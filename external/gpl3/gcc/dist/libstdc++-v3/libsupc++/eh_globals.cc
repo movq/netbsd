@@ -1,5 +1,6 @@
 // -*- C++ -*- Manage the thread-local exception globals.
-// Copyright (C) 2001-2019 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2009
+// Free Software Foundation, Inc.
 //
 // This file is part of GCC.
 //
@@ -46,7 +47,7 @@ using namespace __cxxabiv1;
 namespace
 {
   abi::__cxa_eh_globals*
-  get_global() _GLIBCXX_NOTHROW
+  get_global() throw()
   {
     static __thread abi::__cxa_eh_globals global;
     return &global;
@@ -54,11 +55,11 @@ namespace
 } // anonymous namespace
 
 extern "C" __cxa_eh_globals*
-__cxxabiv1::__cxa_get_globals_fast() _GLIBCXX_NOTHROW
+__cxxabiv1::__cxa_get_globals_fast() throw()
 { return get_global(); }
 
 extern "C" __cxa_eh_globals*
-__cxxabiv1::__cxa_get_globals() _GLIBCXX_NOTHROW
+__cxxabiv1::__cxa_get_globals() throw()
 { return get_global(); }
 
 
@@ -109,7 +110,7 @@ struct __eh_globals_init
 static __eh_globals_init init;
 
 extern "C" __cxa_eh_globals*
-__cxxabiv1::__cxa_get_globals_fast() _GLIBCXX_NOTHROW
+__cxxabiv1::__cxa_get_globals_fast() throw()
 {
   __cxa_eh_globals* g;
   if (init._M_init)
@@ -120,7 +121,7 @@ __cxxabiv1::__cxa_get_globals_fast() _GLIBCXX_NOTHROW
 }
 
 extern "C" __cxa_eh_globals*
-__cxxabiv1::__cxa_get_globals() _GLIBCXX_NOTHROW
+__cxxabiv1::__cxa_get_globals() throw()
 {
   __cxa_eh_globals* g;
   if (init._M_init)
@@ -147,11 +148,11 @@ __cxxabiv1::__cxa_get_globals() _GLIBCXX_NOTHROW
 #else
 
 extern "C" __cxa_eh_globals*
-__cxxabiv1::__cxa_get_globals_fast() _GLIBCXX_NOTHROW
+__cxxabiv1::__cxa_get_globals_fast() throw()
 { return &eh_globals; }
 
 extern "C" __cxa_eh_globals*
-__cxxabiv1::__cxa_get_globals() _GLIBCXX_NOTHROW
+__cxxabiv1::__cxa_get_globals() throw()
 { return &eh_globals; }
 
 #endif

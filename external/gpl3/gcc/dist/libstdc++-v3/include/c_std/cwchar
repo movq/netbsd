@@ -1,6 +1,8 @@
 // -*- C++ -*- forwarding header.
 
-// Copyright (C) 1997-2019 Free Software Foundation, Inc.
+// Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+// 2006, 2007, 2009, 2010
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -42,6 +44,7 @@
 #pragma GCC system_header
 
 #include <bits/c++config.h>
+#include <cstddef>
 
 #if _GLIBCXX_HAVE_WCHAR_H
 #include <wchar.h>
@@ -59,10 +62,11 @@ extern "C"
 }
 #endif
 
-namespace std
-{
+_GLIBCXX_BEGIN_NAMESPACE(std)
+
   using ::mbstate_t;
-} // namespace std
+
+_GLIBCXX_END_NAMESPACE
 
 // Get rid of those macros defined in <wchar.h> in lieu of real functions.
 #undef btowc
@@ -132,9 +136,7 @@ namespace std
 
 #if _GLIBCXX_USE_WCHAR_T
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   using ::wint_t;
 
@@ -225,42 +227,43 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   { return wmemchr(const_cast<const wchar_t*>(__p), __c, __n); }
 #endif
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
-#if _GLIBCXX_USE_C99_WCHAR
+#if _GLIBCXX_USE_C99
 
 #undef wcstold
 #undef wcstoll
 #undef wcstoull
 
-namespace __gnu_cxx
-{
+_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
+
 #if _GLIBCXX_USE_C99_CHECK || _GLIBCXX_USE_C99_DYNAMIC
   extern "C" long double
-    (wcstold)(const wchar_t * __restrict, wchar_t ** __restrict) throw ();
+    (wcstold)(const wchar_t * restrict, wchar_t ** restrict) throw ();
 #endif
 #if !_GLIBCXX_USE_C99_DYNAMIC
   using ::wcstold;
 #endif
 #if _GLIBCXX_USE_C99_LONG_LONG_CHECK || _GLIBCXX_USE_C99_LONG_LONG_DYNAMIC
   extern "C" long long int
-    (wcstoll)(const wchar_t * __restrict, wchar_t ** __restrict, int) throw ();
+    (wcstoll)(const wchar_t * restrict, wchar_t ** restrict, int) throw ();
   extern "C" unsigned long long int
-    (wcstoull)(const wchar_t * __restrict, wchar_t ** __restrict, int) throw ();
+    (wcstoull)(const wchar_t * restrict, wchar_t ** restrict, int) throw ();
 #endif
 #if !_GLIBCXX_USE_C99_LONG_LONG_DYNAMIC
   using ::wcstoll;
   using ::wcstoull;
 #endif
-} // namespace __gnu_cxx
 
-namespace std
-{
+_GLIBCXX_END_NAMESPACE
+
+_GLIBCXX_BEGIN_NAMESPACE(std)
+
   using ::__gnu_cxx::wcstold;
   using ::__gnu_cxx::wcstoll;
   using ::__gnu_cxx::wcstoull;
-} // namespace std
+
+_GLIBCXX_END_NAMESPACE
 
 #endif
 

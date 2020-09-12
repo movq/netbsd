@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2010-2019 Free Software Foundation, Inc.
+   Copyright 2010-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -28,7 +28,6 @@
 #include <time.h>
 #include <sys/time.h>
 #include <sys/resource.h>
-#include <unistd.h>
 
 int trace_speed_test (void);
 
@@ -57,9 +56,13 @@ int nspertp = 0;
 unsigned long long
 myclock ()
 {
-  struct timeval tm;
-  gettimeofday (&tm, NULL);
-  return (((unsigned long long) tm.tv_sec) * 1000000) + tm.tv_usec;
+  struct timeval tm, tm2;
+  struct rusage ru;
+  getrusage (RUSAGE_SELF, &ru);
+  tm = ru.ru_utime;
+  tm2 = ru.ru_stime;
+  return (((unsigned long long) tm.tv_sec) * 1000000) + tm.tv_usec
+    + (((unsigned long long) tm2.tv_sec) * 1000000) + tm2.tv_usec;
 }
 
 int
@@ -85,7 +88,7 @@ main(int argc, char **argv)
 	    }
 	  if (problem < 0)
 	    {
-	      printf ("Negative times, giving up\n");
+	      printf ("Negative times, giving up\n", max_iters);
 	      break;
 	    }
 
@@ -159,9 +162,9 @@ trace_speed_test (void)
     return -1;
 
   if (idelta > mindelta
-      /* Total test time should be between 15 and 30 seconds.  */
-      && (total1 + total2) > (15 * 1000000)
-      && (total1 + total2) < (30 * 1000000))
+      /* Total test time should be between 2 and 5 seconds.  */
+      && (total1 + total2) > (2 * 1000000)
+      && (total1 + total2) < (5 * 1000000)) 
     {
       nsdelta = (((unsigned long long) idelta) * 1000) / iters;
       printf ("Second loop took %d ns longer per iter than first\n", nsdelta);

@@ -1,4 +1,4 @@
-# Copyright 2004-2019 Free Software Foundation, Inc.
+# Copyright 2004, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,21 +15,29 @@
 
 # Test resolving of an opaque type from the loaded shared library.
 
-if {[skip_shlib_tests]} {
-    return -1
+if $tracelevel then {
+    strace $tracelevel
 }
 
-standard_testfile type-opaque-main.c
-
+set testfile type-opaque-main
 set libfile type-opaque-lib
+set srcfile ${testfile}.c
+set binfile ${objdir}/${subdir}/${testfile}
+
 set libsrc "${srcdir}/${subdir}/${libfile}.c"
-set libobj [standard_output_file ${libfile}.so]
+set libobj "${objdir}/${subdir}/${libfile}.so"
 set execsrc "${srcdir}/${subdir}/${srcfile}"
 
 remote_exec build "rm -f ${binfile}"
 
+# Are we on a target board?  No support for downloading shared libraries
+# to a target yet.
+if ![isnative] then {
+    return 0
+}
+
 # get the value of gcc_compiled
-if [get_compiler_info] {
+if [get_compiler_info ${binfile}] {
     return -1
 }
 
@@ -39,11 +47,13 @@ if { [gdb_compile_shlib $libsrc $libobj {debug}] != ""
     return -1
 }
 
-clean_restart ${binfile}
-gdb_load_shlib ${libobj}
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
 
 if ![runto_main] then {
-    fail "can't run to main"
+    fail "Can't run to main"
     return 0
 }
 

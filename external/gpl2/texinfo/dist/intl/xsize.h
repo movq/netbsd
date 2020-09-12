@@ -1,4 +1,4 @@
-/*	$NetBSD: xsize.h,v 1.1.1.1 2016/01/14 00:11:28 christos Exp $	*/
+/*	$NetBSD: xsize.h,v 1.1 2016/01/14 00:11:28 christos Exp $	*/
 
 /* xsize.h -- Checked size_t computations.
 

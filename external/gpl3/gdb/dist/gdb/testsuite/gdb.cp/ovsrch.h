@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2011-2019 Free Software Foundation, Inc.
+   Copyright 2011 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -24,8 +24,6 @@ namespace A
     void foo (int) const;
     void foo (char *) const;
     bool func (void) { return true; }
-    void hibob (int) const;
-    void hibob (char *) const;
   };
 
   namespace B
@@ -36,8 +34,6 @@ namespace A
       void foo (void) const;
       void foo (int) const;
       void foo (char *) const;
-      void hibob (int) const;
-      void hibob (char *) const;
     };
   }
 }

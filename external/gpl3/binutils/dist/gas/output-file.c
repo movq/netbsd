@@ -1,5 +1,6 @@
 /* output-file.c -  Deal with the output file
-   Copyright (C) 1987-2020 Free Software Foundation, Inc.
+   Copyright 1987, 1990, 1991, 1992, 1993, 1994, 1996, 1998, 1999, 2001,
+   2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -28,7 +29,7 @@
 bfd *stdoutput;
 
 void
-output_file_create (const char *name)
+output_file_create (char *name)
 {
   if (name[0] == '-' && name[1] == '\0')
     as_fatal (_("can't open a bfd on stdout %s"), name);
@@ -50,18 +51,15 @@ output_file_create (const char *name)
 }
 
 void
-output_file_close (const char *filename)
+output_file_close (char *filename)
 {
   bfd_boolean res;
 
   if (stdoutput == NULL)
     return;
-
+    
   /* Close the bfd.  */
-  if (had_errors ())
-    res = bfd_cache_close_all ();
-  else
-    res = bfd_close (stdoutput);
+  res = bfd_close (stdoutput);
 
   /* Prevent an infinite loop - if the close failed we will call as_fatal
      which will call xexit() which may call this function again...  */

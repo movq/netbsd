@@ -1,4 +1,4 @@
-# Copyright 2006-2019 Free Software Foundation, Inc.
+# Copyright 2006, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,7 +17,6 @@
 
 load_lib mi-support.exp
 set MIFLAGS "-i=mi"
-load_lib "fortran.exp"
 
 if { [skip_fortran_tests] } { return -1 }
 
@@ -26,10 +25,11 @@ if [mi_gdb_start] {
     continue
 }
 
-standard_testfile array.f
-
+set testfile "array"
+set srcfile ${testfile}.f
+set binfile ${objdir}/${subdir}/${testfile}
 if {[gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" \
-	 executable {debug f90}] != ""} {
+	 executable {debug f77}] != ""} {
     return -1
 }
 
@@ -38,19 +38,14 @@ mi_gdb_load ${binfile}
 
 mi_runto MAIN__
 
-mi_create_varobj "array" "array" "create local variable array"
+mi_gdb_test "-var-create array * array" \
+    "\\^done,name=\"array\",numchild=\"3\",value=\".*\",type=\"integer \\(2,-1:1\\)\"" \
+    "create local variable array"
 
-
-# Depending on the compiler being used,
-# the type names can be printed differently.
-set int4 [fortran_int4]
-
-set children [list [list "array.-1" "-1" 2 "$int4 \\(2\\)"] \
-		  [list "array.0" "0" 2 "$int4 \\(2\\)"] \
-		  [list "array.1" "1" 2 "$int4 \\(2\\)"]]
-
-mi_list_varobj_children "array" $children "get children of array"
+mi_gdb_test "-var-list-children --all-values array" \
+    "\\^done,numchild=\"3\",children=\\\[child=\{name=\"array.-1\",exp=\"-1\",numchild=\"2\",value=\"\\\[2\\\]\",type=\"integer \\(2\\)\"\},child=\{name=\"array.0\",exp=\"0\",numchild=\"2\",value=\"\\\[2\\\]\",type=\"integer \\(2\\)\"\},child=\{name=\"array.1\",exp=\"1\",numchild=\"2\",value=\"\\\[2\\\]\",type=\"integer \\(2\\)\"\}\\\]" \
+    "get children of array"
 
 mi_gdb_test "-var-list-children --all-values array.-1" \
-    "\\^done,numchild=\"2\",children=\\\[child=\{name=\"array.-1.1\",exp=\"1\",numchild=\"0\",value=\"11\",type=\"$int4\"\},child=\{name=\"array.-1.2\",exp=\"2\",numchild=\"0\",value=\"21\",type=\"$int4\"\}\\\],has_more=\"0\"" \
+    "\\^done,numchild=\"2\",children=\\\[child=\{name=\"array.-1.1\",exp=\"1\",numchild=\"0\",value=\"11\",type=\"integer\"\},child=\{name=\"array.-1.2\",exp=\"2\",numchild=\"0\",value=\"21\",type=\"integer\"\}\\\]" \
     "get grandchildren of array (children of first element of second index)"

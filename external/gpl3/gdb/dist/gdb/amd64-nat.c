@@ -1,6 +1,7 @@
 /* Native-dependent code for AMD64.
 
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,6 +21,9 @@
 #include "defs.h"
 #include "gdbarch.h"
 #include "regcache.h"
+
+#include "gdb_assert.h"
+#include "gdb_string.h"
 
 #include "i386-tdep.h"
 #include "amd64-tdep.h"
@@ -56,7 +60,7 @@ amd64_native_gregset_reg_offset (struct gdbarch *gdbarch, int regnum)
 
   gdb_assert (regnum >= 0);
 
-  if (gdbarch_bfd_arch_info (gdbarch)->bits_per_word == 32)
+  if (gdbarch_ptr_bit (gdbarch) == 32)
     {
       reg_offset = amd64_native_gregset32_reg_offset;
       num_regs = amd64_native_gregset32_num_regs;
@@ -65,17 +69,10 @@ amd64_native_gregset_reg_offset (struct gdbarch *gdbarch, int regnum)
   if (num_regs > gdbarch_num_regs (gdbarch))
     num_regs = gdbarch_num_regs (gdbarch);
 
-  if (regnum >= num_regs)
-    return -1;
+  if (regnum < num_regs && regnum < gdbarch_num_regs (gdbarch))
+    return reg_offset[regnum];
 
-  /* Kernels that predate Linux 2.6.25 don't provide access to
-     these segment registers in user_regs_struct.   */
-#ifndef HAVE_STRUCT_USER_REGS_STRUCT_FS_BASE
-  if (regnum == AMD64_FSBASE_REGNUM || regnum == AMD64_GSBASE_REGNUM)
-    return -1;
-#endif
-
-  return reg_offset[regnum];
+  return -1;
 }
 
 /* Return whether the native general-purpose register set supplies
@@ -95,12 +92,12 @@ void
 amd64_supply_native_gregset (struct regcache *regcache,
 			     const void *gregs, int regnum)
 {
-  const char *regs = (const char *) gregs;
-  struct gdbarch *gdbarch = regcache->arch ();
+  const char *regs = gregs;
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   int num_regs = amd64_native_gregset64_num_regs;
   int i;
 
-  if (gdbarch_bfd_arch_info (gdbarch)->bits_per_word == 32)
+  if (gdbarch_ptr_bit (gdbarch) == 32)
     num_regs = amd64_native_gregset32_num_regs;
 
   if (num_regs > gdbarch_num_regs (gdbarch))
@@ -113,7 +110,7 @@ amd64_supply_native_gregset (struct regcache *regcache,
 	  int offset = amd64_native_gregset_reg_offset (gdbarch, i);
 
 	  if (offset != -1)
-	    regcache->raw_supply (i, regs + offset);
+	    regcache_raw_supply (regcache, i, regs + offset);
 	}
     }
 }
@@ -126,12 +123,12 @@ void
 amd64_collect_native_gregset (const struct regcache *regcache,
 			      void *gregs, int regnum)
 {
-  char *regs = (char *) gregs;
-  struct gdbarch *gdbarch = regcache->arch ();
+  char *regs = gregs;
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   int num_regs = amd64_native_gregset64_num_regs;
   int i;
 
-  if (gdbarch_bfd_arch_info (gdbarch)->bits_per_word == 32)
+  if (gdbarch_ptr_bit (gdbarch) == 32)
     {
       num_regs = amd64_native_gregset32_num_regs;
 
@@ -160,7 +157,7 @@ amd64_collect_native_gregset (const struct regcache *regcache,
 	  int offset = amd64_native_gregset_reg_offset (gdbarch, i);
 
 	  if (offset != -1)
-	    regcache->raw_collect (i, regs + offset);
+	    regcache_raw_collect (regcache, i, regs + offset);
 	}
     }
 }

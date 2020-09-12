@@ -1,5 +1,5 @@
 /* tc-mmix.h -- Header file for tc-mmix.c.
-   Copyright (C) 2001-2020 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2002, 2003, 2005, 2007 Free Software Foundation, Inc.
    Written by Hans-Peter Nilsson (hp@bitrange.com).
 
    This file is part of GAS, the GNU Assembler.
@@ -31,6 +31,12 @@ extern const char mmix_comment_chars[];
 
 extern const char mmix_symbol_chars[];
 #define tc_symbol_chars mmix_symbol_chars
+
+extern const char mmix_exp_chars[];
+#define EXP_CHARS mmix_exp_chars
+
+extern const char mmix_flt_chars[];
+#define FLT_CHARS mmix_flt_chars
 
 /* "@" is a synonym for ".".  */
 #define LEX_AT (LEX_BEGIN_NAME)
@@ -179,7 +185,7 @@ extern long md_pcrel_from_section (struct fix *, segT);
 
 extern fragS *mmix_opcode_frag;
 #define TC_FRAG_TYPE fragS *
-#define TC_FRAG_INIT(frag, max_bytes) (frag)->tc_frag_data = mmix_opcode_frag
+#define TC_FRAG_INIT(frag) (frag)->tc_frag_data = mmix_opcode_frag
 
 /* We need to associate each section symbol with a list of GREGs defined
    for that section/segment and sorted on offset, between the point where
@@ -187,18 +193,7 @@ extern fragS *mmix_opcode_frag;
    fixups are done and relocs are output.  Similarly for each unknown
    symbol.  */
 extern void mmix_frob_file (void);
-#define tc_frob_file_before_fix()					\
-  do									\
-    {									\
-      int i = 0;							\
-									\
-      /* It's likely mmix_frob_file changed (removed) sections, so make	\
-	 sure sections are correctly numbered as per renumber_sections,	\
-	 (static to write.c where this macro is called).  */		\
-      mmix_frob_file ();						\
-      bfd_map_over_sections (stdoutput, renumber_sections, &i);		\
-    }									\
-  while (0)
+#define tc_frob_file_before_fix mmix_frob_file
 
 /* Used by mmix_frob_file.  Hangs on section symbols and unknown symbols.  */
 struct mmix_symbol_gregs;
@@ -229,6 +224,3 @@ extern void mmix_md_do_align (int, char *, int, int);
 
 /* This target is buggy, and sets fix size too large.  */
 #define TC_FX_SIZE_SLACK(FIX) 6
-
-/* MMIX has global register symbols.  */
-#define TC_GLOBAL_REGISTER_SYMBOL_OK

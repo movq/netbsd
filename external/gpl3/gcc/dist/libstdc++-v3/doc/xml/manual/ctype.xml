@@ -1,27 +1,30 @@
-<section xmlns="http://docbook.org/ns/docbook" version="5.0" 
-	 xml:id="std.localization.facet.ctype" xreflabel="ctype">
+<section id="std.localization.facet.ctype" xreflabel="ctype">
 <?dbhtml filename="ctype.html"?>
 
-<info><title>ctype</title>
+<sectioninfo>
   <keywordset>
-    <keyword>ISO C++</keyword>
-    <keyword>ctype</keyword>
+    <keyword>
+      ISO C++
+    </keyword>
+    <keyword>
+      ctype
+    </keyword>
   </keywordset>
-</info>
+</sectioninfo>
 
+<title>ctype</title>
 
+<section id="facet.ctype.impl">
+<title>Implementation</title>
 
-<section xml:id="facet.ctype.impl"><info><title>Implementation</title></info>
-
-
-  <section xml:id="facet.ctype.impl.spec"><info><title>Specializations</title></info>
-    
+  <section>
+    <title>Specializations</title>
 
 <para>
-For the required specialization <classname>codecvt&lt;wchar_t, char, mbstate_t&gt;</classname>,
+For the required specialization codecvt&lt;wchar_t, char, mbstate_t&gt; ,
 conversions are made between the internal character set (always UCS4
 on GNU/Linux) and whatever the currently selected locale for the
-<code>LC_CTYPE</code> category implements.
+LC_CTYPE category implements.
 </para>
 
 <para>
@@ -45,10 +48,8 @@ ctype&lt;wchar_t&gt;
 <para>
 This specialization, by specifying all the template parameters, pretty
 much ties the hands of implementors. As such, the implementation is
-straightforward, involving <function>mcsrtombs</function> for the
-conversions between <type>char</type> to <type>wchar_t</type> and
-<function>wcsrtombs</function> for conversions between <type>wchar_t</type>
-and <type>char</type>.
+straightforward, involving mcsrtombs for the conversions between char
+to wchar_t and wcsrtombs for conversions between wchar_t and char.
 </para>
 
 <para>
@@ -59,8 +60,8 @@ characters.
   </section>
 </section>
 
-<section xml:id="facet.ctype.future"><info><title>Future</title></info>
-
+<section id="facet.ctype.future">
+<title>Future</title>
 
 
 <itemizedlist>
@@ -71,8 +72,7 @@ characters.
 
    <listitem>
    <para>
-   How to deal with types other than <type>char</type>, <type>wchar_t</type>?
-   </para></listitem>
+   How to deal with different types than char, wchar_t? </para></listitem>
 
    <listitem><para>
    Overlap between codecvt/ctype: narrow/widen
@@ -80,8 +80,8 @@ characters.
 
    <listitem>
      <para>
-       <type>mask</type> typedef in <classname>codecvt_base</classname>,
-       argument types in <type>codecvt</type>.  what is know about this type?
+       Mask typedef in codecvt_base, argument types in codecvt.  what
+       is know about this type?
    </para></listitem>
 
    <listitem>
@@ -98,11 +98,10 @@ characters.
 
    <listitem>
      <para>
-       Get the <type>ctype&lt;wchar_t&gt;::mask</type> stuff under control.
-       Need to make some kind of static table, and not do lookup every time
-       somebody hits the <code>do_is...</code> functions. Too bad we can't
-       just redefine <type>mask</type> for
-       <classname>ctype&lt;wchar_t&gt;</classname>
+       Get the ctype&lt;wchar_t&gt;::mask stuff under control. Need to
+       make some kind of static table, and not do lookup every time
+       somebody hits the do_is... functions. Too bad we can't just
+       redefine mask for ctype&lt;wchar_t&gt;
    </para></listitem>
 
    <listitem>
@@ -118,15 +117,21 @@ characters.
 </section>
 
 
-<bibliography xml:id="facet.ctype.biblio"><info><title>Bibliography</title></info>
-
+<bibliography id="facet.ctype.biblio">
+<title>Bibliography</title>
 
   <biblioentry>
-    <citetitle>
+    <title>
       The GNU C Library
-    </citetitle>
-    <author><personname><surname>McGrath</surname><firstname>Roland</firstname></personname></author>
-    <author><personname><surname>Drepper</surname><firstname>Ulrich</firstname></personname></author>
+    </title>
+    <author>
+      <surname>McGrath</surname>
+      <firstname>Roland</firstname>
+    </author>
+    <author>
+      <surname>Drepper</surname>
+      <firstname>Ulrich</firstname>
+    </author>
     <copyright>
       <year>2007</year>
       <holder>FSF</holder>
@@ -135,20 +140,23 @@ characters.
   </biblioentry>
 
   <biblioentry>
-    <citetitle>
+    <title>
       Correspondence
-    </citetitle>
-    <author><personname><surname>Drepper</surname><firstname>Ulrich</firstname></personname></author>
+    </title>
+    <author>
+      <surname>Drepper</surname>
+      <firstname>Ulrich</firstname>
+    </author>
     <copyright>
       <year>2002</year>
-      <holder/>
+      <holder></holder>
     </copyright>
   </biblioentry>
 
   <biblioentry>
-    <citetitle>
+    <title>
       ISO/IEC 14882:1998 Programming languages - C++
-    </citetitle>
+    </title>
     <copyright>
       <year>1998</year>
       <holder>ISO</holder>
@@ -156,9 +164,9 @@ characters.
   </biblioentry>
 
   <biblioentry>
-    <citetitle>
+    <title>
       ISO/IEC 9899:1999 Programming languages - C
-    </citetitle>
+    </title>
     <copyright>
       <year>1999</year>
       <holder>ISO</holder>
@@ -166,13 +174,13 @@ characters.
   </biblioentry>
 
   <biblioentry>
-      <title>
-	<link xmlns:xlink="http://www.w3.org/1999/xlink"
-	      xlink:href="http://www.unix.org/version3/ieee_std.html">
-	The Open Group Base Specifications, Issue 6 (IEEE Std. 1003.1-2004)
-	</link>
-      </title>
-
+    <biblioid class="uri">
+      <ulink url="http://www.unix.org/version3/ieee_std.html">
+	<citetitle>
+	  The Open Group Base Specifications, Issue 6 (IEEE Std. 1003.1-2004)
+	</citetitle>
+      </ulink>
+    </biblioid>
     <copyright>
       <year>1999</year>
       <holder>
@@ -181,10 +189,13 @@ characters.
   </biblioentry>
 
   <biblioentry>
-    <citetitle>
+    <title>
       The C++ Programming Language, Special Edition
-    </citetitle>
-    <author><personname><surname>Stroustrup</surname><firstname>Bjarne</firstname></personname></author>
+    </title>
+    <author>
+      <surname>Stroustrup</surname>
+      <firstname>Bjarne</firstname>
+    </author>
     <copyright>
       <year>2000</year>
       <holder>Addison Wesley, Inc.</holder>
@@ -198,14 +209,20 @@ characters.
   </biblioentry>
 
   <biblioentry>
-    <citetitle>
+    <title>
       Standard C++ IOStreams and Locales
-    </citetitle>
+    </title>
     <subtitle>
       Advanced Programmer's Guide and Reference
     </subtitle>
-    <author><personname><surname>Langer</surname><firstname>Angelika</firstname></personname></author>
-    <author><personname><surname>Kreft</surname><firstname>Klaus</firstname></personname></author>
+    <author>
+      <surname>Langer</surname>
+      <firstname>Angelika</firstname>
+    </author>
+    <author>
+      <surname>Kreft</surname>
+      <firstname>Klaus</firstname>
+    </author>
     <copyright>
       <year>2000</year>
       <holder>Addison Wesley Longman, Inc.</holder>

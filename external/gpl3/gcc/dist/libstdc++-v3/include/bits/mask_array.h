@@ -1,6 +1,7 @@
 // The template and inlines for the -*- C++ -*- mask_array class.
 
-// Copyright (C) 1997-2019 Free Software Foundation, Inc.
+// Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2004, 2005, 2009
+//  Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,9 +23,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file bits/mask_array.h
+/** @file mask_array.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{valarray}
+ *  You should not attempt to use it directly.
  */
 
 // Written by Gabriel Dos Reis <Gabriel.Dos-Reis@DPTMaths.ENS-Cachan.Fr>
@@ -34,9 +35,7 @@
 
 #pragma GCC system_header
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   /**
    * @addtogroup numeric_arrays
@@ -131,18 +130,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       const _Array<bool> _M_mask;
       const _Array<_Tp>  _M_array;
 
-#if __cplusplus < 201103L
       // not implemented
       mask_array();
-#else
-    public:
-      mask_array() = delete;
-#endif
     };
 
   template<typename _Tp>
-    inline mask_array<_Tp>::mask_array(const mask_array<_Tp>& __a)
-    : _M_sz(__a._M_sz), _M_mask(__a._M_mask), _M_array(__a._M_array) {}
+    inline mask_array<_Tp>::mask_array(const mask_array<_Tp>& a)
+    : _M_sz(a._M_sz), _M_mask(a._M_mask), _M_array(a._M_array) {}
 
   template<typename _Tp>
     inline
@@ -207,7 +201,6 @@ _DEFINE_VALARRAY_OPERATOR(>>, __shift_right)
 
   // @} group numeric_arrays
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 #endif /* _MASK_ARRAY_H */

@@ -1,4 +1,4 @@
---  Copyright 2008-2019 Free Software Foundation, Inc.
+--  Copyright 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 --
 --  This program is free software; you can redistribute it and/or modify
 --  it under the terms of the GNU General Public License as published by
@@ -30,7 +30,5 @@ package Pck is
    end Inner;
 
    procedure Proc (I : Integer);
-
-   procedure Ambiguous_Func;
 
 end Pck;

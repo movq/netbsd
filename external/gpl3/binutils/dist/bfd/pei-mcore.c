@@ -1,5 +1,5 @@
 /* BFD back-end for MCore PECOFF files.
-   Copyright (C) 1999-2020 Free Software Foundation, Inc.
+   Copyright 1999, 2002, 2007, 2008  Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -22,17 +22,16 @@
 #include "bfd.h"
 
 #ifndef TARGET_BIG_SYM
-#define TARGET_BIG_SYM       mcore_pei_be_vec
+#define TARGET_BIG_SYM       mcore_pei_big_vec
 #define TARGET_BIG_NAME      "pei-mcore-big"
-#define TARGET_LITTLE_SYM    mcore_pei_le_vec
+#define TARGET_LITTLE_SYM    mcore_pei_little_vec
 #define TARGET_LITTLE_NAME   "pei-mcore-little"
 #endif
 
 #define COFF_IMAGE_WITH_PE
 #define COFF_WITH_PE
-#define PCRELOFFSET	   TRUE
-/* Long section names not allowed in executable images, only object files.  */
-#define COFF_LONG_SECTION_NAMES 0
+#define PCRELOFFSET        TRUE
+#define COFF_LONG_SECTION_NAMES
 
 #define MCORE_PE
 

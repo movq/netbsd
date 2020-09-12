@@ -2,23 +2,23 @@
 
 /* Copyright (C) 1994 Free Software Foundation, Inc.
 
-   This file is part of the GNU Readline Library (Readline), a library
-   for reading lines of text with interactive input and history editing.      
+   This file is part of the GNU Readline Library, a library for
+   reading lines of text with interactive input and history editing.
 
-   Readline is free software: you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation, either version 3 of the License, or
+   The GNU Readline Library is free software; you can redistribute it
+   and/or modify it under the terms of the GNU General Public License
+   as published by the Free Software Foundation; either version 2, or
    (at your option) any later version.
 
-   Readline is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   The GNU Readline Library is distributed in the hope that it will be
+   useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+   of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
 
-   You should have received a copy of the GNU General Public License
-   along with Readline.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
+   The GNU General Public License is often shipped with GNU software, and
+   is generally kept in a file called COPYING or LICENSE.  If you do not
+   have a copy of the license, write to the Free Software Foundation,
+   59 Temple Place, Suite 330, Boston, MA 02111 USA. */
 #define READLINE_LIBRARY
 
 #if defined (HAVE_CONFIG_H)
@@ -115,7 +115,7 @@ _rl_copy_to_kill_ring (text, append)
 	  if (slot == rl_max_kills)
 	    {
 	      register int i;
-	      xfree (rl_kill_ring[0]);
+	      free (rl_kill_ring[0]);
 	      for (i = 0; i < slot; i++)
 		rl_kill_ring[i] = rl_kill_ring[i + 1];
 	    }
@@ -146,8 +146,8 @@ _rl_copy_to_kill_ring (text, append)
 	  strcpy (new, text);
 	  strcat (new, old);
 	}
-      xfree (old);
-      xfree (text);
+      free (old);
+      free (text);
       rl_kill_ring[slot] = new;
     }
   else
@@ -582,7 +582,6 @@ rl_yank_nth_arg_internal (count, ignore, history_skip)
   if (!arg || !*arg)
     {
       rl_ding ();
-      FREE (arg);
       return -1;
     }
 
@@ -601,7 +600,7 @@ rl_yank_nth_arg_internal (count, ignore, history_skip)
 #endif /* VI_MODE */
 
   rl_insert_text (arg);
-  xfree (arg);
+  free (arg);
 
   rl_end_undo_group ();
   return 0;
@@ -640,7 +639,7 @@ rl_yank_last_arg (count, key)
     {
       if (undo_needed)
 	rl_do_undo ();
-      if (count < 0)		/* XXX - was < 1 */
+      if (count < 1)
         direction = -direction;
       history_skip += direction;
       if (history_skip < 0)
@@ -657,7 +656,7 @@ rl_yank_last_arg (count, key)
 }
 
 /* A special paste command for users of Cygnus's cygwin32. */
-#if defined (_WIN32)
+#if defined (__CYGWIN__)
 #include <windows.h>
 
 int
@@ -686,7 +685,7 @@ rl_paste_from_clipboard (count, key)
       _rl_set_mark_at_pos (rl_point);
       rl_insert_text (ptr);
       if (ptr != data)
-	xfree (ptr);
+	free (ptr);
       CloseClipboard ();
     }
   return (0);

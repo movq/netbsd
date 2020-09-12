@@ -1,6 +1,6 @@
 /* rx.c --- opcode semantics for stand-alone RX simulator.
 
-Copyright (C) 2008-2019 Free Software Foundation, Inc.
+Copyright (C) 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 Contributed by Red Hat, Inc.
 
 This file is part of the GNU simulators.
@@ -23,7 +23,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
-#include "libiberty.h"
 
 #include "opcode/rx.h"
 #include "cpu.h"
@@ -81,10 +80,6 @@ static const char * id_names[] = {
   "RXO_nop",
   "RXO_nop2",
   "RXO_nop3",
-  "RXO_nop4",
-  "RXO_nop5",
-  "RXO_nop6",
-  "RXO_nop7",
 
   "RXO_scmpu",
   "RXO_smovu",
@@ -152,9 +147,9 @@ static const char * optype_names[] = {
   "RbRi"	/* [Rb + scale * Ri] */
 };
 
-#define N_RXO ARRAY_SIZE (id_names)
-#define N_RXT ARRAY_SIZE (optype_names)
-#define N_MAP 90
+#define N_RXO (sizeof(id_names)/sizeof(id_names[0]))
+#define N_RXT (sizeof(optype_names)/sizeof(optype_names[0]))
+#define N_MAP 30
 
 static unsigned long long benchmark_start_cycle;
 static unsigned long long benchmark_end_cycle;
@@ -411,7 +406,6 @@ get_op (const RX_Opcode_Decoded *rd, int i)
       put_reg (o->reg, get_reg (o->reg) - size2bytes[o->size]);
       /* fall through */
     case RX_Operand_Postinc:	/* [Rn+] */
-    case RX_Operand_Zero_Indirect:	/* [Rn + 0] */
     case RX_Operand_Indirect:	/* [Rn + addend] */
     case RX_Operand_TwoReg:	/* [Rn + scale * R2] */
 #ifdef CYCLE_ACCURATE
@@ -439,7 +433,6 @@ get_op (const RX_Opcode_Decoded *rd, int i)
 
       switch (o->size)
 	{
-	default:
 	case RX_AnySize:
 	  rx_abort ();
 
@@ -480,7 +473,6 @@ get_op (const RX_Opcode_Decoded *rd, int i)
      to the size.  */
   switch (o->size)
     {
-    default:
     case RX_AnySize:
       rx_abort ();
 
@@ -526,7 +518,6 @@ put_op (const RX_Opcode_Decoded *rd, int i, int v)
 
   switch (o->size)
     {
-    default:
     case RX_AnySize:
       if (o->type != RX_Operand_Register)
 	rx_abort ();
@@ -583,7 +574,6 @@ put_op (const RX_Opcode_Decoded *rd, int i, int v)
       put_reg (o->reg, get_reg (o->reg) - size2bytes[o->size]);
       /* fall through */
     case RX_Operand_Postinc:	/* [Rn+] */
-    case RX_Operand_Zero_Indirect:	/* [Rn + 0] */
     case RX_Operand_Indirect:	/* [Rn + addend] */
     case RX_Operand_TwoReg:	/* [Rn + scale * R2] */
 
@@ -607,7 +597,6 @@ put_op (const RX_Opcode_Decoded *rd, int i, int v)
 
       switch (o->size)
 	{
-	default:
 	case RX_AnySize:
 	  rx_abort ();
 
@@ -743,7 +732,8 @@ poppc()
       c = val & carry_mask; \
       val OP 1; \
     } \
-  set_oszc (val, 4, c); \
+  if (count) \
+    set_oszc (val, 4, c); \
   PD (val); \
 }
 
@@ -1515,10 +1505,6 @@ decode_opcode ()
     case RXO_nop:
     case RXO_nop2:
     case RXO_nop3:
-    case RXO_nop4:
-    case RXO_nop5:
-    case RXO_nop6:
-    case RXO_nop7:
       E1;
       break;
 
@@ -1816,22 +1802,6 @@ decode_opcode ()
       E1;
       break;
 
-    case RXO_satr:
-      if (FLAG_O && ! FLAG_S)
-	{
-	  put_reg (6, 0x0);
-	  put_reg (5, 0x7fffffff);
-	  put_reg (4, 0xffffffff);
-	}
-      else if (FLAG_O && FLAG_S)
-	{
-	  put_reg (6, 0xffffffff);
-	  put_reg (5, 0x80000000);
-	  put_reg (4, 0x0);
-	}
-      E1;
-      break;
-      
     case RXO_sbb:
       MATH_OP (-, ! carry);
       break;

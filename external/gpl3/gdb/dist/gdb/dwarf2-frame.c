@@ -1,6 +1,7 @@
 /* Frame unwinder for frames with DWARF Call Frame Information.
 
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    Contributed by Mark Kettenis.
 
@@ -31,18 +32,15 @@
 #include "objfiles.h"
 #include "regcache.h"
 #include "value.h"
-#include "record.h"
+
+#include "gdb_assert.h"
+#include "gdb_string.h"
 
 #include "complaints.h"
 #include "dwarf2-frame.h"
-#include "dwarf2read.h"
 #include "ax.h"
 #include "dwarf2loc.h"
-#include "dwarf2-frame-tailcall.h"
-#if GDB_SELF_TEST
-#include "common/selftest.h"
-#include "selftest-arch.h"
-#endif
+#include "exceptions.h"
 
 struct comp_unit;
 
@@ -70,8 +68,8 @@ struct dwarf2_cie
   ULONGEST return_address_register;
 
   /* Instruction sequence to initialize a register set.  */
-  const gdb_byte *initial_instructions;
-  const gdb_byte *end;
+  gdb_byte *initial_instructions;
+  gdb_byte *end;
 
   /* Saved augmentation, in case it's needed later.  */
   char *augmentation;
@@ -118,8 +116,8 @@ struct dwarf2_fde
   CORE_ADDR address_range;
 
   /* Instruction sequence.  */
-  const gdb_byte *instructions;
-  const gdb_byte *end;
+  gdb_byte *instructions;
+  gdb_byte *end;
 
   /* True if this FDE is read from a .eh_frame instead of a .debug_frame
      section.  */
@@ -143,7 +141,7 @@ struct comp_unit
   struct objfile *objfile;
 
   /* Pointer to the .debug_frame section loaded into memory.  */
-  const gdb_byte *dwarf_frame_buffer;
+  gdb_byte *dwarf_frame_buffer;
 
   /* Length of the loaded .debug_frame section.  */
   bfd_size_type dwarf_frame_size;
@@ -170,30 +168,189 @@ static CORE_ADDR read_encoded_value (struct comp_unit *unit, gdb_byte encoding,
 				     CORE_ADDR func_base);
 
 
-/* See dwarf2-frame.h.  */
-int dwarf2_frame_unwinders_enabled_p = 1;
+/* Structure describing a frame state.  */
+
+struct dwarf2_frame_state
+{
+  /* Each register save state can be described in terms of a CFA slot,
+     another register, or a location expression.  */
+  struct dwarf2_frame_state_reg_info
+  {
+    struct dwarf2_frame_state_reg *reg;
+    int num_regs;
+
+    LONGEST cfa_offset;
+    ULONGEST cfa_reg;
+    enum {
+      CFA_UNSET,
+      CFA_REG_OFFSET,
+      CFA_EXP
+    } cfa_how;
+    const gdb_byte *cfa_exp;
+
+    /* Used to implement DW_CFA_remember_state.  */
+    struct dwarf2_frame_state_reg_info *prev;
+  } regs;
+
+  /* The PC described by the current frame state.  */
+  CORE_ADDR pc;
+
+  /* Initial register set from the CIE.
+     Used to implement DW_CFA_restore.  */
+  struct dwarf2_frame_state_reg_info initial;
+
+  /* The information we care about from the CIE.  */
+  LONGEST data_align;
+  ULONGEST code_align;
+  ULONGEST retaddr_column;
+
+  /* Flags for known producer quirks.  */
+
+  /* The ARM compilers, in DWARF2 mode, assume that DW_CFA_def_cfa
+     and DW_CFA_def_cfa_offset takes a factored offset.  */
+  int armcc_cfa_offsets_sf;
+
+  /* The ARM compilers, in DWARF2 or DWARF3 mode, may assume that
+     the CFA is defined as REG - OFFSET rather than REG + OFFSET.  */
+  int armcc_cfa_offsets_reversed;
+};
 
 /* Store the length the expression for the CFA in the `cfa_reg' field,
    which is unused in that case.  */
 #define cfa_exp_len cfa_reg
 
-dwarf2_frame_state::dwarf2_frame_state (CORE_ADDR pc_, struct dwarf2_cie *cie)
-  : pc (pc_), data_align (cie->data_alignment_factor),
-    code_align (cie->code_alignment_factor),
-    retaddr_column (cie->return_address_register)
+/* Assert that the register set RS is large enough to store gdbarch_num_regs
+   columns.  If necessary, enlarge the register set.  */
+
+static void
+dwarf2_frame_state_alloc_regs (struct dwarf2_frame_state_reg_info *rs,
+			       int num_regs)
 {
+  size_t size = sizeof (struct dwarf2_frame_state_reg);
+
+  if (num_regs <= rs->num_regs)
+    return;
+
+  rs->reg = (struct dwarf2_frame_state_reg *)
+    xrealloc (rs->reg, num_regs * size);
+
+  /* Initialize newly allocated registers.  */
+  memset (rs->reg + rs->num_regs, 0, (num_regs - rs->num_regs) * size);
+  rs->num_regs = num_regs;
+}
+
+/* Copy the register columns in register set RS into newly allocated
+   memory and return a pointer to this newly created copy.  */
+
+static struct dwarf2_frame_state_reg *
+dwarf2_frame_state_copy_regs (struct dwarf2_frame_state_reg_info *rs)
+{
+  size_t size = rs->num_regs * sizeof (struct dwarf2_frame_state_reg);
+  struct dwarf2_frame_state_reg *reg;
+
+  reg = (struct dwarf2_frame_state_reg *) xmalloc (size);
+  memcpy (reg, rs->reg, size);
+
+  return reg;
+}
+
+/* Release the memory allocated to register set RS.  */
+
+static void
+dwarf2_frame_state_free_regs (struct dwarf2_frame_state_reg_info *rs)
+{
+  if (rs)
+    {
+      dwarf2_frame_state_free_regs (rs->prev);
+
+      xfree (rs->reg);
+      xfree (rs);
+    }
+}
+
+/* Release the memory allocated to the frame state FS.  */
+
+static void
+dwarf2_frame_state_free (void *p)
+{
+  struct dwarf2_frame_state *fs = p;
+
+  dwarf2_frame_state_free_regs (fs->initial.prev);
+  dwarf2_frame_state_free_regs (fs->regs.prev);
+  xfree (fs->initial.reg);
+  xfree (fs->regs.reg);
+  xfree (fs);
 }
 
 
 /* Helper functions for execute_stack_op.  */
 
 static CORE_ADDR
-read_addr_from_reg (struct frame_info *this_frame, int reg)
+read_reg (void *baton, int reg)
 {
+  struct frame_info *this_frame = (struct frame_info *) baton;
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
-  int regnum = dwarf_reg_to_regnum_or_error (gdbarch, reg);
+  int regnum;
+  gdb_byte *buf;
 
-  return address_from_register (regnum, this_frame);
+  regnum = gdbarch_dwarf2_reg_to_regnum (gdbarch, reg);
+
+  buf = alloca (register_size (gdbarch, regnum));
+  get_frame_register (this_frame, regnum, buf);
+
+  /* Convert the register to an integer.  This returns a LONGEST
+     rather than a CORE_ADDR, but unpack_pointer does the same thing
+     under the covers, and this makes more sense for non-pointer
+     registers.  Maybe read_reg and the associated interfaces should
+     deal with "struct value" instead of CORE_ADDR.  */
+  return unpack_long (register_type (gdbarch, regnum), buf);
+}
+
+static void
+read_mem (void *baton, gdb_byte *buf, CORE_ADDR addr, size_t len)
+{
+  read_memory (addr, buf, len);
+}
+
+static void
+no_get_frame_base (void *baton, const gdb_byte **start, size_t *length)
+{
+  internal_error (__FILE__, __LINE__,
+		  _("Support for DW_OP_fbreg is unimplemented"));
+}
+
+/* Helper function for execute_stack_op.  */
+
+static CORE_ADDR
+no_get_frame_cfa (void *baton)
+{
+  internal_error (__FILE__, __LINE__,
+		  _("Support for DW_OP_call_frame_cfa is unimplemented"));
+}
+
+/* Helper function for execute_stack_op.  */
+
+static CORE_ADDR
+no_get_frame_pc (void *baton)
+{
+  internal_error (__FILE__, __LINE__, _("\
+Support for DW_OP_GNU_implicit_pointer is unimplemented"));
+}
+
+static CORE_ADDR
+no_get_tls_address (void *baton, CORE_ADDR offset)
+{
+  internal_error (__FILE__, __LINE__, _("\
+Support for DW_OP_GNU_push_tls_address is unimplemented"));
+}
+
+/* Helper function for execute_stack_op.  */
+
+static void
+no_dwarf_call (struct dwarf_expr_context *ctx, size_t die_offset)
+{
+  internal_error (__FILE__, __LINE__,
+		  _("Support for DW_OP_call* is invalid in CFI"));
 }
 
 /* Execute the required actions for both the DW_CFA_restore and
@@ -204,126 +361,59 @@ dwarf2_restore_rule (struct gdbarch *gdbarch, ULONGEST reg_num,
 {
   ULONGEST reg;
 
+  gdb_assert (fs->initial.reg);
   reg = dwarf2_frame_adjust_regnum (gdbarch, reg_num, eh_frame_p);
-  fs->regs.alloc_regs (reg + 1);
+  dwarf2_frame_state_alloc_regs (&fs->regs, reg + 1);
 
   /* Check if this register was explicitly initialized in the
   CIE initial instructions.  If not, default the rule to
   UNSPECIFIED.  */
-  if (reg < fs->initial.reg.size ())
+  if (reg < fs->initial.num_regs)
     fs->regs.reg[reg] = fs->initial.reg[reg];
   else
     fs->regs.reg[reg].how = DWARF2_FRAME_REG_UNSPECIFIED;
 
   if (fs->regs.reg[reg].how == DWARF2_FRAME_REG_UNSPECIFIED)
-    {
-      int regnum = dwarf_reg_to_regnum (gdbarch, reg);
-
-      complaint (_("\
+    complaint (&symfile_complaints, _("\
 incomplete CFI data; DW_CFA_restore unspecified\n\
 register %s (#%d) at %s"),
-		 gdbarch_register_name (gdbarch, regnum), regnum,
-		 paddress (gdbarch, fs->pc));
-    }
+		       gdbarch_register_name
+		       (gdbarch, gdbarch_dwarf2_reg_to_regnum (gdbarch, reg)),
+		       gdbarch_dwarf2_reg_to_regnum (gdbarch, reg),
+		       paddress (gdbarch, fs->pc));
 }
-
-class dwarf_expr_executor : public dwarf_expr_context
-{
- public:
-
-  struct frame_info *this_frame;
-
-  CORE_ADDR read_addr_from_reg (int reg) override
-  {
-    return ::read_addr_from_reg (this_frame, reg);
-  }
-
-  struct value *get_reg_value (struct type *type, int reg) override
-  {
-    struct gdbarch *gdbarch = get_frame_arch (this_frame);
-    int regnum = dwarf_reg_to_regnum_or_error (gdbarch, reg);
-
-    return value_from_register (type, regnum, this_frame);
-  }
-
-  void read_mem (gdb_byte *buf, CORE_ADDR addr, size_t len) override
-  {
-    read_memory (addr, buf, len);
-  }
-
-  void get_frame_base (const gdb_byte **start, size_t *length) override
-  {
-    invalid ("DW_OP_fbreg");
-  }
-
-  void push_dwarf_reg_entry_value (enum call_site_parameter_kind kind,
-				   union call_site_parameter_u kind_u,
-				   int deref_size) override
-  {
-    invalid ("DW_OP_entry_value");
-  }
-
-  CORE_ADDR get_object_address () override
-  {
-    invalid ("DW_OP_push_object_address");
-  }
-
-  CORE_ADDR get_frame_cfa () override
-  {
-    invalid ("DW_OP_call_frame_cfa");
-  }
-
-  CORE_ADDR get_tls_address (CORE_ADDR offset) override
-  {
-    invalid ("DW_OP_form_tls_address");
-  }
-
-  void dwarf_call (cu_offset die_offset) override
-  {
-    invalid ("DW_OP_call*");
-  }
-
-  struct value *dwarf_variable_value (sect_offset sect_off) override
-  {
-    invalid ("DW_OP_GNU_variable_value");
-  }
-
-  CORE_ADDR get_addr_index (unsigned int index) override
-  {
-    invalid ("DW_OP_GNU_addr_index");
-  }
-
- private:
-
-  void invalid (const char *op) ATTRIBUTE_NORETURN
-  {
-    error (_("%s is invalid in this context"), op);
-  }
-};
 
 static CORE_ADDR
 execute_stack_op (const gdb_byte *exp, ULONGEST len, int addr_size,
 		  CORE_ADDR offset, struct frame_info *this_frame,
 		  CORE_ADDR initial, int initial_in_stack_memory)
 {
+  struct dwarf_expr_context *ctx;
   CORE_ADDR result;
+  struct cleanup *old_chain;
 
-  dwarf_expr_executor ctx;
-  scoped_value_mark free_values;
+  ctx = new_dwarf_expr_context ();
+  old_chain = make_cleanup_free_dwarf_expr_context (ctx);
 
-  ctx.this_frame = this_frame;
-  ctx.gdbarch = get_frame_arch (this_frame);
-  ctx.addr_size = addr_size;
-  ctx.ref_addr_size = -1;
-  ctx.offset = offset;
+  ctx->gdbarch = get_frame_arch (this_frame);
+  ctx->addr_size = addr_size;
+  ctx->offset = offset;
+  ctx->baton = this_frame;
+  ctx->read_reg = read_reg;
+  ctx->read_mem = read_mem;
+  ctx->get_frame_base = no_get_frame_base;
+  ctx->get_frame_cfa = no_get_frame_cfa;
+  ctx->get_frame_pc = no_get_frame_pc;
+  ctx->get_tls_address = no_get_tls_address;
+  ctx->dwarf_call = no_dwarf_call;
 
-  ctx.push_address (initial, initial_in_stack_memory);
-  ctx.eval (exp, len);
+  dwarf_expr_push (ctx, initial, initial_in_stack_memory);
+  dwarf_expr_eval (ctx, exp, len);
 
-  if (ctx.location == DWARF_VALUE_MEMORY)
-    result = ctx.fetch_address (0);
-  else if (ctx.location == DWARF_VALUE_REGISTER)
-    result = ctx.read_addr_from_reg (value_as_long (ctx.fetch (0)));
+  if (ctx->location == DWARF_VALUE_MEMORY)
+    result = dwarf_expr_fetch_address (ctx, 0);
+  else if (ctx->location == DWARF_VALUE_REGISTER)
+    result = read_reg (this_frame, dwarf_expr_fetch (ctx, 0));
   else
     {
       /* This is actually invalid DWARF, but if we ever do run across
@@ -333,28 +423,26 @@ execute_stack_op (const gdb_byte *exp, ULONGEST len, int addr_size,
 Not implemented: computing unwound register using explicit value operator"));
     }
 
+  do_cleanups (old_chain);
+
   return result;
 }
 
 
-/* Execute FDE program from INSN_PTR possibly up to INSN_END or up to inferior
-   PC.  Modify FS state accordingly.  Return current INSN_PTR where the
-   execution has stopped, one can resume it on the next call.  */
-
-static const gdb_byte *
+static void
 execute_cfa_program (struct dwarf2_fde *fde, const gdb_byte *insn_ptr,
 		     const gdb_byte *insn_end, struct gdbarch *gdbarch,
 		     CORE_ADDR pc, struct dwarf2_frame_state *fs)
 {
   int eh_frame_p = fde->eh_frame_p;
-  unsigned int bytes_read;
+  int bytes_read;
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
 
   while (insn_ptr < insn_end && fs->pc <= pc)
     {
       gdb_byte insn = *insn_ptr++;
-      uint64_t utmp, reg;
-      int64_t offset;
+      ULONGEST utmp, reg;
+      LONGEST offset;
 
       if ((insn & 0xc0) == DW_CFA_advance_loc)
 	fs->pc += (insn & 0x3f) * fs->code_align;
@@ -362,9 +450,9 @@ execute_cfa_program (struct dwarf2_fde *fde, const gdb_byte *insn_ptr,
 	{
 	  reg = insn & 0x3f;
 	  reg = dwarf2_frame_adjust_regnum (gdbarch, reg, eh_frame_p);
-	  insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &utmp);
+	  insn_ptr = read_uleb128 (insn_ptr, insn_end, &utmp);
 	  offset = utmp * fs->data_align;
-	  fs->regs.alloc_regs (reg + 1);
+	  dwarf2_frame_state_alloc_regs (&fs->regs, reg + 1);
 	  fs->regs.reg[reg].how = DWARF2_FRAME_REG_SAVED_OFFSET;
 	  fs->regs.reg[reg].loc.offset = offset;
 	}
@@ -404,40 +492,40 @@ execute_cfa_program (struct dwarf2_fde *fde, const gdb_byte *insn_ptr,
 	      break;
 
 	    case DW_CFA_offset_extended:
-	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &reg);
+	      insn_ptr = read_uleb128 (insn_ptr, insn_end, &reg);
 	      reg = dwarf2_frame_adjust_regnum (gdbarch, reg, eh_frame_p);
-	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &utmp);
+	      insn_ptr = read_uleb128 (insn_ptr, insn_end, &utmp);
 	      offset = utmp * fs->data_align;
-	      fs->regs.alloc_regs (reg + 1);
+	      dwarf2_frame_state_alloc_regs (&fs->regs, reg + 1);
 	      fs->regs.reg[reg].how = DWARF2_FRAME_REG_SAVED_OFFSET;
 	      fs->regs.reg[reg].loc.offset = offset;
 	      break;
 
 	    case DW_CFA_restore_extended:
-	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &reg);
+	      insn_ptr = read_uleb128 (insn_ptr, insn_end, &reg);
 	      dwarf2_restore_rule (gdbarch, reg, fs, eh_frame_p);
 	      break;
 
 	    case DW_CFA_undefined:
-	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &reg);
+	      insn_ptr = read_uleb128 (insn_ptr, insn_end, &reg);
 	      reg = dwarf2_frame_adjust_regnum (gdbarch, reg, eh_frame_p);
-	      fs->regs.alloc_regs (reg + 1);
+	      dwarf2_frame_state_alloc_regs (&fs->regs, reg + 1);
 	      fs->regs.reg[reg].how = DWARF2_FRAME_REG_UNDEFINED;
 	      break;
 
 	    case DW_CFA_same_value:
-	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &reg);
+	      insn_ptr = read_uleb128 (insn_ptr, insn_end, &reg);
 	      reg = dwarf2_frame_adjust_regnum (gdbarch, reg, eh_frame_p);
-	      fs->regs.alloc_regs (reg + 1);
+	      dwarf2_frame_state_alloc_regs (&fs->regs, reg + 1);
 	      fs->regs.reg[reg].how = DWARF2_FRAME_REG_SAME_VALUE;
 	      break;
 
 	    case DW_CFA_register:
-	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &reg);
+	      insn_ptr = read_uleb128 (insn_ptr, insn_end, &reg);
 	      reg = dwarf2_frame_adjust_regnum (gdbarch, reg, eh_frame_p);
-	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &utmp);
+	      insn_ptr = read_uleb128 (insn_ptr, insn_end, &utmp);
 	      utmp = dwarf2_frame_adjust_regnum (gdbarch, utmp, eh_frame_p);
-	      fs->regs.alloc_regs (reg + 1);
+	      dwarf2_frame_state_alloc_regs (&fs->regs, reg + 1);
 	      fs->regs.reg[reg].how = DWARF2_FRAME_REG_SAVED_REG;
 	      fs->regs.reg[reg].loc.reg = utmp;
 	      break;
@@ -446,7 +534,9 @@ execute_cfa_program (struct dwarf2_fde *fde, const gdb_byte *insn_ptr,
 	      {
 		struct dwarf2_frame_state_reg_info *new_rs;
 
-		new_rs = new dwarf2_frame_state_reg_info (fs->regs);
+		new_rs = XMALLOC (struct dwarf2_frame_state_reg_info);
+		*new_rs = fs->regs;
+		fs->regs.reg = dwarf2_frame_state_copy_regs (&fs->regs);
 		fs->regs.prev = new_rs;
 	      }
 	      break;
@@ -457,19 +547,22 @@ execute_cfa_program (struct dwarf2_fde *fde, const gdb_byte *insn_ptr,
 
 		if (old_rs == NULL)
 		  {
-		    complaint (_("\
+		    complaint (&symfile_complaints, _("\
 bad CFI data; mismatched DW_CFA_restore_state at %s"),
 			       paddress (gdbarch, fs->pc));
 		  }
 		else
-		  fs->regs = std::move (*old_rs);
+		  {
+		    xfree (fs->regs.reg);
+		    fs->regs = *old_rs;
+		    xfree (old_rs);
+		  }
 	      }
 	      break;
 
 	    case DW_CFA_def_cfa:
-	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &reg);
-	      fs->regs.cfa_reg = reg;
-	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &utmp);
+	      insn_ptr = read_uleb128 (insn_ptr, insn_end, &fs->regs.cfa_reg);
+	      insn_ptr = read_uleb128 (insn_ptr, insn_end, &utmp);
 
 	      if (fs->armcc_cfa_offsets_sf)
 		utmp *= fs->data_align;
@@ -479,14 +572,15 @@ bad CFI data; mismatched DW_CFA_restore_state at %s"),
 	      break;
 
 	    case DW_CFA_def_cfa_register:
-	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &reg);
-	      fs->regs.cfa_reg = dwarf2_frame_adjust_regnum (gdbarch, reg,
+	      insn_ptr = read_uleb128 (insn_ptr, insn_end, &fs->regs.cfa_reg);
+	      fs->regs.cfa_reg = dwarf2_frame_adjust_regnum (gdbarch,
+                                                             fs->regs.cfa_reg,
                                                              eh_frame_p);
 	      fs->regs.cfa_how = CFA_REG_OFFSET;
 	      break;
 
 	    case DW_CFA_def_cfa_offset:
-	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &utmp);
+	      insn_ptr = read_uleb128 (insn_ptr, insn_end, &utmp);
 
 	      if (fs->armcc_cfa_offsets_sf)
 		utmp *= fs->data_align;
@@ -499,178 +593,129 @@ bad CFI data; mismatched DW_CFA_restore_state at %s"),
 	      break;
 
 	    case DW_CFA_def_cfa_expression:
-	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &utmp);
-	      fs->regs.cfa_exp_len = utmp;
+	      insn_ptr = read_uleb128 (insn_ptr, insn_end,
+                                       &fs->regs.cfa_exp_len);
 	      fs->regs.cfa_exp = insn_ptr;
 	      fs->regs.cfa_how = CFA_EXP;
 	      insn_ptr += fs->regs.cfa_exp_len;
 	      break;
 
 	    case DW_CFA_expression:
-	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &reg);
+	      insn_ptr = read_uleb128 (insn_ptr, insn_end, &reg);
 	      reg = dwarf2_frame_adjust_regnum (gdbarch, reg, eh_frame_p);
-	      fs->regs.alloc_regs (reg + 1);
-	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &utmp);
-	      fs->regs.reg[reg].loc.exp.start = insn_ptr;
-	      fs->regs.reg[reg].loc.exp.len = utmp;
+	      dwarf2_frame_state_alloc_regs (&fs->regs, reg + 1);
+	      insn_ptr = read_uleb128 (insn_ptr, insn_end, &utmp);
+	      fs->regs.reg[reg].loc.exp = insn_ptr;
+	      fs->regs.reg[reg].exp_len = utmp;
 	      fs->regs.reg[reg].how = DWARF2_FRAME_REG_SAVED_EXP;
 	      insn_ptr += utmp;
 	      break;
 
 	    case DW_CFA_offset_extended_sf:
-	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &reg);
+	      insn_ptr = read_uleb128 (insn_ptr, insn_end, &reg);
 	      reg = dwarf2_frame_adjust_regnum (gdbarch, reg, eh_frame_p);
-	      insn_ptr = safe_read_sleb128 (insn_ptr, insn_end, &offset);
+	      insn_ptr = read_sleb128 (insn_ptr, insn_end, &offset);
 	      offset *= fs->data_align;
-	      fs->regs.alloc_regs (reg + 1);
+	      dwarf2_frame_state_alloc_regs (&fs->regs, reg + 1);
 	      fs->regs.reg[reg].how = DWARF2_FRAME_REG_SAVED_OFFSET;
 	      fs->regs.reg[reg].loc.offset = offset;
 	      break;
 
 	    case DW_CFA_val_offset:
-	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &reg);
-	      fs->regs.alloc_regs (reg + 1);
-	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &utmp);
+	      insn_ptr = read_uleb128 (insn_ptr, insn_end, &reg);
+	      dwarf2_frame_state_alloc_regs (&fs->regs, reg + 1);
+	      insn_ptr = read_uleb128 (insn_ptr, insn_end, &utmp);
 	      offset = utmp * fs->data_align;
 	      fs->regs.reg[reg].how = DWARF2_FRAME_REG_SAVED_VAL_OFFSET;
 	      fs->regs.reg[reg].loc.offset = offset;
 	      break;
 
 	    case DW_CFA_val_offset_sf:
-	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &reg);
-	      fs->regs.alloc_regs (reg + 1);
-	      insn_ptr = safe_read_sleb128 (insn_ptr, insn_end, &offset);
+	      insn_ptr = read_uleb128 (insn_ptr, insn_end, &reg);
+	      dwarf2_frame_state_alloc_regs (&fs->regs, reg + 1);
+	      insn_ptr = read_sleb128 (insn_ptr, insn_end, &offset);
 	      offset *= fs->data_align;
 	      fs->regs.reg[reg].how = DWARF2_FRAME_REG_SAVED_VAL_OFFSET;
 	      fs->regs.reg[reg].loc.offset = offset;
 	      break;
 
 	    case DW_CFA_val_expression:
-	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &reg);
-	      fs->regs.alloc_regs (reg + 1);
-	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &utmp);
-	      fs->regs.reg[reg].loc.exp.start = insn_ptr;
-	      fs->regs.reg[reg].loc.exp.len = utmp;
+	      insn_ptr = read_uleb128 (insn_ptr, insn_end, &reg);
+	      dwarf2_frame_state_alloc_regs (&fs->regs, reg + 1);
+	      insn_ptr = read_uleb128 (insn_ptr, insn_end, &utmp);
+	      fs->regs.reg[reg].loc.exp = insn_ptr;
+	      fs->regs.reg[reg].exp_len = utmp;
 	      fs->regs.reg[reg].how = DWARF2_FRAME_REG_SAVED_VAL_EXP;
 	      insn_ptr += utmp;
 	      break;
 
 	    case DW_CFA_def_cfa_sf:
-	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &reg);
-	      fs->regs.cfa_reg = dwarf2_frame_adjust_regnum (gdbarch, reg,
+	      insn_ptr = read_uleb128 (insn_ptr, insn_end, &fs->regs.cfa_reg);
+	      fs->regs.cfa_reg = dwarf2_frame_adjust_regnum (gdbarch,
+                                                             fs->regs.cfa_reg,
                                                              eh_frame_p);
-	      insn_ptr = safe_read_sleb128 (insn_ptr, insn_end, &offset);
+	      insn_ptr = read_sleb128 (insn_ptr, insn_end, &offset);
 	      fs->regs.cfa_offset = offset * fs->data_align;
 	      fs->regs.cfa_how = CFA_REG_OFFSET;
 	      break;
 
 	    case DW_CFA_def_cfa_offset_sf:
-	      insn_ptr = safe_read_sleb128 (insn_ptr, insn_end, &offset);
+	      insn_ptr = read_sleb128 (insn_ptr, insn_end, &offset);
 	      fs->regs.cfa_offset = offset * fs->data_align;
 	      /* cfa_how deliberately not set.  */
 	      break;
 
+	    case DW_CFA_GNU_window_save:
+	      /* This is SPARC-specific code, and contains hard-coded
+		 constants for the register numbering scheme used by
+		 GCC.  Rather than having a architecture-specific
+		 operation that's only ever used by a single
+		 architecture, we provide the implementation here.
+		 Incidentally that's what GCC does too in its
+		 unwinder.  */
+	      {
+		int size = register_size (gdbarch, 0);
+
+		dwarf2_frame_state_alloc_regs (&fs->regs, 32);
+		for (reg = 8; reg < 16; reg++)
+		  {
+		    fs->regs.reg[reg].how = DWARF2_FRAME_REG_SAVED_REG;
+		    fs->regs.reg[reg].loc.reg = reg + 16;
+		  }
+		for (reg = 16; reg < 32; reg++)
+		  {
+		    fs->regs.reg[reg].how = DWARF2_FRAME_REG_SAVED_OFFSET;
+		    fs->regs.reg[reg].loc.offset = (reg - 16) * size;
+		  }
+	      }
+	      break;
+
 	    case DW_CFA_GNU_args_size:
 	      /* Ignored.  */
-	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &utmp);
+	      insn_ptr = read_uleb128 (insn_ptr, insn_end, &utmp);
 	      break;
 
 	    case DW_CFA_GNU_negative_offset_extended:
-	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &reg);
+	      insn_ptr = read_uleb128 (insn_ptr, insn_end, &reg);
 	      reg = dwarf2_frame_adjust_regnum (gdbarch, reg, eh_frame_p);
-	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &utmp);
-	      offset = utmp * fs->data_align;
-	      fs->regs.alloc_regs (reg + 1);
+	      insn_ptr = read_uleb128 (insn_ptr, insn_end, &offset);
+	      offset *= fs->data_align;
+	      dwarf2_frame_state_alloc_regs (&fs->regs, reg + 1);
 	      fs->regs.reg[reg].how = DWARF2_FRAME_REG_SAVED_OFFSET;
 	      fs->regs.reg[reg].loc.offset = -offset;
 	      break;
 
 	    default:
-	      if (insn >= DW_CFA_lo_user && insn <= DW_CFA_hi_user)
-		{
-		  /* Handle vendor-specific CFI for different architectures.  */
-		  if (!gdbarch_execute_dwarf_cfa_vendor_op (gdbarch, insn, fs))
-		    error (_("Call Frame Instruction op %d in vendor extension "
-			     "space is not handled on this architecture."),
-			   insn);
-		}
-	      else
-		internal_error (__FILE__, __LINE__,
-				_("Unknown CFI encountered."));
+	      internal_error (__FILE__, __LINE__,
+			      _("Unknown CFI encountered."));
 	    }
 	}
     }
 
-  if (fs->initial.reg.empty ())
-    {
-      /* Don't allow remember/restore between CIE and FDE programs.  */
-      delete fs->regs.prev;
-      fs->regs.prev = NULL;
-    }
-
-  return insn_ptr;
+  /* Don't allow remember/restore between CIE and FDE programs.  */
+  dwarf2_frame_state_free_regs (fs->regs.prev);
+  fs->regs.prev = NULL;
 }
-
-#if GDB_SELF_TEST
-
-namespace selftests {
-
-/* Unit test to function execute_cfa_program.  */
-
-static void
-execute_cfa_program_test (struct gdbarch *gdbarch)
-{
-  struct dwarf2_fde fde;
-  struct dwarf2_cie cie;
-
-  memset (&fde, 0, sizeof fde);
-  memset (&cie, 0, sizeof cie);
-
-  cie.data_alignment_factor = -4;
-  cie.code_alignment_factor = 2;
-  fde.cie = &cie;
-
-  dwarf2_frame_state fs (0, fde.cie);
-
-  gdb_byte insns[] =
-    {
-      DW_CFA_def_cfa, 1, 4,  /* DW_CFA_def_cfa: r1 ofs 4 */
-      DW_CFA_offset | 0x2, 1,  /* DW_CFA_offset: r2 at cfa-4 */
-      DW_CFA_remember_state,
-      DW_CFA_restore_state,
-    };
-
-  const gdb_byte *insn_end = insns + sizeof (insns);
-  const gdb_byte *out = execute_cfa_program (&fde, insns, insn_end, gdbarch,
-					     0, &fs);
-
-  SELF_CHECK (out == insn_end);
-  SELF_CHECK (fs.pc == 0);
-
-  /* The instructions above only use r1 and r2, but the register numbers
-     used are adjusted by dwarf2_frame_adjust_regnum.  */
-  auto r1 = dwarf2_frame_adjust_regnum (gdbarch, 1, fde.eh_frame_p);
-  auto r2 = dwarf2_frame_adjust_regnum (gdbarch, 2, fde.eh_frame_p);
-
-  SELF_CHECK (fs.regs.reg.size () == (std::max (r1, r2) + 1));
-
-  SELF_CHECK (fs.regs.reg[r2].how == DWARF2_FRAME_REG_SAVED_OFFSET);
-  SELF_CHECK (fs.regs.reg[r2].loc.offset == -4);
-
-  for (auto i = 0; i < fs.regs.reg.size (); i++)
-    if (i != r2)
-      SELF_CHECK (fs.regs.reg[i].how == DWARF2_FRAME_REG_UNSPECIFIED);
-
-  SELF_CHECK (fs.regs.cfa_reg == 1);
-  SELF_CHECK (fs.regs.cfa_offset == 4);
-  SELF_CHECK (fs.regs.cfa_how == CFA_REG_OFFSET);
-  SELF_CHECK (fs.regs.cfa_exp == NULL);
-  SELF_CHECK (fs.regs.prev == NULL);
-}
-
-} // namespace selftests
-#endif /* GDB_SELF_TEST */
-
 
 
 /* Architecture-specific operations.  */
@@ -753,8 +798,7 @@ dwarf2_frame_set_init_reg (struct gdbarch *gdbarch,
 					     struct dwarf2_frame_state_reg *,
 					     struct frame_info *))
 {
-  struct dwarf2_frame_ops *ops
-    = (struct dwarf2_frame_ops *) gdbarch_data (gdbarch, dwarf2_frame_data);
+  struct dwarf2_frame_ops *ops = gdbarch_data (gdbarch, dwarf2_frame_data);
 
   ops->init_reg = init_reg;
 }
@@ -766,8 +810,7 @@ dwarf2_frame_init_reg (struct gdbarch *gdbarch, int regnum,
 		       struct dwarf2_frame_state_reg *reg,
 		       struct frame_info *this_frame)
 {
-  struct dwarf2_frame_ops *ops
-    = (struct dwarf2_frame_ops *) gdbarch_data (gdbarch, dwarf2_frame_data);
+  struct dwarf2_frame_ops *ops = gdbarch_data (gdbarch, dwarf2_frame_data);
 
   ops->init_reg (gdbarch, regnum, reg, this_frame);
 }
@@ -780,8 +823,7 @@ dwarf2_frame_set_signal_frame_p (struct gdbarch *gdbarch,
 				 int (*signal_frame_p) (struct gdbarch *,
 							struct frame_info *))
 {
-  struct dwarf2_frame_ops *ops
-    = (struct dwarf2_frame_ops *) gdbarch_data (gdbarch, dwarf2_frame_data);
+  struct dwarf2_frame_ops *ops = gdbarch_data (gdbarch, dwarf2_frame_data);
 
   ops->signal_frame_p = signal_frame_p;
 }
@@ -793,8 +835,7 @@ static int
 dwarf2_frame_signal_frame_p (struct gdbarch *gdbarch,
 			     struct frame_info *this_frame)
 {
-  struct dwarf2_frame_ops *ops
-    = (struct dwarf2_frame_ops *) gdbarch_data (gdbarch, dwarf2_frame_data);
+  struct dwarf2_frame_ops *ops = gdbarch_data (gdbarch, dwarf2_frame_data);
 
   if (ops->signal_frame_p == NULL)
     return 0;
@@ -809,8 +850,7 @@ dwarf2_frame_set_adjust_regnum (struct gdbarch *gdbarch,
 				int (*adjust_regnum) (struct gdbarch *,
 						      int, int))
 {
-  struct dwarf2_frame_ops *ops
-    = (struct dwarf2_frame_ops *) gdbarch_data (gdbarch, dwarf2_frame_data);
+  struct dwarf2_frame_ops *ops = gdbarch_data (gdbarch, dwarf2_frame_data);
 
   ops->adjust_regnum = adjust_regnum;
 }
@@ -822,8 +862,7 @@ static int
 dwarf2_frame_adjust_regnum (struct gdbarch *gdbarch,
 			    int regnum, int eh_frame_p)
 {
-  struct dwarf2_frame_ops *ops
-    = (struct dwarf2_frame_ops *) gdbarch_data (gdbarch, dwarf2_frame_data);
+  struct dwarf2_frame_ops *ops = gdbarch_data (gdbarch, dwarf2_frame_data);
 
   if (ops->adjust_regnum == NULL)
     return regnum;
@@ -834,13 +873,13 @@ static void
 dwarf2_frame_find_quirks (struct dwarf2_frame_state *fs,
 			  struct dwarf2_fde *fde)
 {
-  struct compunit_symtab *cust;
+  struct symtab *s;
 
-  cust = find_pc_compunit_symtab (fs->pc);
-  if (cust == NULL)
+  s = find_pc_symtab (fs->pc);
+  if (s == NULL)
     return;
 
-  if (producer_is_realview (COMPUNIT_PRODUCER (cust)))
+  if (producer_is_realview (s->producer))
     {
       if (fde->cie->version == 1)
 	fs->armcc_cfa_offsets_sf = 1;
@@ -855,7 +894,7 @@ dwarf2_frame_find_quirks (struct dwarf2_frame_state *fs,
 	 this problem is fixed (no quirk needed).  If the armcc
 	 augmentation is missing, the quirk is needed.  */
       if (fde->cie->version == 3
-	  && (!startswith (fde->cie->augmentation, "armcc")
+	  && (strncmp (fde->cie->augmentation, "armcc", 5) != 0
 	      || strchr (fde->cie->augmentation + 5, '+') == NULL))
 	fs->armcc_cfa_offsets_reversed = 1;
 
@@ -864,26 +903,33 @@ dwarf2_frame_find_quirks (struct dwarf2_frame_state *fs,
 }
 
 
-/* See dwarf2-frame.h.  */
-
-int
-dwarf2_fetch_cfa_info (struct gdbarch *gdbarch, CORE_ADDR pc,
-		       struct dwarf2_per_cu_data *data,
-		       int *regnum_out, LONGEST *offset_out,
-		       CORE_ADDR *text_offset_out,
-		       const gdb_byte **cfa_start_out,
-		       const gdb_byte **cfa_end_out)
+void
+dwarf2_compile_cfa_to_ax (struct agent_expr *expr, struct axs_value *loc,
+			  struct gdbarch *gdbarch,
+			  CORE_ADDR pc,
+			  struct dwarf2_per_cu_data *data)
 {
+  const int num_regs = gdbarch_num_regs (gdbarch)
+		       + gdbarch_num_pseudo_regs (gdbarch);
   struct dwarf2_fde *fde;
-  CORE_ADDR text_offset;
-  CORE_ADDR pc1 = pc;
+  CORE_ADDR text_offset, cfa;
+  struct dwarf2_frame_state fs;
+  int addr_size;
+
+  memset (&fs, 0, sizeof (struct dwarf2_frame_state));
+
+  fs.pc = pc;
 
   /* Find the correct FDE.  */
-  fde = dwarf2_frame_find_fde (&pc1, &text_offset);
+  fde = dwarf2_frame_find_fde (&fs.pc, &text_offset);
   if (fde == NULL)
     error (_("Could not compute CFA; needed to translate this expression"));
 
-  dwarf2_frame_state fs (pc1, fde->cie);
+  /* Extract any interesting information from the CIE.  */
+  fs.data_align = fde->cie->data_alignment_factor;
+  fs.code_align = fde->cie->code_alignment_factor;
+  fs.retaddr_column = fde->cie->return_address_register;
+  addr_size = fde->cie->addr_size;
 
   /* Check for "quirks" - known bugs in producers.  */
   dwarf2_frame_find_quirks (&fs, fde);
@@ -894,6 +940,7 @@ dwarf2_fetch_cfa_info (struct gdbarch *gdbarch, CORE_ADDR pc,
 
   /* Save the initialized register set.  */
   fs.initial = fs.regs;
+  fs.initial.reg = dwarf2_frame_state_copy_regs (&fs.regs);
 
   /* Then decode the insns in the FDE up to our target PC.  */
   execute_cfa_program (fde, fde->instructions, fde->end, gdbarch, pc, &fs);
@@ -903,21 +950,31 @@ dwarf2_fetch_cfa_info (struct gdbarch *gdbarch, CORE_ADDR pc,
     {
     case CFA_REG_OFFSET:
       {
-	int regnum = dwarf_reg_to_regnum_or_error (gdbarch, fs.regs.cfa_reg);
+	int regnum = gdbarch_dwarf2_reg_to_regnum (gdbarch, fs.regs.cfa_reg);
 
-	*regnum_out = regnum;
-	if (fs.armcc_cfa_offsets_reversed)
-	  *offset_out = -fs.regs.cfa_offset;
-	else
-	  *offset_out = fs.regs.cfa_offset;
-	return 1;
+	if (regnum == -1)
+	  error (_("Unable to access DWARF register number %d"),
+		 (int) fs.regs.cfa_reg); /* FIXME */
+	ax_reg (expr, regnum);
+
+	if (fs.regs.cfa_offset != 0)
+	  {
+	    if (fs.armcc_cfa_offsets_reversed)
+	      ax_const_l (expr, -fs.regs.cfa_offset);
+	    else
+	      ax_const_l (expr, fs.regs.cfa_offset);
+	    ax_simple (expr, aop_add);
+	  }
       }
+      break;
 
     case CFA_EXP:
-      *text_offset_out = text_offset;
-      *cfa_start_out = fs.regs.cfa_exp;
-      *cfa_end_out = fs.regs.cfa_exp + fs.regs.cfa_exp_len;
-      return 0;
+      ax_const_l (expr, text_offset);
+      dwarf2_compile_expr_to_ax (expr, loc, gdbarch, addr_size,
+				 fs.regs.cfa_exp,
+				 fs.regs.cfa_exp + fs.regs.cfa_exp_len,
+				 data);
+      break;
 
     default:
       internal_error (__FILE__, __LINE__, _("Unknown CFA rule."));
@@ -949,42 +1006,31 @@ struct dwarf2_frame_cache
 
   /* The .text offset.  */
   CORE_ADDR text_offset;
-
-  /* True if we already checked whether this frame is the bottom frame
-     of a virtual tail call frame chain.  */
-  int checked_tailcall_bottom;
-
-  /* If not NULL then this frame is the bottom frame of a TAILCALL_FRAME
-     sequence.  If NULL then it is a normal case with no TAILCALL_FRAME
-     involved.  Non-bottom frames of a virtual tail call frames chain use
-     dwarf2_tailcall_frame_unwind unwinder so this field does not apply for
-     them.  */
-  void *tailcall_cache;
-
-  /* The number of bytes to subtract from TAILCALL_FRAME frames frame
-     base to get the SP, to simulate the return address pushed on the
-     stack.  */
-  LONGEST entry_cfa_sp_offset;
-  int entry_cfa_sp_offset_p;
 };
 
 static struct dwarf2_frame_cache *
 dwarf2_frame_cache (struct frame_info *this_frame, void **this_cache)
 {
+  struct cleanup *old_chain;
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
-  const int num_regs = gdbarch_num_cooked_regs (gdbarch);
+  const int num_regs = gdbarch_num_regs (gdbarch)
+		       + gdbarch_num_pseudo_regs (gdbarch);
   struct dwarf2_frame_cache *cache;
+  struct dwarf2_frame_state *fs;
   struct dwarf2_fde *fde;
-  CORE_ADDR entry_pc;
-  const gdb_byte *instr;
+  volatile struct gdb_exception ex;
 
   if (*this_cache)
-    return (struct dwarf2_frame_cache *) *this_cache;
+    return *this_cache;
 
   /* Allocate a new cache.  */
   cache = FRAME_OBSTACK_ZALLOC (struct dwarf2_frame_cache);
   cache->reg = FRAME_OBSTACK_CALLOC (num_regs, struct dwarf2_frame_state_reg);
   *this_cache = cache;
+
+  /* Allocate and initialize the frame state.  */
+  fs = XZALLOC (struct dwarf2_frame_state);
+  old_chain = make_cleanup (dwarf2_frame_state_free, fs);
 
   /* Unwind the PC.
 
@@ -1001,65 +1047,49 @@ dwarf2_frame_cache (struct frame_info *this_frame, void **this_cache)
      get_frame_address_in_block does just this.  It's not clear how
      reliable the method is though; there is the potential for the
      register state pre-call being different to that on return.  */
-  CORE_ADDR pc1 = get_frame_address_in_block (this_frame);
+  fs->pc = get_frame_address_in_block (this_frame);
 
   /* Find the correct FDE.  */
-  fde = dwarf2_frame_find_fde (&pc1, &cache->text_offset);
+  fde = dwarf2_frame_find_fde (&fs->pc, &cache->text_offset);
   gdb_assert (fde != NULL);
 
-  /* Allocate and initialize the frame state.  */
-  struct dwarf2_frame_state fs (pc1, fde->cie);
-
+  /* Extract any interesting information from the CIE.  */
+  fs->data_align = fde->cie->data_alignment_factor;
+  fs->code_align = fde->cie->code_alignment_factor;
+  fs->retaddr_column = fde->cie->return_address_register;
   cache->addr_size = fde->cie->addr_size;
 
   /* Check for "quirks" - known bugs in producers.  */
-  dwarf2_frame_find_quirks (&fs, fde);
+  dwarf2_frame_find_quirks (fs, fde);
 
   /* First decode all the insns in the CIE.  */
   execute_cfa_program (fde, fde->cie->initial_instructions,
-		       fde->cie->end, gdbarch,
-		       get_frame_address_in_block (this_frame), &fs);
+		       fde->cie->end, gdbarch, get_frame_pc (this_frame), fs);
 
   /* Save the initialized register set.  */
-  fs.initial = fs.regs;
-
-  if (get_frame_func_if_available (this_frame, &entry_pc))
-    {
-      /* Decode the insns in the FDE up to the entry PC.  */
-      instr = execute_cfa_program (fde, fde->instructions, fde->end, gdbarch,
-				   entry_pc, &fs);
-
-      if (fs.regs.cfa_how == CFA_REG_OFFSET
-	  && (dwarf_reg_to_regnum (gdbarch, fs.regs.cfa_reg)
-	      == gdbarch_sp_regnum (gdbarch)))
-	{
-	  cache->entry_cfa_sp_offset = fs.regs.cfa_offset;
-	  cache->entry_cfa_sp_offset_p = 1;
-	}
-    }
-  else
-    instr = fde->instructions;
+  fs->initial = fs->regs;
+  fs->initial.reg = dwarf2_frame_state_copy_regs (&fs->regs);
 
   /* Then decode the insns in the FDE up to our target PC.  */
-  execute_cfa_program (fde, instr, fde->end, gdbarch,
-		       get_frame_address_in_block (this_frame), &fs);
+  execute_cfa_program (fde, fde->instructions, fde->end, gdbarch,
+		       get_frame_pc (this_frame), fs);
 
-  TRY
+  TRY_CATCH (ex, RETURN_MASK_ERROR)
     {
       /* Calculate the CFA.  */
-      switch (fs.regs.cfa_how)
+      switch (fs->regs.cfa_how)
 	{
 	case CFA_REG_OFFSET:
-	  cache->cfa = read_addr_from_reg (this_frame, fs.regs.cfa_reg);
-	  if (fs.armcc_cfa_offsets_reversed)
-	    cache->cfa -= fs.regs.cfa_offset;
+	  cache->cfa = read_reg (this_frame, fs->regs.cfa_reg);
+	  if (fs->armcc_cfa_offsets_reversed)
+	    cache->cfa -= fs->regs.cfa_offset;
 	  else
-	    cache->cfa += fs.regs.cfa_offset;
+	    cache->cfa += fs->regs.cfa_offset;
 	  break;
 
 	case CFA_EXP:
 	  cache->cfa =
-	    execute_stack_op (fs.regs.cfa_exp, fs.regs.cfa_exp_len,
+	    execute_stack_op (fs->regs.cfa_exp, fs->regs.cfa_exp_len,
 			      cache->addr_size, cache->text_offset,
 			      this_frame, 0, 0);
 	  break;
@@ -1068,7 +1098,7 @@ dwarf2_frame_cache (struct frame_info *this_frame, void **this_cache)
 	  internal_error (__FILE__, __LINE__, _("Unknown CFA rule."));
 	}
     }
-  CATCH (ex, RETURN_MASK_ERROR)
+  if (ex.reason < 0)
     {
       if (ex.error == NOT_AVAILABLE_ERROR)
 	{
@@ -1078,7 +1108,6 @@ dwarf2_frame_cache (struct frame_info *this_frame, void **this_cache)
 
       throw_exception (ex);
     }
-  END_CATCH
 
   /* Initialize the register state.  */
   {
@@ -1091,16 +1120,19 @@ dwarf2_frame_cache (struct frame_info *this_frame, void **this_cache)
   /* Go through the DWARF2 CFI generated table and save its register
      location information in the cache.  Note that we don't skip the
      return address column; it's perfectly all right for it to
-     correspond to a real register.  */
+     correspond to a real register.  If it doesn't correspond to a
+     real register, or if we shouldn't treat it as such,
+     gdbarch_dwarf2_reg_to_regnum should be defined to return a number outside
+     the range [0, gdbarch_num_regs).  */
   {
     int column;		/* CFI speak for "register number".  */
 
-    for (column = 0; column < fs.regs.reg.size (); column++)
+    for (column = 0; column < fs->regs.num_regs; column++)
       {
 	/* Use the GDB register number as the destination index.  */
-	int regnum = dwarf_reg_to_regnum (gdbarch, column);
+	int regnum = gdbarch_dwarf2_reg_to_regnum (gdbarch, column);
 
-	/* Protect against a target returning a bad register.  */
+	/* If there's no corresponding GDB register, ignore it.  */
 	if (regnum < 0 || regnum >= num_regs)
 	  continue;
 
@@ -1115,16 +1147,16 @@ dwarf2_frame_cache (struct frame_info *this_frame, void **this_cache)
 	   problems when a debug info register falls outside of the
 	   table.  We need a way of iterating through all the valid
 	   DWARF2 register numbers.  */
-	if (fs.regs.reg[column].how == DWARF2_FRAME_REG_UNSPECIFIED)
+	if (fs->regs.reg[column].how == DWARF2_FRAME_REG_UNSPECIFIED)
 	  {
 	    if (cache->reg[regnum].how == DWARF2_FRAME_REG_UNSPECIFIED)
-	      complaint (_("\
+	      complaint (&symfile_complaints, _("\
 incomplete CFI data; unspecified registers (e.g., %s) at %s"),
 			 gdbarch_register_name (gdbarch, regnum),
-			 paddress (gdbarch, fs.pc));
+			 paddress (gdbarch, fs->pc));
 	  }
 	else
-	  cache->reg[regnum] = fs.regs.reg[column];
+	  cache->reg[regnum] = fs->regs.reg[column];
       }
   }
 
@@ -1138,9 +1170,8 @@ incomplete CFI data; unspecified registers (e.g., %s) at %s"),
 	if (cache->reg[regnum].how == DWARF2_FRAME_REG_RA
 	    || cache->reg[regnum].how == DWARF2_FRAME_REG_RA_OFFSET)
 	  {
-	    const std::vector<struct dwarf2_frame_state_reg> &regs
-	      = fs.regs.reg;
-	    ULONGEST retaddr_column = fs.retaddr_column;
+	    struct dwarf2_frame_state_reg *retaddr_reg =
+	      &fs->regs.reg[fs->retaddr_column];
 
 	    /* It seems rather bizarre to specify an "empty" column as
                the return adress column.  However, this is exactly
@@ -1149,25 +1180,25 @@ incomplete CFI data; unspecified registers (e.g., %s) at %s"),
                register corresponding to the return address column.
                Incidentally, that's how we should treat a return
                address column specifying "same value" too.  */
-	    if (fs.retaddr_column < fs.regs.reg.size ()
-		&& regs[retaddr_column].how != DWARF2_FRAME_REG_UNSPECIFIED
-		&& regs[retaddr_column].how != DWARF2_FRAME_REG_SAME_VALUE)
+	    if (fs->retaddr_column < fs->regs.num_regs
+		&& retaddr_reg->how != DWARF2_FRAME_REG_UNSPECIFIED
+		&& retaddr_reg->how != DWARF2_FRAME_REG_SAME_VALUE)
 	      {
 		if (cache->reg[regnum].how == DWARF2_FRAME_REG_RA)
-		  cache->reg[regnum] = regs[retaddr_column];
+		  cache->reg[regnum] = *retaddr_reg;
 		else
-		  cache->retaddr_reg = regs[retaddr_column];
+		  cache->retaddr_reg = *retaddr_reg;
 	      }
 	    else
 	      {
 		if (cache->reg[regnum].how == DWARF2_FRAME_REG_RA)
 		  {
-		    cache->reg[regnum].loc.reg = fs.retaddr_column;
+		    cache->reg[regnum].loc.reg = fs->retaddr_column;
 		    cache->reg[regnum].how = DWARF2_FRAME_REG_SAVED_REG;
 		  }
 		else
 		  {
-		    cache->retaddr_reg.loc.reg = fs.retaddr_column;
+		    cache->retaddr_reg.loc.reg = fs->retaddr_column;
 		    cache->retaddr_reg.how = DWARF2_FRAME_REG_SAVED_REG;
 		  }
 	      }
@@ -1175,9 +1206,11 @@ incomplete CFI data; unspecified registers (e.g., %s) at %s"),
       }
   }
 
-  if (fs.retaddr_column < fs.regs.reg.size ()
-      && fs.regs.reg[fs.retaddr_column].how == DWARF2_FRAME_REG_UNDEFINED)
+  if (fs->retaddr_column < fs->regs.num_regs
+      && fs->regs.reg[fs->retaddr_column].how == DWARF2_FRAME_REG_UNDEFINED)
     cache->undefined_retaddr = 1;
+
+  do_cleanups (old_chain);
 
   return cache;
 }
@@ -1206,11 +1239,12 @@ dwarf2_frame_this_id (struct frame_info *this_frame, void **this_cache,
     dwarf2_frame_cache (this_frame, this_cache);
 
   if (cache->unavailable_retaddr)
-    (*this_id) = frame_id_build_unavailable_stack (get_frame_func (this_frame));
-  else if (cache->undefined_retaddr)
     return;
-  else
-    (*this_id) = frame_id_build (cache->cfa, get_frame_func (this_frame));
+
+  if (cache->undefined_retaddr)
+    return;
+
+  (*this_id) = frame_id_build (cache->cfa, get_frame_func (this_frame));
 }
 
 static struct value *
@@ -1222,32 +1256,6 @@ dwarf2_frame_prev_register (struct frame_info *this_frame, void **this_cache,
     dwarf2_frame_cache (this_frame, this_cache);
   CORE_ADDR addr;
   int realnum;
-
-  /* Check whether THIS_FRAME is the bottom frame of a virtual tail
-     call frame chain.  */
-  if (!cache->checked_tailcall_bottom)
-    {
-      cache->checked_tailcall_bottom = 1;
-      dwarf2_tailcall_sniffer_first (this_frame, &cache->tailcall_cache,
-				     (cache->entry_cfa_sp_offset_p
-				      ? &cache->entry_cfa_sp_offset : NULL));
-    }
-
-  /* Non-bottom frames of a virtual tail call frames chain use
-     dwarf2_tailcall_frame_unwind unwinder so this code does not apply for
-     them.  If dwarf2_tailcall_prev_register_first does not have specific value
-     unwind the register, tail call frames are assumed to have the register set
-     of the top caller.  */
-  if (cache->tailcall_cache)
-    {
-      struct value *val;
-      
-      val = dwarf2_tailcall_prev_register_first (this_frame,
-						 &cache->tailcall_cache,
-						 regnum);
-      if (val)
-	return val;
-    }
 
   switch (cache->reg[regnum].how)
     {
@@ -1261,13 +1269,13 @@ dwarf2_frame_prev_register (struct frame_info *this_frame, void **this_cache,
       return frame_unwind_got_memory (this_frame, regnum, addr);
 
     case DWARF2_FRAME_REG_SAVED_REG:
-      realnum = dwarf_reg_to_regnum_or_error
-	(gdbarch, cache->reg[regnum].loc.reg);
+      realnum
+	= gdbarch_dwarf2_reg_to_regnum (gdbarch, cache->reg[regnum].loc.reg);
       return frame_unwind_got_register (this_frame, regnum, realnum);
 
     case DWARF2_FRAME_REG_SAVED_EXP:
-      addr = execute_stack_op (cache->reg[regnum].loc.exp.start,
-			       cache->reg[regnum].loc.exp.len,
+      addr = execute_stack_op (cache->reg[regnum].loc.exp,
+			       cache->reg[regnum].exp_len,
 			       cache->addr_size, cache->text_offset,
 			       this_frame, cache->cfa, 1);
       return frame_unwind_got_memory (this_frame, regnum, addr);
@@ -1277,8 +1285,8 @@ dwarf2_frame_prev_register (struct frame_info *this_frame, void **this_cache,
       return frame_unwind_got_constant (this_frame, regnum, addr);
 
     case DWARF2_FRAME_REG_SAVED_VAL_EXP:
-      addr = execute_stack_op (cache->reg[regnum].loc.exp.start,
-			       cache->reg[regnum].loc.exp.len,
+      addr = execute_stack_op (cache->reg[regnum].loc.exp,
+			       cache->reg[regnum].exp_len,
 			       cache->addr_size, cache->text_offset,
 			       this_frame, cache->cfa, 1);
       return frame_unwind_got_constant (this_frame, regnum, addr);
@@ -1305,7 +1313,7 @@ dwarf2_frame_prev_register (struct frame_info *this_frame, void **this_cache,
 
     case DWARF2_FRAME_REG_RA_OFFSET:
       addr = cache->reg[regnum].loc.offset;
-      regnum = dwarf_reg_to_regnum_or_error
+      regnum = gdbarch_dwarf2_reg_to_regnum
 	(gdbarch, cache->retaddr_reg.loc.reg);
       addr += get_frame_register_unsigned (this_frame, regnum);
       return frame_unwind_got_address (this_frame, regnum, addr);
@@ -1318,25 +1326,10 @@ dwarf2_frame_prev_register (struct frame_info *this_frame, void **this_cache,
     }
 }
 
-/* Proxy for tailcall_frame_dealloc_cache for bottom frame of a virtual tail
-   call frames chain.  */
-
-static void
-dwarf2_frame_dealloc_cache (struct frame_info *self, void *this_cache)
-{
-  struct dwarf2_frame_cache *cache = dwarf2_frame_cache (self, &this_cache);
-
-  if (cache->tailcall_cache)
-    dwarf2_tailcall_frame_unwind.dealloc_cache (self, cache->tailcall_cache);
-}
-
 static int
 dwarf2_frame_sniffer (const struct frame_unwind *self,
 		      struct frame_info *this_frame, void **this_cache)
 {
-  if (!dwarf2_frame_unwinders_enabled_p)
-    return 0;
-
   /* Grab an address that is guarenteed to reside somewhere within the
      function.  get_frame_pc(), with a no-return next function, can
      end up returning something past the end of this function's body.
@@ -1359,10 +1352,7 @@ dwarf2_frame_sniffer (const struct frame_unwind *self,
 				      this_frame))
     return self->type == SIGTRAMP_FRAME;
 
-  if (self->type != NORMAL_FRAME)
-    return 0;
-
-  return 1;
+  return self->type != SIGTRAMP_FRAME;
 }
 
 static const struct frame_unwind dwarf2_frame_unwind =
@@ -1372,8 +1362,7 @@ static const struct frame_unwind dwarf2_frame_unwind =
   dwarf2_frame_this_id,
   dwarf2_frame_prev_register,
   NULL,
-  dwarf2_frame_sniffer,
-  dwarf2_frame_dealloc_cache
+  dwarf2_frame_sniffer
 };
 
 static const struct frame_unwind dwarf2_signal_frame_unwind =
@@ -1383,10 +1372,7 @@ static const struct frame_unwind dwarf2_signal_frame_unwind =
   dwarf2_frame_this_id,
   dwarf2_frame_prev_register,
   NULL,
-  dwarf2_frame_sniffer,
-
-  /* TAILCALL_CACHE can never be in such frame to need dealloc_cache.  */
-  NULL
+  dwarf2_frame_sniffer
 };
 
 /* Append the DWARF-2 frame unwinders to GDBARCH's list.  */
@@ -1394,10 +1380,6 @@ static const struct frame_unwind dwarf2_signal_frame_unwind =
 void
 dwarf2_append_unwinders (struct gdbarch *gdbarch)
 {
-  /* TAILCALL_FRAME must be first to find the record by
-     dwarf2_tailcall_sniffer_first.  */
-  frame_unwind_append_unwinder (gdbarch, &dwarf2_tailcall_frame_unwind);
-
   frame_unwind_append_unwinder (gdbarch, &dwarf2_frame_unwind);
   frame_unwind_append_unwinder (gdbarch, &dwarf2_signal_frame_unwind);
 }
@@ -1444,49 +1426,95 @@ dwarf2_frame_base_sniffer (struct frame_info *this_frame)
 CORE_ADDR
 dwarf2_frame_cfa (struct frame_info *this_frame)
 {
-  if (frame_unwinder_is (this_frame, &record_btrace_tailcall_frame_unwind)
-      || frame_unwinder_is (this_frame, &record_btrace_frame_unwind))
-    throw_error (NOT_AVAILABLE_ERROR,
-		 _("cfa not available for record btrace target"));
-
   while (get_frame_type (this_frame) == INLINE_FRAME)
     this_frame = get_prev_frame (this_frame);
-  if (get_frame_unwind_stop_reason (this_frame) == UNWIND_UNAVAILABLE)
-    throw_error (NOT_AVAILABLE_ERROR,
-                _("can't compute CFA for this frame: "
-                  "required registers or memory are unavailable"));
-
-  if (get_frame_id (this_frame).stack_status != FID_STACK_VALID)
-    throw_error (NOT_AVAILABLE_ERROR,
-                _("can't compute CFA for this frame: "
-                  "frame base not available"));
-
+  /* This restriction could be lifted if other unwinders are known to
+     compute the frame base in a way compatible with the DWARF
+     unwinder.  */
+  if (! frame_unwinder_is (this_frame, &dwarf2_frame_unwind))
+    error (_("can't compute CFA for this frame"));
   return get_frame_base (this_frame);
 }
 
 const struct objfile_data *dwarf2_frame_objfile_data;
 
 static unsigned int
-read_1_byte (bfd *abfd, const gdb_byte *buf)
+read_1_byte (bfd *abfd, gdb_byte *buf)
 {
   return bfd_get_8 (abfd, buf);
 }
 
 static unsigned int
-read_4_bytes (bfd *abfd, const gdb_byte *buf)
+read_4_bytes (bfd *abfd, gdb_byte *buf)
 {
   return bfd_get_32 (abfd, buf);
 }
 
 static ULONGEST
-read_8_bytes (bfd *abfd, const gdb_byte *buf)
+read_8_bytes (bfd *abfd, gdb_byte *buf)
 {
   return bfd_get_64 (abfd, buf);
 }
 
 static ULONGEST
-read_initial_length (bfd *abfd, const gdb_byte *buf,
-		     unsigned int *bytes_read_ptr)
+read_unsigned_leb128 (bfd *abfd, gdb_byte *buf, unsigned int *bytes_read_ptr)
+{
+  ULONGEST result;
+  unsigned int num_read;
+  int shift;
+  gdb_byte byte;
+
+  result = 0;
+  shift = 0;
+  num_read = 0;
+
+  do
+    {
+      byte = bfd_get_8 (abfd, (bfd_byte *) buf);
+      buf++;
+      num_read++;
+      result |= ((byte & 0x7f) << shift);
+      shift += 7;
+    }
+  while (byte & 0x80);
+
+  *bytes_read_ptr = num_read;
+
+  return result;
+}
+
+static LONGEST
+read_signed_leb128 (bfd *abfd, gdb_byte *buf, unsigned int *bytes_read_ptr)
+{
+  LONGEST result;
+  int shift;
+  unsigned int num_read;
+  gdb_byte byte;
+
+  result = 0;
+  shift = 0;
+  num_read = 0;
+
+  do
+    {
+      byte = bfd_get_8 (abfd, (bfd_byte *) buf);
+      buf++;
+      num_read++;
+      result |= ((byte & 0x7f) << shift);
+      shift += 7;
+    }
+  while (byte & 0x80);
+
+  if (shift < 8 * sizeof (result) && (byte & 0x40))
+    result |= -(((LONGEST)1) << shift);
+
+  *bytes_read_ptr = num_read;
+
+  return result;
+}
+
+static ULONGEST
+read_initial_length (bfd *abfd, gdb_byte *buf, unsigned int *bytes_read_ptr)
 {
   LONGEST result;
 
@@ -1595,10 +1623,10 @@ read_encoded_value (struct comp_unit *unit, gdb_byte encoding,
     {
     case DW_EH_PE_uleb128:
       {
-	uint64_t value;
+	ULONGEST value;
 	const gdb_byte *end_buf = buf + (sizeof (value) + 1) * 8 / 7;
 
-	*bytes_read_ptr += safe_read_uleb128 (buf, end_buf, &value) - buf;
+	*bytes_read_ptr += read_uleb128 (buf, end_buf, &value) - buf;
 	return base + value;
       }
     case DW_EH_PE_udata2:
@@ -1612,10 +1640,10 @@ read_encoded_value (struct comp_unit *unit, gdb_byte encoding,
       return (base + bfd_get_64 (unit->abfd, (bfd_byte *) buf));
     case DW_EH_PE_sleb128:
       {
-	int64_t value;
+	LONGEST value;
 	const gdb_byte *end_buf = buf + (sizeof (value) + 1) * 8 / 7;
 
-	*bytes_read_ptr += safe_read_sleb128 (buf, end_buf, &value) - buf;
+	*bytes_read_ptr += read_sleb128 (buf, end_buf, &value) - buf;
 	return base + value;
       }
     case DW_EH_PE_sdata2:
@@ -1660,9 +1688,8 @@ find_cie (struct dwarf2_cie_table *cie_table, ULONGEST cie_pointer)
       return NULL;
     }
 
-  p_cie = ((struct dwarf2_cie **)
-	   bsearch (&cie_pointer, cie_table->entries, cie_table->num_entries,
-		    sizeof (cie_table->entries[0]), bsearch_cie_cmp));
+  p_cie = bsearch (&cie_pointer, cie_table->entries, cie_table->num_entries,
+                   sizeof (cie_table->entries[0]), bsearch_cie_cmp);
   if (p_cie != NULL)
     return *p_cie;
   return NULL;
@@ -1677,8 +1704,8 @@ add_cie (struct dwarf2_cie_table *cie_table, struct dwarf2_cie *cie)
   gdb_assert (n < 1
               || cie_table->entries[n - 1]->cie_pointer < cie->cie_pointer);
 
-  cie_table->entries
-    = XRESIZEVEC (struct dwarf2_cie *, cie_table->entries, n + 1);
+  cie_table->entries =
+      xrealloc (cie_table->entries, (n + 1) * sizeof (cie_table->entries[0]));
   cie_table->entries[n] = cie;
   cie_table->num_entries = n + 1;
 }
@@ -1702,20 +1729,20 @@ bsearch_fde_cmp (const void *key, const void *element)
 static struct dwarf2_fde *
 dwarf2_frame_find_fde (CORE_ADDR *pc, CORE_ADDR *out_offset)
 {
-  for (objfile *objfile : current_program_space->objfiles ())
+  struct objfile *objfile;
+
+  ALL_OBJFILES (objfile)
     {
       struct dwarf2_fde_table *fde_table;
       struct dwarf2_fde **p_fde;
       CORE_ADDR offset;
       CORE_ADDR seek_pc;
 
-      fde_table = ((struct dwarf2_fde_table *)
-		   objfile_data (objfile, dwarf2_frame_objfile_data));
+      fde_table = objfile_data (objfile, dwarf2_frame_objfile_data);
       if (fde_table == NULL)
 	{
 	  dwarf2_build_frame_info (objfile);
-	  fde_table = ((struct dwarf2_fde_table *)
-		       objfile_data (objfile, dwarf2_frame_objfile_data));
+	  fde_table = objfile_data (objfile, dwarf2_frame_objfile_data);
 	}
       gdb_assert (fde_table != NULL);
 
@@ -1730,9 +1757,8 @@ dwarf2_frame_find_fde (CORE_ADDR *pc, CORE_ADDR *out_offset)
         continue;
 
       seek_pc = *pc - offset;
-      p_fde = ((struct dwarf2_fde **)
-	       bsearch (&seek_pc, fde_table->entries, fde_table->num_entries,
-                        sizeof (fde_table->entries[0]), bsearch_fde_cmp));
+      p_fde = bsearch (&seek_pc, fde_table->entries, fde_table->num_entries,
+                       sizeof (fde_table->entries[0]), bsearch_fde_cmp);
       if (p_fde != NULL)
         {
           *pc = (*p_fde)->initial_location + offset;
@@ -1753,49 +1779,37 @@ add_fde (struct dwarf2_fde_table *fde_table, struct dwarf2_fde *fde)
     return;
 
   fde_table->num_entries += 1;
-  fde_table->entries = XRESIZEVEC (struct dwarf2_fde *, fde_table->entries,
-				   fde_table->num_entries);
+  fde_table->entries =
+      xrealloc (fde_table->entries,
+                fde_table->num_entries * sizeof (fde_table->entries[0]));
   fde_table->entries[fde_table->num_entries - 1] = fde;
 }
 
+#ifdef CC_HAS_LONG_LONG
 #define DW64_CIE_ID 0xffffffffffffffffULL
+#else
+#define DW64_CIE_ID ~0
+#endif
 
-/* Defines the type of eh_frames that are expected to be decoded: CIE, FDE
-   or any of them.  */
+static gdb_byte *decode_frame_entry (struct comp_unit *unit, gdb_byte *start,
+				     int eh_frame_p,
+                                     struct dwarf2_cie_table *cie_table,
+                                     struct dwarf2_fde_table *fde_table);
 
-enum eh_frame_type
-{
-  EH_CIE_TYPE_ID = 1 << 0,
-  EH_FDE_TYPE_ID = 1 << 1,
-  EH_CIE_OR_FDE_TYPE_ID = EH_CIE_TYPE_ID | EH_FDE_TYPE_ID
-};
-
-static const gdb_byte *decode_frame_entry (struct comp_unit *unit,
-					   const gdb_byte *start,
-					   int eh_frame_p,
-					   struct dwarf2_cie_table *cie_table,
-					   struct dwarf2_fde_table *fde_table,
-					   enum eh_frame_type entry_type);
-
-/* Decode the next CIE or FDE, entry_type specifies the expected type.
-   Return NULL if invalid input, otherwise the next byte to be processed.  */
-
-static const gdb_byte *
-decode_frame_entry_1 (struct comp_unit *unit, const gdb_byte *start,
-		      int eh_frame_p,
+/* Decode the next CIE or FDE.  Return NULL if invalid input, otherwise
+   the next byte to be processed.  */
+static gdb_byte *
+decode_frame_entry_1 (struct comp_unit *unit, gdb_byte *start, int eh_frame_p,
                       struct dwarf2_cie_table *cie_table,
-                      struct dwarf2_fde_table *fde_table,
-                      enum eh_frame_type entry_type)
+                      struct dwarf2_fde_table *fde_table)
 {
   struct gdbarch *gdbarch = get_objfile_arch (unit->objfile);
-  const gdb_byte *buf, *end;
+  gdb_byte *buf, *end;
   LONGEST length;
   unsigned int bytes_read;
   int dwarf64_p;
   ULONGEST cie_id;
   ULONGEST cie_pointer;
-  int64_t sleb128;
-  uint64_t uleb128;
 
   buf = start;
   length = read_initial_length (unit->abfd, buf, &bytes_read);
@@ -1838,10 +1852,6 @@ decode_frame_entry_1 (struct comp_unit *unit, const gdb_byte *start,
       char *augmentation;
       unsigned int cie_version;
 
-      /* Check that a CIE was expected.  */
-      if ((entry_type & EH_CIE_TYPE_ID) == 0)
-	error (_("Found a CIE when not expecting it."));
-
       /* Record the offset into the .debug_frame section of this CIE.  */
       cie_pointer = start - unit->dwarf_frame_buffer;
 
@@ -1849,7 +1859,9 @@ decode_frame_entry_1 (struct comp_unit *unit, const gdb_byte *start,
       if (find_cie (cie_table, cie_pointer))
 	return end;
 
-      cie = XOBNEW (&unit->objfile->objfile_obstack, struct dwarf2_cie);
+      cie = (struct dwarf2_cie *)
+	obstack_alloc (&unit->objfile->objfile_obstack,
+		       sizeof (struct dwarf2_cie));
       cie->initial_instructions = NULL;
       cie->cie_pointer = cie_pointer;
 
@@ -1874,7 +1886,7 @@ decode_frame_entry_1 (struct comp_unit *unit, const gdb_byte *start,
 
       /* Ignore armcc augmentations.  We only use them for quirks,
 	 and that doesn't happen until later.  */
-      if (startswith (augmentation, "armcc"))
+      if (strncmp (augmentation, "armcc", 5) == 0)
 	augmentation += strlen (augmentation);
 
       /* The GCC 2.x "eh" augmentation has a pointer immediately
@@ -1909,43 +1921,39 @@ decode_frame_entry_1 (struct comp_unit *unit, const gdb_byte *start,
       else
 	cie->ptr_size = cie->addr_size;
 
-      buf = gdb_read_uleb128 (buf, end, &uleb128);
-      if (buf == NULL)
-	return NULL;
-      cie->code_alignment_factor = uleb128;
+      cie->code_alignment_factor =
+	read_unsigned_leb128 (unit->abfd, buf, &bytes_read);
+      buf += bytes_read;
 
-      buf = gdb_read_sleb128 (buf, end, &sleb128);
-      if (buf == NULL)
-	return NULL;
-      cie->data_alignment_factor = sleb128;
+      cie->data_alignment_factor =
+	read_signed_leb128 (unit->abfd, buf, &bytes_read);
+      buf += bytes_read;
 
       if (cie_version == 1)
 	{
 	  cie->return_address_register = read_1_byte (unit->abfd, buf);
-	  ++buf;
+	  bytes_read = 1;
 	}
       else
-	{
-	  buf = gdb_read_uleb128 (buf, end, &uleb128);
-	  if (buf == NULL)
-	    return NULL;
-	  cie->return_address_register = uleb128;
-	}
-
+	cie->return_address_register = read_unsigned_leb128 (unit->abfd, buf,
+							     &bytes_read);
       cie->return_address_register
 	= dwarf2_frame_adjust_regnum (gdbarch,
 				      cie->return_address_register,
 				      eh_frame_p);
 
+      buf += bytes_read;
+
       cie->saw_z_augmentation = (*augmentation == 'z');
       if (cie->saw_z_augmentation)
 	{
-	  uint64_t uleb_length;
+	  ULONGEST length;
 
-	  buf = gdb_read_uleb128 (buf, end, &uleb_length);
-	  if (buf == NULL)
+	  length = read_unsigned_leb128 (unit->abfd, buf, &bytes_read);
+	  buf += bytes_read;
+	  if (buf > end)
 	    return NULL;
-	  cie->initial_instructions = buf + uleb_length;
+	  cie->initial_instructions = buf + length;
 	  augmentation++;
 	}
 
@@ -2008,11 +2016,6 @@ decode_frame_entry_1 (struct comp_unit *unit, const gdb_byte *start,
     {
       /* This is a FDE.  */
       struct dwarf2_fde *fde;
-      CORE_ADDR addr;
-
-      /* Check that an FDE was expected.  */
-      if ((entry_type & EH_FDE_TYPE_ID) == 0)
-	error (_("Found an FDE when not expecting it."));
 
       /* In an .eh_frame section, the CIE pointer is the delta between the
 	 address within the FDE where the CIE pointer is stored and the
@@ -2028,28 +2031,27 @@ decode_frame_entry_1 (struct comp_unit *unit, const gdb_byte *start,
       if (cie_pointer >= unit->dwarf_frame_size)
 	return NULL;
 
-      fde = XOBNEW (&unit->objfile->objfile_obstack, struct dwarf2_fde);
+      fde = (struct dwarf2_fde *)
+	obstack_alloc (&unit->objfile->objfile_obstack,
+		       sizeof (struct dwarf2_fde));
       fde->cie = find_cie (cie_table, cie_pointer);
       if (fde->cie == NULL)
 	{
 	  decode_frame_entry (unit, unit->dwarf_frame_buffer + cie_pointer,
-			      eh_frame_p, cie_table, fde_table,
-			      EH_CIE_TYPE_ID);
+			      eh_frame_p, cie_table, fde_table);
 	  fde->cie = find_cie (cie_table, cie_pointer);
 	}
 
       gdb_assert (fde->cie != NULL);
 
-      addr = read_encoded_value (unit, fde->cie->encoding, fde->cie->ptr_size,
-				 buf, &bytes_read, 0);
-      fde->initial_location = gdbarch_adjust_dwarf2_addr (gdbarch, addr);
+      fde->initial_location =
+	read_encoded_value (unit, fde->cie->encoding, fde->cie->ptr_size,
+			    buf, &bytes_read, 0);
       buf += bytes_read;
 
       fde->address_range =
 	read_encoded_value (unit, fde->cie->encoding & 0x0f,
 			    fde->cie->ptr_size, buf, &bytes_read, 0);
-      addr = gdbarch_adjust_dwarf2_addr (gdbarch, addr + fde->address_range);
-      fde->address_range = addr - fde->initial_location;
       buf += bytes_read;
 
       /* A 'z' augmentation in the CIE implies the presence of an
@@ -2058,12 +2060,10 @@ decode_frame_entry_1 (struct comp_unit *unit, const gdb_byte *start,
 	 can skip the whole thing.  */
       if (fde->cie->saw_z_augmentation)
 	{
-	  uint64_t uleb_length;
+	  ULONGEST length;
 
-	  buf = gdb_read_uleb128 (buf, end, &uleb_length);
-	  if (buf == NULL)
-	    return NULL;
-	  buf += uleb_length;
+	  length = read_unsigned_leb128 (unit->abfd, buf, &bytes_read);
+	  buf += bytes_read + length;
 	  if (buf > end)
 	    return NULL;
 	}
@@ -2079,24 +2079,20 @@ decode_frame_entry_1 (struct comp_unit *unit, const gdb_byte *start,
   return end;
 }
 
-/* Read a CIE or FDE in BUF and decode it. Entry_type specifies whether we
-   expect an FDE or a CIE.  */
-
-static const gdb_byte *
-decode_frame_entry (struct comp_unit *unit, const gdb_byte *start,
-		    int eh_frame_p,
+/* Read a CIE or FDE in BUF and decode it.  */
+static gdb_byte *
+decode_frame_entry (struct comp_unit *unit, gdb_byte *start, int eh_frame_p,
                     struct dwarf2_cie_table *cie_table,
-                    struct dwarf2_fde_table *fde_table,
-                    enum eh_frame_type entry_type)
+                    struct dwarf2_fde_table *fde_table)
 {
   enum { NONE, ALIGN4, ALIGN8, FAIL } workaround = NONE;
-  const gdb_byte *ret;
+  gdb_byte *ret;
   ptrdiff_t start_offset;
 
   while (1)
     {
       ret = decode_frame_entry_1 (unit, start, eh_frame_p,
-				  cie_table, fde_table, entry_type);
+                                  cie_table, fde_table);
       if (ret != NULL)
 	break;
 
@@ -2153,21 +2149,22 @@ decode_frame_entry (struct comp_unit *unit, const gdb_byte *start,
       break;
 
     case ALIGN4:
-      complaint (_("\
+      complaint (&symfile_complaints, _("\
 Corrupt data in %s:%s; align 4 workaround apparently succeeded"),
 		 unit->dwarf_frame_section->owner->filename,
 		 unit->dwarf_frame_section->name);
       break;
 
     case ALIGN8:
-      complaint (_("\
+      complaint (&symfile_complaints, _("\
 Corrupt data in %s:%s; align 8 workaround apparently succeeded"),
 		 unit->dwarf_frame_section->owner->filename,
 		 unit->dwarf_frame_section->name);
       break;
 
     default:
-      complaint (_("Corrupt data in %s:%s"),
+      complaint (&symfile_complaints,
+		 _("Corrupt data in %s:%s"),
 		 unit->dwarf_frame_section->owner->filename,
 		 unit->dwarf_frame_section->name);
       break;
@@ -2176,6 +2173,12 @@ Corrupt data in %s:%s; align 8 workaround apparently succeeded"),
   return ret;
 }
 
+
+/* Imported from dwarf2read.c.  */
+extern void dwarf2_get_section_info (struct objfile *, const char *,
+				     asection **, gdb_byte **,
+				     bfd_size_type *);
+
 static int
 qsort_fde_cmp (const void *a, const void *b)
 {
@@ -2201,7 +2204,7 @@ void
 dwarf2_build_frame_info (struct objfile *objfile)
 {
   struct comp_unit *unit;
-  const gdb_byte *frame_ptr;
+  gdb_byte *frame_ptr;
   struct dwarf2_cie_table cie_table;
   struct dwarf2_fde_table fde_table;
   struct dwarf2_fde_table *fde_table2;
@@ -2213,112 +2216,59 @@ dwarf2_build_frame_info (struct objfile *objfile)
   fde_table.entries = NULL;
 
   /* Build a minimal decoding of the DWARF2 compilation unit.  */
-  unit = XOBNEW (&objfile->objfile_obstack, comp_unit);
+  unit = (struct comp_unit *) obstack_alloc (&objfile->objfile_obstack,
+					     sizeof (struct comp_unit));
   unit->abfd = objfile->obfd;
   unit->objfile = objfile;
   unit->dbase = 0;
   unit->tbase = 0;
 
-  if (objfile->separate_debug_objfile_backlink == NULL)
-    {
-      /* Do not read .eh_frame from separate file as they must be also
-         present in the main file.  */
-      dwarf2_get_section_info (objfile, DWARF2_EH_FRAME,
-                               &unit->dwarf_frame_section,
-                               &unit->dwarf_frame_buffer,
-                               &unit->dwarf_frame_size);
-      if (unit->dwarf_frame_size)
-        {
-          asection *got, *txt;
-
-          /* FIXME: kettenis/20030602: This is the DW_EH_PE_datarel base
-             that is used for the i386/amd64 target, which currently is
-             the only target in GCC that supports/uses the
-             DW_EH_PE_datarel encoding.  */
-          got = bfd_get_section_by_name (unit->abfd, ".got");
-          if (got)
-            unit->dbase = got->vma;
-
-          /* GCC emits the DW_EH_PE_textrel encoding type on sh and ia64
-             so far.  */
-          txt = bfd_get_section_by_name (unit->abfd, ".text");
-          if (txt)
-            unit->tbase = txt->vma;
-
-	  TRY
-	    {
-	      frame_ptr = unit->dwarf_frame_buffer;
-	      while (frame_ptr < unit->dwarf_frame_buffer + unit->dwarf_frame_size)
-		frame_ptr = decode_frame_entry (unit, frame_ptr, 1,
-						&cie_table, &fde_table,
-						EH_CIE_OR_FDE_TYPE_ID);
-	    }
-
-	  CATCH (e, RETURN_MASK_ERROR)
-	    {
-	      warning (_("skipping .eh_frame info of %s: %s"),
-		       objfile_name (objfile), e.message);
-
-	      if (fde_table.num_entries != 0)
-		{
-                  xfree (fde_table.entries);
-		  fde_table.entries = NULL;
-		  fde_table.num_entries = 0;
-		}
-	      /* The cie_table is discarded by the next if.  */
-	    }
-	  END_CATCH
-
-          if (cie_table.num_entries != 0)
-            {
-              /* Reinit cie_table: debug_frame has different CIEs.  */
-              xfree (cie_table.entries);
-              cie_table.num_entries = 0;
-              cie_table.entries = NULL;
-            }
-        }
-    }
-
-  dwarf2_get_section_info (objfile, DWARF2_DEBUG_FRAME,
+  dwarf2_get_section_info (objfile, ".eh_frame",
                            &unit->dwarf_frame_section,
                            &unit->dwarf_frame_buffer,
                            &unit->dwarf_frame_size);
   if (unit->dwarf_frame_size)
     {
-      int num_old_fde_entries = fde_table.num_entries;
+      asection *got, *txt;
 
-      TRY
-	{
-	  frame_ptr = unit->dwarf_frame_buffer;
-	  while (frame_ptr < unit->dwarf_frame_buffer + unit->dwarf_frame_size)
-	    frame_ptr = decode_frame_entry (unit, frame_ptr, 0,
-					    &cie_table, &fde_table,
-					    EH_CIE_OR_FDE_TYPE_ID);
-	}
-      CATCH (e, RETURN_MASK_ERROR)
-	{
-	  warning (_("skipping .debug_frame info of %s: %s"),
-		   objfile_name (objfile), e.message);
+      /* FIXME: kettenis/20030602: This is the DW_EH_PE_datarel base
+	 that is used for the i386/amd64 target, which currently is
+	 the only target in GCC that supports/uses the
+	 DW_EH_PE_datarel encoding.  */
+      got = bfd_get_section_by_name (unit->abfd, ".got");
+      if (got)
+	unit->dbase = got->vma;
 
-	  if (fde_table.num_entries != 0)
-	    {
-	      fde_table.num_entries = num_old_fde_entries;
-	      if (num_old_fde_entries == 0)
-		{
-		  xfree (fde_table.entries);
-		  fde_table.entries = NULL;
-		}
-	      else
-		{
-		  fde_table.entries
-		    = XRESIZEVEC (struct dwarf2_fde *, fde_table.entries,
-				  fde_table.num_entries);
-		}
-	    }
-	  fde_table.num_entries = num_old_fde_entries;
-	  /* The cie_table is discarded by the next if.  */
-	}
-      END_CATCH
+      /* GCC emits the DW_EH_PE_textrel encoding type on sh and ia64
+         so far.  */
+      txt = bfd_get_section_by_name (unit->abfd, ".text");
+      if (txt)
+	unit->tbase = txt->vma;
+
+      frame_ptr = unit->dwarf_frame_buffer;
+      while (frame_ptr < unit->dwarf_frame_buffer + unit->dwarf_frame_size)
+	frame_ptr = decode_frame_entry (unit, frame_ptr, 1,
+                                        &cie_table, &fde_table);
+
+      if (cie_table.num_entries != 0)
+        {
+          /* Reinit cie_table: debug_frame has different CIEs.  */
+          xfree (cie_table.entries);
+          cie_table.num_entries = 0;
+          cie_table.entries = NULL;
+        }
+    }
+
+  dwarf2_get_section_info (objfile, ".debug_frame",
+                           &unit->dwarf_frame_section,
+                           &unit->dwarf_frame_buffer,
+                           &unit->dwarf_frame_size);
+  if (unit->dwarf_frame_size)
+    {
+      frame_ptr = unit->dwarf_frame_buffer;
+      while (frame_ptr < unit->dwarf_frame_buffer + unit->dwarf_frame_size)
+	frame_ptr = decode_frame_entry (unit, frame_ptr, 0,
+                                        &cie_table, &fde_table);
     }
 
   /* Discard the cie_table, it is no longer needed.  */
@@ -2330,7 +2280,8 @@ dwarf2_build_frame_info (struct objfile *objfile)
     }
 
   /* Copy fde_table to obstack: it is needed at runtime.  */
-  fde_table2 = XOBNEW (&objfile->objfile_obstack, struct dwarf2_fde_table);
+  fde_table2 = (struct dwarf2_fde_table *)
+    obstack_alloc (&objfile->objfile_obstack, sizeof (*fde_table2));
 
   if (fde_table.num_entries == 0)
     {
@@ -2393,8 +2344,7 @@ dwarf2_build_frame_info (struct objfile *objfile)
 	  ++fde_table2->num_entries;
 	  fde_prev = fde;
 	}
-      fde_table2->entries
-	= (struct dwarf2_fde **) obstack_finish (&objfile->objfile_obstack);
+      fde_table2->entries = obstack_finish (&objfile->objfile_obstack);
 
       /* Discard the original fde_table.  */
       xfree (fde_table.entries);
@@ -2403,38 +2353,12 @@ dwarf2_build_frame_info (struct objfile *objfile)
   set_objfile_data (objfile, dwarf2_frame_objfile_data, fde_table2);
 }
 
-/* Handle 'maintenance show dwarf unwinders'.  */
-
-static void
-show_dwarf_unwinders_enabled_p (struct ui_file *file, int from_tty,
-				struct cmd_list_element *c,
-				const char *value)
-{
-  fprintf_filtered (file,
-		    _("The DWARF stack unwinders are currently %s.\n"),
-		    value);
-}
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+void _initialize_dwarf2_frame (void);
 
 void
 _initialize_dwarf2_frame (void)
 {
   dwarf2_frame_data = gdbarch_data_register_pre_init (dwarf2_frame_init);
   dwarf2_frame_objfile_data = register_objfile_data ();
-
-  add_setshow_boolean_cmd ("unwinders", class_obscure,
-			   &dwarf2_frame_unwinders_enabled_p , _("\
-Set whether the DWARF stack frame unwinders are used."), _("\
-Show whether the DWARF stack frame unwinders are used."), _("\
-When enabled the DWARF stack frame unwinders can be used for architectures\n\
-that support the DWARF unwinders.  Enabling the DWARF unwinders for an\n\
-architecture that doesn't support them will have no effect."),
-			   NULL,
-			   show_dwarf_unwinders_enabled_p,
-			   &set_dwarf_cmdlist,
-			   &show_dwarf_cmdlist);
-
-#if GDB_SELF_TEST
-  selftests::register_test_foreach_arch ("execute_cfa_program",
-					 selftests::execute_cfa_program_test);
-#endif
 }

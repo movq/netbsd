@@ -1,6 +1,7 @@
 /* Traditional frame unwind support, for GDB the GNU Debugger.
 
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,7 +24,6 @@
 #include "frame.h"		/* For "struct frame_id".  */
 
 struct frame_info;
-struct regcache_map_entry;
 struct trad_frame_cache;
 
 /* A simple, or traditional frame cache.
@@ -44,11 +44,10 @@ CORE_ADDR trad_frame_get_this_base (struct trad_frame_cache *this_trad_cache);
 
 void trad_frame_set_reg_realreg (struct trad_frame_cache *this_trad_cache,
 				 int regnum, int realreg);
+void trad_frame_set_reg_unknown (struct trad_frame_cache *this_trad_cache,
+				 int regnum, CORE_ADDR addr);
 void trad_frame_set_reg_addr (struct trad_frame_cache *this_trad_cache,
 			      int regnum, CORE_ADDR addr);
-void trad_frame_set_reg_regmap (struct trad_frame_cache *this_trad_cache,
-				const struct regcache_map_entry *regmap,
-				CORE_ADDR addr, size_t size);
 void trad_frame_set_reg_value (struct trad_frame_cache *this_cache,
 			       int regnum, LONGEST val);
 
@@ -92,14 +91,6 @@ struct trad_frame_saved_reg
 void trad_frame_set_value (struct trad_frame_saved_reg this_saved_regs[],
 			   int regnum, LONGEST val);
 
-/* Encode REGNUM is in REALREG in the trad-frame.  */
-void trad_frame_set_realreg (struct trad_frame_saved_reg this_saved_regs[],
-			     int regnum, int realreg);
-
-/* Encode REGNUM is at address ADDR in the trad-frame.  */
-void trad_frame_set_addr (struct trad_frame_saved_reg this_trad_cache[],
-			  int regnum, CORE_ADDR addr);
-
 /* Mark REGNUM as unknown.  */
 void trad_frame_set_unknown (struct trad_frame_saved_reg this_saved_regs[],
 			     int regnum);
@@ -116,7 +107,6 @@ int trad_frame_realreg_p (struct trad_frame_saved_reg this_saved_regs[],
 
 /* Return a freshly allocated (and initialized) trad_frame array.  */
 struct trad_frame_saved_reg *trad_frame_alloc_saved_regs (struct frame_info *);
-struct trad_frame_saved_reg *trad_frame_alloc_saved_regs (struct gdbarch *);
 
 /* Given the trad_frame info, return the location of the specified
    register.  */

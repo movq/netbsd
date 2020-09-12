@@ -1,5 +1,6 @@
 /* ECOFF object file format header file.
-   Copyright (C) 1993-2020 Free Software Foundation, Inc.
+   Copyright 1993, 1994, 1995, 1996, 1997, 1999, 2002, 2004, 2005,
+   2007 Free Software Foundation, Inc.
    Contributed by Cygnus Support.
    Written by Ian Lance Taylor <ian@cygnus.com>.
 
@@ -58,7 +59,6 @@ struct ecoff_sy_obj
 /* We use the ECOFF functions as our hooks.  */
 #define obj_read_begin_hook ecoff_read_begin_hook
 #define obj_symbol_new_hook ecoff_symbol_new_hook
-#define obj_symbol_clone_hook ecoff_symbol_clone_hook
 
 /* Record file switches in the ECOFF symbol table.  */
 #define obj_app_file(name, app) ecoff_new_file (name, app)

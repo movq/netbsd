@@ -1,6 +1,7 @@
 /* Target-dependent header for the MIPS architecture, for GDB, the GNU Debugger.
 
-   Copyright (C) 2002-2019 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,8 +21,6 @@
 #ifndef MIPS_TDEP_H
 #define MIPS_TDEP_H
 
-#include "objfiles.h"
-
 struct gdbarch;
 
 /* All the possible MIPS ABIs.  */
@@ -40,18 +39,6 @@ enum mips_abi
 /* Return the MIPS ABI associated with GDBARCH.  */
 enum mips_abi mips_abi (struct gdbarch *gdbarch);
 
-/* Base and compressed MIPS ISA variations.  */
-enum mips_isa
-  {
-    ISA_MIPS = -1,		/* mips_compression_string depends on it.  */
-    ISA_MIPS16,
-    ISA_MICROMIPS
-  };
-
-/* Corresponding MSYMBOL_TARGET_FLAG aliases.  */
-#define MSYMBOL_TARGET_FLAG_MIPS16 MSYMBOL_TARGET_FLAG_1
-#define MSYMBOL_TARGET_FLAG_MICROMIPS MSYMBOL_TARGET_FLAG_2
-
 /* Return the MIPS ISA's register size.  Just a short cut to the BFD
    architecture's word size.  */
 extern int mips_isa_regsize (struct gdbarch *gdbarch);
@@ -67,8 +54,6 @@ struct mips_regnum
   int cause;		/* Describes last exception.  */
   int hi;		/* Multiply/divide temp.  */
   int lo;		/* ...  */
-  int dspacc;		/* SmartMIPS/DSP accumulators.  */
-  int dspctl;		/* DSP control.  */
 };
 extern const struct mips_regnum *mips_regnum (struct gdbarch *gdbarch);
 
@@ -91,7 +76,6 @@ struct gdbarch_tdep
   /* mips options */
   enum mips_abi mips_abi;
   enum mips_abi found_abi;
-  enum mips_isa mips_isa;
   enum mips_fpu_type mips_fpu_type;
   int mips_last_arg_regnum;
   int mips_last_fp_arg_regnum;
@@ -113,6 +97,14 @@ struct gdbarch_tdep
   int register_size_valid_p;
   int register_size;
 
+  /* General-purpose registers.  */
+  struct regset *gregset;
+  struct regset *gregset64;
+
+  /* Floating-point registers.  */
+  struct regset *fpregset;
+  struct regset *fpregset64;
+
   /* Return the expected next PC if FRAME is stopped at a syscall
      instruction.  */
   CORE_ADDR (*syscall_next_pc) (struct frame_info *frame);
@@ -126,19 +118,8 @@ enum
   MIPS_AT_REGNUM = 1,
   MIPS_V0_REGNUM = 2,		/* Function integer return value.  */
   MIPS_A0_REGNUM = 4,		/* Loc of first arg during a subr call.  */
-  MIPS_S0_REGNUM = 16,
-  MIPS_S1_REGNUM = 17,
-  MIPS_S2_REGNUM = 18,		/* Contains return address in MIPS16 thunks. */
-  MIPS_S3_REGNUM = 19,
-  MIPS_S4_REGNUM = 20,
-  MIPS_S5_REGNUM = 21,
-  MIPS_S6_REGNUM = 22,
-  MIPS_S7_REGNUM = 23,
-  MIPS_T8_REGNUM = 24,
   MIPS_T9_REGNUM = 25,		/* Contains address of callee in PIC.  */
-  MIPS_GP_REGNUM = 28,
   MIPS_SP_REGNUM = 29,
-  MIPS_S8_REGNUM = 30,
   MIPS_RA_REGNUM = 31,
   MIPS_PS_REGNUM = 32,		/* Contains processor status.  */
   MIPS_EMBED_LO_REGNUM = 33,
@@ -153,6 +134,9 @@ enum
   MIPS_LAST_EMBED_REGNUM = 89	/* Last one.  */
 };
 
+/* Defined in mips-tdep.c and used in remote-mips.c.  */
+extern void deprecated_mips_set_processor_regs_hack (void);
+
 /* Instruction sizes and other useful constants.  */
 enum
 {
@@ -163,41 +147,18 @@ enum
 };
 
 /* Single step based on where the current instruction will take us.  */
-extern std::vector<CORE_ADDR> mips_software_single_step
-  (struct regcache *regcache);
-
-/* Strip the ISA (compression) bit off from ADDR.  */
-extern CORE_ADDR mips_unmake_compact_addr (CORE_ADDR addr);
-
-/* Tell if the program counter value in MEMADDR is in a standard
-   MIPS function.  */
-extern int mips_pc_is_mips (bfd_vma memaddr);
+extern int mips_software_single_step (struct frame_info *frame);
 
 /* Tell if the program counter value in MEMADDR is in a MIPS16
    function.  */
-extern int mips_pc_is_mips16 (struct gdbarch *gdbarch, bfd_vma memaddr);
-
-/* Tell if the program counter value in MEMADDR is in a microMIPS
-   function.  */
-extern int mips_pc_is_micromips (struct gdbarch *gdbarch, bfd_vma memaddr);
+extern int mips_pc_is_mips16 (bfd_vma memaddr);
 
 /* Return the currently configured (or set) saved register size.  */
 extern unsigned int mips_abi_regsize (struct gdbarch *gdbarch);
-
-/* Make PC the address of the next instruction to execute.  */
-extern void mips_write_pc (struct regcache *regcache, CORE_ADDR pc);
 
 /* Target descriptions which only indicate the size of general
    registers.  */
 extern struct target_desc *mips_tdesc_gp32;
 extern struct target_desc *mips_tdesc_gp64;
-
-/* Return non-zero if PC is in a MIPS SVR4 lazy binding stub section.  */
-
-static inline int
-in_mips_stubs_section (CORE_ADDR pc)
-{
-  return pc_in_section (pc, ".MIPS.stubs");
-}
 
 #endif /* MIPS_TDEP_H */

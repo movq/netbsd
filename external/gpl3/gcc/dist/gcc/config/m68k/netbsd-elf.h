@@ -1,7 +1,7 @@
 /* Definitions of target machine for GNU compiler,
    for m68k (including m68010) NetBSD platforms using the
    ELF object format.
-   Copyright (C) 2002-2019 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2006, 2007 Free Software Foundation, Inc.
    Contributed by Wasabi Systems. Inc.
 
    This file is derived from <m68k/m68kv4.h>, <m68k/m68kelf.h>,
@@ -35,23 +35,28 @@ along with GCC; see the file COPYING3.  If not see
     }						\
   while (0)
 
-/* Don't try using XFmode on the 68010 or coldfire.  */ 
+/* Don't try using XFmode on the 68010.  */ 
 #undef LONG_DOUBLE_TYPE_SIZE
 #define LONG_DOUBLE_TYPE_SIZE (TARGET_68020 ? 80 : 64)
 
-#undef SUBTARGET_OVERRIDE_OPTIONS
-#define SUBTARGET_OVERRIDE_OPTIONS \
-  { \
-    if (TARGET_COLDFIRE) \
-      { \
-	target_flags |= MASK_STRICT_ALIGNMENT | MASK_CF_HWDIV; \
-	if ((target_flags_explicit & MASK_HARD_FLOAT) == 0) \
-	  { \
-	    target_flags &= ~MASK_HARD_FLOAT; \
-	    m68k_fpu = FPUTYPE_NONE; \
-	  } \
-      } \
-  }
+#undef LIBGCC2_LONG_DOUBLE_TYPE_SIZE
+#ifdef __mc68010__
+#define LIBGCC2_LONG_DOUBLE_TYPE_SIZE 64
+#else
+#define LIBGCC2_LONG_DOUBLE_TYPE_SIZE 80
+#endif
+
+#undef SUBTARGET_EXTRA_SPECS
+#define SUBTARGET_EXTRA_SPECS \
+  { "netbsd_entry_point",   NETBSD_ENTRY_POINT },
+
+
+#undef TARGET_VERSION
+#define TARGET_VERSION			\
+  fprintf (stderr,			\
+	   TARGET_68010			\
+	   ? " (NetBSD/68010 ELF)"	\
+	   : " (NetBSD/m68k ELF)");
 
 
 /* Provide a CPP_SPEC appropriate for NetBSD m68k targets.  Currently we
@@ -59,30 +64,21 @@ along with GCC; see the file COPYING3.  If not see
    whether or not use of the FPU is allowed.  */
 
 #undef CPP_SPEC
-#define CPP_SPEC \
-  "%(netbsd_cpp_spec)"
+#define CPP_SPEC NETBSD_CPP_SPEC
 
 
 /* Provide an ASM_SPEC appropriate for NetBSD m68k ELF targets.  We need
    to pass PIC code generation options.  */
 
 #undef ASM_SPEC
-#define ASM_SPEC \
-  "%(asm_cpu_spec) \
-   %{m68010} %{m68020} %{m68030} %{m68040} %{m68060} \
-   %{m5200} %{m5206e} %{m528x} %{m5307} %{m5407} %{mcfv4e} \
-   %{" FPIE1_OR_FPIC1_SPEC ":-k} %{" FPIE2_OR_FPIC2_SPEC ":-k -K}"
+#define ASM_SPEC "%(asm_cpu_spec) %{fpic|fpie:-k} %{fPIC|fPIE:-k -K}"
+
+#define AS_NEEDS_DASH_FOR_PIPED_INPUT
 
 /* Provide a LINK_SPEC appropriate for a NetBSD/m68k ELF target.  */
 
 #undef LINK_SPEC
 #define LINK_SPEC NETBSD_LINK_SPEC_ELF
-
-/* NetBSD/sun2 does not support shlibs, avoid using libgcc_pic.  */
-#ifndef ENABLE_SHARED_LIBGCC
-#undef REAL_LIBGCC_SPEC
-#define REAL_LIBGCC_SPEC	"-lgcc"
-#endif
 
 #define NETBSD_ENTRY_POINT "_start"
 
@@ -93,13 +89,7 @@ along with GCC; see the file COPYING3.  If not see
 #define FUNCTION_PROFILER(FILE, LABELNO)				\
 do									\
   {									\
-    if (TARGET_COLDFIRE)						\
-      {									\
-        asm_fprintf (FILE, "\tmovea.l #%LLP%d-.,%Ra1\n", (LABELNO));	\
-        asm_fprintf (FILE, "\tlea (-6,%Rpc,%Ra1),%Ra1\n");	\
-      }									\
-    else								\
-      asm_fprintf (FILE, "\tlea (%LLP%d,%Rpc),%Ra1\n", (LABELNO));	\
+    asm_fprintf (FILE, "\tlea (%LLP%d,%Rpc),%Ra1\n", (LABELNO));	\
     if (flag_pic)							\
       fprintf (FILE, "\tbsr.l __mcount@PLTPC\n");			\
     else								\
@@ -162,13 +152,9 @@ while (0)
       {							\
 	if (ADDRESS_REG_P (operands[0]))		\
 	  return "jmp %%pc@(2,%0:l)";			\
-	else if (TARGET_LONG_JUMP_TABLE_OFFSETS)	\
-	  return "jmp %%pc@(2,%0:l)";			\
 	else						\
 	  return "ext%.l %0\n\tjmp %%pc@(2,%0:l)";	\
       }							\
-    else if (TARGET_LONG_JUMP_TABLE_OFFSETS)		\
-      return "jmp %%pc@(2,%0:l)";			\
     else						\
       return "jmp %%pc@(2,%0:w)";			\
   } while (0)
@@ -193,6 +179,15 @@ while (0)
 
 #define BSS_SECTION_ASM_OP	".section\t.bss"
 
+
+/* Like `ASM_OUTPUT_BSS' except takes the required alignment as a
+   separate, explicit argument.  If you define this macro, it is used
+   in place of `ASM_OUTPUT_BSS', and gives you more flexibility in
+   handling the required alignment of the variable.  The alignment is
+   specified as the number of bits.
+
+   Try to use function `asm_output_aligned_bss' defined in file
+   `varasm.c' when defining this macro.  */
 
 #undef ASM_OUTPUT_ALIGNED_BSS
 #define ASM_OUTPUT_ALIGNED_BSS(FILE, DECL, NAME, SIZE, ALIGN)		\
@@ -292,8 +287,8 @@ while (0)
 /* Boundary (in *bits*) on which stack pointer should be aligned.
    The m68k/SVR4 convention is to keep the stack pointer longword aligned.  */
 
-#undef PREFERRED_STACK_BOUNDARY
-#define PREFERRED_STACK_BOUNDARY 32
+#undef STACK_BOUNDARY
+#define STACK_BOUNDARY 32
 
 
 /* Alignment of field after `int : 0' in a structure.

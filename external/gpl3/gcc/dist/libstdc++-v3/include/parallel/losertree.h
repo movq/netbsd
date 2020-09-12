@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2007-2019 Free Software Foundation, Inc.
+// Copyright (C) 2007, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
@@ -116,11 +116,7 @@ namespace __gnu_parallel
        * @brief The destructor.
        */
       ~_LoserTreeBase()
-      {
-	for (unsigned int __i = 0; __i < (2 * _M_k); ++__i)
-	  _M_losers[__i].~_Loser();
-	::operator delete(_M_losers);
-      }
+      { ::operator delete(_M_losers); }
 
       /**
        * @brief Initializes the sequence "_M_source" with the element "__key".
@@ -135,15 +131,15 @@ namespace __gnu_parallel
       {
 	unsigned int __pos = _M_k + __source;
 
-	if (_M_first_insert)
+	if(_M_first_insert)
 	  {
-	    // Construct all keys, so we can easily destruct them.
+	    // Construct all keys, so we can easily deconstruct them.
 	    for (unsigned int __i = 0; __i < (2 * _M_k); ++__i)
-	      ::new(&(_M_losers[__i]._M_key)) _Tp(__key);
+	      new(&(_M_losers[__i]._M_key)) _Tp(__key);
 	    _M_first_insert = false;
 	  }
 	else
-	  _M_losers[__pos]._M_key = __key;
+	  new(&(_M_losers[__pos]._M_key)) _Tp(__key);
 
 	_M_losers[__pos]._M_sup = __sup;
 	_M_losers[__pos]._M_source = __source;
@@ -171,7 +167,6 @@ namespace __gnu_parallel
     {
       typedef _LoserTreeBase<_Tp, _Compare> _Base;
       using _Base::_M_k;
-      using _Base::_M_comp;
       using _Base::_M_losers;
       using _Base::_M_first_insert;
 
@@ -222,7 +217,7 @@ namespace __gnu_parallel
       __delete_min_insert(_Tp __key, bool __sup)
       {
         using std::swap;
-#if _GLIBCXX_PARALLEL_ASSERTIONS
+#if _GLIBCXX_ASSERTIONS
 	// no dummy sequence can ever be at the top!
 	_GLIBCXX_PARALLEL_ASSERT(_M_losers[0]._M_source != -1);
 #endif
@@ -264,7 +259,6 @@ namespace __gnu_parallel
       typedef _LoserTreeBase<_Tp, _Compare> _Base;
       using _Base::_M_log_k;
       using _Base::_M_k;
-      using _Base::_M_comp;
       using _Base::_M_losers;
       using _Base::_M_first_insert;
 
@@ -324,7 +318,7 @@ namespace __gnu_parallel
       __delete_min_insert(_Tp __key, bool __sup)
       {
         using std::swap;
-#if _GLIBCXX_PARALLEL_ASSERTIONS
+#if _GLIBCXX_ASSERTIONS
 	// no dummy sequence can ever be at the top!
 	_GLIBCXX_PARALLEL_ASSERT(_M_losers[0]._M_source != -1);
 #endif
@@ -385,7 +379,7 @@ namespace __gnu_parallel
       }
 
       ~_LoserTreePointerBase()
-      { delete[] _M_losers; }
+      { ::operator delete[](_M_losers); }
 
       int __get_min_source()
       { return _M_losers[0]._M_source; }
@@ -411,7 +405,6 @@ namespace __gnu_parallel
     {
       typedef _LoserTreePointerBase<_Tp, _Compare> _Base;
       using _Base::_M_k;
-      using _Base::_M_comp;
       using _Base::_M_losers;
 
     public:
@@ -451,7 +444,7 @@ namespace __gnu_parallel
 
       void __delete_min_insert(const _Tp& __key, bool __sup)
       {
-#if _GLIBCXX_PARALLEL_ASSERTIONS
+#if _GLIBCXX_ASSERTIONS
 	// no dummy sequence can ever be at the top!
 	_GLIBCXX_PARALLEL_ASSERT(_M_losers[0]._M_source != -1);
 #endif
@@ -493,7 +486,6 @@ namespace __gnu_parallel
     {
       typedef _LoserTreePointerBase<_Tp, _Compare> _Base;
       using _Base::_M_k;
-      using _Base::_M_comp;
       using _Base::_M_losers;
 
     public:
@@ -533,7 +525,7 @@ namespace __gnu_parallel
 
       void __delete_min_insert(const _Tp& __key, bool __sup)
       {
-#if _GLIBCXX_PARALLEL_ASSERTIONS
+#if _GLIBCXX_ASSERTIONS
 	// no dummy sequence can ever be at the top!
 	_GLIBCXX_PARALLEL_ASSERT(_M_losers[0]._M_source != -1);
 #endif
@@ -585,7 +577,7 @@ namespace __gnu_parallel
       _Compare _M_comp;
 
     public:
-      _LoserTreeUnguardedBase(unsigned int __k, const _Tp& __sentinel,
+      _LoserTreeUnguardedBase(unsigned int __k, const _Tp __sentinel,
 			      _Compare __comp = std::less<_Tp>())
       : _M_comp(__comp)
       {
@@ -598,29 +590,20 @@ namespace __gnu_parallel
 	_M_losers = static_cast<_Loser*>(::operator new(2 * _M_k
 							* sizeof(_Loser)));
 
-        for (unsigned int __i = 0; __i < _M_k; ++__i)
-          {
-	    ::new(&(_M_losers[__i]._M_key)) _Tp(__sentinel);
-	    _M_losers[__i]._M_source = -1;
-	  }
-        for (unsigned int __i = _M_k + _M_ik - 1; __i < (2 * _M_k); ++__i)
-          {
-	    ::new(&(_M_losers[__i]._M_key)) _Tp(__sentinel);
+	for (unsigned int __i = _M_k + _M_ik - 1; __i < (2 * _M_k); ++__i)
+	  {
+	    _M_losers[__i]._M_key = __sentinel;
 	    _M_losers[__i]._M_source = -1;
 	  }
       }
 
       ~_LoserTreeUnguardedBase()
-      {
-	for (unsigned int __i = 0; __i < (2 * _M_k); ++__i)
-	  _M_losers[__i].~_Loser();
-	::operator delete(_M_losers);
-      }
+      { ::operator delete(_M_losers); }
 
       int
       __get_min_source()
       {
-#if _GLIBCXX_PARALLEL_ASSERTIONS
+#if _GLIBCXX_ASSERTIONS
 	// no dummy sequence can ever be at the top!
 	_GLIBCXX_PARALLEL_ASSERT(_M_losers[0]._M_source != -1);
 #endif
@@ -632,7 +615,7 @@ namespace __gnu_parallel
       {
 	unsigned int __pos = _M_k + __source;
 
-	::new(&(_M_losers[__pos]._M_key)) _Tp(__key);
+	new(&(_M_losers[__pos]._M_key)) _Tp(__key);
 	_M_losers[__pos]._M_source = __source;
       }
     };
@@ -648,11 +631,10 @@ namespace __gnu_parallel
     {
       typedef _LoserTreeUnguardedBase<_Tp, _Compare> _Base;
       using _Base::_M_k;
-      using _Base::_M_comp;
       using _Base::_M_losers;
 
   public:
-      _LoserTreeUnguarded(unsigned int __k, const _Tp& __sentinel,
+      _LoserTreeUnguarded(unsigned int __k, const _Tp __sentinel,
 			  _Compare __comp = std::less<_Tp>())
       : _Base::_LoserTreeUnguardedBase(__k, __sentinel, __comp)
       { }
@@ -687,7 +669,7 @@ namespace __gnu_parallel
       {
 	_M_losers[0] = _M_losers[__init_winner(1)];
 
-#if _GLIBCXX_PARALLEL_ASSERTIONS
+#if _GLIBCXX_ASSERTIONS
 	// no dummy sequence can ever be at the top at the beginning
 	// (0 sequences!)
 	_GLIBCXX_PARALLEL_ASSERT(_M_losers[0]._M_source != -1);
@@ -700,7 +682,7 @@ namespace __gnu_parallel
       __delete_min_insert(_Tp __key, bool)
       {
         using std::swap;
-#if _GLIBCXX_PARALLEL_ASSERTIONS
+#if _GLIBCXX_ASSERTIONS
 	// no dummy sequence can ever be at the top!
 	_GLIBCXX_PARALLEL_ASSERT(_M_losers[0]._M_source != -1);
 #endif
@@ -736,11 +718,10 @@ namespace __gnu_parallel
     {
       typedef _LoserTreeUnguardedBase<_Tp, _Compare> _Base;
       using _Base::_M_k;
-      using _Base::_M_comp;
       using _Base::_M_losers;
 
     public:
-      _LoserTreeUnguarded(unsigned int __k, const _Tp& __sentinel,
+      _LoserTreeUnguarded(unsigned int __k, const _Tp __sentinel,
 			  _Compare __comp = std::less<_Tp>())
       : _Base::_LoserTreeUnguardedBase(__k, __sentinel, __comp)
       { }
@@ -755,7 +736,7 @@ namespace __gnu_parallel
 	    unsigned int __left = __init_winner(2 * __root);
 	    unsigned int __right = __init_winner(2 * __root + 1);
 
-#if _GLIBCXX_PARALLEL_ASSERTIONS
+#if _GLIBCXX_ASSERTIONS
 	    // If __left one is sentinel then __right one must be, too.
 	    if (_M_losers[__left]._M_source == -1)
 	      _GLIBCXX_PARALLEL_ASSERT(_M_losers[__right]._M_source == -1);
@@ -782,7 +763,7 @@ namespace __gnu_parallel
       {
 	_M_losers[0] = _M_losers[__init_winner(1)];
 
-#if _GLIBCXX_PARALLEL_ASSERTIONS
+#if _GLIBCXX_ASSERTIONS
 	// no dummy sequence can ever be at the top at the beginning
 	// (0 sequences!)
 	_GLIBCXX_PARALLEL_ASSERT(_M_losers[0]._M_source != -1);
@@ -795,7 +776,7 @@ namespace __gnu_parallel
       __delete_min_insert(_Tp __key, bool)
       {
         using std::swap;
-#if _GLIBCXX_PARALLEL_ASSERTIONS
+#if _GLIBCXX_ASSERTIONS
 	// no dummy sequence can ever be at the top!
 	_GLIBCXX_PARALLEL_ASSERT(_M_losers[0]._M_source != -1);
 #endif
@@ -865,7 +846,7 @@ namespace __gnu_parallel
       int
       __get_min_source()
       {
-#if _GLIBCXX_PARALLEL_ASSERTIONS
+#if _GLIBCXX_ASSERTIONS
 	// no dummy sequence can ever be at the top!
 	_GLIBCXX_PARALLEL_ASSERT(_M_losers[0]._M_source != -1);
 #endif
@@ -893,7 +874,6 @@ namespace __gnu_parallel
     {
       typedef _LoserTreePointerUnguardedBase<_Tp, _Compare> _Base;
       using _Base::_M_k;
-      using _Base::_M_comp;
       using _Base::_M_losers;
 
     public:
@@ -932,7 +912,7 @@ namespace __gnu_parallel
       {
 	_M_losers[0] = _M_losers[__init_winner(1)];
 
-#if _GLIBCXX_PARALLEL_ASSERTIONS
+#if _GLIBCXX_ASSERTIONS
 	// no dummy sequence can ever be at the top at the beginning
 	// (0 sequences!)
 	_GLIBCXX_PARALLEL_ASSERT(_M_losers[0]._M_source != -1);
@@ -942,7 +922,7 @@ namespace __gnu_parallel
       void
       __delete_min_insert(const _Tp& __key, bool __sup)
       {
-#if _GLIBCXX_PARALLEL_ASSERTIONS
+#if _GLIBCXX_ASSERTIONS
 	// no dummy sequence can ever be at the top!
 	_GLIBCXX_PARALLEL_ASSERT(_M_losers[0]._M_source != -1);
 #endif
@@ -979,7 +959,6 @@ namespace __gnu_parallel
     {
       typedef _LoserTreePointerUnguardedBase<_Tp, _Compare> _Base;
       using _Base::_M_k;
-      using _Base::_M_comp;
       using _Base::_M_losers;
 
   public:
@@ -998,7 +977,7 @@ namespace __gnu_parallel
 	    unsigned int __left = __init_winner(2 * __root);
 	    unsigned int __right = __init_winner(2 * __root + 1);
 
-#if _GLIBCXX_PARALLEL_ASSERTIONS
+#if _GLIBCXX_ASSERTIONS
 	    // If __left one is sentinel then __right one must be, too.
 	    if (_M_losers[__left]._M_source == -1)
 	      _GLIBCXX_PARALLEL_ASSERT(_M_losers[__right]._M_source == -1);
@@ -1025,7 +1004,7 @@ namespace __gnu_parallel
       {
 	_M_losers[0] = _M_losers[__init_winner(1)];
 
-#if _GLIBCXX_PARALLEL_ASSERTIONS
+#if _GLIBCXX_ASSERTIONS
 	// no dummy sequence can ever be at the top at the beginning
 	// (0 sequences!)
 	_GLIBCXX_PARALLEL_ASSERT(_M_losers[0]._M_source != -1);
@@ -1035,7 +1014,7 @@ namespace __gnu_parallel
       void
       __delete_min_insert(const _Tp& __key, bool __sup)
       {
-#if _GLIBCXX_PARALLEL_ASSERTIONS
+#if _GLIBCXX_ASSERTIONS
 	// no dummy sequence can ever be at the top!
 	_GLIBCXX_PARALLEL_ASSERT(_M_losers[0]._M_source != -1);
 #endif

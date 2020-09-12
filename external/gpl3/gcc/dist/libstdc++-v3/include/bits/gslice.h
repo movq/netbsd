@@ -1,6 +1,7 @@
 // The template and inlines for the -*- C++ -*- gslice class.
 
-// Copyright (C) 1997-2019 Free Software Foundation, Inc.
+// Copyright (C) 1997, 1998, 1999, 2000, 2001, 2004, 2005, 2006, 2009
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,9 +23,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file bits/gslice.h
+/** @file gslice.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{valarray}
+ *  You should not attempt to use it directly.
  */
 
 // Written by Gabriel Dos Reis <Gabriel.Dos-Reis@DPTMaths.ENS-Cachan.Fr>
@@ -34,9 +35,7 @@
 
 #pragma GCC system_header
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   /**
    * @addtogroup numeric_arrays
@@ -73,12 +72,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
      *  Constructs a slice with as many dimensions as the length of the @a l
      *  and @a s arrays.
      *
-     *  @param  __o  Offset in array of first element.
-     *  @param  __l  Array of dimension lengths.
-     *  @param  __s  Array of dimension strides between array elements.
+     *  @param  o  Offset in array of first element.
+     *  @param  l  Array of dimension lengths.
+     *  @param  s  Array of dimension strides between array elements.
      */
-    gslice(size_t __o, const valarray<size_t>& __l, 
-	   const valarray<size_t>& __s);
+    gslice(size_t, const valarray<size_t>&, const valarray<size_t>&);
 
     // XXX: the IS says the copy-ctor and copy-assignment operators are
     //      synthesized by the compiler but they are just unsuitable
@@ -179,7 +177,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   // @} group numeric_arrays
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 #endif /* _GSLICE_H */

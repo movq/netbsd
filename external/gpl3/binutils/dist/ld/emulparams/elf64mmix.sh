@@ -1,9 +1,8 @@
-TEMPLATE_NAME=elf
+TEMPLATE_NAME=elf32
 GENERATE_SHLIB_SCRIPT=yes
 ELFSIZE=64
 SCRIPT_NAME=elf
 OUTPUT_FORMAT="elf64-mmix"
-NO_REL_RELOCS=yes
 ENTRY=_start.
 
 # Default to 0 as mmixal does.
@@ -35,14 +34,11 @@ EXTRA_EM_FILE=mmixelf
 # DEFINED wouldn't find the symbol if it was at the top; presumably
 # before the definition, if the definition is not in the first file.
 # FIXME: Arguably a linker bug.
-# Only do this for a final link, or else we'll mess up e.g. error
-# messages.
-OTHER_TEXT_SECTIONS="
-${RELOCATING+
+OTHER_TEXT_SECTIONS='
  _start. = (DEFINED (_start) ? _start
-	    : (DEFINED (Main) ? Main : (DEFINED (.text) ? .text : 0)));
+            : (DEFINED (Main) ? Main : (DEFINED (.text) ? .text : 0)));
  PROVIDE (Main = DEFINED (Main) ? Main : (DEFINED (_start) ? _start : _start.));
-}"
+'
 
 OTHER_SECTIONS='
  .MMIX.reg_contents :

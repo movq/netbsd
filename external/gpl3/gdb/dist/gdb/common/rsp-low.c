@@ -1,6 +1,6 @@
 /* Low-level RSP routines for GDB, the GNU debugger.
 
-   Copyright (C) 1988-2019 Free Software Foundation, Inc.
+   Copyright (C) 1988-2015 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -92,8 +92,8 @@ pack_hex_byte (char *pkt, int byte)
 
 /* See rsp-low.h.  */
 
-const char *
-unpack_varlen_hex (const char *buff,	/* packet to parse */
+char *
+unpack_varlen_hex (char *buff,	/* packet to parse */
 		   ULONGEST *result)
 {
   int nibble;
@@ -132,50 +132,6 @@ hex2bin (const char *hex, gdb_byte *bin, int count)
 
 /* See rsp-low.h.  */
 
-gdb::byte_vector
-hex2bin (const char *hex)
-{
-  size_t bin_len = strlen (hex) / 2;
-  gdb::byte_vector bin (bin_len);
-
-  hex2bin (hex, bin.data (), bin_len);
-
-  return bin;
-}
-
-/* See rsp-low.h.  */
-
-std::string
-hex2str (const char *hex)
-{
-  return hex2str (hex, strlen (hex));
-}
-
-/* See rsp-low.h.  */
-
-std::string
-hex2str (const char *hex, int count)
-{
-  std::string ret;
-
-  ret.reserve (count);
-  for (size_t i = 0; i < count; ++i)
-    {
-      if (hex[0] == '\0' || hex[1] == '\0')
-	{
-	  /* Hex string is short, or of uneven length.  Return what we
-	     have so far.  */
-	  return ret;
-	}
-      ret += fromhex (hex[0]) * 16 + fromhex (hex[1]);
-      hex += 2;
-    }
-
-  return ret;
-}
-
-/* See rsp-low.h.  */
-
 int
 bin2hex (const gdb_byte *bin, char *hex, int count)
 {
@@ -192,82 +148,36 @@ bin2hex (const gdb_byte *bin, char *hex, int count)
 
 /* See rsp-low.h.  */
 
-std::string
-bin2hex (const gdb_byte *bin, int count)
-{
-  std::string ret;
-
-  ret.reserve (count * 2);
-  for (int i = 0; i < count; ++i)
-    {
-      ret += tohex ((*bin >> 4) & 0xf);
-      ret += tohex (*bin++ & 0xf);
-    }
-
-  return ret;
-}
-
-/* Return whether byte B needs escaping when sent as part of binary data.  */
-
-static int
-needs_escaping (gdb_byte b)
-{
-  return b == '$' || b == '#' || b == '}' || b == '*';
-}
-
-/* See rsp-low.h.  */
-
 int
-remote_escape_output (const gdb_byte *buffer, int len_units, int unit_size,
-		      gdb_byte *out_buf, int *out_len_units,
-		      int out_maxlen_bytes)
+remote_escape_output (const gdb_byte *buffer, int len,
+		      gdb_byte *out_buf, int *out_len,
+		      int out_maxlen)
 {
-  int input_unit_index, output_byte_index = 0, byte_index_in_unit;
-  int number_escape_bytes_needed;
+  int input_index, output_index;
 
-  /* Try to copy integral addressable memory units until
-     (1) we run out of space or
-     (2) we copied all of them.  */
-  for (input_unit_index = 0;
-       input_unit_index < len_units;
-       input_unit_index++)
+  output_index = 0;
+  for (input_index = 0; input_index < len; input_index++)
     {
-      /* Find out how many escape bytes we need for this unit.  */
-      number_escape_bytes_needed = 0;
-      for (byte_index_in_unit = 0;
-	   byte_index_in_unit < unit_size;
-	   byte_index_in_unit++)
+      gdb_byte b = buffer[input_index];
+
+      if (b == '$' || b == '#' || b == '}' || b == '*')
 	{
-	  int idx = input_unit_index * unit_size + byte_index_in_unit;
-	  gdb_byte b = buffer[idx];
-	  if (needs_escaping (b))
-	    number_escape_bytes_needed++;
+	  /* These must be escaped.  */
+	  if (output_index + 2 > out_maxlen)
+	    break;
+	  out_buf[output_index++] = '}';
+	  out_buf[output_index++] = b ^ 0x20;
 	}
-
-      /* Check if we have room to fit this escaped unit.  */
-      if (output_byte_index + unit_size + number_escape_bytes_needed >
-	    out_maxlen_bytes)
-	  break;
-
-      /* Copy the unit byte per byte, adding escapes.  */
-      for (byte_index_in_unit = 0;
-	   byte_index_in_unit < unit_size;
-	   byte_index_in_unit++)
+      else
 	{
-	  int idx = input_unit_index * unit_size + byte_index_in_unit;
-	  gdb_byte b = buffer[idx];
-	  if (needs_escaping (b))
-	    {
-	      out_buf[output_byte_index++] = '}';
-	      out_buf[output_byte_index++] = b ^ 0x20;
-	    }
-	  else
-	    out_buf[output_byte_index++] = b;
+	  if (output_index + 1 > out_maxlen)
+	    break;
+	  out_buf[output_index++] = b;
 	}
     }
 
-  *out_len_units = input_unit_index;
-  return output_byte_index;
+  *out_len = input_index;
+  return output_index;
 }
 
 /* See rsp-low.h.  */

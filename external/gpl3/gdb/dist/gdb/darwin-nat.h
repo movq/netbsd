@@ -1,5 +1,6 @@
 /* Common things used by the various darwin files
-   Copyright (C) 1995-2019 Free Software Foundation, Inc.
+   Copyright (C) 1995, 1996, 1997, 1999, 2000, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -12,54 +13,14 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
 
-#ifndef DARWIN_NAT_H
-#define DARWIN_NAT_H
+#ifndef __DARWIN_NAT_H__
+#define __DARWIN_NAT_H__
 
-#include "inf-child.h"
 #include <mach/mach.h>
-#include "gdbthread.h"
-
-/* This needs to be overridden by the platform specific nat code.  */
-
-class darwin_nat_target : public inf_child_target
-{
-  void create_inferior (const char *exec_file,
-			const std::string &allargs,
-			char **env, int from_tty) override;
-
-  void attach (const char *, int) override;
-
-  void detach (inferior *, int) override;
-
-  ptid_t wait (ptid_t, struct target_waitstatus *, int) override;
-
-  void mourn_inferior () override;
-
-  void kill () override;
-
-  void interrupt () override;
-
-  void resume (ptid_t, int , enum gdb_signal) override;
-
-  bool thread_alive (ptid_t ptid) override;
-
-  const char *pid_to_str (ptid_t) override;
-
-  char *pid_to_exec_file (int pid) override;
-
-  enum target_xfer_status xfer_partial (enum target_object object,
-					const char *annex,
-					gdb_byte *readbuf,
-					const gdb_byte *writebuf,
-					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
-
-  bool supports_multi_process () override;
-
-  ptid_t get_ada_task_ptid (long lwp, long thread) override;
-};
+#include "gdb_assert.h"
 
 /* Describe the mach exception handling state for a task.  This state is saved
    before being changed and restored when a process is detached.
@@ -68,20 +29,21 @@ class darwin_nat_target : public inf_child_target
 struct darwin_exception_info
 {
   /* Exceptions handled by the port.  */
-  exception_mask_t masks[EXC_TYPES_COUNT] {};
+  exception_mask_t masks[EXC_TYPES_COUNT];
 
   /* Ports receiving exception messages.  */
-  mach_port_t ports[EXC_TYPES_COUNT] {};
+  mach_port_t ports[EXC_TYPES_COUNT];
 
   /* Type of messages sent.  */
-  exception_behavior_t behaviors[EXC_TYPES_COUNT] {};
+  exception_behavior_t behaviors[EXC_TYPES_COUNT];
 
   /* Type of state to be sent.  */
-  thread_state_flavor_t flavors[EXC_TYPES_COUNT] {};
+  thread_state_flavor_t flavors[EXC_TYPES_COUNT];
 
   /* Number of elements set.  */
-  mach_msg_type_number_t count = 0;
+  mach_msg_type_number_t count;
 };
+typedef struct darwin_exception_info darwin_exception_info;
 
 struct darwin_exception_msg
 {
@@ -99,82 +61,63 @@ struct darwin_exception_msg
   integer_t ex_data[2];
 };
 
-enum darwin_msg_state
-{
-  /* The thread is running.  */
-  DARWIN_RUNNING,
+enum darwin_msg_state { DARWIN_RUNNING, DARWIN_STOPPED, DARWIN_MESSAGE };
 
-  /* The thread is stopped.  */
-  DARWIN_STOPPED,
-
-  /* The thread has sent a message and waits for a reply.  */
-  DARWIN_MESSAGE
-};
-
-struct darwin_thread_info : public private_thread_info
+struct private_thread_info
 {
   /* The thread port from a GDB point of view.  */
-  thread_t gdb_port = 0;
+  thread_t gdb_port;
 
   /* The thread port from the inferior point of view.  Not to be used inside
      gdb except for get_ada_task_ptid.  */
-  thread_t inf_port = 0;
+  thread_t inf_port;
 
   /* Current message state.
      If the kernel has sent a message it expects a reply and the inferior
      can't be killed before.  */
-  enum darwin_msg_state msg_state = DARWIN_RUNNING;
+  enum darwin_msg_state msg_state;
 
   /* True if this thread is single-stepped.  */
-  bool single_step = false;
+  unsigned char single_step;
 
   /* True if a signal was manually sent to the thread.  */
-  bool signaled = false;
+  unsigned char signaled;
 
   /* The last exception received.  */
-  struct darwin_exception_msg event {};
+  struct darwin_exception_msg event;
 };
-typedef struct darwin_thread_info darwin_thread_t;
+typedef struct private_thread_info darwin_thread_t;
 
-static inline darwin_thread_info *
-get_darwin_thread_info (class thread_info *thread)
-{
-  return static_cast<darwin_thread_info *> (thread->priv.get ());
-}
+/* Define the threads vector type.  */
+DEF_VEC_O (darwin_thread_t);
+
 
 /* Describe an inferior.  */
-struct darwin_inferior : public private_inferior
+struct private_inferior
 {
   /* Corresponding task port.  */
-  task_t task = 0;
+  task_t task;
 
   /* Port which will receive the dead-name notification for the task port.
      This is used to detect the death of the task.  */
-  mach_port_t notify_port = 0;
+  mach_port_t notify_port;
 
   /* Initial exception handling.  */
   darwin_exception_info exception_info;
 
   /* Number of messages that have been received but not yet replied.  */
-  unsigned int pending_messages = 0;
+  unsigned int pending_messages;
 
   /* Set if inferior is not controlled by ptrace(2) but through Mach.  */
-  bool no_ptrace = false;
+  unsigned char no_ptrace;
 
   /* True if this task is suspended.  */
-  bool suspended = false;
+  unsigned char suspended;
 
   /* Sorted vector of known threads.  */
-  std::vector<darwin_thread_t *> threads;
+  VEC(darwin_thread_t) *threads;
 };
-
-/* Return the darwin_inferior attached to INF.  */
-
-static inline darwin_inferior *
-get_darwin_inferior (inferior *inf)
-{
-  return static_cast<darwin_inferior *> (inf->priv.get ());
-}
+typedef struct private_inferior darwin_inferior;
 
 /* Exception port.  */
 extern mach_port_t darwin_ex_port;
@@ -185,10 +128,10 @@ extern mach_port_t darwin_port_set;
 /* A copy of mach_host_self ().  */
 extern mach_port_t darwin_host_self;
 
-/* FUNCTION_NAME is defined in common-utils.h (or not).  */
-#ifdef FUNCTION_NAME
+/* ASSERT_FUNCTION is defined in gdb_assert.h (or not).  */
+#ifdef ASSERT_FUNCTION
 #define MACH_CHECK_ERROR(ret) \
-  mach_check_error (ret, __FILE__, __LINE__, FUNCTION_NAME)
+  mach_check_error (ret, __FILE__, __LINE__, ASSERT_FUNCTION)
 #else
 #define MACH_CHECK_ERROR(ret) \
   mach_check_error (ret, __FILE__, __LINE__, "??")
@@ -199,6 +142,11 @@ extern void mach_check_error (kern_return_t ret, const char *file,
 
 void darwin_set_sstep (thread_t thread, int enable);
 
+/* This one is called in darwin-nat.c, but needs to be provided by the
+   platform specific nat code.  It allows each platform to add platform specific
+   stuff to the darwin_ops.  */
+extern void darwin_complete_target (struct target_ops *target);
+
 void darwin_check_osabi (darwin_inferior *inf, thread_t thread);
 
-#endif /* DARWIN_NAT_H */
+#endif /* __DARWIN_NAT_H__ */

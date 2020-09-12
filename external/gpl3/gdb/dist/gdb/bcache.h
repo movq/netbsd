@@ -2,7 +2,8 @@
    Written by Fred Fish <fnf@cygnus.com>
    Rewritten by Jim Blandy <jimb@cygnus.com>
 
-   Copyright (C) 1999-2019 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2002, 2003, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -165,7 +166,7 @@ extern struct bcache *bcache_xmalloc (
    eliminating duplication.  TYPE should be a string describing the
    kind of data BCACHE holds.  Statistics are printed using
    `printf_filtered' and its ilk.  */
-extern void print_bcache_statistics (struct bcache *bcache, const char *type);
+extern void print_bcache_statistics (struct bcache *bcache, char *type);
 extern int bcache_memory_used (struct bcache *bcache);
 
 /* The hash functions */

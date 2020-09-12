@@ -1,5 +1,7 @@
 /* Define a target vector and some small routines for a variant of a.out.
-   Copyright (C) 1990-2019 Free Software Foundation, Inc.
+   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999,
+   2000, 2001, 2002, 2003, 2004, 2005, 2007, 2009, 2010
+   Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -42,12 +44,12 @@ MY (callback) (bfd *abfd)
   unsigned long arch_align;
 
   /* Calculate the file positions of the parts of a newly read aout header.  */
-  obj_textsec (abfd)->size = N_TXTSIZE (execp);
+  obj_textsec (abfd)->size = N_TXTSIZE (*execp);
 
   /* The virtual memory addresses of the sections.  */
-  obj_textsec (abfd)->vma = N_TXTADDR (execp);
-  obj_datasec (abfd)->vma = N_DATADDR (execp);
-  obj_bsssec  (abfd)->vma = N_BSSADDR (execp);
+  obj_textsec (abfd)->vma = N_TXTADDR (*execp);
+  obj_datasec (abfd)->vma = N_DATADDR (*execp);
+  obj_bsssec  (abfd)->vma = N_BSSADDR (*execp);
 
   /* For some targets, if the entry point is not in the same page
      as the start of the text, then adjust the VMA so that it is.
@@ -71,20 +73,20 @@ MY (callback) (bfd *abfd)
   obj_bsssec (abfd)->lma = obj_bsssec (abfd)->vma;
 
   /* The file offsets of the sections.  */
-  obj_textsec (abfd)->filepos = N_TXTOFF (execp);
-  obj_datasec (abfd)->filepos = N_DATOFF (execp);
+  obj_textsec (abfd)->filepos = N_TXTOFF (*execp);
+  obj_datasec (abfd)->filepos = N_DATOFF (*execp);
 
   /* The file offsets of the relocation info.  */
-  obj_textsec (abfd)->rel_filepos = N_TRELOFF (execp);
-  obj_datasec (abfd)->rel_filepos = N_DRELOFF (execp);
+  obj_textsec (abfd)->rel_filepos = N_TRELOFF (*execp);
+  obj_datasec (abfd)->rel_filepos = N_DRELOFF (*execp);
 
   /* The file offsets of the string table and symbol table.  */
-  obj_sym_filepos (abfd) = N_SYMOFF (execp);
-  obj_str_filepos (abfd) = N_STROFF (execp);
+  obj_sym_filepos (abfd) = N_SYMOFF (*execp);
+  obj_str_filepos (abfd) = N_STROFF (*execp);
 
   /* Determine the architecture and machine type of the object file.  */
 #ifdef SET_ARCH_MACH
-  SET_ARCH_MACH (abfd, execp);
+  SET_ARCH_MACH (abfd, *execp);
 #else
   bfd_default_set_arch_mach (abfd, DEFAULT_ARCH, 0);
 #endif
@@ -149,11 +151,11 @@ MY (object_p) (bfd *abfd)
   exec.a_info = GET_MAGIC (abfd, exec_bytes.e_info);
 #endif
 
-  if (N_BADMAG (&exec))
+  if (N_BADMAG (exec))
     return 0;
 
 #ifdef MACHTYPE_OK
-  if (!(MACHTYPE_OK (N_MACHTYPE (&exec))))
+  if (!(MACHTYPE_OK (N_MACHTYPE (exec))))
     return 0;
 #endif
 
@@ -332,9 +334,9 @@ MY_final_link_callback (bfd *abfd,
 {
   struct internal_exec *execp = exec_hdr (abfd);
 
-  *ptreloff = N_TRELOFF (execp);
-  *pdreloff = N_DRELOFF (execp);
-  *psymoff = N_SYMOFF (execp);
+  *ptreloff = N_TRELOFF (*execp);
+  *pdreloff = N_DRELOFF (*execp);
+  *psymoff = N_SYMOFF (*execp);
 }
 
 #endif
@@ -373,7 +375,7 @@ MY_bfd_final_link (bfd *abfd, struct bfd_link_info *info)
   _bfd_archive_bsd_construct_extended_name_table
 #endif
 #ifndef	MY_write_armap
-#define	MY_write_armap		_bfd_bsd_write_armap
+#define	MY_write_armap		bsd_write_armap
 #endif
 #ifndef MY_read_ar_hdr
 #define MY_read_ar_hdr		_bfd_generic_read_ar_hdr
@@ -407,13 +409,14 @@ MY_bfd_final_link (bfd *abfd, struct bfd_link_info *info)
 #endif
 
 #ifndef MY_bfd_debug_info_start
-#define MY_bfd_debug_info_start		_bfd_void_bfd
+#define MY_bfd_debug_info_start		bfd_void
 #endif
 #ifndef MY_bfd_debug_info_end
-#define MY_bfd_debug_info_end		_bfd_void_bfd
+#define MY_bfd_debug_info_end		bfd_void
 #endif
 #ifndef MY_bfd_debug_info_accumulate
-#define MY_bfd_debug_info_accumulate	_bfd_void_bfd_asection
+#define MY_bfd_debug_info_accumulate	\
+		(void (*) (bfd *, struct bfd_section *)) bfd_void
 #endif
 
 #ifndef MY_core_file_failing_command
@@ -449,9 +452,6 @@ MY_bfd_final_link (bfd *abfd, struct bfd_link_info *info)
 #ifndef MY_canonicalize_reloc
 #define MY_canonicalize_reloc NAME (aout, canonicalize_reloc)
 #endif
-#ifndef MY_set_reloc
-#define MY_set_reloc _bfd_generic_set_reloc
-#endif
 #ifndef MY_make_empty_symbol
 #define MY_make_empty_symbol NAME (aout, make_empty_symbol)
 #endif
@@ -461,10 +461,6 @@ MY_bfd_final_link (bfd *abfd, struct bfd_link_info *info)
 #ifndef MY_get_symbol_info
 #define MY_get_symbol_info NAME (aout, get_symbol_info)
 #endif
-#ifndef MY_get_symbol_version_string
-#define MY_get_symbol_version_string \
-  _bfd_nosymbols_get_symbol_version_string
-#endif
 #ifndef MY_get_lineno
 #define MY_get_lineno NAME (aout, get_lineno)
 #endif
@@ -473,9 +469,6 @@ MY_bfd_final_link (bfd *abfd, struct bfd_link_info *info)
 #endif
 #ifndef MY_find_nearest_line
 #define MY_find_nearest_line NAME (aout, find_nearest_line)
-#endif
-#ifndef MY_find_line
-#define MY_find_line _bfd_nosymbols_find_line
 #endif
 #ifndef MY_find_inliner_info
 #define MY_find_inliner_info _bfd_nosymbols_find_inliner_info
@@ -493,9 +486,6 @@ MY_bfd_final_link (bfd *abfd, struct bfd_link_info *info)
 #ifndef MY_bfd_gc_sections
 #define MY_bfd_gc_sections bfd_generic_gc_sections
 #endif
-#ifndef MY_bfd_lookup_section_flags
-#define MY_bfd_lookup_section_flags bfd_generic_lookup_section_flags
-#endif
 #ifndef MY_bfd_merge_sections
 #define MY_bfd_merge_sections bfd_generic_merge_sections
 #endif
@@ -511,12 +501,6 @@ MY_bfd_final_link (bfd *abfd, struct bfd_link_info *info)
 #endif
 #ifndef MY_bfd_define_common_symbol
 #define MY_bfd_define_common_symbol bfd_generic_define_common_symbol
-#endif
-#ifndef MY_bfd_link_hide_symbol
-#define MY_bfd_link_hide_symbol _bfd_generic_link_hide_symbol
-#endif
-#ifndef MY_bfd_define_start_stop
-#define MY_bfd_define_start_stop bfd_generic_define_start_stop
 #endif
 #ifndef MY_bfd_reloc_type_lookup
 #define MY_bfd_reloc_type_lookup NAME (aout, reloc_type_lookup)
@@ -536,6 +520,9 @@ MY_bfd_final_link (bfd *abfd, struct bfd_link_info *info)
 #ifndef MY_bfd_link_hash_table_create
 #define MY_bfd_link_hash_table_create NAME (aout, link_hash_table_create)
 #endif
+#ifndef MY_bfd_link_hash_table_free
+#define MY_bfd_link_hash_table_free _bfd_generic_link_hash_table_free
+#endif
 #ifndef MY_bfd_link_add_symbols
 #define MY_bfd_link_add_symbols NAME (aout, link_add_symbols)
 #endif
@@ -548,10 +535,6 @@ MY_bfd_final_link (bfd *abfd, struct bfd_link_info *info)
 #endif
 #ifndef MY_bfd_link_split_section
 #define MY_bfd_link_split_section  _bfd_generic_link_split_section
-#endif
-
-#ifndef MY_bfd_link_check_relocs
-#define MY_bfd_link_check_relocs   _bfd_generic_link_check_relocs
 #endif
 
 #ifndef MY_bfd_copy_private_bfd_data
@@ -583,7 +566,7 @@ MY_bfd_final_link (bfd *abfd, struct bfd_link_info *info)
 #endif
 
 #ifndef MY_bfd_is_target_special_symbol
-#define MY_bfd_is_target_special_symbol _bfd_bool_bfd_asymbol_false
+#define MY_bfd_is_target_special_symbol ((bfd_boolean (*) (bfd *, asymbol *)) bfd_false)
 #endif
 
 #ifndef MY_bfd_free_cached_info
@@ -591,18 +574,7 @@ MY_bfd_final_link (bfd *abfd, struct bfd_link_info *info)
 #endif
 
 #ifndef MY_close_and_cleanup
-
-/* Handle closing of a BFD including the resource-releasing parts.  */
-
-static bfd_boolean
-MY_close_and_cleanup (bfd *abfd)
-{
-  if (!MY_bfd_free_cached_info (abfd))
-    return FALSE;
-
-  return _bfd_generic_close_and_cleanup (abfd);
-}
-
+#define MY_close_and_cleanup MY_bfd_free_cached_info
 #endif
 
 #ifndef MY_get_dynamic_symtab_upper_bound
@@ -655,7 +627,6 @@ const bfd_target MY (vec) =
   MY_symbol_leading_char,
   AR_PAD_CHAR,			/* AR_pad_char.  */
   15,				/* AR_max_namelen.  */
-  0,				/* match priority.  */
 #ifdef TARGET_IS_BIG_ENDIAN_P
   bfd_getb64, bfd_getb_signed_64, bfd_putb64,
      bfd_getb32, bfd_getb_signed_32, bfd_putb32,
@@ -671,24 +642,12 @@ const bfd_target MY (vec) =
      bfd_getl32, bfd_getl_signed_32, bfd_putl32,
      bfd_getl16, bfd_getl_signed_16, bfd_putl16, /* Headers.  */
 #endif
-    {				/* bfd_check_format.  */
-      _bfd_dummy_target,
-      MY_object_p,
-      bfd_generic_archive_p,
-      MY_core_file_p
-    },
-    {				/* bfd_set_format.  */
-      _bfd_bool_bfd_false_error,
-      MY_mkobject,
-      _bfd_generic_mkarchive,
-      _bfd_bool_bfd_false_error
-    },
-    {				/* bfd_write_contents.  */
-      _bfd_bool_bfd_false_error,
-      MY_write_object_contents,
-      _bfd_write_archive_contents,
-      _bfd_bool_bfd_false_error
-    },
+    {_bfd_dummy_target, MY_object_p, 		/* bfd_check_format.  */
+       bfd_generic_archive_p, MY_core_file_p},
+    {bfd_false, MY_mkobject,			/* bfd_set_format.  */
+       _bfd_generic_mkarchive, bfd_false},
+    {bfd_false, MY_write_object_contents, 	/* bfd_write_contents.  */
+       _bfd_write_archive_contents, bfd_false},
 
      BFD_JUMP_TABLE_GENERIC (MY),
      BFD_JUMP_TABLE_COPY (MY),

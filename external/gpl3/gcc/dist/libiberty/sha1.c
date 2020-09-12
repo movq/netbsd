@@ -1,7 +1,8 @@
 /* sha1.c - Functions to compute SHA1 message digest of files or
    memory blocks according to the NIST specification FIPS-180-1.
 
-   Copyright (C) 2000-2019 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2001, 2003, 2004, 2005, 2006, 2008 Free Software
+   Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
@@ -229,11 +230,7 @@ sha1_process_bytes (const void *buffer, size_t len, struct sha1_ctx *ctx)
   if (len >= 64)
     {
 #if !_STRING_ARCH_unaligned
-# if defined(__clang__) || defined(__GNUC__)
-# define alignof(type) __alignof__(type)
-# else
 # define alignof(type) offsetof (struct { char c; type x; }, x)
-# endif
 # define UNALIGNED_P(p) (((size_t) p) % alignof (sha1_uint32) != 0)
       if (UNALIGNED_P (buffer))
 	while (len > 64)
@@ -303,7 +300,8 @@ sha1_process_block (const void *buffer, size_t len, struct sha1_ctx *ctx)
      length of the file up to 2^64 bits.  Here we only compute the
      number of bytes.  Do a double word increment.  */
   ctx->total[0] += len;
-  ctx->total[1] += ((len >> 31) >> 1) + (ctx->total[0] < len);
+  if (ctx->total[0] < len)
+    ++ctx->total[1];
 
 #define rol(x, n) (((x) << (n)) | ((sha1_uint32) (x) >> (32 - (n))))
 

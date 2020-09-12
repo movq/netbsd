@@ -1,6 +1,6 @@
 /* The memory range data structure, and associated utilities.
 
-   Copyright (C) 2010-2019 Free Software Foundation, Inc.
+   Copyright (C) 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,29 +20,12 @@
 #ifndef MEMRANGE_H
 #define MEMRANGE_H
 
-#include "common/vec.h"
+#include "vec.h"
 
 /* Defines a [START, START + LENGTH) memory range.  */
 
 struct mem_range
 {
-  mem_range () = default;
-
-  mem_range (CORE_ADDR start_, int length_)
-  : start (start_), length (length_)
-  {}
-
-  bool operator< (const mem_range &other) const
-  {
-    return this->start < other.start;
-  }
-
-  bool operator== (const mem_range &other) const
-  {
-    return (this->start == other.start
-	    && this->length == other.length);
-  }
-
   /* Lowest address in the range.  */
   CORE_ADDR start;
 
@@ -50,20 +33,19 @@ struct mem_range
   int length;
 };
 
+typedef struct mem_range mem_range_s;
+
+DEF_VEC_O(mem_range_s);
+
 /* Returns true if the ranges defined by [start1, start1+len1) and
    [start2, start2+len2) overlap.  */
 
 extern int mem_ranges_overlap (CORE_ADDR start1, int len1,
 			       CORE_ADDR start2, int len2);
 
-/* Returns true if ADDR is in RANGE.  */
-
-extern int address_in_mem_range (CORE_ADDR addr,
-				 const struct mem_range *range);
-
 /* Sort ranges by start address, then coalesce contiguous or
    overlapping ranges.  */
 
-extern void normalize_mem_ranges (std::vector<mem_range> *memory);
+extern void normalize_mem_ranges (VEC(mem_range_s) *memory);
 
 #endif

@@ -1,5 +1,5 @@
 /* ARM EABI compliant unwinding routines
-   Copyright (C) 2004-2019 Free Software Foundation, Inc.
+   Copyright (C) 2004-2013 Free Software Foundation, Inc.
    Contributed by Paul Brook
  
    This file is free software; you can redistribute it and/or modify it
@@ -21,7 +21,6 @@
    see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
    <http://www.gnu.org/licenses/>.  */
 
-#pragma GCC target ("general-regs-only")
 #include "unwind.h"
 
 /* We add a prototype for abort here to avoid creating a dependency on
@@ -353,7 +352,7 @@ _Unwind_GetRegionStart (_Unwind_Context * context)
 
 /* Find the Language specific exception data.  */
 
-_Unwind_Ptr
+void *
 _Unwind_GetLanguageSpecificData (_Unwind_Context * context)
 {
   _Unwind_Control_Block *ucbp;
@@ -367,7 +366,7 @@ _Unwind_GetLanguageSpecificData (_Unwind_Context * context)
   /* Skip the unwind opcodes.  */
   ptr += (((*ptr) >> 24) & 0xff) + 1;
 
-  return (_Unwind_Ptr) ptr;
+  return ptr;
 }
 
 

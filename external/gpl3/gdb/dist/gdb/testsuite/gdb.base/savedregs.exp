@@ -1,4 +1,4 @@
-# Copyright 2004-2019 Free Software Foundation, Inc.
+# Copyright 2004, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -29,21 +29,28 @@ if [target_info exists gdb,nosignals] {
     continue
 }
 
+if $tracelevel then {
+    strace $tracelevel
+}
 
-standard_testfile .c
 
+set testfile savedregs
+set srcfile ${testfile}.c
+set binfile ${objdir}/${subdir}/${testfile}
 if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug}] != "" } {
-    untested "failed to compile"
+    untested "Couldn't compile ${module}.c"
     return -1
 }
 
 # get things started
-clean_restart ${binfile}
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
 
 # Advance to main
-if ![runto_main] then {
-    fail "can't run to main"
-    return 0
+if { ![runto_main] } {
+    gdb_suppress_tests;
 }
 
 proc process_saved_regs { current inner outer } {
@@ -65,7 +72,7 @@ proc process_saved_regs { current inner outer } {
 
     foreach func $inner {
 	set saved_regs($func) "error"
-	set test "get $func info frame"
+	set test "Get $func info frame"
 	# Both dummy and sigtramp frames have problems.
 	switch $func {
 	    dummy {
@@ -78,7 +85,7 @@ proc process_saved_regs { current inner outer } {
 		set pat "Stack frame at .* Saved registers:.*"
 	    }
 	    default {
-		set pat "Stack frame at .* in $func .*( Saved registers:.*)?"
+		set pat "Stack frame at .* in $func .* Saved registers:.*"
 	    }
 	}
 	# If the "info frame" barf, capture the output anyway so that
@@ -136,7 +143,6 @@ process_saved_regs thrower { main } { }
 # Continue to the signal catcher, check main's saved-reg info, capture
 # catcher's saved-reg info.
 gdb_test "handle SIGSEGV pass print nostop"
-gdb_test "handle SIGILL pass print nostop"
 gdb_test "advance catcher" "catcher .* at .*"
 process_saved_regs catcher { sigtramp thrower } { main }
 

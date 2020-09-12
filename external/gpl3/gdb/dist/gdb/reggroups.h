@@ -1,6 +1,7 @@
 /* Register groupings for GDB, the GNU debugger.
 
-   Copyright (C) 2002-2019 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    Contributed by Red Hat.
 
@@ -41,10 +42,6 @@ extern struct reggroup *const restore_reggroup;
 /* Create a new local register group.  */
 extern struct reggroup *reggroup_new (const char *name,
 				      enum reggroup_type type);
-/* Create a new register group allocated onto the gdbarch obstack.  */
-extern struct reggroup *reggroup_gdbarch_new (struct gdbarch *gdbarch,
-					      const char *name,
-					      enum reggroup_type type);
 
 /* Add a register group (with attribute values) to the pre-defined list.  */
 extern void reggroup_add (struct gdbarch *gdbarch, struct reggroup *group);
@@ -53,16 +50,11 @@ extern void reggroup_add (struct gdbarch *gdbarch, struct reggroup *group);
 extern const char *reggroup_name (struct reggroup *reggroup);
 extern enum reggroup_type reggroup_type (struct reggroup *reggroup);
 
-/* Iterators for the architecture's register groups.  Pass in NULL, returns
-   the first (for next), or last (for prev) group.  Pass in a group,
-   returns the next or previous group, or NULL when either the end or the
-   beginning of the group list is reached.  */
+/* Interator for the architecture's register groups.  Pass in NULL,
+   returns the first group.  Pass in a group, returns the next group,
+   or NULL when the last group is reached.  */
 extern struct reggroup *reggroup_next (struct gdbarch *gdbarch,
 				       struct reggroup *last);
-extern struct reggroup *reggroup_prev (struct gdbarch *gdbarch,
-				       struct reggroup *curr);
-/* Find a reggroup by name.  */
-extern reggroup *reggroup_find (struct gdbarch *gdbarch, const char *name);
 
 /* Is REGNUM a member of REGGROUP?  */
 extern int default_register_reggroup_p (struct gdbarch *gdbarch, int regnum,

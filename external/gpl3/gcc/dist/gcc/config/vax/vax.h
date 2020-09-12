@@ -1,5 +1,7 @@
 /* Definitions of target machine for GNU compiler.  VAX version.
-   Copyright (C) 1987-2019 Free Software Foundation, Inc.
+   Copyright (C) 1987, 1988, 1991, 1993, 1994, 1995, 1996, 1997, 1998,
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -17,7 +19,6 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-#include "vax-protos.h"
 
 /* Target CPU builtins.  */
 #define TARGET_CPU_CPP_BUILTINS()		\
@@ -34,6 +35,8 @@ along with GCC; see the file COPYING3.  If not see
     }						\
   while (0)
 
+#define VMS_TARGET 0
+
 /* Use -J option for long branch support with Unix assembler.  */
 
 #define ASM_SPEC "-J"
@@ -48,6 +51,13 @@ along with GCC; see the file COPYING3.  If not see
   %{pg:%eprofiling not supported with -mg\n}}\
  %{!mg:%{!p:%{!pg:-lc}}%{p:-lc_p}%{pg:-lc_p}}"
 
+/* Print subsidiary information on the compiler version in use.  */
+
+#ifndef TARGET_NAME	/* A more specific value might be supplied via -D.  */
+#define TARGET_NAME "vax"
+#endif
+#define TARGET_VERSION fprintf (stderr, " (%s)", TARGET_NAME)
+
 /* Run-time compilation parameters selecting different hardware subsets.  */
 
 /* Nonzero if ELF.  Redefined by vax/elf.h.  */
@@ -61,6 +71,8 @@ along with GCC; see the file COPYING3.  If not see
 #ifndef TARGET_DEFAULT
 #define TARGET_DEFAULT (MASK_UNIX_ASM)
 #endif
+
+#define OVERRIDE_OPTIONS override_options ()
 
 
 /* Target machine storage layout */
@@ -136,11 +148,26 @@ along with GCC; see the file COPYING3.  If not see
    Aside from that, you can include as many other registers as you like.  */
 #define CALL_USED_REGISTERS {1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1}
 
+/* Return number of consecutive hard regs needed starting at reg REGNO
+   to hold something of mode MODE.
+   This is ordinarily the length in words of a value of mode MODE
+   but can be less for certain modes in special long registers.
+   On the VAX, all registers are one word long.  */
+#define HARD_REGNO_NREGS(REGNO, MODE)	\
+  ((GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD)
+
+/* Value is 1 if hard register REGNO can hold a value of machine-mode MODE.
+   On the VAX, all registers can hold all modes.  */
+#define HARD_REGNO_MODE_OK(REGNO, MODE) 1
+
+/* Value is 1 if it is a good idea to tie two pseudo registers
+   when one has mode MODE1 and one has mode MODE2.
+   If HARD_REGNO_MODE_OK could produce different values for MODE1 and MODE2,
+   for any hard reg, then this must be 0 for correct output.  */
+#define MODES_TIEABLE_P(MODE1, MODE2)  1
+
 /* Specify the registers used for certain standard purposes.
    The values of these macros are register numbers.  */
-
-/* VAX PSW for DWARF-2 */
-#define PSW_REGNUM VAX_PSW_REGNUM
 
 /* VAX pc is overloaded on a register.  */
 #define PC_REGNUM VAX_PC_REGNUM
@@ -201,6 +228,20 @@ enum reg_class { NO_REGS, ALL_REGS, LIM_REG_CLASSES };
 #define REG_CLASS_NAMES	\
   { "NO_REGS", "ALL_REGS" }
 
+/* The following macro defines cover classes for Integrated Register
+   Allocator.  Cover classes is a set of non-intersected register
+   classes covering all hard registers used for register allocation
+   purpose.  Any move between two registers of a cover class should be
+   cheaper than load or store of the registers.  The macro value is
+   array of register classes with LIM_REG_CLASSES used as the end
+   marker.  */
+#define IRA_COVER_CLASSES { ALL_REGS, LIM_REG_CLASSES }
+
+/* Return the maximum number of consecutive registers
+   needed to represent mode MODE in a register of class CLASS.  */
+#define CLASS_MAX_NREGS(CLASS, MODE)	\
+  ((GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD)
+
 /* Define which registers fit in which classes.
    This is an initializer for a vector of HARD_REG_SET
    of length N_REG_CLASSES.  */
@@ -212,19 +253,32 @@ enum reg_class { NO_REGS, ALL_REGS, LIM_REG_CLASSES };
    reg number REGNO.  This could be a conditional expression
    or could index an array.  */
 
-#define REGNO_REG_CLASS(REGNO) ((void)(REGNO), ALL_REGS)
+#define REGNO_REG_CLASS(REGNO) ALL_REGS
 
 /* The class value for index registers, and the one for base regs.  */
 
 #define INDEX_REG_CLASS ALL_REGS
 #define BASE_REG_CLASS ALL_REGS
 
+/* Given an rtx X being reloaded into a reg required to be
+   in class CLASS, return the class of reg to actually use.
+   In general this is just CLASS; but on some machines
+   in some cases it is preferable to use a more restrictive class.  */
+
+#define PREFERRED_RELOAD_CLASS(X,CLASS)  (CLASS)
+
+/* Return the maximum number of consecutive registers
+   needed to represent mode MODE in a register of class CLASS.  */
+/* On the VAX, this is always the size of MODE in words,
+   since all registers are the same size.  */
+#define CLASS_MAX_NREGS(CLASS, MODE)	\
+ ((GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD)
 
 /* Stack layout; function entry, exit and calling.  */
 
 /* Define this if pushing a word on the stack
    makes the stack pointer a smaller address.  */
-#define STACK_GROWS_DOWNWARD 1
+#define STACK_GROWS_DOWNWARD
 
 /* Define this to nonzero if the nominal address of the stack frame
    is at the high-address end of the local variables;
@@ -232,10 +286,16 @@ enum reg_class { NO_REGS, ALL_REGS, LIM_REG_CLASSES };
    goes at a more negative offset in the frame.  */
 #define FRAME_GROWS_DOWNWARD 1
 
+/* Offset within stack frame to start allocating local variables at.
+   If FRAME_GROWS_DOWNWARD, this is the offset to the END of the
+   first local allocated.  Otherwise, it is the offset to the BEGINNING
+   of the first local allocated.  */
+#define STARTING_FRAME_OFFSET 0
+
 /* Given an rtx for the address of a frame,
    return an rtx for the address of the word in the frame
    that holds the dynamic chain--the previous frame's address.  */
-#define DYNAMIC_CHAIN_ADDRESS(FRAME) plus_constant (Pmode, (FRAME), 12)
+#define DYNAMIC_CHAIN_ADDRESS(FRAME) plus_constant ((FRAME), 12)
 
 /* If we generate an insn to push BYTES bytes,
    this says how many the stack pointer really advances by.
@@ -244,6 +304,18 @@ enum reg_class { NO_REGS, ALL_REGS, LIM_REG_CLASSES };
 
 /* Offset of first parameter from the argument pointer register value.  */
 #define FIRST_PARM_OFFSET(FNDECL) 4
+
+/* Value is the number of bytes of arguments automatically
+   popped when returning from a subroutine call.
+   FUNDECL is the declaration node of the function (as a tree),
+   FUNTYPE is the data type of the function (as a tree),
+   or for a library call it is an identifier node for the subroutine name.
+   SIZE is the number of bytes of arguments passed on the stack.
+
+   On the VAX, the RET insn pops a maximum of 255 args for any function.  */
+
+#define RETURN_POPS_ARGS(FUNDECL,FUNTYPE,SIZE)	\
+  ((SIZE) > 255 * 4 ? 0 : (SIZE))
 
 /* Define how to find the value returned by a function.
    VALTYPE is the data type of the value (as a tree).
@@ -275,7 +347,7 @@ enum reg_class { NO_REGS, ALL_REGS, LIM_REG_CLASSES };
 /* 1 if N is a possible register number for function argument passing.
    On the VAX, no registers are used in this way.  */
 
-#define FUNCTION_ARG_REGNO_P(N) ((void) (N), 0)
+#define FUNCTION_ARG_REGNO_P(N) 0
 
 /* Define a data type for recording info about an argument list
    during the scan of that argument list.  This data type should
@@ -297,6 +369,32 @@ enum reg_class { NO_REGS, ALL_REGS, LIM_REG_CLASSES };
 #define INIT_CUMULATIVE_ARGS(CUM, FNTYPE, LIBNAME, INDIRECT, N_NAMED_ARGS) \
  ((CUM) = 0)
 
+/* Update the data in CUM to advance over an argument
+   of mode MODE and data type TYPE.
+   (TYPE is null for libcalls where that information may not be available.)  */
+
+#define FUNCTION_ARG_ADVANCE(CUM, MODE, TYPE, NAMED)	\
+  ((CUM) += ((MODE) != BLKmode				\
+	     ? (GET_MODE_SIZE (MODE) + 3) & ~3		\
+	     : (int_size_in_bytes (TYPE) + 3) & ~3))
+
+/* Define where to put the arguments to a function.
+   Value is zero to push the argument on the stack,
+   or a hard register in which to store the argument.
+
+   MODE is the argument's machine mode.
+   TYPE is the data type of the argument (as a tree).
+    This is null for libcalls where that information may
+    not be available.
+   CUM is a variable of type CUMULATIVE_ARGS which gives info about
+    the preceding args and about the function being called.
+   NAMED is nonzero if this argument is a named parameter
+    (otherwise it is an extra parameter matching an ellipsis).  */
+
+/* On the VAX all args are pushed.  */
+
+#define FUNCTION_ARG(CUM, MODE, TYPE, NAMED) 0
+
 /* Output assembler code to FILE to increment profiler label # LABELNO
    for profiling a function entry.  */
 
@@ -313,22 +411,22 @@ enum reg_class { NO_REGS, ALL_REGS, LIM_REG_CLASSES };
     }								\
   while (0)
 
-/* This macro specifies a table of register pairs used to eliminate
-   unneeded registers that point into the stack frame.  */
-#define ELIMINABLE_REGS {{FRAME_POINTER_REGNUM, STACK_POINTER_REGNUM}}
-
-/* On the VAX, FRAME_POINTER_REQUIRED is always 1, so the definition of this
-   macro doesn't matter for register eliminations, but it should still
-   give realistic data for rtx_addr_can_trap_p.  */
-#define INITIAL_ELIMINATION_OFFSET(FROM, TO, OFFSET) \
-  ((OFFSET) = get_frame_size ())
-
 /* EXIT_IGNORE_STACK should be nonzero if, when returning from a function,
    the stack pointer does not matter.  The value is tested only in
    functions that have frame pointers.
    No definition is equivalent to always zero.  */
 
 #define EXIT_IGNORE_STACK 1
+
+/* Store in the variable DEPTH the initial difference between the
+   frame pointer reg contents and the stack pointer reg contents,
+   as of the start of the function body.  This depends on the layout
+   of the fixed parts of the stack frame and on how registers are saved.
+
+   On the VAX, FRAME_POINTER_REQUIRED is always 1, so the definition of this
+   macro doesn't matter.  But it must be defined.  */
+
+#define INITIAL_FRAME_POINTER_OFFSET(DEPTH) (DEPTH) = 0;
 
 /* Length in units of the trampoline for entering a nested function.  */
 
@@ -346,14 +444,9 @@ enum reg_class { NO_REGS, ALL_REGS, LIM_REG_CLASSES };
 
 #define RETURN_ADDR_RTX(COUNT, FRAME)					\
   ((COUNT == 0)								\
-   ? gen_rtx_MEM (Pmode, plus_constant (Pmode, FRAME,			\
-					RETURN_ADDRESS_OFFSET))		\
+   ? gen_rtx_MEM (Pmode, plus_constant (FRAME, RETURN_ADDRESS_OFFSET))	\
    : (rtx) 0)
 
-/* A C expression that is nonzero if X is a legitimate immediate operand
-   on the target machine when generating position independent code.  */
-
-#define LEGITIMATE_PIC_OPERAND_P(X) legitimate_pic_operand_p (X)
 
 /* Addressing modes, and classification of registers for them.  */
 
@@ -367,8 +460,7 @@ enum reg_class { NO_REGS, ALL_REGS, LIM_REG_CLASSES };
    They give nonzero only if REGNO is a hard reg of the suitable class
    or a pseudo reg currently allocated to a suitable hard reg.
    Since they use reg_renumber, they are safe only once reg_renumber
-   has been allocated, which happens in reginfo.c during register
-   allocation.  */
+   has been allocated, which happens in local-alloc.c.  */
 
 #define REGNO_OK_FOR_INDEX_P(regno)	\
   ((regno) < FIRST_PSEUDO_REGISTER || reg_renumber[regno] >= 0)
@@ -382,6 +474,11 @@ enum reg_class { NO_REGS, ALL_REGS, LIM_REG_CLASSES };
 /* 1 if X is an rtx for a constant that is a valid address.  */
 
 #define CONSTANT_ADDRESS_P(X) legitimate_constant_address_p (X)
+
+/* Nonzero if the constant value X is a legitimate general operand.
+   It is given that X satisfies CONSTANT_P or is a CONST_DOUBLE.  */
+
+#define LEGITIMATE_CONSTANT_P(X) legitimate_constant_p (X)
 
 /* The macros REG_OK_FOR..._P assume that the arg is a REG rtx
    and check its validity for a certain class.
@@ -415,6 +512,11 @@ enum reg_class { NO_REGS, ALL_REGS, LIM_REG_CLASSES };
 #define REG_OK_FOR_BASE_P(X) REGNO_OK_FOR_BASE_P (REGNO (X))
 
 #endif
+
+/* Go to LABEL if ADDR (a legitimate address expression)
+   has an effect that depends on the machine mode it is used for.  */
+#define GO_IF_MODE_DEPENDENT_ADDRESS(ADDR, LABEL) \
+  { if (vax_mode_dependent_address_p (ADDR)) goto LABEL; }
 
 /* Specify the machine mode that this machine uses
    for the index in the tablejump instruction.  */
@@ -433,6 +535,10 @@ enum reg_class { NO_REGS, ALL_REGS, LIM_REG_CLASSES };
 /* Define this as 1 if `char' should by default be signed; else as 0.  */
 #define DEFAULT_SIGNED_CHAR 1
 
+/* This flag, if defined, says the same insns that convert to a signed fixnum
+   also convert validly to an unsigned one.  */
+#define FIXUNS_TRUNC_LIKE_FIX_TRUNC
+
 /* Max number of bytes we can move from memory to memory
    in one reasonably fast instruction.  */
 #define MOVE_MAX 8
@@ -449,6 +555,10 @@ enum reg_class { NO_REGS, ALL_REGS, LIM_REG_CLASSES };
    which implies one can omit a sign-extension or zero-extension
    of a shift count.  */
 /* #define SHIFT_COUNT_TRUNCATED */
+
+/* Value is 1 if truncating an integer of INPREC bits to OUTPREC bits
+   is done just by pretending it is already truncated.  */
+#define TRULY_NOOP_TRUNCATION(OUTPREC, INPREC) 1
 
 /* Specify the machine mode that pointers have.
    After generation of rtl, the compiler makes no further distinction

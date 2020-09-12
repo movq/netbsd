@@ -1,6 +1,6 @@
 /* SPU ELF support for BFD.
 
-   Copyright (C) 2006-2019 Free Software Foundation, Inc.
+   Copyright 2006, 2010 Free Software Foundation, Inc.
 
    This file is part of GDB, GAS, and the GNU binutils.
 
@@ -83,7 +83,7 @@ struct spu_opcode
 {
    spu_iformat insn_type;
    unsigned int opcode;
-   const char *mnemonic;
+   char *mnemonic;
    int arg[5];
 };
 

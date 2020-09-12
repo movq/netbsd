@@ -1,5 +1,5 @@
 /* Base configuration file for all OpenBSD targets.
-   Copyright (C) 1999-2019 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2004, 2005, 2007 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -58,7 +58,7 @@ along with GCC; see the file COPYING3.  If not see
     { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1 },	\
     { GPLUSPLUS_TOOL_INCLUDE_DIR, "G++", 1, 1 }, \
     { GPLUSPLUS_BACKWARD_INCLUDE_DIR, "G++", 1, 1 }, \
-    { NATIVE_SYSTEM_HEADER_DIR, NATIVE_SYSTEM_HEADER_COMPONENT, 0, 0 }, \
+    { STANDARD_INCLUDE_DIR, STANDARD_INCLUDE_COMPONENT, 0, 0 }, \
     { 0, 0, 0, 0 }				\
   }
 
@@ -118,6 +118,13 @@ while (0)
 
 #ifndef OBSD_HAS_CORRECT_SPECS
 
+#ifndef OBSD_NO_DYNAMIC_LIBRARIES
+#undef SWITCH_TAKES_ARG
+#define SWITCH_TAKES_ARG(CHAR) \
+  (DEFAULT_SWITCH_TAKES_ARG (CHAR) \
+   || (CHAR) == 'R')
+#endif
+
 #undef CPP_SPEC
 #define CPP_SPEC OBSD_CPP_SPEC
 
@@ -126,7 +133,7 @@ while (0)
    still uses a special flavor of gas that needs to be told when generating 
    pic code.  */
 #undef ASM_SPEC
-#define ASM_SPEC "%{" FPIE1_OR_FPIC1_SPEC ":-k} %{" FPIE2_OR_FPIC2_SPEC ":-k -K}"
+#define ASM_SPEC "%{fpic|fpie:-k} %{fPIC|fPIE:-k -K}"
 #endif
 
 /* Since we use gas, stdin -> - is a good idea.  */
@@ -136,19 +143,12 @@ while (0)
 #define LIB_SPEC OBSD_LIB_SPEC
 
 #if defined(HAVE_LD_EH_FRAME_HDR)
-#define LINK_EH_SPEC "%{!static|static-pie:--eh-frame-hdr} "
+#define LINK_EH_SPEC "%{!static:--eh-frame-hdr} "
 #endif
 
 #undef LIB_SPEC
 #define LIB_SPEC OBSD_LIB_SPEC
 #endif
-
-#define TARGET_POSIX_IO
-
-/* All new versions of OpenBSD have C99 functions.  We redefine this hook
-   so the version from elfos.h header won't be used.  */
-#undef TARGET_LIBC_HAS_FUNCTION
-#define TARGET_LIBC_HAS_FUNCTION default_libc_has_function
 
 
 /* Runtime target specification.  */
@@ -162,7 +162,9 @@ while (0)
 #define DBX_NO_XREFS
 
 
-/* - we use . - _func instead of a local label,
+/* Support of shared libraries, mostly imported from svr4.h through netbsd.  */
+/* Two differences from svr4.h:
+   - we use . - _func instead of a local label,
    - we put extra spaces in expressions such as 
      .type _func , @function
      This is more readable for a human being and confuses c++filt less.  */
@@ -214,7 +216,7 @@ while (0)
   do {									\
     ASM_OUTPUT_TYPE_DIRECTIVE (FILE, NAME, "function");			\
     ASM_DECLARE_RESULT (FILE, DECL_RESULT (DECL));			\
-    ASM_OUTPUT_FUNCTION_LABEL (FILE, NAME, DECL);			\
+    ASM_OUTPUT_LABEL(FILE, NAME);					\
   } while (0)
 #endif
 
@@ -286,4 +288,26 @@ do {									 \
 /* Storage layout.  */
 
 
-#define HAVE_ENABLE_EXECUTE_STACK
+/* bug work around: we don't want to support #pragma weak, but the current
+   code layout needs HANDLE_PRAGMA_WEAK asserted for __attribute((weak)) to
+   work.  On the other hand, we don't define HANDLE_PRAGMA_WEAK directly,
+   as this depends on a few other details as well...  */
+#define HANDLE_SYSV_PRAGMA 1
+
+/* Stack is explicitly denied execution rights on OpenBSD platforms.  */
+#define ENABLE_EXECUTE_STACK						\
+extern void __enable_execute_stack (void *);				\
+void									\
+__enable_execute_stack (void *addr)					\
+{									\
+  long size = getpagesize ();						\
+  long mask = ~(size-1);						\
+  char *page = (char *) (((long) addr) & mask); 			\
+  char *end  = (char *) ((((long) (addr + TRAMPOLINE_SIZE)) & mask) + size); \
+								      \
+  if (mprotect (page, end - page, PROT_READ | PROT_WRITE | PROT_EXEC) < 0) \
+    perror ("mprotect of trampoline code");				\
+}
+
+#include <sys/types.h>
+#include <sys/mman.h>

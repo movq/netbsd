@@ -1,5 +1,6 @@
 /* OS ABI variant handling for GDB.
-   Copyright (C) 2001-2019 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2002, 2003, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
    
    This file is part of GDB.
 
@@ -48,10 +49,6 @@ void gdbarch_init_osabi (struct gdbarch_info, struct gdbarch *);
 
 /* Return the name of the specified OS ABI.  */
 const char *gdbarch_osabi_name (enum gdb_osabi);
-
-/* Return a regular expression that matches the OS part of a GNU
-   configury triplet for the given OSABI.  */
-const char *osabi_triplet_regexp (enum gdb_osabi osabi);
 
 /* Helper routine for ELF file sniffers.  This looks at ABI tag note
    sections to determine the OS ABI from the note.  It should be called

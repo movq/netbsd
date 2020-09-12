@@ -2,7 +2,8 @@
    of basic-block info to/from gmon.out; computing and formatting of
    basic-block related statistics.
 
-   Copyright (C) 1999-2020 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001, 2002, 2004, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -23,7 +24,6 @@
 
 #include "gprof.h"
 #include "libiberty.h"
-#include "filenames.h"
 #include "basic_blocks.h"
 #include "corefile.h"
 #include "gmon_io.h"
@@ -61,7 +61,7 @@ cmp_bb (const PTR lp, const PTR rp)
 
   if (left->file && right->file)
     {
-      r = filename_cmp (left->file->name, right->file->name);
+      r = strcmp (left->file->name, right->file->name);
 
       if (r)
 	return r;
@@ -248,7 +248,7 @@ bb_write_blocks (FILE *ofp, const char *filename)
 	<filename>:<line-number>: (<function-name>:<bb-addr): <ncalls>  */
 
 void
-print_exec_counts (void)
+print_exec_counts ()
 {
   Sym **sorted_bbs, *sym;
   unsigned int i, j, len;
@@ -282,7 +282,7 @@ print_exec_counts (void)
   for (i = 0; i < len; ++i)
     {
       sym = sorted_bbs [i];
-
+      
       if (sym->ncalls > 0 || ! ignore_zeros)
 	{
 	  /* FIXME: This only works if bfd_vma is unsigned long.  */
@@ -311,7 +311,7 @@ print_exec_counts (void)
    line of a file in sequential order.
 
    Global variable bb_annotate_all_lines enables execution count
-   compression (counts are suppressed if identical to the last one)
+   compression (counts are supressed if identical to the last one)
    and prints counts on all executed lines.  Otherwise, print
    all basic-block execution counts exactly once on the line
    that starts the basic-block.  */
@@ -319,7 +319,7 @@ print_exec_counts (void)
 static void
 annotate_with_count (char *buf, unsigned int width, int line_num, PTR arg)
 {
-  Source_File *sf = (Source_File *) arg;
+  Source_File *sf = arg;
   Sym *b;
   unsigned int i;
   static unsigned long last_count;
@@ -328,7 +328,7 @@ annotate_with_count (char *buf, unsigned int width, int line_num, PTR arg)
   b = NULL;
 
   if (line_num <= sf->num_lines)
-    b = (Sym *) sf->line[line_num - 1];
+    b = sf->line[line_num - 1];
 
   if (!b)
     {
@@ -459,7 +459,7 @@ annotate_with_count (char *buf, unsigned int width, int line_num, PTR arg)
    regarding that source file are printed.  */
 
 void
-print_annotated_source (void)
+print_annotated_source ()
 {
   Sym *sym, *line_stats, *new_line;
   Source_File *sf;
@@ -488,7 +488,7 @@ print_annotated_source (void)
     {
       if (sf->num_lines > 0)
 	{
-	  sf->line = (void **) xmalloc (sf->num_lines * sizeof (sf->line[0]));
+	  sf->line = (void *) xmalloc (sf->num_lines * sizeof (sf->line[0]));
 	  memset (sf->line, 0, sf->num_lines * sizeof (sf->line[0]));
 	}
     }
@@ -502,7 +502,7 @@ print_annotated_source (void)
 		  && !sym_lookup (&syms[EXCL_ANNO], sym->addr))))
 	{
 	  sym->file->ncalls += sym->ncalls;
-	  line_stats = (Sym *) sym->file->line[sym->line_num - 1];
+	  line_stats = sym->file->line[sym->line_num - 1];
 
 	  if (!line_stats)
 	    {
@@ -552,7 +552,7 @@ print_annotated_source (void)
 
 	  for (i = 0; i < table_len; ++i)
 	    {
-	      sym = (Sym *) sf->line[i];
+	      sym = sf->line[i];
 
 	      if (!sym || sym->ncalls == 0)
 		  break;

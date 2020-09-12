@@ -1,4 +1,4 @@
-/* Copyright (C) 2009-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,6 +17,9 @@
 
 #include "server.h"
 #include "lynx-low.h"
+
+#include <stdint.h>
+#include <stddef.h>
 #include <limits.h>
 #include <sys/ptrace.h>
 
@@ -66,7 +69,6 @@ typedef struct usr_fcontext_s
 
 /* Defined in auto-generated file powerpc-32.c.  */
 extern void init_registers_powerpc_32 (void);
-extern const struct target_desc *tdesc_powerpc_32;
 
 /* The fill_function for the general-purpose register set.  */
 
@@ -162,7 +164,6 @@ static void
 lynx_ppc_arch_setup (void)
 {
   init_registers_powerpc_32 ();
-  lynx_tdesc = tdesc_powerpc_32;
 }
 
 /* Description of all the powerpc-lynx register sets.  */

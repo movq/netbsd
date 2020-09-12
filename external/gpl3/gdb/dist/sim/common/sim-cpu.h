@@ -1,5 +1,6 @@
 /* CPU support.
-   Copyright (C) 1998-2019 Free Software Foundation, Inc.
+   Copyright (C) 1998, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
    Contributed by Cygnus Solutions.
 
 This file is part of GDB, the GNU debugger.
@@ -100,15 +101,17 @@ typedef struct {
   PROFILE_DATA profile_data;
 #define CPU_PROFILE_DATA(cpu) (& (cpu)->base.profile_data)
 
+#ifdef SIM_HAVE_MODEL
   /* Machine tables for this cpu.  See sim-model.h.  */
-  const SIM_MACH *mach;
+  const MACH *mach;
 #define CPU_MACH(cpu) ((cpu)->base.mach)
   /* The selected model.  */
-  const SIM_MODEL *model;
+  const MODEL *model;
 #define CPU_MODEL(cpu) ((cpu)->base.model)
   /* Model data (profiling state, etc.).  */
   void *model_data;
 #define CPU_MODEL_DATA(cpu) ((cpu)->base.model_data)
+#endif
 
   /* Routines to fetch/store registers.  */
   CPUREG_FETCH_FN *reg_fetch;

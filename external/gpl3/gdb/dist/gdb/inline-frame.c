@@ -1,6 +1,6 @@
 /* Inline frame unwinder for GDB.
 
-   Copyright (C) 2008-2019 Free Software Foundation, Inc.
+   Copyright (C) 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,18 +18,15 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
-#include "breakpoint.h"
-#include "inline-frame.h"
 #include "addrmap.h"
 #include "block.h"
 #include "frame-unwind.h"
 #include "inferior.h"
-#include "gdbthread.h"
 #include "regcache.h"
 #include "symtab.h"
-#include "common/vec.h"
-#include "frame.h"
-#include <algorithm>
+#include "vec.h"
+
+#include "gdb_assert.h"
 
 /* We need to save a few variables for every thread stopped at the
    virtual call site of an inlined function.  If there was always a
@@ -37,15 +34,10 @@
    keep our own list.  */
 struct inline_state
 {
-  inline_state (thread_info *thread_, int skipped_frames_, CORE_ADDR saved_pc_,
-		symbol *skipped_symbol_)
-    : thread (thread_), skipped_frames (skipped_frames_), saved_pc (saved_pc_),
-      skipped_symbol (skipped_symbol_)
-  {}
-
   /* The thread this data relates to.  It should be a currently
-     stopped thread.  */
-  thread_info *thread;
+     stopped thread; we assume thread IDs never change while the
+     thread is stopped.  */
+  ptid_t ptid;
 
   /* The number of inlined functions we are skipping.  Each of these
      functions can be stepped in to.  */
@@ -63,37 +55,54 @@ struct inline_state
   struct symbol *skipped_symbol;
 };
 
-static std::vector<inline_state> inline_states;
+typedef struct inline_state inline_state_s;
+DEF_VEC_O(inline_state_s);
 
-/* Locate saved inlined frame state for THREAD, if it exists and is
-   valid.  */
+static VEC(inline_state_s) *inline_states;
+
+/* Locate saved inlined frame state for PTID, if it exists
+   and is valid.  */
 
 static struct inline_state *
-find_inline_frame_state (thread_info *thread)
+find_inline_frame_state (ptid_t ptid)
 {
-  auto state_it = std::find_if (inline_states.begin (), inline_states.end (),
-				[thread] (const inline_state &state)
-				  {
-				    return state.thread == thread;
-				  });
+  struct inline_state *state;
+  int ix;
 
-  if (state_it == inline_states.end ())
-    return nullptr;
-
-  inline_state &state = *state_it;
-  struct regcache *regcache = get_thread_regcache (thread);
-  CORE_ADDR current_pc = regcache_read_pc (regcache);
-
-  if (current_pc != state.saved_pc)
+  for (ix = 0; VEC_iterate (inline_state_s, inline_states, ix, state); ix++)
     {
-      /* PC has changed - this context is invalid.  Use the
-	 default behavior.  */
+      if (ptid_equal (state->ptid, ptid))
+	{
+	  struct regcache *regcache = get_thread_regcache (ptid);
+	  CORE_ADDR current_pc = regcache_read_pc (regcache);
 
-      unordered_remove (inline_states, state_it);
-      return nullptr;
+	  if (current_pc != state->saved_pc)
+	    {
+	      /* PC has changed - this context is invalid.  Use the
+		 default behavior.  */
+	      VEC_unordered_remove (inline_state_s, inline_states, ix);
+	      return NULL;
+	    }
+	  else
+	    return state;
+	}
     }
 
-  return &state;
+  return NULL;
+}
+
+/* Allocate saved inlined frame state for PTID.  */
+
+static struct inline_state *
+allocate_inline_frame_state (ptid_t ptid)
+{
+  struct inline_state *state;
+
+  state = VEC_safe_push (inline_state_s, inline_states, NULL);
+  memset (state, 0, sizeof (*state));
+  state->ptid = ptid;
+
+  return state;
 }
 
 /* Forget about any hidden inlined functions in PTID, which is new or
@@ -103,34 +112,36 @@ find_inline_frame_state (thread_info *thread)
 void
 clear_inline_frame_state (ptid_t ptid)
 {
-  if (ptid == minus_one_ptid)
+  struct inline_state *state;
+  int ix;
+
+  if (ptid_equal (ptid, minus_one_ptid))
     {
-      inline_states.clear ();
+      VEC_free (inline_state_s, inline_states);
       return;
     }
 
-  if (ptid.is_pid ())
+  if (ptid_is_pid (ptid))
     {
-      int pid = ptid.pid ();
-      auto it = std::remove_if (inline_states.begin (), inline_states.end (),
-				[pid] (const inline_state &state)
-				  {
-				    return pid == state.thread->inf->pid;
-				  });
+      VEC (inline_state_s) *new_states = NULL;
+      int pid = ptid_get_pid (ptid);
 
-      inline_states.erase (it, inline_states.end ());
-
+      for (ix = 0;
+	   VEC_iterate (inline_state_s, inline_states, ix, state);
+	   ix++)
+	if (pid != ptid_get_pid (state->ptid))
+	  VEC_safe_push (inline_state_s, new_states, state);
+      VEC_free (inline_state_s, inline_states);
+      inline_states = new_states;
       return;
     }
 
-  auto it = std::find_if (inline_states.begin (), inline_states.end (),
-			  [&ptid] (const inline_state &state)
-			    {
-			      return ptid == state.thread->ptid;
-			    });
-
-  if (it != inline_states.end ())
-    unordered_remove (inline_states, it);
+  for (ix = 0; VEC_iterate (inline_state_s, inline_states, ix, state); ix++)
+    if (ptid_equal (state->ptid, ptid))
+      {
+	VEC_unordered_remove (inline_state_s, inline_states, ix);
+	return;
+      }
 }
 
 static void
@@ -142,11 +153,11 @@ inline_frame_this_id (struct frame_info *this_frame,
 
   /* In order to have a stable frame ID for a given inline function,
      we must get the stack / special addresses from the underlying
-     real frame's this_id method.  So we must call
-     get_prev_frame_always.  Because we are inlined into some
-     function, there must be previous frames, so this is safe - as
-     long as we're careful not to create any cycles.  */
-  *this_id = get_frame_id (get_prev_frame_always (this_frame));
+     real frame's this_id method.  So we must call get_prev_frame.
+     Because we are inlined into some function, there must be previous
+     frames, so this is safe - as long as we're careful not to
+     create any cycles.  */
+  *this_id = get_frame_id (get_prev_frame (this_frame));
 
   /* We need a valid frame ID, so we need to be based on a valid
      frame.  FSF submission NOTE: this would be a good assertion to
@@ -165,8 +176,8 @@ inline_frame_this_id (struct frame_info *this_frame,
      in the frame ID (and eventually, to set breakpoints).  */
   func = get_frame_function (this_frame);
   gdb_assert (func != NULL);
-  (*this_id).code_addr = BLOCK_ENTRY_PC (SYMBOL_BLOCK_VALUE (func));
-  (*this_id).artificial_depth++;
+  (*this_id).code_addr = BLOCK_START (SYMBOL_BLOCK_VALUE (func));
+  (*this_id).inline_depth++;
 }
 
 static struct value *
@@ -196,10 +207,10 @@ inline_frame_sniffer (const struct frame_unwind *self,
 		      void **this_cache)
 {
   CORE_ADDR this_pc;
-  const struct block *frame_block, *cur_block;
+  struct block *frame_block, *cur_block;
   int depth;
   struct frame_info *next_frame;
-  struct inline_state *state = find_inline_frame_state (inferior_thread ());
+  struct inline_state *state = find_inline_frame_state (inferior_ptid);
 
   this_pc = get_frame_address_in_block (this_frame);
   frame_block = block_for_pc (this_pc);
@@ -214,8 +225,6 @@ inline_frame_sniffer (const struct frame_unwind *self,
     {
       if (block_inlined_p (cur_block))
 	depth++;
-      else if (BLOCK_FUNCTION (cur_block) != NULL)
-	break;
 
       cur_block = BLOCK_SUPERBLOCK (cur_block);
     }
@@ -263,74 +272,45 @@ const struct frame_unwind inline_frame_unwind = {
    before it).  */
 
 static int
-block_starting_point_at (CORE_ADDR pc, const struct block *block)
+block_starting_point_at (CORE_ADDR pc, struct block *block)
 {
-  const struct blockvector *bv;
+  struct blockvector *bv;
   struct block *new_block;
 
   bv = blockvector_for_pc (pc, NULL);
   if (BLOCKVECTOR_MAP (bv) == NULL)
     return 0;
 
-  new_block = (struct block *) addrmap_find (BLOCKVECTOR_MAP (bv), pc - 1);
+  new_block = addrmap_find (BLOCKVECTOR_MAP (bv), pc - 1);
   if (new_block == NULL)
     return 1;
 
   if (new_block == block || contained_in (new_block, block))
     return 0;
 
-  /* The immediately preceding address belongs to a different block,
+  /* The immediately preceeding address belongs to a different block,
      which is not a child of this one.  Treat this as an entrance into
      BLOCK.  */
   return 1;
 }
 
-/* Loop over the stop chain and determine if execution stopped in an
-   inlined frame because of a user breakpoint set at FRAME_BLOCK.  */
-
-static bool
-stopped_by_user_bp_inline_frame (const block *frame_block, bpstat stop_chain)
-{
-  for (bpstat s = stop_chain; s != NULL; s = s->next)
-    {
-      struct breakpoint *bpt = s->breakpoint_at;
-
-      if (bpt != NULL && user_breakpoint_p (bpt))
-	{
-	  bp_location *loc = s->bp_location_at;
-	  enum bp_loc_type t = loc->loc_type;
-
-	  if (t == bp_loc_software_breakpoint
-	      || t == bp_loc_hardware_breakpoint)
-	    {
-	      /* If the location has a function symbol, check whether
-		 the frame was for that inlined function.  If it has
-		 no function symbol, then assume it is.  I.e., default
-		 to presenting the stop at the innermost inline
-		 function.  */
-	      if (loc->symbol == nullptr
-		  || frame_block == SYMBOL_BLOCK_VALUE (loc->symbol))
-		return true;
-	    }
-	}
-    }
-
-  return false;
-}
-
-/* See inline-frame.h.  */
+/* Skip all inlined functions whose call sites are at the current PC.
+   Frames for the hidden functions will not appear in the backtrace until the
+   user steps into them.  */
 
 void
-skip_inline_frames (thread_info *thread, bpstat stop_chain)
+skip_inline_frames (ptid_t ptid)
 {
-  const struct block *frame_block, *cur_block;
+  CORE_ADDR this_pc;
+  struct block *frame_block, *cur_block;
   struct symbol *last_sym = NULL;
   int skip_count = 0;
+  struct inline_state *state;
 
   /* This function is called right after reinitializing the frame
      cache.  We try not to do more unwinding than absolutely
      necessary, for performance.  */
-  CORE_ADDR this_pc = get_frame_pc (get_current_frame ());
+  this_pc = get_frame_pc (get_current_frame ());
   frame_block = block_for_pc (this_pc);
 
   if (frame_block != NULL)
@@ -341,31 +321,25 @@ skip_inline_frames (thread_info *thread, bpstat stop_chain)
 	  if (block_inlined_p (cur_block))
 	    {
 	      /* See comments in inline_frame_this_id about this use
-		 of BLOCK_ENTRY_PC.  */
-	      if (BLOCK_ENTRY_PC (cur_block) == this_pc
+		 of BLOCK_START.  */
+	      if (BLOCK_START (cur_block) == this_pc
 		  || block_starting_point_at (this_pc, cur_block))
 		{
-		  /* Do not skip the inlined frame if execution
-		     stopped in an inlined frame because of a user
-		     breakpoint for this inline function.  */
-		  if (stopped_by_user_bp_inline_frame (cur_block, stop_chain))
-		    break;
-
 		  skip_count++;
 		  last_sym = BLOCK_FUNCTION (cur_block);
 		}
 	      else
 		break;
 	    }
-	  else if (BLOCK_FUNCTION (cur_block) != NULL)
-	    break;
-
 	  cur_block = BLOCK_SUPERBLOCK (cur_block);
 	}
     }
 
-  gdb_assert (find_inline_frame_state (thread) == NULL);
-  inline_states.emplace_back (thread, skip_count, this_pc, last_sym);
+  gdb_assert (find_inline_frame_state (ptid) == NULL);
+  state = allocate_inline_frame_state (ptid);
+  state->skipped_frames = skip_count;
+  state->saved_pc = this_pc;
+  state->skipped_symbol = last_sym;
 
   if (skip_count != 0)
     reinit_frame_cache ();
@@ -374,9 +348,9 @@ skip_inline_frames (thread_info *thread, bpstat stop_chain)
 /* Step into an inlined function by unhiding it.  */
 
 void
-step_into_inline_frame (thread_info *thread)
+step_into_inline_frame (ptid_t ptid)
 {
-  inline_state *state = find_inline_frame_state (thread);
+  struct inline_state *state = find_inline_frame_state (ptid);
 
   gdb_assert (state != NULL && state->skipped_frames > 0);
   state->skipped_frames--;
@@ -387,9 +361,9 @@ step_into_inline_frame (thread_info *thread)
    frame.  */
 
 int
-inline_skipped_frames (thread_info *thread)
+inline_skipped_frames (ptid_t ptid)
 {
-  inline_state *state = find_inline_frame_state (thread);
+  struct inline_state *state = find_inline_frame_state (ptid);
 
   if (state == NULL)
     return 0;
@@ -401,9 +375,9 @@ inline_skipped_frames (thread_info *thread)
    the function inlined into the current frame.  */
 
 struct symbol *
-inline_skipped_symbol (thread_info *thread)
+inline_skipped_symbol (ptid_t ptid)
 {
-  inline_state *state = find_inline_frame_state (thread);
+  struct inline_state *state = find_inline_frame_state (ptid);
 
   gdb_assert (state != NULL);
   return state->skipped_symbol;
@@ -430,7 +404,7 @@ frame_inlined_callees (struct frame_info *this_frame)
      they can be stepped into later.  If we are unwinding already
      outer frames from some non-inlined frame this does not apply.  */
   if (next_frame == NULL)
-    inline_count += inline_skipped_frames (inferior_thread ());
+    inline_count += inline_skipped_frames (inferior_ptid);
 
   return inline_count;
 }

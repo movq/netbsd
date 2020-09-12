@@ -1,5 +1,5 @@
 ;; Predicate definitions for Xtensa.
-;; Copyright (C) 2005-2019 Free Software Foundation, Inc.
+;; Copyright (C) 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -97,8 +97,7 @@
       /* Direct calls only allowed to static functions with PIC.  */
       if (flag_pic)
 	{
-	  tree callee;
-	  const char * callee_sec, * caller_sec;
+	  tree callee, callee_sec, caller_sec;
 
 	  if (GET_CODE (op) != SYMBOL_REF
 	      || !SYMBOL_REF_LOCAL_P (op) || SYMBOL_REF_EXTERNAL_P (op))
@@ -118,12 +117,13 @@
 	      if (DECL_ONE_ONLY (callee))
 		return false;
 	      callee_sec = DECL_SECTION_NAME (callee);
-	      if (((caller_sec == NULL) ^ (callee_sec == NULL))
-		  || (caller_sec != NULL
-		      && caller_sec != callee_sec))
+	      if (((caller_sec == NULL_TREE) ^ (callee_sec == NULL_TREE))
+		  || (caller_sec != NULL_TREE
+		      && strcmp (TREE_STRING_POINTER (caller_sec),
+				 TREE_STRING_POINTER (callee_sec)) != 0))
 		return false;
 	    }
-	  else if (caller_sec)
+	  else if (caller_sec != NULL_TREE)
 	    return false;
 	}
       return true;
@@ -142,15 +142,16 @@
 	       (match_test "GET_MODE_CLASS (mode) == MODE_INT
 			    && xtensa_simm12b (INTVAL (op))"))
 	  (and (match_code "const_int,const_double,const,symbol_ref,label_ref")
-	       (match_test "(TARGET_CONST16 || TARGET_AUTO_LITPOOLS)
-			    && CONSTANT_P (op)
+	       (match_test "TARGET_CONST16 && CONSTANT_P (op)
 			    && GET_MODE_SIZE (mode) % UNITS_PER_WORD == 0")))))
 
 ;; Accept the floating point constant 1 in the appropriate mode.
 (define_predicate "const_float_1_operand"
   (match_code "const_double")
 {
-  return real_equal (CONST_DOUBLE_REAL_VALUE (op), &dconst1);
+  REAL_VALUE_TYPE d;
+  REAL_VALUE_FROM_CONST_DOUBLE (d, op);
+  return REAL_VALUES_EQUAL (d, dconst1);
 })
 
 (define_predicate "fpmem_offset_operand"

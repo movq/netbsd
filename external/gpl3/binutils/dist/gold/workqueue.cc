@@ -1,6 +1,6 @@
 // workqueue.cc -- the workqueue for gold
 
-// Copyright (C) 2006-2020 Free Software Foundation, Inc.
+// Copyright 2006, 2007, 2008 Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -24,7 +24,6 @@
 
 #include "debug.h"
 #include "options.h"
-#include "timer.h"
 #include "workqueue.h"
 #include "workqueue-internal.h"
 
@@ -110,7 +109,7 @@ class Workqueue_threader_single : public Workqueue_threader
   { gold_assert(thread_count > 0); }
 
   bool
-  should_cancel_thread(int)
+  should_cancel_thread()
   { return false; }
 };
 
@@ -202,9 +201,9 @@ Workqueue::queue_next(Task* t)
 // Return whether to cancel the current thread.
 
 inline bool
-Workqueue::should_cancel_thread(int thread_number)
+Workqueue::should_cancel_thread()
 {
-  return this->threader_->should_cancel_thread(thread_number);
+  return this->threader_->should_cancel_thread();
 }
 
 // Find a runnable task in TASKS.  Return NULL if none could be found.
@@ -264,7 +263,7 @@ Workqueue::find_runnable_or_wait(int thread_number)
 	  return NULL;
 	}
 
-      if (this->should_cancel_thread(thread_number))
+      if (this->should_cancel_thread())
 	return NULL;
 
       gold_debug(DEBUG_TASK, "%3d sleeping", thread_number);
@@ -312,24 +311,10 @@ Workqueue::find_and_run_task(int thread_number)
       gold_debug(DEBUG_TASK, "%3d running   task %s", thread_number,
 		 t->name().c_str());
 
-      Timer timer;
-      if (is_debugging_enabled(DEBUG_TASK))
-        timer.start();
-
       t->run(this);
 
-      if (is_debugging_enabled(DEBUG_TASK))
-        {
-          Timer::TimeStats elapsed = timer.get_elapsed_time();
-
-          gold_debug(DEBUG_TASK,
-                     "%3d completed task %s "
-                     "(user: %ld.%06ld sys: %ld.%06ld wall: %ld.%06ld)",
-                     thread_number,  t->name().c_str(),
-                     elapsed.user / 1000, (elapsed.user % 1000) * 1000,
-                     elapsed.sys / 1000, (elapsed.sys % 1000) * 1000,
-                     elapsed.wall / 1000, (elapsed.wall % 1000) * 1000);
-        }
+      gold_debug(DEBUG_TASK, "%3d completed task %s", thread_number,
+		 t->name().c_str());
 
       Task* next;
       {
@@ -507,15 +492,6 @@ Workqueue::set_thread_count(int threads)
   this->threader_->set_thread_count(threads);
   // Wake up all the threads, since something has changed.
   this->condvar_.broadcast();
-}
-
-// Add a new blocker to an existing Task_token.
-
-void
-Workqueue::add_blocker(Task_token* token)
-{
-  Hold_lock hl(this->lock_);
-  token->add_blocker();
 }
 
 } // End namespace gold.

@@ -1,6 +1,7 @@
 /* Target-dependent code for Atmel AVR, for GDB.
 
-   Copyright (C) 1996-2019 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+   2006, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -34,9 +35,8 @@
 #include "symfile.h"
 #include "arch-utils.h"
 #include "regcache.h"
+#include "gdb_string.h"
 #include "dis-asm.h"
-#include "objfiles.h"
-#include <algorithm>
 
 /* AVR Background:
 
@@ -69,17 +69,10 @@
    via the remote serial protocol.  The extra bits are the MSBs and are used to
    decode which memory space the address is referring to.  */
 
+#undef XMALLOC
+#define XMALLOC(TYPE) ((TYPE*) xmalloc (sizeof (TYPE)))
+
 /* Constants: prefixed with AVR_ to avoid name space clashes */
-
-/* Address space flags */
-
-/* We are assigning the TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1 to the flash address
-   space.  */
-
-#define AVR_TYPE_ADDRESS_CLASS_FLASH TYPE_ADDRESS_CLASS_1
-#define AVR_TYPE_INSTANCE_FLAG_ADDRESS_CLASS_FLASH  \
-  TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1
-
 
 enum
 {
@@ -112,7 +105,6 @@ enum
 
   AVR_ARG1_REGNUM = 24,         /* Single byte argument */
   AVR_ARGN_REGNUM = 25,         /* Multi byte argments */
-  AVR_LAST_ARG_REGNUM = 8,      /* Last argument register */
 
   AVR_RET1_REGNUM = 24,         /* Single byte return value */
   AVR_RETN_REGNUM = 25,         /* Multi byte return value */
@@ -191,7 +183,7 @@ struct avr_unwind_cache
 struct gdbarch_tdep
 {
   /* Number of bytes stored to the stack by call instructions.
-     2 bytes for avr1-5 and avrxmega1-5, 3 bytes for avr6 and avrxmega6-7.  */
+     2 bytes for avr1-5, 3 bytes for avr6.  */
   int call_length;
 
   /* Type for void.  */
@@ -306,19 +298,10 @@ avr_address_to_pointer (struct gdbarch *gdbarch,
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
 
-  /* Is it a data address in flash?  */
-  if (AVR_TYPE_ADDRESS_CLASS_FLASH (type))
-    {
-      /* A data pointer in flash is byte addressed.  */
-      store_unsigned_integer (buf, TYPE_LENGTH (type), byte_order,
-			      avr_convert_iaddr_to_raw (addr));
-    }
   /* Is it a code address?  */
-  else if (TYPE_CODE (TYPE_TARGET_TYPE (type)) == TYPE_CODE_FUNC
-	   || TYPE_CODE (TYPE_TARGET_TYPE (type)) == TYPE_CODE_METHOD)
+  if (TYPE_CODE (TYPE_TARGET_TYPE (type)) == TYPE_CODE_FUNC
+      || TYPE_CODE (TYPE_TARGET_TYPE (type)) == TYPE_CODE_METHOD)
     {
-      /* A code pointer is word (16 bits) addressed.  We shift the address down
-	 by 1 bit to convert it to a pointer.  */
       store_unsigned_integer (buf, TYPE_LENGTH (type), byte_order,
 			      avr_convert_iaddr_to_raw (addr >> 1));
     }
@@ -338,21 +321,11 @@ avr_pointer_to_address (struct gdbarch *gdbarch,
   CORE_ADDR addr
     = extract_unsigned_integer (buf, TYPE_LENGTH (type), byte_order);
 
-  /* Is it a data address in flash?  */
-  if (AVR_TYPE_ADDRESS_CLASS_FLASH (type))
-    {
-      /* A data pointer in flash is already byte addressed.  */
-      return avr_make_iaddr (addr);
-    }
   /* Is it a code address?  */
-  else if (TYPE_CODE (TYPE_TARGET_TYPE (type)) == TYPE_CODE_FUNC
-	   || TYPE_CODE (TYPE_TARGET_TYPE (type)) == TYPE_CODE_METHOD
-	   || TYPE_CODE_SPACE (TYPE_TARGET_TYPE (type)))
-    {
-      /* A code pointer is word (16 bits) addressed so we shift it up
-	 by 1 bit to convert it to an address.  */
-      return avr_make_iaddr (addr << 1);
-    }
+  if (TYPE_CODE (TYPE_TARGET_TYPE (type)) == TYPE_CODE_FUNC
+      || TYPE_CODE (TYPE_TARGET_TYPE (type)) == TYPE_CODE_METHOD
+      || TYPE_CODE_SPACE (TYPE_TARGET_TYPE (type)))
+    return avr_make_iaddr (addr << 1);
   else
     return avr_make_saddr (addr);
 }
@@ -367,11 +340,10 @@ avr_integer_to_address (struct gdbarch *gdbarch,
 }
 
 static CORE_ADDR
-avr_read_pc (readable_regcache *regcache)
+avr_read_pc (struct regcache *regcache)
 {
   ULONGEST pc;
-
-  regcache->cooked_read (AVR_PC_REGNUM, &pc);
+  regcache_cooked_read_unsigned (regcache, AVR_PC_REGNUM, &pc);
   return avr_make_iaddr (pc);
 }
 
@@ -383,7 +355,7 @@ avr_write_pc (struct regcache *regcache, CORE_ADDR val)
 }
 
 static enum register_status
-avr_pseudo_register_read (struct gdbarch *gdbarch, readable_regcache *regcache,
+avr_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
                           int regnum, gdb_byte *buf)
 {
   ULONGEST val;
@@ -392,7 +364,7 @@ avr_pseudo_register_read (struct gdbarch *gdbarch, readable_regcache *regcache,
   switch (regnum)
     {
     case AVR_PSEUDO_PC_REGNUM:
-      status = regcache->raw_read (AVR_PC_REGNUM, &val);
+      status = regcache_raw_read_unsigned (regcache, AVR_PC_REGNUM, &val);
       if (status != REG_VALID)
 	return status;
       val >>= 1;
@@ -524,7 +496,7 @@ avr_scan_prologue (struct gdbarch *gdbarch, CORE_ADDR pc_beg, CORE_ADDR pc_end,
   int i;
   unsigned short insn;
   int scan_stage = 0;
-  struct bound_minimal_symbol msymbol;
+  struct minimal_symbol *msymbol;
   unsigned char prologue[AVR_MAX_PROLOGUE_SIZE];
   int vpc = 0;
   int len;
@@ -618,7 +590,7 @@ avr_scan_prologue (struct gdbarch *gdbarch, CORE_ADDR pc_beg, CORE_ADDR pc_end,
       pc_offset += 2;
 
       msymbol = lookup_minimal_symbol ("__prologue_saves__", NULL, NULL);
-      if (!msymbol.minsym)
+      if (!msymbol)
 	break;
 
       insn = extract_unsigned_integer (&prologue[vpc + 8], 2, byte_order);
@@ -656,7 +628,7 @@ avr_scan_prologue (struct gdbarch *gdbarch, CORE_ADDR pc_beg, CORE_ADDR pc_end,
 
       /* Resolve offset (in words) from __prologue_saves__ symbol.
          Which is a pushes count in `-mcall-prologues' mode */
-      num_pushes = AVR_MAX_PUSHES - (i - BMSYMBOL_VALUE_ADDRESS (msymbol)) / 2;
+      num_pushes = AVR_MAX_PUSHES - (i - SYMBOL_VALUE_ADDRESS (msymbol)) / 2;
 
       if (num_pushes > AVR_MAX_PUSHES)
         {
@@ -751,7 +723,7 @@ avr_scan_prologue (struct gdbarch *gdbarch, CORE_ADDR pc_beg, CORE_ADDR pc_end,
           info->size += gdbarch_tdep (gdbarch)->call_length;
           vpc += 2;
         }
-      else if (insn == 0x920f || insn == 0x921f)  /* push r0 or push r1 */
+      else if (insn == 0x920f)  /* push r0 */
         {
           info->size += 1;
           vpc += 2;
@@ -771,6 +743,7 @@ avr_scan_prologue (struct gdbarch *gdbarch, CORE_ADDR pc_beg, CORE_ADDR pc_end,
 	0xcd, 0xb7,		/* in r28,__SP_L__ */
 	0xde, 0xb7		/* in r29,__SP_H__ */
       };
+      unsigned short insn1;
 
       if (vpc + sizeof (img) < len
 	  && memcmp (prologue + vpc, img, sizeof (img)) == 0)
@@ -884,7 +857,7 @@ avr_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 
   post_prologue_pc = skip_prologue_using_sal (gdbarch, func_addr);
   if (post_prologue_pc != 0)
-    return std::max (pc, post_prologue_pc);
+    return max (pc, post_prologue_pc);
 
   {
     CORE_ADDR prologue_end = pc;
@@ -914,9 +887,14 @@ avr_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
    it as a NOP.  Thus, it should be ok.  Since the avr is currently a remote
    only target, this shouldn't be a problem (I hope).  TRoth/2003-05-14  */
 
-constexpr gdb_byte avr_break_insn [] = { 0x98, 0x95 };
-
-typedef BP_MANIPULATION (avr_break_insn) avr_breakpoint;
+static const unsigned char *
+avr_breakpoint_from_pc (struct gdbarch *gdbarch,
+			CORE_ADDR *pcptr, int *lenptr)
+{
+    static const unsigned char avr_break_insn [] = { 0x98, 0x95 };
+    *lenptr = sizeof (avr_break_insn);
+    return avr_break_insn;
+}
 
 /* Determine, for architecture GDBARCH, how a return value of TYPE
    should be returned.  If it is supposed to be returned in registers,
@@ -925,7 +903,7 @@ typedef BP_MANIPULATION (avr_break_insn) avr_breakpoint;
    from WRITEBUF into REGCACHE.  */
 
 static enum return_value_convention
-avr_return_value (struct gdbarch *gdbarch, struct value *function,
+avr_return_value (struct gdbarch *gdbarch, struct type *func_type,
 		  struct type *valtype, struct regcache *regcache,
 		  gdb_byte *readbuf, const gdb_byte *writebuf)
 {
@@ -953,13 +931,13 @@ avr_return_value (struct gdbarch *gdbarch, struct value *function,
   if (writebuf != NULL)
     {
       for (i = 0; i < TYPE_LENGTH (valtype); i++)
-	regcache->cooked_write (lsb_reg + i, writebuf + i);
+        regcache_cooked_write (regcache, lsb_reg + i, writebuf + i);
     }
 
   if (readbuf != NULL)
     {
       for (i = 0; i < TYPE_LENGTH (valtype); i++)
-	regcache->cooked_read (lsb_reg + i, readbuf + i);
+        regcache_cooked_read (regcache, lsb_reg + i, readbuf + i);
     }
 
   return RETURN_VALUE_REGISTER_CONVENTION;
@@ -985,7 +963,7 @@ avr_frame_unwind_cache (struct frame_info *this_frame,
   int i;
 
   if (*this_prologue_cache)
-    return (struct avr_unwind_cache *) *this_prologue_cache;
+    return *this_prologue_cache;
 
   info = FRAME_OBSTACK_ZALLOC (struct avr_unwind_cache);
   *this_prologue_cache = info;
@@ -1104,6 +1082,8 @@ static struct value *
 avr_frame_prev_register (struct frame_info *this_frame,
 			 void **this_prologue_cache, int regnum)
 {
+  struct gdbarch *gdbarch = get_frame_arch (this_frame);
+  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   struct avr_unwind_cache *info
     = avr_frame_unwind_cache (this_frame, this_prologue_cache);
 
@@ -1125,7 +1105,7 @@ avr_frame_prev_register (struct frame_info *this_frame,
 	     everything else about the avr is little endian.  Ick!  */
 	  ULONGEST pc;
 	  int i;
-	  gdb_byte buf[3];
+	  unsigned char buf[3];
 	  struct gdbarch *gdbarch = get_frame_arch (this_frame);
 	  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
@@ -1194,15 +1174,15 @@ struct stack_item
 {
   int len;
   struct stack_item *prev;
-  gdb_byte *data;
+  void *data;
 };
 
 static struct stack_item *
 push_stack_item (struct stack_item *prev, const bfd_byte *contents, int len)
 {
   struct stack_item *si;
-  si = XNEW (struct stack_item);
-  si->data = (gdb_byte *) xmalloc (len);
+  si = xmalloc (sizeof (struct stack_item));
+  si->data = xmalloc (len);
   si->len = len;
   si->prev = prev;
   memcpy (si->data, contents, len);
@@ -1263,17 +1243,17 @@ static CORE_ADDR
 avr_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
                      struct regcache *regcache, CORE_ADDR bp_addr,
                      int nargs, struct value **args, CORE_ADDR sp,
-		     function_call_return_method return_method,
-		     CORE_ADDR struct_addr)
+                     int struct_return, CORE_ADDR struct_addr)
 {
+  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   int i;
-  gdb_byte buf[3];
+  unsigned char buf[3];
   int call_length = gdbarch_tdep (gdbarch)->call_length;
   CORE_ADDR return_pc = avr_convert_iaddr_to_raw (bp_addr);
   int regnum = AVR_ARGN_REGNUM;
   struct stack_item *si = NULL;
 
-  if (return_method == return_method_struct)
+  if (struct_return)
     {
       regcache_cooked_write_unsigned
         (regcache, regnum--, (struct_addr >> 8) & 0xff);
@@ -1294,24 +1274,23 @@ avr_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       const bfd_byte *contents = value_contents (arg);
       int len = TYPE_LENGTH (type);
 
-      /* Calculate the potential last register needed.
-         E.g. For length 2, registers regnum and regnum-1 (say 25 and 24)
-         shall be used. So, last needed register will be regnum-1(24).  */
-      last_regnum = regnum - (len + (len & 1)) + 1;
+      /* Calculate the potential last register needed.  */
+      last_regnum = regnum - (len + (len & 1));
 
       /* If there are registers available, use them.  Once we start putting
          stuff on the stack, all subsequent args go on stack.  */
-      if ((si == NULL) && (last_regnum >= AVR_LAST_ARG_REGNUM))
+      if ((si == NULL) && (last_regnum >= 8))
         {
+          ULONGEST val;
+
           /* Skip a register for odd length args.  */
           if (len & 1)
             regnum--;
 
-          /* Write MSB of argument into register and subsequent bytes in
-             decreasing register numbers.  */
+          val = extract_unsigned_integer (contents, len, byte_order);
           for (j = 0; j < len; j++)
             regcache_cooked_write_unsigned
-              (regcache, regnum--, contents[len - j - 1]);
+              (regcache, regnum--, val >> (8 * (len - j - 1)));
         }
       /* No registers available, push the args onto the stack.  */
       else
@@ -1361,55 +1340,10 @@ avr_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int reg)
     return reg;
   if (reg == 32)
     return AVR_SP_REGNUM;
+
+  warning (_("Unmapped DWARF Register #%d encountered."), reg);
+
   return -1;
-}
-
-/* Implementation of `address_class_type_flags' gdbarch method.
-
-   This method maps DW_AT_address_class attributes to a
-   type_instance_flag_value.  */
-
-static int
-avr_address_class_type_flags (int byte_size, int dwarf2_addr_class)
-{
-  /* The value 1 of the DW_AT_address_class attribute corresponds to the
-     __flash qualifier.  Note that this attribute is only valid with
-     pointer types and therefore the flag is set to the pointer type and
-     not its target type.  */
-  if (dwarf2_addr_class == 1 && byte_size == 2)
-    return AVR_TYPE_INSTANCE_FLAG_ADDRESS_CLASS_FLASH;
-  return 0;
-}
-
-/* Implementation of `address_class_type_flags_to_name' gdbarch method.
-
-   Convert a type_instance_flag_value to an address space qualifier.  */
-
-static const char*
-avr_address_class_type_flags_to_name (struct gdbarch *gdbarch, int type_flags)
-{
-  if (type_flags & AVR_TYPE_INSTANCE_FLAG_ADDRESS_CLASS_FLASH)
-    return "flash";
-  else
-    return NULL;
-}
-
-/* Implementation of `address_class_name_to_type_flags' gdbarch method.
-
-   Convert an address space qualifier to a type_instance_flag_value.  */
-
-static int
-avr_address_class_name_to_type_flags (struct gdbarch *gdbarch,
-                                      const char* name,
-                                      int *type_flags_ptr)
-{
-  if (strcmp (name, "flash") == 0)
-    {
-      *type_flags_ptr = AVR_TYPE_INSTANCE_FLAG_ADDRESS_CLASS_FLASH;
-      return 1;
-    }
-  else
-    return 0;
 }
 
 /* Initialize the gdbarch structure for the AVR's.  */
@@ -1426,21 +1360,14 @@ avr_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   switch (info.bfd_arch_info->mach)
     {
     case bfd_mach_avr1:
-    case bfd_mach_avrxmega1:
     case bfd_mach_avr2:
-    case bfd_mach_avrxmega2:
     case bfd_mach_avr3:
-    case bfd_mach_avrxmega3:
     case bfd_mach_avr4:
-    case bfd_mach_avrxmega4:
     case bfd_mach_avr5:
-    case bfd_mach_avrxmega5:
     default:
       call_length = 2;
       break;
     case bfd_mach_avr6:
-    case bfd_mach_avrxmega6:
-    case bfd_mach_avrxmega7:
       call_length = 3;
       break;
     }
@@ -1455,18 +1382,18 @@ avr_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     }
 
   /* None found, create a new architecture from the information provided.  */
-  tdep = XCNEW (struct gdbarch_tdep);
+  tdep = XMALLOC (struct gdbarch_tdep);
   gdbarch = gdbarch_alloc (&info, tdep);
   
   tdep->call_length = call_length;
 
   /* Create a type for PC.  We can't use builtin types here, as they may not
      be defined.  */
-  tdep->void_type = arch_type (gdbarch, TYPE_CODE_VOID, TARGET_CHAR_BIT,
-			       "void");
+  tdep->void_type = arch_type (gdbarch, TYPE_CODE_VOID, 1, "void");
   tdep->func_void_type = make_function_type (tdep->void_type, NULL);
-  tdep->pc_type = arch_pointer_type (gdbarch, 4 * TARGET_CHAR_BIT, NULL,
-				     tdep->func_void_type);
+  tdep->pc_type = arch_type (gdbarch, TYPE_CODE_PTR, 4, NULL);
+  TYPE_TARGET_TYPE (tdep->pc_type) = tdep->func_void_type;
+  TYPE_UNSIGNED (tdep->pc_type) = 1;
 
   set_gdbarch_short_bit (gdbarch, 2 * TARGET_CHAR_BIT);
   set_gdbarch_int_bit (gdbarch, 2 * TARGET_CHAR_BIT);
@@ -1474,9 +1401,6 @@ avr_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_long_long_bit (gdbarch, 8 * TARGET_CHAR_BIT);
   set_gdbarch_ptr_bit (gdbarch, 2 * TARGET_CHAR_BIT);
   set_gdbarch_addr_bit (gdbarch, 32);
-
-  set_gdbarch_wchar_bit (gdbarch, 2 * TARGET_CHAR_BIT);
-  set_gdbarch_wchar_signed (gdbarch, 1);
 
   set_gdbarch_float_bit (gdbarch, 4 * TARGET_CHAR_BIT);
   set_gdbarch_double_bit (gdbarch, 4 * TARGET_CHAR_BIT);
@@ -1502,6 +1426,7 @@ avr_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_pseudo_register_write (gdbarch, avr_pseudo_register_write);
 
   set_gdbarch_return_value (gdbarch, avr_return_value);
+  set_gdbarch_print_insn (gdbarch, print_insn_avr);
 
   set_gdbarch_push_dummy_call (gdbarch, avr_push_dummy_call);
 
@@ -1514,8 +1439,7 @@ avr_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_skip_prologue (gdbarch, avr_skip_prologue);
   set_gdbarch_inner_than (gdbarch, core_addr_lessthan);
 
-  set_gdbarch_breakpoint_kind_from_pc (gdbarch, avr_breakpoint::kind_from_pc);
-  set_gdbarch_sw_breakpoint_from_kind (gdbarch, avr_breakpoint::bp_from_kind);
+  set_gdbarch_breakpoint_from_pc (gdbarch, avr_breakpoint_from_pc);
 
   frame_unwind_append_unwinder (gdbarch, &avr_frame_unwind);
   frame_base_set_default (gdbarch, &avr_frame_base);
@@ -1524,12 +1448,6 @@ avr_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   set_gdbarch_unwind_pc (gdbarch, avr_unwind_pc);
   set_gdbarch_unwind_sp (gdbarch, avr_unwind_sp);
-
-  set_gdbarch_address_class_type_flags (gdbarch, avr_address_class_type_flags);
-  set_gdbarch_address_class_name_to_type_flags
-    (gdbarch, avr_address_class_name_to_type_flags);
-  set_gdbarch_address_class_type_flags_to_name
-    (gdbarch, avr_address_class_type_flags_to_name);
 
   return gdbarch;
 }
@@ -1548,17 +1466,21 @@ avr_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
    All io registers are 8-bit.  */
 
 static void
-avr_io_reg_read_command (const char *args, int from_tty)
+avr_io_reg_read_command (char *args, int from_tty)
 {
+  LONGEST bufsiz = 0;
+  gdb_byte *buf;
   char query[400];
+  char *p;
   unsigned int nreg = 0;
   unsigned int val;
+  int i, j, k, step;
 
   /* Find out how many io registers the target has.  */
-  gdb::optional<gdb::byte_vector> buf
-    = target_read_alloc (current_top_target (), TARGET_OBJECT_AVR, "avr.io_reg");
+  bufsiz = target_read_alloc (&current_target, TARGET_OBJECT_AVR,
+			      "avr.io_reg", &buf);
 
-  if (!buf)
+  if (bufsiz <= 0)
     {
       fprintf_unfiltered (gdb_stderr,
 			  _("ERR: info io_registers NOT supported "
@@ -1566,42 +1488,36 @@ avr_io_reg_read_command (const char *args, int from_tty)
       return;
     }
 
-  const char *bufstr = (const char *) buf->data ();
-
-  if (sscanf (bufstr, "%x", &nreg) != 1)
+  if (sscanf (buf, "%x", &nreg) != 1)
     {
       fprintf_unfiltered (gdb_stderr,
 			  _("Error fetching number of io registers\n"));
+      xfree (buf);
       return;
     }
+
+  xfree (buf);
 
   reinitialize_more_filter ();
 
   printf_unfiltered (_("Target has %u io registers:\n\n"), nreg);
 
   /* only fetch up to 8 registers at a time to keep the buffer small */
-  int step = 8;
+  step = 8;
 
-  for (int i = 0; i < nreg; i += step)
+  for (i = 0; i < nreg; i += step)
     {
       /* how many registers this round? */
-      int j = step;
+      j = step;
       if ((i+j) >= nreg)
         j = nreg - i;           /* last block is less than 8 registers */
 
       snprintf (query, sizeof (query) - 1, "avr.io_reg:%x,%x", i, j);
-      buf = target_read_alloc (current_top_target (), TARGET_OBJECT_AVR, query);
+      bufsiz = target_read_alloc (&current_target, TARGET_OBJECT_AVR,
+				  query, &buf);
 
-      if (!buf)
-        {
-          fprintf_unfiltered (gdb_stderr,
-			      _("ERR: error reading avr.io_reg:%x,%x\n"),
-			      i, j);
-          return;
-        }
-
-      const char *p = (const char *) buf->data ();
-      for (int k = i; k < (i + j); k++)
+      p = buf;
+      for (k = i; k < (i + j); k++)
 	{
 	  if (sscanf (p, "%[^,],%x;", query, &val) == 2)
 	    {
@@ -1613,8 +1529,12 @@ avr_io_reg_read_command (const char *args, int from_tty)
 		break;
 	    }
 	}
+
+      xfree (buf);
     }
 }
+
+extern initialize_file_ftype _initialize_avr_tdep; /* -Wmissing-prototypes */
 
 void
 _initialize_avr_tdep (void)
@@ -1628,6 +1548,7 @@ _initialize_avr_tdep (void)
   /* FIXME: TRoth/2002-02-18: This should probably be changed to 'info avr
      io_registers' to signify it is not available on other platforms.  */
 
-  add_info ("io_registers", avr_io_reg_read_command,
-	    _("query remote avr target for io space register values"));
+  add_cmd ("io_registers", class_info, avr_io_reg_read_command,
+	   _("query remote avr target for io space register values"),
+	   &infolist);
 }

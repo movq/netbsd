@@ -1,5 +1,6 @@
 /* Engine header for Cpu tools GENerated simulators.
-   Copyright (C) 1998-2019 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
    Contributed by Cygnus Support.
 
 This file is part of GDB, the GNU debugger.
@@ -186,6 +187,8 @@ do { \
 
 #if WITH_SCACHE
 
+#define CIA_ADDR(cia) (cia)
+
 #if WITH_SCACHE_PBB
 
 /* Return the scache pointer of the current insn.  */
@@ -277,6 +280,8 @@ do { \
 #else /* ! WITH_SCACHE */
 
 /* This is the "simple" engine case.  */
+
+#define CIA_ADDR(cia) (cia)
 
 #define SEM_SEM_ARG(vpc, sc) (sc)
 

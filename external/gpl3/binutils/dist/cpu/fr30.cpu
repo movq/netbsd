@@ -159,13 +159,11 @@
 (dnf f-u4c       "4 bit 0 extended"      () 12  4)
 (df  f-i4        "4 bit sign extended"   ()  8  4 INT #f #f)
 (df  f-m4        "4 bit minus extended"  ()  8  4 UINT
-     ; ??? This field takes a value in the range [-16,-1] but there
-     ; doesn't seem a way to tell CGEN that.  Use an unsigned field and
-     ; disable range checks on insertion by masking.  Restore the sign
-     ; on extraction.  CGEN generated documentation for insns that use
-     ; this field will be wrong.
      ((value pc) (and WI value (const #xf)))
-     ((value pc) (or  WI value (const -16)))
+     ; ??? On a 64 bit host this doesn't get completely sign extended
+     ; if the value is recorded in a long, as it is during extraction.
+     ; Various fixes exist, pick one.
+     ((value pc) (or  WI value (sll WI (const -1) (const 4))))
 )
 (dnf f-u8        "8 bit unsigned"        ()  8  8)
 (dnf f-i8        "8 bit unsigned"        ()  4  8)
@@ -193,15 +191,15 @@
 (df  f-disp8     "8 bit signed offset"   ()  4  8 INT #f #f)
 (df  f-disp9     "9 bit signed offset"   ()  4  8 INT
     ((value pc) (sra WI value (const 1)))
-    ((value pc) (mul WI value (const 2)))
+    ((value pc) (sll WI value (const 1)))
 )
 (df  f-disp10    "10 bit signed offset"  ()  4  8 INT
      ((value pc) (sra WI value (const 2)))
-     ((value pc) (mul WI value (const 4)))
+     ((value pc) (sll WI value (const 2)))
 )
 (df  f-s10       "10 bit signed offset"  ()  8  8 INT
      ((value pc) (sra WI value (const 2)))
-     ((value pc) (mul WI value (const 4)))
+     ((value pc) (sll WI value (const 2)))
 )
 (df  f-u10       "10 bit unsigned offset" ()  8  8 UINT
      ((value pc) (srl UWI value (const 2)))
@@ -209,7 +207,7 @@
 )
 (df  f-rel9 "9 pc relative signed offset" (PCREL-ADDR) 8 8 INT
      ((value pc) (sra WI (sub WI value (add WI pc (const 2))) (const 1)))
-     ((value pc) (add WI (mul WI value (const 2)) (add WI pc (const 2))))
+     ((value pc) (add WI (sll WI value (const 1)) (add WI pc (const 2))))
 )
 (dnf f-dir8      "8  bit direct address"  ()  8  8)
 (df  f-dir9      "9  bit direct address"  ()  8  8 UINT
@@ -222,7 +220,7 @@
 )
 (df  f-rel12     "12 bit pc relative signed offset" (PCREL-ADDR) 5 11 INT
      ((value pc) (sra WI (sub WI value (add WI pc (const 2))) (const 1)))
-     ((value pc) (add WI (mul WI value (const 2)) (add WI pc (const 2))))
+     ((value pc) (add WI (sll WI value (const 1)) (add WI pc (const 2))))
 )
 
 (dnf f-reglist_hi_st  "8 bit register mask for stm" () 8 8)

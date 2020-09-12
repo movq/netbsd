@@ -1,5 +1,6 @@
 /* Simple bitmaps.
-   Copyright (C) 1999-2019 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2002, 2003, 2004, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,134 +21,79 @@ along with GCC; see the file COPYING3.  If not see
 #ifndef GCC_SBITMAP_H
 #define GCC_SBITMAP_H
 
-/* Implementation of sets using simple bitmap vectors.
+/* It's not clear yet whether using bitmap.[ch] will be a win.
+   It should be straightforward to convert so for now we keep things simple
+   while more important issues are dealt with.  */
 
-   This set representation is suitable for non-sparse sets with a known
-   (a priori) universe.  The set is represented as a simple array of the
-   host's fastest unsigned integer.  For a given member I in the set:
-     - the element for I will be at sbitmap[I / (bits per element)]
-     - the position for I within element is I % (bits per element)
-
-   This representation is very space-efficient for large non-sparse sets
-   with random access patterns.
-
-   The following operations can be performed in O(1) time:
-
-     * set_size			: SBITMAP_SIZE
-     * member_p			: bitmap_bit_p
-     * add_member		: bitmap_set_bit
-     * remove_member		: bitmap_clear_bit
-
-   Most other operations on this set representation are O(U) where U is
-   the size of the set universe:
-
-     * clear			: bitmap_clear
-     * choose_one		: bitmap_first_set_bit /
-				  bitmap_last_set_bit
-     * forall			: EXECUTE_IF_SET_IN_BITMAP
-     * set_copy			: bitmap_copy
-     * set_intersection		: bitmap_and
-     * set_union		: bitmap_ior
-     * set_difference		: bitmap_and_compl
-     * set_disjuction		: (not implemented)
-     * set_compare		: bitmap_equal_p
-     * bit_in_range_p		: bitmap_bit_in_range_p
-
-   Some operations on 3 sets that occur frequently in data flow problems
-   are also implemented:
-
-      * A | (B & C)		: bitmap_or_and
-      * A | (B & ~C)		: bitmap_ior_and_compl
-      * A & (B | C)		: bitmap_and_or
-
-   Most of the set functions have two variants: One that returns non-zero
-   if members were added or removed from the target set, and one that just
-   performs the operation without feedback.  The former operations are a
-   bit more expensive but the result can often be used to avoid iterations
-   on other sets.
-
-   Allocating a bitmap is done with sbitmap_alloc, and resizing is
-   performed with sbitmap_resize.
-
-   The storage requirements for simple bitmap sets is O(U) where U is the
-   size of the set universe (colloquially the number of bits in the bitmap).
-
-   This set representation works well for relatively small data flow problems
-   (there are special routines for that, see sbitmap_vector_*).  The set
-   operations can be vectorized and there is almost no computating overhead,
-   so that even sparse simple bitmap sets outperform dedicated sparse set
-   representations like linked-list bitmaps.  For larger problems, the size
-   overhead of simple bitmap sets gets too high and other set representations
-   have to be used.  */
-
-#define SBITMAP_ELT_BITS (HOST_BITS_PER_WIDEST_FAST_INT * 1u)
+#define SBITMAP_ELT_BITS ((unsigned) HOST_BITS_PER_WIDEST_FAST_INT)
 #define SBITMAP_ELT_TYPE unsigned HOST_WIDEST_FAST_INT
 
-struct simple_bitmap_def
+/* Can't use SBITMAP_ELT_BITS in this macro because it contains a
+   cast.  There is no perfect macro in GCC to test against.  This
+   suffices for roughly 99% of the hosts we run on, and the rest
+   don't have 256 bit integers.  */
+#if HOST_BITS_PER_WIDEST_FAST_INT > 255
+#error Need to increase size of datatype used for popcount
+#endif
+
+typedef struct simple_bitmap_def
 {
+  unsigned char *popcount;      /* Population count.  */
   unsigned int n_bits;		/* Number of bits.  */
   unsigned int size;		/* Size in elements.  */
   SBITMAP_ELT_TYPE elms[1];	/* The elements.  */
-};
+} *sbitmap;
+typedef const struct simple_bitmap_def *const_sbitmap;
+
+typedef SBITMAP_ELT_TYPE *sbitmap_ptr;
+typedef const SBITMAP_ELT_TYPE *const_sbitmap_ptr;
 
 /* Return the set size needed for N elements.  */
 #define SBITMAP_SET_SIZE(N) (((N) + SBITMAP_ELT_BITS - 1) / SBITMAP_ELT_BITS)
-
-/* Return the number of bits in BITMAP.  */
-#define SBITMAP_SIZE(BITMAP) ((BITMAP)->n_bits)
-
-/* Verify that access at INDEX in bitmap MAP is valid.  */ 
-
-static inline void
-bitmap_check_index (const_sbitmap map, int index)
-{
-  gcc_checking_assert (index >= 0);
-  gcc_checking_assert ((unsigned int)index < map->n_bits);
-}
-
-/* Verify that bitmaps A and B have same size.  */ 
-
-static inline void
-bitmap_check_sizes (const_sbitmap a, const_sbitmap b)
-{
-  gcc_checking_assert (a->n_bits == b->n_bits);
-}
+#define SBITMAP_SIZE_BYTES(BITMAP) ((BITMAP)->size * sizeof (SBITMAP_ELT_TYPE))
 
 /* Test if bit number bitno in the bitmap is set.  */
-static inline SBITMAP_ELT_TYPE
-bitmap_bit_p (const_sbitmap map, int bitno)
-{
-  bitmap_check_index (map, bitno);
+#define TEST_BIT(BITMAP, BITNO) \
+((BITMAP)->elms [(BITNO) / SBITMAP_ELT_BITS] >> (BITNO) % SBITMAP_ELT_BITS & 1)
 
-  size_t i = bitno / SBITMAP_ELT_BITS;
-  unsigned int s = bitno % SBITMAP_ELT_BITS;
-  return (map->elms[i] >> s) & (SBITMAP_ELT_TYPE) 1;
-}
-
-/* Set bit number BITNO in the sbitmap MAP.  */
+/* Set bit number BITNO in the sbitmap MAP.  Updates population count
+   if this bitmap has one.  */
 
 static inline void
-bitmap_set_bit (sbitmap map, int bitno)
+SET_BIT (sbitmap map, unsigned int bitno)
 {
-  bitmap_check_index (map, bitno);
-
+  if (map->popcount)
+    {
+      bool oldbit;
+      oldbit = TEST_BIT (map, bitno);
+      if (!oldbit)
+	map->popcount[bitno / SBITMAP_ELT_BITS]++;
+    }
   map->elms[bitno / SBITMAP_ELT_BITS]
     |= (SBITMAP_ELT_TYPE) 1 << (bitno) % SBITMAP_ELT_BITS;
 }
 
-/* Reset bit number BITNO in the sbitmap MAP.  */
+
+
+/* Reset bit number BITNO in the sbitmap MAP.  Updates population
+   count if this bitmap has one.  */
 
 static inline void
-bitmap_clear_bit (sbitmap map, int bitno)
+RESET_BIT (sbitmap map,  unsigned int bitno)
 {
-  bitmap_check_index (map, bitno);
-
+  if (map->popcount)
+    {
+      bool oldbit;
+      oldbit = TEST_BIT (map, bitno);
+      if (oldbit)
+	map->popcount[bitno / SBITMAP_ELT_BITS]--;
+    }
   map->elms[bitno / SBITMAP_ELT_BITS]
     &= ~((SBITMAP_ELT_TYPE) 1 << (bitno) % SBITMAP_ELT_BITS);
 }
 
 /* The iterator for sbitmap.  */
-struct sbitmap_iterator {
+typedef struct {
   /* The pointer to the first word of the bitmap.  */
   const SBITMAP_ELT_TYPE *ptr;
 
@@ -162,14 +108,13 @@ struct sbitmap_iterator {
 
   /* The words currently visited.  */
   SBITMAP_ELT_TYPE word;
-};
+} sbitmap_iterator;
 
 /* Initialize the iterator I with sbitmap BMP and the initial index
    MIN.  */
 
 static inline void
-bmp_iter_set_init (sbitmap_iterator *i, const_sbitmap bmp,
-		   unsigned int min, unsigned *bit_no ATTRIBUTE_UNUSED)
+sbitmap_iter_init (sbitmap_iterator *i, const_sbitmap bmp, unsigned int min)
 {
   i->word_num = min / (unsigned int) SBITMAP_ELT_BITS;
   i->bit_num = min;
@@ -188,7 +133,7 @@ bmp_iter_set_init (sbitmap_iterator *i, const_sbitmap bmp,
    false.  */
 
 static inline bool
-bmp_iter_set (sbitmap_iterator *i, unsigned int *n)
+sbitmap_iter_cond (sbitmap_iterator *i, unsigned int *n)
 {
   /* Skip words that are zeros.  */
   for (; i->word == 0; i->word = i->ptr[i->word_num])
@@ -214,7 +159,7 @@ bmp_iter_set (sbitmap_iterator *i, unsigned int *n)
 /* Advance to the next bit.  */
 
 static inline void
-bmp_iter_next (sbitmap_iterator *i, unsigned *bit_no ATTRIBUTE_UNUSED)
+sbitmap_iter_next (sbitmap_iterator *i)
 {
   i->word >>= 1;
   i->bit_num++;
@@ -224,89 +169,102 @@ bmp_iter_next (sbitmap_iterator *i, unsigned *bit_no ATTRIBUTE_UNUSED)
    iteration, N is set to the index of the bit being visited.  ITER is
    an instance of sbitmap_iterator used to iterate the bitmap.  */
 
-#ifndef EXECUTE_IF_SET_IN_BITMAP
-/* See bitmap.h for the other definition of EXECUTE_IF_SET_IN_BITMAP.  */
-#define EXECUTE_IF_SET_IN_BITMAP(BITMAP, MIN, BITNUM, ITER)	\
-  for (bmp_iter_set_init (&(ITER), (BITMAP), (MIN), &(BITNUM));	\
-       bmp_iter_set (&(ITER), &(BITNUM));			\
-       bmp_iter_next (&(ITER), &(BITNUM)))
-#endif
+#define EXECUTE_IF_SET_IN_SBITMAP(SBITMAP, MIN, N, ITER)	\
+  for (sbitmap_iter_init (&(ITER), (SBITMAP), (MIN));		\
+       sbitmap_iter_cond (&(ITER), &(N));			\
+       sbitmap_iter_next (&(ITER)))
 
-inline void sbitmap_free (sbitmap map)
-{
-  free (map);
-}
+#define EXECUTE_IF_SET_IN_SBITMAP_REV(SBITMAP, N, CODE)			\
+do {									\
+  unsigned int word_num_;						\
+  unsigned int bit_num_;						\
+  unsigned int size_ = (SBITMAP)->size;					\
+  SBITMAP_ELT_TYPE *ptr_ = (SBITMAP)->elms;				\
+									\
+  for (word_num_ = size_; word_num_ > 0; word_num_--)			\
+    {									\
+      SBITMAP_ELT_TYPE word_ = ptr_[word_num_ - 1];			\
+									\
+      if (word_ != 0)							\
+	for (bit_num_ = SBITMAP_ELT_BITS; bit_num_ > 0; bit_num_--)	\
+	  {								\
+	    SBITMAP_ELT_TYPE _mask = (SBITMAP_ELT_TYPE)1 << (bit_num_ - 1);\
+									\
+	    if ((word_ & _mask) != 0)					\
+	      {								\
+		word_ &= ~ _mask;					\
+		(N) = (word_num_ - 1) * SBITMAP_ELT_BITS + bit_num_ - 1;\
+		CODE;							\
+		if (word_ == 0)						\
+		  break;						\
+	      }								\
+	  }								\
+    }									\
+} while (0)
 
-inline void sbitmap_vector_free (sbitmap * vec)
-{
-  free (vec);
-}
+#define sbitmap_free(MAP)		(free((MAP)->popcount), free((MAP)))
+#define sbitmap_vector_free(VEC)	free(VEC)
 
-extern void dump_bitmap (FILE *, const_sbitmap);
-extern void debug_raw (const simple_bitmap_def &ref);
-extern void debug_raw (const simple_bitmap_def *ptr);
-extern void dump_bitmap_file (FILE *, const_sbitmap);
-extern void debug (const simple_bitmap_def &ref);
-extern void debug (const simple_bitmap_def *ptr);
-extern void dump_bitmap_vector (FILE *, const char *, const char *, sbitmap *,
+struct int_list;
+
+extern void dump_sbitmap (FILE *, const_sbitmap);
+extern void dump_sbitmap_file (FILE *, const_sbitmap);
+extern void dump_sbitmap_vector (FILE *, const char *, const char *, sbitmap *,
 				 int);
 extern sbitmap sbitmap_alloc (unsigned int);
+extern sbitmap sbitmap_alloc_with_popcount (unsigned int);
 extern sbitmap *sbitmap_vector_alloc (unsigned int, unsigned int);
 extern sbitmap sbitmap_resize (sbitmap, unsigned int, int);
-extern void bitmap_copy (sbitmap, const_sbitmap);
-extern int bitmap_equal_p (const_sbitmap, const_sbitmap);
-extern unsigned int bitmap_count_bits (const_sbitmap);
-extern bool bitmap_empty_p (const_sbitmap);
-extern void bitmap_clear (sbitmap);
-extern void bitmap_clear_range (sbitmap, unsigned, unsigned);
-extern void bitmap_set_range (sbitmap, unsigned, unsigned);
-extern void bitmap_ones (sbitmap);
-extern void bitmap_vector_clear (sbitmap *, unsigned int);
-extern void bitmap_vector_ones (sbitmap *, unsigned int);
+extern void sbitmap_copy (sbitmap, const_sbitmap);
+extern void sbitmap_copy_n (sbitmap, const_sbitmap, unsigned int);
+extern int sbitmap_equal (const_sbitmap, const_sbitmap);
+extern bool sbitmap_empty_p (const_sbitmap);
+extern bool sbitmap_range_empty_p (const_sbitmap, unsigned int, unsigned int);
+extern void sbitmap_zero (sbitmap);
+extern void sbitmap_ones (sbitmap);
+extern void sbitmap_vector_zero (sbitmap *, unsigned int);
+extern void sbitmap_vector_ones (sbitmap *, unsigned int);
 
-extern bool bitmap_ior_and_compl (sbitmap, const_sbitmap,
-				      const_sbitmap, const_sbitmap);
-extern void bitmap_and_compl (sbitmap, const_sbitmap, const_sbitmap);
-extern void bitmap_not (sbitmap, const_sbitmap);
-extern bool bitmap_or_and (sbitmap, const_sbitmap,
-				     const_sbitmap, const_sbitmap);
-extern bool bitmap_and_or (sbitmap, const_sbitmap,
-				     const_sbitmap, const_sbitmap);
-extern bool bitmap_intersect_p (const_sbitmap, const_sbitmap);
-extern bool bitmap_and (sbitmap, const_sbitmap, const_sbitmap);
-extern bool bitmap_ior (sbitmap, const_sbitmap, const_sbitmap);
-extern bool bitmap_xor (sbitmap, const_sbitmap, const_sbitmap);
-extern bool bitmap_subset_p (const_sbitmap, const_sbitmap);
-extern bool bitmap_bit_in_range_p (const_sbitmap, unsigned int, unsigned int);
+extern void sbitmap_union_of_diff (sbitmap, const_sbitmap, const_sbitmap, const_sbitmap);
+extern bool sbitmap_union_of_diff_cg (sbitmap, const_sbitmap, const_sbitmap, const_sbitmap);
+extern void sbitmap_difference (sbitmap, const_sbitmap, const_sbitmap);
+extern void sbitmap_not (sbitmap, const_sbitmap);
+extern void sbitmap_a_or_b_and_c (sbitmap, const_sbitmap, const_sbitmap, const_sbitmap);
+extern bool sbitmap_a_or_b_and_c_cg (sbitmap, const_sbitmap, const_sbitmap, const_sbitmap);
+extern void sbitmap_a_and_b_or_c (sbitmap, const_sbitmap, const_sbitmap, const_sbitmap);
+extern bool sbitmap_a_and_b_or_c_cg (sbitmap, const_sbitmap, const_sbitmap, const_sbitmap);
+extern bool sbitmap_any_common_bits (const_sbitmap, const_sbitmap);
+extern void sbitmap_a_and_b (sbitmap, const_sbitmap, const_sbitmap);
+extern bool sbitmap_a_and_b_cg (sbitmap, const_sbitmap, const_sbitmap);
+extern void sbitmap_a_or_b (sbitmap, const_sbitmap, const_sbitmap);
+extern bool sbitmap_a_or_b_cg (sbitmap, const_sbitmap, const_sbitmap);
+extern void sbitmap_a_xor_b (sbitmap, const_sbitmap, const_sbitmap);
+extern bool sbitmap_a_xor_b_cg (sbitmap, const_sbitmap, const_sbitmap);
+extern bool sbitmap_a_subset_b_p (const_sbitmap, const_sbitmap);
 
-extern int bitmap_first_set_bit (const_sbitmap);
-extern int bitmap_last_set_bit (const_sbitmap);
+extern int sbitmap_first_set_bit (const_sbitmap);
+extern int sbitmap_last_set_bit (const_sbitmap);
 
-extern void debug_bitmap (const_sbitmap);
+extern void sbitmap_intersect_of_predsucc (sbitmap, sbitmap *, int,
+					   struct int_list **);
+#define sbitmap_intersect_of_predecessors  sbitmap_intersect_of_predsucc
+#define sbitmap_intersect_of_successors    sbitmap_intersect_of_predsucc
+
+extern void sbitmap_union_of_predsucc (sbitmap, sbitmap *, int,
+				       struct int_list **);
+#define sbitmap_union_of_predecessors  sbitmap_union_of_predsucc
+#define sbitmap_union_of_successors    sbitmap_union_of_predsucc
+
+/* Intersection and Union of preds/succs using the new flow graph
+   structure instead of the pred/succ arrays.  */
+
+extern void sbitmap_intersection_of_succs (sbitmap, sbitmap *, int);
+extern void sbitmap_intersection_of_preds (sbitmap, sbitmap *, int);
+extern void sbitmap_union_of_succs (sbitmap, sbitmap *, int);
+extern void sbitmap_union_of_preds (sbitmap, sbitmap *, int);
+
+extern void debug_sbitmap (const_sbitmap);
 extern sbitmap sbitmap_realloc (sbitmap, unsigned int);
-
-/* a class that ties the lifetime of a sbitmap to its scope.  */
-class auto_sbitmap
-{
-public:
-  explicit auto_sbitmap (unsigned int size) :
-    m_bitmap (sbitmap_alloc (size)) {}
-  ~auto_sbitmap () { sbitmap_free (m_bitmap); }
-
-  /* Allow calling sbitmap functions on our bitmap.  */
-  operator sbitmap () { return m_bitmap; }
-
-private:
-  /* Prevent making a copy that refers to our sbitmap.  */
-  auto_sbitmap (const auto_sbitmap &);
-  auto_sbitmap &operator = (const auto_sbitmap &);
-#if __cplusplus >= 201103L
-  auto_sbitmap (auto_sbitmap &&);
-  auto_sbitmap &operator = (auto_sbitmap &&);
-#endif
-
-  /* The bitmap we are managing.  */
-  sbitmap m_bitmap;
-};
-
+extern unsigned long sbitmap_popcount(const_sbitmap, unsigned long);
+extern void sbitmap_verify_popcount (const_sbitmap);
 #endif /* ! GCC_SBITMAP_H */

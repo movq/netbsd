@@ -1,6 +1,7 @@
 // basic_ios member functions -*- C++ -*-
 
-// Copyright (C) 1999-2019 Free Software Foundation, Inc.
+// Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,
+// 2009  Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,9 +23,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file bits/basic_ios.tcc
+/** @file basic_ios.tcc
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{ios}
+ *  You should not attempt to use it directly.
  */
 
 #ifndef _BASIC_IOS_TCC
@@ -32,9 +33,7 @@
 
 #pragma GCC system_header
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   template<typename _CharT, typename _Traits>
     void
@@ -157,23 +156,24 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     basic_ios<_CharT, _Traits>::_M_cache_locale(const locale& __loc)
     {
       if (__builtin_expect(has_facet<__ctype_type>(__loc), true))
-	_M_ctype = std::__addressof(use_facet<__ctype_type>(__loc));
+	_M_ctype = &use_facet<__ctype_type>(__loc);
       else
 	_M_ctype = 0;
 
       if (__builtin_expect(has_facet<__num_put_type>(__loc), true))
-	_M_num_put = std::__addressof(use_facet<__num_put_type>(__loc));
+	_M_num_put = &use_facet<__num_put_type>(__loc);
       else
 	_M_num_put = 0;
 
       if (__builtin_expect(has_facet<__num_get_type>(__loc), true))
-	_M_num_get = std::__addressof(use_facet<__num_get_type>(__loc));
+	_M_num_get = &use_facet<__num_get_type>(__loc);
       else
 	_M_num_get = 0;
     }
 
   // Inhibit implicit instantiations for required instantiations,
   // which are defined via explicit instantiations elsewhere.
+  // NB:  This syntax is a GNU extension.
 #if _GLIBCXX_EXTERN_TEMPLATE
   extern template class basic_ios<char>;
 
@@ -182,7 +182,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #endif
 #endif
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace std
+_GLIBCXX_END_NAMESPACE
 
 #endif

@@ -1,13 +1,12 @@
-/* A Bison parser, made by GNU Bison 3.0.5.  */
+/* A Bison parser, made by GNU Bison 2.1.  */
 
-/* Bison interface for Yacc-like parsers in C
+/* Skeleton parser for Yacc-like parsing with Bison,
+   Copyright (C) 1984, 1989, 1990, 2000, 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
 
-   Copyright (C) 1984, 1989-1990, 2000-2015, 2018 Free Software Foundation, Inc.
-
-   This program is free software: you can redistribute it and/or modify
+   This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation, either version 3 of the License, or
-   (at your option) any later version.
+   the Free Software Foundation; either version 2, or (at your option)
+   any later version.
 
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -15,66 +14,50 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin Street, Fifth Floor,
+   Boston, MA 02110-1301, USA.  */
 
-/* As a special exception, you may create a larger work that contains
-   part or all of the Bison parser skeleton and distribute that work
-   under terms of your choice, so long as that work isn't itself a
-   parser generator using the skeleton or a modified version thereof
-   as a parser skeleton.  Alternatively, if you modify or redistribute
-   the parser skeleton itself, you may (at your option) remove this
-   special exception, which will cause the skeleton and the resulting
-   Bison output files to be licensed under the GNU General Public
-   License without this special exception.
+/* As a special exception, when this file is copied by Bison into a
+   Bison output file, you may use that output file without restriction.
+   This special exception was added by the Free Software Foundation
+   in version 1.24 of Bison.  */
 
-   This special exception was added by the Free Software Foundation in
-   version 2.2 of Bison.  */
-
-#ifndef YY_YY_DEFPARSE_H_INCLUDED
-# define YY_YY_DEFPARSE_H_INCLUDED
-/* Debug traces.  */
-#ifndef YYDEBUG
-# define YYDEBUG 0
-#endif
-#if YYDEBUG
-extern int yydebug;
-#endif
-
-/* Token type.  */
+/* Tokens.  */
 #ifndef YYTOKENTYPE
 # define YYTOKENTYPE
-  enum yytokentype
-  {
-    NAME = 258,
-    LIBRARY = 259,
-    DESCRIPTION = 260,
-    STACKSIZE = 261,
-    HEAPSIZE = 262,
-    CODE = 263,
-    DATA = 264,
-    SECTIONS = 265,
-    EXPORTS = 266,
-    IMPORTS = 267,
-    VERSIONK = 268,
-    BASE = 269,
-    CONSTANT = 270,
-    READ = 271,
-    WRITE = 272,
-    EXECUTE = 273,
-    SHARED = 274,
-    NONSHARED = 275,
-    NONAME = 276,
-    PRIVATE = 277,
-    SINGLE = 278,
-    MULTIPLE = 279,
-    INITINSTANCE = 280,
-    INITGLOBAL = 281,
-    TERMINSTANCE = 282,
-    TERMGLOBAL = 283,
-    EQUAL = 284,
-    ID = 285,
-    NUMBER = 286
-  };
+   /* Put the tokens into the symbol table, so that GDB and other debuggers
+      know about them.  */
+   enum yytokentype {
+     NAME = 258,
+     LIBRARY = 259,
+     DESCRIPTION = 260,
+     STACKSIZE = 261,
+     HEAPSIZE = 262,
+     CODE = 263,
+     DATA = 264,
+     SECTIONS = 265,
+     EXPORTS = 266,
+     IMPORTS = 267,
+     VERSIONK = 268,
+     BASE = 269,
+     CONSTANT = 270,
+     READ = 271,
+     WRITE = 272,
+     EXECUTE = 273,
+     SHARED = 274,
+     NONSHARED = 275,
+     NONAME = 276,
+     PRIVATE = 277,
+     SINGLE = 278,
+     MULTIPLE = 279,
+     INITINSTANCE = 280,
+     INITGLOBAL = 281,
+     TERMINSTANCE = 282,
+     TERMGLOBAL = 283,
+     ID = 284,
+     NUMBER = 285
+   };
 #endif
 /* Tokens.  */
 #define NAME 258
@@ -103,32 +86,26 @@ extern int yydebug;
 #define INITGLOBAL 281
 #define TERMINSTANCE 282
 #define TERMGLOBAL 283
-#define EQUAL 284
-#define ID 285
-#define NUMBER 286
+#define ID 284
+#define NUMBER 285
 
-/* Value type.  */
-#if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 
-union YYSTYPE
-{
-#line 28 "defparse.y" /* yacc.c:1910  */
 
+
+#if ! defined (YYSTYPE) && ! defined (YYSTYPE_IS_DECLARED)
+#line 29 "defparse.y"
+typedef union YYSTYPE {
   char *id;
-  const char *id_const;
   int number;
-
-#line 122 "defparse.h" /* yacc.c:1910  */
-};
-
-typedef union YYSTYPE YYSTYPE;
-# define YYSTYPE_IS_TRIVIAL 1
+} YYSTYPE;
+/* Line 1447 of yacc.c.  */
+#line 103 "defparse.h"
+# define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1
+# define YYSTYPE_IS_TRIVIAL 1
 #endif
-
 
 extern YYSTYPE yylval;
 
-int yyparse (void);
 
-#endif /* !YY_YY_DEFPARSE_H_INCLUDED  */
+

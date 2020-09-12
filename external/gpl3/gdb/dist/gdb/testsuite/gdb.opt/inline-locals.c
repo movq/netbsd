@@ -1,4 +1,4 @@
-/* Copyright (C) 2008-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2008, 2010, 2011 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -23,7 +23,6 @@
 #endif
 
 int x, y;
-volatile int z = 0;
 volatile int result;
 volatile int *array_p;
 

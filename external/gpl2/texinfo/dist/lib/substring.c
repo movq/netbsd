@@ -1,4 +1,4 @@
-/*	$NetBSD: substring.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: substring.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* substring.c -- extract substring.
    Id: substring.c,v 1.2 2004/04/11 17:56:46 karl Exp 

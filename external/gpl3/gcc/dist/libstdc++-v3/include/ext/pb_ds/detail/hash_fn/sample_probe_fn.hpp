@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2005-2019 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
@@ -41,28 +41,33 @@
 #ifndef PB_DS_SAMPLE_PROBE_FN_HPP
 #define PB_DS_SAMPLE_PROBE_FN_HPP
 
-namespace __gnu_pbds
+// A sample probe policy.
+class sample_probe_fn
 {
-  /// A sample probe policy.
-  class sample_probe_fn
-  {
-  public:
-    typedef std::size_t size_type;
 
-    /// Default constructor.
-    sample_probe_fn();
+public:
 
-    /// Copy constructor.
-    sample_probe_fn(const sample_probe_fn&);
+  // Size type.
+  typedef size_t size_type;
 
-    /// Swaps content.
-    inline void
-    swap(sample_probe_fn&);
+public:
 
-  protected:
-    /// Returns the i-th offset from the hash value of some key r_key.
-    inline size_type
-    operator()(key_const_reference r_key, size_type i) const;
-  };
-}
+  // Default constructor.
+  sample_probe_fn();
+
+  // Copy constructor.
+  sample_probe_fn(const sample_probe_fn& other);
+
+  // Swaps content.
+  inline void
+  swap(sample_probe_fn& other);
+
+protected:
+
+  // Returns the i-th offset from the hash value of some key r_key.
+  inline size_type
+  operator()(const_key_reference r_key, size_type i) const;
+
+};
+
 #endif // #ifndef PB_DS_SAMPLE_PROBE_FN_HPP

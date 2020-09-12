@@ -1,4 +1,4 @@
-/*	$NetBSD: error.h,v 1.1.1.1 2016/01/13 03:15:30 christos Exp $	*/
+/*	$NetBSD: error.h,v 1.1 2016/01/13 03:15:30 christos Exp $	*/
 
 /* Declaration for error-reporting function
    Copyright (C) 1995, 1996, 1997 Free Software Foundation, Inc.

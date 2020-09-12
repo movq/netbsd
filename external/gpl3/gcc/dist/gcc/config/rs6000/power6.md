@@ -1,5 +1,5 @@
 ;; Scheduling description for IBM POWER6 processor.
-;;   Copyright (C) 2006-2019 Free Software Foundation, Inc.
+;;   Copyright (C) 2006, 2007, 2009 Free Software Foundation, Inc.
 ;;   Contributed by Peter Steinmetz (steinmtz@us.ibm.com)
 ;;
 ;; This file is part of GCC.
@@ -92,8 +92,6 @@
 ; that is read/written by a subsequent fixed point op.
 (define_insn_reservation "power6-load" 2 ; fx
   (and (eq_attr "type" "load")
-       (eq_attr "sign_extend" "no")
-       (eq_attr "update" "no")
        (eq_attr "cpu" "power6"))
   "LSU_power6")
 
@@ -108,12 +106,10 @@
                   power6-store-update-indexed,\
                   power6-fpstore,\
                   power6-fpstore-update"
-  "rs6000_store_data_bypass_p")
+  "store_data_bypass_p")
 
 (define_insn_reservation "power6-load-ext" 4 ; fx
-  (and (eq_attr "type" "load")
-       (eq_attr "sign_extend" "yes")
-       (eq_attr "update" "no")
+  (and (eq_attr "type" "load_ext")
        (eq_attr "cpu" "power6"))
   "LSU_power6")
 
@@ -128,81 +124,60 @@
                   power6-store-update-indexed,\
                   power6-fpstore,\
                   power6-fpstore-update"
-  "rs6000_store_data_bypass_p")
+  "store_data_bypass_p")
 
 (define_insn_reservation "power6-load-update" 2 ; fx
-  (and (eq_attr "type" "load")
-       (eq_attr "sign_extend" "no")
-       (eq_attr "update" "yes")
-       (eq_attr "indexed" "no")
+  (and (eq_attr "type" "load_u")
        (eq_attr "cpu" "power6"))
   "LSX_power6")
 
 (define_insn_reservation "power6-load-update-indexed" 2 ; fx
-  (and (eq_attr "type" "load")
-       (eq_attr "sign_extend" "no")
-       (eq_attr "update" "yes")
-       (eq_attr "indexed" "yes")
+  (and (eq_attr "type" "load_ux")
        (eq_attr "cpu" "power6"))
   "LSX_power6")
 
 (define_insn_reservation "power6-load-ext-update" 4 ; fx
-  (and (eq_attr "type" "load")
-       (eq_attr "sign_extend" "yes")
-       (eq_attr "update" "yes")
-       (eq_attr "indexed" "no")
+  (and (eq_attr "type" "load_ext_u")
        (eq_attr "cpu" "power6"))
   "LSX_power6")
 
 (define_insn_reservation "power6-load-ext-update-indexed" 4 ; fx
-  (and (eq_attr "type" "load")
-       (eq_attr "sign_extend" "yes")
-       (eq_attr "update" "yes")
-       (eq_attr "indexed" "yes")
+  (and (eq_attr "type" "load_ext_ux")
        (eq_attr "cpu" "power6"))
   "LSX_power6")
 
 (define_insn_reservation "power6-fpload" 1
   (and (eq_attr "type" "fpload")
-       (eq_attr "update" "no")
        (eq_attr "cpu" "power6"))
   "LSU_power6")
 
 (define_insn_reservation "power6-fpload-update" 1
-  (and (eq_attr "type" "fpload")
-       (eq_attr "update" "yes")
+  (and (eq_attr "type" "fpload_u,fpload_ux")
        (eq_attr "cpu" "power6"))
   "LSX_power6")
 
 (define_insn_reservation "power6-store" 14
   (and (eq_attr "type" "store")
-       (eq_attr "update" "no")
        (eq_attr "cpu" "power6"))
   "LSU_power6")
 
 (define_insn_reservation "power6-store-update" 14
-  (and (eq_attr "type" "store")
-       (eq_attr "update" "yes")
-       (eq_attr "indexed" "no")
+  (and (eq_attr "type" "store_u")
        (eq_attr "cpu" "power6"))
   "LSX_power6")
 
 (define_insn_reservation "power6-store-update-indexed" 14
-  (and (eq_attr "type" "store")
-       (eq_attr "update" "yes")
-       (eq_attr "indexed" "yes")
+  (and (eq_attr "type" "store_ux")
        (eq_attr "cpu" "power6"))
   "LX2_power6")
 
 (define_insn_reservation "power6-fpstore" 14
   (and (eq_attr "type" "fpstore")
-       (eq_attr "update" "no")
        (eq_attr "cpu" "power6"))
   "LSF_power6")
 
 (define_insn_reservation "power6-fpstore-update" 14
-  (and (eq_attr "type" "fpstore")
-       (eq_attr "update" "yes")
+  (and (eq_attr "type" "fpstore_u,fpstore_ux")
        (eq_attr "cpu" "power6"))
   "XLF_power6")
 
@@ -222,9 +197,7 @@
   "LSU_power6")
 
 (define_insn_reservation "power6-integer" 1
-  (and (ior (eq_attr "type" "integer")
-	    (and (eq_attr "type" "add,logical")
-		 (eq_attr "dot" "no")))
+  (and (eq_attr "type" "integer")
        (eq_attr "cpu" "power6"))
   "FXU_power6")
 
@@ -235,31 +208,21 @@
 
 (define_insn_reservation "power6-exts" 1
   (and (eq_attr "type" "exts")
-       (eq_attr "dot" "no")
        (eq_attr "cpu" "power6"))
   "FXU_power6")
 
 (define_insn_reservation "power6-shift" 1
   (and (eq_attr "type" "shift")
-       (eq_attr "var_shift" "no")
-       (eq_attr "dot" "no")
-       (eq_attr "cpu" "power6"))
-  "FXU_power6")
-
-(define_insn_reservation "power6-popcnt" 1
-  (and (eq_attr "type" "popcnt")
        (eq_attr "cpu" "power6"))
   "FXU_power6")
 
 (define_insn_reservation "power6-insert" 1
-  (and (eq_attr "type" "insert")
-       (eq_attr "size" "32")
+  (and (eq_attr "type" "insert_word")
        (eq_attr "cpu" "power6"))
   "FX2_power6")
 
 (define_insn_reservation "power6-insert-dword" 1
-  (and (eq_attr "type" "insert")
-       (eq_attr "size" "64")
+  (and (eq_attr "type" "insert_dword")
        (eq_attr "cpu" "power6"))
   "FX2_power6")
 
@@ -276,7 +239,7 @@
                   power6-store-update-indexed,\
                   power6-fpstore,\
                   power6-fpstore-update"
-  "rs6000_store_data_bypass_p")
+  "store_data_bypass_p")
 
 (define_insn_reservation "power6-cntlz" 2
   (and (eq_attr "type" "cntlz")
@@ -289,12 +252,10 @@
                   power6-store-update-indexed,\
                   power6-fpstore,\
                   power6-fpstore-update"
-  "rs6000_store_data_bypass_p")
+  "store_data_bypass_p")
 
 (define_insn_reservation "power6-var-rotate" 4
-  (and (eq_attr "type" "shift")
-       (eq_attr "var_shift" "yes")
-       (eq_attr "dot" "no")
+  (and (eq_attr "type" "var_shift_rotate")
        (eq_attr "cpu" "power6"))
   "FXU_power6")
 
@@ -334,14 +295,12 @@
   "FXU_power6")
 
 (define_insn_reservation "power6-compare" 1
-  (and (eq_attr "type" "exts")
-       (eq_attr "dot" "yes")
+  (and (eq_attr "type" "compare")
        (eq_attr "cpu" "power6"))
   "FXU_power6")
 
 (define_insn_reservation "power6-fast-compare" 1
-  (and (eq_attr "type" "add,logical")
-       (eq_attr "dot" "yes")
+  (and (eq_attr "type" "fast_compare")
        (eq_attr "cpu" "power6"))
   "FXU_power6")
 
@@ -355,57 +314,44 @@
                   power6-store-update-indexed,\
                   power6-fpstore,\
                   power6-fpstore-update"
-  "rs6000_store_data_bypass_p")
+  "store_data_bypass_p")
 
 (define_insn_reservation "power6-delayed-compare" 2 ; N/A
-  (and (eq_attr "type" "shift")
-       (eq_attr "var_shift" "no")
-       (eq_attr "dot" "yes")
+  (and (eq_attr "type" "delayed_compare")
        (eq_attr "cpu" "power6"))
   "FXU_power6")
 
 (define_insn_reservation "power6-var-delayed-compare" 4
-  (and (eq_attr "type" "shift")
-       (eq_attr "var_shift" "yes")
-       (eq_attr "dot" "yes")
+  (and (eq_attr "type" "var_delayed_compare")
        (eq_attr "cpu" "power6"))
   "FXU_power6")
 
 (define_insn_reservation "power6-lmul-cmp" 16
-  (and (eq_attr "type" "mul")
-       (eq_attr "dot" "yes")
-       (eq_attr "size" "64")
+  (and (eq_attr "type" "lmul_compare")
        (eq_attr "cpu" "power6"))
   "(iu1_power6*16+iu2_power6*16+fpu1_power6*16)\
   |(iu1_power6*16+iu2_power6*16+fpu2_power6*16)");
 
 (define_insn_reservation "power6-imul-cmp" 16
-  (and (eq_attr "type" "mul")
-       (eq_attr "dot" "yes")
-       (eq_attr "size" "32")
+  (and (eq_attr "type" "imul_compare")
        (eq_attr "cpu" "power6"))
   "(iu1_power6*16+iu2_power6*16+fpu1_power6*16)\
   |(iu1_power6*16+iu2_power6*16+fpu2_power6*16)");
 
 (define_insn_reservation "power6-lmul" 16
-  (and (eq_attr "type" "mul")
-       (eq_attr "dot" "no")
-       (eq_attr "size" "64")
+  (and (eq_attr "type" "lmul")
        (eq_attr "cpu" "power6"))
   "(iu1_power6*16+iu2_power6*16+fpu1_power6*16)\
   |(iu1_power6*16+iu2_power6*16+fpu2_power6*16)");
 
 (define_insn_reservation "power6-imul" 16
-  (and (eq_attr "type" "mul")
-       (eq_attr "dot" "no")
-       (eq_attr "size" "32")
+  (and (eq_attr "type" "imul")
        (eq_attr "cpu" "power6"))
   "(iu1_power6*16+iu2_power6*16+fpu1_power6*16)\
   |(iu1_power6*16+iu2_power6*16+fpu2_power6*16)");
 
 (define_insn_reservation "power6-imul3" 16
-  (and (eq_attr "type" "mul")
-       (eq_attr "size" "8,16")
+  (and (eq_attr "type" "imul2,imul3")
        (eq_attr "cpu" "power6"))
   "(iu1_power6*16+iu2_power6*16+fpu1_power6*16)\
   |(iu1_power6*16+iu2_power6*16+fpu2_power6*16)");
@@ -420,11 +366,10 @@
                   power6-store-update-indexed,\
                   power6-fpstore,\
                   power6-fpstore-update"
-  "rs6000_store_data_bypass_p")
+  "store_data_bypass_p")
 
 (define_insn_reservation "power6-idiv" 44
-  (and (eq_attr "type" "div")
-       (eq_attr "size" "32")
+  (and (eq_attr "type" "idiv")
        (eq_attr "cpu" "power6"))
   "(iu1_power6*44+iu2_power6*44+fpu1_power6*44)\
   |(iu1_power6*44+iu2_power6*44+fpu2_power6*44)");
@@ -436,11 +381,10 @@
 ;                  power6-store-update-indexed,\
 ;                  power6-fpstore,\
 ;                  power6-fpstore-update"
-;  "rs6000_store_data_bypass_p")
+;  "store_data_bypass_p")
 
 (define_insn_reservation "power6-ldiv" 56
-  (and (eq_attr "type" "div")
-       (eq_attr "size" "64")
+  (and (eq_attr "type" "ldiv")
        (eq_attr "cpu" "power6"))
   "(iu1_power6*56+iu2_power6*56+fpu1_power6*56)\
   |(iu1_power6*56+iu2_power6*56+fpu2_power6*56)");
@@ -452,7 +396,7 @@
 ;                  power6-store-update-indexed,\
 ;                  power6-fpstore,\
 ;                  power6-fpstore-update"
-;  "rs6000_store_data_bypass_p")
+;  "store_data_bypass_p")
 
 (define_insn_reservation "power6-mtjmpr" 2
   (and (eq_attr "type" "mtjmpr,mfjmpr")
@@ -475,6 +419,11 @@
 
 (define_bypass 3 "power6-crlogical" "power6-branch")
 
+(define_insn_reservation "power6-delayedcr" 3
+  (and (eq_attr "type" "delayed_cr")
+       (eq_attr "cpu" "power6"))
+  "BRU_power6")
+
 (define_insn_reservation "power6-mfcr" 6 ; N/A
   (and (eq_attr "type" "mfcr")
        (eq_attr "cpu" "power6"))
@@ -495,7 +444,7 @@
 (define_bypass 9 "power6-mtcr" "power6-branch")
 
 (define_insn_reservation "power6-fp" 6
-  (and (eq_attr "type" "fp,fpsimple,dmul,dfp")
+  (and (eq_attr "type" "fp,dmul")
        (eq_attr "cpu" "power6"))
   "FPU_power6")
 
@@ -505,7 +454,7 @@
 
 (define_bypass 1 "power6-fp"
                  "power6-fpstore,power6-fpstore-update"
-  "rs6000_store_data_bypass_p")
+  "store_data_bypass_p")
 
 (define_insn_reservation "power6-fpcompare" 8
   (and (eq_attr "type" "fpcompare")
@@ -551,7 +500,7 @@
   "LSF_power6")
 
 (define_insn_reservation "power6-vecsimple" 3
-  (and (eq_attr "type" "vecsimple,veclogical,vecmove")
+  (and (eq_attr "type" "vecsimple")
        (eq_attr "cpu" "power6"))
   "FPU_power6")
 
@@ -563,7 +512,7 @@
 (define_bypass 4 "power6-vecsimple" "power6-vecstore" )
 
 (define_insn_reservation "power6-veccmp" 1
-  (and (eq_attr "type" "veccmp,veccmpfx")
+  (and (eq_attr "type" "veccmp")
        (eq_attr "cpu" "power6"))
   "FPU_power6")
 

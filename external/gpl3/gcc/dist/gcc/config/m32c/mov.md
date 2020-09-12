@@ -1,5 +1,6 @@
 ;; Machine Descriptions for R8C/M16C/M32C
-;; Copyright (C) 2005-2019 Free Software Foundation, Inc.
+;; Copyright (C) 2005, 2007, 2008
+;; Free Software Foundation, Inc.
 ;; Contributed by Red Hat.
 ;;
 ;; This file is part of GCC.
@@ -27,45 +28,22 @@
 ;; example is code like this: a = *b where both a and b are spilled to
 ;; the stack.
 
-(define_insn "mov<mode>_far_op1"
-  [(set (match_operand:QHI 0 "register_operand" "=Rhi")
-	(mem:QHI (plus:SI (sign_extend:SI (match_operand:HI 1 "register_operand" "Ra0"))
-			 (match_operand 2 "immediate_operand" "si"))))
-   ]
-  ""
-  "lde.<bwl>\t%D2[%1],%0"
-  [(set_attr "flags" "sz")]
-  )
-
-(define_insn "mov<mode>_far_op2"
-  [(set (mem:QHI (plus:SI (sign_extend:SI (match_operand:HI 0 "register_operand" "Ra0"))
-			 (match_operand 1 "immediate_operand" "si")))
-	(match_operand:QHI 2 "register_operand"
-			  "=Rhi"))
-   ]
-  ""
-  "ste.<bwl>\t%2,%D1[%0]"
-  [(set_attr "flags" "sz")]
-  )
-
 ;; Match push/pop before mov.b for passing char as arg,
 ;; e.g. stdlib/efgcvt.c.
 (define_insn "movqi_op"
   [(set (match_operand:QI 0 "m32c_nonimmediate_operand"
-			  "=SF,Rhi*Rmm, Rqi*Rmm, <,          RqiSd*Rmm, SdSs,    Rqi*Rmm, Sd")
+			  "=Rqi*Rmm, <,          RqiSd*Rmm, SdSs,    Rqi*Rmm, Sd")
 	(match_operand:QI 1 "m32c_any_operand"
-			  "Rhi*Rmm,SF, iRqi*Rmm, iRqiSd*Rmm, >,         Rqi*Rmm, SdSs,    i"))]
+			  "iRqi*Rmm, iRqiSd*Rmm, >,         Rqi*Rmm, SdSs,    i"))]
   "m32c_mov_ok (operands, QImode)"
   "@
-    lde.b\t%1,%0
-    ste.b\t%1,%0
     mov.b\t%1,%0
     push.b\t%1
     pop.b\t%0
     mov.b\t%1,%0
     mov.b\t%1,%0
     mov.b\t%1,%0"
-  [(set_attr "flags" "sz,sz,sz,*,*,sz,sz,sz")]
+  [(set_attr "flags" "sz,*,*,sz,sz,sz")]
   )
 
 (define_expand "movqi"
@@ -78,13 +56,11 @@
 
 (define_insn "movhi_op"
   [(set (match_operand:HI 0 "m32c_nonimmediate_operand"
-			  "=SF,Rhi*Rmm, Rhi*Rmm,     Sd, SdSs,   *Rcr, RhiSd*Rmm, <, RhiSd*Rmm, <, *Rcr")
+			  "=Rhi*Rmm,     Sd, SdSs,   *Rcr, RhiSd*Rmm, <, RhiSd*Rmm, <, *Rcr")
 	(match_operand:HI 1 "m32c_any_operand"
-			  " Rhi*Rmm,SF, iRhi*RmmSdSs, i, Rhi*Rmm, RhiSd*Rmm, *Rcr, iRhiSd*Rmm, >, *Rcr, >"))]
+			  "iRhi*RmmSdSs, i, Rhi*Rmm, RhiSd*Rmm, *Rcr, iRhiSd*Rmm, >, *Rcr, >"))]
   "m32c_mov_ok (operands, HImode)"
   "@
-   ste.w\t%1,%0
-   lde.w\t%1,%0
    mov.w\t%1,%0
    mov.w\t%1,%0
    mov.w\t%1,%0
@@ -94,7 +70,7 @@
    pop.w\t%0
    pushc\t%1
    popc\t%0"
-  [(set_attr "flags" "sz,sz,sz,sz,sz,n,n,n,n,n,n")]
+  [(set_attr "flags" "sz,sz,sz,n,n,n,n,n,n")]
   )
 
 (define_expand "movhi"
@@ -162,9 +138,9 @@
 ; immediate double data to a memory location.
 (define_peephole2
   [(set (match_operand:HI 0 "memory_operand" "")
-        (match_operand:HI 1 "const_int_operand" ""))
+        (match_operand 1 "const_int_operand" ""))
    (set (match_operand:HI 2 "memory_operand" "")
-        (match_operand:HI 3 "const_int_operand" ""))]
+        (match_operand 3 "const_int_operand" ""))]
    "TARGET_A24 && m32c_immd_dbl_mov (operands, HImode)"
    [(set (match_dup 4) (match_dup 5))]
    ""
@@ -200,11 +176,11 @@
 
 ; All SI moves are split if TARGET_A16
 (define_insn_and_split "movsi_splittable"
-  [(set (match_operand:SI 0 "m32c_nonimmediate_operand" "=RsiRaa<*Rmm,  RsiRaaSd*Rmm,  Ss")
-	(match_operand:SI 1 "m32c_any_operand" "iRsiRaaSd*Rmm,  iRsiRaa>*Rmm,  RsiRaa*Rmm"))]
+  [(set (match_operand:SI 0 "m32c_nonimmediate_operand" "=Rsi<*Rmm,RsiSd*Rmm,Ss")
+	(match_operand:SI 1 "m32c_any_operand" "iRsiSd*Rmm,iRsi>*Rmm,Rsi*Rmm"))]
   "TARGET_A16"
   "#"
-  "TARGET_A16"
+  "TARGET_A16 && reload_completed"
   [(pc)]
   "m32c_split_move (operands, SImode, 1); DONE;"
   )
@@ -213,7 +189,7 @@
 ; don't match.
 (define_insn "push_a01_l"
   [(set (mem:SI (pre_dec:PSI (reg:PSI SP_REGNO)))
-	(match_operand:SI 0 "a_operand" "Raa"))]
+	(match_operand 0 "a_operand" "Raa"))]
   ""
   "push.l\t%0"
   [(set_attr "flags" "n")]

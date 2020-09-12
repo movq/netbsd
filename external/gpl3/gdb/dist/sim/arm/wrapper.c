@@ -1,5 +1,6 @@
 /* run front end support for arm
-   Copyright (C) 1995-2019 Free Software Foundation, Inc.
+   Copyright (C) 1995, 1996, 1997, 2000, 2001, 2002, 2007, 2008, 2009, 2010,
+   2011 Free Software Foundation, Inc.
 
    This file is part of ARM SIM.
 
@@ -20,7 +21,6 @@
    run.c and gdb (when the simulator is linked with gdb).
    All simulator interaction should go through this file.  */
 
-#include "config.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
@@ -28,78 +28,35 @@
 #include <signal.h>
 #include "gdb/callback.h"
 #include "gdb/remote-sim.h"
-#include "sim-main.h"
-#include "sim-options.h"
+#include "armdefs.h"
 #include "armemu.h"
 #include "dbg_rdi.h"
 #include "ansidecl.h"
+#include "sim-utils.h"
+#include "run-sim.h"
 #include "gdb/sim-arm.h"
 #include "gdb/signals.h"
-#include "libiberty.h"
-#include "iwmmxt.h"
 
-/* TODO: This should get pulled from the SIM_DESC.  */
 host_callback *sim_callback;
 
-/* TODO: This should get merged into sim_cpu.  */
-struct ARMul_State *state;
+static struct ARMul_State *state;
+
+/* Who is using the simulator.  */
+static SIM_OPEN_KIND sim_kind;
+
+/* argv[0] */
+static char *myname;
 
 /* Memory size in bytes.  */
-/* TODO: Memory should be converted to the common memory module.  */
 static int mem_size = (1 << 21);
 
+/* Non-zero to display start up banner, and maybe other things.  */
+static int verbosity;
+
+/* Non-zero to set big endian mode.  */
+static int big_endian;
+
 int stop_simulator;
-
-#include "dis-asm.h"
-
-/* TODO: Tracing should be converted to common tracing module.  */
-int trace = 0;
-int disas = 0;
-int trace_funcs = 0;
-
-static struct disassemble_info  info;
-static char opbuf[1000];
-
-static int
-op_printf (char *buf, char *fmt, ...)
-{
-  int ret;
-  va_list ap;
-
-  va_start (ap, fmt);
-  ret = vsprintf (opbuf + strlen (opbuf), fmt, ap);
-  va_end (ap);
-  return ret;
-}
-
-static int
-sim_dis_read (bfd_vma                     memaddr ATTRIBUTE_UNUSED,
-	      bfd_byte *                  ptr,
-	      unsigned int                length,
-	      struct disassemble_info *   info)
-{
-  ARMword val = (ARMword) *((ARMword *) info->application_data);
-
-  while (length--)
-    {
-      * ptr ++ = val & 0xFF;
-      val >>= 8;
-    }
-  return 0;
-}
-
-void
-print_insn (ARMword instr)
-{
-  int size;
-  disassembler_ftype disassemble_fn;
-
-  opbuf[0] = 0;
-  info.application_data = & instr;
-  disassemble_fn = disassembler (bfd_arch_arm, 0, 0, NULL);
-  size = disassemble_fn (0, & info);
-  fprintf (stderr, " %*s\n", size, opbuf);
-}
 
 /* Cirrus DSP registers.
 
@@ -116,7 +73,7 @@ struct maverick_regs
     int i;
     float f;
   } upper;
-
+  
   union
   {
     int i;
@@ -134,7 +91,7 @@ union maverick_acc_regs  DSPacc[4];
 ARMword DSPsc;
 
 static void
-init (void)
+init ()
 {
   static int done;
 
@@ -142,18 +99,41 @@ init (void)
     {
       ARMul_EmulateInit ();
       state = ARMul_NewState ();
-      state->bigendSig = (CURRENT_TARGET_BYTE_ORDER == BFD_ENDIAN_BIG ? HIGH : LOW);
+      state->bigendSig = (big_endian ? HIGH : LOW);
       ARMul_MemoryInit (state, mem_size);
       ARMul_OSInit (state);
-      state->verbose = 0;
+      state->verbose = verbosity;
       done = 1;
     }
 }
 
+/* Set verbosity level of simulator.
+   This is not intended to produce detailed tracing or debugging information.
+   Just summaries.  */
+/* FIXME: common/run.c doesn't do this yet.  */
+
 void
-ARMul_ConsolePrint (ARMul_State * state,
-		    const char * format,
-		    ...)
+sim_set_verbose (v)
+     int v;
+{
+  verbosity = v;
+}
+
+/* Set the memory size to SIZE bytes.
+   Must be called before initializing simulator.  */
+/* FIXME: Rename to sim_set_mem_size.  */
+
+void
+sim_size (size)
+     int size;
+{
+  mem_size = size;
+}
+
+void
+ARMul_ConsolePrint VPARAMS ((ARMul_State * state,
+			     const char * format,
+			     ...))
 {
   va_list ap;
 
@@ -165,11 +145,21 @@ ARMul_ConsolePrint (ARMul_State * state,
     }
 }
 
+ARMword
+ARMul_Debug (state, pc, instr)
+     ARMul_State * state ATTRIBUTE_UNUSED;
+     ARMword       pc    ATTRIBUTE_UNUSED;
+     ARMword       instr ATTRIBUTE_UNUSED;
+{
+  return 0;
+}
+
 int
-sim_write (SIM_DESC sd ATTRIBUTE_UNUSED,
-	   SIM_ADDR addr,
-	   const unsigned char * buffer,
-	   int size)
+sim_write (sd, addr, buffer, size)
+     SIM_DESC sd ATTRIBUTE_UNUSED;
+     SIM_ADDR addr;
+     const unsigned char * buffer;
+     int size;
 {
   int i;
 
@@ -182,10 +172,11 @@ sim_write (SIM_DESC sd ATTRIBUTE_UNUSED,
 }
 
 int
-sim_read (SIM_DESC sd ATTRIBUTE_UNUSED,
-	  SIM_ADDR addr,
-	  unsigned char * buffer,
-	  int size)
+sim_read (sd, addr, buffer, size)
+     SIM_DESC sd ATTRIBUTE_UNUSED;
+     SIM_ADDR addr;
+     unsigned char * buffer;
+     int size;
 {
   int i;
 
@@ -198,7 +189,18 @@ sim_read (SIM_DESC sd ATTRIBUTE_UNUSED,
 }
 
 int
-sim_stop (SIM_DESC sd ATTRIBUTE_UNUSED)
+sim_trace (sd)
+     SIM_DESC sd ATTRIBUTE_UNUSED;
+{  
+  (*sim_callback->printf_filtered)
+    (sim_callback,
+     "This simulator does not support tracing\n");
+  return 1;
+}
+
+int
+sim_stop (sd)
+     SIM_DESC sd ATTRIBUTE_UNUSED;
 {
   state->Emulate = STOP;
   stop_simulator = 1;
@@ -206,9 +208,10 @@ sim_stop (SIM_DESC sd ATTRIBUTE_UNUSED)
 }
 
 void
-sim_resume (SIM_DESC sd ATTRIBUTE_UNUSED,
-	    int step,
-	    int siggnal ATTRIBUTE_UNUSED)
+sim_resume (sd, step, siggnal)
+     SIM_DESC sd ATTRIBUTE_UNUSED;
+     int step;
+     int siggnal ATTRIBUTE_UNUSED;
 {
   state->EndCondition = 0;
   stop_simulator = 0;
@@ -229,32 +232,22 @@ sim_resume (SIM_DESC sd ATTRIBUTE_UNUSED,
 }
 
 SIM_RC
-sim_create_inferior (SIM_DESC sd ATTRIBUTE_UNUSED,
-		     struct bfd * abfd,
-		     char * const *argv,
-		     char * const *env)
+sim_create_inferior (sd, abfd, argv, env)
+     SIM_DESC sd ATTRIBUTE_UNUSED;
+     struct bfd * abfd;
+     char ** argv;
+     char ** env;
 {
   int argvlen = 0;
   int mach;
   char **arg;
 
-  init ();
-
   if (abfd != NULL)
-    {
-      ARMul_SetPC (state, bfd_get_start_address (abfd));
-      mach = bfd_get_mach (abfd);
-    }
+    ARMul_SetPC (state, bfd_get_start_address (abfd));
   else
-    {
-      ARMul_SetPC (state, 0);	/* ??? */
-      mach = 0;
-    }
+    ARMul_SetPC (state, 0);	/* ??? */
 
-#ifdef MODET
-  if (abfd != NULL && (bfd_get_start_address (abfd) & 1))
-    SETT;
-#endif
+  mach = bfd_get_mach (abfd);
 
   switch (mach)
     {
@@ -269,14 +262,13 @@ sim_create_inferior (SIM_DESC sd ATTRIBUTE_UNUSED,
       /* We wouldn't set the machine type with earlier toolchains, so we
 	 explicitly select a processor capable of supporting all ARMs in
 	 32bit mode.  */
-      ARMul_SelectProcessor (state, ARM_v5_Prop | ARM_v5e_Prop | ARM_v6_Prop);
-      break;
-
+      /* We choose the XScale rather than the iWMMXt, because the iWMMXt
+	 removes the FPE emulator, since it conflicts with its coprocessors.
+	 For the most generic ARM support, we want the FPE emulator in place.  */
     case bfd_mach_arm_XScale:
       ARMul_SelectProcessor (state, ARM_v5_Prop | ARM_v5e_Prop | ARM_XScale_Prop | ARM_v6_Prop);
       break;
 
-    case bfd_mach_arm_iWMMXt2:
     case bfd_mach_arm_iWMMXt:
       {
 	extern int SWI_vector_installed;
@@ -340,16 +332,17 @@ sim_create_inferior (SIM_DESC sd ATTRIBUTE_UNUSED,
       break;
     }
 
-  memset (& info, 0, sizeof (info));
-  INIT_DISASSEMBLE_INFO (info, stdout, op_printf);
-  info.read_memory_func = sim_dis_read;
-  info.arch = bfd_get_arch (abfd);
-  info.mach = bfd_get_mach (abfd);
-  info.endian_code = BFD_ENDIAN_LITTLE;
-  if (info.mach == 0)
-    info.arch = bfd_arch_arm;
-  disassemble_init_for_target (& info);
-
+  if (   mach != bfd_mach_arm_3
+      && mach != bfd_mach_arm_3M
+      && mach != bfd_mach_arm_2
+      && mach != bfd_mach_arm_2a)
+    {
+      /* Reset mode to ARM.  A gdb user may rerun a program that had entered
+	 THUMB mode from the start and cause the ARM-mode startup code to be
+	 executed in THUMB mode.  */
+      ARMul_SetCPSR (state, SVC32MODE);
+    }
+  
   if (argv != NULL)
     {
       /* Set up the command line by laboriously stringing together
@@ -401,8 +394,17 @@ sim_create_inferior (SIM_DESC sd ATTRIBUTE_UNUSED,
   return SIM_RC_OK;
 }
 
+void
+sim_info (sd, verbose)
+     SIM_DESC sd ATTRIBUTE_UNUSED;
+     int verbose ATTRIBUTE_UNUSED;
+{
+}
+
 static int
-frommem (struct ARMul_State *state, unsigned char *memory)
+frommem (state, memory)
+     struct ARMul_State *state;
+     unsigned char *memory;
 {
   if (state->bigendSig == HIGH)
     return (memory[0] << 24) | (memory[1] << 16)
@@ -413,9 +415,10 @@ frommem (struct ARMul_State *state, unsigned char *memory)
 }
 
 static void
-tomem (struct ARMul_State *state,
-       unsigned char *memory,
-       int val)
+tomem (state, memory, val)
+     struct ARMul_State *state;
+     unsigned char *memory;
+     int val;
 {
   if (state->bigendSig == HIGH)
     {
@@ -433,8 +436,12 @@ tomem (struct ARMul_State *state,
     }
 }
 
-static int
-arm_reg_store (SIM_CPU *cpu, int rn, unsigned char *memory, int length)
+int
+sim_store_register (sd, rn, memory, length)
+     SIM_DESC sd ATTRIBUTE_UNUSED;
+     int rn;
+     unsigned char *memory;
+     int length ATTRIBUTE_UNUSED;
 {
   init ();
 
@@ -535,14 +542,17 @@ arm_reg_store (SIM_CPU *cpu, int rn, unsigned char *memory, int length)
       return 0;
     }
 
-  return length;
+  return -1;
 }
 
-static int
-arm_reg_fetch (SIM_CPU *cpu, int rn, unsigned char *memory, int length)
+int
+sim_fetch_register (sd, rn, memory, length)
+     SIM_DESC sd ATTRIBUTE_UNUSED;
+     int rn;
+     unsigned char *memory;
+     int length ATTRIBUTE_UNUSED;
 {
   ARMword regval;
-  int len = length;
 
   init ();
 
@@ -645,17 +655,21 @@ arm_reg_fetch (SIM_CPU *cpu, int rn, unsigned char *memory, int length)
       return 0;
     }
 
-  while (len)
+  while (length)
     {
       tomem (state, memory, regval);
 
-      len -= 4;
+      length -= 4;
       memory += 4;
       regval = 0;
-    }
+    }  
 
-  return length;
+  return -1;
 }
+
+#ifdef SIM_TARGET_SWITCHES
+
+static void sim_target_parse_arg_array PARAMS ((char **));
 
 typedef struct
 {
@@ -680,8 +694,10 @@ static swi_options options[] =
   };
 
 
-static int
-sim_target_parse_command_line (int argc, char ** argv)
+int
+sim_target_parse_command_line (argc, argv)
+     int argc;
+     char ** argv;
 {
   int i;
 
@@ -693,34 +709,6 @@ sim_target_parse_command_line (int argc, char ** argv)
       if ((ptr == NULL) || (* ptr != '-'))
 	break;
 
-      if (strcmp (ptr, "-t") == 0)
-	{
-	  trace = 1;
-	  continue;
-	}
-
-      if (strcmp (ptr, "-z") == 0)
-	{
-	  /* Remove this option from the argv array.  */
-	  for (arg = i; arg < argc; arg ++)
-	    argv[arg] = argv[arg + 1];
-	  argc --;
-	  i --;
-	  trace_funcs = 1;
-	  continue;
-	}
-
-      if (strcmp (ptr, "-d") == 0)
-	{
-	  /* Remove this option from the argv array.  */
-	  for (arg = i; arg < argc; arg ++)
-	    argv[arg] = argv[arg + 1];
-	  argc --;
-	  i --;
-	  disas = 1;
-	  continue;
-	}
-
       if (strncmp (ptr, SWI_SWITCH, sizeof SWI_SWITCH - 1) != 0)
 	continue;
 
@@ -730,19 +718,19 @@ sim_target_parse_command_line (int argc, char ** argv)
 	  for (arg = i; arg < argc; arg ++)
 	    argv[arg] = argv[arg + 1];
 	  argc --;
-
+	  
 	  ptr = argv[i];
 	}
       else
 	ptr += sizeof SWI_SWITCH;
 
       swi_mask = 0;
-
+      
       while (* ptr)
 	{
 	  int i;
 
-	  for (i = ARRAY_SIZE (options); i--;)
+	  for (i = sizeof options / sizeof options[0]; i--;)
 	    if (strncmp (ptr, options[i].swi_option,
 			 strlen (options[i].swi_option)) == 0)
 	      {
@@ -761,7 +749,7 @@ sim_target_parse_command_line (int argc, char ** argv)
 
       if (* ptr != 0)
 	fprintf (stderr, "Ignoring swi options: %s\n", ptr);
-
+      
       /* Remove this option from the argv array.  */
       for (arg = i; arg < argc; arg ++)
 	argv[arg] = argv[arg + 1];
@@ -772,116 +760,97 @@ sim_target_parse_command_line (int argc, char ** argv)
 }
 
 static void
-sim_target_parse_arg_array (char ** argv)
-{
-  sim_target_parse_command_line (countargv (argv), argv);
-}
-
-static sim_cia
-arm_pc_get (sim_cpu *cpu)
-{
-  return PC;
-}
-
-static void
-arm_pc_set (sim_cpu *cpu, sim_cia pc)
-{
-  ARMul_SetPC (state, pc);
-}
-
-static void
-free_state (SIM_DESC sd)
-{
-  if (STATE_MODULES (sd) != NULL)
-    sim_module_uninstall (sd);
-  sim_cpu_free_all (sd);
-  sim_state_free (sd);
-}
-
-SIM_DESC
-sim_open (SIM_OPEN_KIND kind,
-	  host_callback *cb,
-	  struct bfd *abfd,
-	  char * const *argv)
+sim_target_parse_arg_array (argv)
+     char ** argv;
 {
   int i;
-  SIM_DESC sd = sim_state_alloc (kind, cb);
-  SIM_ASSERT (STATE_MAGIC (sd) == SIM_MAGIC_NUMBER);
 
-  /* The cpu data is kept in a separately allocated chunk of memory.  */
-  if (sim_cpu_alloc_all (sd, 1, /*cgen_cpu_max_extra_bytes ()*/0) != SIM_RC_OK)
-    {
-      free_state (sd);
-      return 0;
-    }
+  for (i = 0; argv[i]; i++)
+    ;
 
-  if (sim_pre_argv_init (sd, argv[0]) != SIM_RC_OK)
-    {
-      free_state (sd);
-      return 0;
-    }
+  sim_target_parse_command_line (i, argv);
+}
 
-  /* The parser will print an error message for us, so we silently return.  */
-  if (sim_parse_args (sd, argv) != SIM_RC_OK)
-    {
-      free_state (sd);
-      return 0;
-    }
+void
+sim_target_display_usage (help)
+     int help;
+{
+  FILE *stream = help ? stdout : stderr;
 
-  /* Check for/establish the a reference program image.  */
-  if (sim_analyze_program (sd,
-			   (STATE_PROG_ARGV (sd) != NULL
-			    ? *STATE_PROG_ARGV (sd)
-			    : NULL), abfd) != SIM_RC_OK)
-    {
-      free_state (sd);
-      return 0;
-    }
+  fprintf (stream, "%s=<list>  Comma seperated list of SWI protocols to supoport.\n\
+                This list can contain: NONE, DEMON, ANGEL, REDBOOT and/or ALL.\n",
+	   SWI_SWITCH);
+}
+#endif
 
-  /* Configure/verify the target byte order and other runtime
-     configuration options.  */
-  if (sim_config (sd) != SIM_RC_OK)
-    {
-      sim_module_uninstall (sd);
-      return 0;
-    }
+SIM_DESC
+sim_open (kind, ptr, abfd, argv)
+     SIM_OPEN_KIND kind;
+     host_callback *ptr;
+     struct bfd *abfd;
+     char **argv;
+{
+  sim_kind = kind;
+  if (myname) free (myname);
+  myname = (char *) xstrdup (argv[0]);
+  sim_callback = ptr;
 
-  if (sim_post_argv_init (sd) != SIM_RC_OK)
-    {
-      /* Uninstall the modules to avoid memory leaks,
-	 file descriptor leaks, etc.  */
-      sim_module_uninstall (sd);
-      return 0;
-    }
-
-  /* CPU specific initialization.  */
-  for (i = 0; i < MAX_NR_PROCESSORS; ++i)
-    {
-      SIM_CPU *cpu = STATE_CPU (sd, i);
-
-      CPU_REG_FETCH (cpu) = arm_reg_fetch;
-      CPU_REG_STORE (cpu) = arm_reg_store;
-      CPU_PC_FETCH (cpu) = arm_pc_get;
-      CPU_PC_STORE (cpu) = arm_pc_set;
-    }
-
-  sim_callback = cb;
-
+#ifdef SIM_TARGET_SWITCHES
   sim_target_parse_arg_array (argv);
-
-  if (argv[1] != NULL)
+#endif
+  
+  /* Decide upon the endian-ness of the processor.
+     If we can, get the information from the bfd itself.
+     Otherwise look to see if we have been given a command
+     line switch that tells us.  Otherwise default to little endian.  */
+  if (abfd != NULL)
+    big_endian = bfd_big_endian (abfd);
+  else if (argv[1] != NULL)
     {
       int i;
 
-      /* Scan for memory-size switches.  */
+      /* Scan for endian-ness and memory-size switches.  */
       for (i = 0; (argv[i] != NULL) && (argv[i][0] != 0); i++)
-	if (argv[i][0] == '-' && argv[i][1] == 'm')
+	if (argv[i][0] == '-' && argv[i][1] == 'E')
+	  {
+	    char c;
+
+	    if ((c = argv[i][2]) == 0)
+	      {
+		++i;
+		c = argv[i][0];
+	      }
+
+	    switch (c)
+	      {
+	      case 0:
+		sim_callback->printf_filtered
+		  (sim_callback, "No argument to -E option provided\n");
+		break;
+
+	      case 'b':
+	      case 'B':
+		big_endian = 1;
+		break;
+
+	      case 'l':
+	      case 'L':
+		big_endian = 0;
+		break;
+
+	      default:
+		sim_callback->printf_filtered
+		  (sim_callback, "Unrecognised argument to -E option\n");
+		break;
+	      }
+	  }
+	else if (argv[i][0] == '-' && argv[i][1] == 'm')
 	  {
 	    if (argv[i][2] != '\0')
-	      mem_size = atoi (&argv[i][2]);
+	      sim_size (atoi (&argv[i][2]));
 	    else if (argv[i + 1] != NULL)
 	      {
-		mem_size = atoi (argv[i + 1]);
+		sim_size (atoi (argv[i + 1]));
 		i++;
 	      }
 	    else
@@ -890,21 +859,52 @@ sim_open (SIM_OPEN_KIND kind,
 					       "Missing argument to -m option\n");
 		return NULL;
 	      }
+	      
 	  }
     }
 
-  return sd;
+  return (SIM_DESC) 1;
 }
 
 void
-sim_stop_reason (SIM_DESC sd ATTRIBUTE_UNUSED,
-		 enum sim_stop *reason,
-		 int *sigrc)
+sim_close (sd, quitting)
+     SIM_DESC sd ATTRIBUTE_UNUSED;
+     int quitting ATTRIBUTE_UNUSED;
+{
+  if (myname)
+    free (myname);
+  myname = NULL;
+}
+
+SIM_RC
+sim_load (sd, prog, abfd, from_tty)
+     SIM_DESC sd;
+     char *prog;
+     bfd *abfd;
+     int from_tty ATTRIBUTE_UNUSED;
+{
+  bfd *prog_bfd;
+
+  prog_bfd = sim_load_file (sd, myname, sim_callback, prog, abfd,
+			    sim_kind == SIM_OPEN_DEBUG, 0, sim_write);
+  if (prog_bfd == NULL)
+    return SIM_RC_FAIL;
+  ARMul_SetPC (state, bfd_get_start_address (prog_bfd));
+  if (abfd == NULL)
+    bfd_close (prog_bfd);
+  return SIM_RC_OK;
+}
+
+void
+sim_stop_reason (sd, reason, sigrc)
+     SIM_DESC sd ATTRIBUTE_UNUSED;
+     enum sim_stop *reason;
+     int *sigrc;
 {
   if (stop_simulator)
     {
       *reason = sim_stopped;
-      *sigrc = GDB_SIGNAL_INT;
+      *sigrc = TARGET_SIGNAL_INT;
     }
   else if (state->EndCondition == 0)
     {
@@ -915,11 +915,28 @@ sim_stop_reason (SIM_DESC sd ATTRIBUTE_UNUSED,
     {
       *reason = sim_stopped;
       if (state->EndCondition == RDIError_BreakpointReached)
-	*sigrc = GDB_SIGNAL_TRAP;
+	*sigrc = TARGET_SIGNAL_TRAP;
       else if (   state->EndCondition == RDIError_DataAbort
 	       || state->EndCondition == RDIError_AddressException)
-	*sigrc = GDB_SIGNAL_BUS;
+	*sigrc = TARGET_SIGNAL_BUS;
       else
 	*sigrc = 0;
     }
+}
+
+void
+sim_do_command (sd, cmd)
+     SIM_DESC sd ATTRIBUTE_UNUSED;
+     char *cmd ATTRIBUTE_UNUSED;
+{  
+  (*sim_callback->printf_filtered)
+    (sim_callback,
+     "This simulator does not accept any commands.\n");
+}
+
+void
+sim_set_callbacks (ptr)
+     host_callback *ptr;
+{
+  sim_callback = ptr;
 }

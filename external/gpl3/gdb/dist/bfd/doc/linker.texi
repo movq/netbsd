@@ -184,16 +184,28 @@ to the linker hash table instead.)
 @findex _bfd_generic_link_add_archive_symbols
 In most cases the work of looking through the symbols in the
 archive should be done by the
-@code{_bfd_generic_link_add_archive_symbols} function.
+@code{_bfd_generic_link_add_archive_symbols} function.  This
+function builds a hash table from the archive symbol table and
+looks through the list of undefined symbols to see which
+elements should be included.
 @code{_bfd_generic_link_add_archive_symbols} is passed a function
 to call to make the final decision about adding an archive
 element to the link and to do the actual work of adding the
-symbols to the linker hash table.  If the element is to
+symbols to the linker hash table.
+
+The function passed to
+@code{_bfd_generic_link_add_archive_symbols} must read the
+symbols of the archive element and decide whether the archive
+element should be included in the link.  If the element is to
 be included, the @code{add_archive_element} linker callback
 routine must be called with the element as an argument, and
 the element's symbols must be added to the linker hash table
 just as though the element had itself been passed to the
-@code{_bfd_link_add_symbols} function.
+@code{_bfd_link_add_symbols} function.  The @code{add_archive_element}
+callback has the option to indicate that it would like to
+replace the element archive with a substitute BFD, in which
+case it is the symbols of that substitute BFD that must be
+added to the linker hash table instead.
 
 When the a.out @code{_bfd_link_add_symbols} function receives an
 archive, it calls @code{_bfd_generic_link_add_archive_symbols}
@@ -250,7 +262,7 @@ it sets up some data structures for the function to use.
 
 The @code{input_bfds} field of the @code{bfd_link_info} structure
 will point to a list of all the input files included in the
-link.  These files are linked through the @code{link.next} field
+link.  These files are linked through the @code{link_next} field
 of the @code{bfd} structure.
 
 Each section in the output file will have a list of
@@ -363,13 +375,12 @@ reloceatable or final link.
 @subsubsection @code{bfd_section_already_linked}
 @strong{Synopsis}
 @example
-bfd_boolean bfd_section_already_linked (bfd *abfd,
-    asection *sec,
+void bfd_section_already_linked (bfd *abfd, asection *sec,
     struct bfd_link_info *info);
 @end example
 @strong{Description}@*
-Check if @var{data} has been already linked during a reloceatable
-or final link.  Return TRUE if it has.
+Check if @var{sec} has been already linked during a reloceatable
+or final link.
 @example
 #define bfd_section_already_linked(abfd, sec, info) \
        BFD_SEND (abfd, _section_already_linked, (abfd, sec, info))
@@ -393,43 +404,8 @@ Return TRUE on success and FALSE on failure.
 
 @end example
 
-@findex _bfd_generic_link_hide_symbol
-@subsubsection @code{_bfd_generic_link_hide_symbol}
-@strong{Synopsis}
-@example
-void _bfd_generic_link_hide_symbol
-   (bfd *output_bfd, struct bfd_link_info *info,
-    struct bfd_link_hash_entry *h);
-@end example
-@strong{Description}@*
-Hide symbol @var{h}.
-This is an internal function.  It should not be called from
-outside the BFD library.
-@example
-#define bfd_link_hide_symbol(output_bfd, info, h) \
-       BFD_SEND (output_bfd, _bfd_link_hide_symbol, (output_bfd, info, h))
-
-@end example
-
-@findex bfd_generic_define_start_stop
-@subsubsection @code{bfd_generic_define_start_stop}
-@strong{Synopsis}
-@example
-struct bfd_link_hash_entry *bfd_generic_define_start_stop
-   (struct bfd_link_info *info,
-    const char *symbol, asection *sec);
-@end example
-@strong{Description}@*
-Define a __start, __stop, .startof. or .sizeof. symbol.
-Return the symbol or NULL if no such undefined symbol exists.
-@example
-#define bfd_define_start_stop(output_bfd, info, symbol, sec) \
-       BFD_SEND (output_bfd, _bfd_define_start_stop, (info, symbol, sec))
-
-@end example
-
-@findex bfd_find_version_for_sym
-@subsubsection @code{bfd_find_version_for_sym}
+@findex bfd_find_version_for_sym 
+@subsubsection @code{bfd_find_version_for_sym }
 @strong{Synopsis}
 @example
 struct bfd_elf_version_tree * bfd_find_version_for_sym
@@ -441,77 +417,4 @@ Search an elf version script tree for symbol versioning
 info and export / don't-export status for a given symbol.
 Return non-NULL on success and NULL on failure; also sets
 the output @samp{hide} boolean parameter.
-
-@findex bfd_hide_sym_by_version
-@subsubsection @code{bfd_hide_sym_by_version}
-@strong{Synopsis}
-@example
-bfd_boolean bfd_hide_sym_by_version
-   (struct bfd_elf_version_tree *verdefs, const char *sym_name);
-@end example
-@strong{Description}@*
-Search an elf version script tree for symbol versioning
-info for a given symbol.  Return TRUE if the symbol is hidden.
-
-@findex bfd_link_check_relocs
-@subsubsection @code{bfd_link_check_relocs}
-@strong{Synopsis}
-@example
-bfd_boolean bfd_link_check_relocs
-   (bfd *abfd, struct bfd_link_info *info);
-@end example
-@strong{Description}@*
-Checks the relocs in ABFD for validity.
-Does not execute the relocs.
-Return TRUE if everything is OK, FALSE otherwise.
-This is the external entry point to this code.
-
-@findex _bfd_generic_link_check_relocs
-@subsubsection @code{_bfd_generic_link_check_relocs}
-@strong{Synopsis}
-@example
-bfd_boolean _bfd_generic_link_check_relocs
-   (bfd *abfd, struct bfd_link_info *info);
-@end example
-@strong{Description}@*
-Stub function for targets that do not implement reloc checking.
-Return TRUE.
-This is an internal function.  It should not be called from
-outside the BFD library.
-
-@findex bfd_merge_private_bfd_data
-@subsubsection @code{bfd_merge_private_bfd_data}
-@strong{Synopsis}
-@example
-bfd_boolean bfd_merge_private_bfd_data
-   (bfd *ibfd, struct bfd_link_info *info);
-@end example
-@strong{Description}@*
-Merge private BFD information from the BFD @var{ibfd} to the
-the output file BFD when linking.  Return @code{TRUE} on success,
-@code{FALSE} on error.  Possible error returns are:
-
-@itemize @bullet
-
-@item
-@code{bfd_error_no_memory} -
-Not enough memory exists to create private data for @var{obfd}.
-@end itemize
-@example
-#define bfd_merge_private_bfd_data(ibfd, info) \
-       BFD_SEND ((info)->output_bfd, _bfd_merge_private_bfd_data, \
-                 (ibfd, info))
-@end example
-
-@findex _bfd_generic_verify_endian_match
-@subsubsection @code{_bfd_generic_verify_endian_match}
-@strong{Synopsis}
-@example
-bfd_boolean _bfd_generic_verify_endian_match
-   (bfd *ibfd, struct bfd_link_info *info);
-@end example
-@strong{Description}@*
-Can be used from / for bfd_merge_private_bfd_data to check that
-endianness matches between input and output file.  Returns
-TRUE for a match, otherwise returns FALSE and emits an error.
 

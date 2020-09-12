@@ -1,6 +1,6 @@
 // attributes.h -- object attributes for gold   -*- C++ -*-
 
-// Copyright (C) 2009-2020 Free Software Foundation, Inc.
+// Copyright 2009 Free Software Foundation, Inc.
 // Written by Doug Kwan <dougkwan@google.com>.
 // This file contains code adapted from BFD.
 
@@ -257,7 +257,7 @@ class Vendor_object_attributes
   other_attributes() const
   { return &this->other_attributes_; }
 
-  // Return a new attribute associated with TAG.
+  // Return a new attribute asssociated with TAG.
   Object_attribute*
   new_attribute(int tag);
 
@@ -387,11 +387,6 @@ class Output_attributes_section_data : public Output_section_data
   { }
 
  protected:
-  // Write to a map file.
-  void
-  do_print_to_mapfile(Mapfile* mapfile) const
-  { mapfile->print_output_data(this, _("** attributes")); }
-
   // Write the data to the output file.
   void
   do_write(Output_file*);

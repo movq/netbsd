@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright (C) 2013-2019 Free Software Foundation, Inc.
+   Copyright (C) 2013-2014 Free Software Foundation, Inc.
    Contributed by Hui Zhu  <hui@codesourcery.com>
 
    This program is free software; you can redistribute it and/or modify
@@ -19,8 +19,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "../lib/unbuffer_output.c"
-
 static int g;
 
 void
@@ -35,8 +33,6 @@ int
 main (int argc, char *argv[])
 {
   int loc = 1234;
-
-  gdb_unbuffer_output ();
 
   /* Ensure these functions are available.  */
   printf ("kickoff %d\n", loc);

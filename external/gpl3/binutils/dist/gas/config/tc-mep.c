@@ -1,5 +1,6 @@
 /* tc-mep.c -- Assembler for the Toshiba Media Processor.
-   Copyright (C) 2001-2020 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2007
+   Free Software Foundation. Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -18,8 +19,8 @@
    the Free Software Foundation, 51 Franklin Street, Fifth Floor,
    Boston, MA 02110-1301, USA.  */
 
-#include "as.h"
 #include <stdio.h>
+#include "as.h"
 #include "dwarf2dbg.h"
 #include "subsegs.h"
 #include "symcat.h"
@@ -28,6 +29,7 @@
 #include "cgen.h"
 #include "elf/common.h"
 #include "elf/mep.h"
+#include "libbfd.h"
 #include "xregex.h"
 
 /* Structure to hold all of the different components describing
@@ -55,7 +57,6 @@ static int mode = CORE; /* Start in core mode. */
 static int pluspresent = 0;
 static int allow_disabled_registers = 0;
 static int library_flag = 0;
-static int mep_cop = EF_MEP_COP_NONE;
 
 /* We're going to need to store all of the instructions along with
    their fixups so that we can parallelization grouping rules. */
@@ -78,6 +79,8 @@ static void mep_noregerr (int);
 const pseudo_typeS md_pseudo_table[] =
 {
   { "word",	cons,	                        4 },
+  { "file",	(void (*) (int)) dwarf2_directive_file,   	0 },
+  { "loc",	dwarf2_directive_loc,   	0 },
   { "vliw", 	mep_switch_to_vliw_mode,	0 },
   { "core", 	mep_switch_to_core_mode,	0 },
   { "vtext", 	mep_s_vtext,             	0 },
@@ -133,11 +136,7 @@ static struct mep_hi_fixup * mep_hi_fixup_list;
 #define OPTION_NOREPEAT		(OPTION_MD_BASE + 26)
 #define OPTION_DEBUG		(OPTION_MD_BASE + 27)
 #define OPTION_NODEBUG		(OPTION_MD_BASE + 28)
-#define OPTION_UCI		(OPTION_MD_BASE + 29)
-#define OPTION_NOUCI		(OPTION_MD_BASE + 30)
-#define OPTION_DSP		(OPTION_MD_BASE + 31)
-#define OPTION_NODSP		(OPTION_MD_BASE + 32)
-#define OPTION_LIBRARY		(OPTION_MD_BASE + 33)
+#define OPTION_LIBRARY		(OPTION_MD_BASE + 29)
 
 struct option md_longopts[] = {
   { "EB",          no_argument, NULL, OPTION_EB},
@@ -164,37 +163,16 @@ struct option md_longopts[] = {
   { "mcop32",	   no_argument, NULL, OPTION_COP32},
   { "mdebug",      no_argument, NULL, OPTION_DEBUG},
   { "mno-debug",   no_argument, NULL, OPTION_NODEBUG},
-  { "muci",        no_argument, NULL, OPTION_UCI},
-  { "mno-uci",     no_argument, NULL, OPTION_NOUCI},
-  { "mdsp",        no_argument, NULL, OPTION_DSP},
-  { "mno-dsp",     no_argument, NULL, OPTION_NODSP},
   { "mlibrary",    no_argument, NULL, OPTION_LIBRARY},
   { NULL, 0, NULL, 0 } };
 size_t md_longopts_size = sizeof (md_longopts);
-
-/* Options which default to on/off together.  See the comment where
-   this is used for details.  Note that CP and CP64 are not in this
-   list because disabling those overrides the -mivc2 option.  */
-#define OPTION_MASK \
-	( (1 << CGEN_INSN_OPTIONAL_BIT_INSN) \
-	| (1 << CGEN_INSN_OPTIONAL_MUL_INSN) \
-	| (1 << CGEN_INSN_OPTIONAL_DIV_INSN) \
-	| (1 << CGEN_INSN_OPTIONAL_DEBUG_INSN) \
-	| (1 << CGEN_INSN_OPTIONAL_LDZ_INSN) \
-	| (1 << CGEN_INSN_OPTIONAL_ABS_INSN) \
-	| (1 << CGEN_INSN_OPTIONAL_AVE_INSN) \
-	| (1 << CGEN_INSN_OPTIONAL_MINMAX_INSN) \
-	| (1 << CGEN_INSN_OPTIONAL_CLIP_INSN) \
-	| (1 << CGEN_INSN_OPTIONAL_SAT_INSN) \
-	| (1 << CGEN_INSN_OPTIONAL_UCI_INSN) \
-	| (1 << CGEN_INSN_OPTIONAL_DSP_INSN) )
 
 const char * md_shortopts = "";
 static int optbits = 0;
 static int optbitset = 0;
 
 int
-md_parse_option (int c, const char *arg ATTRIBUTE_UNUSED)
+md_parse_option (int c, char *arg ATTRIBUTE_UNUSED)
 {
   int i, idx;
   switch (c)
@@ -305,22 +283,6 @@ md_parse_option (int c, const char *arg ATTRIBUTE_UNUSED)
       optbits &= ~(1 << CGEN_INSN_OPTIONAL_DEBUG_INSN);
       optbitset |= 1 << CGEN_INSN_OPTIONAL_DEBUG_INSN;
       break;
-    case OPTION_UCI:
-      optbits |= 1 << CGEN_INSN_OPTIONAL_UCI_INSN;
-      optbitset |= 1 << CGEN_INSN_OPTIONAL_UCI_INSN;
-      break;
-    case OPTION_NOUCI:
-      optbits &= ~(1 << CGEN_INSN_OPTIONAL_UCI_INSN);
-      optbitset |= 1 << CGEN_INSN_OPTIONAL_UCI_INSN;
-      break;
-    case OPTION_DSP:
-      optbits |= 1 << CGEN_INSN_OPTIONAL_DSP_INSN;
-      optbitset |= 1 << CGEN_INSN_OPTIONAL_DSP_INSN;
-      break;
-    case OPTION_NODSP:
-      optbits &= ~(1 << CGEN_INSN_OPTIONAL_DSP_INSN);
-      optbitset |= 1 << CGEN_INSN_OPTIONAL_DSP_INSN;
-      break;
     case OPTION_LIBRARY:
       library_flag = EF_MEP_LIBRARY;
       break;
@@ -337,8 +299,8 @@ void
 md_show_usage (FILE *stream)
 {
   fprintf (stream, _("MeP specific command line options:\n\
-  -EB                     assemble for a big endian system\n\
-  -EL                     assemble for a little endian system (default)\n\
+  -EB                     assemble for a big endian system (default)\n\
+  -EL                     assemble for a little endian system\n\
   -mconfig=<name>         specify a chip configuration to use\n\
   -maverage -mno-average -mmult -mno-mult -mdiv -mno-div\n\
   -mbitops -mno-bitops -mleadz -mno-leadz -mabsdiff -mno-absdiff\n\
@@ -405,19 +367,19 @@ mep_check_for_disabled_registers (mep_insn *insn)
 	case 7: /* $hi */
 	case 8: /* $lo */
 	  if (!has_mul_div)
-	    as_bad (_("$hi and $lo are disabled when MUL and DIV are off"));
+	    as_bad ("$hi and $lo are disabled when MUL and DIV are off");
 	  break;
 	case 12: /* $mb0 */
 	case 13: /* $me0 */
 	case 14: /* $mb1 */
 	case 15: /* $me1 */
 	  if (!has_cop)
-	    as_bad (_("$mb0, $me0, $mb1, and $me1 are disabled when COP is off"));
+	    as_bad ("$mb0, $me0, $mb1, and $me1 are disabled when COP is off");
 	  break;
 	case 24: /* $dbg */
 	case 25: /* $depc */
 	  if (!has_debug)
-	    as_bad (_("$dbg and $depc are disabled when DEBUG is off"));
+	    as_bad ("$dbg and $depc are disabled when DEBUG is off");
 	  break;
 	}
     }
@@ -426,13 +388,12 @@ mep_check_for_disabled_registers (mep_insn *insn)
 static int
 mep_machine (void)
 {
-  switch (MEP_CPU & EF_MEP_CPU_MASK)
+  switch (MEP_CPU)
     {
     default: break;
     case EF_MEP_CPU_C2: return bfd_mach_mep;
     case EF_MEP_CPU_C3: return bfd_mach_mep;
     case EF_MEP_CPU_C4: return bfd_mach_mep;
-    case EF_MEP_CPU_C5: return bfd_mach_mep_c5;
     case EF_MEP_CPU_H1: return bfd_mach_mep_h1;
     }
 
@@ -442,7 +403,7 @@ mep_machine (void)
 /* The MeP version of the cgen parse_operand function.  The only difference
    from the standard version is that we want to avoid treating '$foo' and
    '($foo...)' as references to a symbol called '$foo'.  The chances are
-   that '$foo' is really a misspelled register.  */
+   that '$foo' is really a misspelt register.  */
 
 static const char *
 mep_parse_operand (CGEN_CPU_DESC cd, enum cgen_parse_operand_type want,
@@ -464,7 +425,7 @@ mep_parse_operand (CGEN_CPU_DESC cd, enum cgen_parse_operand_type want,
 }
 
 void
-md_begin (void)
+md_begin ()
 {
   /* Initialize the `cgen' interface.  */
 
@@ -475,22 +436,17 @@ md_begin (void)
      specified.  If the user specifies options and a config, the
      options modify the config.  */
   if (optbits && mep_config_index == 0)
-    {
-      MEP_OMASK &= ~OPTION_MASK;
-      MEP_OMASK |= optbits;
-    }
+    MEP_OMASK = optbits;
   else
     MEP_OMASK = (MEP_OMASK & ~optbitset) | optbits;
 
-  mep_cop = mep_config_map[mep_config_index].cpu_flag & EF_MEP_COP_MASK;
-
   /* Set the machine number and endian.  */
-  gas_cgen_cpu_desc = mep_cgen_cpu_open (CGEN_CPU_OPEN_MACHS, 0U,
+  gas_cgen_cpu_desc = mep_cgen_cpu_open (CGEN_CPU_OPEN_MACHS, 0,
 					 CGEN_CPU_OPEN_ENDIAN,
 					 target_big_endian
 					 ? CGEN_ENDIAN_BIG
 					 : CGEN_ENDIAN_LITTLE,
-					 CGEN_CPU_OPEN_ISAS, (CGEN_BITSET *) 0,
+					 CGEN_CPU_OPEN_ISAS, 0,
 					 CGEN_CPU_OPEN_END);
   mep_cgen_init_asm (gas_cgen_cpu_desc);
 
@@ -507,7 +463,7 @@ md_begin (void)
   gas_cgen_initialize_saved_fixups_array();
 }
 
-/* Variant of mep_cgen_assemble_insn.  Assemble insn STR of cpu CD as a
+/* Variant of mep_cgen_assemble_insn.  Assemble insn STR of cpu CD as a 
    coprocessor instruction, if possible, into FIELDS, BUF, and INSN.  */
 
 static const CGEN_INSN *
@@ -522,14 +478,14 @@ mep_cgen_assemble_cop_insn (CGEN_CPU_DESC cd,
   const char *errmsg = NULL;
 
   /* The instructions are stored in hashed lists. */
-  ilist = CGEN_ASM_LOOKUP_INSN (gas_cgen_cpu_desc,
+  ilist = CGEN_ASM_LOOKUP_INSN (gas_cgen_cpu_desc, 
 				CGEN_INSN_MNEMONIC (pinsn));
 
   start = str;
   for ( ; ilist != NULL ; ilist = CGEN_ASM_NEXT_INSN (ilist))
     {
       const CGEN_INSN *insn = ilist->insn;
-      if (strcmp (CGEN_INSN_MNEMONIC (ilist->insn),
+      if (strcmp (CGEN_INSN_MNEMONIC (ilist->insn), 
 		  CGEN_INSN_MNEMONIC (pinsn)) == 0
 	  && MEP_INSN_COP_P (ilist->insn)
 	  && mep_cgen_insn_supported (cd, insn))
@@ -547,7 +503,7 @@ mep_cgen_assemble_cop_insn (CGEN_CPU_DESC cd,
 	  errmsg = CGEN_PARSE_FN (cd, insn) (cd, insn, & str, fields);
 	  if (errmsg != NULL)
 	    continue;
-
+	  
 	  errmsg = CGEN_INSERT_FN (cd, insn) (cd, insn, fields, buf,
 					      (bfd_vma) 0);
 	  if (errmsg != NULL)
@@ -582,7 +538,7 @@ mep_check_parallel32_scheduling (void)
      an internally parallel core or an internally parallel coprocessor,
      neither of which are supported at this time.  */
   if ( num_insns_saved > 2 )
-    as_fatal("Internally paralleled cores and coprocessors not supported.");
+    as_fatal("Internally paralled cores and coprocessors not supported.");
 
   /* If there are no insns saved, that's ok.  Just return.  This will
      happen when mep_process_saved_insns is called when the end of the
@@ -608,10 +564,10 @@ mep_check_parallel32_scheduling (void)
 	  if (insn0length + insn1length == 32)
 	    return;
           else
-	    as_bad (_("core and copro insn lengths must total 32 bits."));
+	    as_bad ("core and copro insn lengths must total 32 bits.");
 	}
       else
-        as_bad (_("vliw group must consist of 1 core and 1 copro insn."));
+        as_bad ("vliw group must consist of 1 core and 1 copro insn."); 
     }
   else
     {
@@ -621,7 +577,7 @@ mep_check_parallel32_scheduling (void)
 	 1.  The instruction is a 32 bit core or coprocessor insn and
              can be executed by itself.  Valid.
 
-         2.  The instruction is a core instruction for which a cop nop
+         2.  The instrucion is a core instruction for which a cop nop
              exists.  In this case, insert the cop nop into the saved
              insn array after the core insn and return.  Valid.
 
@@ -647,17 +603,17 @@ mep_check_parallel32_scheduling (void)
                                 CGEN_INSN_VLIW32_NO_MATCHING_NOP))
 	as_fatal ("No valid nop.");
 
-      /* At this point we know that we have a single 16-bit insn that has
-	 a matching nop.  We have to assemble it and put it into the saved
+      /* At this point we know that we have a single 16-bit insn that has 
+	 a matching nop.  We have to assemble it and put it into the saved 
          insn and fixup chain arrays. */
 
       if (insn0iscopro)
 	{
           char *errmsg;
           mep_insn insn;
-
+         
           /* Move the insn and it's fixups to the second element of the
-             saved insns array and insert a 16 bit core nope into the
+             saved insns arrary and insert a 16 bit core nope into the
              first element. */
              insn.insn = mep_cgen_assemble_insn (gas_cgen_cpu_desc, "nop",
                                                  &insn.fields, insn.buffer,
@@ -670,7 +626,7 @@ mep_check_parallel32_scheduling (void)
 
              /* Move the insn in element 0 to element 1 and insert the
                  nop into element 0.  Move the fixups in element 0 to
-                 element 1 and save the current fixups to element 0.
+                 element 1 and save the current fixups to element 0.  
                  Really there aren't any fixups at this point because we're
                  inserting a nop but we might as well be general so that
                  if there's ever a need to insert a general insn, we'll
@@ -745,10 +701,10 @@ mep_check_parallel64_scheduling (void)
 	  if (insn0length + insn1length == 64)
             return;
 	  else
-            as_bad (_("core and copro insn lengths must total 64 bits."));
+            as_bad ("core and copro insn lengths must total 64 bits.");
 	}
       else
-        as_bad (_("vliw group must consist of 1 core and 1 copro insn."));
+        as_bad ("vliw group must consist of 1 core and 1 copro insn.");
     }
   else
     {
@@ -758,7 +714,7 @@ mep_check_parallel64_scheduling (void)
          1.  The instruction is a 64 bit coprocessor insn and can be
              executed by itself.  Valid.
 
-         2.  The instruction is a core instruction for which a cop nop
+         2.  The instrucion is a core instruction for which a cop nop
              exists.  In this case, insert the cop nop into the saved
              insn array after the core insn and return.  Valid.
 
@@ -773,7 +729,7 @@ mep_check_parallel64_scheduling (void)
 	     we have to abort.  */
 
       /* If the insn is 64 bits long, it can run alone.  The size check
-	 is done independently of whether the insn is core or copro
+	 is done indepependantly of whether the insn is core or copro
 	 in case 64 bit coprocessor insns are added later.  */
       if (insn0length == 64)
         return;
@@ -788,9 +744,11 @@ mep_check_parallel64_scheduling (void)
 	{
 	  char *errmsg;
 	  mep_insn insn;
+          int i;
 
           /* Initialize the insn buffer.  */
-	  memset (insn.buffer, 0, sizeof(insn.buffer));
+          for (i = 0; i < 64; i++)
+             insn.buffer[i] = '\0';
 
 	  /* We have a coprocessor insn.  At this point in time there
 	     are is 32-bit core nop.  There is only a 16-bit core
@@ -817,7 +775,7 @@ mep_check_parallel64_scheduling (void)
                  nop has been added, then make the necessary changes and
                  handle its assembly and insertion here.  Otherwise,
                  go figure out why either:
-
+              
                  1. The assembler thinks that there is a 32-bit core nop
                     to match a 32-bit coprocessor insn, or
                  2. The assembler thinks that there is a 48-bit core nop
@@ -834,7 +792,7 @@ mep_check_parallel64_scheduling (void)
 
          /* Move the insn in element 0 to element 1 and insert the
             nop into element 0.  Move the fixups in element 0 to
-            element 1 and save the current fixups to element 0.
+            element 1 and save the current fixups to element 0. 
 	    Really there aren't any fixups at this point because we're
 	    inserting a nop but we might as well be general so that
 	    if there's ever a need to insert a general insn, we'll
@@ -851,9 +809,11 @@ mep_check_parallel64_scheduling (void)
 	{
 	  char * errmsg;
 	  mep_insn insn;
+          int i;
 
           /* Initialize the insn buffer */
-	  memset (insn.buffer, 0, sizeof(insn.buffer));
+          for (i = 0; i < 64; i++)
+             insn.buffer[i] = '\0';
 
 	  /* We have a core insn.  We have to handle all possible nop
 	     lengths.  If a coprocessor doesn't have a nop of a certain
@@ -903,263 +863,17 @@ mep_check_parallel64_scheduling (void)
     }
 }
 
-#ifdef MEP_IVC2_SUPPORTED
-
-/* IVC2 packing is different than other VLIW coprocessors.  Many of
-   the COP insns can be placed in any of three different types of
-   slots, and each bundle can hold up to three insns - zero or one
-   core insns and one or two IVC2 insns.  The insns in CGEN are tagged
-   with which slots they're allowed in, and we have to decide based on
-   that whether or not the user had given us a possible bundling.  */
-
-static int
-slot_ok (int idx, int slot)
-{
-  const CGEN_INSN *insn = saved_insns[idx].insn;
-  return CGEN_ATTR_CGEN_INSN_SLOTS_VALUE (CGEN_INSN_ATTRS (insn)) & (1 << slot);
-}
-
-static void
-mep_check_ivc2_scheduling (void)
-{
-  /* VLIW modes:
-
-     V1 [-----core-----][--------p0s-------][------------p1------------]
-     V2 [-------------core-------------]xxxx[------------p1------------]
-     V3 1111[--p0--]0111[--------p0--------][------------p1------------]
-  */
-
-  int slots[5]; /* Indexed off the SLOTS_ATTR enum.  */
-  int corelength, realcorelength;
-  int i;
-  bfd_byte temp[4];
-  bfd_byte *f;
-  int e = target_big_endian ? 0 : 1;
-
-  /* If there are no insns saved, that's ok.  Just return.  This will
-     happen when mep_process_saved_insns is called when the end of the
-     source file is reached and there are no insns left to be processed.  */
-  if (num_insns_saved == 0)
-    return;
-
-  for (i=0; i<5; i++)
-    slots[i] = -1;
-
-  if (slot_ok (0, SLOTS_CORE))
-    {
-      slots[SLOTS_CORE] = 0;
-      realcorelength = corelength = CGEN_FIELDS_BITSIZE (& saved_insns[0].fields);
-
-      /* If we encounter one of these, it may get relaxed later into a
-	 longer instruction.  We can't just push the other opcodes
-	 away, the bigger insn has to fit into the existing slot.  So,
-	 we make room for the relaxed instruction here.  */
-
-      if (saved_insns[0].insn->base->num == MEP_INSN_BSR12
-	  || saved_insns[0].insn->base->num == MEP_INSN_BRA)
-	corelength = 32;
-    }
-  else
-    realcorelength = corelength = 0;
-
-  if (corelength == 16)
-    {
-      /* V1 mode: we need a P0S slot and a P1 slot.  */
-      switch (num_insns_saved)
-	{
-	case 1:
-	  /* No other insns, fill with NOPs. */
-	  break;
-
-	case 2:
-	  if (slot_ok (1, SLOTS_P1))
-	    slots[SLOTS_P1] = 1;
-	  else if (slot_ok (1, SLOTS_P0S))
-	    slots[SLOTS_P0S] = 1;
-	  else
-	    as_bad (_("cannot pack %s with a 16-bit insn"),
-		    CGEN_INSN_NAME (saved_insns[1].insn));
-	  break;
-
-	case 3:
-	  if (slot_ok (1, SLOTS_P0S)
-	      && slot_ok (2, SLOTS_P1))
-	    {
-	      slots[SLOTS_P0S] = 1;
-	      slots[SLOTS_P1] = 2;
-	    }
-	  else if (slot_ok (1, SLOTS_P1)
-	      && slot_ok (2, SLOTS_P0S))
-	    {
-	      slots[SLOTS_P1] = 1;
-	      slots[SLOTS_P0S] = 2;
-	    }
-	  else
-	    as_bad (_("cannot pack %s and %s together with a 16-bit insn"),
-		    CGEN_INSN_NAME (saved_insns[1].insn),
-		    CGEN_INSN_NAME (saved_insns[2].insn));
-	  break;
-
-	default:
-	  as_bad (_("too many IVC2 insns to pack with a 16-bit core insn"));
-	  break;
-	}
-    }
-  else if (corelength == 32)
-    {
-      /* V2 mode: we need a P1 slot.  */
-      switch (num_insns_saved)
-	{
-	case 1:
-	  /* No other insns, fill with NOPs. */
-	  break;
-	case 2:
-	  /* The other insn must allow P1.  */
-	  if (!slot_ok (1, SLOTS_P1))
-	    as_bad (_("cannot pack %s into slot P1"),
-		    CGEN_INSN_NAME (saved_insns[1].insn));
-	  else
-	    slots[SLOTS_P1] = 1;
-	  break;
-	default:
-	  as_bad (_("too many IVC2 insns to pack with a 32-bit core insn"));
-	  break;
-	}
-    }
-  else if (corelength == 0)
-    {
-      /* V3 mode: we need a P0 slot and a P1 slot, or a P0S+P1 with a
-	 core NOP.  */
-      switch (num_insns_saved)
-	{
-	case 1:
-	  if (slot_ok (0, SLOTS_P0))
-	    slots[SLOTS_P0] = 0;
-	  else if (slot_ok (0, SLOTS_P1))
-	    slots[SLOTS_P1] = 0;
-	  else if (slot_ok (0, SLOTS_P0S))
-	    slots[SLOTS_P0S] = 0;
-	  else
-	    as_bad (_("unable to pack %s by itself?"),
-		    CGEN_INSN_NAME (saved_insns[0].insn));
-	  break;
-
-	case 2:
-	  if (slot_ok (0, SLOTS_P0)
-	      && slot_ok (1, SLOTS_P1))
-	    {
-	      slots[SLOTS_P0] = 0;
-	      slots[SLOTS_P1] = 1;
-	    }
-	  else if (slot_ok (0, SLOTS_P1)
-	      && slot_ok (1, SLOTS_P0))
-	    {
-	      slots[SLOTS_P1] = 0;
-	      slots[SLOTS_P0] = 1;
-	    }
-	  else if (slot_ok (0, SLOTS_P0S)
-	      && slot_ok (1, SLOTS_P1))
-	    {
-	      slots[SLOTS_P0S] = 0;
-	      slots[SLOTS_P1] = 1;
-	    }
-	  else if (slot_ok (0, SLOTS_P1)
-	      && slot_ok (1, SLOTS_P0S))
-	    {
-	      slots[SLOTS_P1] = 0;
-	      slots[SLOTS_P0S] = 1;
-	    }
-	  else
-	    as_bad (_("cannot pack %s and %s together"),
-		    CGEN_INSN_NAME (saved_insns[0].insn),
-		    CGEN_INSN_NAME (saved_insns[1].insn));
-	  break;
-
-	default:
-	  as_bad (_("too many IVC2 insns to pack together"));
-	  break;
-	}
-    }
-
-  /* The core insn needs to be done normally so that fixups,
-     relaxation, etc are done.  Other IVC2 insns need only be resolved
-     to bit patterns; there are no relocations for them.  */
-  if (slots[SLOTS_CORE] != -1)
-    {
-      gas_cgen_restore_fixups (0);
-      gas_cgen_finish_insn (saved_insns[0].insn, saved_insns[0].buffer,
-			    CGEN_FIELDS_BITSIZE (& saved_insns[0].fields),
-			    1, NULL);
-    }
-
-  /* Allocate whatever bytes remain in our insn word.  Adjust the
-     pointer to point (as if it were) to the beginning of the whole
-     word, so that we don't have to adjust for it elsewhere.  */
-  f = (bfd_byte *) frag_more (8 - realcorelength / 8);
-  /* Unused slots are filled with NOPs, which happen to be all zeros.  */
-  memset (f, 0, 8 - realcorelength / 8);
-  f -= realcorelength / 8;
-
-  for (i=1; i<5; i++)
-    {
-      mep_insn *m;
-
-      if (slots[i] == -1)
-	continue;
-
-      m = & saved_insns[slots[i]];
-
-#if CGEN_INT_INSN_P
-      cgen_put_insn_value (gas_cgen_cpu_desc, (unsigned char *) temp, 32,
-			   m->buffer[0]);
-#else
-      memcpy (temp, m->buffer, byte_len);
-#endif
-
-      switch (i)
-	{
-	case SLOTS_P0S:
-	  f[2^e] = temp[1^e];
-	  f[3^e] = temp[2^e];
-	  f[4^e] |= temp[3^e] & 0xf0;
-	  break;
-	case SLOTS_P0:
-	  f[0^e] = 0xf0 | temp[0^e] >> 4;
-	  f[1^e] = temp[0^e] << 4 | 0x07;
-	  f[2^e] = temp[1^e];
-	  f[3^e] = temp[2^e];
-	  f[4^e] |= temp[3^e] & 0xf0;
-	  break;
-	case SLOTS_P1:
-	  f[4^e] |= temp[0^e] >> 4;
-	  f[5^e] = temp[0^e] << 4 | temp[1^e] >> 4;
-	  f[6^e] = temp[1^e] << 4 | temp[2^e] >> 4;
-	  f[7^e] = temp[2^e] << 4 | temp[3^e] >> 4;
-	  break;
-	default:
-	  break;
-	}
-    }
-}
-
-#endif /* MEP_IVC2_SUPPORTED */
-
 /* The scheduling functions are just filters for invalid combinations.
-   If there is a violation, they terminate assembly.  Otherwise they
-   just fall through.  Successful combinations cause no side effects
+   If there is a violation, they terminate assembly.  Otherise they
+   just fall through.  Succesful combinations cause no side effects
    other than valid nop insertion.  */
 
 static void
 mep_check_parallel_scheduling (void)
 {
   /* This is where we will eventually read the config information
-     and choose which scheduling checking function to call.  */
-#ifdef MEP_IVC2_SUPPORTED
-  if (mep_cop == EF_MEP_COP_IVC2)
-    mep_check_ivc2_scheduling ();
-  else
-#endif /* MEP_IVC2_SUPPORTED */
-    if (MEP_VLIW64)
+     and choose which scheduling checking function to call.  */   
+  if (MEP_VLIW64)
     mep_check_parallel64_scheduling ();
   else
     mep_check_parallel32_scheduling ();
@@ -1175,20 +889,15 @@ mep_process_saved_insns (void)
   /* We have to check for valid scheduling here. */
   mep_check_parallel_scheduling ();
 
-  /* IVC2 has to pack instructions in a funny way, so it does it
-     itself.  */
-  if (mep_cop != EF_MEP_COP_IVC2)
+  /* If the last call didn't cause assembly to terminate, we have
+     a valid vliw insn/insn pair saved. Restore this instructions'
+     fixups and process the insns. */
+  for (i = 0;i<num_insns_saved;i++)
     {
-      /* If the last call didn't cause assembly to terminate, we have
-	 a valid vliw insn/insn pair saved. Restore this instructions'
-	 fixups and process the insns. */
-      for (i = 0;i<num_insns_saved;i++)
-	{
-	  gas_cgen_restore_fixups (i);
-	  gas_cgen_finish_insn (saved_insns[i].insn, saved_insns[i].buffer,
-				CGEN_FIELDS_BITSIZE (& saved_insns[i].fields),
-				1, NULL);
-	}
+      gas_cgen_restore_fixups (i);
+      gas_cgen_finish_insn (saved_insns[i].insn, saved_insns[i].buffer,
+			    CGEN_FIELDS_BITSIZE (& saved_insns[i].fields),
+			    1, NULL);
     }
   gas_cgen_restore_fixups (MAX_SAVED_FIXUP_CHAINS - 1);
 
@@ -1219,7 +928,7 @@ md_assemble (char * str)
 		     + copro insn
 
                  We want to handle the general case where more than
-                 one instruction can be preceded by a +.  This will
+                 one instruction can be preceeded by a +.  This will
                  happen later if we add support for internally parallel
                  coprocessors.  We'll make the parsing nice and general
                  so that it can handle an arbitrary number of insns
@@ -1243,32 +952,15 @@ md_assemble (char * str)
       int thisInsnIsCopro = 0;
       mep_insn insn;
       int i;
-
+      
       /* Initialize the insn buffer */
-
+	
       if (! CGEN_INT_INSN_P)
          for (i=0; i < CGEN_MAX_INSN_SIZE; i++)
             insn.buffer[i]='\0';
 
-
-      /* IVC2 has two sets of coprocessor opcodes, one for CORE mode
-	 and one for VLIW mode.  They have the same names.  To specify
-	 which one we want, we use the COP isas - the 32 bit ISA is
-	 for the core instructions (which are always 32 bits), and the
-	 other ISAs are for the VLIW ones (which always pack into 64
-	 bit insns).  We use other attributes to determine slotting
-	 later.  */
-      if (mep_cop == EF_MEP_COP_IVC2)
-	{
-	  cgen_bitset_union (isas, & MEP_COP16_ISA, isas);
-	  cgen_bitset_union (isas, & MEP_COP48_ISA, isas);
-	  cgen_bitset_union (isas, & MEP_COP64_ISA, isas);
-	}
-      else
-	{
-	  /* Can't tell core / copro insns apart at parse time! */
-	  cgen_bitset_union (isas, & MEP_COP_ISA, isas);
-	}
+      /* Can't tell core / copro insns apart at parse time! */
+      cgen_bitset_union (isas, & MEP_COP_ISA, isas);
 
       /* Assemble the insn so we can examine its attributes. */
       insn.insn = mep_cgen_assemble_insn (gas_cgen_cpu_desc, str,
@@ -1299,7 +991,7 @@ md_assemble (char * str)
 	  /* Check for a + with a core insn and abort if found. */
 	  if (!thisInsnIsCopro)
 	    {
-	      as_fatal("A core insn cannot be preceded by a +.\n");
+	      as_fatal("A core insn cannot be preceeded by a +.\n");
 	      return;
 	    }
 
@@ -1351,10 +1043,6 @@ md_assemble (char * str)
       /* Only single instructions are assembled in core mode. */
       mep_insn insn;
 
-      /* See comment in the VLIW clause above about this.  */
-      if (mep_cop & EF_MEP_COP_IVC2)
-	cgen_bitset_union (isas, & MEP_COP32_ISA, isas);
-
       /* If a leading '+' was present, issue an error.
 	 That's not allowed in core mode. */
       if (pluspresent)
@@ -1380,8 +1068,8 @@ md_assemble (char * str)
 valueT
 md_section_align (segT segment, valueT size)
 {
-  int align = bfd_section_alignment (segment);
-  return ((size + (1 << align) - 1) & -(1 << align));
+  int align = bfd_get_section_alignment (stdoutput, segment);
+  return ((size + (1 << align) - 1) & (-1 << align));
 }
 
 
@@ -1524,13 +1212,7 @@ md_estimate_size_before_relax (fragS * fragP, segT segment)
   if (fragP->fr_subtype == 1)
     fragP->fr_subtype = insn_to_subtype (fragP->fr_cgen.insn->base->num);
 
-  if (S_GET_SEGMENT (fragP->fr_symbol) != segment
-      || S_IS_WEAK (fragP->fr_symbol)
-#ifdef MEP_IVC2_SUPPORTED
-      || (mep_cop == EF_MEP_COP_IVC2
-	  && bfd_section_flags (segment) & SEC_MEP_VLIW)
-#endif /* MEP_IVC2_SUPPORTED */
-      )
+  if (S_GET_SEGMENT (fragP->fr_symbol) != segment)
     {
       int new_insn;
 
@@ -1539,13 +1221,13 @@ md_estimate_size_before_relax (fragS * fragP, segT segment)
     }
 
   if (MEP_VLIW && ! MEP_VLIW64
-      && (bfd_section_flags (segment) & SEC_MEP_VLIW))
+      && (bfd_get_section_flags (stdoutput, segment) & SEC_MEP_VLIW))
     {
       /* Use 32 bit branches for vliw32 so the vliw word is not split.  */
       switch (fragP->fr_cgen.insn->base->num)
 	{
 	case MEP_INSN_BSR12:
-	  fragP->fr_subtype = insn_to_subtype
+	  fragP->fr_subtype = insn_to_subtype 
 	    (subtype_mappings[fragP->fr_subtype].insn_for_extern);
 	  break;
 	case MEP_INSN_BEQZ:
@@ -1570,27 +1252,7 @@ md_estimate_size_before_relax (fragS * fragP, segT segment)
 	}
     }
 
-#ifdef MEP_IVC2_SUPPORTED
-  if (mep_cop == EF_MEP_COP_IVC2
-      && bfd_section_flags (segment) & SEC_MEP_VLIW)
-    return 0;
-#endif /* MEP_IVC2_SUPPORTED */
-
   return subtype_mappings[fragP->fr_subtype].growth;
-}
-
-/* VLIW does relaxing, but not growth.  */
-
-long
-mep_relax_frag (segT segment, fragS *fragP, long stretch)
-{
-  long rv = relax_frag (segment, fragP, stretch);
-#ifdef MEP_IVC2_SUPPORTED
-  if (mep_cop == EF_MEP_COP_IVC2
-      && bfd_section_flags (segment) & SEC_MEP_VLIW)
-    return 0;
-#endif
-  return rv;
 }
 
 /* *fragP has been relaxed to its final size, and now needs to have
@@ -1613,30 +1275,20 @@ target_address_for (fragS *frag)
 }
 
 void
-md_convert_frag (bfd *abfd  ATTRIBUTE_UNUSED,
-		 segT seg ATTRIBUTE_UNUSED,
+md_convert_frag (bfd *abfd  ATTRIBUTE_UNUSED, 
+		 segT sec ATTRIBUTE_UNUSED,
 		 fragS *fragP)
 {
   int addend, rn, bit = 0;
   int operand;
   int where = fragP->fr_opcode - fragP->fr_literal;
   int e = target_big_endian ? 0 : 1;
-  int core_mode;
-
-#ifdef MEP_IVC2_SUPPORTED
-  if (bfd_section_flags (seg) & SEC_MEP_VLIW
-      && mep_cop == EF_MEP_COP_IVC2)
-    core_mode = 0;
-  else
-#endif /* MEP_IVC2_SUPPORTED */
-    core_mode = 1;
 
   addend = target_address_for (fragP) - (fragP->fr_address + where);
 
   if (subtype_mappings[fragP->fr_subtype].insn == -1)
     {
-      if (core_mode)
-	fragP->fr_fix += subtype_mappings[fragP->fr_subtype].growth;
+      fragP->fr_fix += subtype_mappings[fragP->fr_subtype].growth;
       switch (subtype_mappings[fragP->fr_subtype].insn_for_extern)
 	{
 	case MEP_PSEUDO64_16BITCC:
@@ -1678,8 +1330,7 @@ md_convert_frag (bfd *abfd  ATTRIBUTE_UNUSED,
 	break;
 
       case MEP_INSN_BSR24:
-	if (core_mode)
-	  fragP->fr_fix += 2;
+	fragP->fr_fix += 2;
 	fragP->fr_opcode[0^e] = 0xd8 | ((addend >> 5) & 0x07);
 	fragP->fr_opcode[1^e] = 0x09 | ((addend << 3) & 0xf0);
 	fragP->fr_opcode[2^e] = 0x00 | ((addend >>16) & 0xff);
@@ -1699,8 +1350,7 @@ md_convert_frag (bfd *abfd  ATTRIBUTE_UNUSED,
 	   instructions to JMP.  */
 	if (addend <= 65535 && addend >= -65536)
 	  {
-	    if (core_mode)
-	      fragP->fr_fix += 2;
+	    fragP->fr_fix += 2;
 	    fragP->fr_opcode[0^e] = 0xe0;
 	    fragP->fr_opcode[1^e] = 0x01;
 	    fragP->fr_opcode[2^e] = 0x00 | ((addend >> 9) & 0xff);
@@ -1708,12 +1358,11 @@ md_convert_frag (bfd *abfd  ATTRIBUTE_UNUSED,
 	    operand = MEP_OPERAND_PCREL17A2;
 	    break;
 	  }
-	/* Fall through.  */
+	/* ...FALLTHROUGH... */
 
       case MEP_INSN_JMP:
 	addend = target_address_for (fragP);
-	if (core_mode)
-	  fragP->fr_fix += 2;
+	fragP->fr_fix += 2;
 	fragP->fr_opcode[0^e] = 0xd8 | ((addend >> 5) & 0x07);
 	fragP->fr_opcode[1^e] = 0x08 | ((addend << 3) & 0xf0);
 	fragP->fr_opcode[2^e] = 0x00 | ((addend >>16) & 0xff);
@@ -1723,7 +1372,6 @@ md_convert_frag (bfd *abfd  ATTRIBUTE_UNUSED,
 
       case MEP_INSN_BNEZ:
 	bit = 1;
-	/* Fall through.  */
       case MEP_INSN_BEQZ:
 	fragP->fr_opcode[1^e] = bit | (addend & 0xfe);
 	operand = MEP_OPERAND_PCREL8A2;
@@ -1731,12 +1379,10 @@ md_convert_frag (bfd *abfd  ATTRIBUTE_UNUSED,
 
       case MEP_INSN_BNEI:
 	bit = 4;
-	/* Fall through.  */
       case MEP_INSN_BEQI:
 	if (subtype_mappings[fragP->fr_subtype].growth)
 	  {
-	    if (core_mode)
-	      fragP->fr_fix += subtype_mappings[fragP->fr_subtype].growth;
+	    fragP->fr_fix += subtype_mappings[fragP->fr_subtype].growth;
 	    rn = fragP->fr_opcode[0^e] & 0x0f;
 	    fragP->fr_opcode[0^e] = 0xe0 | rn;
 	    fragP->fr_opcode[1^e] = bit;
@@ -1762,11 +1408,10 @@ md_convert_frag (bfd *abfd  ATTRIBUTE_UNUSED,
 	abort ();
       }
 
-  if (S_GET_SEGMENT (fragP->fr_symbol) != seg
-      || S_IS_WEAK (fragP->fr_symbol)
+  if (S_GET_SEGMENT (fragP->fr_symbol) != sec
       || operand == MEP_OPERAND_PCABS24A2)
     {
-      gas_assert (fragP->fr_cgen.insn != 0);
+      assert (fragP->fr_cgen.insn != 0);
       gas_cgen_record_fixup (fragP,
 			     where,
 			     fragP->fr_cgen.insn,
@@ -1790,7 +1435,7 @@ mep_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
     switch (fixP->fx_cgen.opinfo)
       {
       case BFD_RELOC_MEP_LOW16:
-	*valP = ((*valP & 0xffff) ^ 0x8000) - 0x8000;
+	*valP = ((long)(*valP & 0xffff)) << 16 >> 16;
 	break;
       case BFD_RELOC_MEP_HI16U:
 	*valP >>= 16;
@@ -1800,7 +1445,7 @@ mep_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 	break;
       }
 
-  /* Now call cgen's md_apply_fix.  */
+  /* Now call cgen's md_aply_fix.  */
   gas_cgen_md_apply_fix (fixP, valP, seg);
 }
 
@@ -1809,15 +1454,9 @@ md_pcrel_from_section (fixS *fixP, segT sec)
 {
   if (fixP->fx_addsy != (symbolS *) NULL
       && (! S_IS_DEFINED (fixP->fx_addsy)
-	  || S_IS_WEAK (fixP->fx_addsy)
 	  || S_GET_SEGMENT (fixP->fx_addsy) != sec))
     /* The symbol is undefined (or is defined but not in this section).
        Let the linker figure it out.  */
-    return 0;
-
-  /* If we've got other reasons for emitting this relocation, let the
-     linker handle pc-rel also.  */
-  if (mep_force_relocation (fixP))
     return 0;
 
   /* Return the address of the opcode - cgen adjusts for opcode size
@@ -1867,7 +1506,7 @@ md_cgen_lookup_reloc (const CGEN_INSN *insn ATTRIBUTE_UNUSED,
 #ifdef OBJ_COMPLEX_RELC
       /* coalescing this into RELOC_MEP_16 is actually a bug,
 	 since it's a signed operand. let the relc code handle it. */
-      return BFD_RELOC_RELC;
+      return BFD_RELOC_RELC; 
 #endif
 
     case MEP_OPERAND_UIMM16:
@@ -1880,7 +1519,7 @@ md_cgen_lookup_reloc (const CGEN_INSN *insn ATTRIBUTE_UNUSED,
 
     default:
 #ifdef OBJ_COMPLEX_RELC
-      /* this is not an error, yet.
+      /* this is not an error, yet. 
 	 pass it to the linker. */
       return BFD_RELOC_RELC;
 #endif
@@ -1935,7 +1574,7 @@ mep_cgen_record_fixup_exp (fragS *frag,
    tc_gen_reloc.  */
 
 void
-mep_frob_file (void)
+mep_frob_file ()
 {
   struct mep_hi_fixup * l;
 
@@ -1944,7 +1583,7 @@ mep_frob_file (void)
       segment_info_type * seginfo;
       int pass;
 
-      gas_assert (FX_OPINFO_R_TYPE (l->fixp) == BFD_RELOC_HI16
+      assert (FX_OPINFO_R_TYPE (l->fixp) == BFD_RELOC_HI16
 	      || FX_OPINFO_R_TYPE (l->fixp) == BFD_RELOC_LO16);
 
       /* Check quickly whether the next fixup happens to be a matching low.  */
@@ -1984,7 +1623,7 @@ mep_frob_file (void)
 		  for (pf = &seginfo->fix_root;
 		       * pf != l->fixp;
 		       pf = & (* pf)->fx_next)
-		    gas_assert (* pf != NULL);
+		    assert (* pf != NULL);
 
 		  * pf = l->fixp->fx_next;
 
@@ -2019,9 +1658,6 @@ mep_force_relocation (fixS *fixp)
 	 || fixp->fx_r_type == BFD_RELOC_VTABLE_ENTRY)
     return 1;
 
-  if (generic_force_reloc (fixp))
-    return 1;
-
   /* Allow branches to global symbols to be resolved at assembly time.
      This is consistent with way relaxable branches are handled, since
      branches to both global and local symbols are relaxed.  It also
@@ -2040,7 +1676,7 @@ md_number_to_chars (char *buf, valueT val, int n)
     number_to_chars_littleendian (buf, val, n);
 }
 
-const char *
+char *
 md_atof (int type, char *litP, int *sizeP)
 {
   return ieee_md_atof (type, litP, sizeP, TRUE);
@@ -2080,18 +1716,18 @@ mep_fix_adjustable (fixS *fixP)
   return 1;
 }
 
-bfd_vma
-mep_elf_section_letter (int letter, const char **ptrmsg)
+int
+mep_elf_section_letter (int letter, char **ptrmsg)
 {
   if (letter == 'v')
     return SHF_MEP_VLIW;
 
-  *ptrmsg = _("bad .section directive: want a,v,w,x,M,S in string");
-  return -1;
+  *ptrmsg = _("Bad .section directive: want a,v,w,x,M,S in string");
+  return 0;
 }
 
 flagword
-mep_elf_section_flags (flagword flags, bfd_vma attr, int type ATTRIBUTE_UNUSED)
+mep_elf_section_flags (flagword flags, int attr, int type ATTRIBUTE_UNUSED)
 {
   if (attr & SHF_MEP_VLIW)
     flags |= SEC_MEP_VLIW;
@@ -2110,7 +1746,7 @@ mep_vtext_section (void)
     {
       flagword applicable = bfd_applicable_section_flags (stdoutput);
       vtext_section = subseg_new (VTEXT_SECTION_NAME, 0);
-      bfd_set_section_flags (vtext_section,
+      bfd_set_section_flags (stdoutput, vtext_section,
 			     applicable & (SEC_ALLOC | SEC_LOAD | SEC_RELOC
 					   | SEC_CODE | SEC_READONLY
 					   | SEC_MEP_VLIW));
@@ -2185,7 +1821,7 @@ mep_cleanup (void)
 {
   /* Take care of any insns left to be parallelized when the file ends.
      This is mainly here to handle the case where the file ends with an
-     insn preceded by a + or the file ends unexpectedly.  */
+     insn preceeded by a + or the file ends unexpectedly.  */
   if (mode == VLIW)
     mep_process_saved_insns ();
 }
@@ -2199,5 +1835,5 @@ mep_flush_pending_output (void)
       pluspresent = 0;
     }
 
-  return 1;
+  return 1; 
 }

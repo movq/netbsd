@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2005-2019 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
@@ -34,7 +34,7 @@
 // warranty.
 
 /**
- * @file detail/cond_dealtor.hpp
+ * @file cond_dealtor.hpp
  * Contains a conditional deallocator.
  */
 
@@ -43,42 +43,83 @@
 
 namespace __gnu_pbds
 {
+
   namespace detail
   {
-    /// Conditional deallocate constructor argument.
-    template<typename Entry, typename _Alloc>
-      class cond_dealtor
-      {
-	typedef typename _Alloc::template rebind<Entry>	__rebind_e;
 
-      public:
-	typedef typename __rebind_e::other 		entry_allocator;
-	typedef typename entry_allocator::pointer 	entry_pointer;
+#define PB_DS_COND_DEALTOR_CLASS_T_DEC		\
+    template<typename Entry, class Allocator>
 
-	cond_dealtor(entry_pointer p_e)
-	: m_p_e(p_e), m_no_action_destructor(false) { }
+#define PB_DS_COND_DEALTOR_CLASS_C_DEC				\
+    cond_dealtor<						\
+						Entry,		\
+						Allocator>
 
-	~cond_dealtor()
-	{
-	  if (m_no_action_destructor)
-	    return;
-	  s_alloc.deallocate(m_p_e, 1);
-	}
+    template<typename Entry, class Allocator>
+    class cond_dealtor
+    {
+    public:
+      typedef
+      typename Allocator::template rebind<Entry>::other
+      entry_allocator;
 
-	void
-	set_no_action()
-	{ m_no_action_destructor = true; }
+      typedef typename entry_allocator::pointer entry_pointer;
 
-      private:
-	entry_pointer 		m_p_e;
-	bool 			m_no_action_destructor;
-	static entry_allocator 	s_alloc;
-      };
+    public:
+      inline
+      cond_dealtor(entry_pointer p_e);
 
-    template<typename Entry, class _Alloc>
-      typename cond_dealtor<Entry, _Alloc>::entry_allocator
-      cond_dealtor<Entry, _Alloc>::s_alloc;
+      inline
+      ~cond_dealtor();
+
+      inline void
+      set_no_action();
+
+    private:
+      entry_pointer m_p_e;
+
+      bool m_no_action_destructor;
+
+      static entry_allocator s_alloc;
+    };
+
+    PB_DS_COND_DEALTOR_CLASS_T_DEC
+    typename PB_DS_COND_DEALTOR_CLASS_C_DEC::entry_allocator
+    PB_DS_COND_DEALTOR_CLASS_C_DEC::s_alloc;
+
+    PB_DS_COND_DEALTOR_CLASS_T_DEC
+    inline
+    PB_DS_COND_DEALTOR_CLASS_C_DEC::
+    cond_dealtor(entry_pointer p_e) :
+      m_p_e(p_e),
+      m_no_action_destructor(false)
+    { }
+
+    PB_DS_COND_DEALTOR_CLASS_T_DEC
+    inline void
+    PB_DS_COND_DEALTOR_CLASS_C_DEC::
+    set_no_action()
+    {
+      m_no_action_destructor = true;
+    }
+
+    PB_DS_COND_DEALTOR_CLASS_T_DEC
+    inline
+    PB_DS_COND_DEALTOR_CLASS_C_DEC::
+    ~cond_dealtor()
+    {
+      if (m_no_action_destructor)
+        return;
+
+      s_alloc.deallocate(m_p_e, 1);
+    }
+
+#undef PB_DS_COND_DEALTOR_CLASS_T_DEC
+#undef PB_DS_COND_DEALTOR_CLASS_C_DEC
+
   } // namespace detail
+
 } // namespace __gnu_pbds
 
 #endif // #ifndef PB_DS_COND_DEALTOR_HPP
+

@@ -1,5 +1,5 @@
 /* tc-xtensa.h -- Header file for tc-xtensa.c.
-   Copyright (C) 2003-2020 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -30,7 +30,7 @@ struct fix;
 #include "xtensa-isa.h"
 #include "xtensa-config.h"
 
-#define TARGET_BYTES_BIG_ENDIAN 0
+#define TARGET_BYTES_BIG_ENDIAN XCHAL_HAVE_BE
 
 
 /* Maximum number of opcode slots in a VLIW instruction.  */
@@ -107,7 +107,7 @@ enum xtensa_relax_statesE
   /* When the code density option is available, this will generate a
      NOP.N marked RELAX_NARROW.  Otherwise, it will create an rs_fill
      fragment with a NOP in it.  Once a frag has been converted to
-     RELAX_LOOP_END_ADD_NOP, it should never be changed back to
+     RELAX_LOOP_END_ADD_NOP, it should never be changed back to 
      RELAX_LOOP_END.  */
 
   RELAX_LITERAL,
@@ -124,7 +124,6 @@ enum xtensa_relax_statesE
 
   RELAX_LITERAL_POOL_BEGIN,
   RELAX_LITERAL_POOL_END,
-  RELAX_LITERAL_POOL_CANDIDATE_BEGIN,
   /* Technically these are not relaxations at all but mark a location
      to store literals later.  Note that fr_var stores the frchain for
      BEGIN frags and fr_var stores now_seg for END frags.  */
@@ -175,16 +174,11 @@ enum xtensa_relax_statesE
      RELAX_UNREACHABLE frag.  */
 
   RELAX_ORG,
-  /* This marks the location as having previously been an rs_org frag.
+  /* This marks the location as having previously been an rs_org frag.  
      rs_org frags are converted to fill-zero frags immediately after
      relaxation.  However, we need to remember where they were so we can
      prevent the linker from changing the size of any frag between the
      section start and the org frag.  */
-
-  RELAX_TRAMPOLINE,
-  /* Every few thousand frags, we insert one of these, just in case we may
-     need some space for a trampoline (jump to a jump) because the function
-     has gotten too big. If not needed, it disappears. */
 
   RELAX_NONE
 };
@@ -236,10 +230,6 @@ struct xtensa_frag_type
      align branch targets as if it were a normal narrow instruction.  */
   unsigned int is_aligning_branch : 1;
 
-  /* A trampoline frag that is located in the middle of code and thus
-     needs a jump around.  */
-  unsigned int needs_jump_around : 1;
-
   /* For text fragments that can generate literals at relax time, this
      variable points to the frag where the literal will be stored.  For
      literal frags, this variable points to the nearest literal pool
@@ -263,23 +253,15 @@ struct xtensa_frag_type
   int literal_expansion[MAX_SLOTS];
   int unreported_expansion;
 
-  /* For slots that have a free register for relaxation, record that
-     register.  */
-  expressionS free_reg[MAX_SLOTS];
-
   /* For text fragments that can generate literals at relax time:  */
   fragS *literal_frags[MAX_SLOTS];
   enum xtensa_relax_statesE slot_subtypes[MAX_SLOTS];
   symbolS *slot_symbols[MAX_SLOTS];
   offsetT slot_offsets[MAX_SLOTS];
 
-  /* For trampoline fragments.  */
-  struct fix *jump_around_fix;
-
-  /* When marking frags after this one in the chain as no transform,
-     cache the last one in the chain, so that we can skip to the
-     end of the chain.  */
-  fragS *no_transform_end;
+  /* The global aligner needs to walk backward through the list of
+     frags.  This field is only valid after xtensa_end.  */
+  fragS *fr_prev;
 };
 
 
@@ -340,14 +322,7 @@ extern void xtensa_elf_section_change_hook (void);
 extern int xtensa_unrecognized_line (int);
 extern bfd_boolean xtensa_check_inside_bundle (void);
 extern void xtensa_handle_align (fragS *);
-extern char *xtensa_section_rename (const char *);
-
-/* We need to set the target endianness in xtensa_init and not in md_begin.
-   This is because xtensa_target_format is called before md_begin, and we
-   want to have all non-statically initialized fields initialized.  */
-
-#define HOST_SPECIAL_INIT xtensa_init
-extern void xtensa_init (int, char **);
+extern char *xtensa_section_rename (char *);
 
 #define TARGET_FORMAT			xtensa_target_format ()
 #define TARGET_ARCH			bfd_arch_xtensa
@@ -356,11 +331,10 @@ extern void xtensa_init (int, char **);
 #define TC_FIX_TYPE			xtensa_fix_data
 #define TC_INIT_FIX_DATA(x)		xtensa_init_fix_data (x)
 #define TC_FRAG_TYPE			struct xtensa_frag_type
-#define TC_FRAG_INIT(frag, max_bytes)	xtensa_frag_init (frag)
+#define TC_FRAG_INIT(frag)		xtensa_frag_init (frag)
 #define TC_FORCE_RELOCATION(fix)	xtensa_force_relocation (fix)
 #define TC_FORCE_RELOCATION_SUB_SAME(fix, seg) \
-  (GENERIC_FORCE_RELOCATION_SUB_SAME (fix, seg)	\
-   || xtensa_force_relocation (fix))
+  (! SEG_NORMAL (seg) || xtensa_force_relocation (fix))
 #define	TC_VALIDATE_FIX_SUB(fix, seg)	xtensa_validate_fix_sub (fix)
 #define NO_PSEUDO_DOT			xtensa_check_inside_bundle ()
 #define tc_canonicalize_symbol_name(s)	xtensa_section_rename (s)

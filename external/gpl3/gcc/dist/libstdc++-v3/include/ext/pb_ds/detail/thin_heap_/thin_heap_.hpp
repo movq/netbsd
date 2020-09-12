@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2005-2019 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
@@ -34,81 +34,112 @@
 // warranty.
 
 /**
- * @file thin_heap_/thin_heap_.hpp
+ * @file thin_heap_.hpp
  * Contains an implementation class for a thin heap.
  */
 
 #ifndef PB_DS_THIN_HEAP_HPP
 #define PB_DS_THIN_HEAP_HPP
 
+/*
+ * Thin heaps.
+ * Tarjan and Kaplan.
+ */
+
 #include <algorithm>
 #include <ext/pb_ds/detail/cond_dealtor.hpp>
 #include <ext/pb_ds/detail/type_utils.hpp>
 #include <ext/pb_ds/detail/left_child_next_sibling_heap_/left_child_next_sibling_heap_.hpp>
+#include <ext/pb_ds/detail/left_child_next_sibling_heap_/null_metadata.hpp>
 #include <debug/debug.h>
 
 namespace __gnu_pbds
 {
   namespace detail
   {
+
 #define PB_DS_CLASS_T_DEC \
-    template<typename Value_Type, typename Cmp_Fn, typename _Alloc>
+    template<typename Value_Type, class Cmp_Fn, class Allocator>
 
 #define PB_DS_CLASS_C_DEC \
-    thin_heap<Value_Type, Cmp_Fn, _Alloc>
+    thin_heap_<Value_Type, Cmp_Fn, Allocator>
 
 #ifdef _GLIBCXX_DEBUG
-#define PB_DS_BASE_T_P \
-    <Value_Type, Cmp_Fn, typename _Alloc::size_type, _Alloc, true>
-#else
-#define PB_DS_BASE_T_P \
-    <Value_Type, Cmp_Fn, typename _Alloc::size_type, _Alloc>
-#endif
-
+#define PB_DS_BASE_C_DEC \
+    left_child_next_sibling_heap_<Value_Type, Cmp_Fn,	\
+			        typename Allocator::size_type, Allocator, true>
+#else 
+#define PB_DS_BASE_C_DEC						\
+    left_child_next_sibling_heap_<Value_Type, Cmp_Fn, \
+				  typename Allocator::size_type, Allocator>
+#endif 
 
     /**
-     *  Thin heap.
-     *
-     *  @ingroup heap-detail
-     *
-     *  See Tarjan and Kaplan.
-     */
-    template<typename Value_Type, typename Cmp_Fn, typename _Alloc>
-    class thin_heap
-    : public left_child_next_sibling_heap PB_DS_BASE_T_P
+     * class description = "t|-|i|\| h34p">
+     **/
+    template<typename Value_Type, class Cmp_Fn, class Allocator>
+    class thin_heap_ : public PB_DS_BASE_C_DEC
     {
+
     private:
-      typedef typename _Alloc::template rebind<Value_Type>::other __rebind_a;
-      typedef left_child_next_sibling_heap PB_DS_BASE_T_P base_type;
+      typedef PB_DS_BASE_C_DEC base_type;
 
     protected:
-      typedef typename base_type::node 			node;
-      typedef typename base_type::node_pointer 		node_pointer;
-      typedef typename base_type::node_const_pointer 	node_const_pointer;
+      typedef typename base_type::node node;
+
+      typedef typename base_type::node_pointer node_pointer;
+
+      typedef typename base_type::const_node_pointer const_node_pointer;
 
     public:
-      typedef Value_Type 				value_type;
-      typedef Cmp_Fn 					cmp_fn;
-      typedef _Alloc 					allocator_type;
-      typedef typename _Alloc::size_type 		size_type;
-      typedef typename _Alloc::difference_type 		difference_type;
 
-      typedef typename __rebind_a::pointer		pointer;
-      typedef typename __rebind_a::const_pointer	const_pointer;
-      typedef typename __rebind_a::reference		reference;
-      typedef typename __rebind_a::const_reference     	const_reference;
+      typedef typename Allocator::size_type size_type;
 
-      typedef typename base_type::point_iterator 	point_iterator;
-      typedef typename base_type::point_const_iterator 	point_const_iterator;
-      typedef typename base_type::iterator 		iterator;
-      typedef typename base_type::const_iterator 	const_iterator;
+      typedef typename Allocator::difference_type difference_type;
 
+      typedef Value_Type value_type;
+
+      typedef
+      typename Allocator::template rebind<
+	value_type>::other::pointer
+      pointer;
+
+      typedef
+      typename Allocator::template rebind<
+	value_type>::other::const_pointer
+      const_pointer;
+
+      typedef
+      typename Allocator::template rebind<
+	value_type>::other::reference
+      reference;
+
+      typedef
+      typename Allocator::template rebind<
+	value_type>::other::const_reference
+      const_reference;
+
+      typedef
+      typename PB_DS_BASE_C_DEC::const_point_iterator
+      const_point_iterator;
+
+      typedef typename PB_DS_BASE_C_DEC::point_iterator point_iterator;
+
+      typedef typename PB_DS_BASE_C_DEC::const_iterator const_iterator;
+
+      typedef typename PB_DS_BASE_C_DEC::iterator iterator;
+
+      typedef Cmp_Fn cmp_fn;
+
+      typedef Allocator allocator_type;
+
+    public:
 
       inline point_iterator
-      push(const_reference);
+      push(const_reference r_val);
 
       void
-      modify(point_iterator, const_reference);
+      modify(point_iterator it, const_reference r_new_val);
 
       inline const_reference
       top() const;
@@ -117,50 +148,51 @@ namespace __gnu_pbds
       pop();
 
       void
-      erase(point_iterator);
+      erase(point_iterator it);
 
       inline void
       clear();
 
       template<typename Pred>
       size_type
-      erase_if(Pred);
+      erase_if(Pred pred);
 
       template<typename Pred>
       void
-      split(Pred, PB_DS_CLASS_C_DEC&);
+      split(Pred pred, PB_DS_CLASS_C_DEC& other);
 
       void
-      join(PB_DS_CLASS_C_DEC&);
+      join(PB_DS_CLASS_C_DEC& other);
 
     protected:
-      thin_heap();
 
-      thin_heap(const Cmp_Fn&);
+      thin_heap_();
 
-      thin_heap(const PB_DS_CLASS_C_DEC&);
+      thin_heap_(const Cmp_Fn& r_cmp_fn);
+
+      thin_heap_(const PB_DS_CLASS_C_DEC& other);
 
       void
-      swap(PB_DS_CLASS_C_DEC&);
+      swap(PB_DS_CLASS_C_DEC& other);
 
-      ~thin_heap();
+      ~thin_heap_();
 
       template<typename It>
       void
-      copy_from_range(It, It);
+      copy_from_range(It first_it, It last_it);
 
 #ifdef _GLIBCXX_DEBUG
       void
-      assert_valid(const char*, int) const;
+      assert_valid() const;
 
       void
-      assert_max(const char*, int) const;
-#endif
+      assert_max() const;
+#endif 
 
 #ifdef PB_DS_THIN_HEAP_TRACE_
       void
       trace() const;
-#endif
+#endif 
 
     private:
       enum
@@ -168,38 +200,40 @@ namespace __gnu_pbds
 	  max_rank = (sizeof(size_type) << 4) + 2
 	};
 
+    private:
+
       void
       initialize();
 
       inline void
-      update_max(node_pointer);
+      update_max(node_pointer p_nd);
 
       inline void
-      fix(node_pointer);
+      fix(node_pointer p_nd);
 
       inline void
-      fix_root(node_pointer);
+      fix_root(node_pointer p_y);
 
       inline void
-      fix_sibling_rank_1_unmarked(node_pointer);
+      fix_sibling_rank_1_unmarked(node_pointer p_y);
 
       inline void
-      fix_sibling_rank_1_marked(node_pointer);
+      fix_sibling_rank_1_marked(node_pointer p_y);
 
       inline void
-      fix_sibling_general_unmarked(node_pointer);
+      fix_sibling_general_unmarked(node_pointer p_y);
 
       inline void
-      fix_sibling_general_marked(node_pointer);
+      fix_sibling_general_marked(node_pointer p_y);
 
       inline void
-      fix_child(node_pointer);
+      fix_child(node_pointer p_y);
 
       inline static void
-      make_root(node_pointer);
+      make_root(node_pointer p_nd);
 
       inline void
-      make_root_and_link(node_pointer);
+      make_root_and_link(node_pointer p_nd);
 
       inline void
       remove_max_node();
@@ -208,7 +242,7 @@ namespace __gnu_pbds
       to_aux_except_max();
 
       inline void
-      add_to_aux(node_pointer);
+      add_to_aux(node_pointer p_nd);
 
       inline void
       make_from_aux();
@@ -217,24 +251,26 @@ namespace __gnu_pbds
       rank_bound();
 
       inline void
-      make_child_of(node_pointer, node_pointer);
+      make_child_of(node_pointer p_nd, node_pointer p_new_parent);
 
       inline void
-      remove_node(node_pointer);
+      remove_node(node_pointer p_nd);
 
       inline node_pointer
-      join(node_pointer, node_pointer) const;
+      join(node_pointer p_lhs, node_pointer p_rhs) const;
 
 #ifdef _GLIBCXX_DEBUG
       void
-      assert_node_consistent(node_const_pointer, bool, const char*, int) const;
+      assert_node_consistent(const_node_pointer p_nd, bool root) const;
 
       void
-      assert_aux_null(const char*, int) const;
-#endif
+      assert_aux_null() const;
+#endif 
 
-      node_pointer 	m_p_max;
-      node_pointer 	m_a_aux[max_rank];
+    private:
+      node_pointer m_p_max;
+
+      node_pointer m_a_aux[max_rank];
     };
 
     enum
@@ -270,24 +306,18 @@ namespace __gnu_pbds
 	/* 21    */ 15126ul,
 	/* 22    */ 24476ul,
 	/* 23    */ 39602ul,
-	/* 24    */ 64079ul
-#if __SIZE_MAX__ > 0xfffful
-	,
+	/* 24    */ 64079ul,
 	/* 25    */ 103681ul,
 	/* 26    */ 167761ul,
 	/* 27    */ 271442ul,
 	/* 28    */ 439204ul,
-	/* 29    */ 710646ul
-#if __SIZE_MAX__ > 0xffffful
-	,
+	/* 29    */ 710646ul,
 	/* 30    */ 1149851ul,
 	/* 31    */ 1860497ul,
 	/* 32    */ 3010349ul,
 	/* 33    */ 4870846ul,
 	/* 34    */ 7881196ul,
-	/* 35    */ 12752042ul
-#if __SIZE_MAX__ > 0xfffffful
-	,
+	/* 35    */ 12752042ul,
 	/* 36    */ 20633239ul,
 	/* 37    */ 33385282ul,
 	/* 38    */ 54018521ul,
@@ -300,18 +330,8 @@ namespace __gnu_pbds
 	/* 45    */ 1568397607ul,
 	/* 46    */ 2537720636ul,
 	/* 47    */ 4106118243ul
-#endif
-#endif
-#endif
 	/* Pot's good, let's play */
       };
-
-#define PB_DS_ASSERT_NODE_CONSISTENT(_Node, _Bool)			\
-  _GLIBCXX_DEBUG_ONLY(assert_node_consistent(_Node, _Bool,		\
-					     __FILE__, __LINE__);)
-
-#define PB_DS_ASSERT_AUX_NULL(X)					\
-  _GLIBCXX_DEBUG_ONLY(X.assert_aux_null(__FILE__, __LINE__);)
 
 #include <ext/pb_ds/detail/thin_heap_/constructors_destructor_fn_imps.hpp>
 #include <ext/pb_ds/detail/thin_heap_/debug_fn_imps.hpp>
@@ -321,13 +341,11 @@ namespace __gnu_pbds
 #include <ext/pb_ds/detail/thin_heap_/erase_fn_imps.hpp>
 #include <ext/pb_ds/detail/thin_heap_/split_join_fn_imps.hpp>
 
-#undef PB_DS_ASSERT_AUX_NULL
-#undef PB_DS_ASSERT_NODE_CONSISTENT
 #undef PB_DS_CLASS_C_DEC
 #undef PB_DS_CLASS_T_DEC
-#undef PB_DS_BASE_T_P
+#undef PB_DS_BASE_C_DEC
 
   } // namespace detail
 } // namespace __gnu_pbds
 
-#endif
+#endif 

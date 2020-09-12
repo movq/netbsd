@@ -1,4 +1,5 @@
-# Copyright 1999-2019 Free Software Foundation, Inc.
+# Copyright 1999, 2003, 2004, 2007, 2008, 2009, 2010, 2011
+# Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,7 +14,16 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# Test -file-list-exec-source-files.
+#
+# Test essential Machine interface (MI) operations
+#
+# Verify that, using the MI, we can run a simple program and perform basic
+# debugging activities like: insert breakpoints, run the program,
+# step, next, continue until it ends and, last but not least, quit.
+#
+# The goal is not to test gdb functionality, which is done by other tests,
+# but to verify the correct output response to MI operations.
+#
 
 load_lib mi-support.exp
 set MIFLAGS "-i=mi"
@@ -23,10 +33,11 @@ if [mi_gdb_start] {
     continue
 }
 
-standard_testfile basics.c
-
-if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug}] != "" } {
-     untested "failed to compile"
+set testfile "basics"
+set srcfile ${testfile}.c
+set binfile ${objdir}/${subdir}/mi-file
+if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug additional_flags=-DFAKEARGV}] != "" } {
+     untested mi-file.exp
      return -1
 }
 
@@ -39,11 +50,7 @@ proc test_file_list_exec_source_file {} {
     global srcdir
     global subdir
     global fullname_syntax
-    if { [is_remote host] } {
-	set srcfilepath ".*${srcfile}"
-    } else {
-	set srcfilepath [string_to_regexp ${srcdir}/${subdir}/${srcfile}]
-    }
+    set srcfilepath [string_to_regexp ${srcdir}/${subdir}/${srcfile}]
 
     # get the path and absolute path to the current executable
     #
@@ -68,7 +75,7 @@ proc test_file_list_exec_source_files {} {
 
     # get the path and absolute path to the current executable
     mi_gdb_test "222-file-list-exec-source-files" \
-	    "222\\\^done,files=\\\[\{file=\".*${srcfile}\",fullname=\"$fullname_syntax${srcfile}\"\}.*]" \
+	    "222\\\^done,files=\\\[\{file=\".*/${srcfile}\",fullname=\"$fullname_syntax${srcfile}\"\}.*]" \
               "Getting a list of source files."
 }
 

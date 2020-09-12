@@ -1,5 +1,6 @@
 /* BFD support for the D10V processor
-   Copyright (C) 1996-2019 Free Software Foundation, Inc.
+   Copyright 1996, 1999, 2000, 2002, 2005, 2007, 2010
+   Free Software Foundation, Inc.
    Contributed by Martin Hunt (hunt@cygnus.com).
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -32,11 +33,10 @@ static const bfd_arch_info_type d10v_ts3_info =
   bfd_mach_d10v_ts3,
   "d10v",
   "d10v:ts3",
-  4,	/* Section alignment power.  */
+  4, 	/* Section alignment power.  */
   FALSE,
   bfd_default_compatible,
   bfd_default_scan,
-  bfd_arch_default_fill,
   0,
 };
 
@@ -53,7 +53,6 @@ static const bfd_arch_info_type d10v_ts2_info =
   FALSE,
   bfd_default_compatible,
   bfd_default_scan,
-  bfd_arch_default_fill,
   & d10v_ts3_info,
 };
 
@@ -70,6 +69,5 @@ const bfd_arch_info_type bfd_d10v_arch =
   TRUE,
   bfd_default_compatible,
   bfd_default_scan,
-  bfd_arch_default_fill,
   & d10v_ts2_info,
 };

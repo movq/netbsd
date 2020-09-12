@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2008-2019 Free Software Foundation, Inc.
+   Copyright 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -27,9 +27,12 @@ int foo ()
   return a[0] + a[1] + a[2] + a[3] + a[4] + a[5] + a[6];
 }
 
-int
 main()
 {
+#ifdef usestubs
+    set_debug_traps ();
+    breakpoint ();
+#endif
   foo ();
 } /* end of main */
 

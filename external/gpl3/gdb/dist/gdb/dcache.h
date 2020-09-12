@@ -1,7 +1,8 @@
 /* Declarations for caching.  Typically used by remote back ends for
    caching remote memory.
 
-   Copyright (C) 1992-2019 Free Software Foundation, Inc.
+   Copyright (C) 1992, 1993, 1995, 1999, 2000, 2001, 2007, 2008, 2009, 2010,
+   2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -21,8 +22,6 @@
 #ifndef DCACHE_H
 #define DCACHE_H
 
-#include "target.h"	/* for enum target_xfer_status */
-
 typedef struct dcache_struct DCACHE;
 
 /* Invalidate DCACHE.  */
@@ -34,13 +33,12 @@ DCACHE *dcache_init (void);
 /* Free a DCACHE.  */
 void dcache_free (DCACHE *);
 
-enum target_xfer_status
-  dcache_read_memory_partial (struct target_ops *ops, DCACHE *dcache,
-			      CORE_ADDR memaddr, gdb_byte *myaddr,
-			      ULONGEST len, ULONGEST *xfered_len);
+/* Simple to call from <remote>_xfer_memory.  */
 
-void dcache_update (DCACHE *dcache, enum target_xfer_status status,
-		    CORE_ADDR memaddr, const gdb_byte *myaddr,
-		    ULONGEST len);
+int dcache_xfer_memory (struct target_ops *ops, DCACHE *cache, CORE_ADDR mem,
+			gdb_byte *my, int len, int should_write);
+
+void dcache_update (DCACHE *dcache, CORE_ADDR memaddr, gdb_byte *myaddr,
+		    int len);
 
 #endif /* DCACHE_H */

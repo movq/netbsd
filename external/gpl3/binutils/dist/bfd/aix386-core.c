@@ -1,7 +1,9 @@
 /* BFD back-end for AIX on PS/2 core files.
    This was based on trad-core.c, which was written by John Gilmore of
-	Cygnus Support.
-   Copyright (C) 1988-2020 Free Software Foundation, Inc.
+        Cygnus Support.
+   Copyright 1988, 1989, 1991, 1992, 1993, 1994, 1996, 1998, 1999, 2000,
+   2001, 2002, 2004, 2006, 2007
+   Free Software Foundation, Inc.
    Written by Minh Tran-Le <TRANLE@INTELLICORP.COM>.
    Converted to back end form by Ian Lance Taylor <ian@cygnus.com>.
 
@@ -57,31 +59,32 @@
     (((bfd)->tdata.trad_core_data)->reg2_section)
 
 /* These are stored in the bfd's tdata.  */
-struct trad_core_struct
-{
+struct trad_core_struct {
   struct corehdr *hdr;		/* core file header */
   asection *reg_section;
   asection *reg2_section;
   asection *sections[MAX_CORE_SEGS];
 };
 
+static void swap_abort PARAMS ((void));
+
 static const bfd_target *
-aix386_core_file_p (bfd *abfd)
+aix386_core_file_p (abfd)
+     bfd *abfd;
 {
   int i, n;
   unsigned char longbuf[4];	/* Raw bytes of various header fields */
   bfd_size_type core_size = sizeof (struct corehdr);
   bfd_size_type amt;
   struct corehdr *core;
-  struct mergem
-  {
+  struct mergem {
     struct trad_core_struct coredata;
     struct corehdr internal_core;
   } *mergem;
   flagword flags;
 
   amt = sizeof (longbuf);
-  if (bfd_bread (longbuf, amt, abfd) != amt)
+  if (bfd_bread ((PTR) longbuf, amt, abfd) != amt)
     {
       if (bfd_get_error () != bfd_error_system_call)
 	bfd_set_error (bfd_error_wrong_format);
@@ -101,7 +104,7 @@ aix386_core_file_p (bfd *abfd)
 
   core = &mergem->internal_core;
 
-  if ((bfd_bread (core, core_size, abfd)) != core_size)
+  if ((bfd_bread ((PTR) core, core_size, abfd)) != core_size)
     {
       if (bfd_get_error () != bfd_error_system_call)
 	bfd_set_error (bfd_error_wrong_format);
@@ -193,25 +196,25 @@ aix386_core_file_p (bfd *abfd)
 }
 
 static char *
-aix386_core_file_failing_command (bfd *abfd)
+aix386_core_file_failing_command (abfd)
+     bfd *abfd;
 {
   return core_hdr (abfd)->cd_comm;
 }
 
 static int
-aix386_core_file_failing_signal (bfd *abfd)
+aix386_core_file_failing_signal (abfd)
+     bfd *abfd;
 {
   return core_hdr (abfd)->cd_cursig;
 }
 
 #define aix386_core_file_matches_executable_p generic_core_file_matches_executable_p
 
-#define aix386_core_file_pid _bfd_nocore_core_file_pid
-
 /* If somebody calls any byte-swapping routines, shoot them.  */
 
 static void
-swap_abort (void)
+swap_abort ()
 {
   /* This way doesn't require any declaration for ANSI to fuck up.  */
   abort ();
@@ -224,8 +227,7 @@ swap_abort (void)
 #define	NO_PUT64 ((void (*) (bfd_uint64_t, void *)) swap_abort)
 #define	NO_GETS64 ((bfd_int64_t (*) (const void *)) swap_abort)
 
-const bfd_target core_aix386_vec =
-{
+const bfd_target aix386_core_vec = {
   "aix386-core",
   bfd_target_unknown_flavour,
   BFD_ENDIAN_BIG,		/* target byte order */
@@ -238,7 +240,6 @@ const bfd_target core_aix386_vec =
   0,				/* leading underscore */
   ' ',				/* ar_pad_char */
   16,				/* ar_max_namelen */
-  0,				/* match priority.  */
   NO_GET64, NO_GETS64, NO_PUT64,
   NO_GET, NO_GETS, NO_PUT,
   NO_GET, NO_GETS, NO_PUT,	/* data */
@@ -246,24 +247,12 @@ const bfd_target core_aix386_vec =
   NO_GET, NO_GETS, NO_PUT,
   NO_GET, NO_GETS, NO_PUT,	/* hdrs */
 
-  {				/* bfd_check_format */
-    _bfd_dummy_target,
-    _bfd_dummy_target,
-    _bfd_dummy_target,
-    aix386_core_file_p
-  },
-  {				/* bfd_create_object */
-    _bfd_bool_bfd_false_error,
-    _bfd_bool_bfd_false_error,
-    _bfd_bool_bfd_false_error,
-    _bfd_bool_bfd_false_error
-  },
-  {				/* bfd_write_contents */
-    _bfd_bool_bfd_false_error,
-    _bfd_bool_bfd_false_error,
-    _bfd_bool_bfd_false_error,
-    _bfd_bool_bfd_false_error
-  },
+  {_bfd_dummy_target, _bfd_dummy_target,
+   _bfd_dummy_target, aix386_core_file_p},
+  {bfd_false, bfd_false,	/* bfd_create_object */
+   bfd_false, bfd_false},
+  {bfd_false, bfd_false,	/* bfd_write_contents */
+   bfd_false, bfd_false},
 
   BFD_JUMP_TABLE_GENERIC (_bfd_generic),
   BFD_JUMP_TABLE_COPY (_bfd_generic),
@@ -277,5 +266,5 @@ const bfd_target core_aix386_vec =
 
   NULL,
 
-  NULL
+  (PTR) 0
 };

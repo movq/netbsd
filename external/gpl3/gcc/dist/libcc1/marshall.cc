@@ -1,5 +1,5 @@
 /* Marshalling and unmarshalling.
-   Copyright (C) 2014-2019 Free Software Foundation, Inc.
+   Copyright (C) 2014 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -47,6 +47,36 @@ cc1_plugin::unmarshall_intlike (connection *conn, unsigned long long *result)
   if (!conn->require ('i'))
     return FAIL;
   return conn->get (result, sizeof (*result));
+}
+
+cc1_plugin::status
+cc1_plugin::unmarshall (connection *conn, enum gcc_c_symbol_kind *result)
+{
+  protocol_int p;
+  if (!unmarshall_intlike (conn, &p))
+    return FAIL;
+  *result = (enum gcc_c_symbol_kind) p;
+  return OK;
+}
+
+cc1_plugin::status
+cc1_plugin::unmarshall (connection *conn, enum gcc_c_oracle_request *result)
+{
+  protocol_int p;
+  if (!unmarshall_intlike (conn, &p))
+    return FAIL;
+  *result = (enum gcc_c_oracle_request) p;
+  return OK;
+}
+
+cc1_plugin::status
+cc1_plugin::unmarshall (connection *conn, enum gcc_qualifiers *result)
+{
+  protocol_int p;
+  if (!unmarshall_intlike (conn, &p))
+    return FAIL;
+  *result = (enum gcc_qualifiers) p;
+  return OK;
 }
 
 cc1_plugin::status
@@ -98,98 +128,39 @@ cc1_plugin::unmarshall (connection *conn, char **result)
 }
 
 cc1_plugin::status
-cc1_plugin::marshall_array_start (connection *conn, char id,
-				  size_t n_elements)
+cc1_plugin::marshall (connection *conn, const gcc_type_array *a)
 {
-  if (!conn->send (id))
+  if (!conn->send ('a'))
     return FAIL;
 
-  unsigned long long r = n_elements;
+  unsigned long long r = a->n_elements;
   if (!conn->send (&r, sizeof (r)))
     return FAIL;
 
-  return OK;
-}
-
-cc1_plugin::status
-cc1_plugin::marshall_array_elmts (connection *conn, size_t n_bytes,
-				  void *elements)
-{
-  return conn->send (elements, n_bytes);
-}
-
-cc1_plugin::status
-cc1_plugin::unmarshall_array_start (connection *conn, char id,
-				    size_t *n_elements)
-{
-  unsigned long long len;
-
-  if (!conn->require (id))
-    return FAIL;
-  if (!conn->get (&len, sizeof (len)))
-    return FAIL;
-
-  *n_elements = len;
-
-  return OK;
-}
-
-cc1_plugin::status
-cc1_plugin::unmarshall_array_elmts (connection *conn, size_t n_bytes,
-				    void *elements)
-{
-  return conn->get (elements, n_bytes);
-}
-
-cc1_plugin::status
-cc1_plugin::marshall (connection *conn, const gcc_type_array *a)
-{
-  size_t len;
-
-  if (a)
-    len = a->n_elements;
-  else
-    len = (size_t)-1;
-
-  if (!marshall_array_start (conn, 'a', len))
-    return FAIL;
-
-  if (!a)
-    return OK;
-
-  return marshall_array_elmts (conn, len * sizeof (a->elements[0]),
-			       a->elements);
+  return conn->send (a->elements, r * sizeof (a->elements[0]));
 }
 
 cc1_plugin::status
 cc1_plugin::unmarshall (connection *conn, gcc_type_array **result)
 {
-  size_t len;
+  unsigned long long len;
 
-  if (!unmarshall_array_start (conn, 'a', &len))
+  if (!conn->require ('a'))
+    return FAIL;
+  if (!conn->get (&len, sizeof (len)))
     return FAIL;
 
-  if (len == (size_t)-1)
+  *result = new gcc_type_array;
+
+  (*result)->n_elements = len;
+  (*result)->elements = new gcc_type[len];
+
+  if (!conn->get ((*result)->elements, len * sizeof ((*result)->elements[0])))
     {
-      *result = NULL;
-      return OK;
-    }
-
-  gcc_type_array *gta = new gcc_type_array;
-
-  gta->n_elements = len;
-  gta->elements = new gcc_type[len];
-
-  if (!unmarshall_array_elmts (conn,
-			       len * sizeof (gta->elements[0]),
-			       gta->elements))
-    {
-      delete[] gta->elements;
+      delete[] (*result)->elements;
       delete *result;
       return FAIL;
     }
-
-  *result = gta;
 
   return OK;
 }

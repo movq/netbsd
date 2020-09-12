@@ -1,4 +1,4 @@
-/*	$NetBSD: info-utils.h,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: info-utils.h,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* info-utils.h -- Exported functions and variables from info-utils.c.
    Id: info-utils.h,v 1.4 2004/04/11 17:56:45 karl Exp    

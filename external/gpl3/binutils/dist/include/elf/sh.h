@@ -1,11 +1,11 @@
 /* SH ELF support for BFD.
-   Copyright (C) 1998-2020 Free Software Foundation, Inc.
+   Copyright 1998, 2000, 2001, 2002, 2003, 2004, 2005 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 3 of the License, or
+   the Free Software Foundation; either version 2 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -19,10 +19,6 @@
 
 #ifndef _ELF_SH_H
 #define _ELF_SH_H
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /* Processor specific flags for the ELF header e_flags field.  */
 
@@ -88,12 +84,6 @@ int sh_find_elf_flags (unsigned int arch_set);
 
 /* Convert bfd_mach_* into EF_SH*.  */
 int sh_elf_get_flags_from_mach (unsigned long mach);
-
-/* Other e_flags bits.  */
-
-#define EF_SH_PIC		0x100	/* Segments of an FDPIC binary may
-					   be relocated independently.  */
-#define EF_SH_FDPIC		0x8000	/* Uses the FDPIC ABI.  */
 
 /* Flags for the st_other symbol field.
    Keep away from the STV_ visibility flags (bit 0..1).  */
@@ -223,17 +213,7 @@ START_RELOC_NUMBERS (elf_sh_reloc_type)
   RELOC_NUMBER (R_SH_JMP_SLOT64, 195)
   RELOC_NUMBER (R_SH_RELATIVE64, 196)
   FAKE_RELOC (R_SH_FIRST_INVALID_RELOC_5, 197)
-  FAKE_RELOC (R_SH_LAST_INVALID_RELOC_5, 200)
-  RELOC_NUMBER (R_SH_GOT20, 201)
-  RELOC_NUMBER (R_SH_GOTOFF20, 202)
-  RELOC_NUMBER (R_SH_GOTFUNCDESC, 203)
-  RELOC_NUMBER (R_SH_GOTFUNCDESC20, 204)
-  RELOC_NUMBER (R_SH_GOTOFFFUNCDESC, 205)
-  RELOC_NUMBER (R_SH_GOTOFFFUNCDESC20, 206)
-  RELOC_NUMBER (R_SH_FUNCDESC, 207)
-  RELOC_NUMBER (R_SH_FUNCDESC_VALUE, 208)
-  FAKE_RELOC (R_SH_FIRST_INVALID_RELOC_6, 209)
-  FAKE_RELOC (R_SH_LAST_INVALID_RELOC_6, 241)
+  FAKE_RELOC (R_SH_LAST_INVALID_RELOC_5, 241)
   RELOC_NUMBER (R_SH_SHMEDIA_CODE, 242)
   RELOC_NUMBER (R_SH_PT_16, 243)
   RELOC_NUMBER (R_SH_IMMS16, 244)
@@ -249,9 +229,5 @@ START_RELOC_NUMBERS (elf_sh_reloc_type)
   RELOC_NUMBER (R_SH_64, 254)
   RELOC_NUMBER (R_SH_64_PCREL, 255)
 END_RELOC_NUMBERS (R_SH_max)
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

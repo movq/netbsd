@@ -1,4 +1,4 @@
-# Copyright (C) 2015-2019 Free Software Foundation, Inc.
+# Copyright (C) 2015 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -32,8 +32,7 @@ if { [skip_python_tests] } { continue }
 
 proc test_lookup_type { lang type_name } {
     gdb_test_no_output "set language ${lang}"
-    gdb_test "python print(gdb.lookup_type('${type_name}').name)" \
-        "${type_name}" \
+    gdb_test_no_output "python gdb.lookup_type('${type_name}')" \
         "lookup type ${type_name} using language ${lang}"
 }
 
@@ -46,6 +45,8 @@ test_lookup_type "d" "ucent"
 test_lookup_type "fortran" "character"
 
 test_lookup_type "go" "int32"
+
+test_lookup_type "java" "byte"
 
 test_lookup_type "modula-2" "CARDINAL"
 

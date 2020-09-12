@@ -1,6 +1,6 @@
 ;;   This file contains instructions that support fixed-point operations
 ;;   for Atmel AVR micro controllers.
-;;   Copyright (C) 2012-2019 Free Software Foundation, Inc.
+;;   Copyright (C) 2012-2013 Free Software Foundation, Inc.
 ;;
 ;;   Contributed by Sean D'Epagnier  (sean@depagnier.com)
 ;;                  Georg-Johann Lay (avr@gjlay.de)
@@ -231,11 +231,7 @@
               (clobber (reg:HI 24))])
    (set (match_operand:QQ 0 "register_operand" "")
         (reg:QQ 23))]
-  "!AVR_HAVE_MUL"
-  {
-    avr_fix_inputs (operands, 1 << 2, regmask (QQmode, 24));
-  })
-
+  "!AVR_HAVE_MUL")
 
 (define_expand "muluqq3_nomul"
   [(set (reg:UQQ 22)
@@ -250,10 +246,7 @@
               (clobber (reg:HI 22))])
    (set (match_operand:UQQ 0 "register_operand" "")
         (reg:UQQ 25))]
-  "!AVR_HAVE_MUL"
-  {
-    avr_fix_inputs (operands, 1 << 2, regmask (UQQmode, 22));
-  })
+  "!AVR_HAVE_MUL")
 
 (define_insn "*mulqq3.call"
   [(set (reg:QQ 23)
@@ -281,10 +274,7 @@
               (clobber (reg:HI 22))])
    (set (match_operand:ALL2QA 0 "register_operand" "")
         (reg:ALL2QA 24))]
-  "AVR_HAVE_MUL"
-  {
-    avr_fix_inputs (operands, 1 << 2, regmask (<MODE>mode, 18));
-  })
+  "AVR_HAVE_MUL")
 
 ;; "*mulhq3.call"  "*muluhq3.call"
 ;; "*mulha3.call"  "*muluha3.call"
@@ -312,10 +302,7 @@
                     (reg:ALL4A 20)))
    (set (match_operand:ALL4A 0 "register_operand" "")
         (reg:ALL4A 24))]
-  "AVR_HAVE_MUL"
-  {
-    avr_fix_inputs (operands, 1 << 2, regmask (<MODE>mode, 16));
-  })
+  "AVR_HAVE_MUL")
 
 ;; "*mulsa3.call" "*mulusa3.call"
 (define_insn "*mul<mode>3.call"
@@ -343,12 +330,7 @@
                                 (reg:ALL1Q 22)))
               (clobber (reg:QI 25))])
    (set (match_operand:ALL1Q 0 "register_operand" "")
-        (reg:ALL1Q 24))]
-  ""
-  {
-    avr_fix_inputs (operands, 1 << 2, regmask (<MODE>mode, 25));
-  })
-
+        (reg:ALL1Q 24))])
 
 ;; "*divqq3.call" "*udivuqq3.call"
 (define_insn "*<code><mode>3.call"
@@ -374,11 +356,7 @@
               (clobber (reg:HI 26))
               (clobber (reg:QI 21))])
    (set (match_operand:ALL2QA 0 "register_operand" "")
-        (reg:ALL2QA 24))]
-  ""
-  {
-    avr_fix_inputs (operands, 1 << 2, regmask (<MODE>mode, 26));
-  })
+        (reg:ALL2QA 24))])
 
 ;; "*divhq3.call" "*udivuhq3.call"
 ;; "*divha3.call" "*udivuha3.call"
@@ -407,11 +385,7 @@
               (clobber (reg:HI 26))
               (clobber (reg:HI 30))])
    (set (match_operand:ALL4A 0 "register_operand" "")
-        (reg:ALL4A 22))]
-  ""
-  {
-    avr_fix_inputs (operands, 1 << 2, regmask (<MODE>mode, 24));
-  })
+        (reg:ALL4A 22))])
 
 ;; "*divsa3.call" "*udivusa3.call"
 (define_insn "*<code><mode>3.call"
@@ -456,12 +430,11 @@
       }
 
     // Input and output of the libgcc function
-    const unsigned int regno_in[]  = { -1U, 22, 22, -1U, 18 };
-    const unsigned int regno_out[] = { -1U, 24, 24, -1U, 22 };
+    const unsigned int regno_in[]  = { -1, 22, 22, -1, 18 };
+    const unsigned int regno_out[] = { -1, 24, 24, -1, 22 };
 
     operands[3] = gen_rtx_REG (<MODE>mode, regno_out[(size_t) GET_MODE_SIZE (<MODE>mode)]);
     operands[4] = gen_rtx_REG (<MODE>mode,  regno_in[(size_t) GET_MODE_SIZE (<MODE>mode)]);
-    avr_fix_inputs (operands, 1 << 2, regmask (<MODE>mode, REGNO (operands[4])));
     operands[5] = simplify_gen_subreg (QImode, force_reg (HImode, operands[2]), HImode, 0);
     // $2 is no more needed, but is referenced for expand.
     operands[2] = const0_rtx;

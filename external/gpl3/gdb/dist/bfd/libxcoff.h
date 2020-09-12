@@ -1,5 +1,5 @@
 /* BFD XCOFF object file private structure.
-   Copyright (C) 2001-2019 Free Software Foundation, Inc.
+   Copyright 2001, 2002, 2005, 2007, 2009 Free Software Foundation, Inc.
    Written by Tom Rix, Redhat.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -64,8 +64,8 @@ struct xcoff_backend_data_rec
   unsigned long _xcoff_ldhdr_version;
 
   bfd_boolean (* _xcoff_put_symbol_name)
-    (struct bfd_link_info *, struct bfd_strtab_hash *,
-     struct internal_syment *, const char *);
+    (bfd *, struct bfd_strtab_hash *, struct internal_syment *,
+     const char *);
 
   bfd_boolean (* _xcoff_put_ldsymbol_name)
     (bfd *, struct xcoff_loader_info *, struct internal_ldsym *,
@@ -77,7 +77,7 @@ struct xcoff_backend_data_rec
     (bfd *, union internal_auxent *, const char *);
 
   /* Line number and relocation overflow.
-     XCOFF32 overflows to another section when the line number or the
+     XCOFF32 overflows to another section when the line number or the 
      relocation count exceeds 0xffff.  XCOFF64 does not overflow.  */
   bfd_boolean (*_xcoff_is_lineno_count_overflow) (bfd *, bfd_vma);
   bfd_boolean (*_xcoff_is_reloc_count_overflow)  (bfd *, bfd_vma);
@@ -87,11 +87,11 @@ struct xcoff_backend_data_rec
      XCOFF64 is offset in .loader header.  */
   bfd_vma (*_xcoff_loader_symbol_offset) (bfd *, struct internal_ldhdr *);
   bfd_vma (*_xcoff_loader_reloc_offset)  (bfd *, struct internal_ldhdr *);
-
-  /* Global linkage.  The first word of global linkage code must be be
+  
+  /* Global linkage.  The first word of global linkage code must be be 
      modified by filling in the correct TOC offset.  */
   unsigned long *_xcoff_glink_code;
-
+  
   /* Size of the global link code in bytes of the xcoff_glink_code table.  */
   unsigned long _xcoff_glink_size;
 
@@ -154,8 +154,8 @@ struct xcoff_backend_data_rec
 
 #define bfd_xcoff_ldhdr_version(a) ((xcoff_backend (a)->_xcoff_ldhdr_version))
 
-#define bfd_xcoff_put_symbol_name(a, b, c, d, e) \
-  ((xcoff_backend (a)->_xcoff_put_symbol_name) ((b), (c), (d), (e)))
+#define bfd_xcoff_put_symbol_name(a, b, c, d) \
+  ((xcoff_backend (a)->_xcoff_put_symbol_name) ((a), (b), (c), (d)))
 
 #define bfd_xcoff_put_ldsymbol_name(a, b, c, d) \
   ((xcoff_backend (a)->_xcoff_put_ldsymbol_name) ((a), (b), (c), (d)))
@@ -185,7 +185,7 @@ struct xcoff_backend_data_rec
 #define bfd_xcoff_glink_code(a, b)   ((xcoff_backend (a)->_xcoff_glink_code[(b)]))
 #define bfd_xcoff_glink_code_size(a) ((xcoff_backend (a)->_xcoff_glink_size))
 
-/* Check for the magic number U803XTOCMAGIC or U64_TOCMAGIC for 64 bit
+/* Check for the magic number U803XTOCMAGIC or U64_TOCMAGIC for 64 bit 
    targets.  */
 #define bfd_xcoff_is_xcoff64(a) \
   (   (0x01EF == (bfd_xcoff_magic_number (a))) \
@@ -194,7 +194,7 @@ struct xcoff_backend_data_rec
 /* Check for the magic number U802TOMAGIC for 32 bit targets.  */
 #define bfd_xcoff_is_xcoff32(a) (0x01DF == (bfd_xcoff_magic_number (a)))
 
-#define bfd_xcoff_rtinit_size(a)	      ((xcoff_backend (a)->_xcoff_rtinit_size))
+#define bfd_xcoff_rtinit_size(a)              ((xcoff_backend (a)->_xcoff_rtinit_size))
 #define bfd_xcoff_generate_rtinit(a, b, c, d) ((xcoff_backend (a)->_xcoff_generate_rtinit ((a), (b), (c), (d))))
 
 /* Accessor macros for tdata.  */
@@ -234,27 +234,5 @@ bfd_boolean xcoff_reloc_type_rel  (XCOFF_RELOC_FUNCTION_ARGS);
 bfd_boolean xcoff_reloc_type_toc  (XCOFF_RELOC_FUNCTION_ARGS);
 bfd_boolean xcoff_reloc_type_ba   (XCOFF_RELOC_FUNCTION_ARGS);
 bfd_boolean xcoff_reloc_type_crel (XCOFF_RELOC_FUNCTION_ARGS);
-
-/* Structure to describe dwarf sections.
-   Useful to convert from XCOFF section name to flag and vice-versa.
-   Also mark if section has a length field at the beginning.  */
-struct xcoff_dwsect_name {
-  /* A XCOFF dwarf section is identified by its name.  */
-  unsigned int flag;
-
-  /* Corresponding XCOFF section name.  */
-  const char *name;
-
-  /* True if size must be prepended.  */
-  bfd_boolean def_size;
-};
-
-/* Number of entries in the array.  The number is known and public so that user
-   can 'extend' this array by index.  */
-#define XCOFF_DWSECT_NBR_NAMES	8
-
-/* The dwarf sections array.  */
-extern const struct xcoff_dwsect_name
-  xcoff_dwsect_names[XCOFF_DWSECT_NBR_NAMES];
 
 #endif /* LIBXCOFF_H */

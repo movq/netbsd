@@ -1,5 +1,5 @@
 /* A Fibonacci heap datatype.
-   Copyright (C) 1998-2020 Free Software Foundation, Inc.
+   Copyright 1998, 1999, 2000, 2001 Free Software Foundation, Inc.
    Contributed by Daniel Berlin (dan@cgsoftware.com).
    
 This file is part of GNU CC.
@@ -214,10 +214,7 @@ fibheap_replace_key_data (fibheap_t heap, fibnode_t node,
   node->key = key;
   y = node->parent;
 
-  /* Short-circuit if the key is the same, as we then don't have to
-     do anything.  Except if we're trying to force the new node to
-     be the new minimum for delete.  */
-  if (okey == key && okey != FIBHEAPKEY_MIN)
+  if (okey == key)
     return odata;
 
   /* These two compares are specifically <= 0 to make sure that in the case
@@ -259,11 +256,6 @@ fibheap_delete_node (fibheap_t heap, fibnode_t node)
 
   /* To perform delete, we just make it the min key, and extract.  */
   fibheap_replace_key (heap, node, FIBHEAPKEY_MIN);
-  if (node != heap->min)
-    {
-      fprintf (stderr, "Can't force minimum on fibheap.\n");
-      abort ();
-    }
   fibheap_extract_min (heap);
 
   return ret;

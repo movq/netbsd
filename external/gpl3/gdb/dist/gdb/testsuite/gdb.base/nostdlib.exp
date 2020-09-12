@@ -1,4 +1,4 @@
-# Copyright 2010-2019 Free Software Foundation, Inc.
+# Copyright 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,15 +13,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-standard_testfile .c
-
-# If we're using a stub, breakpoints at the entry point will not trigger.
-# See also the comment in break-entry.exp.
-
-if [use_gdb_stub] {
-    untested "skipping tests due to use_gdb_stub"
-    return
-}
+set testfile "nostdlib"
+set srcfile ${testfile}.c
+set executable ${testfile}
+set binfile ${objdir}/${subdir}/${executable}
 
 # default_target_compile would otherwise add "-lm" making the testcase
 # dependent on whether the system libraries are already prelinked.
@@ -41,11 +36,11 @@ if [board_info $board exists mathlib] {
     unset_board_info mathlib
 }
 if {$err != ""} {
-    untested "failed to compile"
+    untested ${testfile}.exp
     return -1
 }
 
-clean_restart $binfile
+clean_restart $executable
 
 gdb_breakpoint "*marker"
 gdb_breakpoint "*_start"

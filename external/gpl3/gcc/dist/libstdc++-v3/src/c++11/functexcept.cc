@@ -1,4 +1,4 @@
-// Copyright (C) 2001-2019 Free Software Foundation, Inc.
+// Copyright (C) 2001-2013 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -26,7 +26,11 @@
 #include <stdexcept>
 #include <new>
 #include <typeinfo>
-#include <stdarg.h>
+#include <ios>
+#include <system_error>
+#include <future>
+#include <functional>
+#include <regex>
 
 #ifdef _GLIBCXX_USE_NLS
 # include <libintl.h>
@@ -34,12 +38,6 @@
 #else
 # define _(msgid)   (msgid)
 #endif
-
-namespace __gnu_cxx
-{
-  int __snprintf_lite(char *__buf, size_t __bufsize, const char *__fmt,
-		      va_list __ap);
-}
 
 namespace std _GLIBCXX_VISIBILITY(default)
 {
@@ -82,22 +80,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   { _GLIBCXX_THROW_OR_ABORT(out_of_range(_(__s))); }
 
   void
-  __throw_out_of_range_fmt(const char* __fmt, ...)
-  {
-    const size_t __len = __builtin_strlen(__fmt);
-    // We expect at most 2 numbers, and 1 short string. The additional
-    // 512 bytes should provide more than enough space for expansion.
-    const size_t __alloca_size = __len + 512;
-    char *const __s = static_cast<char*>(__builtin_alloca(__alloca_size));
-    va_list __ap;
-
-    va_start(__ap, __fmt);
-    __gnu_cxx::__snprintf_lite(__s, __alloca_size, __fmt, __ap);
-    _GLIBCXX_THROW_OR_ABORT(out_of_range(_(__s)));
-    va_end(__ap);  // Not reached.
-  }
-
-  void
   __throw_runtime_error(const char* __s __attribute__((unused)))
   { _GLIBCXX_THROW_OR_ABORT(runtime_error(_(__s))); }
 
@@ -112,6 +94,28 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   void
   __throw_underflow_error(const char* __s __attribute__((unused)))
   { _GLIBCXX_THROW_OR_ABORT(underflow_error(_(__s))); }
+
+  void
+  __throw_ios_failure(const char* __s __attribute__((unused)))
+  { _GLIBCXX_THROW_OR_ABORT(ios_base::failure(_(__s))); }
+
+  void
+  __throw_system_error(int __i __attribute__((unused)))
+  { _GLIBCXX_THROW_OR_ABORT(system_error(error_code(__i,
+						    generic_category()))); }
+
+  void
+  __throw_future_error(int __i __attribute__((unused)))
+  { _GLIBCXX_THROW_OR_ABORT(future_error(make_error_code(future_errc(__i)))); }
+
+  void
+  __throw_bad_function_call()
+  { _GLIBCXX_THROW_OR_ABORT(bad_function_call()); }
+
+  void
+  __throw_regex_error(regex_constants::error_type __ecode
+		      __attribute__((unused)))
+  { _GLIBCXX_THROW_OR_ABORT(regex_error(__ecode)); }
 
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace

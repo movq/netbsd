@@ -1,5 +1,6 @@
 /* Semantics ops support for CGEN-based simulators.
-   Copyright (C) 1996-2019 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1997, 1998, 1999, 2002, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
    Contributed by Cygnus Solutions.
 
 This file is part of the GNU Simulators.
@@ -24,10 +25,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <assert.h>
 
-/* TODO: This should get moved into sim-inline.h.  */
 #if defined (__GNUC__) && ! defined (SEMOPS_DEFINE_INLINE)
 #define SEMOPS_DEFINE_INLINE
-#define SEMOPS_INLINE EXTERN_INLINE
+#define SEMOPS_INLINE extern inline
 #else
 #define SEMOPS_INLINE
 #endif
@@ -404,7 +404,7 @@ SUBWORDXFSI (XF in, int word)
   /* Note: typedef struct { SI parts[3]; } XF; */
   union { XF in; SI out[3]; } x;
   x.in = in;
-  if (CURRENT_TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+  if (CURRENT_TARGET_BYTE_ORDER == BIG_ENDIAN)
     return x.out[word];
   else
     return x.out[2 - word];
@@ -416,7 +416,7 @@ SUBWORDTFSI (TF in, int word)
   /* Note: typedef struct { SI parts[4]; } TF; */
   union { TF in; SI out[4]; } x;
   x.in = in;
-  if (CURRENT_TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+  if (CURRENT_TARGET_BYTE_ORDER == BIG_ENDIAN)
     return x.out[word];
   else
     return x.out[3 - word];
@@ -432,7 +432,7 @@ SEMOPS_INLINE DF
 JOINSIDF (SI x0, SI x1)
 {
   union { SI in[2]; DF out; } x;
-  if (CURRENT_TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+  if (CURRENT_TARGET_BYTE_ORDER == BIG_ENDIAN)
     x.in[0] = x0, x.in[1] = x1;
   else
     x.in[1] = x0, x.in[0] = x1;
@@ -443,7 +443,7 @@ SEMOPS_INLINE XF
 JOINSIXF (SI x0, SI x1, SI x2)
 {
   union { SI in[3]; XF out; } x;
-  if (CURRENT_TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+  if (CURRENT_TARGET_BYTE_ORDER == BIG_ENDIAN)
     x.in[0] = x0, x.in[1] = x1, x.in[2] = x2;
   else
     x.in[2] = x0, x.in[1] = x1, x.in[0] = x2;
@@ -454,7 +454,7 @@ SEMOPS_INLINE TF
 JOINSITF (SI x0, SI x1, SI x2, SI x3)
 {
   union { SI in[4]; TF out; } x;
-  if (CURRENT_TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
+  if (CURRENT_TARGET_BYTE_ORDER == BIG_ENDIAN)
     x.in[0] = x0, x.in[1] = x1, x.in[2] = x2, x.in[3] = x3;
   else
     x.in[3] = x0, x.in[2] = x1, x.in[1] = x2, x.in[0] = x3;
@@ -631,54 +631,6 @@ SUBOFQI (QI a, QI b, BI c)
   return res;
 }
 
-SEMOPS_INLINE BI
-MUL2OFSI (SI a, SI b)
-{
-  DI tmp = MULDI (EXTSIDI (a), EXTSIDI (b));
-  BI res = tmp < -0x80000000LL || tmp > 0x7fffffffLL;
-  return res;
-}
-
-SEMOPS_INLINE BI
-MUL1OFSI (USI a, USI b)
-{
-  UDI tmp = MULDI (ZEXTSIDI (a), ZEXTSIDI (b));
-  BI res = (tmp > 0xFFFFFFFFULL);
-  return res;
-}
-
-SEMOPS_INLINE BI
-ADDCFDI (DI a, DI b, BI c)
-{
-  DI tmp = ADDDI (a, ADDDI (b, c));
-  BI res = ((UDI) tmp < (UDI) a) || (c && tmp == a);
-  return res;
-}
-
-SEMOPS_INLINE BI
-ADDOFDI (DI a, DI b, BI c)
-{
-  DI tmp = ADDDI (a, ADDDI (b, c));
-  BI res = (((a < 0) == (b < 0))
-	    && ((a < 0) != (tmp < 0)));
-  return res;
-}
-
-SEMOPS_INLINE BI
-SUBCFDI (DI a, DI b, BI c)
-{
-  BI res = ((UDI) a < (UDI) b) || (c && a == b);
-  return res;
-}
-
-SEMOPS_INLINE BI
-SUBOFDI (DI a, DI b, BI c)
-{
-  DI tmp = SUBDI (a, ADDSI (b, c));
-  BI res = (((a < 0) != (b < 0))
-	    && ((a < 0) != (tmp < 0)));
-  return res;
-}
 #else
 
 SI ADDCSI (SI, SI, BI);
@@ -699,12 +651,6 @@ UBI ADDOFQI (QI, QI, BI);
 QI SUBCQI (QI, QI, BI);
 UBI SUBCFQI (QI, QI, BI);
 UBI SUBOFQI (QI, QI, BI);
-BI MUL1OFSI (SI a, SI b);
-BI MUL2OFSI (SI a, SI b);
-BI ADDCFDI (DI a, DI b, BI c);
-BI ADDOFDI (DI a, DI b, BI c);
-BI SUBCFDI (DI a, DI b, BI c);
-BI SUBOFDI (DI a, DI b, BI c);
 
 #endif
 

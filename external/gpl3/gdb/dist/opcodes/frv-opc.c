@@ -1,9 +1,8 @@
-/* DO NOT EDIT!  -*- buffer-read-only: t -*- vi:set ro:  */
 /* Instruction opcode table for frv.
 
 THIS FILE IS MACHINE GENERATED WITH CGEN.
 
-Copyright (C) 1996-2019 Free Software Foundation, Inc.
+Copyright 1996-2010 Free Software Foundation, Inc.
 
 This file is part of the GNU Binutils and/or GDB, the GNU debugger.
 
@@ -32,7 +31,6 @@ This file is part of the GNU Binutils and/or GDB, the GNU debugger.
 #include "libiberty.h"
 
 /* -- opc.c */
-#include "opintl.h"
 #include "elf/frv.h"
 #include <stdio.h>
 
@@ -236,7 +234,7 @@ static CGEN_ATTR_VALUE_ENUM_TYPE fr400_unit_mapping[] =
 /* NIL      */     UNIT_NIL,
 /* I0       */     UNIT_I0,
 /* I1       */     UNIT_I1,
-/* I01      */     UNIT_I01,
+/* I01      */     UNIT_I01, 
 /* I2       */     UNIT_NIL, /* no I2 or I3 unit */
 /* I3       */     UNIT_NIL,
 /* IALL     */     UNIT_I01, /* only I0 and I1 units */
@@ -271,7 +269,7 @@ static CGEN_ATTR_VALUE_ENUM_TYPE fr450_unit_mapping[] =
 /* NIL      */     UNIT_NIL,
 /* I0       */     UNIT_I0,
 /* I1       */     UNIT_I1,
-/* I01      */     UNIT_I01,
+/* I01      */     UNIT_I01, 
 /* I2       */     UNIT_NIL, /* no I2 or I3 unit */
 /* I3       */     UNIT_NIL,
 /* IALL     */     UNIT_I01, /* only I0 and I1 units */
@@ -303,7 +301,7 @@ static CGEN_ATTR_VALUE_ENUM_TYPE fr500_unit_mapping[] =
 /* NIL      */     UNIT_NIL,
 /* I0       */     UNIT_I0,
 /* I1       */     UNIT_I1,
-/* I01      */     UNIT_I01,
+/* I01      */     UNIT_I01, 
 /* I2       */     UNIT_NIL, /* no I2 or I3 unit */
 /* I3       */     UNIT_NIL,
 /* IALL     */     UNIT_I01, /* only I0 and I1 units */
@@ -335,10 +333,10 @@ static CGEN_ATTR_VALUE_ENUM_TYPE fr550_unit_mapping[] =
 /* NIL      */     UNIT_NIL,
 /* I0       */     UNIT_I0,
 /* I1       */     UNIT_I1,
-/* I01      */     UNIT_I01,
+/* I01      */     UNIT_I01, 
 /* I2       */     UNIT_I2,
 /* I3       */     UNIT_I3,
-/* IALL     */     UNIT_IALL,
+/* IALL     */     UNIT_IALL, 
 /* FM0      */     UNIT_FM0,
 /* FM1      */     UNIT_FM1,
 /* FM01     */     UNIT_FM01,
@@ -455,9 +453,9 @@ add_next_to_vliw (FRV_VLIW *vliw, CGEN_ATTR_VALUE_ENUM_TYPE unit)
 
   if (next <= 0)
     {
-      /* xgettext:c-format */
-      opcodes_error_handler (_("internal error: bad vliw->next_slot value"));
-      abort ();
+      fprintf (stderr, "frv-opc.c line %d: bad vliw->next_slot value.\n",
+	       __LINE__);
+      abort (); /* Should never happen.  */
     }
 
   /* The table is sorted by units allowed within slots, so vliws with
@@ -765,8 +763,8 @@ fr500_check_insn_major_constraints (FRV_VLIW *vliw, CGEN_ATTR_VALUE_ENUM_TYPE ma
 	&&   ! find_major_in_vliw (vliw, FR500_MAJOR_F_6)
 	&&   ! find_major_in_vliw (vliw, FR500_MAJOR_F_7);
     default:
-      /* xgettext:c-format */
-      opcodes_error_handler (_("internal error: bad major code"));
+      fprintf (stderr, "frv-opc.c, line %d: bad major code, aborting.\n",
+	       __LINE__);
       abort ();
       break;
     }
@@ -815,9 +813,9 @@ frv_vliw_add_insn (FRV_VLIW *vliw, const CGEN_INSN *insn)
   unit = CGEN_INSN_ATTR_VALUE (insn, CGEN_INSN_UNIT);
   if (unit == UNIT_NIL)
     {
-      /* xgettext:c-format */
-      opcodes_error_handler (_("internal error: bad insn unit"));
-      abort ();
+      fprintf (stderr, "frv-opc.c line %d: bad insn unit.\n",
+	       __LINE__);
+      abort (); /* No UNIT specified for this insn in frv.cpu.  */
     }
 
   switch (vliw->mach)
@@ -6126,13 +6124,15 @@ static const CGEN_OPCODE frv_cgen_macro_insn_opcode_table[] =
    Targets are free to override CGEN_{ASM,DIS}_HASH_P in the .opc file.  */
 
 static int
-asm_hash_insn_p (const CGEN_INSN *insn ATTRIBUTE_UNUSED)
+asm_hash_insn_p (insn)
+     const CGEN_INSN *insn ATTRIBUTE_UNUSED;
 {
   return CGEN_ASM_HASH_P (insn);
 }
 
 static int
-dis_hash_insn_p (const CGEN_INSN *insn)
+dis_hash_insn_p (insn)
+     const CGEN_INSN *insn;
 {
   /* If building the hash table and the NO-DIS attribute is present,
      ignore.  */
@@ -6164,7 +6164,8 @@ dis_hash_insn_p (const CGEN_INSN *insn)
    Targets are free to override CGEN_{ASM,DIS}_HASH in the .opc file.  */
 
 static unsigned int
-asm_hash_insn (const char *mnem)
+asm_hash_insn (mnem)
+     const char * mnem;
 {
   return CGEN_ASM_HASH (mnem);
 }
@@ -6173,8 +6174,9 @@ asm_hash_insn (const char *mnem)
    VALUE is the first base_insn_bitsize bits as an int in host order.  */
 
 static unsigned int
-dis_hash_insn (const char *buf ATTRIBUTE_UNUSED,
-		     CGEN_INSN_INT value ATTRIBUTE_UNUSED)
+dis_hash_insn (buf, value)
+     const char * buf ATTRIBUTE_UNUSED;
+     CGEN_INSN_INT value ATTRIBUTE_UNUSED;
 {
   return CGEN_DIS_HASH (buf, value);
 }

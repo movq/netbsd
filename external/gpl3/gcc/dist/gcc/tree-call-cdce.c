@@ -1,5 +1,6 @@
 /* Conditional Dead Call Elimination pass for the GNU compiler.
-   Copyright (C) 2008-2019 Free Software Foundation, Inc.
+   Copyright (C) 2008
+   Free Software Foundation, Inc.
    Contributed by Xinliang David Li <davidxl@google.com>
 
 This file is part of GCC.
@@ -21,90 +22,63 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "backend.h"
+#include "tm.h"
+#include "ggc.h"
+
+/* These RTL headers are needed for basic-block.h.  */
+#include "rtl.h"
+#include "tm_p.h"
+#include "hard-reg-set.h"
+#include "obstack.h"
+#include "basic-block.h"
+
 #include "tree.h"
+#include "diagnostic.h"
+#include "tree-flow.h"
 #include "gimple.h"
-#include "cfghooks.h"
+#include "tree-dump.h"
 #include "tree-pass.h"
-#include "ssa.h"
-#include "gimple-pretty-print.h"
-#include "fold-const.h"
-#include "stor-layout.h"
-#include "gimple-iterator.h"
-#include "tree-cfg.h"
-#include "tree-into-ssa.h"
-#include "builtins.h"
-#include "internal-fn.h"
-#include "tree-dfa.h"
+#include "timevar.h"
+#include "flags.h"
 
 
-/* This pass serves two closely-related purposes:
+/* Conditional dead call elimination
 
-   1. It conditionally executes calls that set errno if (a) the result of
-      the call is unused and (b) a simple range check on the arguments can
-      detect most cases where errno does not need to be set.
+   Some builtin functions can set errno on error conditions, but they
+   are otherwise pure.  If the result of a call to such a function is
+   not used, the compiler can still not eliminate the call without
+   powerful interprocedural analysis to prove that the errno is not
+   checked.  However, if the conditions under which the error occurs
+   are known, the compiler can conditionally dead code eliminate the
+   calls by shrink-wrapping the semi-dead calls into the error condition:
 
-      This is the "conditional dead-code elimination" that gave the pass
-      its original name, since the call is dead for most argument values.
-      The calls for which it helps are usually part of the C++ abstraction
-      penalty exposed after inlining.
+        built_in_call (args)
+          ==>
+        if (error_cond (args))
+             built_in_call (args)
 
-   2. It looks for calls to built-in functions that set errno and whose
-      result is used.  It checks whether there is an associated internal
-      function that doesn't set errno and whether the target supports
-      that internal function.  If so, the pass uses the internal function
-      to compute the result of the built-in function but still arranges
-      for errno to be set when necessary.  There are two ways of setting
-      errno:
-
-      a. by protecting the original call with the same argument checks as (1)
-
-      b. by protecting the original call with a check that the result
-	 of the internal function is not equal to itself (i.e. is NaN).
-
-      (b) requires that NaNs are the only erroneous results.  It is not
-      appropriate for functions like log, which returns ERANGE for zero
-      arguments.  (b) is also likely to perform worse than (a) because it
-      requires the result to be calculated first.  The pass therefore uses
-      (a) when it can and uses (b) as a fallback.
-
-      For (b) the pass can replace the original call with a call to
-      IFN_SET_EDOM, if the target supports direct assignments to errno.
-
-   In both cases, arguments that require errno to be set should occur
-   rarely in practice.  Checks of the errno result should also be rare,
-   but the compiler would need powerful interprocedural analysis to
-   prove that errno is not checked.  It's much easier to add argument
-   checks or result checks instead.
-
-     An example of (1) is:
-
-	 log (x);   // Mostly dead call
+    An actual simple example is :
+         log (x);   // Mostly dead call
      ==>
-	 if (__builtin_islessequal (x, 0))
-	     log (x);
-
+         if (x < 0)
+             log (x);
      With this change, call to log (x) is effectively eliminated, as
-     in the majority of the cases, log won't be called with x out of
+     in majority of the cases, log won't be called with x out of
      range.  The branch is totally predictable, so the branch cost
      is low.
-
-     An example of (2) is:
-
-	y = sqrt (x);
-     ==>
-	y = IFN_SQRT (x);
-	if (__builtin_isless (x, 0))
-	    sqrt (x);
-
-     In the vast majority of cases we should then never need to call sqrt.
 
    Note that library functions are not supposed to clear errno to zero without
    error.  See IEEE Std 1003.1, section 2.3 Error Numbers, and section 7.5:3 of
    ISO/IEC 9899 (C99).
 
    The condition wrapping the builtin call is conservatively set to avoid too
-   aggressive (wrong) shrink wrapping.  */
+   aggressive (wrong) shrink wrapping.  The optimization is called conditional
+   dead call elimination because the call is eliminated under the condition
+   that the input arguments would not lead to domain or range error (for
+   instance when x <= 0 for a log (x) call), however the chances that the error
+   condition is hit is very low (those builtin calls which are conditionally
+   dead are usually part of the C++ abstraction penalty exposed after
+   inlining).  */
 
 
 /* A structure for representing input domain of
@@ -115,7 +89,7 @@ along with GCC; see the file COPYING3.  If not see
    to indicate if lb and ub value are inclusive
    respectively.  */
 
-struct inp_domain
+typedef struct input_domain
 {
   int lb;
   int ub;
@@ -123,7 +97,7 @@ struct inp_domain
   bool has_ub;
   bool is_lb_inclusive;
   bool is_ub_inclusive;
-};
+} inp_domain;
 
 /* A helper function to construct and return an input
    domain object.  LB is the lower bound, HAS_LB is
@@ -160,7 +134,7 @@ static bool
 check_target_format (tree arg)
 {
   tree type;
-  machine_mode mode;
+  enum machine_mode mode;
   const struct real_format *rfmt;
 
   type = TREE_TYPE (arg);
@@ -172,7 +146,7 @@ check_target_format (tree arg)
       || (mode == DFmode
 	  && (rfmt == &ieee_double_format || rfmt == &mips_double_format
 	      || rfmt == &motorola_double_format))
-      /* For long double, we cannot really check XFmode
+      /* For long double, we can not really check XFmode
          which is only defined on intel platforms.
          Candidate pre-selection using builtin function
          code guarantees that we are checking formats
@@ -201,7 +175,7 @@ check_target_format (tree arg)
 #define MAX_BASE_INT_BIT_SIZE 32
 
 static bool
-check_pow (gcall *pow_call)
+check_pow (gimple pow_call)
 {
   tree base, expn;
   enum tree_code bc, ec;
@@ -228,19 +202,19 @@ check_pow (gcall *pow_call)
       /* Only handle a fixed range of constant.  */
       REAL_VALUE_TYPE mv;
       REAL_VALUE_TYPE bcv = TREE_REAL_CST (base);
-      if (real_equal (&bcv, &dconst1))
+      if (REAL_VALUES_EQUAL (bcv, dconst1))
         return false;
-      if (real_less (&bcv, &dconst1))
+      if (REAL_VALUES_LESS (bcv, dconst1))
         return false;
-      real_from_integer (&mv, TYPE_MODE (TREE_TYPE (base)), 256, UNSIGNED);
-      if (real_less (&mv, &bcv))
+      real_from_integer (&mv, TYPE_MODE (TREE_TYPE (base)), 256, 0, 1);
+      if (REAL_VALUES_LESS (mv, bcv))
         return false;
       return true;
     }
   else if (bc == SSA_NAME)
     {
-      tree base_val0, type;
-      gimple *base_def;
+      tree base_val0, base_var, type;
+      gimple base_def;
       int bit_sz;
 
       /* Only handles cases where base value is converted
@@ -253,7 +227,11 @@ check_pow (gcall *pow_call)
         return false;
       base_val0 = gimple_assign_rhs1 (base_def);
 
-      type = TREE_TYPE (base_val0);
+      base_var = SSA_NAME_VAR (base_val0);
+      if (!DECL_P  (base_var))
+        return false;
+
+      type = TREE_TYPE (base_var);
       if (TREE_CODE (type) != INTEGER_TYPE)
         return false;
       bit_sz = TYPE_PRECISION (type);
@@ -275,7 +253,7 @@ check_pow (gcall *pow_call)
    Returns true if the function call is a candidate.  */
 
 static bool
-check_builtin_call (gcall *bcall)
+check_builtin_call (gimple bcall)
 {
   tree arg;
 
@@ -283,15 +261,28 @@ check_builtin_call (gcall *bcall)
   return check_target_format (arg);
 }
 
-/* Return true if built-in function call CALL calls a math function
-   and if we know how to test the range of its arguments to detect _most_
-   situations in which errno is not set.  The test must err on the side
-   of treating non-erroneous values as potentially erroneous.  */
+/* A helper function to determine if a builtin function call is a
+   candidate for conditional DCE.  Returns true if the builtin call
+   is a candidate.  */
 
 static bool
-can_test_argument_range (gcall *call)
+is_call_dce_candidate (gimple call)
 {
-  switch (DECL_FUNCTION_CODE (gimple_call_fndecl (call)))
+  tree fn;
+  enum built_in_function fnc;
+
+  /* Only potentially dead calls are considered.  */
+  if (gimple_call_lhs (call))
+    return false;
+
+  fn = gimple_call_fndecl (call);
+  if (!fn
+      || !DECL_BUILT_IN (fn)
+      || (DECL_BUILT_IN_CLASS (fn) != BUILT_IN_NORMAL))
+    return false;
+
+  fnc = DECL_FUNCTION_CODE (fn);
+  switch (fnc)
     {
     /* Trig functions.  */
     CASE_FLT_FN (BUILT_IN_ACOS):
@@ -314,7 +305,6 @@ can_test_argument_range (gcall *call)
     CASE_FLT_FN (BUILT_IN_POW10):
     /* Sqrt.  */
     CASE_FLT_FN (BUILT_IN_SQRT):
-    CASE_FLT_FN_FLOATN_NX (BUILT_IN_SQRT):
       return check_builtin_call (call);
     /* Special one: two argument pow.  */
     case BUILT_IN_POW:
@@ -326,100 +316,28 @@ can_test_argument_range (gcall *call)
   return false;
 }
 
-/* Return true if CALL can produce a domain error (EDOM) but can never
-   produce a pole, range overflow or range underflow error (all ERANGE).
-   This means that we can tell whether a function would have set errno
-   by testing whether the result is a NaN.  */
-
-static bool
-edom_only_function (gcall *call)
-{
-  switch (DECL_FUNCTION_CODE (gimple_call_fndecl (call)))
-    {
-    CASE_FLT_FN (BUILT_IN_ACOS):
-    CASE_FLT_FN (BUILT_IN_ASIN):
-    CASE_FLT_FN (BUILT_IN_ATAN):
-    CASE_FLT_FN (BUILT_IN_COS):
-    CASE_FLT_FN (BUILT_IN_SIGNIFICAND):
-    CASE_FLT_FN (BUILT_IN_SIN):
-    CASE_FLT_FN (BUILT_IN_SQRT):
-    CASE_FLT_FN_FLOATN_NX (BUILT_IN_SQRT):
-    CASE_FLT_FN (BUILT_IN_FMOD):
-    CASE_FLT_FN (BUILT_IN_REMAINDER):
-      return true;
-
-    default:
-      return false;
-    }
-}
-
-/* Return true if it is structurally possible to guard CALL.  */
-
-static bool
-can_guard_call_p (gimple *call)
-{
-  return (!stmt_ends_bb_p (call)
-	  || find_fallthru_edge (gimple_bb (call)->succs));
-}
 
-/* For a comparison code return the comparison code we should use if we don't
-   HONOR_NANS.  */
-
-static enum tree_code
-comparison_code_if_no_nans (tree_code code)
-{
-  switch (code)
-    {
-    case UNLT_EXPR:
-      return LT_EXPR;
-    case UNGT_EXPR:
-      return GT_EXPR;
-    case UNLE_EXPR:
-      return LE_EXPR;
-    case UNGE_EXPR:
-      return GE_EXPR;
-    case UNEQ_EXPR:
-      return EQ_EXPR;
-    case LTGT_EXPR:
-      return NE_EXPR;
-
-    case LT_EXPR:
-    case GT_EXPR:
-    case LE_EXPR:
-    case GE_EXPR:
-    case EQ_EXPR:
-    case NE_EXPR:
-      return code;
-
-    default:
-      gcc_unreachable ();
-    }
-}
-
-/* A helper function to generate gimple statements for one bound
-   comparison, so that the built-in function is called whenever
-   TCODE <ARG, LBUB> is *false*.  TEMP_NAME1/TEMP_NAME2 are names
-   of the temporaries, CONDS is a vector holding the produced GIMPLE
-   statements, and NCONDS points to the variable holding the number of
-   logical comparisons.  CONDS is either empty or a list ended with a
-   null tree.  */
+/* A helper function to generate gimple statements for
+   one bound comparison.  ARG is the call argument to
+   be compared with the bound, LBUB is the bound value
+   in integer, TCODE is the tree_code of the comparison,
+   TEMP_NAME1/TEMP_NAME2 are names of the temporaries,
+   CONDS is a vector holding the produced GIMPLE statements,
+   and NCONDS points to the variable holding the number
+   of logical comparisons.  CONDS is either empty or
+   a list ended with a null tree.  */
 
 static void
 gen_one_condition (tree arg, int lbub,
                    enum tree_code tcode,
                    const char *temp_name1,
 		   const char *temp_name2,
-		   vec<gimple *> conds,
+                   VEC (gimple, heap) *conds,
                    unsigned *nconds)
 {
-  if (!HONOR_NANS (arg))
-    tcode = comparison_code_if_no_nans (tcode);
-
   tree lbub_real_cst, lbub_cst, float_type;
   tree temp, tempn, tempc, tempcn;
-  gassign *stmt1;
-  gassign *stmt2;
-  gcond *stmt3;
+  gimple stmt1, stmt2, stmt3;
 
   float_type = TREE_TYPE (arg);
   lbub_cst = build_int_cst (integer_type_node, lbub);
@@ -439,9 +357,9 @@ gen_one_condition (tree arg, int lbub,
   gimple_assign_set_lhs (stmt2, tempcn);
 
   stmt3 = gimple_build_cond_from_tree (tempcn, NULL_TREE, NULL_TREE);
-  conds.quick_push (stmt1);
-  conds.quick_push (stmt2);
-  conds.quick_push (stmt3);
+  VEC_quick_push (gimple, conds, stmt1);
+  VEC_quick_push (gimple, conds, stmt2);
+  VEC_quick_push (gimple, conds, stmt3);
   (*nconds)++;
 }
 
@@ -456,13 +374,13 @@ gen_one_condition (tree arg, int lbub,
 
 static void
 gen_conditions_for_domain (tree arg, inp_domain domain,
-			   vec<gimple *> conds,
+                           VEC (gimple, heap) *conds,
                            unsigned *nconds)
 {
   if (domain.has_lb)
     gen_one_condition (arg, domain.lb,
                        (domain.is_lb_inclusive
-                        ? UNGE_EXPR : UNGT_EXPR),
+                        ? LT_EXPR : LE_EXPR),
                        "DCE_COND_LB", "DCE_COND_LB_TEST",
                        conds, nconds);
 
@@ -470,11 +388,11 @@ gen_conditions_for_domain (tree arg, inp_domain domain,
     {
       /* Now push a separator.  */
       if (domain.has_lb)
-        conds.quick_push (NULL);
+        VEC_quick_push (gimple, conds, NULL);
 
       gen_one_condition (arg, domain.ub,
                          (domain.is_ub_inclusive
-                          ? UNLE_EXPR : UNLT_EXPR),
+                          ? GT_EXPR : GE_EXPR),
                          "DCE_COND_UB", "DCE_COND_UB_TEST",
                          conds, nconds);
     }
@@ -486,7 +404,7 @@ gen_conditions_for_domain (tree arg, inp_domain domain,
    See candidate selection in check_pow.  Since the
    candidates' base values have a limited range,
    the guarded code generated for y are simple:
-   if (__builtin_isgreater (y, max_y))
+   if (y > max_y)
      pow (const, y);
    Note max_y can be computed separately for each
    const base, but in this implementation, we
@@ -499,7 +417,7 @@ gen_conditions_for_domain (tree arg, inp_domain domain,
 
 static void
 gen_conditions_for_pow_cst_base (tree base, tree expn,
-				 vec<gimple *> conds,
+                                 VEC (gimple, heap) *conds,
                                  unsigned *nconds)
 {
   inp_domain exp_domain;
@@ -507,10 +425,10 @@ gen_conditions_for_pow_cst_base (tree base, tree expn,
      sure it is consistent with check_pow.  */
   REAL_VALUE_TYPE mv;
   REAL_VALUE_TYPE bcv = TREE_REAL_CST (base);
-  gcc_assert (!real_equal (&bcv, &dconst1)
-              && !real_less (&bcv, &dconst1));
-  real_from_integer (&mv, TYPE_MODE (TREE_TYPE (base)), 256, UNSIGNED);
-  gcc_assert (!real_less (&mv, &bcv));
+  gcc_assert (!REAL_VALUES_EQUAL (bcv, dconst1)
+              && !REAL_VALUES_LESS (bcv, dconst1));
+  real_from_integer (&mv, TYPE_MODE (TREE_TYPE (base)), 256, 0, 1);
+  gcc_assert (!REAL_VALUES_LESS (mv, bcv));
 
   exp_domain = get_domain (0, false, false,
                            127, true, false);
@@ -535,21 +453,22 @@ gen_conditions_for_pow_cst_base (tree base, tree expn,
 
 static void
 gen_conditions_for_pow_int_base (tree base, tree expn,
-				 vec<gimple *> conds,
+                                 VEC (gimple, heap) *conds,
                                  unsigned *nconds)
 {
-  gimple *base_def;
+  gimple base_def;
   tree base_val0;
-  tree int_type;
+  tree base_var, int_type;
   tree temp, tempn;
   tree cst0;
-  gimple *stmt1, *stmt2;
+  gimple stmt1, stmt2;
   int bit_sz, max_exp;
   inp_domain exp_domain;
 
   base_def = SSA_NAME_DEF_STMT (base);
   base_val0 = gimple_assign_rhs1 (base_def);
-  int_type = TREE_TYPE (base_val0);
+  base_var = SSA_NAME_VAR (base_val0);
+  int_type = TREE_TYPE (base_var);
   bit_sz = TYPE_PRECISION (int_type);
   gcc_assert (bit_sz > 0
               && bit_sz <= MAX_BASE_INT_BIT_SIZE);
@@ -571,11 +490,11 @@ gen_conditions_for_pow_int_base (tree base, tree expn,
   /* For pow ((double)x, y), generate the following conditions:
      cond 1:
      temp1 = x;
-     if (__builtin_islessequal (temp1, 0))
+     if (temp1 <= 0)
 
      cond 2:
      temp2 = y;
-     if (__builtin_isgreater (temp2, max_exp_real_cst))  */
+     if (temp2 > max_exp_real_cst)  */
 
   /* Generate condition in reverse order -- first
      the condition for the exp argument.  */
@@ -592,24 +511,24 @@ gen_conditions_for_pow_int_base (tree base, tree expn,
      type is integer.  */
 
   /* Push a separator.  */
-  conds.quick_push (NULL);
+  VEC_quick_push (gimple, conds, NULL);
 
   temp = create_tmp_var (int_type, "DCE_COND1");
   cst0 = build_int_cst (int_type, 0);
   stmt1 = gimple_build_assign (temp, base_val0);
   tempn = make_ssa_name (temp, stmt1);
   gimple_assign_set_lhs (stmt1, tempn);
-  stmt2 = gimple_build_cond (GT_EXPR, tempn, cst0, NULL_TREE, NULL_TREE);
+  stmt2 = gimple_build_cond (LE_EXPR, tempn, cst0, NULL_TREE, NULL_TREE);
 
-  conds.quick_push (stmt1);
-  conds.quick_push (stmt2);
+  VEC_quick_push (gimple, conds, stmt1);
+  VEC_quick_push (gimple, conds, stmt2);
   (*nconds)++;
 }
 
 /* Method to generate conditional statements for guarding conditionally
    dead calls to pow.  One or more statements can be generated for
    each logical condition.  Statement groups of different conditions
-   are separated by a NULL tree and they are stored in the vec
+   are separated by a NULL tree and they are stored in the VEC
    conds.  The number of logical conditions are stored in *nconds.
 
    See C99 standard, 7.12.7.4:2, for description of pow (x, y).
@@ -624,13 +543,15 @@ gen_conditions_for_pow_int_base (tree base, tree expn,
    and *NCONDS is the number of logical conditions.  */
 
 static void
-gen_conditions_for_pow (gcall *pow_call, vec<gimple *> conds,
+gen_conditions_for_pow (gimple pow_call, VEC (gimple, heap) *conds,
                         unsigned *nconds)
 {
   tree base, expn;
   enum tree_code bc;
 
-  gcc_checking_assert (check_pow (pow_call));
+#ifdef ENABLE_CHECKING
+  gcc_assert (check_pow (pow_call));
+#endif
 
   *nconds = 0;
 
@@ -742,7 +663,6 @@ get_no_error_domain (enum built_in_function fnc)
                          308, true, false);
     /* sqrt: [0, +inf)  */
     CASE_FLT_FN (BUILT_IN_SQRT):
-    CASE_FLT_FN_FLOATN_NX (BUILT_IN_SQRT):
       return get_domain (0, true, true,
                          0, false, false);
     default:
@@ -761,20 +681,20 @@ get_no_error_domain (enum built_in_function fnc)
    condition are separated by NULL tree in the vector.  */
 
 static void
-gen_shrink_wrap_conditions (gcall *bi_call, vec<gimple *> conds,
+gen_shrink_wrap_conditions (gimple bi_call, VEC (gimple, heap) *conds,
                             unsigned int *nconds)
 {
-  gcall *call;
+  gimple call;
   tree fn;
   enum built_in_function fnc;
 
-  gcc_assert (nconds && conds.exists ());
-  gcc_assert (conds.length () == 0);
+  gcc_assert (nconds && conds);
+  gcc_assert (VEC_length (gimple, conds) == 0);
   gcc_assert (is_gimple_call (bi_call));
 
   call = bi_call;
   fn = gimple_call_fndecl (call);
-  gcc_assert (fn && fndecl_built_in_p (fn));
+  gcc_assert (fn && DECL_BUILT_IN (fn));
   fnc = DECL_FUNCTION_CODE (fn);
   *nconds = 0;
 
@@ -792,184 +712,120 @@ gen_shrink_wrap_conditions (gcall *bi_call, vec<gimple *> conds,
   return;
 }
 
-/* Shrink-wrap BI_CALL so that it is only called when one of the NCONDS
-   conditions in CONDS is false.  */
 
-static void
-shrink_wrap_one_built_in_call_with_conds (gcall *bi_call, vec <gimple *> conds,
-					  unsigned int nconds)
+/* Probability of the branch (to the call) is taken.  */
+#define ERR_PROB 0.01
+
+/* The function to shrink wrap a partially dead builtin call
+   whose return value is not used anywhere, but has to be kept
+   live due to potential error condition.  Returns true if the
+   transformation actually happens.  */
+
+static bool
+shrink_wrap_one_built_in_call (gimple bi_call)
 {
   gimple_stmt_iterator bi_call_bsi;
-  basic_block bi_call_bb, join_tgt_bb, guard_bb;
+  basic_block bi_call_bb, join_tgt_bb, guard_bb, guard_bb0;
   edge join_tgt_in_edge_from_call, join_tgt_in_edge_fall_thru;
   edge bi_call_in_edge0, guard_bb_in_edge;
-  unsigned tn_cond_stmts;
+  VEC (gimple, heap) *conds;
+  unsigned tn_cond_stmts, nconds;
   unsigned ci;
-  gimple *cond_expr = NULL;
-  gimple *cond_expr_start;
+  gimple cond_expr = NULL;
+  gimple cond_expr_start;
+  tree bi_call_label_decl;
+  gimple bi_call_label;
 
-  /* The cfg we want to create looks like this:
+  conds = VEC_alloc (gimple, heap, 12);
+  gen_shrink_wrap_conditions (bi_call, conds, &nconds);
 
-	   [guard n-1]         <- guard_bb (old block)
-	     |    \
-	     | [guard n-2]                   }
-	     |    / \                        }
-	     |   /  ...                      } new blocks
-	     |  /  [guard 0]                 }
-	     | /    /   |                    }
-	    [ call ]    |     <- bi_call_bb  }
-	     | \        |
-	     |  \       |
-	     |   [ join ]     <- join_tgt_bb (old iff call must end bb)
-	     |
-	 possible EH edges (only if [join] is old)
+  /* This can happen if the condition generator decides
+     it is not beneficial to do the transformation.  Just
+     return false and do not do any transformation for
+     the call.  */
+  if (nconds == 0)
+    return false;
 
-     When [join] is new, the immediate dominators for these blocks are:
-
-     1. [guard n-1]: unchanged
-     2. [call]: [guard n-1]
-     3. [guard m]: [guard m+1] for 0 <= m <= n-2
-     4. [join]: [guard n-1]
-
-     We punt for the more complex case case of [join] being old and
-     simply free the dominance info.  We also punt on postdominators,
-     which aren't expected to be available at this point anyway.  */
   bi_call_bb = gimple_bb (bi_call);
 
-  /* Now find the join target bb -- split bi_call_bb if needed.  */
-  if (stmt_ends_bb_p (bi_call))
-    {
-      /* We checked that there was a fallthrough edge in
-	 can_guard_call_p.  */
-      join_tgt_in_edge_from_call = find_fallthru_edge (bi_call_bb->succs);
-      gcc_assert (join_tgt_in_edge_from_call);
-      /* We don't want to handle PHIs.  */
-      if (EDGE_COUNT (join_tgt_in_edge_from_call->dest->preds) > 1)
-	join_tgt_bb = split_edge (join_tgt_in_edge_from_call);
-      else
-	{
-	  join_tgt_bb = join_tgt_in_edge_from_call->dest;
-	  /* We may have degenerate PHIs in the destination.  Propagate
-	     those out.  */
-	  for (gphi_iterator i = gsi_start_phis (join_tgt_bb); !gsi_end_p (i);)
-	    {
-	      gphi *phi = i.phi ();
-	      replace_uses_by (gimple_phi_result (phi),
-			       gimple_phi_arg_def (phi, 0));
-	      remove_phi_node (&i, true);
-	    }
-	}
-    }
-  else
-    {
-      join_tgt_in_edge_from_call = split_block (bi_call_bb, bi_call);
-      join_tgt_bb = join_tgt_in_edge_from_call->dest;
-    }
-
+  /* Now find the join target bb -- split
+     bi_call_bb if needed.  */
   bi_call_bsi = gsi_for_stmt (bi_call);
+
+  join_tgt_in_edge_from_call = split_block (bi_call_bb, bi_call);
+  bi_call_bsi = gsi_for_stmt (bi_call);
+
+  join_tgt_bb = join_tgt_in_edge_from_call->dest;
 
   /* Now it is time to insert the first conditional expression
      into bi_call_bb and split this bb so that bi_call is
      shrink-wrapped.  */
-  tn_cond_stmts = conds.length ();
+  tn_cond_stmts = VEC_length (gimple, conds);
   cond_expr = NULL;
-  cond_expr_start = conds[0];
+  cond_expr_start = VEC_index (gimple, conds, 0);
   for (ci = 0; ci < tn_cond_stmts; ci++)
     {
-      gimple *c = conds[ci];
+      gimple c = VEC_index (gimple, conds, ci);
       gcc_assert (c || ci != 0);
       if (!c)
         break;
       gsi_insert_before (&bi_call_bsi, c, GSI_SAME_STMT);
       cond_expr = c;
     }
+  nconds--;
   ci++;
   gcc_assert (cond_expr && gimple_code (cond_expr) == GIMPLE_COND);
 
-  typedef std::pair<edge, edge> edge_pair;
-  auto_vec<edge_pair, 8> edges;
+  /* Now the label.  */
+  bi_call_label_decl = create_artificial_label (gimple_location (bi_call));
+  bi_call_label = gimple_build_label (bi_call_label_decl);
+  gsi_insert_before (&bi_call_bsi, bi_call_label, GSI_SAME_STMT);
 
   bi_call_in_edge0 = split_block (bi_call_bb, cond_expr);
   bi_call_in_edge0->flags &= ~EDGE_FALLTHRU;
-  bi_call_in_edge0->flags |= EDGE_FALSE_VALUE;
-  guard_bb = bi_call_bb;
+  bi_call_in_edge0->flags |= EDGE_TRUE_VALUE;
+  guard_bb0 = bi_call_bb;
   bi_call_bb = bi_call_in_edge0->dest;
-  join_tgt_in_edge_fall_thru = make_edge (guard_bb, join_tgt_bb,
-                                          EDGE_TRUE_VALUE);
+  join_tgt_in_edge_fall_thru = make_edge (guard_bb0, join_tgt_bb,
+                                          EDGE_FALSE_VALUE);
 
-  edges.reserve (nconds);
-  edges.quick_push (edge_pair (bi_call_in_edge0, join_tgt_in_edge_fall_thru));
+  bi_call_in_edge0->probability = REG_BR_PROB_BASE * ERR_PROB;
+  join_tgt_in_edge_fall_thru->probability =
+      REG_BR_PROB_BASE - bi_call_in_edge0->probability;
 
   /* Code generation for the rest of the conditions  */
-  for (unsigned int i = 1; i < nconds; ++i)
+  guard_bb = guard_bb0;
+  while (nconds > 0)
     {
       unsigned ci0;
       edge bi_call_in_edge;
       gimple_stmt_iterator guard_bsi = gsi_for_stmt (cond_expr_start);
       ci0 = ci;
-      cond_expr_start = conds[ci0];
+      cond_expr_start = VEC_index (gimple, conds, ci0);
       for (; ci < tn_cond_stmts; ci++)
         {
-	  gimple *c = conds[ci];
+          gimple c = VEC_index (gimple, conds, ci);
           gcc_assert (c || ci != ci0);
           if (!c)
             break;
           gsi_insert_before (&guard_bsi, c, GSI_SAME_STMT);
           cond_expr = c;
         }
+      nconds--;
       ci++;
       gcc_assert (cond_expr && gimple_code (cond_expr) == GIMPLE_COND);
       guard_bb_in_edge = split_block (guard_bb, cond_expr);
       guard_bb_in_edge->flags &= ~EDGE_FALLTHRU;
-      guard_bb_in_edge->flags |= EDGE_TRUE_VALUE;
+      guard_bb_in_edge->flags |= EDGE_FALSE_VALUE;
 
-      bi_call_in_edge = make_edge (guard_bb, bi_call_bb, EDGE_FALSE_VALUE);
-      edges.quick_push (edge_pair (bi_call_in_edge, guard_bb_in_edge));
+      bi_call_in_edge = make_edge (guard_bb, bi_call_bb, EDGE_TRUE_VALUE);
+
+      bi_call_in_edge->probability = REG_BR_PROB_BASE * ERR_PROB;
+      guard_bb_in_edge->probability =
+          REG_BR_PROB_BASE - bi_call_in_edge->probability;
     }
 
-  /* Now update the probability and profile information, processing the
-     guards in order of execution.
-
-     There are two approaches we could take here.  On the one hand we
-     could assign a probability of X to the call block and distribute
-     that probability among its incoming edges.  On the other hand we
-     could assign a probability of X to each individual call edge.
-
-     The choice only affects calls that have more than one condition.
-     In those cases, the second approach would give the call block
-     a greater probability than the first.  However, the difference
-     is only small, and our chosen X is a pure guess anyway.
-
-     Here we take the second approach because it's slightly simpler
-     and because it's easy to see that it doesn't lose profile counts.  */
-  bi_call_bb->count = profile_count::zero ();
-  while (!edges.is_empty ())
-    {
-      edge_pair e = edges.pop ();
-      edge call_edge = e.first;
-      edge nocall_edge = e.second;
-      basic_block src_bb = call_edge->src;
-      gcc_assert (src_bb == nocall_edge->src);
-
-      call_edge->probability = profile_probability::very_unlikely ();
-      nocall_edge->probability = profile_probability::always ()
-				 - call_edge->probability;
-
-      bi_call_bb->count += call_edge->count ();
-
-      if (nocall_edge->dest != join_tgt_bb)
-	nocall_edge->dest->count = src_bb->count - bi_call_bb->count;
-    }
-
-  if (dom_info_available_p (CDI_DOMINATORS))
-    {
-      /* The split_blocks leave [guard 0] as the immediate dominator
-	 of [call] and [call] as the immediate dominator of [join].
-	 Fix them up.  */
-      set_immediate_dominator (CDI_DOMINATORS, bi_call_bb, guard_bb);
-      set_immediate_dominator (CDI_DOMINATORS, join_tgt_bb, guard_bb);
-    }
-
+  VEC_free (gimple, heap, conds);
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
       location_t loc;
@@ -979,190 +835,49 @@ shrink_wrap_one_built_in_call_with_conds (gcall *bi_call, vec <gimple *> conds,
                " into error conditions.\n",
                LOCATION_FILE (loc), LOCATION_LINE (loc));
     }
-}
-
-/* Shrink-wrap BI_CALL so that it is only called when it might set errno
-   (but is always called if it would set errno).  */
-
-static void
-shrink_wrap_one_built_in_call (gcall *bi_call)
-{
-  unsigned nconds = 0;
-  auto_vec<gimple *, 12> conds;
-  gen_shrink_wrap_conditions (bi_call, conds, &nconds);
-  gcc_assert (nconds != 0);
-  shrink_wrap_one_built_in_call_with_conds (bi_call, conds, nconds);
-}
-
-/* Return true if built-in function call CALL could be implemented using
-   a combination of an internal function to compute the result and a
-   separate call to set errno.  */
-
-static bool
-can_use_internal_fn (gcall *call)
-{
-  /* Only replace calls that set errno.  */
-  if (!gimple_vdef (call))
-    return false;
-
-  /* See whether there is an internal function for this built-in.  */
-  if (replacement_internal_fn (call) == IFN_LAST)
-    return false;
-
-  /* See whether we can catch all cases where errno would be set,
-     while still avoiding the call in most cases.  */
-  if (!can_test_argument_range (call)
-      && !edom_only_function (call))
-    return false;
 
   return true;
-}
-
-/* Implement built-in function call CALL using an internal function.  */
-
-static void
-use_internal_fn (gcall *call)
-{
-  /* We'll be inserting another call with the same arguments after the
-     lhs has been set, so prevent any possible coalescing failure from
-     having both values live at once.  See PR 71020.  */
-  replace_abnormal_ssa_names (call);
-
-  unsigned nconds = 0;
-  auto_vec<gimple *, 12> conds;
-  if (can_test_argument_range (call))
-    {
-      gen_shrink_wrap_conditions (call, conds, &nconds);
-      gcc_assert (nconds != 0);
-    }
-  else
-    gcc_assert (edom_only_function (call));
-
-  internal_fn ifn = replacement_internal_fn (call);
-  gcc_assert (ifn != IFN_LAST);
-
-  /* Construct the new call, with the same arguments as the original one.  */
-  auto_vec <tree, 16> args;
-  unsigned int nargs = gimple_call_num_args (call);
-  for (unsigned int i = 0; i < nargs; ++i)
-    args.safe_push (gimple_call_arg (call, i));
-  gcall *new_call = gimple_build_call_internal_vec (ifn, args);
-  gimple_set_location (new_call, gimple_location (call));
-  gimple_call_set_nothrow (new_call, gimple_call_nothrow_p (call));
-
-  /* Transfer the LHS to the new call.  */
-  tree lhs = gimple_call_lhs (call);
-  gimple_call_set_lhs (new_call, lhs);
-  gimple_call_set_lhs (call, NULL_TREE);
-  SSA_NAME_DEF_STMT (lhs) = new_call;
-
-  /* Insert the new call.  */
-  gimple_stmt_iterator gsi = gsi_for_stmt (call);
-  gsi_insert_before (&gsi, new_call, GSI_SAME_STMT);
-
-  if (nconds == 0)
-    {
-      /* Skip the call if LHS == LHS.  If we reach here, EDOM is the only
-	 valid errno value and it is used iff the result is NaN.  */
-      conds.quick_push (gimple_build_cond (EQ_EXPR, lhs, lhs,
-					   NULL_TREE, NULL_TREE));
-      nconds++;
-
-      /* Try replacing the original call with a direct assignment to
-	 errno, via an internal function.  */
-      if (set_edom_supported_p () && !stmt_ends_bb_p (call))
-	{
-	  gimple_stmt_iterator gsi = gsi_for_stmt (call);
-	  gcall *new_call = gimple_build_call_internal (IFN_SET_EDOM, 0);
-	  gimple_set_vuse (new_call, gimple_vuse (call));
-	  gimple_set_vdef (new_call, gimple_vdef (call));
-	  SSA_NAME_DEF_STMT (gimple_vdef (new_call)) = new_call;
-	  gimple_set_location (new_call, gimple_location (call));
-	  gsi_replace (&gsi, new_call, false);
-	  call = new_call;
-	}
-    }
-
-  shrink_wrap_one_built_in_call_with_conds (call, conds, nconds);
 }
 
 /* The top level function for conditional dead code shrink
    wrapping transformation.  */
 
-static void
-shrink_wrap_conditional_dead_built_in_calls (vec<gcall *> calls)
+static bool
+shrink_wrap_conditional_dead_built_in_calls (VEC (gimple, heap) *calls)
 {
+  bool changed = false;
   unsigned i = 0;
 
-  unsigned n = calls.length ();
+  unsigned n = VEC_length (gimple, calls);
+  if (n == 0)
+    return false;
+
   for (; i < n ; i++)
     {
-      gcall *bi_call = calls[i];
-      if (gimple_call_lhs (bi_call))
-	use_internal_fn (bi_call);
-      else
-	shrink_wrap_one_built_in_call (bi_call);
+      gimple bi_call = VEC_index (gimple, calls, i);
+      changed |= shrink_wrap_one_built_in_call (bi_call);
     }
+
+  return changed;
 }
 
-namespace {
+/* Pass entry points.  */
 
-const pass_data pass_data_call_cdce =
-{
-  GIMPLE_PASS, /* type */
-  "cdce", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
-  TV_TREE_CALL_CDCE, /* tv_id */
-  ( PROP_cfg | PROP_ssa ), /* properties_required */
-  0, /* properties_provided */
-  0, /* properties_destroyed */
-  0, /* todo_flags_start */
-  0, /* todo_flags_finish */
-};
-
-class pass_call_cdce : public gimple_opt_pass
-{
-public:
-  pass_call_cdce (gcc::context *ctxt)
-    : gimple_opt_pass (pass_data_call_cdce, ctxt)
-  {}
-
-  /* opt_pass methods: */
-  virtual bool gate (function *)
-    {
-      /* The limit constants used in the implementation
-	 assume IEEE floating point format.  Other formats
-	 can be supported in the future if needed.  */
-      return flag_tree_builtin_call_dce != 0;
-    }
-
-  virtual unsigned int execute (function *);
-
-}; // class pass_call_cdce
-
-unsigned int
-pass_call_cdce::execute (function *fun)
+static unsigned int
+tree_call_cdce (void)
 {
   basic_block bb;
   gimple_stmt_iterator i;
-  auto_vec<gcall *> cond_dead_built_in_calls;
-  FOR_EACH_BB_FN (bb, fun)
+  bool something_changed = false;
+  VEC (gimple, heap) *cond_dead_built_in_calls = NULL;
+  FOR_EACH_BB (bb)
     {
-      /* Skip blocks that are being optimized for size, since our
-	 transformation always increases code size.  */
-      if (optimize_bb_for_size_p (bb))
-	continue;
-
       /* Collect dead call candidates.  */
       for (i = gsi_start_bb (bb); !gsi_end_p (i); gsi_next (&i))
         {
-	  gcall *stmt = dyn_cast <gcall *> (gsi_stmt (i));
-          if (stmt
-	      && gimple_call_builtin_p (stmt, BUILT_IN_NORMAL)
-	      && (gimple_call_lhs (stmt)
-		  ? can_use_internal_fn (stmt)
-		  : can_test_argument_range (stmt))
-	      && can_guard_call_p (stmt))
+	  gimple stmt = gsi_stmt (i);
+          if (is_gimple_call (stmt)
+              && is_call_dce_candidate (stmt))
             {
               if (dump_file && (dump_flags & TDF_DETAILS))
                 {
@@ -1170,28 +885,59 @@ pass_call_cdce::execute (function *fun)
                   print_gimple_stmt (dump_file, stmt, 0, TDF_SLIM);
                   fprintf (dump_file, "\n");
                 }
-	      if (!cond_dead_built_in_calls.exists ())
-		cond_dead_built_in_calls.create (64);
-	      cond_dead_built_in_calls.safe_push (stmt);
+	      if (cond_dead_built_in_calls == NULL)
+		cond_dead_built_in_calls = VEC_alloc (gimple, heap, 64);
+	      VEC_safe_push (gimple, heap, cond_dead_built_in_calls, stmt);
             }
 	}
     }
 
-  if (!cond_dead_built_in_calls.exists ())
+  if (cond_dead_built_in_calls == NULL)
     return 0;
 
-  shrink_wrap_conditional_dead_built_in_calls (cond_dead_built_in_calls);
-  free_dominance_info (CDI_POST_DOMINATORS);
-  /* As we introduced new control-flow we need to insert PHI-nodes
-     for the call-clobbers of the remaining call.  */
-  mark_virtual_operands_for_renaming (fun);
-  return TODO_update_ssa;
+  something_changed
+    = shrink_wrap_conditional_dead_built_in_calls (cond_dead_built_in_calls);
+
+  VEC_free (gimple, heap, cond_dead_built_in_calls);
+
+  if (something_changed)
+    {
+      free_dominance_info (CDI_DOMINATORS);
+      free_dominance_info (CDI_POST_DOMINATORS);
+      /* As we introduced new control-flow we need to insert PHI-nodes
+         for the call-clobbers of the remaining call.  */
+      mark_sym_for_renaming (gimple_vop (cfun));
+      return (TODO_update_ssa | TODO_cleanup_cfg | TODO_ggc_collect
+              | TODO_remove_unused_locals);
+    }
+  else
+    return 0;
 }
 
-} // anon namespace
-
-gimple_opt_pass *
-make_pass_call_cdce (gcc::context *ctxt)
+static bool
+gate_call_cdce (void)
 {
-  return new pass_call_cdce (ctxt);
+  /* The limit constants used in the implementation
+     assume IEEE floating point format.  Other formats
+     can be supported in the future if needed.  */
+  return flag_tree_builtin_call_dce != 0 && optimize_function_for_speed_p (cfun);
 }
+
+struct gimple_opt_pass pass_call_cdce =
+{
+ {
+  GIMPLE_PASS,
+  "cdce",                               /* name */
+  gate_call_cdce,                       /* gate */
+  tree_call_cdce,                       /* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  TV_TREE_CALL_CDCE,                    /* tv_id */
+  PROP_cfg | PROP_ssa,                  /* properties_required */
+  0,                                    /* properties_provided */
+  0,                                    /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_dump_func | TODO_verify_ssa      /* todo_flags_finish */
+ }
+};

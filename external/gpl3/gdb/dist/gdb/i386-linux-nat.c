@@ -1,6 +1,7 @@
 /* Native-dependent code for GNU/Linux i386.
 
-   Copyright (C) 1999-2019 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008,
+   2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,36 +19,73 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
+#include "i386-nat.h"
 #include "inferior.h"
 #include "gdbcore.h"
 #include "regcache.h"
-#include "elf/common.h"
-#include "nat/gdb_ptrace.h"
-#include <sys/uio.h>
-#include "gregset.h"
-#include "gdb_proc_service.h"
+#include "regset.h"
+#include "target.h"
+#include "linux-nat.h"
 
-#include "i386-linux-nat.h"
+#include "gdb_assert.h"
+#include "gdb_string.h"
+#include "elf/common.h"
+#include <sys/uio.h>
+#include <sys/ptrace.h>
+#include <sys/user.h>
+#include <sys/procfs.h>
+
+#ifdef HAVE_SYS_REG_H
+#include <sys/reg.h>
+#endif
+
+#ifndef ORIG_EAX
+#define ORIG_EAX -1
+#endif
+
+#ifdef HAVE_SYS_DEBUGREG_H
+#include <sys/debugreg.h>
+#endif
+
+#ifndef DR_FIRSTADDR
+#define DR_FIRSTADDR 0
+#endif
+
+#ifndef DR_LASTADDR
+#define DR_LASTADDR 3
+#endif
+
+#ifndef DR_STATUS
+#define DR_STATUS 6
+#endif
+
+#ifndef DR_CONTROL
+#define DR_CONTROL 7
+#endif
+
+/* Prototypes for supply_gregset etc.  */
+#include "gregset.h"
+
 #include "i387-tdep.h"
 #include "i386-tdep.h"
 #include "i386-linux-tdep.h"
-#include "common/x86-xstate.h"
 
-#include "x86-linux-nat.h"
-#include "nat/linux-ptrace.h"
-#include "inf-ptrace.h"
+/* Defines ps_err_e, struct ps_prochandle.  */
+#include "gdb_proc_service.h"
 
-struct i386_linux_nat_target final : public x86_linux_nat_target
-{
-  /* Add our register access methods.  */
-  void fetch_registers (struct regcache *, int) override;
-  void store_registers (struct regcache *, int) override;
+#include "i386-xstate.h"
 
-  /* Override the default ptrace resume method.  */
-  void low_resume (ptid_t ptid, int step, enum gdb_signal sig) override;
-};
+#ifndef PTRACE_GETREGSET
+#define PTRACE_GETREGSET	0x4204
+#endif
 
-static i386_linux_nat_target the_i386_linux_nat_target;
+#ifndef PTRACE_SETREGSET
+#define PTRACE_SETREGSET	0x4205
+#endif
+
+/* Does the current host support PTRACE_GETREGSET?  */
+static int have_ptrace_getregset = -1;
+
 
 /* The register sets used in GNU/Linux ELF core-dumps are identical to
    the register sets in `struct user' that is used for a.out
@@ -71,7 +109,7 @@ static i386_linux_nat_target the_i386_linux_nat_target;
   (I386_ST0_REGNUM <= (regno) && (regno) < I386_SSE_NUM_REGS)
 
 #define GETXSTATEREGS_SUPPLIES(regno) \
-  (I386_ST0_REGNUM <= (regno) && (regno) < I386_PKEYS_NUM_REGS)
+  (I386_ST0_REGNUM <= (regno) && (regno) < I386_AVX_NUM_REGS)
 
 /* Does the current host support the GETREGS request?  */
 int have_ptrace_getregs =
@@ -106,27 +144,30 @@ int have_ptrace_getfpxregs =
 static void
 fetch_register (struct regcache *regcache, int regno)
 {
-  pid_t tid;
+  int tid;
   int val;
 
   gdb_assert (!have_ptrace_getregs);
   if (i386_linux_gregset_reg_offset[regno] == -1)
     {
-      regcache->raw_supply (regno, NULL);
+      regcache_raw_supply (regcache, regno, NULL);
       return;
     }
 
-  tid = get_ptrace_pid (regcache->ptid ());
+  /* GNU/Linux LWP ID's are process ID's.  */
+  tid = TIDGET (inferior_ptid);
+  if (tid == 0)
+    tid = PIDGET (inferior_ptid); /* Not a threaded program.  */
 
   errno = 0;
   val = ptrace (PTRACE_PEEKUSER, tid,
 		i386_linux_gregset_reg_offset[regno], 0);
   if (errno != 0)
     error (_("Couldn't read register %s (#%d): %s."), 
-	   gdbarch_register_name (regcache->arch (), regno),
+	   gdbarch_register_name (get_regcache_arch (regcache), regno),
 	   regno, safe_strerror (errno));
 
-  regcache->raw_supply (regno, &val);
+  regcache_raw_supply (regcache, regno, &val);
 }
 
 /* Store one register.  */
@@ -134,22 +175,25 @@ fetch_register (struct regcache *regcache, int regno)
 static void
 store_register (const struct regcache *regcache, int regno)
 {
-  pid_t tid;
+  int tid;
   int val;
 
   gdb_assert (!have_ptrace_getregs);
   if (i386_linux_gregset_reg_offset[regno] == -1)
     return;
 
-  tid = get_ptrace_pid (regcache->ptid ());
+  /* GNU/Linux LWP ID's are process ID's.  */
+  tid = TIDGET (inferior_ptid);
+  if (tid == 0)
+    tid = PIDGET (inferior_ptid); /* Not a threaded program.  */
 
   errno = 0;
-  regcache->raw_collect (regno, &val);
+  regcache_raw_collect (regcache, regno, &val);
   ptrace (PTRACE_POKEUSER, tid,
 	  i386_linux_gregset_reg_offset[regno], val);
   if (errno != 0)
     error (_("Couldn't write register %s (#%d): %s."),
-	   gdbarch_register_name (regcache->arch (), regno),
+	   gdbarch_register_name (get_regcache_arch (regcache), regno),
 	   regno, safe_strerror (errno));
 }
 
@@ -167,13 +211,13 @@ supply_gregset (struct regcache *regcache, const elf_gregset_t *gregsetp)
   int i;
 
   for (i = 0; i < I386_NUM_GREGS; i++)
-    regcache->raw_supply (i, regp + i386_linux_gregset_reg_offset[i]);
+    regcache_raw_supply (regcache, i,
+			 regp + i386_linux_gregset_reg_offset[i]);
 
   if (I386_LINUX_ORIG_EAX_REGNUM
-	< gdbarch_num_regs (regcache->arch ()))
-    regcache->raw_supply
-      (I386_LINUX_ORIG_EAX_REGNUM,
-       regp + i386_linux_gregset_reg_offset[I386_LINUX_ORIG_EAX_REGNUM]);
+	< gdbarch_num_regs (get_regcache_arch (regcache)))
+    regcache_raw_supply (regcache, I386_LINUX_ORIG_EAX_REGNUM, regp
+			 + i386_linux_gregset_reg_offset[I386_LINUX_ORIG_EAX_REGNUM]);
 }
 
 /* Fill register REGNO (if it is a general-purpose register) in
@@ -189,14 +233,14 @@ fill_gregset (const struct regcache *regcache,
 
   for (i = 0; i < I386_NUM_GREGS; i++)
     if (regno == -1 || regno == i)
-      regcache->raw_collect (i, regp + i386_linux_gregset_reg_offset[i]);
+      regcache_raw_collect (regcache, i,
+			    regp + i386_linux_gregset_reg_offset[i]);
 
   if ((regno == -1 || regno == I386_LINUX_ORIG_EAX_REGNUM)
       && I386_LINUX_ORIG_EAX_REGNUM
-	   < gdbarch_num_regs (regcache->arch ()))
-    regcache->raw_collect
-      (I386_LINUX_ORIG_EAX_REGNUM,
-       regp + i386_linux_gregset_reg_offset[I386_LINUX_ORIG_EAX_REGNUM]);
+	   < gdbarch_num_regs (get_regcache_arch (regcache)))
+    regcache_raw_collect (regcache, I386_LINUX_ORIG_EAX_REGNUM, regp
+			  + i386_linux_gregset_reg_offset[I386_LINUX_ORIG_EAX_REGNUM]);
 }
 
 #ifdef HAVE_PTRACE_GETREGS
@@ -330,10 +374,10 @@ store_fpregs (const struct regcache *regcache, int tid, int regno)
 static int
 fetch_xstateregs (struct regcache *regcache, int tid)
 {
-  char xstateregs[X86_XSTATE_MAX_SIZE];
+  char xstateregs[I386_XSTATE_MAX_SIZE];
   struct iovec iov;
 
-  if (have_ptrace_getregset != TRIBOOL_TRUE)
+  if (!have_ptrace_getregset)
     return 0;
 
   iov.iov_base = xstateregs;
@@ -353,10 +397,10 @@ fetch_xstateregs (struct regcache *regcache, int tid)
 static int
 store_xstateregs (const struct regcache *regcache, int tid, int regno)
 {
-  char xstateregs[X86_XSTATE_MAX_SIZE];
+  char xstateregs[I386_XSTATE_MAX_SIZE];
   struct iovec iov;
 
-  if (have_ptrace_getregset != TRIBOOL_TRUE)
+  if (!have_ptrace_getregset)
     return 0;
   
   iov.iov_base = xstateregs;
@@ -457,10 +501,11 @@ store_fpxregs (const struct regcache *regcache, int tid, int regno)
    this for all registers (including the floating point and SSE
    registers).  */
 
-void
-i386_linux_nat_target::fetch_registers (struct regcache *regcache, int regno)
+static void
+i386_linux_fetch_inferior_registers (struct target_ops *ops,
+				     struct regcache *regcache, int regno)
 {
-  pid_t tid;
+  int tid;
 
   /* Use the old method of peeking around in `struct user' if the
      GETREGS request isn't available.  */
@@ -468,14 +513,17 @@ i386_linux_nat_target::fetch_registers (struct regcache *regcache, int regno)
     {
       int i;
 
-      for (i = 0; i < gdbarch_num_regs (regcache->arch ()); i++)
+      for (i = 0; i < gdbarch_num_regs (get_regcache_arch (regcache)); i++)
 	if (regno == -1 || regno == i)
 	  fetch_register (regcache, i);
 
       return;
     }
 
-  tid = get_ptrace_pid (regcache->ptid ());
+  /* GNU/Linux LWP ID's are process ID's.  */
+  tid = TIDGET (inferior_ptid);
+  if (tid == 0)
+    tid = PIDGET (inferior_ptid); /* Not a threaded program.  */
 
   /* Use the PTRACE_GETFPXREGS request whenever possible, since it
      transfers more registers in one system call, and we'll cache the
@@ -488,7 +536,7 @@ i386_linux_nat_target::fetch_registers (struct regcache *regcache, int regno)
       /* The call above might reset `have_ptrace_getregs'.  */
       if (!have_ptrace_getregs)
 	{
-	  fetch_registers (regcache, regno);
+	  i386_linux_fetch_inferior_registers (ops, regcache, regno);
 	  return;
 	}
 
@@ -534,10 +582,11 @@ i386_linux_nat_target::fetch_registers (struct regcache *regcache, int regno)
 /* Store register REGNO back into the child process.  If REGNO is -1,
    do this for all registers (including the floating point and SSE
    registers).  */
-void
-i386_linux_nat_target::store_registers (struct regcache *regcache, int regno)
+static void
+i386_linux_store_inferior_registers (struct target_ops *ops,
+				     struct regcache *regcache, int regno)
 {
-  pid_t tid;
+  int tid;
 
   /* Use the old method of poking around in `struct user' if the
      SETREGS request isn't available.  */
@@ -545,14 +594,17 @@ i386_linux_nat_target::store_registers (struct regcache *regcache, int regno)
     {
       int i;
 
-      for (i = 0; i < gdbarch_num_regs (regcache->arch ()); i++)
+      for (i = 0; i < gdbarch_num_regs (get_regcache_arch (regcache)); i++)
 	if (regno == -1 || regno == i)
 	  store_register (regcache, i);
 
       return;
     }
 
-  tid = get_ptrace_pid (regcache->ptid ());
+  /* GNU/Linux LWP ID's are process ID's.  */
+  tid = TIDGET (inferior_ptid);
+  if (tid == 0)
+    tid = PIDGET (inferior_ptid); /* Not a threaded program.  */
 
   /* Use the PTRACE_SETFPXREGS requests whenever possible, since it
      transfers more registers in one system call.  But remember that
@@ -597,22 +649,169 @@ i386_linux_nat_target::store_registers (struct regcache *regcache, int regno)
 }
 
 
+/* Support for debug registers.  */
+
+static unsigned long i386_linux_dr[DR_CONTROL + 1];
+
+/* Get debug register REGNUM value from only the one LWP of PTID.  */
+
+static unsigned long
+i386_linux_dr_get (ptid_t ptid, int regnum)
+{
+  int tid;
+  unsigned long value;
+
+  tid = TIDGET (ptid);
+  if (tid == 0)
+    tid = PIDGET (ptid);
+
+  /* FIXME: kettenis/2001-03-27: Calling perror_with_name if the
+     ptrace call fails breaks debugging remote targets.  The correct
+     way to fix this is to add the hardware breakpoint and watchpoint
+     stuff to the target vector.  For now, just return zero if the
+     ptrace call fails.  */
+  errno = 0;
+  value = ptrace (PTRACE_PEEKUSER, tid,
+		  offsetof (struct user, u_debugreg[regnum]), 0);
+  if (errno != 0)
+#if 0
+    perror_with_name (_("Couldn't read debug register"));
+#else
+    return 0;
+#endif
+
+  return value;
+}
+
+/* Set debug register REGNUM to VALUE in only the one LWP of PTID.  */
+
+static void
+i386_linux_dr_set (ptid_t ptid, int regnum, unsigned long value)
+{
+  int tid;
+
+  tid = TIDGET (ptid);
+  if (tid == 0)
+    tid = PIDGET (ptid);
+
+  errno = 0;
+  ptrace (PTRACE_POKEUSER, tid,
+	  offsetof (struct user, u_debugreg[regnum]), value);
+  if (errno != 0)
+    perror_with_name (_("Couldn't write debug register"));
+}
+
+/* Set DR_CONTROL to ADDR in all LWPs of LWP_LIST.  */
+
+static void
+i386_linux_dr_set_control (unsigned long control)
+{
+  struct lwp_info *lp;
+  ptid_t ptid;
+
+  i386_linux_dr[DR_CONTROL] = control;
+  ALL_LWPS (lp, ptid)
+    i386_linux_dr_set (ptid, DR_CONTROL, control);
+}
+
+/* Set address REGNUM (zero based) to ADDR in all LWPs of LWP_LIST.  */
+
+static void
+i386_linux_dr_set_addr (int regnum, CORE_ADDR addr)
+{
+  struct lwp_info *lp;
+  ptid_t ptid;
+
+  gdb_assert (regnum >= 0 && regnum <= DR_LASTADDR - DR_FIRSTADDR);
+
+  i386_linux_dr[DR_FIRSTADDR + regnum] = addr;
+  ALL_LWPS (lp, ptid)
+    i386_linux_dr_set (ptid, DR_FIRSTADDR + regnum, addr);
+}
+
+/* Set address REGNUM (zero based) to zero in all LWPs of LWP_LIST.  */
+
+static void
+i386_linux_dr_reset_addr (int regnum)
+{
+  i386_linux_dr_set_addr (regnum, 0);
+}
+
+/* Get DR_STATUS from only the one LWP of INFERIOR_PTID.  */
+
+static unsigned long
+i386_linux_dr_get_status (void)
+{
+  return i386_linux_dr_get (inferior_ptid, DR_STATUS);
+}
+
+/* Unset MASK bits in DR_STATUS in all LWPs of LWP_LIST.  */
+
+static void
+i386_linux_dr_unset_status (unsigned long mask)
+{
+  struct lwp_info *lp;
+  ptid_t ptid;
+
+  ALL_LWPS (lp, ptid)
+    {
+      unsigned long value;
+      
+      value = i386_linux_dr_get (ptid, DR_STATUS);
+      value &= ~mask;
+      i386_linux_dr_set (ptid, DR_STATUS, value);
+    }
+}
+
+static void
+i386_linux_new_thread (ptid_t ptid)
+{
+  int i;
+
+  for (i = DR_FIRSTADDR; i <= DR_LASTADDR; i++)
+    i386_linux_dr_set (ptid, i, i386_linux_dr[i]);
+
+  i386_linux_dr_set (ptid, DR_CONTROL, i386_linux_dr[DR_CONTROL]);
+}
+
+
 /* Called by libthread_db.  Returns a pointer to the thread local
    storage (or its descriptor).  */
 
 ps_err_e
-ps_get_thread_area (struct ps_prochandle *ph,
+ps_get_thread_area (const struct ps_prochandle *ph, 
 		    lwpid_t lwpid, int idx, void **base)
 {
-  unsigned int base_addr;
-  ps_err_e result;
+  /* NOTE: cagney/2003-08-26: The definition of this buffer is found
+     in the kernel header <asm-i386/ldt.h>.  It, after padding, is 4 x
+     4 byte integers in size: `entry_number', `base_addr', `limit',
+     and a bunch of status bits.
 
-  result = x86_linux_get_thread_area (lwpid, (void *) idx, &base_addr);
+     The values returned by this ptrace call should be part of the
+     regcache buffer, and ps_get_thread_area should channel its
+     request through the regcache.  That way remote targets could
+     provide the value using the remote protocol and not this direct
+     call.
 
-  if (result == PS_OK)
-    *(int *) base = base_addr;
+     Is this function needed?  I'm guessing that the `base' is the
+     address of a descriptor that libthread_db uses to find the
+     thread local address base that GDB needs.  Perhaps that
+     descriptor is defined by the ABI.  Anyway, given that
+     libthread_db calls this function without prompting (gdb
+     requesting tls base) I guess it needs info in there anyway.  */
+  unsigned int desc[4];
+  gdb_assert (sizeof (int) == 4);
 
-  return result;
+#ifndef PTRACE_GET_THREAD_AREA
+#define PTRACE_GET_THREAD_AREA 25
+#endif
+
+  if (ptrace (PTRACE_GET_THREAD_AREA, lwpid,
+	      (void *) idx, (unsigned long) &desc) < 0)
+    return PS_ERR;
+
+  *(int *)base = desc[1];
+  return PS_OK;
 }
 
 
@@ -644,10 +843,12 @@ static const unsigned char linux_syscall[] = { 0xcd, 0x80 };
    If STEP is nonzero, single-step it.
    If SIGNAL is nonzero, give it that signal.  */
 
-void
-i386_linux_nat_target::low_resume (ptid_t ptid, int step, enum gdb_signal signal)
+static void
+i386_linux_resume (struct target_ops *ops,
+		   ptid_t ptid, int step, enum target_signal signal)
 {
-  int pid = ptid.lwp ();
+  int pid = PIDGET (ptid);
+
   int request;
 
   if (catch_syscall_enabled () > 0)
@@ -657,8 +858,8 @@ i386_linux_nat_target::low_resume (ptid_t ptid, int step, enum gdb_signal signal
 
   if (step)
     {
-      struct regcache *regcache = get_thread_regcache (ptid);
-      struct gdbarch *gdbarch = regcache->arch ();
+      struct regcache *regcache = get_thread_regcache (pid_to_ptid (pid));
+      struct gdbarch *gdbarch = get_regcache_arch (regcache);
       enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
       ULONGEST pc;
       gdb_byte buf[LINUX_SYSCALL_LEN];
@@ -692,8 +893,7 @@ i386_linux_nat_target::low_resume (ptid_t ptid, int step, enum gdb_signal signal
 
 	      regcache_cooked_read_unsigned (regcache, I386_ESP_REGNUM, &sp);
 	      if (syscall == SYS_rt_sigreturn)
-		addr = read_memory_unsigned_integer (sp + 8, 4, byte_order)
-		  + 20;
+		addr = read_memory_integer (sp + 8, 4, byte_order) + 20;
 	      else
 		addr = sp;
 
@@ -707,15 +907,107 @@ i386_linux_nat_target::low_resume (ptid_t ptid, int step, enum gdb_signal signal
 	}
     }
 
-  if (ptrace (request, pid, 0, gdb_signal_to_host (signal)) == -1)
+  if (ptrace (request, pid, 0, target_signal_to_host (signal)) == -1)
     perror_with_name (("ptrace"));
+}
+
+static void (*super_post_startup_inferior) (ptid_t ptid);
+
+static void
+i386_linux_child_post_startup_inferior (ptid_t ptid)
+{
+  i386_cleanup_dregs ();
+  super_post_startup_inferior (ptid);
+}
+
+/* Get Linux/x86 target description from running target.  */
+
+static const struct target_desc *
+i386_linux_read_description (struct target_ops *ops)
+{
+  int tid;
+  static uint64_t xcr0;
+
+  /* GNU/Linux LWP ID's are process ID's.  */
+  tid = TIDGET (inferior_ptid);
+  if (tid == 0)
+    tid = PIDGET (inferior_ptid); /* Not a threaded program.  */
+
+#ifdef HAVE_PTRACE_GETFPXREGS
+  if (have_ptrace_getfpxregs == -1)
+    {
+      elf_fpxregset_t fpxregs;
+
+      if (ptrace (PTRACE_GETFPXREGS, tid, 0, (int) &fpxregs) < 0)
+	{
+	  have_ptrace_getfpxregs = 0;
+	  have_ptrace_getregset = 0;
+	  return tdesc_i386_mmx_linux;
+	}
+    }
+#endif
+
+  if (have_ptrace_getregset == -1)
+    {
+      uint64_t xstateregs[(I386_XSTATE_SSE_SIZE / sizeof (uint64_t))];
+      struct iovec iov;
+
+      iov.iov_base = xstateregs;
+      iov.iov_len = sizeof (xstateregs);
+
+      /* Check if PTRACE_GETREGSET works.  */
+      if (ptrace (PTRACE_GETREGSET, tid, (unsigned int) NT_X86_XSTATE,
+		  &iov) < 0)
+	have_ptrace_getregset = 0;
+      else
+	{
+	  have_ptrace_getregset = 1;
+
+	  /* Get XCR0 from XSAVE extended state.  */
+	  xcr0 = xstateregs[(I386_LINUX_XSAVE_XCR0_OFFSET
+			     / sizeof (long long))];
+	}
+    }
+
+  /* Check the native XCR0 only if PTRACE_GETREGSET is available.  */
+  if (have_ptrace_getregset
+      && (xcr0 & I386_XSTATE_AVX_MASK) == I386_XSTATE_AVX_MASK)
+    return tdesc_i386_avx_linux;
+  else
+    return tdesc_i386_linux;
 }
 
 void
 _initialize_i386_linux_nat (void)
 {
-  linux_target = &the_i386_linux_nat_target;
+  struct target_ops *t;
 
-  /* Add the target.  */
-  add_inf_child_target (linux_target);
+  /* Fill in the generic GNU/Linux methods.  */
+  t = linux_target ();
+
+  i386_use_watchpoints (t);
+
+  i386_dr_low.set_control = i386_linux_dr_set_control;
+  i386_dr_low.set_addr = i386_linux_dr_set_addr;
+  i386_dr_low.reset_addr = i386_linux_dr_reset_addr;
+  i386_dr_low.get_status = i386_linux_dr_get_status;
+  i386_dr_low.unset_status = i386_linux_dr_unset_status;
+  i386_set_debug_register_length (4);
+
+  /* Override the default ptrace resume method.  */
+  t->to_resume = i386_linux_resume;
+
+  /* Override the GNU/Linux inferior startup hook.  */
+  super_post_startup_inferior = t->to_post_startup_inferior;
+  t->to_post_startup_inferior = i386_linux_child_post_startup_inferior;
+
+  /* Add our register access methods.  */
+  t->to_fetch_registers = i386_linux_fetch_inferior_registers;
+  t->to_store_registers = i386_linux_store_inferior_registers;
+
+  t->to_read_description = i386_linux_read_description;
+
+  /* Register the target.  */
+  linux_nat_add_target (t);
+  linux_nat_set_new_thread (t, i386_linux_new_thread);
 }

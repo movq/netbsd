@@ -1,5 +1,6 @@
 /* BFD back-end for ns32k a.out-ish binaries.
-   Copyright (C) 1990-2020 Free Software Foundation, Inc.
+   Copyright 1990, 1991, 1992, 1994, 1995, 1996, 1998, 1999, 2000, 2001,
+   2002, 2003, 2005, 2007 Free Software Foundation, Inc.
    Contributed by Ian Dall (idall@eleceng.adelaide.edu.au).
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -19,7 +20,6 @@
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
-#include "sysdep.h"
 #include "bfd.h"
 #include "aout/aout64.h"
 #include "ns32k.h"
@@ -27,11 +27,11 @@
 /* Do not "beautify" the CONCAT* macro args.  Traditional C will not
    remove whitespace added here, and thus will fail to concatenate
    the tokens.  */
-#define MYNS(OP) CONCAT2 (ns32k_aout_,OP)
+#define MYNS(OP) CONCAT2 (ns32kaout_,OP)
 
 reloc_howto_type * MYNS (bfd_reloc_type_lookup) (bfd *, bfd_reloc_code_real_type);
 reloc_howto_type * MYNS (bfd_reloc_name_lookup) (bfd *, const char *);
-bfd_boolean	   MYNS (write_object_contents) (bfd *);
+bfd_boolean        MYNS (write_object_contents) (bfd *);
 
 /* Avoid multiple definitions from aoutx if supporting
    standard a.out format(s) as well as this one.  */
@@ -67,10 +67,10 @@ void bfd_ns32k_arch (void);
    sym1: .long foo	 # 2's complement not pc relative
 
    self:  movd @self, r0 # pc relative displacement
-	  movd foo, r0   # non pc relative displacement
+          movd foo, r0   # non pc relative displacement
 
    self:  movd self, r0  # pc relative immediate
-	  movd foo, r0   # non pc relative immediate
+          movd foo, r0   # non pc relative immediate
 
    In addition, for historical reasons the encoding of the relocation types
    in the a.out format relocation entries is such that even the relocation
@@ -135,10 +135,10 @@ reloc_howto_type MY (howto_table)[] =
 
 #define CTOR_TABLE_RELOC_HOWTO(BFD) (MY (howto_table) + 14)
 
-#define RELOC_STD_BITS_NS32K_TYPE_BIG		0x06
-#define RELOC_STD_BITS_NS32K_TYPE_LITTLE	0x60
-#define RELOC_STD_BITS_NS32K_TYPE_SH_BIG	1
-#define RELOC_STD_BITS_NS32K_TYPE_SH_LITTLE	5
+#define RELOC_STD_BITS_NS32K_TYPE_BIG 		0x06
+#define RELOC_STD_BITS_NS32K_TYPE_LITTLE 	0x60
+#define RELOC_STD_BITS_NS32K_TYPE_SH_BIG 	1
+#define RELOC_STD_BITS_NS32K_TYPE_SH_LITTLE 	5
 
 static reloc_howto_type *
 MY (reloc_howto) (bfd *abfd ATTRIBUTE_UNUSED,
@@ -214,7 +214,7 @@ MY (bfd_reloc_type_lookup) (bfd *abfd, bfd_reloc_code_real_type code)
 
   BFD_ASSERT (ext == 0);
   if (code == BFD_RELOC_CTOR)
-    switch (bfd_arch_bits_per_address (abfd))
+    switch (bfd_get_arch_info (abfd)->bits_per_address)
       {
       case 32:
 	code = BFD_RELOC_32;
@@ -303,10 +303,10 @@ MY_swap_std_reloc_out (bfd *abfd,
      from the abs section, or as a symbol which has an abs value.
      Check for that here.  */
   if (bfd_is_com_section (output_section)
-      || bfd_is_abs_section (output_section)
-      || bfd_is_und_section (output_section))
+      || output_section == &bfd_abs_section
+      || output_section == &bfd_und_section)
     {
-      if (bfd_abs_section_ptr->symbol == sym)
+      if (bfd_abs_section.symbol == sym)
 	{
 	  /* Whoops, looked like an abs symbol, but is really an offset
 	     from the abs section.  */

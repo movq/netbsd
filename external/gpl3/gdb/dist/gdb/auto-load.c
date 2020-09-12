@@ -1,6 +1,6 @@
 /* GDB routines for supporting auto-loaded scripts.
 
-   Copyright (C) 2012-2019 Free Software Foundation, Inc.
+   Copyright (C) 2012-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,47 +18,33 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
-#include <ctype.h>
 #include "auto-load.h"
 #include "progspace.h"
+#include "python/python.h"
 #include "gdb_regex.h"
 #include "ui-out.h"
 #include "filenames.h"
 #include "command.h"
-#include "observable.h"
+#include "observer.h"
 #include "objfiles.h"
+#include "exceptions.h"
 #include "cli/cli-script.h"
 #include "gdbcmd.h"
-#include "cli/cli-cmds.h"
 #include "cli/cli-decode.h"
 #include "cli/cli-setshow.h"
+#include "gdb_vecs.h"
 #include "readline/tilde.h"
 #include "completer.h"
+#include "observer.h"
 #include "fnmatch.h"
 #include "top.h"
-#include "common/filestuff.h"
-#include "extension.h"
-#include "gdb/section-scripts.h"
-#include <algorithm>
-#include "common/pathstuff.h"
 
-/* The section to look in for auto-loaded scripts (in file formats that
-   support sections).
-   Each entry in this section is a record that begins with a leading byte
-   identifying the record type.
-   At the moment we only support one record type: A leading byte of 1,
-   followed by the path of a python script to load.  */
-#define AUTO_SECTION_NAME ".debug_gdb_scripts"
+/* The suffix of per-objfile scripts to auto-load as non-Python command files.
+   E.g. When the program loads libfoo.so, look for libfoo-gdb.gdb.  */
+#define GDB_AUTO_FILE_NAME "-gdb.gdb"
 
-static void maybe_print_unsupported_script_warning
-  (struct auto_load_pspace_info *, struct objfile *objfile,
-   const struct extension_language_defn *language,
-   const char *section_name, unsigned offset);
-
-static void maybe_print_script_not_found_warning
-  (struct auto_load_pspace_info *, struct objfile *objfile,
-   const struct extension_language_defn *language,
-   const char *section_name, unsigned offset);
+static void source_gdb_script_for_objfile (struct objfile *objfile, FILE *file,
+					   const char *filename);
 
 /* Value of the 'set debug auto-load' configuration variable.  */
 static int debug_auto_load = 0;
@@ -90,14 +76,6 @@ show_auto_load_gdb_scripts (struct ui_file *file, int from_tty,
   fprintf_filtered (file, _("Auto-loading of canned sequences of commands "
 			    "scripts is %s.\n"),
 		    value);
-}
-
-/* Return non-zero if auto-loading gdb scripts is enabled.  */
-
-int
-auto_load_gdb_scripts_enabled (const struct extension_language_defn *extlang)
-{
-  return auto_load_gdb_scripts;
 }
 
 /* Internal-use flag to enable/disable auto-loading.
@@ -140,7 +118,7 @@ static char *auto_load_dir;
 /* "set" command for the auto_load_dir configuration variable.  */
 
 static void
-set_auto_load_dir (const char *args, int from_tty, struct cmd_list_element *c)
+set_auto_load_dir (char *args, int from_tty, struct cmd_list_element *c)
 {
   /* Setting the variable to "" resets it to the compile time defaults.  */
   if (auto_load_dir[0] == '\0')
@@ -169,15 +147,19 @@ static char *auto_load_safe_path;
 /* Vector of directory elements of AUTO_LOAD_SAFE_PATH with each one normalized
    by tilde_expand and possibly each entries has added its gdb_realpath
    counterpart.  */
-std::vector<gdb::unique_xmalloc_ptr<char>> auto_load_safe_path_vec;
+static VEC (char_ptr) *auto_load_safe_path_vec;
 
 /* Expand $datadir and $debugdir in STRING according to the rules of
-   substitute_path_component.  */
+   substitute_path_component.  Return vector from dirnames_to_char_ptr_vec,
+   this vector must be freed by free_char_ptr_vec by the caller.  */
 
-static std::vector<gdb::unique_xmalloc_ptr<char>>
+static VEC (char_ptr) *
 auto_load_expand_dir_vars (const char *string)
 {
-  char *s = xstrdup (string);
+  VEC (char_ptr) *dir_vec;
+  char *s;
+
+  s = xstrdup (string);
   substitute_path_component (&s, "$datadir", gdb_datadir);
   substitute_path_component (&s, "$debugdir", debug_file_directory);
 
@@ -185,8 +167,7 @@ auto_load_expand_dir_vars (const char *string)
     fprintf_unfiltered (gdb_stdlog,
 			_("auto-load: Expanded $-variables to \"%s\".\n"), s);
 
-  std::vector<gdb::unique_xmalloc_ptr<char>> dir_vec
-    = dirnames_to_char_ptr_vec (s);
+  dir_vec = dirnames_to_char_ptr_vec (s);
   xfree(s);
 
   return dir_vec;
@@ -197,49 +178,55 @@ auto_load_expand_dir_vars (const char *string)
 static void
 auto_load_safe_path_vec_update (void)
 {
+  unsigned len;
+  int ix;
+
   if (debug_auto_load)
     fprintf_unfiltered (gdb_stdlog,
 			_("auto-load: Updating directories of \"%s\".\n"),
 			auto_load_safe_path);
 
+  free_char_ptr_vec (auto_load_safe_path_vec);
+
   auto_load_safe_path_vec = auto_load_expand_dir_vars (auto_load_safe_path);
-  size_t len = auto_load_safe_path_vec.size ();
+  len = VEC_length (char_ptr, auto_load_safe_path_vec);
 
   /* Apply tilde_expand and gdb_realpath to each AUTO_LOAD_SAFE_PATH_VEC
      element.  */
-  for (size_t i = 0; i < len; i++)
+  for (ix = 0; ix < len; ix++)
     {
-      gdb::unique_xmalloc_ptr<char> &in_vec = auto_load_safe_path_vec[i];
-      gdb::unique_xmalloc_ptr<char> expanded (tilde_expand (in_vec.get ()));
-      gdb::unique_xmalloc_ptr<char> real_path = gdb_realpath (expanded.get ());
+      char *dir = VEC_index (char_ptr, auto_load_safe_path_vec, ix);
+      char *expanded = tilde_expand (dir);
+      char *real_path = gdb_realpath (expanded);
 
-      /* Ensure the current entry is at least tilde_expand-ed.  ORIGINAL makes
-	 sure we free the original string.  */
-      gdb::unique_xmalloc_ptr<char> original = std::move (in_vec);
-      in_vec = std::move (expanded);
+      /* Ensure the current entry is at least tilde_expand-ed.  */
+      VEC_replace (char_ptr, auto_load_safe_path_vec, ix, expanded);
 
       if (debug_auto_load)
 	{
-	  if (strcmp (in_vec.get (), original.get ()) == 0)
+	  if (strcmp (expanded, dir) == 0)
 	    fprintf_unfiltered (gdb_stdlog,
 				_("auto-load: Using directory \"%s\".\n"),
-				in_vec.get ());
+				expanded);
 	  else
 	    fprintf_unfiltered (gdb_stdlog,
 				_("auto-load: Resolved directory \"%s\" "
 				  "as \"%s\".\n"),
-				original.get (), in_vec.get ());
+				dir, expanded);
 	}
+      xfree (dir);
 
       /* If gdb_realpath returns a different content, append it.  */
-      if (strcmp (real_path.get (), in_vec.get ()) != 0)
+      if (strcmp (real_path, expanded) == 0)
+	xfree (real_path);
+      else
 	{
+	  VEC_safe_push (char_ptr, auto_load_safe_path_vec, real_path);
+
 	  if (debug_auto_load)
 	    fprintf_unfiltered (gdb_stdlog,
 				_("auto-load: And canonicalized as \"%s\".\n"),
-				real_path.get ());
-
-	  auto_load_safe_path_vec.push_back (std::move (real_path));
+				real_path);
 	}
     }
 }
@@ -255,8 +242,7 @@ auto_load_gdb_datadir_changed (void)
 /* "set" command for the auto_load_safe_path configuration variable.  */
 
 static void
-set_auto_load_safe_path (const char *args,
-			 int from_tty, struct cmd_list_element *c)
+set_auto_load_safe_path (char *args, int from_tty, struct cmd_list_element *c)
 {
   /* Setting the variable to "" resets it to the compile time defaults.  */
   if (auto_load_safe_path[0] == '\0')
@@ -295,7 +281,7 @@ show_auto_load_safe_path (struct ui_file *file, int from_tty,
    variable.  */
 
 static void
-add_auto_load_safe_path (const char *args, int from_tty)
+add_auto_load_safe_path (char *args, int from_tty)
 {
   char *s;
 
@@ -310,22 +296,6 @@ Use 'set auto-load safe-path /' for disabling the auto-load safe-path security.\
   auto_load_safe_path = s;
 
   auto_load_safe_path_vec_update ();
-}
-
-/* "add-auto-load-scripts-directory" command for the auto_load_dir configuration
-   variable.  */
-
-static void
-add_auto_load_dir (const char *args, int from_tty)
-{
-  char *s;
-
-  if (args == NULL || *args == 0)
-    error (_("Directory argument required."));
-
-  s = xstrprintf ("%s%c%s", auto_load_dir, DIRNAME_SEPARATOR, args);
-  xfree (auto_load_dir);
-  auto_load_dir = s;
 }
 
 /* Implementation for filename_is_in_pattern overwriting the caller's FILENAME
@@ -401,9 +371,9 @@ filename_is_in_pattern (const char *filename, const char *pattern)
 {
   char *filename_copy, *pattern_copy;
 
-  filename_copy = (char *) alloca (strlen (filename) + 1);
+  filename_copy = alloca (strlen (filename) + 1);
   strcpy (filename_copy, filename);
-  pattern_copy = (char *) alloca (strlen (pattern) + 1);
+  pattern_copy = alloca (strlen (pattern) + 1);
   strcpy (pattern_copy, pattern);
 
   return filename_is_in_pattern_1 (filename_copy, pattern_copy);
@@ -412,40 +382,38 @@ filename_is_in_pattern (const char *filename, const char *pattern)
 /* Return 1 if FILENAME belongs to one of directory components of
    AUTO_LOAD_SAFE_PATH_VEC.  Return 0 otherwise.
    auto_load_safe_path_vec_update is never called.
-   *FILENAME_REALP may be updated by gdb_realpath of FILENAME.  */
+   *FILENAME_REALP may be updated by gdb_realpath of FILENAME - it has to be
+   freed by the caller.  */
 
 static int
 filename_is_in_auto_load_safe_path_vec (const char *filename,
-					gdb::unique_xmalloc_ptr<char> *filename_realp)
+					char **filename_realp)
 {
-  const char *pattern = NULL;
+  char *pattern;
+  int ix;
 
-  for (const gdb::unique_xmalloc_ptr<char> &p : auto_load_safe_path_vec)
-    if (*filename_realp == NULL && filename_is_in_pattern (filename, p.get ()))
-      {
-	pattern = p.get ();
-	break;
-      }
+  for (ix = 0; VEC_iterate (char_ptr, auto_load_safe_path_vec, ix, pattern);
+       ++ix)
+    if (*filename_realp == NULL && filename_is_in_pattern (filename, pattern))
+      break;
   
   if (pattern == NULL)
     {
       if (*filename_realp == NULL)
 	{
 	  *filename_realp = gdb_realpath (filename);
-	  if (debug_auto_load && strcmp (filename_realp->get (), filename) != 0)
+	  if (debug_auto_load && strcmp (*filename_realp, filename) != 0)
 	    fprintf_unfiltered (gdb_stdlog,
 				_("auto-load: Resolved "
 				  "file \"%s\" as \"%s\".\n"),
-				filename, filename_realp->get ());
+				filename, *filename_realp);
 	}
 
-      if (strcmp (filename_realp->get (), filename) != 0)
-	for (const gdb::unique_xmalloc_ptr<char> &p : auto_load_safe_path_vec)
-	  if (filename_is_in_pattern (filename_realp->get (), p.get ()))
-	    {
-	      pattern = p.get ();
-	      break;
-	    }
+      if (strcmp (*filename_realp, filename) != 0)
+	for (ix = 0;
+	     VEC_iterate (char_ptr, auto_load_safe_path_vec, ix, pattern); ++ix)
+	  if (filename_is_in_pattern (*filename_realp, pattern))
+	    break;
     }
 
   if (pattern != NULL)
@@ -471,7 +439,8 @@ filename_is_in_auto_load_safe_path_vec (const char *filename,
 int
 file_is_auto_load_safe (const char *filename, const char *debug_fmt, ...)
 {
-  gdb::unique_xmalloc_ptr<char> filename_real;
+  char *filename_real = NULL;
+  struct cleanup *back_to;
   static int advice_printed = 0;
 
   if (debug_auto_load)
@@ -483,24 +452,34 @@ file_is_auto_load_safe (const char *filename, const char *debug_fmt, ...)
       va_end (debug_args);
     }
 
+  back_to = make_cleanup (free_current_contents, &filename_real);
+
   if (filename_is_in_auto_load_safe_path_vec (filename, &filename_real))
-    return 1;
+    {
+      do_cleanups (back_to);
+      return 1;
+    }
 
   auto_load_safe_path_vec_update ();
   if (filename_is_in_auto_load_safe_path_vec (filename, &filename_real))
-    return 1;
+    {
+      do_cleanups (back_to);
+      return 1;
+    }
 
   warning (_("File \"%s\" auto-loading has been declined by your "
 	     "`auto-load safe-path' set to \"%s\"."),
-	   filename_real.get (), auto_load_safe_path);
+	   filename_real, auto_load_safe_path);
 
   if (!advice_printed)
     {
       const char *homedir = getenv ("HOME");
+      char *homeinit;
 
       if (homedir == NULL)
 	homedir = "$HOME";
-      std::string homeinit = string_printf ("%s/%s", homedir, gdbinit);
+      homeinit = xstrprintf ("%s/%s", homedir, gdbinit);
+      make_cleanup (xfree, homeinit);
 
       printf_filtered (_("\
 To enable execution of this file add\n\
@@ -512,12 +491,46 @@ line to your configuration file \"%s\".\n\
 For more information about this security protection see the\n\
 \"Auto-loading safe path\" section in the GDB manual.  E.g., run from the shell:\n\
 \tinfo \"(gdb)Auto-loading safe path\"\n"),
-		       filename_real.get (),
-		       homeinit.c_str (), homeinit.c_str ());
+		       filename_real, homeinit, homeinit);
       advice_printed = 1;
     }
 
+  do_cleanups (back_to);
   return 0;
+}
+
+/* Definition of script language for GDB canned sequences of commands.  */
+
+static const struct script_language script_language_gdb
+  = { GDB_AUTO_FILE_NAME, source_gdb_script_for_objfile };
+
+static void
+source_gdb_script_for_objfile (struct objfile *objfile, FILE *file,
+			       const char *filename)
+{
+  int is_safe;
+  struct auto_load_pspace_info *pspace_info;
+  volatile struct gdb_exception e;
+
+  is_safe = file_is_auto_load_safe (filename, _("auto-load: Loading canned "
+						"sequences of commands script "
+						"\"%s\" for objfile \"%s\".\n"),
+				    filename, objfile->name);
+
+  /* Add this script to the hash table too so "info auto-load gdb-scripts"
+     can print it.  */
+  pspace_info = get_auto_load_pspace_data_for_loading (current_program_space);
+  maybe_add_script (pspace_info, is_safe, filename, filename,
+		    &script_language_gdb);
+
+  if (!is_safe)
+    return;
+
+  TRY_CATCH (e, RETURN_MASK_ALL)
+    {
+      script_from_file (file, filename);
+    }
+  exception_print (gdb_stderr, e);
 }
 
 /* For scripts specified in .debug_gdb_scripts, multiple objfiles may load
@@ -527,21 +540,15 @@ For more information about this security protection see the\n\
 
 struct auto_load_pspace_info
 {
-  /* For each program space we keep track of loaded scripts, both when
-     specified as file names and as scripts to be executed directly.  */
-  struct htab *loaded_script_files;
-  struct htab *loaded_script_texts;
-
-  /* Non-zero if we've issued the warning about an auto-load script not being
-     supported.  We only want to issue this warning once.  */
-  int unsupported_script_warning_printed;
+  /* For each program space we keep track of loaded scripts.  */
+  struct htab *loaded_scripts;
 
   /* Non-zero if we've issued the warning about an auto-load script not being
      found.  We only want to issue this warning once.  */
   int script_not_found_warning_printed;
 };
 
-/* Objects of this type are stored in the loaded_script hash table.  */
+/* Objects of this type are stored in the loaded script hash table.  */
 
 struct loaded_script
 {
@@ -549,13 +556,13 @@ struct loaded_script
   const char *name;
 
   /* Full path name or NULL if script wasn't found (or was otherwise
-     inaccessible), or NULL for loaded_script_texts.  */
+     inaccessible).  */
   const char *full_path;
 
   /* Non-zero if this script has been loaded.  */
   int loaded;
 
-  const struct extension_language_defn *language;
+  const struct script_language *language;
 };
 
 /* Per-program-space data key.  */
@@ -564,13 +571,15 @@ static const struct program_space_data *auto_load_pspace_data;
 static void
 auto_load_pspace_data_cleanup (struct program_space *pspace, void *arg)
 {
-  struct auto_load_pspace_info *info = (struct auto_load_pspace_info *) arg;
+  struct auto_load_pspace_info *info;
 
-  if (info->loaded_script_files)
-    htab_delete (info->loaded_script_files);
-  if (info->loaded_script_texts)
-    htab_delete (info->loaded_script_texts);
-  xfree (info);
+  info = program_space_data (pspace, auto_load_pspace_data);
+  if (info != NULL)
+    {
+      if (info->loaded_scripts)
+	htab_delete (info->loaded_scripts);
+      xfree (info);
+    }
 }
 
 /* Get the current autoload data.  If none is found yet, add it now.  This
@@ -581,11 +590,10 @@ get_auto_load_pspace_data (struct program_space *pspace)
 {
   struct auto_load_pspace_info *info;
 
-  info = ((struct auto_load_pspace_info *)
-	  program_space_data (pspace, auto_load_pspace_data));
+  info = program_space_data (pspace, auto_load_pspace_data);
   if (info == NULL)
     {
-      info = XCNEW (struct auto_load_pspace_info);
+      info = XZALLOC (struct auto_load_pspace_info);
       set_program_space_data (pspace, auto_load_pspace_data, info);
     }
 
@@ -597,7 +605,7 @@ get_auto_load_pspace_data (struct program_space *pspace)
 static hashval_t
 hash_loaded_script_entry (const void *data)
 {
-  const struct loaded_script *e = (const struct loaded_script *) data;
+  const struct loaded_script *e = data;
 
   return htab_hash_string (e->name) ^ htab_hash_pointer (e->language);
 }
@@ -607,8 +615,8 @@ hash_loaded_script_entry (const void *data)
 static int
 eq_loaded_script_entry (const void *a, const void *b)
 {
-  const struct loaded_script *ea = (const struct loaded_script *) a;
-  const struct loaded_script *eb = (const struct loaded_script *) b;
+  const struct loaded_script *ea = a;
+  const struct loaded_script *eb = b;
 
   return strcmp (ea->name, eb->name) == 0 && ea->language == eb->language;
 }
@@ -623,16 +631,11 @@ init_loaded_scripts_info (struct auto_load_pspace_info *pspace_info)
      Space for each entry is obtained with one malloc so we can free them
      easily.  */
 
-  pspace_info->loaded_script_files = htab_create (31,
-						  hash_loaded_script_entry,
-						  eq_loaded_script_entry,
-						  xfree);
-  pspace_info->loaded_script_texts = htab_create (31,
-						  hash_loaded_script_entry,
-						  eq_loaded_script_entry,
-						  xfree);
+  pspace_info->loaded_scripts = htab_create (31,
+					     hash_loaded_script_entry,
+					     eq_loaded_script_entry,
+					     xfree);
 
-  pspace_info->unsupported_script_warning_printed = FALSE;
   pspace_info->script_not_found_warning_printed = FALSE;
 }
 
@@ -645,24 +648,23 @@ get_auto_load_pspace_data_for_loading (struct program_space *pspace)
   struct auto_load_pspace_info *info;
 
   info = get_auto_load_pspace_data (pspace);
-  if (info->loaded_script_files == NULL)
+  if (info->loaded_scripts == NULL)
     init_loaded_scripts_info (info);
 
   return info;
 }
 
-/* Add script file NAME in LANGUAGE to hash table of PSPACE_INFO.
-   LOADED 1 if the script has been (is going to) be loaded, 0 otherwise
-   (such as if it has not been found).
-   FULL_PATH is NULL if the script wasn't found.
-   The result is true if the script was already in the hash table.  */
+/* Add script NAME in LANGUAGE to hash table of PSPACE_INFO.  LOADED 1 if the
+   script has been (is going to) be loaded, 0 otherwise (such as if it has not
+   been found).  FULL_PATH is NULL if the script wasn't found.  The result is
+   true if the script was already in the hash table.  */
 
-static int
-maybe_add_script_file (struct auto_load_pspace_info *pspace_info, int loaded,
-		       const char *name, const char *full_path,
-		       const struct extension_language_defn *language)
+int
+maybe_add_script (struct auto_load_pspace_info *pspace_info, int loaded,
+		  const char *name, const char *full_path,
+		  const struct script_language *language)
 {
-  struct htab *htab = pspace_info->loaded_script_files;
+  struct htab *htab = pspace_info->loaded_scripts;
   struct loaded_script **slot, entry;
   int in_hash_table;
 
@@ -673,15 +675,14 @@ maybe_add_script_file (struct auto_load_pspace_info *pspace_info, int loaded,
 
   /* If this script is not in the hash table, add it.  */
 
-  if (!in_hash_table)
+  if (! in_hash_table)
     {
       char *p;
 
       /* Allocate all space in one chunk so it's easier to free.  */
-      *slot = ((struct loaded_script *)
-	       xmalloc (sizeof (**slot)
-			+ strlen (name) + 1
-			+ (full_path != NULL ? (strlen (full_path) + 1) : 0)));
+      *slot = xmalloc (sizeof (**slot)
+		       + strlen (name) + 1
+		       + (full_path != NULL ? (strlen (full_path) + 1) : 0));
       p = ((char*) *slot) + sizeof (**slot);
       strcpy (p, name);
       (*slot)->name = p;
@@ -700,45 +701,6 @@ maybe_add_script_file (struct auto_load_pspace_info *pspace_info, int loaded,
   return in_hash_table;
 }
 
-/* Add script contents NAME in LANGUAGE to hash table of PSPACE_INFO.
-   LOADED 1 if the script has been (is going to) be loaded, 0 otherwise
-   (such as if it has not been found).
-   The result is true if the script was already in the hash table.  */
-
-static int
-maybe_add_script_text (struct auto_load_pspace_info *pspace_info,
-		       int loaded, const char *name,
-		       const struct extension_language_defn *language)
-{
-  struct htab *htab = pspace_info->loaded_script_texts;
-  struct loaded_script **slot, entry;
-  int in_hash_table;
-
-  entry.name = name;
-  entry.language = language;
-  slot = (struct loaded_script **) htab_find_slot (htab, &entry, INSERT);
-  in_hash_table = *slot != NULL;
-
-  /* If this script is not in the hash table, add it.  */
-
-  if (!in_hash_table)
-    {
-      char *p;
-
-      /* Allocate all space in one chunk so it's easier to free.  */
-      *slot = ((struct loaded_script *)
-	       xmalloc (sizeof (**slot) + strlen (name) + 1));
-      p = ((char*) *slot) + sizeof (**slot);
-      strcpy (p, name);
-      (*slot)->name = p;
-      (*slot)->full_path = NULL;
-      (*slot)->loaded = loaded;
-      (*slot)->language = language;
-    }
-
-  return in_hash_table;
-}
-
 /* Clear the table of loaded section scripts.  */
 
 static void
@@ -747,15 +709,11 @@ clear_section_scripts (void)
   struct program_space *pspace = current_program_space;
   struct auto_load_pspace_info *info;
 
-  info = ((struct auto_load_pspace_info *)
-	  program_space_data (pspace, auto_load_pspace_data));
-  if (info != NULL && info->loaded_script_files != NULL)
+  info = program_space_data (pspace, auto_load_pspace_data);
+  if (info != NULL && info->loaded_scripts != NULL)
     {
-      htab_delete (info->loaded_script_files);
-      htab_delete (info->loaded_script_texts);
-      info->loaded_script_files = NULL;
-      info->loaded_script_texts = NULL;
-      info->unsupported_script_warning_printed = FALSE;
+      htab_delete (info->loaded_scripts);
+      info->loaded_scripts = NULL;
       info->script_not_found_warning_printed = FALSE;
     }
 }
@@ -766,41 +724,53 @@ clear_section_scripts (void)
 
 static int
 auto_load_objfile_script_1 (struct objfile *objfile, const char *realname,
-			    const struct extension_language_defn *language)
+			    const struct script_language *language)
 {
-  const char *debugfile;
-  int retval;
-  const char *suffix = ext_lang_auto_load_suffix (language);
+  char *filename, *debugfile;
+  int len, retval;
+  FILE *input;
+  struct cleanup *cleanups;
 
-  std::string filename = std::string (realname) + suffix;
+  len = strlen (realname);
+  filename = xmalloc (len + strlen (language->suffix) + 1);
+  memcpy (filename, realname, len);
+  strcpy (filename + len, language->suffix);
 
-  gdb_file_up input = gdb_fopen_cloexec (filename.c_str (), "r");
-  debugfile = filename.c_str ();
+  cleanups = make_cleanup (xfree, filename);
+
+  input = fopen (filename, "r");
+  debugfile = filename;
   if (debug_auto_load)
     fprintf_unfiltered (gdb_stdlog, _("auto-load: Attempted file \"%s\" %s.\n"),
 			debugfile, input ? _("exists") : _("does not exist"));
 
-  std::string debugfile_holder;
   if (!input)
     {
+      VEC (char_ptr) *vec;
+      int ix;
+      char *dir;
+
       /* Also try the same file in a subdirectory of gdb's data
 	 directory.  */
 
-      std::vector<gdb::unique_xmalloc_ptr<char>> vec
-	= auto_load_expand_dir_vars (auto_load_dir);
+      vec = auto_load_expand_dir_vars (auto_load_dir);
+      make_cleanup_free_char_ptr_vec (vec);
 
       if (debug_auto_load)
 	fprintf_unfiltered (gdb_stdlog, _("auto-load: Searching 'set auto-load "
 					  "scripts-directory' path \"%s\".\n"),
 			    auto_load_dir);
 
-      for (const gdb::unique_xmalloc_ptr<char> &dir : vec)
+      for (ix = 0; VEC_iterate (char_ptr, vec, ix, dir); ++ix)
 	{
-	  /* FILENAME is absolute, so we don't need a "/" here.  */
-	  debugfile_holder = dir.get () + filename;
-	  debugfile = debugfile_holder.c_str ();
+	  debugfile = xmalloc (strlen (dir) + strlen (filename) + 1);
+	  strcpy (debugfile, dir);
 
-	  input = gdb_fopen_cloexec (debugfile, "r");
+	  /* FILENAME is absolute, so we don't need a "/" here.  */
+	  strcat (debugfile, filename);
+
+	  make_cleanup (xfree, debugfile);
+	  input = fopen (debugfile, "r");
 	  if (debug_auto_load)
 	    fprintf_unfiltered (gdb_stdlog, _("auto-load: Attempted file "
 					      "\"%s\" %s.\n"),
@@ -813,45 +783,21 @@ auto_load_objfile_script_1 (struct objfile *objfile, const char *realname,
 
   if (input)
     {
-      int is_safe;
-      struct auto_load_pspace_info *pspace_info;
-
-      is_safe
-	= file_is_auto_load_safe (debugfile,
-				  _("auto-load: Loading %s script \"%s\""
-				    " by extension for objfile \"%s\".\n"),
-				  ext_lang_name (language),
-				  debugfile, objfile_name (objfile));
-
-      /* Add this script to the hash table too so
-	 "info auto-load ${lang}-scripts" can print it.  */
-      pspace_info
-	= get_auto_load_pspace_data_for_loading (current_program_space);
-      maybe_add_script_file (pspace_info, is_safe, debugfile, debugfile,
-			     language);
+      make_cleanup_fclose (input);
 
       /* To preserve existing behaviour we don't check for whether the
 	 script was already in the table, and always load it.
 	 It's highly unlikely that we'd ever load it twice,
 	 and these scripts are required to be idempotent under multiple
 	 loads anyway.  */
-      if (is_safe)
-	{
-	  objfile_script_sourcer_func *sourcer
-	    = ext_lang_objfile_script_sourcer (language);
-
-	  /* We shouldn't get here if support for the language isn't
-	     compiled in.  And the extension language is required to implement
-	     this function.  */
-	  gdb_assert (sourcer != NULL);
-	  sourcer (language, objfile, input.get (), debugfile);
-	}
+      language->source_script_for_objfile (objfile, input, debugfile);
 
       retval = 1;
     }
   else
     retval = 0;
 
+  do_cleanups (cleanups);
   return retval;
 }
 
@@ -860,288 +806,32 @@ auto_load_objfile_script_1 (struct objfile *objfile, const char *realname,
 
 void
 auto_load_objfile_script (struct objfile *objfile,
-			  const struct extension_language_defn *language)
+			  const struct script_language *language)
 {
-  gdb::unique_xmalloc_ptr<char> realname
-    = gdb_realpath (objfile_name (objfile));
+  char *realname = gdb_realpath (objfile->name);
+  struct cleanup *cleanups = make_cleanup (xfree, realname);
 
-  if (!auto_load_objfile_script_1 (objfile, realname.get (), language))
+  if (!auto_load_objfile_script_1 (objfile, realname, language))
     {
       /* For Windows/DOS .exe executables, strip the .exe suffix, so that
 	 FOO-gdb.gdb could be used for FOO.exe, and try again.  */
 
-      size_t len = strlen (realname.get ());
+      size_t len = strlen (realname);
       const size_t lexe = sizeof (".exe") - 1;
 
-      if (len > lexe && strcasecmp (realname.get () + len - lexe, ".exe") == 0)
+      if (len > lexe && strcasecmp (realname + len - lexe, ".exe") == 0)
 	{
 	  len -= lexe;
-	  realname.get ()[len] = '\0';
+	  realname[len] = '\0';
 	  if (debug_auto_load)
 	    fprintf_unfiltered (gdb_stdlog, _("auto-load: Stripped .exe suffix, "
 					      "retrying with \"%s\".\n"),
-				realname.get ());
-	  auto_load_objfile_script_1 (objfile, realname.get (), language);
+				realname);
+	  auto_load_objfile_script_1 (objfile, realname, language);
 	}
     }
-}
 
-/* Subroutine of source_section_scripts to simplify it.
-   Load FILE as a script in extension language LANGUAGE.
-   The script is from section SECTION_NAME in OBJFILE at offset OFFSET.  */
-
-static void
-source_script_file (struct auto_load_pspace_info *pspace_info,
-		    struct objfile *objfile,
-		    const struct extension_language_defn *language,
-		    const char *section_name, unsigned int offset,
-		    const char *file)
-{
-  int in_hash_table;
-  objfile_script_sourcer_func *sourcer;
-
-  /* Skip this script if support is not compiled in.  */
-  sourcer = ext_lang_objfile_script_sourcer (language);
-  if (sourcer == NULL)
-    {
-      /* We don't throw an error, the program is still debuggable.  */
-      maybe_print_unsupported_script_warning (pspace_info, objfile, language,
-					      section_name, offset);
-      /* We *could* still try to open it, but there's no point.  */
-      maybe_add_script_file (pspace_info, 0, file, NULL, language);
-      return;
-    }
-
-  /* Skip this script if auto-loading it has been disabled.  */
-  if (!ext_lang_auto_load_enabled (language))
-    {
-      /* No message is printed, just skip it.  */
-      return;
-    }
-
-  gdb::optional<open_script> opened = find_and_open_script (file,
-							    1 /*search_path*/);
-
-  if (opened)
-    {
-      if (!file_is_auto_load_safe (opened->full_path.get (),
-				   _("auto-load: Loading %s script "
-				     "\"%s\" from section \"%s\" of "
-				     "objfile \"%s\".\n"),
-				   ext_lang_name (language),
-				   opened->full_path.get (),
-				   section_name, objfile_name (objfile)))
-	opened.reset ();
-    }
-  else
-    {
-      /* If one script isn't found it's not uncommon for more to not be
-	 found either.  We don't want to print a message for each script,
-	 too much noise.  Instead, we print the warning once and tell the
-	 user how to find the list of scripts that weren't loaded.
-	 We don't throw an error, the program is still debuggable.
-
-	 IWBN if complaints.c were more general-purpose.  */
-
-      maybe_print_script_not_found_warning (pspace_info, objfile, language,
-					    section_name, offset);
-    }
-
-  in_hash_table = maybe_add_script_file (pspace_info, bool (opened), file,
-					 (opened
-					  ? opened->full_path.get ()
-					  : NULL),
-					 language);
-
-  /* If this file is not currently loaded, load it.  */
-  if (opened && !in_hash_table)
-    sourcer (language, objfile, opened->stream.get (),
-	     opened->full_path.get ());
-}
-
-/* Subroutine of source_section_scripts to simplify it.
-   Execute SCRIPT as a script in extension language LANG.
-   The script is from section SECTION_NAME in OBJFILE at offset OFFSET.  */
-
-static void
-execute_script_contents (struct auto_load_pspace_info *pspace_info,
-			 struct objfile *objfile,
-			 const struct extension_language_defn *language,
-			 const char *section_name, unsigned int offset,
-			 const char *script)
-{
-  objfile_script_executor_func *executor;
-  const char *newline, *script_text;
-  const char *name;
-  int is_safe, in_hash_table;
-
-  /* The first line of the script is the name of the script.
-     It must not contain any kind of space character.  */
-  name = NULL;
-  newline = strchr (script, '\n');
-  std::string name_holder;
-  if (newline != NULL)
-    {
-      const char *buf, *p;
-
-      /* Put the name in a buffer and validate it.  */
-      name_holder = std::string (script, newline - script);
-      buf = name_holder.c_str ();
-      for (p = buf; *p != '\0'; ++p)
-	{
-	  if (isspace (*p))
-	    break;
-	}
-      /* We don't allow nameless scripts, they're not helpful to the user.  */
-      if (p != buf && *p == '\0')
-	name = buf;
-    }
-  if (name == NULL)
-    {
-      /* We don't throw an error, the program is still debuggable.  */
-      warning (_("\
-Missing/bad script name in entry at offset %u in section %s\n\
-of file %s."),
-	       offset, section_name, objfile_name (objfile));
-      return;
-    }
-  script_text = newline + 1;
-
-  /* Skip this script if support is not compiled in.  */
-  executor = ext_lang_objfile_script_executor (language);
-  if (executor == NULL)
-    {
-      /* We don't throw an error, the program is still debuggable.  */
-      maybe_print_unsupported_script_warning (pspace_info, objfile, language,
-					      section_name, offset);
-      maybe_add_script_text (pspace_info, 0, name, language);
-      return;
-    }
-
-  /* Skip this script if auto-loading it has been disabled.  */
-  if (!ext_lang_auto_load_enabled (language))
-    {
-      /* No message is printed, just skip it.  */
-      return;
-    }
-
-  is_safe = file_is_auto_load_safe (objfile_name (objfile),
-				    _("auto-load: Loading %s script "
-				      "\"%s\" from section \"%s\" of "
-				      "objfile \"%s\".\n"),
-				    ext_lang_name (language), name,
-				    section_name, objfile_name (objfile));
-
-  in_hash_table = maybe_add_script_text (pspace_info, is_safe, name, language);
-
-  /* If this file is not currently loaded, load it.  */
-  if (is_safe && !in_hash_table)
-    executor (language, objfile, name, script_text);
-}
-
-/* Load scripts specified in OBJFILE.
-   START,END delimit a buffer containing a list of nul-terminated
-   file names.
-   SECTION_NAME is used in error messages.
-
-   Scripts specified as file names are found per normal "source -s" command
-   processing.  First the script is looked for in $cwd.  If not found there
-   the source search path is used.
-
-   The section contains a list of path names of script files to load or
-   actual script contents.  Each entry is nul-terminated.  */
-
-static void
-source_section_scripts (struct objfile *objfile, const char *section_name,
-			const char *start, const char *end)
-{
-  const char *p;
-  struct auto_load_pspace_info *pspace_info;
-
-  pspace_info = get_auto_load_pspace_data_for_loading (current_program_space);
-
-  for (p = start; p < end; ++p)
-    {
-      const char *entry;
-      const struct extension_language_defn *language;
-      unsigned int offset = p - start;
-      int code = *p;
-
-      switch (code)
-	{
-	case SECTION_SCRIPT_ID_PYTHON_FILE:
-	case SECTION_SCRIPT_ID_PYTHON_TEXT:
-	  language = get_ext_lang_defn (EXT_LANG_PYTHON);
-	  break;
-	case SECTION_SCRIPT_ID_SCHEME_FILE:
-	case SECTION_SCRIPT_ID_SCHEME_TEXT:
-	  language = get_ext_lang_defn (EXT_LANG_GUILE);
-	  break;
-	default:
-	  warning (_("Invalid entry in %s section"), section_name);
-	  /* We could try various heuristics to find the next valid entry,
-	     but it's safer to just punt.  */
-	  return;
-	}
-      entry = ++p;
-
-      while (p < end && *p != '\0')
-	++p;
-      if (p == end)
-	{
-	  warning (_("Non-nul-terminated entry in %s at offset %u"),
-		   section_name, offset);
-	  /* Don't load/execute it.  */
-	  break;
-	}
-
-      switch (code)
-	{
-	case SECTION_SCRIPT_ID_PYTHON_FILE:
-	case SECTION_SCRIPT_ID_SCHEME_FILE:
-	  if (p == entry)
-	    {
-	      warning (_("Empty entry in %s at offset %u"),
-		       section_name, offset);
-	      continue;
-	    }
-	  source_script_file (pspace_info, objfile, language,
-			      section_name, offset, entry);
-	  break;
-	case SECTION_SCRIPT_ID_PYTHON_TEXT:
-	case SECTION_SCRIPT_ID_SCHEME_TEXT:
-	  execute_script_contents (pspace_info, objfile, language,
-				   section_name, offset, entry);
-	  break;
-	}
-    }
-}
-
-/* Load scripts specified in section SECTION_NAME of OBJFILE.  */
-
-static void
-auto_load_section_scripts (struct objfile *objfile, const char *section_name)
-{
-  bfd *abfd = objfile->obfd;
-  asection *scripts_sect;
-  bfd_byte *data = NULL;
-
-  scripts_sect = bfd_get_section_by_name (abfd, section_name);
-  if (scripts_sect == NULL
-      || (bfd_get_section_flags (abfd, scripts_sect) & SEC_HAS_CONTENTS) == 0)
-    return;
-
-  if (!bfd_get_full_section_contents (abfd, scripts_sect, &data))
-    warning (_("Couldn't read %s section of %s"),
-	     section_name, bfd_get_filename (abfd));
-  else
-    {
-      gdb::unique_xmalloc_ptr<bfd_byte> data_holder (data);
-
-      char *p = (char *) data;
-      source_section_scripts (objfile, section_name, p,
-			      p + bfd_get_section_size (scripts_sect));
-    }
+  do_cleanups (cleanups);
 }
 
 /* Load any auto-loaded scripts for OBJFILE.  */
@@ -1149,21 +839,13 @@ auto_load_section_scripts (struct objfile *objfile, const char *section_name)
 void
 load_auto_scripts_for_objfile (struct objfile *objfile)
 {
-  /* Return immediately if auto-loading has been globally disabled.
-     This is to handle sequencing of operations during gdb startup.
-     Also return immediately if OBJFILE was not created from a file
-     on the local filesystem.  */
-  if (!global_auto_load
-      || (objfile->flags & OBJF_NOT_FILENAME) != 0
-      || is_target_filename (objfile->original_name))
+  if (!global_auto_load)
     return;
 
-  /* Load any extension language scripts for this objfile.
-     E.g., foo-gdb.gdb, foo-gdb.py.  */
-  auto_load_ext_lang_scripts_for_objfile (objfile);
+  if (auto_load_gdb_scripts)
+    auto_load_objfile_script (objfile, &script_language_gdb);
 
-  /* Load any scripts mentioned in AUTO_SECTION_NAME (.debug_gdb_scripts).  */
-  auto_load_section_scripts (objfile, AUTO_SECTION_NAME);
+  gdbpy_load_auto_scripts_for_objfile (objfile);
 }
 
 /* This is a new_objfile observer callback to auto-load scripts.
@@ -1187,15 +869,14 @@ auto_load_new_objfile (struct objfile *objfile)
 
 /* Collect scripts to be printed in a vec.  */
 
+typedef struct loaded_script *loaded_script_ptr;
+DEF_VEC_P (loaded_script_ptr);
+
 struct collect_matching_scripts_data
 {
-  collect_matching_scripts_data (std::vector<loaded_script *> *scripts_p_,
-				 const extension_language_defn *language_)
-  : scripts_p (scripts_p_), language (language_)
-  {}
+  VEC (loaded_script_ptr) **scripts_p;
 
-  std::vector<loaded_script *> *scripts_p;
-  const struct extension_language_defn *language;
+  const struct script_language *language;
 };
 
 /* Traversal function for htab_traverse.
@@ -1204,12 +885,11 @@ struct collect_matching_scripts_data
 static int
 collect_matching_scripts (void **slot, void *info)
 {
-  struct loaded_script *script = (struct loaded_script *) *slot;
-  struct collect_matching_scripts_data *data
-    = (struct collect_matching_scripts_data *) info;
+  struct loaded_script *script = *slot;
+  struct collect_matching_scripts_data *data = info;
 
   if (script->language == data->language && re_exec (script->name))
-    data->scripts_p->push_back (script);
+    VEC_safe_push (loaded_script_ptr, *data->scripts_p, script);
 
   return 1;
 }
@@ -1220,29 +900,35 @@ static void
 print_script (struct loaded_script *script)
 {
   struct ui_out *uiout = current_uiout;
+  struct cleanup *chain;
 
-  ui_out_emit_tuple tuple_emitter (uiout, NULL);
+  chain = make_cleanup_ui_out_tuple_begin_end (uiout, NULL);
 
-  uiout->field_string ("loaded", script->loaded ? "Yes" : "No");
-  uiout->field_string ("script", script->name);
-  uiout->text ("\n");
+  ui_out_field_string (uiout, "loaded", script->loaded ? "Yes" : "No");
+  ui_out_field_string (uiout, "script", script->name);
+  ui_out_text (uiout, "\n");
 
   /* If the name isn't the full path, print it too.  */
   if (script->full_path != NULL
       && strcmp (script->name, script->full_path) != 0)
     {
-      uiout->text ("\tfull name: ");
-      uiout->field_string ("full_path", script->full_path);
-      uiout->text ("\n");
+      ui_out_text (uiout, "\tfull name: ");
+      ui_out_field_string (uiout, "full_path", script->full_path);
+      ui_out_text (uiout, "\n");
     }
+
+  do_cleanups (chain);
 }
 
 /* Helper for info_auto_load_scripts to sort the scripts by name.  */
 
-static bool
-sort_scripts_by_name (loaded_script *a, loaded_script *b)
+static int
+sort_scripts_by_name (const void *ap, const void *bp)
 {
-  return FILENAME_CMP (a->name, b->name) < 0;
+  const struct loaded_script *a = *(const struct loaded_script **) ap;
+  const struct loaded_script *b = *(const struct loaded_script **) bp;
+
+  return FILENAME_CMP (a->name, b->name);
 }
 
 /* Special internal GDB value of auto_load_info_scripts's PATTERN identify
@@ -1250,26 +936,19 @@ sort_scripts_by_name (loaded_script *a, loaded_script *b)
    "info auto-load" invocation.  Extra newline will be printed if needed.  */
 char auto_load_info_scripts_pattern_nl[] = "";
 
-/* Subroutine of auto_load_info_scripts to simplify it.
-   Print SCRIPTS.  */
-
-static void
-print_scripts (const std::vector<loaded_script *> &scripts)
-{
-  for (loaded_script *script : scripts)
-    print_script (script);
-}
-
 /* Implementation for "info auto-load gdb-scripts"
    (and "info auto-load python-scripts").  List scripts in LANGUAGE matching
    PATTERN.  FROM_TTY is the usual GDB boolean for user interactivity.  */
 
 void
-auto_load_info_scripts (const char *pattern, int from_tty,
-			const struct extension_language_defn *language)
+auto_load_info_scripts (char *pattern, int from_tty,
+			const struct script_language *language)
 {
   struct ui_out *uiout = current_uiout;
   struct auto_load_pspace_info *pspace_info;
+  struct cleanup *script_chain;
+  VEC (loaded_script_ptr) *scripts;
+  int nr_scripts;
 
   dont_repeat ();
 
@@ -1291,72 +970,68 @@ auto_load_info_scripts (const char *pattern, int from_tty,
      Plus we want to sort the scripts by name.
      So first traverse the hash table collecting the matching scripts.  */
 
-  std::vector<loaded_script *> script_files, script_texts;
+  scripts = VEC_alloc (loaded_script_ptr, 10);
+  script_chain = make_cleanup (VEC_cleanup (loaded_script_ptr), &scripts);
 
-  if (pspace_info != NULL && pspace_info->loaded_script_files != NULL)
+  if (pspace_info != NULL && pspace_info->loaded_scripts != NULL)
     {
-      collect_matching_scripts_data data (&script_files, language);
+      struct collect_matching_scripts_data data = { &scripts, language };
 
       /* Pass a pointer to scripts as VEC_safe_push can realloc space.  */
-      htab_traverse_noresize (pspace_info->loaded_script_files,
+      htab_traverse_noresize (pspace_info->loaded_scripts,
 			      collect_matching_scripts, &data);
-
-      std::sort (script_files.begin (), script_files.end (),
-		 sort_scripts_by_name);
     }
 
-  if (pspace_info != NULL && pspace_info->loaded_script_texts != NULL)
-    {
-      collect_matching_scripts_data data (&script_texts, language);
-
-      /* Pass a pointer to scripts as VEC_safe_push can realloc space.  */
-      htab_traverse_noresize (pspace_info->loaded_script_texts,
-			      collect_matching_scripts, &data);
-
-      std::sort (script_texts.begin (), script_texts.end (),
-		 sort_scripts_by_name);
-    }
-
-  int nr_scripts = script_files.size () + script_texts.size ();
+  nr_scripts = VEC_length (loaded_script_ptr, scripts);
 
   /* Table header shifted right by preceding "gdb-scripts:  " would not match
      its columns.  */
   if (nr_scripts > 0 && pattern == auto_load_info_scripts_pattern_nl)
-    uiout->text ("\n");
+    ui_out_text (uiout, "\n");
 
-  {
-    ui_out_emit_table table_emitter (uiout, 2, nr_scripts,
-				     "AutoLoadedScriptsTable");
+  make_cleanup_ui_out_table_begin_end (uiout, 2, nr_scripts,
+				       "AutoLoadedScriptsTable");
 
-    uiout->table_header (7, ui_left, "loaded", "Loaded");
-    uiout->table_header (70, ui_left, "script", "Script");
-    uiout->table_body ();
+  ui_out_table_header (uiout, 7, ui_left, "loaded", "Loaded");
+  ui_out_table_header (uiout, 70, ui_left, "script", "Script");
+  ui_out_table_body (uiout);
 
-    print_scripts (script_files);
-    print_scripts (script_texts);
-  }
+  if (nr_scripts > 0)
+    {
+      int i;
+      loaded_script_ptr script;
+
+      qsort (VEC_address (loaded_script_ptr, scripts),
+	     VEC_length (loaded_script_ptr, scripts),
+	     sizeof (loaded_script_ptr), sort_scripts_by_name);
+      for (i = 0; VEC_iterate (loaded_script_ptr, scripts, i, script); ++i)
+	print_script (script);
+    }
+
+  do_cleanups (script_chain);
 
   if (nr_scripts == 0)
     {
       if (pattern && *pattern)
-	uiout->message ("No auto-load scripts matching %s.\n", pattern);
+	ui_out_message (uiout, 0, "No auto-load scripts matching %s.\n",
+			pattern);
       else
-	uiout->message ("No auto-load scripts.\n");
+	ui_out_message (uiout, 0, "No auto-load scripts.\n");
     }
 }
 
 /* Wrapper for "info auto-load gdb-scripts".  */
 
 static void
-info_auto_load_gdb_scripts (const char *pattern, int from_tty)
+info_auto_load_gdb_scripts (char *pattern, int from_tty)
 {
-  auto_load_info_scripts (pattern, from_tty, &extension_language_gdb);
+  auto_load_info_scripts (pattern, from_tty, &script_language_gdb);
 }
 
 /* Implement 'info auto-load local-gdbinit'.  */
 
 static void
-info_auto_load_local_gdbinit (const char *args, int from_tty)
+info_auto_load_local_gdbinit (char *args, int from_tty)
 {
   if (auto_load_local_gdbinit_pathname == NULL)
     printf_filtered (_("Local .gdbinit file was not found.\n"));
@@ -1368,54 +1043,24 @@ info_auto_load_local_gdbinit (const char *args, int from_tty)
 		     auto_load_local_gdbinit_pathname);
 }
 
-/* Print an "unsupported script" warning if it has not already been printed.
-   The script is in language LANGUAGE at offset OFFSET in section SECTION_NAME
-   of OBJFILE.  */
-
-static void
-maybe_print_unsupported_script_warning
-  (struct auto_load_pspace_info *pspace_info,
-   struct objfile *objfile, const struct extension_language_defn *language,
-   const char *section_name, unsigned offset)
-{
-  if (!pspace_info->unsupported_script_warning_printed)
-    {
-      warning (_("\
-Unsupported auto-load script at offset %u in section %s\n\
-of file %s.\n\
-Use `info auto-load %s-scripts [REGEXP]' to list them."),
-	       offset, section_name, objfile_name (objfile),
-	       ext_lang_name (language));
-      pspace_info->unsupported_script_warning_printed = 1;
-    }
-}
-
 /* Return non-zero if SCRIPT_NOT_FOUND_WARNING_PRINTED of PSPACE_INFO was unset
    before calling this function.  Always set SCRIPT_NOT_FOUND_WARNING_PRINTED
    of PSPACE_INFO.  */
 
-static void
-maybe_print_script_not_found_warning
-  (struct auto_load_pspace_info *pspace_info,
-   struct objfile *objfile, const struct extension_language_defn *language,
-   const char *section_name, unsigned offset)
+int
+script_not_found_warning_print (struct auto_load_pspace_info *pspace_info)
 {
-  if (!pspace_info->script_not_found_warning_printed)
-    {
-      warning (_("\
-Missing auto-load script at offset %u in section %s\n\
-of file %s.\n\
-Use `info auto-load %s-scripts [REGEXP]' to list them."),
-	       offset, section_name, objfile_name (objfile),
-	       ext_lang_name (language));
-      pspace_info->script_not_found_warning_printed = 1;
-    }
+  int retval = !pspace_info->script_not_found_warning_printed;
+
+  pspace_info->script_not_found_warning_printed = 1;
+
+  return retval;
 }
 
 /* The only valid "set auto-load" argument is off|0|no|disable.  */
 
 static void
-set_auto_load_cmd (const char *args, int from_tty)
+set_auto_load_cmd (char *args, int from_tty)
 {
   struct cmd_list_element *list;
   size_t length;
@@ -1464,7 +1109,7 @@ automatic loading of Python scripts."),
    "show auto-load " settings.  */
 
 static void
-show_auto_load_cmd (const char *args, int from_tty)
+show_auto_load_cmd (char *args, int from_tty)
 {
   cmd_show_list (*auto_load_show_cmdlist_get (), from_tty, "");
 }
@@ -1492,24 +1137,32 @@ automatic loading of Python scripts."),
    newlines at proper places.  */
 
 static void
-info_auto_load_cmd (const char *args, int from_tty)
+info_auto_load_cmd (char *args, int from_tty)
 {
   struct cmd_list_element *list;
+  struct cleanup *infolist_chain;
   struct ui_out *uiout = current_uiout;
 
-  ui_out_emit_tuple tuple_emitter (uiout, "infolist");
+  infolist_chain = make_cleanup_ui_out_tuple_begin_end (uiout, "infolist");
 
   for (list = *auto_load_info_cmdlist_get (); list != NULL; list = list->next)
     {
-      ui_out_emit_tuple option_emitter (uiout, "option");
+      struct cleanup *option_chain
+	= make_cleanup_ui_out_tuple_begin_end (uiout, "option");
 
       gdb_assert (!list->prefixlist);
       gdb_assert (list->type == not_set_cmd);
 
-      uiout->field_string ("name", list->name);
-      uiout->text (":  ");
+      ui_out_field_string (uiout, "name", list->name);
+      ui_out_text (uiout, ":  ");
       cmd_func (list, auto_load_info_scripts_pattern_nl, from_tty);
+
+      /* Close the tuple.  */
+      do_cleanups (option_chain);
     }
+
+  /* Close the tuple.  */
+  do_cleanups (infolist_chain);
 }
 
 /* Initialize "info auto-load " commands prefix and return it.  */
@@ -1530,19 +1183,19 @@ found and/or loaded."),
   return &retval;
 }
 
+void _initialize_auto_load (void);
+
 void
 _initialize_auto_load (void)
 {
   struct cmd_list_element *cmd;
-  char *scripts_directory_help, *gdb_name_help, *python_name_help;
-  char *guile_name_help;
-  const char *suffix;
+  char *scripts_directory_help;
 
   auto_load_pspace_data
     = register_program_space_data_with_cleanup (NULL,
 						auto_load_pspace_data_cleanup);
 
-  gdb::observers::new_objfile.attach (auto_load_new_objfile);
+  observer_attach_new_objfile (auto_load_new_objfile);
 
   add_setshow_boolean_cmd ("gdb-scripts", class_support,
 			   &auto_load_gdb_scripts, _("\
@@ -1580,45 +1233,27 @@ Usage: info auto-load local-gdbinit"),
 	   auto_load_info_cmdlist_get ());
 
   auto_load_dir = xstrdup (AUTO_LOAD_DIR);
-
-  suffix = ext_lang_auto_load_suffix (get_ext_lang_defn (EXT_LANG_GDB));
-  gdb_name_help
-    = xstrprintf (_("\
-GDB scripts:    OBJFILE%s\n"),
-		  suffix);
-  python_name_help = NULL;
+  scripts_directory_help = xstrprintf (
 #ifdef HAVE_PYTHON
-  suffix = ext_lang_auto_load_suffix (get_ext_lang_defn (EXT_LANG_PYTHON));
-  python_name_help
-    = xstrprintf (_("\
-Python scripts: OBJFILE%s\n"),
-		  suffix);
+				       _("\
+Automatically loaded Python scripts (named OBJFILE%s) and GDB scripts\n\
+(named OBJFILE%s) are located in one of the directories listed by this\n\
+option.\n\
+%s"),
+				       GDBPY_AUTO_FILE_NAME,
+#else
+				       _("\
+Automatically loaded GDB scripts (named OBJFILE%s) are located in one\n\
+of the directories listed by this option.\n\
+%s"),
 #endif
-  guile_name_help = NULL;
-#ifdef HAVE_GUILE
-  suffix = ext_lang_auto_load_suffix (get_ext_lang_defn (EXT_LANG_GUILE));
-  guile_name_help
-    = xstrprintf (_("\
-Guile scripts:  OBJFILE%s\n"),
-		  suffix);
-#endif
-  scripts_directory_help
-    = xstrprintf (_("\
-Automatically loaded scripts are located in one of the directories listed\n\
-by this option.\n\
-\n\
-Script names:\n\
-%s%s%s\
-\n\
+				       GDB_AUTO_FILE_NAME,
+				       _("\
 This option is ignored for the kinds of scripts \
 having 'set auto-load ... off'.\n\
 Directories listed here need to be present also \
 in the 'set auto-load safe-path'\n\
-option."),
-		  gdb_name_help,
-		  python_name_help ? python_name_help : "",
-		  guile_name_help ? guile_name_help : "");
-
+option."));
   add_setshow_optional_filename_cmd ("scripts-directory", class_support,
 				     &auto_load_dir, _("\
 Set the list of directories from which to load auto-loaded scripts."), _("\
@@ -1628,9 +1263,6 @@ Show the list of directories from which to load auto-loaded scripts."),
 				     auto_load_set_cmdlist_get (),
 				     auto_load_show_cmdlist_get ());
   xfree (scripts_directory_help);
-  xfree (python_name_help);
-  xfree (gdb_name_help);
-  xfree (guile_name_help);
 
   auto_load_safe_path = xstrdup (AUTO_LOAD_SAFE_PATH);
   auto_load_safe_path_vec_update ();
@@ -1652,7 +1284,7 @@ This options has security implications for untrusted inferiors."),
 				     show_auto_load_safe_path,
 				     auto_load_set_cmdlist_get (),
 				     auto_load_show_cmdlist_get ());
-  gdb::observers::gdb_datadir_changed.attach (auto_load_gdb_datadir_changed);
+  observer_attach_gdb_datadir_changed (auto_load_gdb_datadir_changed);
 
   cmd = add_cmd ("add-auto-load-safe-path", class_support,
 		 add_auto_load_safe_path,
@@ -1660,15 +1292,6 @@ This options has security implications for untrusted inferiors."),
 		   "to auto-load files.\n\
 See the commands 'set auto-load safe-path' and 'show auto-load safe-path' to\n\
 access the current full list setting."),
-		 &cmdlist);
-  set_cmd_completer (cmd, filename_completer);
-
-  cmd = add_cmd ("add-auto-load-scripts-directory", class_support,
-		 add_auto_load_dir,
-		 _("Add entries to the list of directories from which to load "
-		   "auto-loaded scripts.\n\
-See the commands 'set auto-load scripts-directory' and\n\
-'show auto-load scripts-directory' to access the current full list setting."),
 		 &cmdlist);
   set_cmd_completer (cmd, filename_completer);
 

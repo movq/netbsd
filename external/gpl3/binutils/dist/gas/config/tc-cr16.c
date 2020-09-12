@@ -1,5 +1,5 @@
 /* tc-cr16.c -- Assembler code for the CR16 CPU core.
-   Copyright (C) 2007-2020 Free Software Foundation, Inc.
+   Copyright 2007 Free Software Foundation, Inc.
 
    Contributed by M R Swami Reddy <MR.Swami.Reddy@nsc.com>
 
@@ -99,11 +99,6 @@ const char EXP_CHARS[] = "eE";
 /* Chars that mean this number is a floating point constant as in 0f12.456  */
 const char FLT_CHARS[] = "f'";
 
-#ifdef OBJ_ELF
-/* Pre-defined "_GLOBAL_OFFSET_TABLE_"  */
-symbolS * GOT_symbol;
-#endif
-
 /* Target-specific multicharacter options, not const-declared at usage.  */
 const char *md_shortopts = "";
 struct option md_longopts[] =
@@ -178,12 +173,7 @@ l_cons (int nbytes)
               if ((width = exp.X_add_number) >
                   (unsigned int)(BITS_PER_CHAR * nbytes))
                 {
-		  as_warn (ngettext ("field width %lu too big to fit in %d"
-				     " byte: truncated to %d bits",
-				     "field width %lu too big to fit in %d"
-				     " bytes: truncated to %d bits",
-				     nbytes),
-			   width, nbytes, (BITS_PER_CHAR * nbytes));
+                  as_warn (_("field width %lu too big to fit in %d bytes: truncated to %d bits"), width, nbytes, (BITS_PER_CHAR * nbytes));
                   width = BITS_PER_CHAR * nbytes;
                 }                   /* Too big.  */
 
@@ -211,7 +201,7 @@ l_cons (int nbytes)
                   return;
                 }
 
-              value |= ((~(-(1 << width)) & exp.X_add_number)
+              value |= ((~(-1 << width) & exp.X_add_number)
                         << ((BITS_PER_CHAR * nbytes) - bits_available));
 
               if ((bits_available -= width) == 0
@@ -246,6 +236,7 @@ l_cons (int nbytes)
   demand_empty_rest_of_line ();
 }
 
+
 /* This table describes all the machine specific pseudo-ops
    the assembler has to support.  The fields are:
    *** Pseudo-op name without dot.
@@ -257,7 +248,6 @@ const pseudo_typeS md_pseudo_table[] =
   /* In CR16 machine, align is in bytes (not a ptwo boundary).  */
   {"align", s_align_bytes, 0},
   {"long", l_cons,  4 },
-  {"4byte", l_cons, 4 },
   {0, 0, 0}
 };
 
@@ -322,12 +312,12 @@ get_cc (char *cc_name)
 static reg
 get_register (char *reg_name)
 {
-  const reg_entry *rreg;
+  const reg_entry *reg;
 
-  rreg = (const reg_entry *) hash_find (reg_hash, reg_name);
+  reg = (const reg_entry *) hash_find (reg_hash, reg_name);
 
-  if (rreg != NULL)
-    return rreg->value.reg_val;
+  if (reg != NULL)
+    return reg->value.reg_val;
 
   return nullregister;
 }
@@ -336,38 +326,38 @@ get_register (char *reg_name)
 static reg
 get_register_pair (char *reg_name)
 {
-  const reg_entry *rreg;
+  const reg_entry *reg;
   char tmp_rp[16]="\0";
 
-  /* Add '(' and ')' to the reg pair, if it's not present.  */
-  if (reg_name[0] != '(')
+  /* Add '(' and ')' to the reg pair, if its not present.  */
+  if (reg_name[0] != '(') 
     {
       tmp_rp[0] = '(';
       strcat (tmp_rp, reg_name);
       strcat (tmp_rp,")");
-      rreg = (const reg_entry *) hash_find (regp_hash, tmp_rp);
+      reg = (const reg_entry *) hash_find (regp_hash, tmp_rp);
     }
   else
-    rreg = (const reg_entry *) hash_find (regp_hash, reg_name);
+    reg = (const reg_entry *) hash_find (regp_hash, reg_name);
 
-  if (rreg != NULL)
-    return rreg->value.reg_val;
+  if (reg != NULL)
+    return reg->value.reg_val;
 
   return nullregister;
-}
+} 
 
 /* Get the index register 'reg_name'.  */
 
 static reg
 get_index_register (char *reg_name)
 {
-  const reg_entry *rreg;
+  const reg_entry *reg;
 
-  rreg = (const reg_entry *) hash_find (reg_hash, reg_name);
+  reg = (const reg_entry *) hash_find (reg_hash, reg_name);
 
-  if ((rreg != NULL)
-      && ((rreg->value.reg_val == 12) || (rreg->value.reg_val == 13)))
-    return rreg->value.reg_val;
+  if ((reg != NULL)
+      && ((reg->value.reg_val == 12) || (reg->value.reg_val == 13)))
+    return reg->value.reg_val;
 
   return nullregister;
 }
@@ -376,17 +366,17 @@ get_index_register (char *reg_name)
 static reg
 get_index_register_pair (char *reg_name)
 {
-  const reg_entry *rreg;
+  const reg_entry *reg;
 
-  rreg = (const reg_entry *) hash_find (regp_hash, reg_name);
+  reg = (const reg_entry *) hash_find (regp_hash, reg_name);
 
-  if (rreg != NULL)
+  if (reg != NULL)
     {
-      if ((rreg->value.reg_val != 1) || (rreg->value.reg_val != 7)
-          || (rreg->value.reg_val != 9) || (rreg->value.reg_val > 10))
-        return rreg->value.reg_val;
+      if ((reg->value.reg_val != 1) || (reg->value.reg_val != 7)
+          || (reg->value.reg_val != 9) || (reg->value.reg_val > 10))
+        return reg->value.reg_val;
 
-      as_bad (_("Unknown register pair - index relative mode: `%d'"), rreg->value.reg_val);
+      as_bad (_("Unknown register pair - index relative mode: `%d'"), reg->value.reg_val);
     }
 
   return nullregister;
@@ -397,12 +387,12 @@ get_index_register_pair (char *reg_name)
 static preg
 get_pregister (char *preg_name)
 {
-  const reg_entry *prreg;
+  const reg_entry *preg;
 
-  prreg = (const reg_entry *) hash_find (preg_hash, preg_name);
+  preg = (const reg_entry *) hash_find (preg_hash, preg_name);
 
-  if (prreg != NULL)
-    return prreg->value.preg_val;
+  if (preg != NULL)
+    return preg->value.preg_val;
 
   return nullpregister;
 }
@@ -412,12 +402,12 @@ get_pregister (char *preg_name)
 static preg
 get_pregisterp (char *preg_name)
 {
-  const reg_entry *prreg;
+  const reg_entry *preg;
 
-  prreg = (const reg_entry *) hash_find (pregp_hash, preg_name);
+  preg = (const reg_entry *) hash_find (pregp_hash, preg_name);
 
-  if (prreg != NULL)
-    return prreg->value.preg_val;
+  if (preg != NULL)
+    return preg->value.preg_val;
 
   return nullpregister;
 }
@@ -497,9 +487,9 @@ cr16_force_relocation (fixS *fix)
 /* Record a fixup for a cons expression.  */
 
 void
-cr16_cons_fix_new (fragS *frag, int offset, int len, expressionS *exp,
-		   bfd_reloc_code_real_type rtype)
+cr16_cons_fix_new (fragS *frag, int offset, int len, expressionS *exp)
 {
+  int rtype;
   switch (len)
     {
     default: rtype = BFD_RELOC_NONE; break;
@@ -526,15 +516,8 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS * fixP)
 {
   arelent * reloc;
 
-  /* If symbols are local and resolved, then no relocation needed.  */
-  if ( ((fixP->fx_addsy)
-        && (S_GET_SEGMENT (fixP->fx_addsy) == absolute_section))
-       || ((fixP->fx_subsy)
-	   && (S_GET_SEGMENT (fixP->fx_subsy) == absolute_section)))
-     return NULL;
-
-  reloc = XNEW (arelent);
-  reloc->sym_ptr_ptr  = XNEW (asymbol *);
+  reloc = xmalloc (sizeof (arelent));
+  reloc->sym_ptr_ptr  = xmalloc (sizeof (asymbol *));
   *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixP->fx_addsy);
   reloc->address = fixP->fx_frag->fr_address + fixP->fx_where;
   reloc->addend = fixP->fx_offset;
@@ -579,22 +562,8 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS * fixP)
                         segment_name (S_GET_SEGMENT (fixP->fx_addsy)));
         }
     }
-#ifdef OBJ_ELF
-      if ((fixP->fx_r_type == BFD_RELOC_CR16_GOT_REGREL20)
-           && GOT_symbol
-	   && fixP->fx_addsy == GOT_symbol)
-	{
-	    reloc->addend = fixP->fx_offset = reloc->address;
-	}
-      else if ((fixP->fx_r_type == BFD_RELOC_CR16_GOTC_REGREL20)
-           && GOT_symbol
-	   && fixP->fx_addsy == GOT_symbol)
-	{
-	    reloc->addend = fixP->fx_offset = reloc->address;
-	}
-#endif
 
-  gas_assert ((int) fixP->fx_r_type > 0);
+  assert ((int) fixP->fx_r_type > 0);
   reloc->howto = bfd_reloc_type_lookup (stdoutput, fixP->fx_r_type);
 
   if (reloc->howto == NULL)
@@ -605,7 +574,7 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS * fixP)
                     bfd_get_reloc_code_name (fixP->fx_r_type));
       return NULL;
     }
-  gas_assert (!fixP->fx_pcrel == !reloc->howto->pc_relative);
+  assert (!fixP->fx_pcrel == !reloc->howto->pc_relative);
 
   return reloc;
 }
@@ -684,30 +653,12 @@ md_convert_frag (bfd *abfd ATTRIBUTE_UNUSED, asection *sec, fragS *fragP)
   fragP->fr_fix += md_relax_table[fragP->fr_subtype].rlx_length;
 }
 
-symbolS *
-md_undefined_symbol (char *name)
-{
-  if (*name == '_' && *(name + 1) == 'G'
-      && strcmp (name, "_GLOBAL_OFFSET_TABLE_") == 0)
-   {
-     if (!GOT_symbol)
-       {
-         if (symbol_find (name))
-             as_bad (_("GOT already in symbol table"));
-          GOT_symbol = symbol_new (name, undefined_section,
-                                   (valueT) 0, &zero_address_frag);
-       }
-     return GOT_symbol;
-   }
-  return 0;
-}
-
 /* Process machine-dependent command line options.  Called once for
    each option on the command line that the machine-independent part of
    GAS does not understand.  */
 
 int
-md_parse_option (int c ATTRIBUTE_UNUSED, const char *arg ATTRIBUTE_UNUSED)
+md_parse_option (int c ATTRIBUTE_UNUSED, char *arg ATTRIBUTE_UNUSED)
 {
   return 0;
 }
@@ -720,7 +671,7 @@ md_show_usage (FILE *stream ATTRIBUTE_UNUSED)
   return;
 }
 
-const char *
+char *
 md_atof (int type, char *litP, int *sizeP)
 {
   return ieee_md_atof (type, litP, sizeP, target_big_endian);
@@ -736,52 +687,39 @@ void
 md_apply_fix (fixS *fixP, valueT *valP, segT seg)
 {
   valueT val = * valP;
+  char *buf = fixP->fx_frag->fr_literal + fixP->fx_where;
+  fixP->fx_offset = 0;
+
+  switch (fixP->fx_r_type)
+    {
+      case BFD_RELOC_CR16_NUM8:
+        bfd_put_8 (stdoutput, (unsigned char) val, buf);
+        break;
+      case BFD_RELOC_CR16_NUM16:
+        bfd_put_16 (stdoutput, val, buf);
+        break;
+      case BFD_RELOC_CR16_NUM32:
+        bfd_put_32 (stdoutput, val, buf);
+        break;
+      case BFD_RELOC_CR16_NUM32a:
+        bfd_put_32 (stdoutput, val, buf);
+        break;
+      default:
+        /* We shouldn't ever get here because linkrelax is nonzero.  */
+        abort ();
+        break;
+    }
+
+  fixP->fx_done = 0;
 
   if (fixP->fx_addsy == NULL
       && fixP->fx_pcrel == 0)
     fixP->fx_done = 1;
-  else if (fixP->fx_pcrel == 1
+
+  if (fixP->fx_pcrel == 1
       && fixP->fx_addsy != NULL
       && S_GET_SEGMENT (fixP->fx_addsy) == seg)
     fixP->fx_done = 1;
-  else
-    fixP->fx_done = 0;
-
-  if (fixP->fx_addsy != NULL && !fixP->fx_pcrel)
-    {
-      val = fixP->fx_offset;
-      fixP->fx_done = 1;
-    }
-
-  if (fixP->fx_done)
-    {
-      char *buf = fixP->fx_frag->fr_literal + fixP->fx_where;
-
-      fixP->fx_offset = 0;
-
-      switch (fixP->fx_r_type)
-	{
-	case BFD_RELOC_CR16_NUM8:
-	  bfd_put_8 (stdoutput, (unsigned char) val, buf);
-	  break;
-	case BFD_RELOC_CR16_NUM16:
-	  bfd_put_16 (stdoutput, val, buf);
-	  break;
-	case BFD_RELOC_CR16_NUM32:
-	  bfd_put_32 (stdoutput, val, buf);
-	  break;
-	case BFD_RELOC_CR16_NUM32a:
-	  bfd_put_32 (stdoutput, val, buf);
-	  break;
-	default:
-	  /* We shouldn't ever get here because linkrelax is nonzero.  */
-	  abort ();
-	  break;
-	}
-      fixP->fx_done = 0;
-    }
-  else
-    fixP->fx_offset = * valP;
 }
 
 /* The location from which a PC relative jump should be calculated,
@@ -798,20 +736,20 @@ initialise_reg_hash_table (struct hash_control ** hash_table,
                            const reg_entry * register_table,
                            const unsigned int num_entries)
 {
-  const reg_entry * rreg;
+  const reg_entry * reg;
   const char *hashret;
 
   if ((* hash_table = hash_new ()) == NULL)
     as_fatal (_("Virtual memory exhausted"));
 
-  for (rreg = register_table;
-       rreg < (register_table + num_entries);
-       rreg++)
+  for (reg = register_table;
+       reg < (register_table + num_entries);
+       reg++)
     {
-      hashret = hash_insert (* hash_table, rreg->name, (char *) rreg);
+      hashret = hash_insert (* hash_table, reg->name, (char *) reg);
       if (hashret)
         as_fatal (_("Internal Error:  Can't hash %s: %s"),
-                  rreg->name, hashret);
+                  reg->name, hashret);
     }
 }
 
@@ -875,8 +813,6 @@ process_label_constant (char *str, ins * cr16_ins)
   int symbol_with_s = 0;
   int symbol_with_m = 0;
   int symbol_with_l = 0;
-  int symbol_with_at_got = 0;
-  int symbol_with_at_gotc = 0;
   argument *cur_arg = cr16_ins->arg + cur_arg_num;  /* Current argument.  */
 
   saved_input_line_pointer = input_line_pointer;
@@ -906,8 +842,6 @@ process_label_constant (char *str, ins * cr16_ins)
     case O_subtract:
     case O_add:
       cur_arg->X_op = O_symbol;
-      cur_arg->constant = cr16_ins->exp.X_add_number;
-      cr16_ins->exp.X_add_number = 0;
       cr16_ins->rtype = BFD_RELOC_NONE;
       relocatable = 1;
 
@@ -926,37 +860,12 @@ process_label_constant (char *str, ins * cr16_ins)
           || strneq (input_line_pointer, ":s", 2))
         symbol_with_s = 1;
 
-      if (strneq (input_line_pointer, "@cGOT", 5)
-          || strneq (input_line_pointer, "@cgot", 5))
-	{
-	  if (GOT_symbol == NULL)
-           GOT_symbol = symbol_find_or_make (GLOBAL_OFFSET_TABLE_NAME);
-
-          symbol_with_at_gotc = 1;
-	}
-      else if (strneq (input_line_pointer, "@GOT", 4)
-          || strneq (input_line_pointer, "@got", 4))
-	{
-          if ((strneq (input_line_pointer, "+", 1))
-	       || (strneq (input_line_pointer, "-", 1)))
-           as_warn (_("GOT bad expression with %s."), input_line_pointer);
-
-	  if (GOT_symbol == NULL)
-           GOT_symbol = symbol_find_or_make (GLOBAL_OFFSET_TABLE_NAME);
-
-          symbol_with_at_got = 1;
-	}
-
       switch (cur_arg->type)
         {
         case arg_cr:
           if (IS_INSN_TYPE (LD_STOR_INS) || IS_INSN_TYPE (CSTBIT_INS))
             {
-	      if (symbol_with_at_got)
-	          cr16_ins->rtype = BFD_RELOC_CR16_GOT_REGREL20;
-	      else if (symbol_with_at_gotc)
-	          cr16_ins->rtype = BFD_RELOC_CR16_GOTC_REGREL20;
-	      else if (cur_arg->size == 20)
+              if (cur_arg->size == 20)
                 cr16_ins->rtype = BFD_RELOC_CR16_REGREL20;
               else
                 cr16_ins->rtype = BFD_RELOC_CR16_REGREL20a;
@@ -965,12 +874,6 @@ process_label_constant (char *str, ins * cr16_ins)
 
         case arg_crp:
           if (IS_INSN_TYPE (LD_STOR_INS) || IS_INSN_TYPE (CSTBIT_INS))
-	   {
-	    if (symbol_with_at_got)
-	      cr16_ins->rtype = BFD_RELOC_CR16_GOT_REGREL20;
-	    else if (symbol_with_at_gotc)
-	      cr16_ins->rtype = BFD_RELOC_CR16_GOTC_REGREL20;
-	   } else {
             switch (instruction->size)
               {
               case 1:
@@ -1000,29 +903,15 @@ process_label_constant (char *str, ins * cr16_ins)
               default:
                 break;
               }
-	    }
           break;
 
         case arg_idxr:
           if (IS_INSN_TYPE (LD_STOR_INS) || IS_INSN_TYPE (CSTBIT_INS))
-	    {
-	      if (symbol_with_at_got)
-	        cr16_ins->rtype = BFD_RELOC_CR16_GOT_REGREL20;
-	      else if (symbol_with_at_gotc)
-	        cr16_ins->rtype = BFD_RELOC_CR16_GOTC_REGREL20;
-	      else
-                cr16_ins->rtype = BFD_RELOC_CR16_REGREL20;
-	    }
+            cr16_ins->rtype = BFD_RELOC_CR16_REGREL20;
           break;
 
         case arg_idxrp:
           if (IS_INSN_TYPE (LD_STOR_INS) || IS_INSN_TYPE (CSTBIT_INS))
-	    {
-	    if (symbol_with_at_got)
-	      cr16_ins->rtype = BFD_RELOC_CR16_GOT_REGREL20;
-	    else if (symbol_with_at_gotc)
-	      cr16_ins->rtype = BFD_RELOC_CR16_GOTC_REGREL20;
-	    else {
             switch (instruction->size)
               {
               case 1: cr16_ins->rtype = BFD_RELOC_CR16_REGREL0; break;
@@ -1030,8 +919,6 @@ process_label_constant (char *str, ins * cr16_ins)
               case 3: cr16_ins->rtype = BFD_RELOC_CR16_REGREL20; break;
               default: break;
               }
-	    }
-	   }
           break;
 
         case arg_c:
@@ -1049,13 +936,9 @@ process_label_constant (char *str, ins * cr16_ins)
           else if (IS_INSN_TYPE (STOR_IMM_INS) || IS_INSN_TYPE (LD_STOR_INS)
                    || IS_INSN_TYPE (CSTBIT_INS))
             {
-	      if (symbol_with_s)
+              if (symbol_with_s)
                 as_bad (_("operand %d: illegal use expression: `%s`"), cur_arg_num + 1, str);
-	      if (symbol_with_at_got)
-	        cr16_ins->rtype = BFD_RELOC_CR16_GOT_REGREL20;
-	      else if (symbol_with_at_gotc)
-	        cr16_ins->rtype = BFD_RELOC_CR16_GOTC_REGREL20;
-	      else if (symbol_with_m)
+              if (symbol_with_m)
                 cr16_ins->rtype = BFD_RELOC_CR16_ABS20;
               else /* Default to (symbol_with_l) */
                 cr16_ins->rtype = BFD_RELOC_CR16_ABS24;
@@ -1067,11 +950,7 @@ process_label_constant (char *str, ins * cr16_ins)
         case arg_ic:
           if (IS_INSN_TYPE (ARITH_INS))
             {
-	      if (symbol_with_at_got)
-	        cr16_ins->rtype = BFD_RELOC_CR16_GOT_REGREL20;
-	      else if (symbol_with_at_gotc)
-	        cr16_ins->rtype = BFD_RELOC_CR16_GOTC_REGREL20;
-	      else if (symbol_with_s)
+              if (symbol_with_s)
                 cr16_ins->rtype = BFD_RELOC_CR16_IMM4;
               else if (symbol_with_m)
                 cr16_ins->rtype = BFD_RELOC_CR16_IMM20;
@@ -1106,42 +985,41 @@ process_label_constant (char *str, ins * cr16_ins)
 static int
 getreg_image (reg r)
 {
-  const reg_entry *rreg;
+  const reg_entry *reg;
   char *reg_name;
   int is_procreg = 0; /* Nonzero means argument should be processor reg.  */
 
   /* Check whether the register is in registers table.  */
   if (r < MAX_REG)
-    rreg = cr16_regtab + r;
+    reg = cr16_regtab + r;
   else /* Register not found.  */
     {
       as_bad (_("Unknown register: `%d'"), r);
       return 0;
     }
 
-  reg_name = rreg->name;
+  reg_name = reg->name;
 
 /* Issue a error message when register is illegal.  */
 #define IMAGE_ERR \
   as_bad (_("Illegal register (`%s') in Instruction: `%s'"), \
-	  reg_name, ins_parse);
+            reg_name, ins_parse);                            \
+  break;
 
-  switch (rreg->type)
+  switch (reg->type)
     {
     case CR16_R_REGTYPE:
       if (! is_procreg)
-        return rreg->image;
+        return reg->image;
       else
         IMAGE_ERR;
-      break;
 
     case CR16_P_REGTYPE:
-      return rreg->image;
+      return reg->image;
       break;
 
     default:
       IMAGE_ERR;
-      break;
     }
 
   return 0;
@@ -1159,8 +1037,8 @@ getreg_image (reg r)
 static void
 set_operand (char *operand, ins * cr16_ins)
 {
-  char *operandS; /* Pointer to start of sub-operand.  */
-  char *operandE; /* Pointer to end of sub-operand.  */
+  char *operandS; /* Pointer to start of sub-opearand.  */
+  char *operandE; /* Pointer to end of sub-opearand.  */
 
   argument *cur_arg = &cr16_ins->arg[cur_arg_num]; /* Current argument.  */
 
@@ -1171,7 +1049,6 @@ set_operand (char *operand, ins * cr16_ins)
     {
     case arg_ic:    /* Case $0x18.  */
       operandS++;
-      /* Fall through.  */
     case arg_c:     /* Case 0x18.  */
       /* Set constant.  */
       process_label_constant (operandS, cr16_ins);
@@ -1189,7 +1066,6 @@ set_operand (char *operand, ins * cr16_ins)
       *operandE = '\0';
       process_label_constant (operandS, cr16_ins);
       operandS = operandE;
-      /* Fall through.  */
     case arg_rbase: /* Case (r1) or (r1,r0).  */
       operandS++;
       /* Set register base.  */
@@ -1477,7 +1353,7 @@ gettrap (char *s)
     if (strcasecmp (trap->name, s) == 0)
       return trap->entry;
 
-  /* To make compatible with CR16 4.1 tools, the below 3-lines of
+  /* To make compatable with CR16 4.1 tools, the below 3-lines of
    * code added. Refer: Development Tracker item #123 */
   for (trap = cr16_traps; trap < (cr16_traps + NUMTRAPS); trap++)
     if (trap->entry  == (unsigned int) atoi (s))
@@ -1552,25 +1428,28 @@ is_bcc_insn (char * op)
 
 /* Cinv instruction requires special handling.  */
 
-static void
+static int
 check_cinv_options (char * operand)
 {
   char *p = operand;
+  int i_used = 0, u_used = 0, d_used = 0;
 
   while (*++p != ']')
     {
-      switch (*p)
-	{
-	case ',':
-	case ' ':
-	case 'i':
-	case 'u':
-	case 'd':
-	  break;
-	default:
-	  as_bad (_("Illegal `cinv' parameter: `%c'"), *p);
-	}
+      if (*p == ',' || *p == ' ')
+        continue;
+
+      else if (*p == 'i')
+        i_used = 1;
+      else if (*p == 'u')
+        u_used = 1;
+      else if (*p == 'd')
+        d_used = 1;
+      else
+        as_bad (_("Illegal `cinv' parameter: `%c'"), *p);
     }
+
+  return 0;
 }
 
 /* Retrieve the opcode image of a given register pair.
@@ -1580,12 +1459,12 @@ check_cinv_options (char * operand)
 static int
 getregp_image (reg r)
 {
-  const reg_entry *rreg;
+  const reg_entry *reg;
   char *reg_name;
 
   /* Check whether the register is in registers table.  */
   if (r < MAX_REG)
-    rreg = cr16_regptab + r;
+    reg = cr16_regptab + r;
   /* Register not found.  */
   else
     {
@@ -1593,7 +1472,7 @@ getregp_image (reg r)
       return 0;
     }
 
-  reg_name = rreg->name;
+  reg_name = reg->name;
 
 /* Issue a error message when register  pair is illegal.  */
 #define RPAIR_IMAGE_ERR \
@@ -1601,10 +1480,10 @@ getregp_image (reg r)
             reg_name, ins_parse);                                 \
   break;
 
-  switch (rreg->type)
+  switch (reg->type)
     {
     case CR16_RP_REGTYPE:
-      return rreg->image;
+      return reg->image;
     default:
       RPAIR_IMAGE_ERR;
     }
@@ -1619,12 +1498,12 @@ getregp_image (reg r)
 static int
 getidxregp_image (reg r)
 {
-  const reg_entry *rreg;
+  const reg_entry *reg;
   char *reg_name;
 
   /* Check whether the register is in registers table.  */
   if (r < MAX_REG)
-    rreg = cr16_regptab + r;
+    reg = cr16_regptab + r;
   /* Register not found.  */
   else
     {
@@ -1632,16 +1511,16 @@ getidxregp_image (reg r)
       return 0;
     }
 
-  reg_name = rreg->name;
+  reg_name = reg->name;
 
 /* Issue a error message when register  pair is illegal.  */
 #define IDX_RPAIR_IMAGE_ERR \
   as_bad (_("Illegal index register pair (`%s') in Instruction: `%s'"), \
             reg_name, ins_parse);                                       \
 
-  if (rreg->type == CR16_RP_REGTYPE)
+  if (reg->type == CR16_RP_REGTYPE)
     {
-      switch (rreg->image)
+      switch (reg->image)
         {
         case 0:  return 0; break;
         case 2:  return 1; break;
@@ -1660,18 +1539,18 @@ getidxregp_image (reg r)
   return 0;
 }
 
-/* Retrieve the opcode image of a given processor register.
+/* Retrieve the opcode image of a given processort register.
    If the register is illegal for the current instruction,
    issue an error.  */
 static int
-getprocreg_image (int r)
+getprocreg_image (reg r)
 {
-  const reg_entry *rreg;
+  const reg_entry *reg;
   char *reg_name;
 
   /* Check whether the register is in registers table.  */
-  if (r >= MAX_REG && r < MAX_PREG)
-    rreg = &cr16_pregtab[r - MAX_REG];
+  if (r < MAX_PREG)
+    reg = &cr16_pregtab[r - MAX_REG];
   /* Register not found.  */
   else
     {
@@ -1679,7 +1558,7 @@ getprocreg_image (int r)
       return 0;
     }
 
-  reg_name = rreg->name;
+  reg_name = reg->name;
 
 /* Issue a error message when register  pair is illegal.  */
 #define PROCREG_IMAGE_ERR \
@@ -1687,10 +1566,10 @@ getprocreg_image (int r)
             reg_name, ins_parse);                                      \
   break;
 
-  switch (rreg->type)
+  switch (reg->type)
     {
     case CR16_P_REGTYPE:
-      return rreg->image;
+      return reg->image;
     default:
       PROCREG_IMAGE_ERR;
     }
@@ -1698,18 +1577,18 @@ getprocreg_image (int r)
   return 0;
 }
 
-/* Retrieve the opcode image of a given processor register.
+/* Retrieve the opcode image of a given processort register.
    If the register is illegal for the current instruction,
    issue an error.  */
 static int
-getprocregp_image (int r)
+getprocregp_image (reg r)
 {
-  const reg_entry *rreg;
+  const reg_entry *reg;
   char *reg_name;
   int pregptab_disp = 0;
 
   /* Check whether the register is in registers table.  */
-  if (r >= MAX_REG && r < MAX_PREG)
+  if (r < MAX_PREG)
     {
       r = r - MAX_REG;
       switch (r)
@@ -1726,7 +1605,7 @@ getprocregp_image (int r)
           pregptab_disp = 5;  break;
         default: break;
         }
-      rreg = &cr16_pregptab[r - pregptab_disp];
+      reg = &cr16_pregptab[r - pregptab_disp];
     }
   /* Register not found.  */
   else
@@ -1735,7 +1614,7 @@ getprocregp_image (int r)
       return 0;
     }
 
-  reg_name = rreg->name;
+  reg_name = reg->name;
 
 /* Issue a error message when register  pair is illegal.  */
 #define PROCREGP_IMAGE_ERR \
@@ -1743,10 +1622,10 @@ getprocregp_image (int r)
             reg_name, ins_parse);                                              \
   break;
 
-  switch (rreg->type)
+  switch (reg->type)
     {
     case CR16_P_REGTYPE:
-      return rreg->image;
+      return reg->image;
     default:
       PROCREGP_IMAGE_ERR;
     }
@@ -1797,9 +1676,7 @@ print_constant (int nbits, int shift, argument *arg)
       break;
 
     case 21:
-      if ((nbits == 21) && (IS_INSN_TYPE (LD_STOR_INS)))
-	nbits = 20;
-      /* Fall through.  */
+      if ((nbits == 21) && (IS_INSN_TYPE (LD_STOR_INS))) nbits = 20;
     case 24:
     case 22:
     case 20:
@@ -1852,7 +1729,7 @@ print_constant (int nbits, int shift, argument *arg)
       /* When instruction size is 3 and 'shift' is 16, a 16-bit constant is
          always filling the upper part of output_opcode[1]. If we mistakenly
          write it to output_opcode[0], the constant prefix (that is, 'match')
-         will be overridden.
+         will be overriden.
          0        1         2         3
          +---------+---------+---------+---------+
          | 'match' |         | X X X X |         |
@@ -2003,16 +1880,16 @@ static op_err
 check_range (long *num, int bits, int unsigned flags, int update)
 {
   long min, max;
-  op_err retval = OP_LEGAL;
+  int retval = OP_LEGAL;
   long value = *num;
 
   if (bits == 0 && value > 0) return OP_OUT_OF_RANGE;
 
-  /* For hosts with longs bigger than 32-bits make sure that the top
+  /* For hosts witah longs bigger than 32-bits make sure that the top
      bits of a 32-bit negative value read in by the parser are set,
      so that the correct comparisons are made.  */
   if (value & 0x80000000)
-    value |= (-1UL << 31);
+    value |= (-1L << 31);
 
 
   /* Verify operand value is even.  */
@@ -2091,7 +1968,7 @@ check_range (long *num, int bits, int unsigned flags, int update)
    return retval;
 }
 
-/* Bunch of error checking.
+/* Bunch of error checkings.
    The checks are made after a matching instruction was found.  */
 
 static void
@@ -2114,7 +1991,7 @@ warn_if_needed (ins *insn)
     {
       unsigned int count = insn->arg[0].constant, reg_val;
 
-      /* Check if count operand caused to save/retrieve the RA twice
+      /* Check if count operand caused to save/retrive the RA twice
          to generate warning message.  */
      if (insn->nargs > 2)
        {
@@ -2205,7 +2082,7 @@ adjust_if_needed (ins *insn ATTRIBUTE_UNUSED)
    Returns 1 upon success, 0 upon failure.  */
 
 static int
-assemble_insn (const char *mnemonic, ins *insn)
+assemble_insn (char *mnemonic, ins *insn)
 {
   /* Type of each operand in the current template.  */
   argtype cur_type[MAX_OPERANDS];
@@ -2295,7 +2172,7 @@ assemble_insn (const char *mnemonic, ins *insn)
             goto next_insn;
 
           /* If 'storb' instruction with 'sp' reg and 16-bit disp of
-           * reg-pair, leads to undefined trap, so this should use
+           * reg-pair, leads to undifined trap, so this should use
            * 20-bit disp of reg-pair.  */
           if (IS_INSN_MNEMONIC ("storb") && (instruction->size == 2)
               && (insn->arg[i].r == 15) && (insn->arg[i + 1].type == arg_crp))
@@ -2362,7 +2239,7 @@ next_insn:
   else
     /* Full match - print the encoding to output file.  */
     {
-      /* Make further checking (such that couldn't be made earlier).
+      /* Make further checkings (such that couldn't be made earlier).
          Warn the user if necessary.  */
       warn_if_needed (insn);
 
@@ -2391,7 +2268,7 @@ next_insn:
 
       for (i = 0; i < insn->nargs; i++)
         {
-         /* For BAL (ra),disp17 instruction only. And also set the
+         /* For BAL (ra),disp17 instuction only. And also set the
             DISP24a relocation type.  */
          if (IS_INSN_MNEMONIC ("bal") && (instruction->size == 2) && i == 0)
            {
@@ -2453,7 +2330,7 @@ print_insn (ins *insn)
         this_frag = frag_var (rs_machine_dependent, insn_size *2,
                               4, relax_subtype,
                               insn->exp.X_add_symbol,
-                              0,
+                              insn->exp.X_add_number,
                               0);
       }
     else
@@ -2467,7 +2344,7 @@ print_insn (ins *insn)
              int size;
 
              reloc_howto = bfd_reloc_type_lookup (stdoutput, insn->rtype);
-
+  
              if (!reloc_howto)
                abort ();
 
@@ -2497,12 +2374,66 @@ print_insn (ins *insn)
     }
 }
 
-/* Actually assemble an instruction.  */
+/* This is the guts of the machine-dependent assembler.  OP points to a
+   machine dependent instruction.  This function is supposed to emit
+   the frags/bytes it assembles to.  */
 
-static void
-cr16_assemble (const char *op, char *param)
+void
+md_assemble (char *op)
 {
   ins cr16_ins;
+  char *param, param1[32];
+  char c;
+
+  /* Reset global variables for a new instruction.  */
+  reset_vars (op);
+
+  /* Strip the mnemonic.  */
+  for (param = op; *param != 0 && !ISSPACE (*param); param++)
+    ;
+  c = *param;
+  *param++ = '\0';
+
+  /* bCC instuctions and adjust the mnemonic by adding extra white spaces.  */
+  if (is_bcc_insn (op))
+    {
+      strcpy (param1, get_b_cc (op));
+      op = "b";
+      strcat (param1,",");
+      strcat (param1, param);
+      param = (char *) &param1;
+    }
+
+  /* Checking the cinv options and adjust the mnemonic by removing the
+     extra white spaces.  */
+  if (streq ("cinv", op))
+    {
+     /* Validate the cinv options.  */
+      check_cinv_options (param);
+      strcat (op, param);
+    }
+
+  /* MAPPING - SHIFT INSN, if imm4/imm16 positive values
+     lsh[b/w] imm4/imm6, reg ==> ashu[b/w] imm4/imm16, reg
+     as CR16 core doesn't support lsh[b/w] right shift operaions.  */
+  if ((streq ("lshb", op) || streq ("lshw", op) || streq ("lshd", op))
+      && (param [0] == '$'))
+    {
+      strcpy (param1, param);
+      /* Find the instruction.  */
+      instruction = (const inst *) hash_find (cr16_inst_hash, op);
+       parse_operands (&cr16_ins, param1);
+      if (((&cr16_ins)->arg[0].type == arg_ic)
+          && ((&cr16_ins)->arg[0].constant >= 0))
+        {
+           if (streq ("lshb", op))
+             op = "ashub";
+           else if (streq ("lshd", op))
+             op = "ashud";
+           else
+             op = "ashuw";
+        }
+    }
 
   /* Find the instruction.  */
   instruction = (const inst *) hash_find (cr16_inst_hash, op);
@@ -2524,68 +2455,4 @@ cr16_assemble (const char *op, char *param)
 
   /* Print the instruction.  */
   print_insn (&cr16_ins);
-}
-
-/* This is the guts of the machine-dependent assembler.  OP points to a
-   machine dependent instruction.  This function is supposed to emit
-   the frags/bytes it assembles to.  */
-
-void
-md_assemble (char *op)
-{
-  ins cr16_ins;
-  char *param, param1[32];
-
-  /* Reset global variables for a new instruction.  */
-  reset_vars (op);
-
-  /* Strip the mnemonic.  */
-  for (param = op; *param != 0 && !ISSPACE (*param); param++)
-    ;
-  *param++ = '\0';
-
-  /* bCC instructions and adjust the mnemonic by adding extra white spaces.  */
-  if (is_bcc_insn (op))
-    {
-      strcpy (param1, get_b_cc (op));
-      strcat (param1,",");
-      strcat (param1, param);
-      param = (char *) &param1;
-      cr16_assemble ("b", param);
-      return;
-    }
-
-  /* Checking the cinv options and adjust the mnemonic by removing the
-     extra white spaces.  */
-  if (streq ("cinv", op))
-    {
-     /* Validate the cinv options.  */
-      check_cinv_options (param);
-      strcat (op, param);
-    }
-
-  /* MAPPING - SHIFT INSN, if imm4/imm16 positive values
-     lsh[b/w] imm4/imm6, reg ==> ashu[b/w] imm4/imm16, reg
-     as CR16 core doesn't support lsh[b/w] right shift operations.  */
-  if ((streq ("lshb", op) || streq ("lshw", op) || streq ("lshd", op))
-      && (param [0] == '$'))
-    {
-      strcpy (param1, param);
-      /* Find the instruction.  */
-      instruction = (const inst *) hash_find (cr16_inst_hash, op);
-       parse_operands (&cr16_ins, param1);
-      if (((&cr16_ins)->arg[0].type == arg_ic)
-          && ((&cr16_ins)->arg[0].constant >= 0))
-        {
-           if (streq ("lshb", op))
-             cr16_assemble ("ashub", param);
-           else if (streq ("lshd", op))
-             cr16_assemble ("ashud", param);
-           else
-             cr16_assemble ("ashuw", param);
-	   return;
-        }
-    }
-
-  cr16_assemble (op, param);
 }

@@ -1,5 +1,6 @@
 /* seh pdata/xdata coff object file format
-   Copyright (C) 2009-2020 Free Software Foundation, Inc.
+   Copyright 2009
+   Free Software Foundation, Inc.
 
    This file is part of GAS.
 
@@ -38,7 +39,7 @@
 
   The third version has a function entry block of BeginAddress (RVA),
   EndAddress (RVA), and UnwindData (RVA). The description of the
-  prologue, exception-handler, and additional SEH data is stored
+  prologue, excepetion-handler, and additional SEH data is stored
   within the UNWIND_DATA field in the xdata section.
 
   The pseudos:
@@ -56,7 +57,6 @@
   .seh_savereg
   .seh_savexmm
   .seh_pushframe
-  .seh_code
 */
 
 /* architecture specific pdata/xdata handling.  */
@@ -74,7 +74,6 @@
 	{"seh_32", obj_coff_seh_32, 1}, \
 	{"seh_no32", obj_coff_seh_32, 0}, \
 	{"seh_handler", obj_coff_seh_handler, 0}, \
-	{"seh_code", obj_coff_seh_code, 0}, \
 	{"seh_handlerdata", obj_coff_seh_handlerdata, 0},
 
 /* Type definitions.  */
@@ -150,9 +149,8 @@ static void obj_coff_seh_32 (int);
 static void obj_coff_seh_proc  (int);
 static void obj_coff_seh_handler (int);
 static void obj_coff_seh_handlerdata (int);
-static void obj_coff_seh_code (int);
 
-#define UNDSEC bfd_und_section_ptr
+#define UNDSEC (asection *) &bfd_und_section
 
 /* Check if x64 UNW_... macros are already defined.  */
 #ifndef PEX64_FLAG_NHANDLER
@@ -204,3 +202,4 @@ static void obj_coff_seh_code (int);
    PEX64_SCOPE_ENTRY_SIZE * (IDX))
 
 #endif
+

@@ -1,5 +1,5 @@
 /* Base configuration file for all FreeBSD targets.
-   Copyright (C) 1999-2019 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2001, 2007, 2008 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -29,6 +29,17 @@ along with GCC; see the file COPYING3.  If not see
 /* In case we need to know.  */
 #define USING_CONFIG_FREEBSD 1
 
+/* This defines which switch letters take arguments.  On FreeBSD, most of
+   the normal cases (defined in gcc.c) apply, and we also have -h* and
+   -z* options (for the linker) (coming from SVR4).
+   We also have -R (alias --rpath), no -z, --soname (-h), --assert etc.  */
+
+#undef  SWITCH_TAKES_ARG
+#define SWITCH_TAKES_ARG(CHAR) (FBSD_SWITCH_TAKES_ARG(CHAR))
+
+#undef  WORD_SWITCH_TAKES_ARG
+#define WORD_SWITCH_TAKES_ARG(STR) (FBSD_WORD_SWITCH_TAKES_ARG(STR))
+
 #undef  TARGET_OS_CPP_BUILTINS
 #define TARGET_OS_CPP_BUILTINS() FBSD_TARGET_OS_CPP_BUILTINS()
 
@@ -44,29 +55,18 @@ along with GCC; see the file COPYING3.  If not see
 #undef  LIB_SPEC
 #define LIB_SPEC FBSD_LIB_SPEC
 
-#if defined(HAVE_LD_EH_FRAME_HDR)
-#define LINK_EH_SPEC "%{!static|static-pie:--eh-frame-hdr} "
-#endif
-
-#ifdef TARGET_LIBC_PROVIDES_SSP
-#define LINK_SSP_SPEC "%{fstack-protector|fstack-protector-all" \
-		       "|fstack-protector-strong|fstack-protector-explicit" \
-		       ":-lssp_nonshared}"
-#endif
-
-#undef TARGET_LIBC_HAS_FUNCTION
-#define TARGET_LIBC_HAS_FUNCTION no_c99_libc_has_function
-
-/* Use --as-needed -lgcc_s for eh support.  */
-#ifdef HAVE_LD_AS_NEEDED
-#define USE_LD_AS_NEEDED 1
-#endif
+/* Define this so we can compile MS code for use with WINE.  */
+#define HANDLE_PRAGMA_PACK_PUSH_POP 1
 
 /************************[  Target stuff  ]***********************************/
 
 /* All FreeBSD Architectures support the ELF object file format.  */
 #undef  OBJECT_FORMAT_ELF
 #define OBJECT_FORMAT_ELF
+
+/* Don't assume anything about the header files.  */
+#undef  NO_IMPLICIT_EXTERN_C
+#define NO_IMPLICIT_EXTERN_C	1
 
 /* Follow FreeBSD's standard headers (<sys/_types.h> etc...).  */
 
@@ -76,7 +76,7 @@ along with GCC; see the file COPYING3.  If not see
 #undef  WINT_TYPE
 #define WINT_TYPE "int"
 
-#define MATH_LIBRARY_PROFILE    "m_p"
+#define MATH_LIBRARY_PROFILE    "-lm_p"
 
 /* Code generation parameters.  */
 

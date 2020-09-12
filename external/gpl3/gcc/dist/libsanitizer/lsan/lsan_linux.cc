@@ -5,13 +5,13 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file is a part of LeakSanitizer. Linux/NetBSD-specific code.
+// This file is a part of LeakSanitizer. Linux-specific code.
 //
 //===----------------------------------------------------------------------===//
 
 #include "sanitizer_common/sanitizer_platform.h"
 
-#if SANITIZER_LINUX || SANITIZER_NETBSD
+#if SANITIZER_LINUX
 
 #include "lsan_allocator.h"
 
@@ -28,4 +28,4 @@ void ReplaceSystemMalloc() {}
 
 } // namespace __lsan
 
-#endif  // SANITIZER_LINUX || SANITIZER_NETBSD
+#endif // SANITIZER_LINUX

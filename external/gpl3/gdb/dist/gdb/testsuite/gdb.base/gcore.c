@@ -1,4 +1,5 @@
-/* Copyright 2002-2019 Free Software Foundation, Inc.
+/* Copyright 2002, 2004, 2007, 2008, 2009, 2010, 2011
+Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -46,12 +47,15 @@ array_func ()
       un_initialized_array[i] = extern_array[i] + 8;
       local_array[i] = extern_array[i] + 12;
     }
-  /* Reference static_array so that clang doesn't discard it.  */
-  (void) static_array[0];
   terminal_func ();
 }
 
+#ifdef PROTOTYPES
 int factorial_func (int value)
+#else
+int factorial_func (value)
+     int value;
+#endif
 {
   if (value > 1) {
     value *= factorial_func (value - 1);
@@ -60,7 +64,6 @@ int factorial_func (int value)
   return (value);
 }
 
-int
 main()
 {
   factorial_func (6);

@@ -1,4 +1,4 @@
-/* Copyright (C) 2012-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2012-2013 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -21,9 +21,14 @@
    see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
    <http://www.gnu.org/licenses/>.  */
 
-#if !defined _IMMINTRIN_H_INCLUDED && !defined _MM3DNOW_H_INCLUDED
-# error "Never use <prfchwintrin.h> directly; include <immintrin.h> or <mm3dnow.h> instead."
+#if !defined _X86INTRIN_H_INCLUDED && !defined _MM3DNOW_H_INCLUDED
+# error "Never use <prfchwintrin.h> directly; include <x86intrin.h> or <mm3dnow.h> instead."
 #endif
+
+
+#if !defined (__PRFCHW__) && !defined (__3dNOW__)
+# error "PRFCHW instruction not enabled"
+#endif /* __PRFCHW__ or  __3dNOW__*/
 
 #ifndef _PRFCHWINTRIN_H_INCLUDED
 #define _PRFCHWINTRIN_H_INCLUDED

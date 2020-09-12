@@ -1,5 +1,5 @@
 /* Definitions for option handling for ARM.
-   Copyright (C) 1991-2019 Free Software Foundation, Inc.
+   Copyright (C) 1991-2013 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -13,21 +13,23 @@
    or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
    License for more details.
 
-   Under Section 7 of GPL version 3, you are granted additional
-   permissions described in the GCC Runtime Library Exception, version
-   3.1, as published by the Free Software Foundation.
-
-   You should have received a copy of the GNU General Public License and
-   a copy of the GCC Runtime Library Exception along with this program;
-   see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+   You should have received a copy of the GNU General Public License
+   along with GCC; see the file COPYING3.  If not see
    <http://www.gnu.org/licenses/>.  */
 
 #ifndef ARM_OPTS_H
 #define ARM_OPTS_H
 
-#include "arm-flags.h"
-#include "arm-isa.h"
-#include "arm-cpu.h"
+/* The various ARM cores.  */
+enum processor_type
+{
+#define ARM_CORE(NAME, IDENT, ARCH, FLAGS, COSTS) \
+  IDENT,
+#include "arm-cores.def"
+#undef ARM_CORE
+  /* Used to indicate that no processor has been specified.  */
+  arm_none
+};
 
 /* Which __fp16 format to use.
    The enumeration values correspond to the numbering for the

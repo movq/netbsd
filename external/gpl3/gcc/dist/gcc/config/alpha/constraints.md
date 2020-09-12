@@ -1,5 +1,5 @@
 ;; Constraint definitions for DEC Alpha.
-;; Copyright (C) 2007-2019 Free Software Foundation, Inc.
+;; Copyright (C) 2007 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -18,8 +18,8 @@
 ;; <http://www.gnu.org/licenses/>.
 
 ;;; Unused letters:
-;;;    ABCDEF H             V  YZ
-;;;       de ghijkl   pq  tu wxyz
+;;;    ABCDEF               V  YZ
+;;;       de ghijklmnopq stu wxyz
 
 ;; Integer register constraints.
 
@@ -32,15 +32,11 @@
 (define_register_constraint "c" "R27_REG"
  "General register 27, function call address")
 
-(define_register_constraint "f" "TARGET_FPREGS ? FLOAT_REGS : NO_REGS"
+(define_register_constraint "f" "FLOAT_REGS"
  "Any floating-point register")
 
 (define_register_constraint "v" "R0_REG"
  "General register 0, function value return address")
-
-(define_memory_constraint "w"
- "A memory whose address is only a register"
- (match_operand 0 "mem_noofs_operand"))
 
 ;; Integer constant constraints.
 (define_constraint "I"
@@ -82,22 +78,24 @@
 (define_constraint "P"
   "The constant 1, 2 or 3"
   (and (match_code "const_int")
-       (match_test "IN_RANGE (ival, 1, 3)")))
+       (match_test "ival == 1 || ival == 2 || ival == 3")))
+
+(define_constraint "H"
+  "A valid operand of a ZAP insn, when building with 32-bit HOST_WIDE_INT"
+  (and (match_code "const_double")
+       (match_test "mode == VOIDmode && zap_mask (hval) && zap_mask (lval)")))
 
 ;; Floating-point constant constraints.
 (define_constraint "G"
   "The floating point zero constant"
   (and (match_code "const_double")
-       (match_test "op == CONST0_RTX (mode)")))
+       (match_test "GET_MODE_CLASS (mode) == MODE_FLOAT
+		    && op == CONST0_RTX (mode)")))
 
 ;; "Extra" constraints.
-
-;; A memory location that is not a reference
-;; (using an AND) to an unaligned location.
-(define_memory_constraint "Q"
+(define_constraint "Q"
   "@internal A normal_memory_operand"
-  (and (match_code "mem")
-       (not (match_code "and" "0"))))
+  (match_operand 0 "normal_memory_operand"))
 
 (define_constraint "R"
   "@internal A direct_call_operand"
@@ -111,6 +109,11 @@
 (define_constraint "T"
   "@internal A high-part symbol"
   (match_code "high"))
+
+(define_constraint "U"
+  "@internal A UNICOSMK symbol"
+  (and (match_test "TARGET_ABI_UNICOSMK")
+       (match_operand 0 "symbolic_operand")))
 
 (define_constraint "W"
   "A vector zero constant"

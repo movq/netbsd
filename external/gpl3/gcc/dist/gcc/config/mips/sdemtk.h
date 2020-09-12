@@ -1,6 +1,7 @@
 /* Definitions of target machine for GNU compiler.
    MIPS SDE version, for use with the SDE C library rather than newlib.
-   Copyright (C) 2007-2019 Free Software Foundation, Inc.
+   Copyright (C) 2007, 2008, 2009
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -34,7 +35,10 @@ along with GCC; see the file COPYING3.  If not see
 	builtin_define ("__mipsfp64");			\
 							\
       if (TARGET_NO_FLOAT) 				\
-	builtin_define ("__NO_FLOAT");			\
+	{						\
+	  builtin_define ("__NO_FLOAT");		\
+	  builtin_define ("__mips_no_float");		\
+	}						\
       else if (TARGET_SOFT_FLOAT_ABI)			\
 	builtin_define ("__SOFT_FLOAT");		\
       else if (TARGET_SINGLE_FLOAT)			\
@@ -49,6 +53,18 @@ along with GCC; see the file COPYING3.  If not see
         {						\
 	  builtin_assert ("endian=little");		\
 	  builtin_assert ("cpu=mipsel");		\
+	}						\
+    }							\
+  while (0)
+
+#undef SUBTARGET_OVERRIDE_OPTIONS
+#define SUBTARGET_OVERRIDE_OPTIONS			\
+  do							\
+    {							\
+      if (TARGET_NO_FLOAT)				\
+	{						\
+	  target_flags |= MASK_SOFT_FLOAT_ABI;		\
+	  target_flags_explicit |= MASK_SOFT_FLOAT_ABI;	\
 	}						\
     }							\
   while (0)
@@ -70,7 +86,7 @@ extern void mips_sync_icache (void *beg, unsigned long len);
 #undef MIPS_ICACHE_SYNC
 #define MIPS_ICACHE_SYNC(ADDR, SIZE)					\
   emit_library_call (gen_rtx_SYMBOL_REF (Pmode, mips_cache_flush_func),	\
-		     LCT_NORMAL, VOIDmode, ADDR, Pmode,			\
+		     LCT_NORMAL, VOIDmode, 2, ADDR, Pmode,		\
 		     SIZE, TYPE_MODE (sizetype))
 
 /* This version of _mcount does not pop 2 words from the stack.  */
@@ -97,6 +113,3 @@ extern void mips_sync_icache (void *beg, unsigned long len);
 /* ...nor does the call sequence preserve $31.  */
 #undef MIPS_SAVE_REG_FOR_PROFILING_P
 #define MIPS_SAVE_REG_FOR_PROFILING_P(REGNO) ((REGNO) == RETURN_ADDR_REGNUM)
-
-/* Compile in support for the -mno-float option.  */
-#define TARGET_SUPPORTS_NO_FLOAT 1

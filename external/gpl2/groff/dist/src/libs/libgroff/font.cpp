@@ -1,4 +1,4 @@
-/*	$NetBSD: font.cpp,v 1.1.1.1 2016/01/13 18:41:48 christos Exp $	*/
+/*	$NetBSD: font.cpp,v 1.1 2016/01/13 18:41:48 christos Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 1989, 1990, 1991, 1992, 2000, 2001, 2002, 2003, 2004, 2005

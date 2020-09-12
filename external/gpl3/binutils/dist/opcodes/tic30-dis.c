@@ -1,5 +1,5 @@
 /* Disassembly routines for TMS320C30 architecture
-   Copyright (C) 1998-2020 Free Software Foundation, Inc.
+   Copyright 1998, 1999, 2000, 2002, 2005, 2007 Free Software Foundation, Inc.
    Contributed by Steven Haworth (steve@pm.cse.rmit.edu.au)
 
    This file is part of the GNU opcodes library.
@@ -19,10 +19,10 @@
    Free Software Foundation, 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
-#include "sysdep.h"
 #include <errno.h>
 #include <math.h>
-#include "disassemble.h"
+#include "sysdep.h"
+#include "dis-asm.h"
 #include "opcode/tic30.h"
 
 #define NORMAL_INSN   1
@@ -64,7 +64,7 @@ static unsigned int _pc;
 struct instruction
 {
   int type;
-  insn_template *tm;
+  template *tm;
   partemplate *ptm;
 };
 
@@ -78,7 +78,7 @@ get_tic30_instruction (unsigned long insn_word, struct instruction *insn)
     case THREE_OPERAND:
       insn->type = NORMAL_INSN;
       {
-	insn_template *current_optab = (insn_template *) tic30_optab;
+	template *current_optab = (template *) tic30_optab;
 
 	for (; current_optab < tic30_optab_end; current_optab++)
 	  {
@@ -145,7 +145,7 @@ get_tic30_instruction (unsigned long insn_word, struct instruction *insn)
     case BRANCHES:
       insn->type = NORMAL_INSN;
       {
-	insn_template *current_optab = (insn_template *) tic30_optab;
+	template *current_optab = (template *) tic30_optab;
 
 	for (; current_optab < tic30_optab_end; current_optab++)
 	  {
@@ -188,8 +188,6 @@ get_tic30_instruction (unsigned long insn_word, struct instruction *insn)
   return 1;
 }
 
-#define OPERAND_BUFFER_LEN 15
-
 static int
 get_register_operand (unsigned char fragment, char *buffer)
 {
@@ -201,8 +199,7 @@ get_register_operand (unsigned char fragment, char *buffer)
     {
       if ((fragment & 0x1F) == current_reg->opcode)
 	{
-	  strncpy (buffer, current_reg->name, OPERAND_BUFFER_LEN);
-	  buffer[OPERAND_BUFFER_LEN - 1] = 0;
+	  strcpy (buffer, current_reg->name);
 	  return 1;
 	}
     }
@@ -253,25 +250,16 @@ get_indirect_operand (unsigned short fragment,
 		int bufcnt;
 
 		len = strlen (current_ind->syntax);
-
 		for (i = 0, bufcnt = 0; i < len; i++, bufcnt++)
 		  {
 		    buffer[bufcnt] = current_ind->syntax[i];
-
-		    if (bufcnt > 0
-			&& bufcnt < OPERAND_BUFFER_LEN - 1
-			&& buffer[bufcnt - 1] == 'a'
-			&& buffer[bufcnt] == 'r')
+		    if (buffer[bufcnt - 1] == 'a' && buffer[bufcnt] == 'r')
 		      buffer[++bufcnt] = arnum + '0';
-		    
-		    if (bufcnt < OPERAND_BUFFER_LEN - 1
-			&& buffer[bufcnt] == '('
+		    if (buffer[bufcnt] == '('
 			&& current_ind->displacement == DISP_REQUIRED)
 		      {
-			snprintf (buffer + (bufcnt + 1),
-				 OPERAND_BUFFER_LEN - (bufcnt + 1),
-				 "%u", disp);
-			bufcnt += strlen (buffer + (bufcnt + 1));
+			sprintf (&buffer[bufcnt + 1], "%u", disp);
+			bufcnt += strlen (&buffer[bufcnt + 1]);
 		      }
 		  }
 		buffer[bufcnt + 1] = '\0';
@@ -286,7 +274,7 @@ get_indirect_operand (unsigned short fragment,
 static int
 cnvt_tmsfloat_ieee (unsigned long tmsfloat, int size, float *ieeefloat)
 {
-  unsigned long exponent, sign, mant;
+  unsigned long exp, sign, mant;
   union
   {
     unsigned long l;
@@ -303,16 +291,16 @@ cnvt_tmsfloat_ieee (unsigned long tmsfloat, int size, float *ieeefloat)
 	  tmsfloat = (long) tmsfloat >> 4;
 	}
     }
-  exponent = tmsfloat & 0xFF000000;
-  if (exponent == 0x80000000)
+  exp = tmsfloat & 0xFF000000;
+  if (exp == 0x80000000)
     {
       *ieeefloat = 0.0;
       return 1;
     }
-  exponent += 0x7F000000;
+  exp += 0x7F000000;
   sign = (tmsfloat & 0x00800000) << 8;
   mant = tmsfloat & 0x007FFFFF;
-  if (exponent == 0xFF000000)
+  if (exp == 0xFF000000)
     {
       if (mant == 0)
 	*ieeefloat = ERANGE;
@@ -329,18 +317,18 @@ cnvt_tmsfloat_ieee (unsigned long tmsfloat, int size, float *ieeefloat)
 #endif
       return 1;
     }
-  exponent >>= 1;
+  exp >>= 1;
   if (sign)
     {
       mant = (~mant) & 0x007FFFFF;
       mant += 1;
-      exponent += mant & 0x00800000;
-      exponent &= 0x7F800000;
+      exp += mant & 0x00800000;
+      exp &= 0x7F800000;
       mant &= 0x007FFFFF;
     }
   if (tmsfloat == 0x80000000)
-    sign = mant = exponent = 0;
-  tmsfloat = sign | exponent | mant;
+    sign = mant = exp = 0;
+  tmsfloat = sign | exp | mant;
   val.l = tmsfloat;
   *ieeefloat = val.f;
   return 1;
@@ -352,7 +340,7 @@ print_two_operand (disassemble_info *info,
 		   struct instruction *insn)
 {
   char name[12];
-  char operand[2][OPERAND_BUFFER_LEN] =
+  char operand[2][13] =
   {
     {0},
     {0}
@@ -439,7 +427,7 @@ print_three_operand (disassemble_info *info,
 		     unsigned long insn_word,
 		     struct instruction *insn)
 {
-  char operand[3][OPERAND_BUFFER_LEN] =
+  char operand[3][13] =
   {
     {0},
     {0},
@@ -485,7 +473,7 @@ print_par_insn (disassemble_info *info,
 {
   size_t i, len;
   char *name1, *name2;
-  char operand[2][3][OPERAND_BUFFER_LEN] =
+  char operand[2][3][13] =
   {
     {
       {0},
@@ -607,7 +595,7 @@ print_branch (disassemble_info *info,
 	      unsigned long insn_word,
 	      struct instruction *insn)
 {
-  char operand[2][OPERAND_BUFFER_LEN] =
+  char operand[2][13] =
   {
     {0},
     {0}
@@ -681,9 +669,9 @@ print_branch (disassemble_info *info,
       if (address == 0)
 	info->fprintf_func (info->stream, " <%s>", sym->name);
       else
-	info->fprintf_func (info->stream, " <%s %c %lu>", sym->name,
+	info->fprintf_func (info->stream, " <%s %c %d>", sym->name,
 			    ((short) address < 0) ? '-' : '+',
-			    address);
+			    abs (address));
     }
   return 1;
 }
@@ -696,10 +684,8 @@ print_insn_tic30 (bfd_vma pc, disassemble_info *info)
   bfd_vma bufaddr = pc - info->buffer_vma;
 
   /* Obtain the current instruction word from the buffer.  */
-  insn_word = (((unsigned) *(info->buffer + bufaddr) << 24)
-	       | (*(info->buffer + bufaddr + 1) << 16)
-	       | (*(info->buffer + bufaddr + 2) << 8)
-	       | *(info->buffer + bufaddr + 3));
+  insn_word = (*(info->buffer + bufaddr) << 24) | (*(info->buffer + bufaddr + 1) << 16) |
+    (*(info->buffer + bufaddr + 2) << 8) | *(info->buffer + bufaddr + 3);
   _pc = pc / 4;
   /* Get the instruction refered to by the current instruction word
      and print it out based on its type.  */

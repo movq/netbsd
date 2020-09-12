@@ -1,26 +1,10 @@
 # Linker script for Itanium VMS systems.
 # Tristan Gingold <gingold@adacore.com>.
-#
-# Copyright (C) 2014-2020 Free Software Foundation, Inc.
-#
-# Copying and distribution of this file, with or without modification,
-# are permitted in any medium without royalty provided the copyright
-# notice and this notice are preserved.
-
-# Using an empty script for ld -r is better than mashing together
-# sections.  This hack likely leaves ld -Ur broken.
-test -n "${RELOCATING}" || exit 0
 
 PAGESIZE=0x10000
 BLOCKSIZE=0x200
 
 cat <<EOF
-/* Copyright (C) 2014-2020 Free Software Foundation, Inc.
-
-   Copying and distribution of this script, with or without modification,
-   are permitted in any medium without royalty provided the copyright
-   notice and this notice are preserved.  */
-
 OUTPUT_FORMAT("${OUTPUT_FORMAT}")
 ${LIB_SEARCH_DIRS}
 ENTRY(__entry)
@@ -32,14 +16,14 @@ SECTIONS
 
   \$DATA\$ ALIGN (${BLOCKSIZE}) : {
     *(\$DATA\$ .data .data.*)
-    *(\$BSS\$ .bss .bss.*)
+    *(\$BSS\$ .bss)
   }
 
   /* Code segment.  Note: name must be \$CODE\$ */
   ${RELOCATING+. = ALIGN (${PAGESIZE});}
 
   \$CODE\$ ALIGN (${BLOCKSIZE}) : {
-    *(\$CODE\$ .text .text.*)
+    *(\$CODE\$ .text)
   }
   .plt ALIGN (8) : {
     *(.plt)
@@ -51,7 +35,7 @@ SECTIONS
   /* RO initialized data.  */
   \$LITERAL\$ ALIGN (${BLOCKSIZE}) : {
     *(\$LITERAL\$)
-    *(\$READONLY\$ .rodata .rodata.*)
+    *(\$READONLY\$ .rodata)
     *(.jcr)
     *(.ctors)
     *(.dtors)
@@ -69,7 +53,7 @@ SECTIONS
   ${RELOCATING+. = ALIGN (${PAGESIZE});}
 
   .srodata : {
-    *(.srodata .srodata.*)
+    *(.srodata)
   }
   .got ALIGN (8) : {
     *(.got)
@@ -78,7 +62,7 @@ SECTIONS
     *(.IA_64.pltoff)
   }
   \$TFR\$ ALIGN (16) : {
-    /* Transfer vector.  */
+    /* Tranfer vector.  */
     __entry = .;
     *(.transfer)
   }
@@ -87,7 +71,7 @@ SECTIONS
 
   \$RW_SHORT\$ ALIGN (${BLOCKSIZE}) : {
     *(.sdata .sdata.*)
-    *(.sbss .sbss.*)
+    *(.sbss)
   }
 
   ${RELOCATING+. = ALIGN (${PAGESIZE});}
@@ -120,13 +104,29 @@ SECTIONS
   .gnu.version_r : { *(.gnu.version_r) }
   .rela.IA_64.pltoff : { *(.rela.IA_64.pltoff) }
 
-EOF
+  /* DWARF 2 */
+  .debug_info     0 : { *(.debug_info${RELOCATING+ .gnu.linkonce.wi.*}) }
+  .debug_abbrev   0 : { *(.debug_abbrev) }
+  .debug_line     0 : { *(.debug_line) }
+  .debug_frame    0 : { *(.debug_frame) }
+  .debug_str      0 : { *(.debug_str) }
+  .debug_loc      0 : { *(.debug_loc) }
+  .debug_macinfo  0 : { *(.debug_macinfo) }
+  .debug_aranges  0 : { *(.debug_aranges) }
+  .debug_pubnames 0 : { *(.debug_pubnames) }
+  .trace_info     0 : { *(.trace_info) }
+  .trace_abbrev   0 : { *(.trace_abbrev) }
+  .trace_aranges  0 : { *(.trace_aranges) }
 
-. $srcdir/scripttempl/DWARF.sc
+  /* DWARF 3 */
+  .debug_pubtypes 0 : { *(.debug_pubtypes) }
+  .debug_ranges   0 : { *(.debug_ranges) }
 
-cat <<EOF
+  /* DWARF Extension.  */
+  .debug_macro    0 : { *(.debug_macro) } 
+  
   .note : { *(.vms.note) }
 
-  /DISCARD/ : { *(.note) *(.vms_display_name_info) }
+  /DISCARD/ : { *(.note) }
 }
 EOF

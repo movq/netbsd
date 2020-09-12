@@ -1,5 +1,6 @@
 /* Address ranges.
-   Copyright (C) 1998-2019 Free Software Foundation, Inc.
+   Copyright (C) 1998, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
    Contributed by Cygnus Solutions.
 
 This file is part of the GNU Simulators.
@@ -32,7 +33,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #include <string.h>
 #endif
 
-#ifdef SIM_ARANGE_C_INCLUDED
+#define DEFINE_INLINE_P (! defined (SIM_ARANGE_C_INCLUDED))
+#define DEFINE_NON_INLINE_P defined (SIM_ARANGE_C_INCLUDED)
+
+#if DEFINE_NON_INLINE_P
 
 /* Insert a range.  */
 
@@ -190,9 +194,9 @@ frob_range (ADDR_RANGE *ar, address_word start, address_word end, int delete_p)
 
  out:
   if (new_asr)
-    free (new_asr);
+    free(new_asr);
   if (new_asr2)
-    free (new_asr2);
+    free(new_asr2);
 }
 
 /* Free T and all subtrees.  */
@@ -277,7 +281,9 @@ sim_addr_range_delete (ADDR_RANGE *ar, address_word start, address_word end)
   build_search_tree (ar);
 }
 
-#else /* SIM_ARANGE_C_INCLUDED */
+#endif /* DEFINE_NON_INLINE_P */
+
+#if DEFINE_INLINE_P
 
 SIM_ARANGE_INLINE int
 sim_addr_range_hit_p (ADDR_RANGE *ar, address_word addr)
@@ -296,4 +302,4 @@ sim_addr_range_hit_p (ADDR_RANGE *ar, address_word addr)
   return 0;
 }
 
-#endif /* SIM_ARANGE_C_INCLUDED */
+#endif /* DEFINE_INLINE_P */

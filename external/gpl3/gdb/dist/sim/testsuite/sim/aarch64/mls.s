@@ -4,8 +4,6 @@
 
 .include "testutils.inc"
 
-	.data
-	.align 4
 input:
 	.word 0x04030201
 	.word 0x08070605

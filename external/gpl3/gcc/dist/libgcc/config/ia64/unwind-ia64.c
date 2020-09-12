@@ -1,6 +1,6 @@
 /* Subroutines needed for unwinding IA-64 standard format stack frame
    info for exception handling.
-   Copyright (C) 1997-2019 Free Software Foundation, Inc.
+   Copyright (C) 1997-2013 Free Software Foundation, Inc.
    Contributed by Andrew MacLeod  <amacleod@cygnus.com>
 	          Andrew Haley  <aph@cygnus.com>
 		  David Mosberger-Tang <davidm@hpl.hp.com>
@@ -1715,10 +1715,10 @@ _Unwind_SetIP (struct _Unwind_Context *context, _Unwind_Ptr val)
   context->rp = val;
 }
 
-_Unwind_Ptr
+void *
 _Unwind_GetLanguageSpecificData (struct _Unwind_Context *context)
 {
-  return (_Unwind_Ptr)context->lsda;
+  return context->lsda;
 }
 
 _Unwind_Ptr
@@ -2165,8 +2165,7 @@ uw_init_context_1 (struct _Unwind_Context *context, void *bsp)
 
 static void __attribute__((noreturn))
 uw_install_context (struct _Unwind_Context *current __attribute__((unused)),
-		    struct _Unwind_Context *target,
-		    unsigned long frames __attribute__((unused)))
+		    struct _Unwind_Context *target)
 {
   unw_word ireg_buf[4], ireg_nat = 0, ireg_pr = 0;
   unw_word saved_lc;
@@ -2445,16 +2444,6 @@ uw_identify_context (struct _Unwind_Context *context)
 {
   return _Unwind_GetIP (context);
 }
-
-#ifdef __NetBSD__
-/* dummy for bootstrapping purposes */
-struct unw_table_entry *
-_Unwind_FindTableEntry (void *pc, unw_word *segment_base,
-			unw_word *gp, struct unw_table_entry *ent)
-{
-	return NULL;
-}
-#endif
 
 #include "unwind.inc"
 

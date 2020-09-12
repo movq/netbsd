@@ -1,6 +1,6 @@
 // decimal classes -*- C++ -*-
 
-// Copyright (C) 2009-2019 Free Software Foundation, Inc.
+// Copyright (C) 2009 Free Software Foundation, Inc.
 
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,9 +22,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file decimal/decimal.h
+/** @file bits/decimal.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{decimal}
+ *  You should not attempt to use it directly.
  */
 
 // ISO/IEC TR 24733
@@ -35,10 +35,8 @@
 
 #pragma GCC system_header
 
-namespace std _GLIBCXX_VISIBILITY(default)
+namespace std
 {
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
-
 namespace decimal
 {
   // ISO/IEC TR 24733  3.2.[234].1  Construct/copy/destroy.
@@ -288,7 +286,7 @@ namespace decimal
   inline _Tp operator _Op(_Tp __rhs)		\
   {						\
     _Tp __tmp;					\
-    __tmp.__setval(_Op __rhs.__getval());	\
+    __tmp.__setval(0 _Op __rhs.__getval());	\
     return __tmp;				\
   }
 
@@ -461,9 +459,8 @@ namespace decimal
 #undef _DEFINE_DECIMAL_COMPARISON_LHS
 #undef _DEFINE_DECIMAL_COMPARISON_RHS
 #undef _DEFINE_DECIMAL_COMPARISONS
-} // namespace decimal
 
-_GLIBCXX_END_NAMESPACE_VERSION
+} // namespace decimal
 } // namespace std
 
 #endif /* _GLIBCXX_DECIMAL_IMPL */

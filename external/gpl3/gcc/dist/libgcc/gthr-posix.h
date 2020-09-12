@@ -1,6 +1,6 @@
 /* Threads compatibility routines for libgcc2 and libobjc.  */
 /* Compile this one with gcc.  */
-/* Copyright (C) 1997-2019 Free Software Foundation, Inc.
+/* Copyright (C) 1997-2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -87,8 +87,7 @@ typedef struct timespec __gthread_time_t;
 #  define __gthrw_pragma(pragma)
 # endif
 # define __gthrw2(name,name2,type) \
-  static __typeof(type) name \
-    __attribute__ ((__weakref__(#name2), __copy__ (type))); \
+  static __typeof(type) name __attribute__ ((__weakref__(#name2))); \
   __gthrw_pragma(weak type)
 # define __gthrw_(name) __gthrw_ ## name
 #else
@@ -165,12 +164,9 @@ __gthrw(pthread_setschedparam)
    working interface is always exposed.  On FreeBSD 6 and later, libc also
    exposes a dummy POSIX threads interface, similar to what Solaris 2.6 up
    to 9 does.  FreeBSD >= 700014 even provides a pthread_cancel stub in libc,
-   which means the alternate __gthread_active_p below cannot be used there. 
-   On NetBSD, linking with pthreads but without calling pthread_create()
-   makes std::call_once() so we do the same.
-*/
+   which means the alternate __gthread_active_p below cannot be used there.  */
 
-#if defined(__FreeBSD__) || (defined(__sun) && defined(__svr4__)) || defined(__NetBSD__)
+#if defined(__FreeBSD__) || (defined(__sun) && defined(__svr4__))
 
 static volatile int __gthread_active = -1;
 
@@ -213,7 +209,7 @@ __gthread_active_p (void)
   return __gthread_active_latest_value != 0;
 }
 
-#else /* neither FreeBSD nor Solaris nor NetBSD */
+#else /* neither FreeBSD nor Solaris */
 
 /* For a program to be multi-threaded the only thing that it certainly must
    be using is pthread_create.  However, there may be other libraries that
@@ -255,7 +251,7 @@ __gthread_active_p (void)
   return __gthread_active_ptr != 0;
 }
 
-#endif /* FreeBSD or Solaris or NetBSD */
+#endif /* FreeBSD or Solaris */
 
 #else /* not SUPPORTS_WEAK */
 

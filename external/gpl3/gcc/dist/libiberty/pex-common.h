@@ -1,6 +1,7 @@
 /* Utilities to execute a program in a subprocess (possibly linked by pipes
    with other subprocesses), and wait for it.  Shared logic.
-   Copyright (C) 1996-2019 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2003, 2004
+   Free Software Foundation, Inc.
 
 This file is part of the libiberty library.
 Libiberty is free software; you can redistribute it and/or
@@ -103,7 +104,7 @@ struct pex_funcs
   /* Open file NAME for writing.  If BINARY is non-zero, open in
      binary mode.  Return >= 0 on success, -1 on error.  */
   int (*open_write) (struct pex_obj *, const char */* name */,
-                     int /* binary */, int /* append */);
+                     int /* binary */);
   /* Execute a child process.  FLAGS, EXECUTABLE, ARGV, ERR are from
      pex_run.  IN, OUT, ERRDES, TOCLOSE are all descriptors, from
      open_read, open_write, or pipe, or they are one of STDIN_FILE_NO,

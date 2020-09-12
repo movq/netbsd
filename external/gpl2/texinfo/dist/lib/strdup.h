@@ -1,4 +1,4 @@
-/*	$NetBSD: strdup.h,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: strdup.h,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* strdup.h -- duplicate a string
    Copyright (C) 2004 Free Software Foundation, Inc.

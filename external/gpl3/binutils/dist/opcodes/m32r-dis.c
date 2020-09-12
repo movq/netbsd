@@ -1,11 +1,11 @@
-/* DO NOT EDIT!  -*- buffer-read-only: t -*- vi:set ro:  */
 /* Disassembler interface for targets using CGEN. -*- C -*-
    CGEN: Cpu tools GENerator
 
    THIS FILE IS MACHINE GENERATED WITH CGEN.
    - the resultant file is machine generated, cgen-dis.in isn't
 
-   Copyright (C) 1996-2020 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of libopcodes.
 
@@ -29,7 +29,7 @@
 #include "sysdep.h"
 #include <stdio.h>
 #include "ansidecl.h"
-#include "disassemble.h"
+#include "dis-asm.h"
 #include "bfd.h"
 #include "symcat.h"
 #include "libiberty.h"
@@ -59,38 +59,15 @@ static int read_insn
 /* -- disassembler routines inserted here.  */
 
 /* -- dis.c */
+/* Immediate values are prefixed with '#'.  */
 
-/* Print signed operands with '#' prefixes.  */
-
-static void
-print_signed_with_hash_prefix (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
-			       void * dis_info,
-			       long value,
-			       unsigned int attrs ATTRIBUTE_UNUSED,
-			       bfd_vma pc ATTRIBUTE_UNUSED,
-			       int length ATTRIBUTE_UNUSED)
-{
-  disassemble_info *info = (disassemble_info *) dis_info;
-
-  (*info->fprintf_func) (info->stream, "#");
-  (*info->fprintf_func) (info->stream, "%ld", value);
-}
-
-/* Print unsigned operands with '#' prefixes.  */
-
-static void
-print_unsigned_with_hash_prefix (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
-				 void * dis_info,
-				 long value,
-				 unsigned int attrs ATTRIBUTE_UNUSED,
-				 bfd_vma pc ATTRIBUTE_UNUSED,
-				 int length ATTRIBUTE_UNUSED)
-{
-  disassemble_info *info = (disassemble_info *) dis_info;
-
-  (*info->fprintf_func) (info->stream, "#");
-  (*info->fprintf_func) (info->stream, "0x%lx", value);
-}
+#define CGEN_PRINT_NORMAL(cd, info, value, attrs, pc, length)	\
+  do								\
+    {								\
+      if (CGEN_BOOL_ATTR ((attrs), CGEN_OPERAND_HASH_PREFIX))	\
+	(*info->fprintf_func) (info->stream, "#");		\
+    }								\
+  while (0)
 
 /* Handle '#' prefixes as operands.  */
 
@@ -229,16 +206,16 @@ m32r_cgen_print_operand (CGEN_CPU_DESC cd,
       print_normal (cd, info, fields->f_hi16, 0|(1<<CGEN_OPERAND_SIGN_OPT), pc, length);
       break;
     case M32R_OPERAND_IMM1 :
-      print_unsigned_with_hash_prefix (cd, info, fields->f_imm1, 0, pc, length);
+      print_normal (cd, info, fields->f_imm1, 0|(1<<CGEN_OPERAND_HASH_PREFIX), pc, length);
       break;
     case M32R_OPERAND_SCR :
       print_keyword (cd, info, & m32r_cgen_opval_cr_names, fields->f_r2, 0);
       break;
     case M32R_OPERAND_SIMM16 :
-      print_signed_with_hash_prefix (cd, info, fields->f_simm16, 0|(1<<CGEN_OPERAND_SIGNED), pc, length);
+      print_normal (cd, info, fields->f_simm16, 0|(1<<CGEN_OPERAND_SIGNED)|(1<<CGEN_OPERAND_HASH_PREFIX), pc, length);
       break;
     case M32R_OPERAND_SIMM8 :
-      print_signed_with_hash_prefix (cd, info, fields->f_simm8, 0|(1<<CGEN_OPERAND_SIGNED), pc, length);
+      print_normal (cd, info, fields->f_simm8, 0|(1<<CGEN_OPERAND_SIGNED)|(1<<CGEN_OPERAND_HASH_PREFIX), pc, length);
       break;
     case M32R_OPERAND_SLO16 :
       print_normal (cd, info, fields->f_simm16, 0|(1<<CGEN_OPERAND_SIGNED), pc, length);
@@ -253,22 +230,22 @@ m32r_cgen_print_operand (CGEN_CPU_DESC cd,
       print_keyword (cd, info, & m32r_cgen_opval_gr_names, fields->f_r2, 0);
       break;
     case M32R_OPERAND_UIMM16 :
-      print_unsigned_with_hash_prefix (cd, info, fields->f_uimm16, 0, pc, length);
+      print_normal (cd, info, fields->f_uimm16, 0|(1<<CGEN_OPERAND_HASH_PREFIX), pc, length);
       break;
     case M32R_OPERAND_UIMM24 :
-      print_address (cd, info, fields->f_uimm24, 0|(1<<CGEN_OPERAND_RELOC)|(1<<CGEN_OPERAND_ABS_ADDR), pc, length);
+      print_address (cd, info, fields->f_uimm24, 0|(1<<CGEN_OPERAND_HASH_PREFIX)|(1<<CGEN_OPERAND_RELOC)|(1<<CGEN_OPERAND_ABS_ADDR), pc, length);
       break;
     case M32R_OPERAND_UIMM3 :
-      print_unsigned_with_hash_prefix (cd, info, fields->f_uimm3, 0, pc, length);
+      print_normal (cd, info, fields->f_uimm3, 0|(1<<CGEN_OPERAND_HASH_PREFIX), pc, length);
       break;
     case M32R_OPERAND_UIMM4 :
-      print_unsigned_with_hash_prefix (cd, info, fields->f_uimm4, 0, pc, length);
+      print_normal (cd, info, fields->f_uimm4, 0|(1<<CGEN_OPERAND_HASH_PREFIX), pc, length);
       break;
     case M32R_OPERAND_UIMM5 :
-      print_unsigned_with_hash_prefix (cd, info, fields->f_uimm5, 0, pc, length);
+      print_normal (cd, info, fields->f_uimm5, 0|(1<<CGEN_OPERAND_HASH_PREFIX), pc, length);
       break;
     case M32R_OPERAND_UIMM8 :
-      print_unsigned_with_hash_prefix (cd, info, fields->f_uimm8, 0, pc, length);
+      print_normal (cd, info, fields->f_uimm8, 0|(1<<CGEN_OPERAND_HASH_PREFIX), pc, length);
       break;
     case M32R_OPERAND_ULO16 :
       print_normal (cd, info, fields->f_uimm16, 0, pc, length);
@@ -276,14 +253,13 @@ m32r_cgen_print_operand (CGEN_CPU_DESC cd,
 
     default :
       /* xgettext:c-format */
-      opcodes_error_handler
-	(_("internal error: unrecognized field %d while printing insn"),
-	 opindex);
-      abort ();
+      fprintf (stderr, _("Unrecognized field %d while printing insn.\n"),
+	       opindex);
+    abort ();
   }
 }
 
-cgen_print_fn * const m32r_cgen_print_handlers[] =
+cgen_print_fn * const m32r_cgen_print_handlers[] = 
 {
   print_insn_normal,
 };
@@ -311,6 +287,10 @@ print_normal (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
 {
   disassemble_info *info = (disassemble_info *) dis_info;
 
+#ifdef CGEN_PRINT_NORMAL
+  CGEN_PRINT_NORMAL (cd, info, value, attrs, pc, length);
+#endif
+
   /* Print the operand as directed by the attributes.  */
   if (CGEN_BOOL_ATTR (attrs, CGEN_OPERAND_SEM_ONLY))
     ; /* nothing to do */
@@ -331,6 +311,10 @@ print_address (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
 	       int length ATTRIBUTE_UNUSED)
 {
   disassemble_info *info = (disassemble_info *) dis_info;
+
+#ifdef CGEN_PRINT_ADDRESS
+  CGEN_PRINT_ADDRESS (cd, info, value, attrs, pc, length);
+#endif
 
   /* Print the operand as directed by the attributes.  */
   if (CGEN_BOOL_ATTR (attrs, CGEN_OPERAND_SEM_ONLY))
@@ -473,7 +457,7 @@ print_insn (CGEN_CPU_DESC cd,
       int length;
       unsigned long insn_value_cropped;
 
-#ifdef CGEN_VALIDATE_INSN_SUPPORTED
+#ifdef CGEN_VALIDATE_INSN_SUPPORTED 
       /* Not needed as insn shouldn't be in hash lists if not supported.  */
       /* Supported by this cpu?  */
       if (! m32r_cgen_insn_supported (cd, insn))
@@ -491,7 +475,7 @@ print_insn (CGEN_CPU_DESC cd,
          relevant part from the buffer. */
       if ((unsigned) (CGEN_INSN_BITSIZE (insn) / 8) < buflen &&
 	  (unsigned) (CGEN_INSN_BITSIZE (insn) / 8) <= sizeof (unsigned long))
-	insn_value_cropped = bfd_get_bits (buf, CGEN_INSN_BITSIZE (insn),
+	insn_value_cropped = bfd_get_bits (buf, CGEN_INSN_BITSIZE (insn), 
 					   info->endian == BFD_ENDIAN_BIG);
       else
 	insn_value_cropped = insn_value;
@@ -610,7 +594,7 @@ print_insn_m32r (bfd_vma pc, disassemble_info *info)
   arch = info->arch;
   if (arch == bfd_arch_unknown)
     arch = CGEN_BFD_ARCH;
-
+   
   /* There's no standard way to compute the machine or isa number
      so we leave it to the target.  */
 #ifdef CGEN_COMPUTE_MACH
@@ -630,7 +614,7 @@ print_insn_m32r (bfd_vma pc, disassemble_info *info)
     cgen_bitset_add (isa, CGEN_COMPUTE_ISA (info));
   }
 #else
-  isa = info->private_data;
+  isa = info->insn_sets;
 #endif
 
   /* If we've switched cpu's, try to find a handle we've used before */
@@ -651,7 +635,7 @@ print_insn_m32r (bfd_vma pc, disassemble_info *info)
 	      break;
 	    }
 	}
-    }
+    } 
 
   /* If we haven't initialized yet, initialize the opcode table.  */
   if (! cd)

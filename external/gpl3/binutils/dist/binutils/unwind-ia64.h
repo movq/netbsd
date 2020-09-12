@@ -1,5 +1,5 @@
 /* unwind-ia64.h -- dump IA-64 unwind info.
-   Copyright (C) 2000-2020 Free Software Foundation, Inc.
+   Copyright 2000, 2001, 2002, 2003, 2007 Free Software Foundation, Inc.
 	Contributed by David Mosberger-Tang <davidm@hpl.hp.com>
 
    This file is part of GNU Binutils.
@@ -29,4 +29,4 @@
 #define UNW_FLAG_UHANDLER(x)	((x) & 0x0000000200000000LL)
 #define UNW_LENGTH(x)		((x) & 0x00000000ffffffffLL)
 
-extern const unsigned char *unw_decode (const unsigned char *, int, void *, const unsigned char *);
+extern const unsigned char *unw_decode (const unsigned char *, int, void *);

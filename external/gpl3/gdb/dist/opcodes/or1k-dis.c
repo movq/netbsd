@@ -1,11 +1,10 @@
-/* DO NOT EDIT!  -*- buffer-read-only: t -*- vi:set ro:  */
 /* Disassembler interface for targets using CGEN. -*- C -*-
    CGEN: Cpu tools GENerator
 
    THIS FILE IS MACHINE GENERATED WITH CGEN.
    - the resultant file is machine generated, cgen-dis.in isn't
 
-   Copyright (C) 1996-2019 Free Software Foundation, Inc.
+   Copyright (C) 1996-2015 Free Software Foundation, Inc.
 
    This file is part of libopcodes.
 
@@ -29,7 +28,7 @@
 #include "sysdep.h"
 #include <stdio.h>
 #include "ansidecl.h"
-#include "disassemble.h"
+#include "dis-asm.h"
 #include "bfd.h"
 #include "symcat.h"
 #include "libiberty.h"
@@ -90,9 +89,6 @@ or1k_cgen_print_operand (CGEN_CPU_DESC cd,
 
   switch (opindex)
     {
-    case OR1K_OPERAND_DISP21 :
-      print_address (cd, info, fields->f_disp21, 0|(1<<CGEN_OPERAND_ABS_ADDR), pc, length);
-      break;
     case OR1K_OPERAND_DISP26 :
       print_address (cd, info, fields->f_disp26, 0|(1<<CGEN_OPERAND_PCREL_ADDR), pc, length);
       break;
@@ -141,14 +137,13 @@ or1k_cgen_print_operand (CGEN_CPU_DESC cd,
 
     default :
       /* xgettext:c-format */
-      opcodes_error_handler
-	(_("internal error: unrecognized field %d while printing insn"),
-	 opindex);
-      abort ();
+      fprintf (stderr, _("Unrecognized field %d while printing insn.\n"),
+	       opindex);
+    abort ();
   }
 }
 
-cgen_print_fn * const or1k_cgen_print_handlers[] =
+cgen_print_fn * const or1k_cgen_print_handlers[] = 
 {
   print_insn_normal,
 };
@@ -338,7 +333,7 @@ print_insn (CGEN_CPU_DESC cd,
       int length;
       unsigned long insn_value_cropped;
 
-#ifdef CGEN_VALIDATE_INSN_SUPPORTED
+#ifdef CGEN_VALIDATE_INSN_SUPPORTED 
       /* Not needed as insn shouldn't be in hash lists if not supported.  */
       /* Supported by this cpu?  */
       if (! or1k_cgen_insn_supported (cd, insn))
@@ -356,7 +351,7 @@ print_insn (CGEN_CPU_DESC cd,
          relevant part from the buffer. */
       if ((unsigned) (CGEN_INSN_BITSIZE (insn) / 8) < buflen &&
 	  (unsigned) (CGEN_INSN_BITSIZE (insn) / 8) <= sizeof (unsigned long))
-	insn_value_cropped = bfd_get_bits (buf, CGEN_INSN_BITSIZE (insn),
+	insn_value_cropped = bfd_get_bits (buf, CGEN_INSN_BITSIZE (insn), 
 					   info->endian == BFD_ENDIAN_BIG);
       else
 	insn_value_cropped = insn_value;
@@ -475,7 +470,7 @@ print_insn_or1k (bfd_vma pc, disassemble_info *info)
   arch = info->arch;
   if (arch == bfd_arch_unknown)
     arch = CGEN_BFD_ARCH;
-
+   
   /* There's no standard way to compute the machine or isa number
      so we leave it to the target.  */
 #ifdef CGEN_COMPUTE_MACH
@@ -516,7 +511,7 @@ print_insn_or1k (bfd_vma pc, disassemble_info *info)
 	      break;
 	    }
 	}
-    }
+    } 
 
   /* If we haven't initialized yet, initialize the opcode table.  */
   if (! cd)

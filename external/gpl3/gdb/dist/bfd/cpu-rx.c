@@ -1,5 +1,5 @@
 /* BFD support for the RX processor.
-   Copyright (C) 2008-2019 Free Software Foundation, Inc.
+   Copyright (C) 2008, 2009 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -36,37 +36,6 @@ static const bfd_arch_info_type arch_info_struct[] =
     FALSE,			/* The default ?  */
     bfd_default_compatible,	/* Architecture comparison fn.  */
     bfd_default_scan,		/* String to architecture convert fn.  */
-    bfd_arch_default_fill,	/* Default fill.  */
-    &arch_info_struct[1]	/* Next in list.  */
-  },
-  {
-    32,				/* Bits per word.  */
-    32,				/* Bits per address.  */
-    8,				/* Bits per byte.  */
-    bfd_arch_rx,		/* Architecture.  */
-    bfd_mach_rx_v2,		/* Machine.  */
-    "rx:v2",			/* Architecture name.  */
-    "rx:v2",			/* Printable name.  */
-    3,				/* Section align power.  */
-    FALSE,			/* The default ?  */
-    bfd_default_compatible,	/* Architecture comparison fn.  */
-    bfd_default_scan,		/* String to architecture convert fn.  */
-    bfd_arch_default_fill,	/* Default fill.  */
-    &arch_info_struct[2]	/* Next in list.  */
-  },
-  {
-    32,				/* Bits per word.  */
-    32,				/* Bits per address.  */
-    8,				/* Bits per byte.  */
-    bfd_arch_rx,		/* Architecture.  */
-    bfd_mach_rx_v3,		/* Machine.  */
-    "rx:v3",			/* Architecture name.  */
-    "rx:v3",			/* Printable name.  */
-    3,				/* Section align power.  */
-    FALSE,			/* The default ?  */
-    bfd_default_compatible,	/* Architecture comparison fn.  */
-    bfd_default_scan,		/* String to architecture convert fn.  */
-    bfd_arch_default_fill,	/* Default fill.  */
     NULL			/* Next in list.  */
   },
 };
@@ -84,6 +53,5 @@ const bfd_arch_info_type bfd_rx_arch =
   TRUE,				/* The default ?  */
   bfd_default_compatible,	/* Architecture comparison fn.  */
   bfd_default_scan,		/* String to architecture convert fn.  */
-  bfd_arch_default_fill,	/* Default fill.  */
   & arch_info_struct[0],	/* Next in list.  */
 };

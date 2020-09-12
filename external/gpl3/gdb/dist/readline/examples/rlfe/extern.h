@@ -19,7 +19,7 @@
  * 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA
  *
  ****************************************************************
- * Id FAU
+ * $Id: extern.h,v 1.1 2011/09/24 19:57:00 christos Exp $ FAU
  */
 
 #if !defined(__GNUC__) || __GNUC__ < 2
@@ -27,14 +27,7 @@
 #define __attribute__(x)
 #endif
 
-#if !defined (__P)
-#  if defined (__STDC__) || defined (__GNUC__) || defined (__cplusplus)
-#    define __P(protos) protos
-#  else
-#    define __P(protos) ()
-#  endif
-#endif
-
 /* pty.c */
 extern int   OpenPTY __P((char **));
 extern void  InitPTY __P((int));
+

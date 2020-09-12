@@ -1,4 +1,4 @@
-/* Copyright (C) 2006-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 
    This file is free software; you can redistribute it and/or modify it under
    the terms of the GNU General Public License as published by the Free
@@ -14,15 +14,23 @@
    along with GCC; see the file COPYING3.  If not see
    <http://www.gnu.org/licenses/>.  */
 
-#define IN_TARGET_CODE 1
-
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "target.h"
-#include "c-family/c-common.h"
-#include "stringpool.h"
+#include "tm.h"
+#include "cpplib.h"
+#include "tree.h"
+#include "c-tree.h"
+#include "c-pragma.h"
+#include "function.h"
+#include "rtl.h"
+#include "expr.h"
+#include "tm_p.h"
 #include "langhooks.h"
+#include "insn-config.h"
+#include "insn-codes.h"
+#include "recog.h"
+#include "optabs.h"
 
 
 /* Keep the vector keywords handy for fast comparisons.  */
@@ -64,7 +72,7 @@ spu_macro_to_expand (cpp_reader *pfile, const cpp_token *tok)
       if (ident)
 	{
 	  enum rid rid_code = (enum rid)(ident->rid_code);
-	  if (cpp_macro_p (ident))
+	  if (ident->type == NT_MACRO)
 	    {
 	      (void) cpp_get_token (pfile);
 	      tok = cpp_peek_token (pfile, 0);
@@ -91,9 +99,9 @@ spu_resolve_overloaded_builtin (location_t loc, tree fndecl, void *passed_args)
 #define SCALAR_TYPE_P(t) (INTEGRAL_TYPE_P (t) \
 			  || SCALAR_FLOAT_TYPE_P (t) \
 			  || POINTER_TYPE_P (t))
-  vec<tree, va_gc> *fnargs = static_cast <vec<tree, va_gc> *> (passed_args);
-  unsigned int nargs = vec_safe_length (fnargs);
-  int new_fcode, fcode = DECL_FUNCTION_CODE (fndecl);
+  VEC(tree,gc) *fnargs = (VEC(tree,gc) *) passed_args;
+  unsigned int nargs = VEC_length (tree, fnargs);
+  int new_fcode, fcode = DECL_FUNCTION_CODE (fndecl) - END_BUILTINS;
   struct spu_builtin_description *desc;
   tree match = NULL_TREE;
 
@@ -110,7 +118,7 @@ spu_resolve_overloaded_builtin (location_t loc, tree fndecl, void *passed_args)
   for (new_fcode = fcode + 1; spu_builtins[new_fcode].type == B_INTERNAL;
        new_fcode++)
     {
-      tree decl = targetm.builtin_decl (new_fcode, true);
+      tree decl = spu_builtins[new_fcode].fndecl;
       tree params = TYPE_ARG_TYPES (TREE_TYPE (decl));
       tree param;
       bool all_scalar;
@@ -135,7 +143,7 @@ spu_resolve_overloaded_builtin (location_t loc, tree fndecl, void *passed_args)
 	      return error_mark_node;
 	    }
 
-	  var = (*fnargs)[p];
+	  var = VEC_index (tree, fnargs, p);
 
 	  if (TREE_CODE (var) == NON_LVALUE_EXPR)
 	    var = TREE_OPERAND (var, 0);
@@ -178,7 +186,7 @@ spu_resolve_overloaded_builtin (location_t loc, tree fndecl, void *passed_args)
       return error_mark_node;
     }
 
-  return build_function_call_vec (loc, vNULL, match, fnargs, NULL);
+  return build_function_call_vec (loc, match, fnargs, NULL);
 #undef SCALAR_TYPE_P
 }
 
@@ -186,26 +194,25 @@ spu_resolve_overloaded_builtin (location_t loc, tree fndecl, void *passed_args)
 void
 spu_cpu_cpp_builtins (struct cpp_reader *pfile)
 {
-  cpp_define (pfile, "__SPU__");
+  builtin_define_std ("__SPU__");
   cpp_assert (pfile, "cpu=spu");
   cpp_assert (pfile, "machine=spu");
   if (spu_arch == PROCESSOR_CELLEDP)
-    cpp_define (pfile, "__SPU_EDP__");
-  if (cpp_get_options (pfile)->lang != CLK_ASM)
-    cpp_define (pfile, "__vector=__attribute__((__spu_vector__))");
+    builtin_define_std ("__SPU_EDP__");
+  builtin_define_std ("__vector=__attribute__((__spu_vector__))");
   switch (spu_ea_model)
     {
     case 32:
-      cpp_define (pfile, "__EA32__");
+      builtin_define_std ("__EA32__");
       break;
     case 64:
-      cpp_define (pfile, "__EA64__");
+      builtin_define_std ("__EA64__");
       break;
     default:
        gcc_unreachable ();
     }
 
-  if (!flag_iso && cpp_get_options (pfile)->lang != CLK_ASM)
+  if (!flag_iso)
     {
       /* Define this when supporting context-sensitive keywords.  */
       cpp_define (pfile, "__VECTOR_KEYWORD_SUPPORTED__");

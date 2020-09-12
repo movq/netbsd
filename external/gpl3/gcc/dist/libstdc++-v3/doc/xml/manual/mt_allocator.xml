@@ -1,21 +1,24 @@
-<chapter xmlns="http://docbook.org/ns/docbook" version="5.0" 
-	 xml:id="manual.ext.allocator.mt" xreflabel="mt allocator">
+<sect1 id="manual.ext.allocator.mt" xreflabel="mt allocator">
 <?dbhtml filename="mt_allocator.html"?>
 
-<info><title>The mt_allocator</title>
+<sect1info>
   <keywordset>
-    <keyword>ISO C++</keyword>
-    <keyword>allocator</keyword>
+    <keyword>
+      ISO C++
+    </keyword>
+    <keyword>
+      allocator
+    </keyword>
   </keywordset>
-</info>
+</sect1info>
 
-
+<title>mt_allocator</title>
 
 <para>
 </para>
 
-<section xml:id="allocator.mt.intro"><info><title>Intro</title></info>
-
+<sect2 id="allocator.mt.intro">
+<title>Intro</title>
 
 <para>
   The mt allocator [hereinafter referred to simply as "the allocator"]
@@ -37,15 +40,14 @@
   view - the "inner workings" of the allocator.
 </para>
 
-</section>
+</sect2>
 
 
-<section xml:id="allocator.mt.design_issues"><info><title>Design Issues</title></info>
-<?dbhtml filename="mt_allocator_design.html"?>
+<sect2 id="allocator.mt.design_issues">
+<title>Design Issues</title>
 
-
-<section xml:id="allocator.mt.overview"><info><title>Overview</title></info>
-
+<sect3 id="allocator.mt.overview">
+<title>Overview</title>
 
 
 <para> There are three general components to the allocator: a datum
@@ -102,16 +104,15 @@ classes, namely member functions <code>allocate</code> and
 <code>deallocate</code>, plus others.
 </para>
 
-</section>
-</section>
+</sect3>
+</sect2>
 
-<section xml:id="allocator.mt.impl"><info><title>Implementation</title></info>
-<?dbhtml filename="mt_allocator_impl.html"?>
+<sect2 id="allocator.mt.impl">
+<title>Implementation</title>
 
 
-
-<section xml:id="allocator.mt.tune"><info><title>Tunable Parameters</title></info>
-
+<sect3 id="allocator.mt.tune">
+<title>Tunable Parameters</title>
 
 <para>Certain allocation parameters can be modified, or tuned. There
 exists a nested <code>struct __pool_base::_Tune</code> that contains all
@@ -165,10 +166,10 @@ int main()
 }
 </programlisting>
 
-</section>
+</sect3>
 
-<section xml:id="allocator.mt.init"><info><title>Initialization</title></info>
-
+<sect3 id="allocator.mt.init">
+<title>Initialization</title>
 
 <para>
 The static variables (pointers to freelists, tuning parameters etc)
@@ -275,14 +276,13 @@ The _S_initialize() function:
     a thread decides to return some blocks to the global freelist.
 </para>
 
-</section>
+</sect3>
 
-<section xml:id="allocator.mt.deallocation"><info><title>Deallocation Notes</title></info>
-
+<sect3 id="allocator.mt.deallocation">
+<title>Deallocation Notes</title>
 
 <para> Notes about deallocation. This allocator does not explicitly
-release memory back to the OS, but keeps its own freelists instead.
-Because of this, memory debugging programs like
+release memory. Because of this, memory debugging programs like
 valgrind or purify may notice leaks: sorry about this
 inconvenience. Operating systems will reclaim allocated memory at
 program termination anyway. If sidestepping this kind of noise is
@@ -308,17 +308,16 @@ containers, this works, as an instance of the allocator is constructed
 as part of a container's constructor. However, this assumption is
 implementation-specific, and subject to change. For an example of a
 pool that frees memory, see the following
-    <link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="http://gcc.gnu.org/viewcvs/gcc/trunk/libstdc++-v3/testsuite/ext/mt_allocator/deallocate_local-6.cc?view=markup">
-    example.</link>
+    <ulink url="http://gcc.gnu.org/viewcvs/trunk/libstdc++-v3/testsuite/ext/mt_allocator/deallocate_local-6.cc?view=markup">
+    example.</ulink>
 </para>
 
-</section>
+</sect3>
 
-</section>
+</sect2>
 
-<section xml:id="allocator.mt.example_single"><info><title>Single Thread Example</title></info>
-<?dbhtml filename="mt_allocator_ex_single.html"?>
-
+<sect2 id="allocator.mt.example_single">
+<title>Single Thread Example</title>
 
 <para>
 Let's start by describing how the data on a freelist is laid out in memory.
@@ -409,11 +408,10 @@ after a set of performance measurements that showed that this is roughly 10%
 faster than maintaining a set of "last pointers" as well.
 </para>
 
-</section>
+</sect2>
 
-<section xml:id="allocator.mt.example_multi"><info><title>Multiple Thread Example</title></info>
-<?dbhtml filename="mt_allocator_ex_multi.html"?>
-
+<sect2 id="allocator.mt.example_multi">
+<title>Multiple Thread Example</title>
 
 <para>
 In the ST example we never used the thread_id variable present in each block.
@@ -551,6 +549,6 @@ be improved to further reduce the risk of blocks being "bounced back
 and forth" between freelists.
 </para>
 
-</section>
+</sect2>
 
-</chapter>
+</sect1>

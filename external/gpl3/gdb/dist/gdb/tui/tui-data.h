@@ -1,6 +1,7 @@
 /* TUI data manipulation routines.
 
-   Copyright (C) 1998-2019 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2004, 2006, 2007, 2008, 2009,
+   2010, 2011 Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
 
@@ -19,8 +20,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef TUI_TUI_DATA_H
-#define TUI_TUI_DATA_H
+#ifndef TUI_DATA_H
+#define TUI_DATA_H
 
 #include "tui/tui.h"	/* For enum tui_win_type.  */
 #include "gdb_curses.h"	/* For WINDOW.  */
@@ -31,11 +32,6 @@ struct tui_point
   int x, y;
 };
 
-struct tui_win_element;
-
-/* This describes the content of the window.  */
-typedef struct tui_win_element **tui_win_content;
-
 /* Generic window information.  */
 struct tui_gen_win_info
 {
@@ -44,7 +40,7 @@ struct tui_gen_win_info
   int width;		    /* Window width.  */
   int height;		    /* Window height.  */
   struct tui_point origin;  /* Origin of window.  */
-  tui_win_content content;  /* Content of window.  */
+  void **content;	    /* Content of window.  */
   int content_size;	    /* Size of content (# of elements).  */
   int content_in_use;	    /* Can it be used, or is it already used?  */
   int viewport_height;	    /* Viewport height.  */
@@ -60,10 +56,10 @@ struct tui_gen_win_info
 #define NO_REGS_STRING          "[ Register Values Unavailable ]"
 #define NO_DATA_STRING          "[ No Data Values Displayed ]"
 #define MAX_CONTENT_COUNT       100
-#define SRC_NAME                "src"
-#define CMD_NAME                "cmd"
-#define DATA_NAME               "regs"
-#define DISASSEM_NAME           "asm"
+#define SRC_NAME                "SRC"
+#define CMD_NAME                "CMD"
+#define DATA_NAME               "REGS"
+#define DISASSEM_NAME           "ASM"
 #define TUI_NULL_STR            ""
 #define DEFAULT_HISTORY_COUNT	25
 #define BOX_WINDOW              TRUE
@@ -80,7 +76,7 @@ struct tui_gen_win_info
 
 /* Strings to display in the TUI status line.  */
 #define PROC_PREFIX             "In: "
-#define LINE_PREFIX             "L"
+#define LINE_PREFIX             "Line: "
 #define PC_PREFIX               "PC: "
 #define SINGLE_KEY              "(SingleKey)"
 
@@ -90,7 +86,16 @@ struct tui_gen_win_info
 				   numbers.  */
 #define MIN_PROC_WIDTH    12
 #define MAX_TARGET_WIDTH  10
-#define MAX_PID_WIDTH     19
+#define MAX_PID_WIDTH     14
+
+#define TUI_FLOAT_REGS_NAME                  "$FREGS"
+#define TUI_FLOAT_REGS_NAME_LOWER            "$fregs"
+#define TUI_GENERAL_REGS_NAME                "$GREGS"
+#define TUI_GENERAL_REGS_NAME_LOWER          "$gregs"
+#define TUI_SPECIAL_REGS_NAME                "$SREGS"
+#define TUI_SPECIAL_REGS_NAME_LOWER          "$sregs"
+#define TUI_GENERAL_SPECIAL_REGS_NAME        "$REGS"
+#define TUI_GENERAL_SPECIAL_REGS_NAME_LOWER  "$regs"
 
 /* Scroll direction enum.  */
 enum tui_scroll_direction
@@ -130,16 +135,21 @@ enum tui_data_type
   TUI_STRUCT
 };
 
-enum tui_line_or_address_kind
+/* Types of register displays.  */
+enum tui_register_display_type
 {
-  LOA_LINE,
-  LOA_ADDRESS
+  TUI_UNDEFINED_REGS,
+  TUI_GENERAL_REGS,
+  TUI_SFLOAT_REGS,
+  TUI_DFLOAT_REGS,
+  TUI_SPECIAL_REGS,
+  TUI_GENERAL_AND_SPECIAL_REGS
 };
 
 /* Structure describing source line or line address.  */
 struct tui_line_or_address
 {
-  enum tui_line_or_address_kind loa;
+  enum { LOA_LINE, LOA_ADDRESS } loa;
   union
     {
       int line_no;
@@ -152,6 +162,8 @@ struct tui_layout_def
 {
   enum tui_win_type display_mode;
   int split;
+  enum tui_register_display_type regs_display_type;
+  enum tui_register_display_type float_regs_display_type;
 };
 
 /* Elements in the Source/Disassembly Window.  */
@@ -192,8 +204,7 @@ struct tui_command_element
 /* Elements in the locator window content.  */
 struct tui_locator_element
 {
-  /* Resolved absolute filename as returned by symtab_to_fullname.  */
-  char full_name[MAX_LOCATOR_ELEMENT_LEN];
+  char file_name[MAX_LOCATOR_ELEMENT_LEN];
   char proc_name[MAX_LOCATOR_ELEMENT_LEN];
   int line_no;
   CORE_ADDR addr;
@@ -229,8 +240,14 @@ union tui_which_element
 
 struct tui_win_element
 {
+  int highlight;
   union tui_which_element which_element;
 };
+
+
+/* This describes the content of the window.  */
+typedef struct tui_win_element **tui_win_content;
+
 
 /* This struct defines the specific information about a data display
    window.  */
@@ -240,6 +257,7 @@ struct tui_data_info
   int data_content_count;
   tui_win_content regs_content;	/* Start of regs display content.  */
   int regs_content_count;
+  enum tui_register_display_type regs_display_type;
   int regs_column_count;
   int display_regs;		/* Should regs be displayed at all?  */
   struct reggroup *current_group;
@@ -253,10 +271,7 @@ struct tui_source_info
   struct tui_gen_win_info *execution_info;
   int horizontal_offset;	/* Used for horizontal scroll.  */
   struct tui_line_or_address start_line_or_addr;
-
-  /* It is the resolved form as returned by symtab_to_fullname.  */
-  char *fullname;
-
+  char *filename;
   /* Architecture associated with code at this location.  */
   struct gdbarch *gdbarch;
 };
@@ -264,6 +279,8 @@ struct tui_source_info
 
 struct tui_command_info
 {
+  int cur_line;			/* The current line position.  */
+  int curch;			/* The current cursor position.  */
   int start_line;
 };
 
@@ -277,6 +294,7 @@ struct tui_win_info
     struct tui_source_info source_info;
     struct tui_data_info data_display_info;
     struct tui_command_info command_info;
+    void *opaque;
   }
   detail;
   int can_highlight;	/* Can this window ever be highlighted?  */
@@ -291,7 +309,7 @@ extern void tui_set_win_highlight (struct tui_win_info *win_info,
 
 
 /* Global Data.  */
-extern struct tui_win_info *tui_win_list[MAX_MAJOR_WINDOWS];
+extern struct tui_win_info *(tui_win_list[MAX_MAJOR_WINDOWS]);
 
 #define TUI_SRC_WIN     tui_win_list[SRC_WIN]
 #define TUI_DISASM_WIN	tui_win_list[DISASSEM_WIN]
@@ -315,14 +333,16 @@ extern void tui_free_data_content (tui_win_content, int);
 extern void tui_free_all_source_wins_content (void);
 extern void tui_del_window (struct tui_win_info *);
 extern void tui_del_data_windows (tui_win_content, int);
-extern struct tui_win_info *tui_partial_win_by_name (const char *);
-extern const char *tui_win_name (const struct tui_gen_win_info *);
+extern struct tui_win_info *tui_partial_win_by_name (char *);
+extern char *tui_win_name (struct tui_gen_win_info *);
 extern enum tui_layout_type tui_current_layout (void);
 extern void tui_set_current_layout_to (enum tui_layout_type);
 extern int tui_term_height (void);
 extern void tui_set_term_height_to (int);
 extern int tui_term_width (void);
 extern void tui_set_term_width_to (int);
+extern void tui_set_gen_win_origin (struct tui_gen_win_info *, 
+				    int, int);
 extern struct tui_gen_win_info *tui_locator_win_info_ptr (void);
 extern struct tui_gen_win_info *tui_source_exec_info_win_ptr (void);
 extern struct tui_gen_win_info *tui_disassem_exec_info_win_ptr (void);
@@ -331,6 +351,8 @@ extern void tui_clear_source_windows (void);
 extern void tui_clear_source_windows_detail (void);
 extern void tui_clear_win_detail (struct tui_win_info *);
 extern void tui_add_to_source_windows (struct tui_win_info *);
+extern int tui_default_tab_len (void);
+extern void tui_set_default_tab_len (int);
 extern struct tui_win_info *tui_win_with_focus (void);
 extern void tui_set_win_with_focus (struct tui_win_info *);
 extern struct tui_layout_def *tui_layout_def (void);
@@ -342,6 +364,4 @@ extern struct tui_win_info *tui_prev_win (struct tui_win_info *);
 
 extern void tui_add_to_source_windows (struct tui_win_info *);
 
-extern unsigned int tui_tab_width;
-
-#endif /* TUI_TUI_DATA_H */
+#endif /* TUI_DATA_H */

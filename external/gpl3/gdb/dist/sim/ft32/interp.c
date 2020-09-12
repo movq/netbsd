@@ -1,6 +1,6 @@
 /* Simulator for the FT32 processor
 
-   Copyright (C) 2008-2019 Free Software Foundation, Inc.
+   Copyright (C) 2008-2015 Free Software Foundation, Inc.
    Contributed by FTDI <support@ftdichip.com>
 
    This file is part of simulators.
@@ -169,8 +169,6 @@ static uint32_t cpu_mem_read (SIM_DESC sd, uint32_t dw, uint32_t ea)
       /* Simulate some IO devices */
       switch (ea)
 	{
-	case 0x10000:
-	  return getchar ();
 	case 0x1fff4:
 	  /* Read the simulator cycle timer.  */
 	  return cpu->state.cycles / 100;
@@ -205,12 +203,8 @@ static void cpu_mem_write (SIM_DESC sd, uint32_t dw, uint32_t ea, uint32_t d)
 	  cpu->state.pm_addr = d;
 	  break;
 	case 0x1fc88:
-	  if (cpu->state.pm_unlock)
-	    {
-	      /* Write to PM.  */
-	      ft32_write_item (sd, dw, cpu->state.pm_addr, d);
-	      cpu->state.pm_addr += 4;
-	    }
+	  /* Write to PM */
+	  ft32_write_item (sd, dw, cpu->state.pm_addr, d);
 	  break;
 	case 0x1fffc:
 	  /* Normal exit.  */
@@ -332,7 +326,7 @@ step_once (SIM_DESC sd)
   uint32_t pa;
   uint32_t aa;
   uint32_t k16;
-  uint32_t k15;
+  uint32_t k8;
   uint32_t al;
   uint32_t r_1v;
   uint32_t rimmv;
@@ -340,23 +334,15 @@ step_once (SIM_DESC sd)
   uint32_t bit_len;
   uint32_t upper;
   uint32_t insnpc;
-  unsigned int sc[2];
-  int isize;
 
+  if (cpu->state.cycles >= cpu->state.next_tick_cycle)
+    {
+      cpu->state.next_tick_cycle += 100000;
+      ft32_push (sd, cpu->state.pc);
+      cpu->state.pc = 12;  /* interrupt 1.  */
+    }
   inst = ft32_read_item (sd, 2, cpu->state.pc);
   cpu->state.cycles += 1;
-
-  if ((STATE_ARCHITECTURE (sd)->mach == bfd_mach_ft32b)
-      && ft32_decode_shortcode (cpu->state.pc, inst, sc))
-    {
-      if ((cpu->state.pc & 3) == 0)
-        inst = sc[0];
-      else
-        inst = sc[1];
-      isize = 2;
-    }
-  else
-    isize = 4;
 
   /* Handle "call 8" (which is FT32's "break" equivalent) here.  */
   if (inst == 0x00340002)
@@ -380,11 +366,7 @@ step_once (SIM_DESC sd)
   pa   =              (inst >> FT32_FLD_PA_BIT) & LSBS (FT32_FLD_PA_SIZ);
   aa   =              (inst >> FT32_FLD_AA_BIT) & LSBS (FT32_FLD_AA_SIZ);
   k16  =              (inst >> FT32_FLD_K16_BIT) & LSBS (FT32_FLD_K16_SIZ);
-  k15  =              (inst >> FT32_FLD_K15_BIT) & LSBS (FT32_FLD_K15_SIZ);
-  if (k15 & 0x80)
-    k15 ^= 0x7f00;
-  if (k15 & 0x4000)
-    k15 -= 0x8000;
+  k8   = nsigned (8,  (inst >> FT32_FLD_K8_BIT) & LSBS (FT32_FLD_K8_SIZ));
   al   =              (inst >> FT32_FLD_AL_BIT) & LSBS (FT32_FLD_AL_SIZ);
 
   r_1v = cpu->state.regs[r_1];
@@ -398,7 +380,7 @@ step_once (SIM_DESC sd)
   upper = (inst >> 27);
 
   insnpc = cpu->state.pc;
-  cpu->state.pc += isize;
+  cpu->state.pc += 4;
   switch (upper)
     {
     case FT32_PAT_TOC:
@@ -511,7 +493,7 @@ step_once (SIM_DESC sd)
       break;
 
     case FT32_PAT_LPMI:
-      cpu->state.regs[r_d] = ft32_read_item (sd, dw, cpu->state.regs[r_1] + k15);
+      cpu->state.regs[r_d] = ft32_read_item (sd, dw, cpu->state.regs[r_1] + k8);
       cpu->state.cycles += 1;
       break;
 
@@ -520,7 +502,7 @@ step_once (SIM_DESC sd)
       break;
 
     case FT32_PAT_STI:
-      cpu_mem_write (sd, dw, cpu->state.regs[r_d] + k15, cpu->state.regs[r_1]);
+      cpu_mem_write (sd, dw, cpu->state.regs[r_d] + k8, cpu->state.regs[r_1]);
       break;
 
     case FT32_PAT_LDA:
@@ -529,7 +511,7 @@ step_once (SIM_DESC sd)
       break;
 
     case FT32_PAT_LDI:
-      cpu->state.regs[r_d] = cpu_mem_read (sd, dw, cpu->state.regs[r_1] + k15);
+      cpu->state.regs[r_d] = cpu_mem_read (sd, dw, cpu->state.regs[r_1] + k8);
       cpu->state.cycles += 1;
       break;
 
@@ -546,8 +528,8 @@ step_once (SIM_DESC sd)
     case FT32_PAT_EXI:
       {
 	uint32_t tmp;
-	tmp = cpu_mem_read (sd, dw, cpu->state.regs[r_1] + k15);
-	cpu_mem_write (sd, dw, cpu->state.regs[r_1] + k15, cpu->state.regs[r_d]);
+	tmp = cpu_mem_read (sd, dw, cpu->state.regs[r_1] + k8);
+	cpu_mem_write (sd, dw, cpu->state.regs[r_1] + k8, cpu->state.regs[r_d]);
 	cpu->state.regs[r_d] = tmp;
 	cpu->state.cycles += 1;
       }
@@ -614,7 +596,7 @@ step_once (SIM_DESC sd)
 	    uint32_t src = r_1v;
 	    uint32_t dst = cpu->state.regs[r_d];
 	    uint32_t i;
-	    for (i = 0; i < (rimmv & 0x7fff); i++)
+	    for (i = 0; i < rimmv; i++)
 	      PUT_BYTE (dst + i, GET_BYTE (src + i));
 	  }
 	  break;
@@ -633,7 +615,7 @@ step_once (SIM_DESC sd)
 	    /* memset instruction.  */
 	    uint32_t dst = cpu->state.regs[r_d];
 	    uint32_t i;
-	    for (i = 0; i < (rimmv & 0x7fff); i++)
+	    for (i = 0; i < rimmv; i++)
 	      PUT_BYTE (dst + i, r_1v);
 	  }
 	  break;
@@ -800,7 +782,7 @@ SIM_DESC
 sim_open (SIM_OPEN_KIND kind,
 	  host_callback *cb,
 	  struct bfd *abfd,
-	  char * const *argv)
+	  char **argv)
 {
   char c;
   size_t i;
@@ -819,7 +801,9 @@ sim_open (SIM_OPEN_KIND kind,
       return 0;
     }
 
-  /* The parser will print an error message for us, so we silently return.  */
+  /* getopt will print the error message so we just have to exit if this fails.
+     FIXME: Hmmm...  in the case of gdb we need getopt to call
+     print_filtered.  */
   if (sim_parse_args (sd, argv) != SIM_RC_OK)
     {
       free_state (sd);
@@ -872,11 +856,17 @@ sim_open (SIM_OPEN_KIND kind,
   return sd;
 }
 
+void
+sim_close (SIM_DESC sd, int quitting)
+{
+  sim_module_uninstall (sd);
+}
+
 SIM_RC
 sim_create_inferior (SIM_DESC sd,
 		     struct bfd *abfd,
-		     char * const *argv,
-		     char * const *env)
+		     char **argv,
+		     char **env)
 {
   uint32_t addr;
   sim_cpu *cpu = STATE_CPU (sd, 0);
@@ -887,11 +877,7 @@ sim_create_inferior (SIM_DESC sd,
   else
     addr = 0;
 
-  /* Standalone mode (i.e. `run`) will take care of the argv for us in
-     sim_open() -> sim_parse_args().  But in debug mode (i.e. 'target sim'
-     with `gdb`), we need to handle it because the user can change the
-     argv on the fly via gdb's 'run'.  */
-  if (STATE_PROG_ARGV (sd) != argv)
+  if (STATE_OPEN_KIND (sd) == SIM_OPEN_DEBUG)
     {
       freeargv (STATE_PROG_ARGV (sd));
       STATE_PROG_ARGV (sd) = dupargv (argv);

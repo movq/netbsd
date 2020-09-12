@@ -1,6 +1,6 @@
 /* Xtensa/Elf configuration.
    Derived from the configuration for GCC for Intel i386 running Linux.
-   Copyright (C) 2001-2019 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2003, 2006, 2007 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,17 +20,20 @@ along with GCC; see the file COPYING3.  If not see
 
 #define TARGET_SECTION_TYPE_FLAGS xtensa_multibss_section_type_flags
 
+/* Don't assume anything about the header files.  */
+#define NO_IMPLICIT_EXTERN_C
+
 #undef ASM_APP_ON
 #define ASM_APP_ON "#APP\n"
 
 #undef ASM_APP_OFF
 #define ASM_APP_OFF "#NO_APP\n"
 
-#undef SIZE_TYPE
-#define SIZE_TYPE "unsigned int"
+#undef MD_EXEC_PREFIX
+#undef MD_STARTFILE_PREFIX
 
-#undef PTRDIFF_TYPE
-#define PTRDIFF_TYPE "int"
+#undef TARGET_VERSION
+#define TARGET_VERSION fputs (" (Xtensa/ELF)", stderr);
 
 #undef WCHAR_TYPE
 #define WCHAR_TYPE "short unsigned int"
@@ -40,14 +43,13 @@ along with GCC; see the file COPYING3.  If not see
 
 #undef ASM_SPEC
 #define ASM_SPEC \
- "%{mtext-section-literals:--text-section-literals} \
+ "%{v} \
+  %{mtext-section-literals:--text-section-literals} \
   %{mno-text-section-literals:--no-text-section-literals} \
   %{mtarget-align:--target-align} \
   %{mno-target-align:--no-target-align} \
   %{mlongcalls:--longcalls} \
-  %{mno-longcalls:--no-longcalls} \
-  %{mauto-litpools:--auto-litpools} \
-  %{mno-auto-litpools:--no-auto-litpools}"
+  %{mno-longcalls:--no-longcalls}"
 
 #undef LIB_SPEC
 #define LIB_SPEC "-lc -lsim -lc -lhandlers-sim -lhal"
@@ -77,8 +79,6 @@ along with GCC; see the file COPYING3.  If not see
 /* Do not force "-fpic" for this target.  */
 #define XTENSA_ALWAYS_PIC 0
 
-#undef DBX_REGISTER_NUMBER
-
 /* Search for headers in $tooldir/arch/include and for libraries and
    startfiles in $tooldir/arch/lib.  */
 #define GCC_DRIVER_HOST_INITIALIZATION \
@@ -98,3 +98,5 @@ do \
 	      "GCC", PREFIX_PRIORITY_LAST, 0, 0); \
   } \
 while (0)
+
+#define HANDLE_PRAGMA_PACK_PUSH_POP 1

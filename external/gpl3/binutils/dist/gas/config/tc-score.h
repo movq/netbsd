@@ -1,10 +1,9 @@
 /* tc-score.h -- Score specific file for assembler
-   Copyright (C) 2006-2020 Free Software Foundation, Inc.
-   Contributed by:
-   Brain.lin (brain.lin@sunplusct.com)
+   Copyright 2006, 2007 Free Software Foundation, Inc.
+   Contributed by: 
    Mei Ligang (ligang@sunnorth.com.cn)
    Pei-Lin Tsai (pltsai@sunplus.com)
-
+ 
    This file is part of GAS, the GNU Assembler.
 
    GAS is free software; you can redistribute it and/or modify
@@ -39,7 +38,7 @@
 #define md_relax_frag(segment, fragp, stretch)  score_relax_frag (segment, fragp, stretch)
 extern int score_relax_frag (asection *, struct frag *, long);
 
-/* #define md_frag_check(fragp)  score_frag_check (fragp) */
+#define md_frag_check(fragp)  score_frag_check (fragp)
 extern void score_frag_check (fragS *);
 
 #define TC_VALIDATE_FIX(FIXP, SEGTYPE, SKIP)  score_validate_fix (FIXP)
@@ -62,7 +61,7 @@ struct score_tc_frag_data
 
 #define TC_FRAG_TYPE struct score_tc_frag_data
 
-#define TC_FRAG_INIT(FRAGP, MAX_BYTES) \
+#define TC_FRAG_INIT(FRAGP) \
   do \
     { \
       (FRAGP)->tc_frag_data.is_insn = (((FRAGP)->fr_type == rs_machine_dependent) ? 1 : 0); \
@@ -74,5 +73,11 @@ struct score_tc_frag_data
 #else
 #define GLOBAL_OFFSET_TABLE_NAME "__GLOBAL_OFFSET_TABLE_"
 #endif
+
+enum score_pic_level
+{
+  NO_PIC,
+  PIC
+};
 
 #endif /*TC_SCORE */

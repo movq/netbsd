@@ -1,5 +1,6 @@
 /* itbl-ops.c
-   Copyright (C) 1997-2020 Free Software Foundation, Inc.
+   Copyright 1997, 1999, 2000, 2001, 2002, 2003, 2005, 2006, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -96,7 +97,7 @@
 
 #ifdef DEBUG
 #include <assert.h>
-#define ASSERT(x) gas_assert (x)
+#define ASSERT(x) assert(x)
 #define DBG(x) printf x
 #else
 #define ASSERT(x)
@@ -132,7 +133,7 @@ struct itbl_field {
 struct itbl_entry {
   e_processor processor;	/* processor number */
   e_type type;			/* dreg/creg/greg/insn */
-  char *name;			/* mnemonic name for insn/register */
+  char *name;			/* mnemionic name for insn/register */
   unsigned long value;		/* opcode/instruction mask/register number */
   unsigned long flags;		/* effects of the instruction */
   struct itbl_range range;	/* bit range within instruction for value */
@@ -299,10 +300,7 @@ append_insns_as_macros (void)
 {
   struct ITBL_OPCODE_STRUCT *new_opcodes, *o;
   struct itbl_entry *e, **es;
-  int n, size, new_num_opcodes;
-#ifdef USE_MACROS
-  int id;
-#endif
+  int n, id, size, new_size, new_num_opcodes;
 
   if (!itbl_have_entries)
     return;
@@ -320,9 +318,12 @@ append_insns_as_macros (void)
   ASSERT (size >= 0);
   DBG (("I get=%d\n", size / sizeof (ITBL_OPCODES[0])));
 
-  /* FIXME since ITBL_OPCODES could be a static table,
+  new_size = sizeof (struct ITBL_OPCODE_STRUCT) * new_num_opcodes;
+  ASSERT (new_size > size);
+
+  /* FIXME since ITBL_OPCODES culd be a static table,
 		we can't realloc or delete the old memory.  */
-  new_opcodes = XNEWVEC (struct ITBL_OPCODE_STRUCT, new_num_opcodes);
+  new_opcodes = (struct ITBL_OPCODE_STRUCT *) malloc (new_size);
   if (!new_opcodes)
     {
       printf (_("Unable to allocate memory for new instructions\n"));
@@ -334,9 +335,7 @@ append_insns_as_macros (void)
   /* FIXME! some NUMOPCODES are calculated expressions.
 		These need to be changed before itbls can be supported.  */
 
-#ifdef USE_MACROS
   id = ITBL_NUM_MACROS;		/* begin the next macro id after the last */
-#endif
   o = &new_opcodes[ITBL_NUM_OPCODES];	/* append macro to opcodes list */
   for (n = e_p0; n < e_nprocs; n++)
     {
@@ -540,7 +539,7 @@ itbl_assemble (char *name, char *s)
 				return 0;	/-* error; invalid operand *-/
 				break;
 			*/
-	  /* If not a symbol, fallthru to IMMED */
+	  /* If not a symbol, fall thru to IMMED */
 	case e_immed:
 	  if (*n == '0' && *(n + 1) == 'x')	/* hex begins 0x...  */
 	    {
@@ -594,7 +593,6 @@ itbl_disassemble (char *s, unsigned long insn)
     {
       struct itbl_entry *r;
       unsigned long value;
-      char s_value[20];
 
       if (f == e->fields)	/* First operand is preceded by tab.  */
 	strcat (s, "\t");
@@ -613,18 +611,14 @@ itbl_disassemble (char *s, unsigned long insn)
 	  if (r)
 	    strcat (s, r->name);
 	  else
-	    {
-	      sprintf (s_value, "$%lu", value);
-	      strcat (s, s_value);
-	    }
+	    sprintf (s, "%s$%lu", s, value);
 	  break;
 	case e_addr:
 	  /* Use assembler's symbol table to find symbol.  */
 	  /* FIXME!! Do we need this?  If so, what about relocs??  */
 	  /* If not a symbol, fall through to IMMED.  */
 	case e_immed:
-	  sprintf (s_value, "0x%lx", value);
-	  strcat (s, s_value);
+	  sprintf (s, "%s0x%lx", s, value);
 	  break;
 	default:
 	  return 0;		/* error; invalid field spec */
@@ -850,11 +844,13 @@ alloc_entry (e_processor processor, e_type type,
   struct itbl_entry *e, **es;
   if (!name)
     return 0;
-  e = XNEW (struct itbl_entry);
+  e = (struct itbl_entry *) malloc (sizeof (struct itbl_entry));
   if (e)
     {
       memset (e, 0, sizeof (struct itbl_entry));
-      e->name = xstrdup (name);
+      e->name = (char *) malloc (sizeof (strlen (name)) + 1);
+      if (e->name)
+	strcpy (e->name, name);
       e->processor = processor;
       e->type = type;
       e->value = value;
@@ -872,7 +868,7 @@ alloc_field (e_type type, int sbit, int ebit,
 	     unsigned long flags)
 {
   struct itbl_field *f;
-  f = XNEW (struct itbl_field);
+  f = (struct itbl_field *) malloc (sizeof (struct itbl_field));
   if (f)
     {
       memset (f, 0, sizeof (struct itbl_field));

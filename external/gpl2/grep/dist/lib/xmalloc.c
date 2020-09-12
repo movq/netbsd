@@ -1,4 +1,4 @@
-/*	$NetBSD: xmalloc.c,v 1.1.1.1 2016/01/10 21:36:19 christos Exp $	*/
+/*	$NetBSD: xmalloc.c,v 1.1 2016/01/10 21:36:19 christos Exp $	*/
 
 /* xmalloc.c -- malloc with out of memory checking
    Copyright (C) 1990-1999, 2000 Free Software Foundation, Inc.

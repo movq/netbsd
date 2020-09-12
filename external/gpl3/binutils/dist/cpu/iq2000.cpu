@@ -1,5 +1,5 @@
 ; IQ2000/IQ10 Common CPU description. -*- Scheme -*-
-; Copyright 2001, 2002, 2007, 2009 Free Software Foundation, Inc.
+; Copyright 2001, 2002, 2007 Free Software Foundation, Inc.
 ;
 ; Contributed by Red Hat Inc; developed under contract from Fujitsu.
 ;
@@ -207,7 +207,7 @@
 (df  f-offset "pc offset field"                (PCREL-ADDR) 15 16 INT
      ; Actually, this is relative to the address of the delay slot.
      ((value pc) (sra SI (sub SI value pc) 2))
-     ((value pc) (add SI (mul SI value 4) (add pc 4))))
+     ((value pc) (add SI (sll SI value 2) (add pc 4))))
 
 ; Instruction fields that scarcely appear in instructions.
 

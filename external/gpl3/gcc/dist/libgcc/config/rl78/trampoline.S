@@ -1,5 +1,5 @@
 /* libgcc routines for RL78
-   Copyright (C) 2011-2019 Free Software Foundation, Inc.
+   Copyright (C) 2011-2013 Free Software Foundation, Inc.
    Contributed by Red Hat.
 
    This file is part of GCC.
@@ -32,7 +32,9 @@
 
 */
 
-#include "vregs.h"
+r8	=	0xffef0
+r10	=	0xffef2
+r14	=	0xffef6
 
 	.data
 	.p2align	1
@@ -80,10 +82,14 @@ trampoline_array_end:
    pointer in R10, allocate a trampoline and return its address in
    R8. */
 
-START_FUNC ___trampoline_init
-	movw	hl, #trampoline_array
+	.text
+	.global ___trampoline_init
+        .type   ___trampoline_init, @function
+___trampoline_init:
 
-1:	movw	ax, [hl + TO_ADDR]
+	movw	hl, #trampoline_array
+1:
+	movw	ax, [hl + TO_ADDR]
 	cmpw	ax, #0
 	bz	$2f
 
@@ -103,27 +109,30 @@ START_FUNC ___trampoline_init
 
 	movw	ax, [hl + TO_STUB]
 	movw	r8, ax
+
 	ret
-END_FUNC ___trampoline_init
+	.size	___trampoline_init, . - ___trampoline_init
 
-
-START_FUNC ___trampoline_uninit
+	.global	___trampoline_uninit
+        .type   ___trampoline_uninit, @function
+___trampoline_uninit:
 	movw	hl, #trampoline_array
 	movw	ax, sp
 	movw	bc, ax
-
-1:	movw	ax, [hl + TO_FRAME]
+1:
+	movw	ax, [hl + TO_FRAME]
 	cmpw	ax, bc
 	bc	$2f
 
 	clrw	ax
 	movw	[hl + TO_ADDR], ax
 
-2:	movw	ax, hl
+2:
+	movw	ax, hl
 	addw	ax, #TO_SIZE
 	movw	hl, ax
 	cmpw	ax, #trampoline_array_end
 	bnz	$1b
 
 	ret
-END_FUNC ___trampoline_uninit
+	.size	___trampoline_uninit, . - ___trampoline_uninit

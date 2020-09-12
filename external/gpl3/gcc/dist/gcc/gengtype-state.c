@@ -1,7 +1,7 @@
 /* Gengtype persistent state serialization & de-serialization.
    Useful for gengtype in plugin mode.
 
-   Copyright (C) 2010-2019 Free Software Foundation, Inc.
+   Copyright (C) 2010-2013 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -23,14 +23,15 @@
    and Basile Starynkevitch <basile@starynkevitch.net>
 */
 
-#ifdef HOST_GENERATOR_FILE
-#include "config.h"
-#define GENERATOR_FILE 1
-#else
+#ifdef GENERATOR_FILE
 #include "bconfig.h"
+#else
+#include "config.h"
 #endif
 #include "system.h"
 #include "errors.h"	/* For fatal.  */
+#include "double-int.h"
+#include "hashtab.h"
 #include "version.h"	/* For version_string & pkgversion_string.  */
 #include "obstack.h"
 #include "gengtype.h"
@@ -53,6 +54,8 @@ type_lineloc (const_type_p ty)
     case TYPE_USER_STRUCT:
     case TYPE_UNDEFINED:
       return CONST_CAST (struct fileloc*, &ty->u.s.line);
+    case TYPE_PARAM_STRUCT:
+      return CONST_CAST (struct fileloc*, &ty->u.param_struct.line);
     case TYPE_SCALAR:
     case TYPE_STRING:
     case TYPE_POINTER:
@@ -134,141 +137,9 @@ static const char *state_path = NULL;
 static int state_line = 0;
 static long state_bol = 0;	/* offset of beginning of line */
 
-/* A class for writing out s-expressions, keeping track of newlines and
-   nested indentation.  */
-class s_expr_writer
-{
-public:
-  s_expr_writer ();
 
-  void write_new_line ();
-  void write_any_indent (int leading_spaces);
-
-  void begin_s_expr (const char *tag);
-  void end_s_expr ();
-
-private:
-  int m_indent_amount;
-  int m_had_recent_newline;
-}; // class s_expr_writer
-
-/* A class for writing out "gtype.state".  */
-class state_writer : public s_expr_writer
-{
-public:
-  state_writer ();
-
-private:
-  void write_state_fileloc (struct fileloc *floc);
-  void write_state_fields (pair_p fields);
-  void write_state_a_string (const char *s);
-  void write_state_string_option (options_p current);
-  void write_state_type_option (options_p current);
-  void write_state_nested_option (options_p current);
-  void write_state_option (options_p current);
-  void write_state_options (options_p opt);
-  void write_state_lang_bitmap (lang_bitmap bitmap);
-  void write_state_version (const char *version);
-  void write_state_scalar_type (type_p current);
-  void write_state_string_type (type_p current);
-  void write_state_undefined_type (type_p current);
-  void write_state_struct_union_type (type_p current, const char *kindstr);
-  void write_state_struct_type (type_p current);
-  void write_state_user_struct_type (type_p current);
-  void write_state_union_type (type_p current);
-  void write_state_lang_struct_type (type_p current);
-  void write_state_pointer_type (type_p current);
-  void write_state_array_type (type_p current);
-  void write_state_gc_used (enum gc_used_enum gus);
-  void write_state_common_type_content (type_p current);
-  void write_state_type (type_p current);
-  void write_state_pair (pair_p current);
-  int write_state_pair_list (pair_p list);
-  void write_state_typedefs (void);
-  void write_state_structures (void);
-  void write_state_variables (void);
-  void write_state_srcdir (void);
-  void write_state_files_list (void);
-  void write_state_languages (void);
-
-  friend void write_state (const char *state_path);
-
-private:
-  /* Counter of written types.  */
-  int m_state_written_type_count;
-}; // class state_writer
-
-
-/* class s_expr_writer's trivial constructor.  */
-s_expr_writer::s_expr_writer ()
-  : m_indent_amount (0),
-    m_had_recent_newline (0)
-{
-}
-
-/* Write a newline to the output file, merging adjacent newlines.  */
-void
-s_expr_writer::write_new_line (void)
-{
-  /* Don't add a newline if we've just had one.  */
-  if (!m_had_recent_newline)
-    {
-      fprintf (state_file, "\n");
-      m_had_recent_newline = 1;
-    }
-}
-
-/* If we've just had a newline, write the indentation amount, potentially
-   omitting some spaces.
-
-   LEADING_SPACES exists to support code that writes strings with leading
-   spaces (e.g " foo") which might occur within a line, or could be the first
-   thing on a line.  By passing leading_spaces == 1, when such a string is the
-   first thing on a line, write_any_indent () swallows the successive
-   leading spaces into the indentation so that the "foo" begins at the expected
-   column.  */
-void
-s_expr_writer::write_any_indent (int leading_spaces)
-{
-  int i;
-  int amount = m_indent_amount - leading_spaces;
-  if (m_had_recent_newline)
-    for (i = 0; i < amount; i++)
-      fprintf (state_file, " ");
-  m_had_recent_newline = 0;
-}
-
-/* Write the beginning of a new s-expresion e.g. "(!foo "
-   The writer automatically adds whitespace to show the hierarchical
-   structure of the expressions, so each one starts on a new line,
-   and any within it will be at an increased indentation level.  */
-void
-s_expr_writer::begin_s_expr (const char *tag)
-{
-  write_new_line ();
-  write_any_indent (0);
-  fprintf (state_file, "(!%s ", tag);
-  m_indent_amount++;
-}
-
-/* Write out the end of an s-expression: any necssessary indentation,
-   a closing parenthesis, and a new line.  */
-void
-s_expr_writer::end_s_expr (void)
-{
-  m_indent_amount--;
-  write_any_indent (0);
-  fprintf (state_file, ")");
-  write_new_line ();
-}
-
-
-/* class state_writer's trivial constructor.  */
-state_writer::state_writer ()
-  : s_expr_writer (),
-    m_state_written_type_count (0)
-{
-}
+/* Counter of written types.  */
+static int state_written_type_count = 0;
 
 
 /* Fatal error messages when reading the state.  They are extremely
@@ -278,7 +149,7 @@ state_writer::state_writer ()
 
 
 /* Fatal message while reading state.  */
-static void 
+static inline void 
 fatal_reading_state (struct state_token_st* tok, const char*msg)
 {
   if (tok)
@@ -304,7 +175,7 @@ fatal_reading_state (struct state_token_st* tok, const char*msg)
     else						\
       fatal ("%s:%d: Invalid state file; " Fmt,		\
 	     state_path, state_line, __VA_ARGS__);	\
-  } while (0)
+  } while(0)
 
 
 /* Find or allocate an identifier in our name hash table.  */
@@ -630,6 +501,7 @@ state_token_is_name (struct state_token_st *p, const char *name)
  * We want to serialize :
  *          - typedefs list
  *          - structures list
+ *          - param_structs list
  *          - variables list
  *
  * So, we have one routine for each kind of data.  The main writing
@@ -646,6 +518,22 @@ static htab_t state_seen_types;
 
 /* Return the length of a linked list made of pairs.  */
 static int pair_list_length (pair_p list);
+
+/* Write a pair */
+static void write_state_pair (pair_p);
+
+/* return the number of pairs written.  Should match the length given
+   by pair_list_length.  */
+static int write_state_pair_list (pair_p list);
+
+/* Write a type.  When a type is written, its state_number is updated,
+   to ensure that a "reference" to a seen type is written on next
+   occurrences.  */
+static void write_state_type (type_p);
+
+/* Write a null-terminatel string using our Lispy lexical conventions,
+   similar to those of C or MELT.  */
+static void write_state_a_string (const char *s);
 
 /* Compute the length of a list of pairs, starting from the first
    one.  */
@@ -664,8 +552,8 @@ pair_list_length (pair_p list)
    state file-s produced by gengtype on the same GCC source tree are
    very similar and can be reasonably compared with diff, even if the
    two GCC source trees have different absolute paths.  */
-void
-state_writer::write_state_fileloc (struct fileloc *floc)
+static void
+write_state_fileloc (struct fileloc *floc)
 {
 
   if (floc != NULL && floc->line > 0)
@@ -677,42 +565,39 @@ state_writer::write_state_fileloc (struct fileloc *floc)
       srcrelpath = get_file_srcdir_relative_path (floc->file);
       if (srcrelpath != NULL)
 	{
-	  begin_s_expr ("srcfileloc");
+	  fprintf (state_file, "\n(!srcfileloc ");
 	  write_state_a_string (srcrelpath);
 	}
       else
 	{
-	  begin_s_expr ("fileloc");
+	  fprintf (state_file, "\n(!fileloc ");
 	  write_state_a_string (get_input_file_name (floc->file));
 	}
       fprintf (state_file, " %d", floc->line);
-      end_s_expr ();
+      fprintf (state_file, ")\n");
     }
   else
     fprintf (state_file, "nil ");
 }
 
 /* Write a list of fields.  */
-void
-state_writer::write_state_fields (pair_p fields)
+static void
+write_state_fields (pair_p fields)
 {
   int nbfields = pair_list_length (fields);
   int nbpairs = 0;
-  begin_s_expr ("fields");
-  fprintf (state_file, "%d ", nbfields);
+  fprintf (state_file, "\n(!fields %d ", nbfields);
   nbpairs = write_state_pair_list (fields);
   gcc_assert (nbpairs == nbfields);
-  end_s_expr ();
+  fprintf (state_file, ")\n");
 }
 
 /* Write a null-terminated string in our lexical convention, very
    similar to the convention of C.  */
-void
-state_writer::write_state_a_string (const char *s)
+static void
+write_state_a_string (const char *s)
 {
   char c;
-
-  write_any_indent (1);
 
   fputs (" \"", state_file);
   for (; *s != 0; s++)
@@ -758,10 +643,9 @@ state_writer::write_state_a_string (const char *s)
 }
 
 /* Our option-s have three kinds, each with its writer.  */
-void
-state_writer::write_state_string_option (options_p current)
+static void
+write_state_string_option (options_p current)
 {
-  write_any_indent (0);
   fprintf (state_file, "string ");
   if (current->info.string != NULL)
     write_state_a_string (current->info.string);
@@ -769,43 +653,34 @@ state_writer::write_state_string_option (options_p current)
     fprintf (state_file, " nil ");
 }
 
-void
-state_writer::write_state_type_option (options_p current)
+static void
+write_state_type_option (options_p current)
 {
-  write_any_indent (0);
   fprintf (state_file, "type ");
   write_state_type (current->info.type);
 }
 
-void
-state_writer::write_state_nested_option (options_p current)
+static void
+write_state_nested_option (options_p current)
 {
-  write_any_indent (0);
   fprintf (state_file, "nested ");
   write_state_type (current->info.nested->type);
   if (current->info.nested->convert_from != NULL)
     write_state_a_string (current->info.nested->convert_from);
   else
-    {
-      write_any_indent (1);
-      fprintf (state_file, " nil ");
-    }
+    fprintf (state_file, " nil ");
 
   if (current->info.nested->convert_to != NULL)
     write_state_a_string (current->info.nested->convert_to);
   else
-    {
-      write_any_indent (1);
-      fprintf (state_file, " nil ");
-    }
+    fprintf (state_file, " nil ");
 }
 
-void
-state_writer::write_state_option (options_p current)
+static void
+write_state_option (options_p current)
 {
-  begin_s_expr ("option");
+  fprintf (state_file, "\n(!option ");
 
-  write_any_indent (0);
   if (current->name != NULL)
     fprintf (state_file, "%s ", current->name);
   else
@@ -826,54 +701,53 @@ state_writer::write_state_option (options_p current)
       fatal ("Option tag unknown");
     }
 
-  /* Terminate the "option" s-expression.  */
-  end_s_expr ();
+  fprintf (state_file, ")\n");
 }
 
 
 
 /* Write a list of GTY options.  */
-void
-state_writer::write_state_options (options_p opt)
+static void
+write_state_options (options_p opt)
 {
   options_p current;
 
   if (opt == NULL)
     {
-	write_any_indent (0);
-	fprintf (state_file, "nil ");
+      fprintf (state_file, "nil ");
       return;
     }
 
-  begin_s_expr ("options");
+  fprintf (state_file, "\n(!options ");
   for (current = opt; current != NULL; current = current->next)
       write_state_option (current);
-  end_s_expr ();
+  fprintf (state_file, ")\n");
 }
 
 
 /* Write a bitmap representing a set of GCC front-end languages.  */
-void
-state_writer::write_state_lang_bitmap (lang_bitmap bitmap)
+static void
+write_state_lang_bitmap (lang_bitmap bitmap)
 {
-  write_any_indent (0);
   fprintf (state_file, "%d ", (int) bitmap);
 }
 
 /* Write version information.  */
-void
-state_writer::write_state_version (const char *version)
+static void
+write_state_version (const char *version)
 {
-  begin_s_expr ("version");
+  fprintf (state_file, "\n(!version ");
   write_state_a_string (version);
-  end_s_expr ();
+  fprintf (state_file, ")\n");
 }
 
+/* Common routine to write the common content of all types.  */
+static void write_state_common_type_content (type_p current);
+
 /* Write a scalar type.  We have only two of these.  */
-void
-state_writer::write_state_scalar_type (type_p current)
+static void
+write_state_scalar_type (type_p current)
 {
-  write_any_indent (0);
   if (current == &scalar_nonchar)
     fprintf (state_file, "scalar_nonchar ");
   else if (current == &scalar_char)
@@ -885,12 +759,11 @@ state_writer::write_state_scalar_type (type_p current)
 }
 
 /* Write the string type.  There is only one such thing! */
-void
-state_writer::write_state_string_type (type_p current)
+static void
+write_state_string_type (type_p current)
 {
   if (current == &string_type)
     {
-      write_any_indent (0);
       fprintf (state_file, "string ");
       write_state_common_type_content (current);
     }
@@ -899,44 +772,35 @@ state_writer::write_state_string_type (type_p current)
 }
 
 /* Write an undefined type.  */
-void
-state_writer::write_state_undefined_type (type_p current)
+static void
+write_state_undefined_type (type_p current)
 {
   DBGPRINTF ("undefined type @ %p #%d '%s'", (void *) current,
 	     current->state_number, current->u.s.tag);
-  write_any_indent (0);
   fprintf (state_file, "undefined ");
   gcc_assert (current->gc_used == GC_UNUSED);
   write_state_common_type_content (current);
   if (current->u.s.tag != NULL)
     write_state_a_string (current->u.s.tag);
   else
-    {
-      write_any_indent (0);
-      fprintf (state_file, "nil");
-    }
+    fprintf (state_file, "nil");
 
   write_state_fileloc (type_lineloc (current));
 }
 
 
 /* Common code to write structure like types.  */
-void
-state_writer::write_state_struct_union_type (type_p current,
-					     const char *kindstr)
+static void
+write_state_struct_union_type (type_p current, const char *kindstr)
 {
   DBGPRINTF ("%s type @ %p #%d '%s'", kindstr, (void *) current,
 	     current->state_number, current->u.s.tag);
-  write_any_indent (0);
   fprintf (state_file, "%s ", kindstr);
   write_state_common_type_content (current);
   if (current->u.s.tag != NULL)
     write_state_a_string (current->u.s.tag);
   else
-    {
-      write_any_indent (0);
-      fprintf (state_file, "nil");
-    }
+    fprintf (state_file, "nil");
 
   write_state_fileloc (type_lineloc (current));
   write_state_fields (current->u.s.fields);
@@ -946,37 +810,32 @@ state_writer::write_state_struct_union_type (type_p current,
 
 
 /* Write a GTY struct type.  */
-void
-state_writer::write_state_struct_type (type_p current)
+static void
+write_state_struct_type (type_p current)
 {
   write_state_struct_union_type (current, "struct");
   write_state_type (current->u.s.lang_struct);
-  write_state_type (current->u.s.base_class);
 }
 
 /* Write a GTY user-defined struct type.  */
-void
-state_writer::write_state_user_struct_type (type_p current)
+static void
+write_state_user_struct_type (type_p current)
 {
   DBGPRINTF ("user_struct type @ %p #%d '%s'", (void *) current,
 	     current->state_number, current->u.s.tag);
-  write_any_indent (0);
   fprintf (state_file, "user_struct ");
   write_state_common_type_content (current);
   if (current->u.s.tag != NULL)
     write_state_a_string (current->u.s.tag);
   else
-    {
-      write_any_indent (0);
-      fprintf (state_file, "nil");
-    }
+    fprintf (state_file, "nil");
   write_state_fileloc (type_lineloc (current));
   write_state_fields (current->u.s.fields);
 }
 
 /* write a GTY union type.  */
-void
-state_writer::write_state_union_type (type_p current)
+static void
+write_state_union_type (type_p current)
 {
   write_state_struct_union_type (current, "union");
   write_state_type (current->u.s.lang_struct);
@@ -987,8 +846,8 @@ state_writer::write_state_union_type (type_p current)
    subfield, which points to a linked list of homonumous types.
    Change this function with extreme care, see also
    read_state_lang_struct_type.  */
-void
-state_writer::write_state_lang_struct_type (type_p current)
+static void
+write_state_lang_struct_type (type_p current)
 {
   int nbhomontype = 0;
   type_p hty = NULL;
@@ -1010,48 +869,59 @@ state_writer::write_state_lang_struct_type (type_p current)
 	homoname = hty->u.s.tag;
       gcc_assert (strcmp (homoname, hty->u.s.tag) == 0);
     }
-  begin_s_expr ("homotypes");
-  fprintf (state_file, "%d", nbhomontype);
+  fprintf (state_file, "(!homotypes %d\n", nbhomontype);
   for (hty = current->u.s.lang_struct; hty != NULL; hty = hty->next)
     write_state_type (hty);
-  end_s_expr ();
+  fprintf (state_file, ")\n");
+}
+
+/* Write a parametrized structure GTY type.  */
+static void
+write_state_param_struct_type (type_p current)
+{
+  int i;
+
+  fprintf (state_file, "param_struct ");
+  write_state_common_type_content (current);
+  write_state_type (current->u.param_struct.stru);
+  for (i = 0; i < NUM_PARAM; i++)
+    {
+      if (current->u.param_struct.param[i] != NULL)
+	write_state_type (current->u.param_struct.param[i]);
+      else
+	fprintf (state_file, "nil ");
+    }
+  write_state_fileloc (&current->u.param_struct.line);
 }
 
 /* Write a pointer type.  */
-void
-state_writer::write_state_pointer_type (type_p current)
+static void
+write_state_pointer_type (type_p current)
 {
-  write_any_indent (0);
   fprintf (state_file, "pointer ");
   write_state_common_type_content (current);
   write_state_type (current->u.p);
 }
 
 /* Write an array type.  */
-void
-state_writer::write_state_array_type (type_p current)
+static void
+write_state_array_type (type_p current)
 {
-  write_any_indent (0);
   fprintf (state_file, "array ");
   write_state_common_type_content (current);
   if (current->u.a.len != NULL)
     write_state_a_string (current->u.a.len);
   else
-    {
-      write_any_indent (1);
-      fprintf (state_file, " nil");
-    }
+    fprintf (state_file, " nil");
 
-  write_any_indent (1);
   fprintf (state_file, " ");
   write_state_type (current->u.a.p);
 }
 
 /* Write the gc_used information.  */
-void
-state_writer::write_state_gc_used (enum gc_used_enum gus)
+static void
+write_state_gc_used (enum gc_used_enum gus)
 {
-  write_any_indent (1);
   switch (gus)
     {
     case GC_UNUSED:
@@ -1073,10 +943,9 @@ state_writer::write_state_gc_used (enum gc_used_enum gus)
 
 /* Utility routine to write the common content of all types.  Notice
    that the next field is *not* written on purpose.  */
-void
-state_writer::write_state_common_type_content (type_p current)
+static void
+write_state_common_type_content (type_p current)
 {
-  write_any_indent (0);
   fprintf (state_file, "%d ", current->state_number);
   /* We do not write the next type, because list of types are
      explicitly written.  However, lang_struct are special in that
@@ -1089,29 +958,25 @@ state_writer::write_state_common_type_content (type_p current)
 /* The important and recursive routine writing GTY types as understood
    by gengtype.  Types which have a positive state_number have already
    been seen and written.  */
-void
-state_writer::write_state_type (type_p current)
+static void
+write_state_type (type_p current)
 {
-  write_any_indent (0);
   if (current == NULL)
     {
       fprintf (state_file, "nil ");
       return;
     }
 
-  begin_s_expr ("type");
+  fprintf (state_file, "\n(!type ");
 
   if (current->state_number > 0)
-    {
-      write_any_indent (0);
-      fprintf (state_file, "already_seen %d", current->state_number);
-    }
+    fprintf (state_file, "already_seen %d", current->state_number);
   else
     {
-      m_state_written_type_count++;
-      DBGPRINTF ("writing type #%d @%p old number %d", m_state_written_type_count,
+      state_written_type_count++;
+      DBGPRINTF ("writing type #%d @%p old number %d", state_written_type_count,
 		 (void *) current, current->state_number);
-      current->state_number = m_state_written_type_count;
+      current->state_number = state_written_type_count;
       switch (current->kind)
 	{
 	case TYPE_NONE:
@@ -1137,6 +1002,9 @@ state_writer::write_state_type (type_p current)
 	case TYPE_LANG_STRUCT:
 	  write_state_lang_struct_type (current);
 	  break;
+	case TYPE_PARAM_STRUCT:
+	  write_state_param_struct_type (current);
+	  break;
 	case TYPE_SCALAR:
 	  write_state_scalar_type (current);
 	  break;
@@ -1146,23 +1014,21 @@ state_writer::write_state_type (type_p current)
 	}
     }
 
-  /* Terminate the "type" s-expression.  */
-  end_s_expr ();
+  fprintf (state_file, ")\n");
 }
 
 
 /* Write a pair.  */
-void
-state_writer::write_state_pair (pair_p current)
+static void
+write_state_pair (pair_p current)
 {
   if (current == NULL)
     {
-      write_any_indent (0);
       fprintf (state_file, "nil)");
       return;
     }
 
-  begin_s_expr ("pair");
+  fprintf (state_file, "\n(!pair ");
 
   if (current->name != NULL)
     write_state_a_string (current->name);
@@ -1173,13 +1039,12 @@ state_writer::write_state_pair (pair_p current)
   write_state_fileloc (&(current->line));
   write_state_options (current->opt);
 
-  /* Terminate the "pair" s-expression.  */
-  end_s_expr ();
+  fprintf (state_file, ")");
 }
 
 /* Write a pair list and return the number of pairs written.  */
-int
-state_writer::write_state_pair_list (pair_p list)
+static int
+write_state_pair_list (pair_p list)
 {
   int nbpair = 0;
   pair_p current;
@@ -1193,28 +1058,28 @@ state_writer::write_state_pair_list (pair_p list)
 
 }
 
-/* When writing imported linked lists, like typedefs, structures, ... we count
-   their length first and write it.  This eases the reading, and enables an
-   extra verification on the number of actually read items.  */
+/* When writing imported linked lists, like typedefs, structures,
+   param_structs, ... we count their length first and write it.  These
+   eases the reading, and enables an extra verification on the number
+   of actually read items.  */
 
 /* Write our typedefs.  */
-void
-state_writer::write_state_typedefs (void)
+static void
+write_state_typedefs (void)
 {
   int nbtypedefs = pair_list_length (typedefs);
   int nbpairs = 0;
-  begin_s_expr ("typedefs");
-  fprintf (state_file, "%d", nbtypedefs);
+  fprintf (state_file, "\n(!typedefs %d\n", nbtypedefs);
   nbpairs = write_state_pair_list (typedefs);
   gcc_assert (nbpairs == nbtypedefs);
-  end_s_expr ();
+  fprintf (state_file, ")\n");
   if (verbosity_level >= 2)
     printf ("%s wrote %d typedefs\n", progname, nbtypedefs);
 }
 
 /* Write our structures.  */
-void
-state_writer::write_state_structures (void)
+static void
+write_state_structures (void)
 {
   int nbstruct = 0;
   type_p current;
@@ -1222,54 +1087,65 @@ state_writer::write_state_structures (void)
   for (current = structures; current != NULL; current = current->next)
     nbstruct++;
 
-  begin_s_expr ("structures");
-  fprintf (state_file, "%d", nbstruct);
+  fprintf (state_file, "\n(!structures %d\n", nbstruct);
 
   for (current = structures; current != NULL; current = current->next)
-    {
-      write_new_line ();
-      write_state_type (current);
-    }
+    write_state_type (current);
 
-  /* Terminate the "structures" s-expression.  */
-  end_s_expr ();
+  fprintf (state_file, ")\n");
   if (verbosity_level >= 2)
     printf ("%s wrote %d structures in state\n", progname, nbstruct);
 }
 
+/* Write our param_struct-s.  */
+static void
+write_state_param_structs (void)
+{
+  int nbparamstruct = 0;
+  type_p current;
+
+  for (current = param_structs; current != NULL; current = current->next)
+    nbparamstruct++;
+
+  fprintf (state_file, "\n(!param_structs %d\n", nbparamstruct);
+
+  for (current = param_structs; current != NULL; current = current->next)
+    write_state_type (current);
+
+  fprintf (state_file, ")\n");
+}
+
 /* Write our variables.  */
-void
-state_writer::write_state_variables (void)
+static void
+write_state_variables (void)
 {
   int nbvars = pair_list_length (variables);
   int nbpairs = 0;
-  begin_s_expr ("variables");
-  fprintf (state_file, "%d", nbvars);
+  fprintf (state_file, "\n(!variables %d\n", nbvars);
   nbpairs = write_state_pair_list (variables);
   gcc_assert (nbpairs == nbvars);
-  end_s_expr ();
+  fprintf (state_file, ")\n");
   if (verbosity_level >= 2)
     printf ("%s wrote %d variables.\n", progname, nbvars);
 }
 
 /* Write the source directory.  File locations within the source
    directory have been written specifically.  */
-void
-state_writer::write_state_srcdir (void)
+static void
+write_state_srcdir (void)
 {
-  begin_s_expr ("srcdir");
+  fprintf (state_file, "\n(!srcdir ");
   write_state_a_string (srcdir);
-  end_s_expr ();
+  fprintf (state_file, ")\n");
 }
 
 /* Count and write the list of our files.  */
-void
-state_writer::write_state_files_list (void)
+static void
+write_state_files_list (void)
 {
   int i = 0;
   /* Write the list of files with their lang_bitmap.  */
-  begin_s_expr ("fileslist");
-  fprintf (state_file, "%d", (int) num_gt_files);
+  fprintf (state_file, "\n(!fileslist %d\n", (int) num_gt_files);
   for (i = 0; i < (int) num_gt_files; i++)
     {
       const char *cursrcrelpath = NULL;
@@ -1279,30 +1155,25 @@ state_writer::write_state_files_list (void)
       cursrcrelpath = get_file_srcdir_relative_path (curfil);
       if (cursrcrelpath)
 	{
-	  begin_s_expr ("srcfile");
-	  fprintf (state_file, "%d ", get_lang_bitmap (curfil));
+	  fprintf (state_file, "(!srcfile %d ", get_lang_bitmap (curfil));
 	  write_state_a_string (cursrcrelpath);
 	}
       else
 	{
-	  begin_s_expr ("file");
-	  fprintf (state_file, "%d ", get_lang_bitmap (curfil));
+	  fprintf (state_file, "(!file %d ", get_lang_bitmap (curfil));
 	  write_state_a_string (get_input_file_name (curfil));
 	}
-      /* Terminate the inner s-expression (either "srcfile" or "file").   */
-      end_s_expr ();
+      fprintf (state_file, ")\n");
     }
-  /* Terminate the "fileslist" s-expression.  */
-  end_s_expr ();
+  fprintf (state_file, ")\n");
 }
 
 /* Write the list of GCC front-end languages.  */
-void
-state_writer::write_state_languages (void)
+static void
+write_state_languages (void)
 {
   int i = 0;
-  begin_s_expr ("languages");
-  fprintf (state_file, "%d", (int) num_lang_dirs);
+  fprintf (state_file, "\n(!languages %d", (int) num_lang_dirs);
   for (i = 0; i < (int) num_lang_dirs; i++)
     {
       /* Languages names are identifiers, we expect only letters or
@@ -1310,7 +1181,7 @@ state_writer::write_state_languages (void)
          valid language name, but cp is valid.  */
       fprintf (state_file, " %s", lang_dir_names[i]);
     }
-  end_s_expr ();
+  fprintf (state_file, ")\n");
 }
 
 /* Write the trailer.  */
@@ -1363,17 +1234,15 @@ write_state (const char *state_path)
   fprintf (state_file,
 	   ";;; This file should be parsed by the same %s which wrote it.\n",
 	   progname);
-
-  state_writer sw;
-
   /* The first non-comment significant line gives the version string.  */
-  sw.write_state_version (version_string);
-  sw.write_state_srcdir ();
-  sw.write_state_languages ();
-  sw.write_state_files_list ();
-  sw.write_state_structures ();
-  sw.write_state_typedefs ();
-  sw.write_state_variables ();
+  write_state_version (version_string);
+  write_state_srcdir ();
+  write_state_languages ();
+  write_state_files_list ();
+  write_state_structures ();
+  write_state_typedefs ();
+  write_state_param_structs ();
+  write_state_variables ();
   write_state_trailer ();
   statelen = ftell (state_file);
   if (ferror (state_file))
@@ -1389,7 +1258,7 @@ write_state (const char *state_path)
 
   if (verbosity_level >= 1)
     printf ("%s wrote state file %s of %ld bytes with %d GTY-ed types\n",
-	    progname, state_path, statelen, sw.m_state_written_type_count);
+	    progname, state_path, statelen, state_written_type_count);
 
 }
 
@@ -1561,9 +1430,6 @@ read_state_struct_type (type_p type)
       read_state_options (&(type->u.s.opt));
       read_state_lang_bitmap (&(type->u.s.bitmap));
       read_state_type (&(type->u.s.lang_struct));
-      read_state_type (&(type->u.s.base_class));
-      if (type->u.s.base_class)
-	add_subclass (type->u.s.base_class, type);
     }
   else
     {
@@ -1757,6 +1623,34 @@ read_state_lang_struct_type (type_p type)
 }
 
 
+/* Read a param_struct type for GTY parametrized structures.  */
+static void
+read_state_param_struct_type (type_p type)
+{
+  int i;
+  struct state_token_st *t0;
+
+  type->kind = TYPE_PARAM_STRUCT;
+  read_state_common_type_content (type);
+  DBGPRINTF ("read param_struct type @%p #%d",
+	     (void *) type, type->state_number);
+  read_state_type (&(type->u.param_struct.stru));
+
+  for (i = 0; i < NUM_PARAM; i++)
+    {
+      t0 = peek_state_token (0);
+      if (state_token_is_name (t0, "nil"))
+	{
+	  type->u.param_struct.param[i] = NULL;
+	  next_state_tokens (1);
+	}
+      else
+	read_state_type (&(type->u.param_struct.param[i]));
+    }
+  read_state_fileloc (&(type->u.param_struct.line));
+}
+
+
 /* Read the gc used information.  */
 static void
 read_state_gc_used (enum gc_used_enum *pgus)
@@ -1857,6 +1751,12 @@ read_state_type (type_p *current)
 	      *current = XCNEW (struct type);
 	      next_state_tokens (1);
 	      read_state_lang_struct_type (*current);
+	    }
+	  else if (state_token_is_name (t0, "param_struct"))
+	    {
+	      *current = XCNEW (struct type);
+	      next_state_tokens (1);
+	      read_state_param_struct_type (*current);
 	    }
 	  else if (state_token_is_name (t0, "pointer"))
 	    {
@@ -2206,7 +2106,7 @@ read_state_pair (pair_p *current)
 	  next_state_tokens (1);
 	  read_state_type (&((*current)->type));
 	  read_state_fileloc (&((*current)->line));
-	  read_state_options (&((*current)->opt));
+	  read_state_options (&((*current)->opt));;
 	  t0 = peek_state_token (0);
 	  if (state_token_kind (t0) == STOK_RIGHTPAR)
 	    {
@@ -2350,6 +2250,58 @@ read_state_structures (type_p *structures)
   if (verbosity_level >= 2)
     printf ("%s read %d structures from state\n", progname, nbstruct);
   *structures = head;
+}
+
+
+/* Read the param_struct-s.  */
+static void
+read_state_param_structs (type_p *param_structs)
+{
+  int nbparamstructs = 0;
+  int countparamstructs = 0;
+  type_p head = NULL;
+  type_p previous = NULL;
+  type_p tmp;
+  struct state_token_st *t0 = peek_state_token (0);
+  struct state_token_st *t1 = peek_state_token (1);
+  struct state_token_st *t2 = peek_state_token (2);
+
+  if (state_token_kind (t0) == STOK_LEFTPAR
+      && state_token_is_name (t1, "!param_structs")
+      && state_token_kind (t2) == STOK_INTEGER)
+    {
+      nbparamstructs = t2->stok_un.stok_num;
+      next_state_tokens (3);
+      t0 = t1 = t2 = NULL;
+      t0 = peek_state_token (0);
+      while (state_token_kind (t0) != STOK_RIGHTPAR)
+	{
+	  tmp = NULL;
+	  read_state_type (&tmp);
+	  if (head == NULL)
+	    {
+	      head = tmp;
+	      previous = head;
+	    }
+	  else
+	    {
+	      previous->next = tmp;
+	      previous = tmp;
+	    }
+	  t0 = peek_state_token (0);
+	  countparamstructs++;
+	}
+      next_state_tokens (1);
+    }
+  else
+    fatal_reading_state (t0, "Bad param_structs syntax");
+  t0 = peek_state_token (0);
+  if (countparamstructs != nbparamstructs)
+    fatal_reading_state_printf
+      (t0,
+       "invalid number of param_structs expected %d got %d",
+       nbparamstructs, countparamstructs);
+  *param_structs = head;
 }
 
 
@@ -2512,7 +2464,7 @@ read_state_files_list (void)
 				 "expecting file in !fileslist of state file");
 	};
       t0 = peek_state_token (0);
-      if (state_token_kind (t0) != STOK_RIGHTPAR)
+      if (!state_token_kind (t0) == STOK_RIGHTPAR)
 	fatal_reading_state (t0, "missing ) for !fileslist in state file");
       next_state_tokens (1);
     }
@@ -2599,6 +2551,7 @@ read_state (const char *path)
       (NULL_STATE_TOKEN, "input error while reading state [%s]",
        xstrerror (errno));
   read_state_typedefs (&typedefs);
+  read_state_param_structs (&param_structs);
   read_state_variables (&variables);
   read_state_trailer ();
 

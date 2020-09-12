@@ -3,12 +3,11 @@
 
 SCRIPT_NAME=elf
 OUTPUT_FORMAT="elf32-h8300"
-NO_REL_RELOCS=yes
 TEXT_START_ADDR=0x100
 MAXPAGESIZE=2
 TARGET_PAGE_SIZE=128
 ARCH=h8300
-TEMPLATE_NAME=elf
+TEMPLATE_NAME=elf32
 EMBEDDED=yes
 STACK_ADDR=0xfefc
 TINY_READONLY_SECTION=".tinyrodata :
@@ -18,7 +17,7 @@ TINY_READONLY_SECTION=".tinyrodata :
 TINY_DATA_SECTION=".tinydata	${RELOCATING+0xff8000} :
   {
 	*(.tinydata)
-	${RELOCATING+ _tinydata = .; }
+        ${RELOCATING+ _tinydata = .; }
   }"
 TINY_BSS_SECTION=".tinybss	: ${RELOCATING+AT (_tinydata)}
   {

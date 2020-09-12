@@ -1,5 +1,6 @@
 ;; Machine Descriptions for R8C/M16C/M32C
-;; Copyright (C) 2005-2019 Free Software Foundation, Inc.
+;; Copyright (C) 2005, 2007, 2008
+;; Free Software Foundation, Inc.
 ;; Contributed by Red Hat.
 ;;
 ;; This file is part of GCC.
@@ -42,11 +43,11 @@
   [(set (match_operand:QI 0 "memsym_operand" "+Si")
 	(ior:QI (subreg:QI (ashift:HI (const_int 1)
 				      (subreg:QI (match_operand:HI 1 "a_qi_operand" "Raa") 0)) 0)
-		(match_dup 0)))]
+		(match_operand:QI 2 "memsym_operand" "0")))]
   "TARGET_A16"
   "bset\t%0[%1]"
   [(set_attr "flags" "n")]
-  )
+  )  
 
 (define_insn "bset_hi"
   [(set (zero_extract:HI (match_operand:QI 0 "memsym_operand" "+Si")
@@ -82,7 +83,7 @@
 (define_insn "andqi3_16"
   [(set (match_operand:QI 0 "mra_operand" "=Sp,Rqi,RhlSd,RhlSd,??Rmm,??Rmm")
 	(and:QI (match_operand:QI 1 "mra_operand" "%0,0,0,0,0,0")
-		(match_operand:QI 2 "mrai_operand" "Imb,Imb,iRhlSd,?Rmm,iRhlSd,?Rmm")))]
+		(match_operand 2 "mrai_operand" "Imb,Imb,iRhlSd,?Rmm,iRhlSd,?Rmm")))]
   "TARGET_A16"
   "@
    bclr\t%B2,%0
@@ -135,8 +136,6 @@
       return \"and.w %h2,%h0\;and.w %H2,%H0\";
     case 5:
       return \"and.w %h2,%h0\;and.w %H2,%H0\";
-    default:
-      gcc_unreachable ();
     }"
   [(set_attr "flags" "x,x,x,x,x,x")]
 )
@@ -178,7 +177,7 @@
 (define_insn "andqi3_24"
   [(set (match_operand:QI 0 "mra_operand" "=Sd,Rqi,RhlSd,RhlSd,??Rmm,??Rmm")
 	(and:QI (match_operand:QI 1 "mra_operand" "%0,0,0,0,0,0")
-		(match_operand:QI 2 "mrai_operand" "Imb,Imb,iRhlSd,?Rmm,iRhlSd,?Rmm")))]
+		(match_operand 2 "mrai_operand" "Imb,Imb,iRhlSd,?Rmm,iRhlSd,?Rmm")))]
   "TARGET_A24"
   "@
    bclr\t%B2,%0
@@ -315,8 +314,6 @@
       return \"or.w %h2,%h0\;or.w %H2,%H0\";
     case 5:
       return \"or.w %h2,%h0\;or.w %H2,%H0\";
-    default:
-      gcc_unreachable ();
     }"
   [(set_attr "flags" "x,x,x,x,x,x")]
 )
@@ -363,8 +360,6 @@
       return \"xor.w %h2,%h0\;xor.w %H2,%H0\";
     case 5:
       return \"xor.w %h2,%h0\;xor.w %H2,%H0\";
-    default:
-      gcc_unreachable ();
     }"
   [(set_attr "flags" "x,x,x,x,x,x")]
 )

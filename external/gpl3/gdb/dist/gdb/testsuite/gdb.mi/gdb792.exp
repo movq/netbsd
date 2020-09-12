@@ -1,4 +1,5 @@
-# Copyright 2002-2019 Free Software Foundation, Inc.
+# Copyright 2002, 2003, 2007, 2008, 2009, 2010, 2011
+# Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -27,14 +28,16 @@ if [mi_gdb_start] {
     continue
 }
 
-standard_testfile .cc
+set testfile gdb792
+set srcfile "$testfile.cc"
+set binfile $objdir/$subdir/$testfile
 
-if [get_compiler_info "c++"] {
-    return -1
+if [get_compiler_info ${binfile} "c++"] {
+    return -1;
 }
 
 if {[gdb_compile $srcdir/$subdir/$srcfile $binfile executable {debug c++}] != ""} {
-  untested "failed to compile"
+  untested gdb792.exp
   return -1
 }
 

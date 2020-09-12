@@ -1,5 +1,6 @@
 /* Prologue value handling for GDB.
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright 2003, 2004, 2005, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,6 +18,8 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
+#include "gdb_string.h"
+#include "gdb_assert.h"
 #include "prologue-value.h"
 #include "regcache.h"
 
@@ -278,7 +281,7 @@ pv_is_array_ref (pv_t addr, CORE_ADDR size,
    The entry with the lowest offset simply follows the entry with the
    highest offset.  Entries may abut, but never overlap.  The area's
    'entry' pointer points to an arbitrary node in the ring.  */
-struct pv_area::area_entry
+struct area_entry
 {
   /* Links in the doubly-linked ring.  */
   struct area_entry *prev, *next;
@@ -296,23 +299,44 @@ struct pv_area::area_entry
 };
 
 
-/* See prologue-value.h.  */
-
-pv_area::pv_area (int base_reg, int addr_bit)
-  : m_base_reg (base_reg),
-    /* Remember that shift amounts equal to the type's width are
-       undefined.  */
-    m_addr_mask (((((CORE_ADDR) 1 << (addr_bit - 1)) - 1) << 1) | 1),
-    m_entry (nullptr)
+struct pv_area
 {
+  /* This area's base register.  */
+  int base_reg;
+
+  /* The mask to apply to addresses, to make the wrap-around happen at
+     the right place.  */
+  CORE_ADDR addr_mask;
+
+  /* An element of the doubly-linked ring of entries, or zero if we
+     have none.  */
+  struct area_entry *entry;
+};
+
+
+struct pv_area *
+make_pv_area (int base_reg, int addr_bit)
+{
+  struct pv_area *a = (struct pv_area *) xmalloc (sizeof (*a));
+
+  memset (a, 0, sizeof (*a));
+
+  a->base_reg = base_reg;
+  a->entry = 0;
+
+  /* Remember that shift amounts equal to the type's width are
+     undefined.  */
+  a->addr_mask = ((((CORE_ADDR) 1 << (addr_bit - 1)) - 1) << 1) | 1;
+
+  return a;
 }
 
-/* See prologue-value.h.  */
 
-void
-pv_area::clear_entries ()
+/* Delete all entries from AREA.  */
+static void
+clear_entries (struct pv_area *area)
 {
-  struct area_entry *e = m_entry;
+  struct area_entry *e = area->entry;
 
   if (e)
     {
@@ -326,23 +350,37 @@ pv_area::clear_entries ()
           xfree (e);
           e = next;
         }
-      while (e != m_entry);
+      while (e != area->entry);
 
-      m_entry = 0;
+      area->entry = 0;
     }
 }
 
 
-pv_area::~pv_area ()
+void
+free_pv_area (struct pv_area *area)
 {
-  clear_entries ();
+  clear_entries (area);
+  xfree (area);
 }
 
 
-/* See prologue-value.h.  */
+static void
+do_free_pv_area_cleanup (void *arg)
+{
+  free_pv_area ((struct pv_area *) arg);
+}
 
-bool
-pv_area::store_would_trash (pv_t addr)
+
+struct cleanup *
+make_cleanup_free_pv_area (struct pv_area *area)
+{
+  return make_cleanup (do_free_pv_area_cleanup, (void *) area);
+}
+
+
+int
+pv_area_store_would_trash (struct pv_area *area, pv_t addr)
 {
   /* It may seem odd that pvk_constant appears here --- after all,
      that's the case where we know the most about the address!  But
@@ -351,16 +389,23 @@ pv_area::store_would_trash (pv_t addr)
      constants.  */
   return (addr.kind == pvk_unknown
           || addr.kind == pvk_constant
-          || (addr.kind == pvk_register && addr.reg != m_base_reg));
+          || (addr.kind == pvk_register && addr.reg != area->base_reg));
 }
 
 
-/* See prologue-value.h.  */
+/* Return a pointer to the first entry we hit in AREA starting at
+   OFFSET and going forward.
 
-struct pv_area::area_entry *
-pv_area::find_entry (CORE_ADDR offset)
+   This may return zero, if AREA has no entries.
+
+   And since the entries are a ring, this may return an entry that
+   entirely preceeds OFFSET.  This is the correct behavior: depending
+   on the sizes involved, we could still overlap such an area, with
+   wrap-around.  */
+static struct area_entry *
+find_entry (struct pv_area *area, CORE_ADDR offset)
 {
-  struct area_entry *e = m_entry;
+  struct area_entry *e = area->entry;
 
   if (! e)
     return 0;
@@ -374,50 +419,54 @@ pv_area::find_entry (CORE_ADDR offset)
      with wrap-around.  We have to subtract offset from both sides to
      make sure both things we're comparing are on the same side of the
      discontinuity.  */
-  while (((e->next->offset - offset) & m_addr_mask)
-         < ((e->offset - offset) & m_addr_mask))
+  while (((e->next->offset - offset) & area->addr_mask)
+         < ((e->offset - offset) & area->addr_mask))
     e = e->next;
 
   /* If the previous entry would be better than the current one, then
      scan backwards.  */
-  while (((e->prev->offset - offset) & m_addr_mask)
-         < ((e->offset - offset) & m_addr_mask))
+  while (((e->prev->offset - offset) & area->addr_mask)
+         < ((e->offset - offset) & area->addr_mask))
     e = e->prev;
 
   /* In case there's some locality to the searches, set the area's
      pointer to the entry we've found.  */
-  m_entry = e;
+  area->entry = e;
 
   return e;
 }
 
 
-/* See prologue-value.h.  */
-
-int
-pv_area::overlaps (struct area_entry *entry, CORE_ADDR offset, CORE_ADDR size)
+/* Return non-zero if the SIZE bytes at OFFSET would overlap ENTRY;
+   return zero otherwise.  AREA is the area to which ENTRY belongs.  */
+static int
+overlaps (struct pv_area *area,
+          struct area_entry *entry,
+          CORE_ADDR offset,
+          CORE_ADDR size)
 {
   /* Think carefully about wrap-around before simplifying this.  */
-  return (((entry->offset - offset) & m_addr_mask) < size
-          || ((offset - entry->offset) & m_addr_mask) < entry->size);
+  return (((entry->offset - offset) & area->addr_mask) < size
+          || ((offset - entry->offset) & area->addr_mask) < entry->size);
 }
 
 
-/* See prologue-value.h.  */
-
 void
-pv_area::store (pv_t addr, CORE_ADDR size, pv_t value)
+pv_area_store (struct pv_area *area,
+               pv_t addr,
+               CORE_ADDR size,
+               pv_t value)
 {
   /* Remove any (potentially) overlapping entries.  */
-  if (store_would_trash (addr))
-    clear_entries ();
+  if (pv_area_store_would_trash (area, addr))
+    clear_entries (area);
   else
     {
       CORE_ADDR offset = addr.k;
-      struct area_entry *e = find_entry (offset);
+      struct area_entry *e = find_entry (area, offset);
 
       /* Delete all entries that we would overlap.  */
-      while (e && overlaps (e, offset, size))
+      while (e && overlaps (area, e, offset, size))
         {
           struct area_entry *next = (e->next == e) ? 0 : e->next;
 
@@ -430,10 +479,10 @@ pv_area::store (pv_t addr, CORE_ADDR size, pv_t value)
 
       /* Move the area's pointer to the next remaining entry.  This
          will also zero the pointer if we've deleted all the entries.  */
-      m_entry = e;
+      area->entry = e;
     }
 
-  /* Now, there are no entries overlapping us, and m_entry is
+  /* Now, there are no entries overlapping us, and area->entry is
      either zero or pointing at the closest entry after us.  We can
      just insert ourselves before that.
 
@@ -444,41 +493,39 @@ pv_area::store (pv_t addr, CORE_ADDR size, pv_t value)
   else
     {
       CORE_ADDR offset = addr.k;
-      struct area_entry *e = XNEW (struct area_entry);
+      struct area_entry *e = (struct area_entry *) xmalloc (sizeof (*e));
 
       e->offset = offset;
       e->size = size;
       e->value = value;
 
-      if (m_entry)
+      if (area->entry)
         {
-          e->prev = m_entry->prev;
-          e->next = m_entry;
+          e->prev = area->entry->prev;
+          e->next = area->entry;
           e->prev->next = e->next->prev = e;
         }
       else
         {
           e->prev = e->next = e;
-          m_entry = e;
+          area->entry = e;
         }
     }
 }
 
 
-/* See prologue-value.h.  */
-
 pv_t
-pv_area::fetch (pv_t addr, CORE_ADDR size)
+pv_area_fetch (struct pv_area *area, pv_t addr, CORE_ADDR size)
 {
   /* If we have no entries, or we can't decide how ADDR relates to the
      entries we do have, then the value is unknown.  */
-  if (! m_entry
-      || store_would_trash (addr))
+  if (! area->entry
+      || pv_area_store_would_trash (area, addr))
     return pv_unknown ();
   else
     {
       CORE_ADDR offset = addr.k;
-      struct area_entry *e = find_entry (offset);
+      struct area_entry *e = find_entry (area, offset);
 
       /* If this entry exactly matches what we're looking for, then
          we're set.  Otherwise, say it's unknown.  */
@@ -490,12 +537,13 @@ pv_area::fetch (pv_t addr, CORE_ADDR size)
 }
 
 
-/* See prologue-value.h.  */
-
-bool
-pv_area::find_reg (struct gdbarch *gdbarch, int reg, CORE_ADDR *offset_p)
+int
+pv_area_find_reg (struct pv_area *area,
+                  struct gdbarch *gdbarch,
+                  int reg,
+                  CORE_ADDR *offset_p)
 {
-  struct area_entry *e = m_entry;
+  struct area_entry *e = area->entry;
 
   if (e)
     do
@@ -507,31 +555,30 @@ pv_area::find_reg (struct gdbarch *gdbarch, int reg, CORE_ADDR *offset_p)
           {
             if (offset_p)
               *offset_p = e->offset;
-            return true;
+            return 1;
           }
 
         e = e->next;
       }
-    while (e != m_entry);
+    while (e != area->entry);
 
-  return false;
+  return 0;
 }
 
 
-/* See prologue-value.h.  */
-
 void
-pv_area::scan (void (*func) (void *closure,
-			     pv_t addr,
-			     CORE_ADDR size,
-			     pv_t value),
-	       void *closure)
+pv_area_scan (struct pv_area *area,
+              void (*func) (void *closure,
+                            pv_t addr,
+                            CORE_ADDR size,
+                            pv_t value),
+              void *closure)
 {
-  struct area_entry *e = m_entry;
+  struct area_entry *e = area->entry;
   pv_t addr;
 
   addr.kind = pvk_register;
-  addr.reg = m_base_reg;
+  addr.reg = area->base_reg;
 
   if (e)
     do
@@ -540,5 +587,5 @@ pv_area::scan (void (*func) (void *closure,
         func (closure, addr, e->size, e->value);
         e = e->next;
       }
-    while (e != m_entry);
+    while (e != area->entry);
 }

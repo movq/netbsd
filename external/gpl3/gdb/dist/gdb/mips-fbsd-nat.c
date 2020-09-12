@@ -1,6 +1,6 @@
 /* Native-dependent code for FreeBSD/mips.
 
-   Copyright (C) 2017-2019 Free Software Foundation, Inc.
+   Copyright (C) 2017 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -31,41 +31,25 @@
 #include "mips-fbsd-tdep.h"
 #include "inf-ptrace.h"
 
-struct mips_fbsd_nat_target final : public fbsd_nat_target
-{
-  void fetch_registers (struct regcache *, int) override;
-  void store_registers (struct regcache *, int) override;
-};
-
-static mips_fbsd_nat_target the_mips_fbsd_nat_target;
-
-/* Determine if PT_GETREGS fetches REGNUM.  */
+/* Determine if PT_GETREGS fetches this register.  */
 
 static bool
 getregs_supplies (struct gdbarch *gdbarch, int regnum)
 {
   return (regnum >= MIPS_ZERO_REGNUM
-	  && regnum <= mips_regnum (gdbarch)->pc);
-}
-
-/* Determine if PT_GETFPREGS fetches REGNUM.  */
-
-static bool
-getfpregs_supplies (struct gdbarch *gdbarch, int regnum)
-{
-  return (regnum >= mips_regnum (gdbarch)->fp0
-	  && regnum <= mips_regnum (gdbarch)->fp_implementation_revision);
+	  && regnum <= gdbarch_pc_regnum (gdbarch));
 }
 
 /* Fetch register REGNUM from the inferior.  If REGNUM is -1, do this
    for all registers.  */
 
-void
-mips_fbsd_nat_target::fetch_registers (struct regcache *regcache, int regnum)
+static void
+mips_fbsd_fetch_inferior_registers (struct target_ops *ops,
+				    struct regcache *regcache, int regnum)
 {
-  pid_t pid = get_ptrace_pid (regcache->ptid ());
+  pid_t pid = get_ptrace_pid (regcache_get_ptid (regcache));
 
-  struct gdbarch *gdbarch = regcache->arch ();
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   if (regnum == -1 || getregs_supplies (gdbarch, regnum))
     {
       struct reg regs;
@@ -74,9 +58,12 @@ mips_fbsd_nat_target::fetch_registers (struct regcache *regcache, int regnum)
 	perror_with_name (_("Couldn't get registers"));
 
       mips_fbsd_supply_gregs (regcache, regnum, &regs, sizeof (register_t));
+      if (regnum != -1)
+	return;
     }
 
-  if (regnum == -1 || getfpregs_supplies (gdbarch, regnum))
+  if (regnum == -1
+      || regnum >= gdbarch_fp0_regnum (get_regcache_arch (regcache)))
     {
       struct fpreg fpregs;
 
@@ -91,12 +78,13 @@ mips_fbsd_nat_target::fetch_registers (struct regcache *regcache, int regnum)
 /* Store register REGNUM back into the inferior.  If REGNUM is -1, do
    this for all registers.  */
 
-void
-mips_fbsd_nat_target::store_registers (struct regcache *regcache, int regnum)
+static void
+mips_fbsd_store_inferior_registers (struct target_ops *ops,
+				    struct regcache *regcache, int regnum)
 {
-  pid_t pid = get_ptrace_pid (regcache->ptid ());
+  pid_t pid = get_ptrace_pid (regcache_get_ptid (regcache));
 
-  struct gdbarch *gdbarch = regcache->arch ();
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   if (regnum == -1 || getregs_supplies (gdbarch, regnum))
     {
       struct reg regs;
@@ -109,9 +97,13 @@ mips_fbsd_nat_target::store_registers (struct regcache *regcache, int regnum)
 
       if (ptrace (PT_SETREGS, pid, (PTRACE_TYPE_ARG3) &regs, 0) == -1)
 	perror_with_name (_("Couldn't write registers"));
+
+      if (regnum != -1)
+	return;
     }
 
-  if (regnum == -1 || getfpregs_supplies (gdbarch, regnum))
+  if (regnum == -1
+      || regnum >= gdbarch_fp0_regnum (get_regcache_arch (regcache)))
     {
       struct fpreg fpregs;
 
@@ -125,9 +117,18 @@ mips_fbsd_nat_target::store_registers (struct regcache *regcache, int regnum)
 	perror_with_name (_("Couldn't write floating point status"));
     }
 }
+
+
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+void _initialize_mips_fbsd_nat (void);
 
 void
 _initialize_mips_fbsd_nat (void)
 {
-  add_inf_child_target (&the_mips_fbsd_nat_target);
+  struct target_ops *t;
+
+  t = inf_ptrace_target ();
+  t->to_fetch_registers = mips_fbsd_fetch_inferior_registers;
+  t->to_store_registers = mips_fbsd_store_inferior_registers;
+  fbsd_nat_add_target (t);
 }

@@ -1,6 +1,8 @@
 // -*- C++ -*- forwarding header.
 
-// Copyright (C) 1997-2019 Free Software Foundation, Inc.
+// Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+// 2006, 2007, 2008, 2009, 2010
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -39,14 +41,11 @@
 #pragma GCC system_header
 
 #include <bits/c++config.h>
+#include <cstddef>
 #include <stdio.h>
 
 #ifndef _GLIBCXX_CSTDIO
 #define _GLIBCXX_CSTDIO 1
-
-#if __cplusplus <= 201103L && !defined(_GLIBCXX_HAVE_GETS)
-extern "C" char* gets (char* __s) __attribute__((__deprecated__));
-#endif
 
 // Get rid of those macros defined in <stdio.h> in lieu of real functions.
 #undef clearerr
@@ -70,9 +69,7 @@ extern "C" char* gets (char* __s) __attribute__((__deprecated__));
 #undef fwrite
 #undef getc
 #undef getchar
-#if __cplusplus <= 201103L
-# undef gets
-#endif
+#undef gets
 #undef perror
 #undef printf
 #undef putc
@@ -93,8 +90,8 @@ extern "C" char* gets (char* __s) __attribute__((__deprecated__));
 #undef vprintf
 #undef vsprintf
 
-namespace std
-{
+_GLIBCXX_BEGIN_NAMESPACE(std)
+
   using ::FILE;
   using ::fpos_t;
 
@@ -119,10 +116,7 @@ namespace std
   using ::fwrite;
   using ::getc;
   using ::getchar;
-#if __cplusplus <= 201103L
-  // LWG 2249
   using ::gets;
-#endif
   using ::perror;
   using ::printf;
   using ::putc;
@@ -137,16 +131,15 @@ namespace std
   using ::sprintf;
   using ::sscanf;
   using ::tmpfile;
-#if _GLIBCXX_USE_TMPNAM
   using ::tmpnam;
-#endif
   using ::ungetc;
   using ::vfprintf;
   using ::vprintf;
   using ::vsprintf;
-} // namespace
 
-#if _GLIBCXX_USE_C99_STDIO
+_GLIBCXX_END_NAMESPACE
+
+#if _GLIBCXX_USE_C99
 
 #undef snprintf
 #undef vfscanf
@@ -154,20 +147,19 @@ namespace std
 #undef vsnprintf
 #undef vsscanf
 
-namespace __gnu_cxx
-{
+_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
+
 #if _GLIBCXX_USE_C99_CHECK || _GLIBCXX_USE_C99_DYNAMIC
   extern "C" int
-  (snprintf)(char * __restrict, std::size_t, const char * __restrict, ...)
+  (snprintf)(char * restrict, size_t, const char * restrict, ...) throw ();
+  extern "C" int
+  (vfscanf)(FILE * restrict, const char * restrict, __gnuc_va_list);
+  extern "C" int (vscanf)(const char * restrict, __gnuc_va_list);
+  extern "C" int
+  (vsnprintf)(char * restrict, size_t, const char * restrict, __gnuc_va_list)
   throw ();
   extern "C" int
-  (vfscanf)(FILE * __restrict, const char * __restrict, __gnuc_va_list);
-  extern "C" int (vscanf)(const char * __restrict, __gnuc_va_list);
-  extern "C" int
-  (vsnprintf)(char * __restrict, std::size_t, const char * __restrict,
-	      __gnuc_va_list) throw ();
-  extern "C" int
-  (vsscanf)(const char * __restrict, const char * __restrict, __gnuc_va_list)
+  (vsscanf)(const char * restrict, const char * restrict, __gnuc_va_list)
   throw ();
 #endif
 
@@ -178,17 +170,38 @@ namespace __gnu_cxx
   using ::vsnprintf;
   using ::vsscanf;
 #endif
-} // namespace __gnu_cxx
 
-namespace std
-{
+_GLIBCXX_END_NAMESPACE
+
+_GLIBCXX_BEGIN_NAMESPACE(std)
+
   using ::__gnu_cxx::snprintf;
   using ::__gnu_cxx::vfscanf;
   using ::__gnu_cxx::vscanf;
   using ::__gnu_cxx::vsnprintf;
   using ::__gnu_cxx::vsscanf;
-} // namespace std
 
-#endif // _GLIBCXX_USE_C99_STDIO
+_GLIBCXX_END_NAMESPACE
+
+#endif // _GLIBCXX_USE_C99
+
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+#  if defined(_GLIBCXX_INCLUDE_AS_TR1)
+#    error C++0x header cannot be included from TR1 header
+#  endif
+#  if defined(_GLIBCXX_INCLUDE_AS_CXX0X)
+#    include <tr1_impl/cstdio>
+#  else
+#    define _GLIBCXX_INCLUDE_AS_CXX0X
+#    define _GLIBCXX_BEGIN_NAMESPACE_TR1
+#    define _GLIBCXX_END_NAMESPACE_TR1
+#    define _GLIBCXX_TR1
+#    include <tr1_impl/cstdio>
+#    undef _GLIBCXX_TR1
+#    undef _GLIBCXX_END_NAMESPACE_TR1
+#    undef _GLIBCXX_BEGIN_NAMESPACE_TR1
+#    undef _GLIBCXX_INCLUDE_AS_CXX0X
+#  endif
+#endif
 
 #endif

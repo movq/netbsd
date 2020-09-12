@@ -1,5 +1,6 @@
 /* Definitions of target machine for GNU compiler, for HP PA-RISC
-   Copyright (C) 1998-2019 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2002, 2003, 2004, 2005, 2007, 2008, 2011
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -23,9 +24,7 @@ along with GCC; see the file COPYING3.  If not see
    the definition of __cplusplus.  We define _INCLUDE_LONGLONG
    to prevent nlist.h from defining __STDC_32_MODE__ (no longlong
    support).  We define __STDCPP__ to get certain system headers
-   (notably assert.h) to assume standard preprocessor behavior in C++.
-   We define _XOPEN_SOURCE_EXTENDED when we define _HPUX_SOURCE to avoid
-   non standard hpux variants in _INCLUDE_XOPEN_SOURCE_EXTENDED.  */
+   (notably assert.h) to assume standard preprocessor behavior in C++.  */
 #undef TARGET_OS_CPP_BUILTINS
 #define TARGET_OS_CPP_BUILTINS()					\
   do									\
@@ -42,72 +41,47 @@ along with GCC; see the file COPYING3.  If not see
 	if (c_dialect_cxx ())						\
 	  {								\
 	    builtin_define ("_HPUX_SOURCE");				\
-	    builtin_define ("_REENTRANT");				\
 	    builtin_define ("_INCLUDE_LONGLONG");			\
 	    builtin_define ("__STDCPP__");				\
-	    builtin_define ("_LARGEFILE_SOURCE");			\
-	    builtin_define ("_LARGEFILE64_SOURCE");			\
-	    if (flag_pa_unix >= 1995)					\
-	      {								\
-		builtin_define ("_XOPEN_UNIX");				\
-		builtin_define ("_XOPEN_SOURCE_EXTENDED");		\
-	      }								\
-	    if (flag_pa_unix >= 1998)					\
-	      {								\
-		builtin_define ("_INCLUDE__STDC_A1_SOURCE");		\
-		builtin_define ("_INCLUDE_XOPEN_SOURCE_500");		\
-	      }								\
-	    if (flag_pa_unix >= 2003)					\
-	      {								\
-		builtin_define ("_INCLUDE_STDC_SOURCE_PRE_199901");	\
-		builtin_define ("_INCLUDE_STDC_SOURCE_199901");		\
-		builtin_define ("_INCLUDE_XOPEN_SOURCE_PRE_500");	\
-		builtin_define ("_INCLUDE_XOPEN_SOURCE_520");		\
-		builtin_define ("_INCLUDE_XOPEN_SOURCE_PRE_600");	\
-		builtin_define ("_INCLUDE_XOPEN_SOURCE_600");		\
-	      }								\
-	  }								\
-	else if (flag_iso)						\
-	  {								\
-	    if (flag_isoc94)						\
-	      builtin_define ("_INCLUDE__STDC_A1_SOURCE");		\
 	  }								\
 	else								\
 	  {								\
-	    builtin_define ("_HPUX_SOURCE");				\
-	    builtin_define ("_REENTRANT");				\
-	    if (preprocessing_trad_p ())				\
+	    if (!flag_iso)						\
 	      {								\
-		builtin_define ("hp9000s800");				\
-		builtin_define ("hppa");				\
-		builtin_define ("hpux");				\
-		builtin_define ("unix");				\
-		builtin_define ("__CLASSIC_C__");			\
-		builtin_define ("_PWB");				\
-		builtin_define ("PWB");					\
-	      }								\
-	    if (flag_pa_unix >= 1995)					\
-	      {								\
-		builtin_define ("_XOPEN_UNIX");				\
-		builtin_define ("_XOPEN_SOURCE_EXTENDED");		\
-	      }								\
-	    if (flag_pa_unix >= 1998)					\
-	      {								\
-		builtin_define ("_INCLUDE__STDC_A1_SOURCE");		\
-		builtin_define ("_INCLUDE_XOPEN_SOURCE_500");		\
-	      }								\
-	    if (flag_pa_unix >= 2003)					\
-	      {								\
-		builtin_define ("_INCLUDE_STDC_SOURCE_PRE_199901");	\
-		builtin_define ("_INCLUDE_STDC_SOURCE_199901");		\
-		builtin_define ("_INCLUDE_XOPEN_SOURCE_PRE_500");	\
-		builtin_define ("_INCLUDE_XOPEN_SOURCE_520");		\
-		builtin_define ("_INCLUDE_XOPEN_SOURCE_PRE_600");	\
-		builtin_define ("_INCLUDE_XOPEN_SOURCE_600");		\
+		builtin_define ("_HPUX_SOURCE");			\
+		if (preprocessing_trad_p ())				\
+		  {							\
+		    builtin_define ("hp9000s800");			\
+		    builtin_define ("hppa");				\
+		    builtin_define ("hpux");				\
+		    builtin_define ("unix");				\
+		    builtin_define ("__CLASSIC_C__");			\
+		    builtin_define ("_PWB");				\
+		    builtin_define ("PWB");				\
+		  }							\
 	      }								\
 	  }								\
 	if (!TARGET_64BIT)						\
 	  builtin_define ("_ILP32");					\
+	if (flag_pa_unix >= 1995 && !flag_iso)				\
+	  {								\
+	    builtin_define ("_XOPEN_UNIX");				\
+	    builtin_define ("_XOPEN_SOURCE_EXTENDED");			\
+	  }								\
+	if (TARGET_HPUX_11_11)						\
+	  {								\
+	    if (flag_pa_unix >= 1998)					\
+	      {								\
+		if (flag_isoc94 || flag_isoc99 || c_dialect_cxx()	\
+		    || !flag_iso)					\
+		  builtin_define ("_INCLUDE__STDC_A1_SOURCE");		\
+		if (!flag_iso)						\
+		  builtin_define ("_INCLUDE_XOPEN_SOURCE_500");		\
+	      }								\
+	    else if (flag_isoc94 || flag_isoc99 || c_dialect_cxx ())	\
+	      warning (0, "-munix=98 option required for C89 "		\
+		       "Amendment 1 features.\n");			\
+	  }								\
 	if (TARGET_SIO)							\
 	  builtin_define ("_SIO");					\
 	else								\
@@ -131,10 +105,10 @@ along with GCC; see the file COPYING3.  If not see
 #undef LINK_SPEC
 #define LINK_SPEC \
   "%{!shared:%{p:-L/lib/libp -L/usr/lib/libp %{!static:\
-     %nwarning: consider linking with '-static' as system libraries with\n\
+     %nWarning: consider linking with `-static' as system libraries with\n\
      %n  profiling support are only provided in archive format}}}\
    %{!shared:%{pg:-L/lib/libp -L/usr/lib/libp %{!static:\
-     %nwarning: consider linking with '-static' as system libraries with\n\
+     %nWarning: consider linking with `-static' as system libraries with\n\
      %n  profiling support are only provided in archive format}}}\
    %{!shared:%{!static:%{rdynamic:-E}}}\
    -z %{mlinker-opt:-O} %{!shared:-u main -u __gcc_plt_call}\
@@ -147,8 +121,7 @@ along with GCC; see the file COPYING3.  If not see
 #undef LIB_SPEC
 #define LIB_SPEC \
   "%{!shared:\
-     %{fopenacc|fopenmp|%:gt(%{ftree-parallelize-loops=*:%*} 1):\
-       %{static:-a archive_shared} -lrt %{static:-a archive}}\
+     %{fopenmp:%{static:-a archive_shared} -lrt %{static:-a archive}}\
      %{mt|pthread:-lpthread} -lc\
      %{static:%{!nolibdld:-a archive_shared -ldld -a archive -lc}\
        %{!mt:%{!pthread:-a shared -lc -a archive}}}}\
@@ -157,7 +130,7 @@ along with GCC; see the file COPYING3.  If not see
 /* The libgcc_stub.a library needs to come last.  */
 #undef LINK_GCC_C_SEQUENCE_SPEC
 #define LINK_GCC_C_SEQUENCE_SPEC \
-  "%G %{!nolibc:%L} %G %{!nostdlib:%{!nodefaultlibs:%{!shared:-lgcc_stub}}}"
+  "%G %L %G %{!nostdlib:%{!nodefaultlibs:%{!shared:-lgcc_stub}}}"
 
 #undef STARTFILE_SPEC
 #define STARTFILE_SPEC \

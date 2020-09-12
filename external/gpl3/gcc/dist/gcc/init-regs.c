@@ -1,5 +1,5 @@
 /* Initialization of uninitialized regs.
-   Copyright (C) 2007-2019 Free Software Foundation, Inc.
+   Copyright (C) 2007, 2008, 2009 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,14 +20,15 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "backend.h"
-#include "rtl.h"
+#include "tm.h"
 #include "tree.h"
-#include "df.h"
-#include "memmodel.h"
-#include "emit-rtl.h"
+#include "rtl.h"
+#include "regs.h"
 #include "expr.h"
 #include "tree-pass.h"
+#include "basic-block.h"
+#include "flags.h"
+#include "df.h"
 
 /* Check all of the uses of pseudo variables.  If any use that is MUST
    uninitialized, add a store of 0 immediately before it.  For
@@ -48,7 +49,7 @@ static void
 initialize_uninitialized_regs (void)
 {
   basic_block bb;
-  auto_bitmap already_genned;
+  bitmap already_genned = BITMAP_ALLOC (NULL);
 
   if (optimize == 1)
     {
@@ -58,30 +59,27 @@ initialize_uninitialized_regs (void)
 
   df_analyze ();
 
-  FOR_EACH_BB_FN (bb, cfun)
+  FOR_EACH_BB (bb)
     {
-      rtx_insn *insn;
+      rtx insn;
       bitmap lr = DF_LR_IN (bb);
       bitmap ur = DF_LIVE_IN (bb);
       bitmap_clear (already_genned);
 
       FOR_BB_INSNS (bb, insn)
 	{
-	  df_ref use;
+	  unsigned int uid = INSN_UID (insn);
+	  df_ref *use_rec;
 	  if (!NONDEBUG_INSN_P (insn))
 	    continue;
 
-	  FOR_EACH_INSN_USE (use, insn)
+	  for (use_rec = DF_INSN_UID_USES (uid); *use_rec; use_rec++)
 	    {
+	      df_ref use = *use_rec;
 	      unsigned int regno = DF_REF_REGNO (use);
 
 	      /* Only do this for the pseudos.  */
 	      if (regno < FIRST_PSEUDO_REGISTER)
-		continue;
-
-	      /* Ignore pseudo PIC register.  */
-	      if (pic_offset_table_rtx
-		  && regno == REGNO (pic_offset_table_rtx))
 		continue;
 
 	      /* Do not generate multiple moves for the same regno.
@@ -98,13 +96,12 @@ initialize_uninitialized_regs (void)
 	      if (bitmap_bit_p (lr, regno)
 		  && (!bitmap_bit_p (ur, regno)))
 		{
-		  rtx_insn *move_insn;
+		  rtx move_insn;
 		  rtx reg = DF_REF_REAL_REG (use);
 
 		  bitmap_set_bit (already_genned, regno);
 
 		  start_sequence ();
-		  emit_clobber (reg);
 		  emit_move_insn (reg, CONST0_RTX (GET_MODE (reg)));
 		  move_insn = get_insns ();
 		  end_sequence ();
@@ -112,8 +109,7 @@ initialize_uninitialized_regs (void)
 		  if (dump_file)
 		    fprintf (dump_file,
 			     "adding initialization in %s of reg %d at in block %d for insn %d.\n",
-			     current_function_name (), regno, bb->index,
-			     INSN_UID (insn));
+			     current_function_name (), regno, bb->index, uid);
 		}
 	    }
 	}
@@ -125,44 +121,39 @@ initialize_uninitialized_regs (void)
 	df_dump (dump_file);
       df_remove_problem (df_live);
     }
+
+  BITMAP_FREE (already_genned);
 }
 
-namespace {
-
-const pass_data pass_data_initialize_regs =
+static bool
+gate_initialize_regs (void)
 {
-  RTL_PASS, /* type */
-  "init-regs", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
-  TV_NONE, /* tv_id */
-  0, /* properties_required */
-  0, /* properties_provided */
-  0, /* properties_destroyed */
-  0, /* todo_flags_start */
-  TODO_df_finish, /* todo_flags_finish */
+  return optimize > 0;
+}
+
+static unsigned int
+rest_of_handle_initialize_regs (void)
+{
+  initialize_uninitialized_regs ();
+  return 0;
+}
+
+struct rtl_opt_pass pass_initialize_regs =
+{
+ {
+  RTL_PASS,
+  "init-regs",                          /* name */
+  gate_initialize_regs,                 /* gate */
+  rest_of_handle_initialize_regs,       /* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  TV_NONE,                              /* tv_id */
+  0,                                    /* properties_required */
+  0,                                    /* properties_provided */
+  0,                                    /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_dump_func |
+  TODO_df_finish                        /* todo_flags_finish */
+ }
 };
-
-class pass_initialize_regs : public rtl_opt_pass
-{
-public:
-  pass_initialize_regs (gcc::context *ctxt)
-    : rtl_opt_pass (pass_data_initialize_regs, ctxt)
-  {}
-
-  /* opt_pass methods: */
-  virtual bool gate (function *) { return optimize > 0; }
-  virtual unsigned int execute (function *)
-    {
-      initialize_uninitialized_regs ();
-      return 0;
-    }
-
-}; // class pass_initialize_regs
-
-} // anon namespace
-
-rtl_opt_pass *
-make_pass_initialize_regs (gcc::context *ctxt)
-{
-  return new pass_initialize_regs (ctxt);
-}

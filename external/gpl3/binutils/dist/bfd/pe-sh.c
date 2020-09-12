@@ -1,5 +1,5 @@
 /* BFD back-end for SH PECOFF files.
-   Copyright (C) 1995-2020 Free Software Foundation, Inc.
+   Copyright 1995, 2000, 2001, 2002, 2007 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -21,7 +21,7 @@
 #include "sysdep.h"
 #include "bfd.h"
 
-#define TARGET_SHL_SYM sh_pe_le_vec
+#define TARGET_SHL_SYM shlpe_vec
 #define TARGET_SHL_NAME "pe-shl"
 #define COFF_WITH_PE
 #define PCRELOFFSET TRUE

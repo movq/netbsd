@@ -1,5 +1,5 @@
 /* internal.h -- Internal header file for stack backtrace library.
-   Copyright (C) 2012-2019 Free Software Foundation, Inc.
+   Copyright (C) 2012-2013 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Google.
 
 Redistribution and use in source and binary forms, with or without
@@ -7,13 +7,13 @@ modification, are permitted provided that the following conditions are
 met:
 
     (1) Redistributions of source code must retain the above copyright
-    notice, this list of conditions and the following disclaimer.
+    notice, this list of conditions and the following disclaimer. 
 
     (2) Redistributions in binary form must reproduce the above copyright
     notice, this list of conditions and the following disclaimer in
     the documentation and/or other materials provided with the
-    distribution.
-
+    distribution.  
+    
     (3) The name of the author may not be used to
     endorse or promote products derived from this software without
     specific prior written permission.
@@ -65,48 +65,7 @@ POSSIBILITY OF SUCH DAMAGE.  */
 #define __sync_lock_test_and_set(A, B) (abort(), 0)
 #define __sync_lock_release(A) abort()
 
-#endif /* !defined (HAVE_SYNC_FUNCTIONS) */
-
-#ifdef HAVE_ATOMIC_FUNCTIONS
-
-/* We have the atomic builtin functions.  */
-
-#define backtrace_atomic_load_pointer(p) \
-    __atomic_load_n ((p), __ATOMIC_ACQUIRE)
-#define backtrace_atomic_load_int(p) \
-    __atomic_load_n ((p), __ATOMIC_ACQUIRE)
-#define backtrace_atomic_store_pointer(p, v) \
-    __atomic_store_n ((p), (v), __ATOMIC_RELEASE)
-#define backtrace_atomic_store_size_t(p, v) \
-    __atomic_store_n ((p), (v), __ATOMIC_RELEASE)
-#define backtrace_atomic_store_int(p, v) \
-    __atomic_store_n ((p), (v), __ATOMIC_RELEASE)
-
-#else /* !defined (HAVE_ATOMIC_FUNCTIONS) */
-#ifdef HAVE_SYNC_FUNCTIONS
-
-/* We have the sync functions but not the atomic functions.  Define
-   the atomic ones in terms of the sync ones.  */
-
-extern void *backtrace_atomic_load_pointer (void *);
-extern int backtrace_atomic_load_int (int *);
-extern void backtrace_atomic_store_pointer (void *, void *);
-extern void backtrace_atomic_store_size_t (size_t *, size_t);
-extern void backtrace_atomic_store_int (int *, int);
-
-#else /* !defined (HAVE_SYNC_FUNCTIONS) */
-
-/* We have neither the sync nor the atomic functions.  These will
-   never be called.  */
-
-#define backtrace_atomic_load_pointer(p) (abort(), (void *) NULL)
-#define backtrace_atomic_load_int(p) (abort(), 0)
-#define backtrace_atomic_store_pointer(p, v) abort()
-#define backtrace_atomic_store_size_t(p, v) abort()
-#define backtrace_atomic_store_int(p, v) abort()
-
-#endif /* !defined (HAVE_SYNC_FUNCTIONS) */
-#endif /* !defined (HAVE_ATOMIC_FUNCTIONS) */
+#endif /* !defined(HAVE_SYNC_FUNCTIONS) */
 
 /* The type of the function that collects file/line information.  This
    is like backtrace_pcinfo.  */
@@ -179,7 +138,7 @@ struct backtrace_view
 /* Create a view of SIZE bytes from DESCRIPTOR at OFFSET.  Store the
    result in *VIEW.  Returns 1 on success, 0 on error.  */
 extern int backtrace_get_view (struct backtrace_state *state, int descriptor,
-			       off_t offset, uint64_t size,
+			       off_t offset, size_t size,
 			       backtrace_error_callback error_callback,
 			       void *data, struct backtrace_view *view);
 
@@ -196,20 +155,13 @@ extern int backtrace_close (int descriptor,
 			    backtrace_error_callback error_callback,
 			    void *data);
 
-/* Sort without using memory.  */
-
-extern void backtrace_qsort (void *base, size_t count, size_t size,
-			     int (*compar) (const void *, const void *));
-
-/* Allocate memory.  This is like malloc.  If ERROR_CALLBACK is NULL,
-   this does not report an error, it just returns NULL.  */
+/* Allocate memory.  This is like malloc.  */
 
 extern void *backtrace_alloc (struct backtrace_state *state, size_t size,
 			      backtrace_error_callback error_callback,
 			      void *data) ATTRIBUTE_MALLOC;
 
-/* Free memory allocated by backtrace_alloc.  If ERROR_CALLBACK is
-   NULL, this does not report an error.  */
+/* Free memory allocated by backtrace_alloc.  */
 
 extern void backtrace_free (struct backtrace_state *state, void *mem,
 			    size_t size,
@@ -257,18 +209,6 @@ extern int backtrace_vector_release (struct backtrace_state *state,
 				     backtrace_error_callback error_callback,
 				     void *data);
 
-/* Free the space managed by VEC.  This will reset VEC.  */
-
-static inline void
-backtrace_vector_free (struct backtrace_state *state,
-		       struct backtrace_vector *vec,
-		       backtrace_error_callback error_callback, void *data)
-{
-  vec->alc += vec->size;
-  vec->size = 0;
-  backtrace_vector_release (state, vec, error_callback, data);
-}
-
 /* Read initial debug data from a descriptor, and set the
    fileline_data, syminfo_fn, and syminfo_data fields of STATE.
    Return the fileln_fn field in *FILELN_FN--this is done this way so
@@ -280,13 +220,10 @@ backtrace_vector_free (struct backtrace_state *state,
    appropriate one.  */
 
 extern int backtrace_initialize (struct backtrace_state *state,
-				 const char *filename,
 				 int descriptor,
 				 backtrace_error_callback error_callback,
 				 void *data,
 				 fileline *fileline_fn);
-
-struct dwarf_data;
 
 /* Add file/line information for a DWARF module.  */
 
@@ -303,18 +240,7 @@ extern int backtrace_dwarf_add (struct backtrace_state *state,
 				const unsigned char *dwarf_str,
 				size_t dwarf_str_size,
 				int is_bigendian,
-				struct dwarf_data *fileline_altlink,
 				backtrace_error_callback error_callback,
-				void *data, fileline *fileline_fn,
-				struct dwarf_data **fileline_entry);
-
-/* A test-only hook for elf_uncompress_zdebug.  */
-
-extern int backtrace_uncompress_zdebug (struct backtrace_state *,
-					const unsigned char *compressed,
-					size_t compressed_size,
-					backtrace_error_callback, void *data,
-					unsigned char **uncompressed,
-					size_t *uncompressed_size);
+				void *data, fileline *fileline_fn);
 
 #endif

@@ -1,4 +1,4 @@
-# Copyright 2006-2019 Free Software Foundation, Inc.
+# Copyright 2006, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,19 +16,44 @@
 # The intent of this testcase is to assure that backtrace works while
 # single-stepping the instructions that prepare to call a function.
 
+if $tracelevel then {
+    strace $tracelevel
+}
 
-standard_testfile
 
-if {[prepare_for_testing "failed to prepare" $testfile $srcfile debug]} {
+set testfile step-bt
+set srcfile ${testfile}.c
+set binfile ${objdir}/${subdir}/${testfile}
+if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug}] != "" } {
+    untested "Couldn't compile test program"
     return -1
 }
+
+# Get things started.
+
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
 
 gdb_test "break *hello" \
          "Breakpoint.*at.* file .*$srcfile, line .*" \
          "breakpoint at first instruction of hello()"
 
 gdb_run_cmd
-gdb_test "" "Breakpoint.* hello .* at .*$srcfile:.*" "run to hello()"
+gdb_expect {
+    -re ".*Breakpoint.* hello .* at .*$srcfile:.*$gdb_prompt $"  {
+	pass "run to hello()"
+    }
+    -re ".*$gdb_prompt $" {
+	fail "run to hello()"
+	return -1
+    }
+    timeout {
+        fail "run to hello() (timeout)"
+        return -1
+    }
+}
 
 gdb_test "stepi" \
          ".*" \

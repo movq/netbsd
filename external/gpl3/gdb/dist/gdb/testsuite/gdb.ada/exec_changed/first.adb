@@ -1,4 +1,5 @@
---  Copyright 2005-2019 Free Software Foundation, Inc.
+--  Copyright 2005, 2007, 2008, 2009, 2010, 2011
+--  Free Software Foundation, Inc.
 --
 --  This program is free software; you can redistribute it and/or modify
 --  it under the terms of the GNU General Public License as published by
@@ -14,12 +15,6 @@
 --  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 procedure First is
-
-   procedure Break_Me is
-   begin
-      null;
-   end Break_Me;
-
 begin
-   Break_Me;
+   null;
 end First;

@@ -1,6 +1,7 @@
 // Allocators -*- C++ -*-
 
-// Copyright (C) 2001-2019 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -49,13 +50,8 @@
 #include <ext/atomicity.h>
 #include <ext/concurrence.h>
 #include <bits/move.h>
-#if __cplusplus >= 201103L
-#include <type_traits>
-#endif
 
-namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
 
   using std::size_t;
   using std::ptrdiff_t;
@@ -141,54 +137,42 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
         struct rebind
         { typedef __pool_alloc<_Tp1> other; };
 
-#if __cplusplus >= 201103L
-      // _GLIBCXX_RESOLVE_LIB_DEFECTS
-      // 2103. propagate_on_container_move_assignment
-      typedef std::true_type propagate_on_container_move_assignment;
-#endif
+      __pool_alloc() throw() { }
 
-      __pool_alloc() _GLIBCXX_USE_NOEXCEPT { }
-
-      __pool_alloc(const __pool_alloc&) _GLIBCXX_USE_NOEXCEPT { }
+      __pool_alloc(const __pool_alloc&) throw() { }
 
       template<typename _Tp1>
-        __pool_alloc(const __pool_alloc<_Tp1>&) _GLIBCXX_USE_NOEXCEPT { }
+        __pool_alloc(const __pool_alloc<_Tp1>&) throw() { }
 
-      ~__pool_alloc() _GLIBCXX_USE_NOEXCEPT { }
+      ~__pool_alloc() throw() { }
 
       pointer
-      address(reference __x) const _GLIBCXX_NOEXCEPT
-      { return std::__addressof(__x); }
+      address(reference __x) const { return &__x; }
 
       const_pointer
-      address(const_reference __x) const _GLIBCXX_NOEXCEPT
-      { return std::__addressof(__x); }
+      address(const_reference __x) const { return &__x; }
 
       size_type
-      max_size() const _GLIBCXX_USE_NOEXCEPT 
+      max_size() const throw() 
       { return size_t(-1) / sizeof(_Tp); }
 
-#if __cplusplus >= 201103L
-      template<typename _Up, typename... _Args>
-        void
-        construct(_Up* __p, _Args&&... __args)
-	{ ::new((void *)__p) _Up(std::forward<_Args>(__args)...); }
-
-      template<typename _Up>
-        void 
-        destroy(_Up* __p) { __p->~_Up(); }
-#else
       // _GLIBCXX_RESOLVE_LIB_DEFECTS
       // 402. wrong new expression in [some_] allocator::construct
       void 
       construct(pointer __p, const _Tp& __val) 
       { ::new((void *)__p) _Tp(__val); }
 
-      void 
-      destroy(pointer __p) { __p->~_Tp(); }
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      template<typename... _Args>
+        void
+        construct(pointer __p, _Args&&... __args)
+	{ ::new((void *)__p) _Tp(std::forward<_Args>(__args)...); }
 #endif
 
-      _GLIBCXX_NODISCARD pointer
+      void 
+      destroy(pointer __p) { __p->~_Tp(); }
+
+      pointer
       allocate(size_type __n, const void* = 0);
 
       void
@@ -210,7 +194,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     __pool_alloc<_Tp>::_S_force_new;
 
   template<typename _Tp>
-    _GLIBCXX_NODISCARD _Tp*
+    _Tp*
     __pool_alloc<_Tp>::allocate(size_type __n, const void*)
     {
       pointer __ret = 0;
@@ -218,16 +202,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	{
 	  if (__n > this->max_size())
 	    std::__throw_bad_alloc();
-
-	  const size_t __bytes = __n * sizeof(_Tp);
-
-#if __cpp_aligned_new
-	  if (alignof(_Tp) > __STDCPP_DEFAULT_NEW_ALIGNMENT__)
-	    {
-	      std::align_val_t __al = std::align_val_t(alignof(_Tp));
-	      return static_cast<_Tp*>(::operator new(__bytes, __al));
-	    }
-#endif
 
 	  // If there is a race through here, assume answer from getenv
 	  // will resolve in same direction.  Inspired by techniques
@@ -240,6 +214,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		__atomic_add_dispatch(&_S_force_new, -1);
 	    }
 
+	  const size_t __bytes = __n * sizeof(_Tp);	      
 	  if (__bytes > size_t(_S_max_bytes) || _S_force_new > 0)
 	    __ret = static_cast<_Tp*>(::operator new(__bytes));
 	  else
@@ -268,13 +243,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     {
       if (__builtin_expect(__n != 0 && __p != 0, true))
 	{
-#if __cpp_aligned_new
-	  if (alignof(_Tp) > __STDCPP_DEFAULT_NEW_ALIGNMENT__)
-	    {
-	      ::operator delete(__p, std::align_val_t(alignof(_Tp)));
-	      return;
-	    }
-#endif
 	  const size_t __bytes = __n * sizeof(_Tp);
 	  if (__bytes > static_cast<size_t>(_S_max_bytes) || _S_force_new > 0)
 	    ::operator delete(__p);
@@ -290,7 +258,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	}
     }
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 #endif

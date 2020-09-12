@@ -162,7 +162,10 @@ void tester ()
 int main () 
 {
   int i;
-
+#ifdef usestubs
+  set_debug_traps();
+  breakpoint();
+#endif
   for (i = 0; i < 5; i += 1)
     tester ();
   return 0;

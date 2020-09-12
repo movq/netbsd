@@ -1,6 +1,7 @@
 /* Signal trampoline unwinder.
 
-   Copyright (C) 2004-2019 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -41,7 +42,7 @@ struct trad_frame_cache;
 
 /* Magic instruction that to mark the end of the signal trampoline
    instruction sequence.  */
-#define TRAMP_SENTINEL_INSN ULONGEST_MAX
+#define TRAMP_SENTINEL_INSN ((LONGEST) -1)
 
 struct tramp_frame
 {
@@ -69,13 +70,6 @@ struct tramp_frame
 		struct frame_info *this_frame,
 		struct trad_frame_cache *this_cache,
 		CORE_ADDR func);
-  /* Return non-zero if the tramp-frame is valid for the PC requested.
-     Adjust the PC to point to the address to check the instruction
-     sequence against if required.  If this is NULL, then the tramp-frame
-     is valid for any PC.  */
-  int (*validate) (const struct tramp_frame *self,
-		   struct frame_info *this_frame,
-		   CORE_ADDR *pc);
 };
 
 void tramp_frame_prepend_unwinder (struct gdbarch *gdbarch,

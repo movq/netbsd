@@ -1,6 +1,7 @@
 // The template and inlines for the -*- C++ -*- slice_array class.
 
-// Copyright (C) 1997-2019 Free Software Foundation, Inc.
+// Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2004, 2005, 2006, 2009
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,9 +23,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file bits/slice_array.h
+/** @file slice_array.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{valarray}
+ *  You should not attempt to use it directly.
  */
 
 // Written by Gabriel Dos Reis <Gabriel.Dos-Reis@DPTMaths.ENS-Cachan.Fr>
@@ -34,9 +35,7 @@
 
 #pragma GCC system_header
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   /**
    * @addtogroup numeric_arrays
@@ -65,11 +64,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     /**
      *  @brief  Construct a slice.
      *
-     *  @param  __o  Offset in array of first element.
-     *  @param  __d  Number of elements in slice.
-     *  @param  __s  Stride between array elements.
+     *  @param  o  Offset in array of first element.
+     *  @param  d  Number of elements in slice.
+     *  @param  s  Stride between array elements.
      */
-    slice(size_t __o, size_t __d, size_t __s);
+    slice(size_t, size_t, size_t);
 
     ///  Return array offset of first slice element.
     size_t start() const;
@@ -192,13 +191,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       const size_t      _M_stride;
       const _Array<_Tp> _M_array;
 
-#if __cplusplus < 201103L
       // not implemented
       slice_array();
-#else
-    public:
-      slice_array() = delete;
-#endif
     };
 
   template<typename _Tp>
@@ -209,8 +203,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _Tp>
     inline
-    slice_array<_Tp>::slice_array(const slice_array<_Tp>& __a)
-    : _M_sz(__a._M_sz), _M_stride(__a._M_stride), _M_array(__a._M_array) {}
+    slice_array<_Tp>::slice_array(const slice_array<_Tp>& a)
+    : _M_sz(a._M_sz), _M_stride(a._M_stride), _M_array(a._M_array) {}
 
   //    template<typename _Tp>
   //    inline slice_array<_Tp>::~slice_array () {}
@@ -273,7 +267,6 @@ _DEFINE_VALARRAY_OPERATOR(>>, __shift_right)
 
   // @} group numeric_arrays
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 #endif /* _SLICE_ARRAY_H */

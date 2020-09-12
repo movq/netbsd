@@ -1,5 +1,6 @@
 /* CPP Library.
-   Copyright (C) 1986-2019 Free Software Foundation, Inc.
+   Copyright (C) 1986, 1987, 1989, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
+   1999, 2000, 2003, 2004, 2006, 2007 Free Software Foundation, Inc.
    Contributed by Per Bothner, 1994-95.
    Based on CCCP program by Paul Rubin, June 1986
    Adapted to ANSI C, Richard Stallman, Jan 1987
@@ -24,13 +25,18 @@
 #include "tm.h"
 #include "cppdefault.h"
 
-#ifndef NATIVE_SYSTEM_HEADER_COMPONENT
-#define NATIVE_SYSTEM_HEADER_COMPONENT 0
+#ifndef STANDARD_INCLUDE_DIR
+#define STANDARD_INCLUDE_DIR "/usr/include"
+#endif
+
+#ifndef STANDARD_INCLUDE_COMPONENT
+#define STANDARD_INCLUDE_COMPONENT 0
 #endif
 
 #if defined (CROSS_DIRECTORY_STRUCTURE) && !defined (TARGET_SYSTEM_ROOT)
 # undef LOCAL_INCLUDE_DIR
-# undef NATIVE_SYSTEM_HEADER_DIR
+# undef SYSTEM_INCLUDE_DIR
+# undef STANDARD_INCLUDE_DIR
 #else
 # undef CROSS_INCLUDE_DIR
 #endif
@@ -42,34 +48,26 @@ const struct default_include cpp_include_defaults[]
 = {
 #ifdef GPLUSPLUS_INCLUDE_DIR
     /* Pick up GNU C++ generic include files.  */
-    { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1,
-      GPLUSPLUS_INCLUDE_DIR_ADD_SYSROOT, 0 },
+    { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1, 0, 0 },
 #endif
 #ifdef GPLUSPLUS_TOOL_INCLUDE_DIR
     /* Pick up GNU C++ target-dependent include files.  */
-    { GPLUSPLUS_TOOL_INCLUDE_DIR, "G++", 1, 1,
-      GPLUSPLUS_INCLUDE_DIR_ADD_SYSROOT, 1 },
+    { GPLUSPLUS_TOOL_INCLUDE_DIR, "G++", 1, 1, 0, 1 },
 #endif
 #ifdef GPLUSPLUS_BACKWARD_INCLUDE_DIR
     /* Pick up GNU C++ backward and deprecated include files.  */
-    { GPLUSPLUS_BACKWARD_INCLUDE_DIR, "G++", 1, 1,
-      GPLUSPLUS_INCLUDE_DIR_ADD_SYSROOT, 0 },
-#endif
-#ifdef GCC_INCLUDE_DIR
-#ifndef GCC_INCLUDE_DIR_ADD_SYSROOT
-#define GCC_INCLUDE_DIR_ADD_SYSROOT 0
-#endif
-    /* This is the dir for gcc's private headers.  */
-    { GCC_INCLUDE_DIR, "GCC", 0, 0,
-      GCC_INCLUDE_DIR_ADD_SYSROOT, 0 },
+    { GPLUSPLUS_BACKWARD_INCLUDE_DIR, "G++", 1, 1, 0, 0 },
 #endif
 #ifdef LOCAL_INCLUDE_DIR
     /* /usr/local/include comes before the fixincluded header files.  */
-    { LOCAL_INCLUDE_DIR, 0, 0, 1, 1, 2 },
     { LOCAL_INCLUDE_DIR, 0, 0, 1, 1, 0 },
 #endif
 #ifdef PREFIX_INCLUDE_DIR
     { PREFIX_INCLUDE_DIR, 0, 0, 1, 0, 0 },
+#endif
+#ifdef GCC_INCLUDE_DIR
+    /* This is the dir for gcc's private headers.  */
+    { GCC_INCLUDE_DIR, "GCC", 0, 0, 0, 0 },
 #endif
 #ifdef FIXED_INCLUDE_DIR
     /* This is the dir for fixincludes.  */
@@ -91,10 +89,13 @@ const struct default_include cpp_include_defaults[]
     /* Another place the target system's headers might be.  */
     { TOOL_INCLUDE_DIR, "BINUTILS", 0, 1, 0, 0 },
 #endif
-#ifdef NATIVE_SYSTEM_HEADER_DIR
+#ifdef SYSTEM_INCLUDE_DIR
+    /* Some systems have an extra dir of include files.  */
+    { SYSTEM_INCLUDE_DIR, 0, 0, 0, 1, 0 },
+#endif
+#ifdef STANDARD_INCLUDE_DIR
     /* /usr/include comes dead last.  */
-    { NATIVE_SYSTEM_HEADER_DIR, NATIVE_SYSTEM_HEADER_COMPONENT, 0, 0, 1, 2 },
-    { NATIVE_SYSTEM_HEADER_DIR, NATIVE_SYSTEM_HEADER_COMPONENT, 0, 0, 1, 0 },
+    { STANDARD_INCLUDE_DIR, STANDARD_INCLUDE_COMPONENT, 0, 0, 1, 0 },
 #endif
     { 0, 0, 0, 0, 0, 0 }
   };
@@ -126,7 +127,7 @@ cpp_relocated (void)
   if (relocated == -1)
     {
       /* Check if the toolchain was relocated?  */
-      gcc_exec_prefix = getenv ("GCC_EXEC_PREFIX");
+      GET_ENVIRONMENT (gcc_exec_prefix, "GCC_EXEC_PREFIX");
       if (gcc_exec_prefix)
        relocated = 1;
       else
@@ -135,3 +136,4 @@ cpp_relocated (void)
 
   return relocated;
 }
+

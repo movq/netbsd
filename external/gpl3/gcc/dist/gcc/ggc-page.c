@@ -1,5 +1,6 @@
 /* "Bag-of-pages" garbage collector for the GNU compiler.
-   Copyright (C) 1999-2019 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,18 +21,16 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "backend.h"
-#include "alias.h"
+#include "tm.h"
 #include "tree.h"
 #include "rtl.h"
-#include "memmodel.h"
 #include "tm_p.h"
-#include "diagnostic-core.h"
+#include "toplev.h"
 #include "flags.h"
-#include "ggc-internal.h"
+#include "ggc.h"
 #include "timevar.h"
 #include "params.h"
-#include "cgraph.h"
+#include "tree-flow.h"
 #include "cfgloop.h"
 #include "plugin.h"
 
@@ -39,20 +38,30 @@ along with GCC; see the file COPYING3.  If not see
    file open.  Prefer either to valloc.  */
 #ifdef HAVE_MMAP_ANON
 # undef HAVE_MMAP_DEV_ZERO
+
+# include <sys/mman.h>
+# ifndef MAP_FAILED
+#  define MAP_FAILED -1
+# endif
+# if !defined (MAP_ANONYMOUS) && defined (MAP_ANON)
+#  define MAP_ANONYMOUS MAP_ANON
+# endif
 # define USING_MMAP
+
 #endif
 
 #ifdef HAVE_MMAP_DEV_ZERO
+
+# include <sys/mman.h>
+# ifndef MAP_FAILED
+#  define MAP_FAILED -1
+# endif
 # define USING_MMAP
+
 #endif
 
 #ifndef USING_MMAP
 #define USING_MALLOC_PAGE_GROUPS
-#endif
-
-#if defined(HAVE_MADVISE) && HAVE_DECL_MADVISE && defined(MADV_DONTNEED) \
-    && defined(USING_MMAP)
-# define USING_MADVISE
 #endif
 
 /* Strategy:
@@ -92,6 +101,11 @@ along with GCC; see the file COPYING3.  If not see
      4: Object marks as well.  */
 #define GGC_DEBUG_LEVEL (0)
 
+#ifndef HOST_BITS_PER_PTR
+#define HOST_BITS_PER_PTR  HOST_BITS_PER_LONG
+#endif
+
+
 /* A two-level tree is used to look up the page-entry for a given
    pointer.  Two chunks of the pointer's bits are extracted to index
    the first and second levels of the tree, as follows:
@@ -116,14 +130,14 @@ along with GCC; see the file COPYING3.  If not see
 
 #define PAGE_L1_BITS	(8)
 #define PAGE_L2_BITS	(32 - PAGE_L1_BITS - G.lg_pagesize)
-#define PAGE_L1_SIZE	((uintptr_t) 1 << PAGE_L1_BITS)
-#define PAGE_L2_SIZE	((uintptr_t) 1 << PAGE_L2_BITS)
+#define PAGE_L1_SIZE	((size_t) 1 << PAGE_L1_BITS)
+#define PAGE_L2_SIZE	((size_t) 1 << PAGE_L2_BITS)
 
 #define LOOKUP_L1(p) \
-  (((uintptr_t) (p) >> (32 - PAGE_L1_BITS)) & ((1 << PAGE_L1_BITS) - 1))
+  (((size_t) (p) >> (32 - PAGE_L1_BITS)) & ((1 << PAGE_L1_BITS) - 1))
 
 #define LOOKUP_L2(p) \
-  (((uintptr_t) (p) >> G.lg_pagesize) & ((1 << PAGE_L2_BITS) - 1))
+  (((size_t) (p) >> G.lg_pagesize) & ((1 << PAGE_L2_BITS) - 1))
 
 /* The number of objects per allocation page, for objects on a page of
    the indicated ORDER.  */
@@ -152,7 +166,7 @@ along with GCC; see the file COPYING3.  If not see
 struct max_alignment {
   char c;
   union {
-    int64_t i;
+    HOST_WIDEST_INT i;
     void *p;
   } u;
 };
@@ -196,7 +210,7 @@ static const size_t extra_order_size_table[] = {
   sizeof (struct tree_field_decl),
   sizeof (struct tree_parm_decl),
   sizeof (struct tree_var_decl),
-  sizeof (struct tree_type_non_common),
+  sizeof (struct tree_type),
   sizeof (struct function),
   sizeof (struct basic_block_def),
   sizeof (struct cgraph_node),
@@ -212,9 +226,9 @@ static const size_t extra_order_size_table[] = {
 
 #define ROUND_UP_VALUE(x, f) ((f) - 1 - ((f) - 1 + (x)) % (f))
 
-/* Round X to next multiple of the page size */
+/* Compute the smallest multiple of F that is >= X.  */
 
-#define PAGE_ALIGN(x) ROUND_UP ((x), G.pagesize)
+#define ROUND_UP(x, f) (CEIL (x, f) * (f))
 
 /* The Ith entry is the number of objects on a page or order I.  */
 
@@ -237,7 +251,7 @@ inverse_table[NUM_ORDERS];
 
 /* A page_entry records the status of an allocation page.  This
    structure is dynamically sized to fit the bitmap in_use_p.  */
-struct page_entry
+typedef struct page_entry
 {
   /* The next page-entry with objects of the same size, or NULL if
      this is the last page-entry.  */
@@ -277,19 +291,16 @@ struct page_entry
   /* The lg of size of objects allocated from this page.  */
   unsigned char order;
 
-  /* Discarded page? */
-  bool discarded;
-
   /* A bit vector indicating whether or not objects are in use.  The
      Nth bit is one if the Nth object on this page is allocated.  This
      array is dynamically sized.  */
   unsigned long in_use_p[1];
-};
+} page_entry;
 
 #ifdef USING_MALLOC_PAGE_GROUPS
 /* A page_group describes a large allocation from malloc, from which
    we parcel out aligned pages.  */
-struct page_group
+typedef struct page_group
 {
   /* A linked list of all extant page groups.  */
   struct page_group *next;
@@ -302,7 +313,7 @@ struct page_group
 
   /* A bitmask of pages in use.  */
   unsigned int in_use;
-};
+} page_group;
 #endif
 
 #if HOST_BITS_PER_PTR <= 32
@@ -324,41 +335,6 @@ typedef struct page_table_chain
 
 #endif
 
-class finalizer
-{
-public:
-  finalizer (void *addr, void (*f)(void *)) : m_addr (addr), m_function (f) {}
-
-  void *addr () const { return m_addr; }
-
-  void call () const { m_function (m_addr); }
-
-private:
-  void *m_addr;
-  void (*m_function)(void *);
-};
-
-class vec_finalizer
-{
-public:
-  vec_finalizer (uintptr_t addr, void (*f)(void *), size_t s, size_t n) :
-    m_addr (addr), m_function (f), m_object_size (s), m_n_objects (n) {}
-
-  void call () const
-    {
-      for (size_t i = 0; i < m_n_objects; i++)
-	m_function (reinterpret_cast<void *> (m_addr + (i * m_object_size)));
-    }
-
-  void *addr () const { return reinterpret_cast<void *> (m_addr); }
-
-private:
-  uintptr_t m_addr;
-  void (*m_function)(void *);
-  size_t m_object_size;
-  size_t m_n_objects;
-};
-
 #ifdef ENABLE_GC_ALWAYS_COLLECT
 /* List of free objects to be verified as actually free on the
    next collection.  */
@@ -370,7 +346,7 @@ struct free_object
 #endif
 
 /* The rest of the global variables.  */
-static struct ggc_globals
+static struct globals
 {
   /* The Nth element in this array is a page with objects of size 2^N.
      If there are any pages with free objects, they will be at the
@@ -452,23 +428,18 @@ static struct ggc_globals
      better runtime data access pattern.  */
   unsigned long **save_in_use;
 
-  /* Finalizers for single objects.  The first index is collection_depth.  */
-  vec<vec<finalizer> > finalizers;
-
-  /* Finalizers for vectors of objects.  */
-  vec<vec<vec_finalizer> > vec_finalizers;
-
 #ifdef ENABLE_GC_ALWAYS_COLLECT
   /* List of free objects to be verified as actually free on the
      next collection.  */
   struct free_object *free_object_list;
 #endif
 
+#ifdef GATHER_STATISTICS
   struct
   {
-    /* Total GC-allocated memory.  */
+    /* Total memory allocated with ggc_alloc.  */
     unsigned long long total_allocated;
-    /* Total overhead for GC-allocated memory.  */
+    /* Total overhead for memory to be allocated with ggc_alloc.  */
     unsigned long long total_overhead;
 
     /* Total allocations and overhead for sizes less than 32, 64 and 128.
@@ -490,16 +461,13 @@ static struct ggc_globals
     /* The overhead for each of the allocation orders.  */
     unsigned long long total_overhead_per_order[NUM_ORDERS];
   } stats;
+#endif
 } G;
-
-/* True if a gc is currently taking place.  */
-
-static bool in_gc = false;
 
 /* The size in bytes required to maintain a bitmap for the objects
    on a page-entry.  */
 #define BITMAP_SIZE(Num_objects) \
-  (CEIL ((Num_objects), HOST_BITS_PER_LONG) * sizeof (long))
+  (CEIL ((Num_objects), HOST_BITS_PER_LONG) * sizeof(long))
 
 /* Allocate pages in chunks of this size, to throttle calls to memory
    allocation routines.  The first page is used, the rest go onto the
@@ -508,7 +476,7 @@ static bool in_gc = false;
    can override this by defining GGC_QUIRE_SIZE explicitly.  */
 #ifndef GGC_QUIRE_SIZE
 # ifdef USING_MMAP
-#  define GGC_QUIRE_SIZE 512	/* 2MB for 4K pages */
+#  define GGC_QUIRE_SIZE 256
 # else
 #  define GGC_QUIRE_SIZE 16
 # endif
@@ -517,10 +485,11 @@ static bool in_gc = false;
 /* Initial guess as to how many page table entries we might need.  */
 #define INITIAL_PTE_COUNT 128
 
+static int ggc_allocated_p (const void *);
 static page_entry *lookup_page_table_entry (const void *);
 static void set_page_table_entry (void *, page_entry *);
 #ifdef USING_MMAP
-static char *alloc_anon (char *, size_t, bool check);
+static char *alloc_anon (char *, size_t);
 #endif
 #ifdef USING_MALLOC_PAGE_GROUPS
 static size_t page_group_index (char *, char *);
@@ -581,11 +550,10 @@ push_by_depth (page_entry *p, unsigned long *s)
 #define save_in_use_p(__p) \
   (save_in_use_p_i (__p->index_by_depth))
 
-/* Traverse the page table and find the entry for a page.
-   If the object wasn't allocated in GC return NULL.  */
+/* Returns nonzero if P was allocated in GC'able memory.  */
 
-static inline page_entry *
-safe_lookup_page_table_entry (const void *p)
+static inline int
+ggc_allocated_p (const void *p)
 {
   page_entry ***base;
   size_t L1, L2;
@@ -594,11 +562,11 @@ safe_lookup_page_table_entry (const void *p)
   base = &G.lookup[0];
 #else
   page_table table = G.lookup;
-  uintptr_t high_bits = (uintptr_t) p & ~ (uintptr_t) 0xffffffff;
+  size_t high_bits = (size_t) p & ~ (size_t) 0xffffffff;
   while (1)
     {
       if (table == NULL)
-	return NULL;
+	return 0;
       if (table->high_bits == high_bits)
 	break;
       table = table->next;
@@ -609,10 +577,8 @@ safe_lookup_page_table_entry (const void *p)
   /* Extract the level 1 and 2 indices.  */
   L1 = LOOKUP_L1 (p);
   L2 = LOOKUP_L2 (p);
-  if (! base[L1])
-    return NULL;
 
-  return base[L1][L2];
+  return base[L1] && base[L1][L2];
 }
 
 /* Traverse the page table and find the entry for a page.
@@ -628,7 +594,7 @@ lookup_page_table_entry (const void *p)
   base = &G.lookup[0];
 #else
   page_table table = G.lookup;
-  uintptr_t high_bits = (uintptr_t) p & ~ (uintptr_t) 0xffffffff;
+  size_t high_bits = (size_t) p & ~ (size_t) 0xffffffff;
   while (table->high_bits != high_bits)
     table = table->next;
   base = &table->table[0];
@@ -653,7 +619,7 @@ set_page_table_entry (void *p, page_entry *entry)
   base = &G.lookup[0];
 #else
   page_table table;
-  uintptr_t high_bits = (uintptr_t) p & ~ (uintptr_t) 0xffffffff;
+  size_t high_bits = (size_t) p & ~ (size_t) 0xffffffff;
   for (table = G.lookup; table; table = table->next)
     if (table->high_bits == high_bits)
       goto found;
@@ -679,7 +645,7 @@ found:
 
 /* Prints the page-entry for object size ORDER, for debugging.  */
 
-DEBUG_FUNCTION void
+void
 debug_print_page_list (int order)
 {
   page_entry *p;
@@ -702,7 +668,7 @@ debug_print_page_list (int order)
    compile error unless exactly one of the HAVE_* is defined.  */
 
 static inline char *
-alloc_anon (char *pref ATTRIBUTE_UNUSED, size_t size, bool check)
+alloc_anon (char *pref ATTRIBUTE_UNUSED, size_t size)
 {
 #ifdef HAVE_MMAP_ANON
   char *page = (char *) mmap (pref, size, PROT_READ | PROT_WRITE,
@@ -715,8 +681,6 @@ alloc_anon (char *pref ATTRIBUTE_UNUSED, size_t size, bool check)
 
   if (page == (char *) MAP_FAILED)
     {
-      if (!check)
-        return NULL;
       perror ("virtual memory exhausted");
       exit (FATAL_EXIT_CODE);
     }
@@ -725,7 +689,7 @@ alloc_anon (char *pref ATTRIBUTE_UNUSED, size_t size, bool check)
   G.bytes_mapped += size;
 
   /* Pretend we don't have access to the allocated pages.  We'll enable
-     access to smaller pieces of the area in ggc_internal_alloc.  Discard the
+     access to smaller pieces of the area in ggc_alloc.  Discard the
      handle to avoid handle leak.  */
   VALGRIND_DISCARD (VALGRIND_MAKE_MEM_NOACCESS (page, size));
 
@@ -779,7 +743,6 @@ alloc_page (unsigned order)
   entry_size = num_objects * OBJECT_SIZE (order);
   if (entry_size < G.pagesize)
     entry_size = G.pagesize;
-  entry_size = PAGE_ALIGN (entry_size);
 
   entry = NULL;
   page = NULL;
@@ -791,10 +754,6 @@ alloc_page (unsigned order)
 
   if (p != NULL)
     {
-      if (p->discarded)
-        G.bytes_mapped += p->bytes;
-      p->discarded = false;
-
       /* Recycle the allocated memory from this page ...  */
       *pp = p->next;
       page = p->page;
@@ -819,18 +778,13 @@ alloc_page (unsigned order)
 	 extras on the freelist.  (Can only do this optimization with
 	 mmap for backing store.)  */
       struct page_entry *e, *f = G.free_pages;
-      int i, entries = GGC_QUIRE_SIZE;
+      int i;
 
-      page = alloc_anon (NULL, G.pagesize * GGC_QUIRE_SIZE, false);
-      if (page == NULL)
-     	{
-	  page = alloc_anon (NULL, G.pagesize, true);
-          entries = 1;
-	}
+      page = alloc_anon (NULL, G.pagesize * GGC_QUIRE_SIZE);
 
       /* This loop counts down so that the chain will be in ascending
 	 memory order.  */
-      for (i = entries - 1; i >= 1; i--)
+      for (i = GGC_QUIRE_SIZE - 1; i >= 1; i--)
 	{
 	  e = XCNEWVAR (struct page_entry, page_entry_size);
 	  e->order = order;
@@ -843,7 +797,7 @@ alloc_page (unsigned order)
       G.free_pages = f;
     }
   else
-    page = alloc_anon (NULL, entry_size, true);
+    page = alloc_anon (NULL, entry_size);
 #endif
 #ifdef USING_MALLOC_PAGE_GROUPS
   else
@@ -862,7 +816,7 @@ alloc_page (unsigned order)
 	alloc_size = entry_size + G.pagesize - 1;
       allocation = XNEWVEC (char, alloc_size);
 
-      page = (char *) (((uintptr_t) allocation + G.pagesize - 1) & -G.pagesize);
+      page = (char *) (((size_t) allocation + G.pagesize - 1) & -G.pagesize);
       head_slop = page - allocation;
       if (multiple_pages)
 	tail_slop = ((size_t) allocation + alloc_size) & (G.pagesize - 1);
@@ -1016,94 +970,7 @@ free_page (page_entry *entry)
 static void
 release_pages (void)
 {
-  size_t n1 = 0;
-  size_t n2 = 0;
-#ifdef USING_MADVISE
-  page_entry *p, *start_p;
-  char *start;
-  size_t len;
-  size_t mapped_len;
-  page_entry *next, *prev, *newprev;
-  size_t free_unit = (GGC_QUIRE_SIZE/2) * G.pagesize;
-
-  /* First free larger continuous areas to the OS.
-     This allows other allocators to grab these areas if needed.
-     This is only done on larger chunks to avoid fragmentation. 
-     This does not always work because the free_pages list is only
-     approximately sorted. */
-
-  p = G.free_pages;
-  prev = NULL;
-  while (p)
-    {
-      start = p->page;
-      start_p = p;
-      len = 0;
-      mapped_len = 0;
-      newprev = prev;
-      while (p && p->page == start + len)
-        {
-          len += p->bytes;
-	  if (!p->discarded)
-	      mapped_len += p->bytes;
-	  newprev = p;
-          p = p->next;
-        }
-      if (len >= free_unit)
-        {
-          while (start_p != p)
-            {
-              next = start_p->next;
-              free (start_p);
-              start_p = next;
-            }
-          munmap (start, len);
-	  if (prev)
-	    prev->next = p;
-          else
-            G.free_pages = p;
-          G.bytes_mapped -= mapped_len;
-	  n1 += len;
-	  continue;
-        }
-      prev = newprev;
-   }
-
-  /* Now give back the fragmented pages to the OS, but keep the address 
-     space to reuse it next time. */
-
-  for (p = G.free_pages; p; )
-    {
-      if (p->discarded)
-        {
-          p = p->next;
-          continue;
-        }
-      start = p->page;
-      len = p->bytes;
-      start_p = p;
-      p = p->next;
-      while (p && p->page == start + len)
-        {
-          len += p->bytes;
-          p = p->next;
-        }
-      /* Give the page back to the kernel, but don't free the mapping.
-         This avoids fragmentation in the virtual memory map of the 
- 	 process. Next time we can reuse it by just touching it. */
-      madvise (start, len, MADV_DONTNEED);
-      /* Don't count those pages as mapped to not touch the garbage collector
-         unnecessarily. */
-      G.bytes_mapped -= len;
-      n2 += len;
-      while (start_p != p)
-        {
-          start_p->discarded = true;
-          start_p = start_p->next;
-        }
-    }
-#endif
-#if defined(USING_MMAP) && !defined(USING_MADVISE)
+#ifdef USING_MMAP
   page_entry *p, *next;
   char *start;
   size_t len;
@@ -1128,7 +995,6 @@ release_pages (void)
 	}
 
       munmap (start, len);
-      n1 += len;
       G.bytes_mapped -= len;
     }
 
@@ -1156,21 +1022,11 @@ release_pages (void)
       {
 	*gp = g->next;
 	G.bytes_mapped -= g->alloc_size;
-	n1 += g->alloc_size;
 	free (g->allocation);
       }
     else
       gp = &g->next;
 #endif
-  if (!quiet_flag && (n1 || n2))
-    {
-      fprintf (stderr, " {GC");
-      if (n1)
-	fprintf (stderr, " released %luk", (unsigned long)(n1 / 1024));
-      if (n2)
-	fprintf (stderr, " madv_dontneed %luk", (unsigned long)(n2 / 1024));
-      fprintf (stderr, "}");
-    }
 }
 
 /* This table provides a fast way to determine ceil(log_2(size)) for
@@ -1212,77 +1068,35 @@ static unsigned char size_lookup[NUM_SIZE_LOOKUP] =
   9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9
 };
 
-/* For a given size of memory requested for allocation, return the
-   actual size that is going to be allocated, as well as the size
-   order.  */
+/* Typed allocation function.  Does nothing special in this collector.  */
 
-static void
-ggc_round_alloc_size_1 (size_t requested_size,
-			size_t *size_order,
-			size_t *alloced_size)
+void *
+ggc_alloc_typed_stat (enum gt_types_enum type ATTRIBUTE_UNUSED, size_t size
+		      MEM_STAT_DECL)
 {
-  size_t order, object_size;
-
-  if (requested_size < NUM_SIZE_LOOKUP)
-    {
-      order = size_lookup[requested_size];
-      object_size = OBJECT_SIZE (order);
-    }
-  else
-    {
-      order = 10;
-      while (requested_size > (object_size = OBJECT_SIZE (order)))
-        order++;
-    }
-
-  if (size_order)
-    *size_order = order;
-  if (alloced_size)
-    *alloced_size = object_size;
-}
-
-/* For a given size of memory requested for allocation, return the
-   actual size that is going to be allocated.  */
-
-size_t
-ggc_round_alloc_size (size_t requested_size)
-{
-  size_t size = 0;
-  
-  ggc_round_alloc_size_1 (requested_size, NULL, &size);
-  return size;
-}
-
-/* Push a finalizer onto the appropriate vec.  */
-
-static void
-add_finalizer (void *result, void (*f)(void *), size_t s, size_t n)
-{
-  if (f == NULL)
-    /* No finalizer.  */;
-  else if (n == 1)
-    {
-      finalizer fin (result, f);
-      G.finalizers[G.context_depth].safe_push (fin);
-    }
-  else
-    {
-      vec_finalizer fin (reinterpret_cast<uintptr_t> (result), f, s, n);
-      G.vec_finalizers[G.context_depth].safe_push (fin);
-    }
+  return ggc_alloc_stat (size PASS_MEM_STAT);
 }
 
 /* Allocate a chunk of memory of SIZE bytes.  Its contents are undefined.  */
 
 void *
-ggc_internal_alloc (size_t size, void (*f)(void *), size_t s, size_t n
-		    MEM_STAT_DECL)
+ggc_alloc_stat (size_t size MEM_STAT_DECL)
 {
   size_t order, word, bit, object_offset, object_size;
   struct page_entry *entry;
   void *result;
 
-  ggc_round_alloc_size_1 (size, &order, &object_size);
+  if (size < NUM_SIZE_LOOKUP)
+    {
+      order = size_lookup[size];
+      object_size = OBJECT_SIZE (order);
+    }
+  else
+    {
+      order = 10;
+      while (size > (object_size = OBJECT_SIZE (order)))
+	order++;
+    }
 
   /* If there are non-full pages for this size allocation, they are at
      the head of the list.  */
@@ -1386,9 +1200,10 @@ ggc_internal_alloc (size_t size, void (*f)(void *), size_t s, size_t n
 
   /* Calculate the object's address.  */
   result = entry->page + object_offset;
-  if (GATHER_STATISTICS)
-    ggc_record_overhead (OBJECT_SIZE (order), OBJECT_SIZE (order) - size,
-			 result FINAL_PASS_MEM_STAT);
+#ifdef GATHER_STATISTICS
+  ggc_record_overhead (OBJECT_SIZE (order), OBJECT_SIZE (order) - size,
+		       result PASS_MEM_STAT);
+#endif
 
 #ifdef ENABLE_GC_CHECKING
   /* Keep poisoning-by-writing-0xaf the object, in an attempt to keep the
@@ -1419,34 +1234,32 @@ ggc_internal_alloc (size_t size, void (*f)(void *), size_t s, size_t n
   /* For timevar statistics.  */
   timevar_ggc_mem_total += object_size;
 
-  if (f)
-    add_finalizer (result, f, s, n);
+#ifdef GATHER_STATISTICS
+  {
+    size_t overhead = object_size - size;
 
-  if (GATHER_STATISTICS)
-    {
-      size_t overhead = object_size - size;
+    G.stats.total_overhead += overhead;
+    G.stats.total_allocated += object_size;
+    G.stats.total_overhead_per_order[order] += overhead;
+    G.stats.total_allocated_per_order[order] += object_size;
 
-      G.stats.total_overhead += overhead;
-      G.stats.total_allocated += object_size;
-      G.stats.total_overhead_per_order[order] += overhead;
-      G.stats.total_allocated_per_order[order] += object_size;
-
-      if (size <= 32)
-	{
-	  G.stats.total_overhead_under32 += overhead;
-	  G.stats.total_allocated_under32 += object_size;
-	}
-      if (size <= 64)
-	{
-	  G.stats.total_overhead_under64 += overhead;
-	  G.stats.total_allocated_under64 += object_size;
-	}
-      if (size <= 128)
-	{
-	  G.stats.total_overhead_under128 += overhead;
-	  G.stats.total_allocated_under128 += object_size;
-	}
-    }
+    if (size <= 32)
+      {
+	G.stats.total_overhead_under32 += overhead;
+	G.stats.total_allocated_under32 += object_size;
+      }
+    if (size <= 64)
+      {
+	G.stats.total_overhead_under64 += overhead;
+	G.stats.total_allocated_under64 += object_size;
+      }
+    if (size <= 128)
+      {
+	G.stats.total_overhead_under128 += overhead;
+	G.stats.total_allocated_under128 += object_size;
+      }
+  }
+#endif
 
   if (GGC_DEBUG_LEVEL >= 3)
     fprintf (G.debug_file,
@@ -1467,14 +1280,12 @@ gt_ggc_m_S (const void *p)
   unsigned long mask;
   unsigned long offset;
 
-  if (!p)
+  if (!p || !ggc_allocated_p (p))
     return;
 
-  /* Look up the page on which the object is alloced.  If it was not
-     GC allocated, gracefully bail out.  */
-  entry = safe_lookup_page_table_entry (p);
-  if (!entry)
-    return;
+  /* Look up the page on which the object is alloced.  .  */
+  entry = lookup_page_table_entry (p);
+  gcc_assert (entry);
 
   /* Calculate the index of the object on the page; this is its bit
      position in the in_use_p bitmap.  Note that because a char* might
@@ -1508,26 +1319,6 @@ gt_ggc_m_S (const void *p)
     fprintf (G.debug_file, "Marking %p\n", p);
 
   return;
-}
-
-
-/* User-callable entry points for marking string X.  */
-
-void
-gt_ggc_mx (const char *& x)
-{
-  gt_ggc_m_S (x);
-}
-
-void
-gt_ggc_mx (unsigned char *& x)
-{
-  gt_ggc_m_S (x);
-}
-
-void
-gt_ggc_mx (unsigned char& x ATTRIBUTE_UNUSED)
-{
 }
 
 /* If P is not marked, marks it and return false.  Otherwise return true.
@@ -1605,15 +1396,13 @@ ggc_get_size (const void *p)
 void
 ggc_free (void *p)
 {
-  if (in_gc)
-    return;
-
   page_entry *pe = lookup_page_table_entry (p);
   size_t order = pe->order;
   size_t size = OBJECT_SIZE (order);
 
-  if (GATHER_STATISTICS)
-    ggc_free_overhead (p);
+#ifdef GATHER_STATISTICS
+  ggc_free_overhead (p);
+#endif
 
   if (GGC_DEBUG_LEVEL >= 3)
     fprintf (G.debug_file,
@@ -1724,14 +1513,9 @@ compute_inverse (unsigned order)
 void
 init_ggc (void)
 {
-  static bool init_p = false;
   unsigned order;
 
-  if (init_p)
-    return;
-  init_p = true;
-
-  G.pagesize = getpagesize ();
+  G.pagesize = getpagesize();
   G.lg_pagesize = exact_log2 (G.pagesize);
 
 #ifdef HAVE_MMAP_DEV_ZERO
@@ -1752,15 +1536,15 @@ init_ggc (void)
      believe, is an unaligned page allocation, which would cause us to
      hork badly if we tried to use it.  */
   {
-    char *p = alloc_anon (NULL, G.pagesize, true);
+    char *p = alloc_anon (NULL, G.pagesize);
     struct page_entry *e;
-    if ((uintptr_t)p & (G.pagesize - 1))
+    if ((size_t)p & (G.pagesize - 1))
       {
 	/* How losing.  Discard this one and try another.  If we still
 	   can't get something useful, give up.  */
 
-	p = alloc_anon (NULL, G.pagesize, true);
-	gcc_assert (!((uintptr_t)p & (G.pagesize - 1)));
+	p = alloc_anon (NULL, G.pagesize);
+	gcc_assert (!((size_t)p & (G.pagesize - 1)));
       }
 
     /* We have a good page, might as well hold onto it...  */
@@ -1819,11 +1603,20 @@ init_ggc (void)
   G.by_depth_max = INITIAL_PTE_COUNT;
   G.by_depth = XNEWVEC (page_entry *, G.by_depth_max);
   G.save_in_use = XNEWVEC (unsigned long *, G.by_depth_max);
+}
 
-  /* Allocate space for the depth 0 finalizers.  */
-  G.finalizers.safe_push (vNULL);
-  G.vec_finalizers.safe_push (vNULL);
-  gcc_assert (G.finalizers.length() == 1);
+/* Start a new GGC zone.  */
+
+struct alloc_zone *
+new_ggc_zone (const char *name ATTRIBUTE_UNUSED)
+{
+  return NULL;
+}
+
+/* Destroy a GGC zone.  */
+void
+destroy_ggc_zone (struct alloc_zone *zone ATTRIBUTE_UNUSED)
+{
 }
 
 /* Merge the SAVE_IN_USE_P and IN_USE_P arrays in P so that IN_USE_P
@@ -1879,7 +1672,7 @@ clear_marks (void)
 	  size_t bitmap_size = BITMAP_SIZE (num_objects + 1);
 
 	  /* The data should be page-aligned.  */
-	  gcc_assert (!((uintptr_t) p->page & (G.pagesize - 1)));
+	  gcc_assert (!((size_t) p->page & (G.pagesize - 1)));
 
 	  /* Pages that aren't in the topmost context are not collected;
 	     nevertheless, we need their in-use bit vectors to store GC
@@ -1899,53 +1692,6 @@ clear_marks (void)
 	  /* Make sure the one-past-the-end bit is always set.  */
 	  p->in_use_p[num_objects / HOST_BITS_PER_LONG]
 	    = ((unsigned long) 1 << (num_objects % HOST_BITS_PER_LONG));
-	}
-    }
-}
-
-/* Check if any blocks with a registered finalizer have become unmarked. If so
-   run the finalizer and unregister it because the block is about to be freed.
-   Note that no garantee is made about what order finalizers will run in so
-   touching other objects in gc memory is extremely unwise.  */
-
-static void
-ggc_handle_finalizers ()
-{
-  unsigned dlen = G.finalizers.length();
-  for (unsigned d = G.context_depth; d < dlen; ++d)
-    {
-      vec<finalizer> &v = G.finalizers[d];
-      unsigned length = v.length ();
-      for (unsigned int i = 0; i < length;)
-	{
-	  finalizer &f = v[i];
-	  if (!ggc_marked_p (f.addr ()))
-	    {
-	      f.call ();
-	      v.unordered_remove (i);
-	      length--;
-	    }
-	  else
-	    i++;
-	}
-    }
-
-  gcc_assert (dlen == G.vec_finalizers.length());
-  for (unsigned d = G.context_depth; d < dlen; ++d)
-    {
-      vec<vec_finalizer> &vv = G.vec_finalizers[d];
-      unsigned length = vv.length ();
-      for (unsigned int i = 0; i < length;)
-	{
-	  vec_finalizer &f = vv[i];
-	  if (!ggc_marked_p (f.addr ()))
-	    {
-	      f.call ();
-	      vv.unordered_remove (i);
-	      length--;
-	    }
-	  else
-	    i++;
 	}
     }
 }
@@ -2189,44 +1935,38 @@ ggc_collect (void)
     MAX (G.allocated_last_gc, (size_t)PARAM_VALUE (GGC_MIN_HEAPSIZE) * 1024);
 
   float min_expand = allocated_last_gc * PARAM_VALUE (GGC_MIN_EXPAND) / 100;
+
   if (G.allocated < allocated_last_gc + min_expand && !ggc_force_collect)
     return;
 
   timevar_push (TV_GC);
+  if (!quiet_flag)
+    fprintf (stderr, " {GC %luk -> ", (unsigned long) G.allocated / 1024);
   if (GGC_DEBUG_LEVEL >= 2)
     fprintf (G.debug_file, "BEGIN COLLECTING\n");
 
   /* Zero the total allocated bytes.  This will be recalculated in the
      sweep phase.  */
-  size_t allocated = G.allocated;
   G.allocated = 0;
 
   /* Release the pages we freed the last time we collected, but didn't
      reuse in the interim.  */
   release_pages ();
 
-  /* Output this later so we do not interfere with release_pages.  */
-  if (!quiet_flag)
-    fprintf (stderr, " {GC %luk -> ", (unsigned long) allocated / 1024);
-
   /* Indicate that we've seen collections at this context depth.  */
   G.context_depth_collections = ((unsigned long)1 << (G.context_depth + 1)) - 1;
 
   invoke_plugin_callbacks (PLUGIN_GGC_START, NULL);
 
-  in_gc = true;
   clear_marks ();
   ggc_mark_roots ();
-  ggc_handle_finalizers ();
-
-  if (GATHER_STATISTICS)
-    ggc_prune_overhead_list ();
-
+#ifdef GATHER_STATISTICS
+  ggc_prune_overhead_list ();
+#endif
   poison_pages ();
   validate_free_objects ();
   sweep_pages ();
 
-  in_gc = false;
   G.allocated_last_gc = G.allocated;
 
   invoke_plugin_callbacks (PLUGIN_GGC_END, NULL);
@@ -2239,37 +1979,13 @@ ggc_collect (void)
     fprintf (G.debug_file, "END COLLECTING\n");
 }
 
-/* Return free pages to the system.  */
-
-void
-ggc_trim ()
-{
-  timevar_push (TV_GC);
-  G.allocated = 0;
-  sweep_pages ();
-  release_pages ();
-  if (!quiet_flag)
-    fprintf (stderr, " {GC trimmed to %luk, %luk mapped}",
-	     (unsigned long) G.allocated / 1024,
-	     (unsigned long) G.bytes_mapped / 1024);
-  timevar_pop (TV_GC);
-}
-
-/* Assume that all GGC memory is reachable and grow the limits for next
-   collection.  With checking, trigger GGC so -Q compilation outputs how much
-   of memory really is reachable.  */
-
-void
-ggc_grow (void)
-{
-  if (!flag_checking)
-    G.allocated_last_gc = MAX (G.allocated_last_gc,
-			       G.allocated);
-  else
-    ggc_collect ();
-  if (!quiet_flag)
-    fprintf (stderr, " {GC start %luk} ", (unsigned long) G.allocated / 1024);
-}
+/* Print allocation statistics.  */
+#define SCALE(x) ((unsigned long) ((x) < 1024*10 \
+		  ? (x) \
+		  : ((x) < 1024*1024*10 \
+		     ? (x) / 1024 \
+		     : (x) / (1024*1024))))
+#define STAT_LABEL(x) ((x) < 1024*10 ? ' ' : ((x) < 1024*1024*10 ? 'k' : 'M'))
 
 void
 ggc_print_statistics (void)
@@ -2295,7 +2011,7 @@ ggc_print_statistics (void)
      allocation.  */
   fprintf (stderr,
            "Memory still allocated at the end of the compilation process\n");
-  fprintf (stderr, "%-8s %10s  %10s  %10s\n",
+  fprintf (stderr, "%-5s %10s  %10s  %10s\n",
 	   "Size", "Allocated", "Used", "Overhead");
   for (i = 0; i < NUM_ORDERS; ++i)
     {
@@ -2322,64 +2038,52 @@ ggc_print_statistics (void)
 	  overhead += (sizeof (page_entry) - sizeof (long)
 		       + BITMAP_SIZE (OBJECTS_IN_PAGE (p) + 1));
 	}
-      fprintf (stderr, "%-8" PRIu64 " " PRsa (10) " " PRsa (10) " "
-	       PRsa (10) "\n",
-	       (uint64_t)OBJECT_SIZE (i),
-	       SIZE_AMOUNT (allocated),
-	       SIZE_AMOUNT (in_use),
-	       SIZE_AMOUNT (overhead));
+      fprintf (stderr, "%-5lu %10lu%c %10lu%c %10lu%c\n",
+	       (unsigned long) OBJECT_SIZE (i),
+	       SCALE (allocated), STAT_LABEL (allocated),
+	       SCALE (in_use), STAT_LABEL (in_use),
+	       SCALE (overhead), STAT_LABEL (overhead));
       total_overhead += overhead;
     }
-  fprintf (stderr, "%-8s " PRsa (10) " " PRsa (10) " " PRsa (10) "\n",
-	   "Total",
-	   SIZE_AMOUNT (G.bytes_mapped),
-	   SIZE_AMOUNT (G.allocated),
-	   SIZE_AMOUNT (total_overhead));
+  fprintf (stderr, "%-5s %10lu%c %10lu%c %10lu%c\n", "Total",
+	   SCALE (G.bytes_mapped), STAT_LABEL (G.bytes_mapped),
+	   SCALE (G.allocated), STAT_LABEL(G.allocated),
+	   SCALE (total_overhead), STAT_LABEL (total_overhead));
 
-  if (GATHER_STATISTICS)
-    {
-      fprintf (stderr, "\nTotal allocations and overheads during "
-	       "the compilation process\n");
+#ifdef GATHER_STATISTICS
+  {
+    fprintf (stderr, "\nTotal allocations and overheads during the compilation process\n");
 
-      fprintf (stderr, "Total Overhead:                          "
-	       PRsa (9) "\n",
-	       SIZE_AMOUNT (G.stats.total_overhead));
-      fprintf (stderr, "Total Allocated:                         "
-	       PRsa (9) "\n",
-	       SIZE_AMOUNT (G.stats.total_allocated));
+    fprintf (stderr, "Total Overhead:                        %10lld\n",
+             G.stats.total_overhead);
+    fprintf (stderr, "Total Allocated:                       %10lld\n",
+             G.stats.total_allocated);
 
-      fprintf (stderr, "Total Overhead  under  32B:              "
-	       PRsa (9) "\n",
-	       SIZE_AMOUNT (G.stats.total_overhead_under32));
-      fprintf (stderr, "Total Allocated under  32B:              "
-	       PRsa (9) "\n",
-	       SIZE_AMOUNT (G.stats.total_allocated_under32));
-      fprintf (stderr, "Total Overhead  under  64B:              "
-	       PRsa (9) "\n",
-	       SIZE_AMOUNT (G.stats.total_overhead_under64));
-      fprintf (stderr, "Total Allocated under  64B:              "
-	       PRsa (9) "\n",
-	       SIZE_AMOUNT (G.stats.total_allocated_under64));
-      fprintf (stderr, "Total Overhead  under 128B:              "
-	       PRsa (9) "\n",
-	       SIZE_AMOUNT (G.stats.total_overhead_under128));
-      fprintf (stderr, "Total Allocated under 128B:              "
-	       PRsa (9) "\n",
-	       SIZE_AMOUNT (G.stats.total_allocated_under128));
+    fprintf (stderr, "Total Overhead  under  32B:            %10lld\n",
+             G.stats.total_overhead_under32);
+    fprintf (stderr, "Total Allocated under  32B:            %10lld\n",
+             G.stats.total_allocated_under32);
+    fprintf (stderr, "Total Overhead  under  64B:            %10lld\n",
+             G.stats.total_overhead_under64);
+    fprintf (stderr, "Total Allocated under  64B:            %10lld\n",
+             G.stats.total_allocated_under64);
+    fprintf (stderr, "Total Overhead  under 128B:            %10lld\n",
+             G.stats.total_overhead_under128);
+    fprintf (stderr, "Total Allocated under 128B:            %10lld\n",
+             G.stats.total_allocated_under128);
 
-      for (i = 0; i < NUM_ORDERS; i++)
-	if (G.stats.total_allocated_per_order[i])
-	  {
-	    fprintf (stderr, "Total Overhead  page size %9" PRIu64 ":     "
-		     PRsa (9) "\n",
-		     (uint64_t)OBJECT_SIZE (i),
-		     SIZE_AMOUNT (G.stats.total_overhead_per_order[i]));
-	    fprintf (stderr, "Total Allocated page size %9" PRIu64 ":     "
-		     PRsa (9) "\n",
-		     (uint64_t)OBJECT_SIZE (i),
-		     SIZE_AMOUNT (G.stats.total_allocated_per_order[i]));
-	  }
+    for (i = 0; i < NUM_ORDERS; i++)
+      if (G.stats.total_allocated_per_order[i])
+        {
+          fprintf (stderr, "Total Overhead  page size %7lu:     %10lld\n",
+                   (unsigned long) OBJECT_SIZE (i),
+		   G.stats.total_overhead_per_order[i]);
+          fprintf (stderr, "Total Allocated page size %7lu:     %10lld\n",
+                   (unsigned long) OBJECT_SIZE (i),
+		   G.stats.total_allocated_per_order[i]);
+        }
   }
+#endif
 }
 
 struct ggc_pch_ondisk
@@ -2390,7 +2094,7 @@ struct ggc_pch_ondisk
 struct ggc_pch_data
 {
   struct ggc_pch_ondisk d;
-  uintptr_t base[NUM_ORDERS];
+  size_t base[NUM_ORDERS];
   size_t written[NUM_ORDERS];
 };
 
@@ -2402,7 +2106,8 @@ init_ggc_pch (void)
 
 void
 ggc_pch_count_object (struct ggc_pch_data *d, void *x ATTRIBUTE_UNUSED,
-		      size_t size, bool is_string ATTRIBUTE_UNUSED)
+		      size_t size, bool is_string ATTRIBUTE_UNUSED,
+		      enum gt_types_enum type ATTRIBUTE_UNUSED)
 {
   unsigned order;
 
@@ -2425,27 +2130,28 @@ ggc_pch_total_size (struct ggc_pch_data *d)
   unsigned i;
 
   for (i = 0; i < NUM_ORDERS; i++)
-    a += PAGE_ALIGN (d->d.totals[i] * OBJECT_SIZE (i));
+    a += ROUND_UP (d->d.totals[i] * OBJECT_SIZE (i), G.pagesize);
   return a;
 }
 
 void
 ggc_pch_this_base (struct ggc_pch_data *d, void *base)
 {
-  uintptr_t a = (uintptr_t) base;
+  size_t a = (size_t) base;
   unsigned i;
 
   for (i = 0; i < NUM_ORDERS; i++)
     {
       d->base[i] = a;
-      a += PAGE_ALIGN (d->d.totals[i] * OBJECT_SIZE (i));
+      a += ROUND_UP (d->d.totals[i] * OBJECT_SIZE (i), G.pagesize);
     }
 }
 
 
 char *
 ggc_pch_alloc_object (struct ggc_pch_data *d, void *x ATTRIBUTE_UNUSED,
-		      size_t size, bool is_string ATTRIBUTE_UNUSED)
+		      size_t size, bool is_string ATTRIBUTE_UNUSED,
+		      enum gt_types_enum type ATTRIBUTE_UNUSED)
 {
   unsigned order;
   char *result;
@@ -2472,7 +2178,7 @@ ggc_pch_prepare_write (struct ggc_pch_data *d ATTRIBUTE_UNUSED,
 }
 
 void
-ggc_pch_write_object (struct ggc_pch_data *d,
+ggc_pch_write_object (struct ggc_pch_data *d ATTRIBUTE_UNUSED,
 		      FILE *f, void *x, void *newx ATTRIBUTE_UNUSED,
 		      size_t size, bool is_string ATTRIBUTE_UNUSED)
 {
@@ -2489,29 +2195,29 @@ ggc_pch_write_object (struct ggc_pch_data *d,
     }
 
   if (fwrite (x, size, 1, f) != 1)
-    fatal_error (input_location, "can%'t write PCH file: %m");
+    fatal_error ("can't write PCH file: %m");
 
   /* If SIZE is not the same as OBJECT_SIZE(order), then we need to pad the
      object out to OBJECT_SIZE(order).  This happens for strings.  */
 
   if (size != OBJECT_SIZE (order))
     {
-      unsigned padding = OBJECT_SIZE (order) - size;
+      unsigned padding = OBJECT_SIZE(order) - size;
 
       /* To speed small writes, we use a nulled-out array that's larger
          than most padding requests as the source for our null bytes.  This
          permits us to do the padding with fwrite() rather than fseek(), and
          limits the chance the OS may try to flush any outstanding writes.  */
-      if (padding <= sizeof (emptyBytes))
+      if (padding <= sizeof(emptyBytes))
         {
           if (fwrite (emptyBytes, 1, padding, f) != padding)
-            fatal_error (input_location, "can%'t write PCH file");
+            fatal_error ("can't write PCH file");
         }
       else
         {
           /* Larger than our buffer?  Just default to fseek.  */
           if (fseek (f, padding, SEEK_CUR) != 0)
-            fatal_error (input_location, "can%'t write PCH file");
+            fatal_error ("can't write PCH file");
         }
     }
 
@@ -2520,14 +2226,14 @@ ggc_pch_write_object (struct ggc_pch_data *d,
       && fseek (f, ROUND_UP_VALUE (d->d.totals[order] * OBJECT_SIZE (order),
 				   G.pagesize),
 		SEEK_CUR) != 0)
-    fatal_error (input_location, "can%'t write PCH file: %m");
+    fatal_error ("can't write PCH file: %m");
 }
 
 void
 ggc_pch_finish (struct ggc_pch_data *d, FILE *f)
 {
   if (fwrite (&d->d, sizeof (d->d), 1, f) != 1)
-    fatal_error (input_location, "can%'t write PCH file: %m");
+    fatal_error ("can't write PCH file: %m");
   free (d);
 }
 
@@ -2537,6 +2243,8 @@ ggc_pch_finish (struct ggc_pch_data *d, FILE *f)
 static void
 move_ptes_to_front (int count_old_page_tables, int count_new_page_tables)
 {
+  unsigned i;
+
   /* First, we swap the new entries to the front of the varrays.  */
   page_entry **new_by_depth;
   unsigned long **new_save_in_use;
@@ -2564,10 +2272,10 @@ move_ptes_to_front (int count_old_page_tables, int count_new_page_tables)
   G.save_in_use = new_save_in_use;
 
   /* Now update all the index_by_depth fields.  */
-  for (unsigned i = G.by_depth_in_use; i--;)
+  for (i = G.by_depth_in_use; i > 0; --i)
     {
-      page_entry *p = G.by_depth[i];
-      p->index_by_depth = i;
+      page_entry *p = G.by_depth[i-1];
+      p->index_by_depth = i-1;
     }
 
   /* And last, we update the depth pointers in G.depth.  The first
@@ -2590,9 +2298,6 @@ ggc_pch_read (FILE *f, void *addr)
 
   count_old_page_tables = G.by_depth_in_use;
 
-  if (fread (&d, sizeof (d), 1, f) != 1)
-    fatal_error (input_location, "cannot read PCH file: %m");
-
   /* We've just read in a PCH file.  So, every object that used to be
      allocated is now free.  */
   clear_marks ();
@@ -2601,17 +2306,13 @@ ggc_pch_read (FILE *f, void *addr)
 #endif
   /* Since we free all the allocated objects, the free list becomes
      useless.  Validate it now, which will also clear it.  */
-  validate_free_objects ();
+  validate_free_objects();
 
   /* No object read from a PCH file should ever be freed.  So, set the
      context depth to 1, and set the depth of all the currently-allocated
      pages to be 1 too.  PCH pages will have depth 0.  */
   gcc_assert (!G.context_depth);
   G.context_depth = 1;
-  /* Allocate space for the depth 1 finalizers.  */
-  G.finalizers.safe_push (vNULL);
-  G.vec_finalizers.safe_push (vNULL);
-  gcc_assert (G.finalizers.length() == 2);
   for (i = 0; i < NUM_ORDERS; i++)
     {
       page_entry *p;
@@ -2621,6 +2322,8 @@ ggc_pch_read (FILE *f, void *addr)
 
   /* Allocate the appropriate page-table entries for the pages read from
      the PCH file.  */
+  if (fread (&d, sizeof (d), 1, f) != 1)
+    fatal_error ("can't read PCH file: %m");
 
   for (i = 0; i < NUM_ORDERS; i++)
     {
@@ -2633,7 +2336,7 @@ ggc_pch_read (FILE *f, void *addr)
       if (d.totals[i] == 0)
 	continue;
 
-      bytes = PAGE_ALIGN (d.totals[i] * OBJECT_SIZE (i));
+      bytes = ROUND_UP (d.totals[i] * OBJECT_SIZE (i), G.pagesize);
       num_objs = bytes / OBJECT_SIZE (i);
       entry = XCNEWVAR (struct page_entry, (sizeof (struct page_entry)
 					    - sizeof (long)

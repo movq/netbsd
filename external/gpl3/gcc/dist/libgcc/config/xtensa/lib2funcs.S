@@ -1,5 +1,5 @@
 /* Assembly functions for libgcc2.
-   Copyright (C) 2001-2019 Free Software Foundation, Inc.
+   Copyright (C) 2001-2013 Free Software Foundation, Inc.
    Contributed by Bob Wilson (bwilson@tensilica.com) at Tensilica.
 
 This file is part of GCC.
@@ -29,36 +29,15 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
    current register window.  This is used to set up the stack so that
    arbitrary frames can be accessed.  */
 
-#if XCHAL_HAVE_WINDOWED && !__XTENSA_CALL0_ABI__
 	.align	4
 	.global	__xtensa_libgcc_window_spill
 	.type	__xtensa_libgcc_window_spill,@function
 __xtensa_libgcc_window_spill:
-	entry	sp, 48
-#if XCHAL_NUM_AREGS > 16
-	call12	1f
+	entry	sp, 32
+	movi	a2, 0
+	syscall
 	retw
-	.align	4
-1:
-	.rept	(XCHAL_NUM_AREGS - 24) / 12
-	_entry	sp, 48
-	mov	a12, a0
-	.endr
-	_entry	sp, 16
-#if XCHAL_NUM_AREGS % 12 == 0
-	mov	a4, a4
-#elif XCHAL_NUM_AREGS % 12 == 4
-	mov	a8, a8
-#elif XCHAL_NUM_AREGS % 12 == 8
-	mov	a12, a12
-#endif
-	retw
-#else
-	mov	a8, a8
-	retw
-#endif
 	.size	__xtensa_libgcc_window_spill, .-__xtensa_libgcc_window_spill
-#endif
 
 
 /* __xtensa_nonlocal_goto: This code does all the hard work of a
@@ -72,7 +51,6 @@ __xtensa_libgcc_window_spill:
   This function never returns to its caller but instead goes directly
   to the address of the specified goto handler.  */
 
-#if XCHAL_HAVE_WINDOWED && !__XTENSA_CALL0_ABI__
 	.align	4
 	.global	__xtensa_nonlocal_goto
 	.type	__xtensa_nonlocal_goto,@function
@@ -80,7 +58,10 @@ __xtensa_nonlocal_goto:
 	entry	sp, 32
 
 	/* Flush registers.  */
-	call8	__xtensa_libgcc_window_spill
+	mov	a5, a2
+	movi	a2, 0
+	syscall
+	mov	a2, a5
 
 	/* Because the save area for a0-a3 is stored one frame below
 	   the one identified by a2, the only way to restore those
@@ -147,7 +128,6 @@ __xtensa_nonlocal_goto:
 
 	retw
 	.size	__xtensa_nonlocal_goto, .-__xtensa_nonlocal_goto
-#endif
 
 
 /* __xtensa_sync_caches: This function is called after writing a trampoline
@@ -174,9 +154,7 @@ __xtensa_nonlocal_goto:
 	.global	__xtensa_sync_caches
 	.type	__xtensa_sync_caches,@function
 __xtensa_sync_caches:
-#if XCHAL_HAVE_WINDOWED && !__XTENSA_CALL0_ABI__
 	entry 	sp, 32
-#endif
 #if XCHAL_DCACHE_SIZE > 0
 	/* Flush the trampoline from the data cache.  */
 	extui	a4, a2, 0, XCHAL_DCACHE_LINEWIDTH
@@ -204,9 +182,5 @@ __xtensa_sync_caches:
 	bnez	a4, .Licache_loop
 #endif
 	isync
-#if XCHAL_HAVE_WINDOWED && !__XTENSA_CALL0_ABI__
 	retw
-#else
-	ret
-#endif
 	.size	__xtensa_sync_caches, .-__xtensa_sync_caches

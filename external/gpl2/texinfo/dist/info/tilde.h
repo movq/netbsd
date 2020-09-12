@@ -1,4 +1,4 @@
-/*	$NetBSD: tilde.h,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: tilde.h,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* tilde.h: Externally available variables and function in libtilde.a.
    Id: tilde.h,v 1.3 2004/04/11 17:56:46 karl Exp 

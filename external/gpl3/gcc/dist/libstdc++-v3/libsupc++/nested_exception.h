@@ -1,6 +1,6 @@
 // Nested Exception support header (nested_exception class) for -*- C++ -*-
 
-// Copyright (C) 2009-2019 Free Software Foundation, Inc.
+// Copyright (C) 2009, 2010 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,9 +22,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file bits/nested_exception.h
- *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{exception}
+/** @file nested_exception.h
+ *  This is an internal header file, included by other headers and the
+ *  implementation. You should not attempt to use it directly.
  */
 
 #ifndef _GLIBCXX_NESTED_EXCEPTION_H
@@ -32,12 +32,15 @@
 
 #pragma GCC visibility push(default)
 
-#if __cplusplus < 201103L
+#ifndef __GXX_EXPERIMENTAL_CXX0X__
 # include <bits/c++0x_warning.h>
 #else
 
 #include <bits/c++config.h>
-#include <bits/move.h>
+
+#if !defined(_GLIBCXX_ATOMIC_BUILTINS_4)
+#  error This platform does not support exception propagation.
+#endif
 
 extern "C++" {
 
@@ -54,109 +57,111 @@ namespace std
     exception_ptr _M_ptr;
 
   public:
-    nested_exception() noexcept : _M_ptr(current_exception()) { }
+    nested_exception() throw() : _M_ptr(current_exception()) { }
 
-    nested_exception(const nested_exception&) noexcept = default;
+    nested_exception(const nested_exception&) = default;
 
-    nested_exception& operator=(const nested_exception&) noexcept = default;
+    nested_exception& operator=(const nested_exception&) = default;
 
-    virtual ~nested_exception() noexcept;
+    inline virtual ~nested_exception();
 
-    [[noreturn]]
     void
-    rethrow_nested() const
-    {
-      if (_M_ptr)
-	rethrow_exception(_M_ptr);
-      std::terminate();
-    }
+    rethrow_nested() const __attribute__ ((__noreturn__))
+    { rethrow_exception(_M_ptr); }
 
     exception_ptr
-    nested_ptr() const noexcept
+    nested_ptr() const
     { return _M_ptr; }
   };
+
+  inline nested_exception::~nested_exception() = default;
 
   template<typename _Except>
     struct _Nested_exception : public _Except, public nested_exception
     {
-      explicit _Nested_exception(const _Except& __ex)
-      : _Except(__ex)
-      { }
-
       explicit _Nested_exception(_Except&& __ex)
       : _Except(static_cast<_Except&&>(__ex))
       { }
     };
 
-  // [except.nested]/8
-  // Throw an exception of unspecified type that is publicly derived from
-  // both remove_reference_t<_Tp> and nested_exception.
-  template<typename _Tp>
-    [[noreturn]]
-    inline void
-    __throw_with_nested_impl(_Tp&& __t, true_type)
-    {
-      using _Up = typename remove_reference<_Tp>::type;
-      throw _Nested_exception<_Up>{std::forward<_Tp>(__t)};
-    }
-
-  template<typename _Tp>
-    [[noreturn]]
-    inline void
-    __throw_with_nested_impl(_Tp&& __t, false_type)
-    { throw std::forward<_Tp>(__t); }
-
-  /// If @p __t is derived from nested_exception, throws @p __t.
-  /// Else, throws an implementation-defined object derived from both.
-  template<typename _Tp>
-    [[noreturn]]
-    inline void
-    throw_with_nested(_Tp&& __t)
-    {
-      using _Up = typename decay<_Tp>::type;
-      using _CopyConstructible
-	= __and_<is_copy_constructible<_Up>, is_move_constructible<_Up>>;
-      static_assert(_CopyConstructible::value,
-	  "throw_with_nested argument must be CopyConstructible");
-      using __nest = __and_<is_class<_Up>, __bool_constant<!__is_final(_Up)>,
-			    __not_<is_base_of<nested_exception, _Up>>>;
-      std::__throw_with_nested_impl(std::forward<_Tp>(__t), __nest{});
-    }
-
-  // Determine if dynamic_cast<const nested_exception&> would be well-formed.
-  template<typename _Tp>
-    using __rethrow_if_nested_cond = typename enable_if<
-      __and_<is_polymorphic<_Tp>,
-	     __or_<__not_<is_base_of<nested_exception, _Tp>>,
-		   is_convertible<_Tp*, nested_exception*>>>::value
-    >::type;
-
-  // Attempt dynamic_cast to nested_exception and call rethrow_nested().
   template<typename _Ex>
-    inline __rethrow_if_nested_cond<_Ex>
-    __rethrow_if_nested_impl(const _Ex* __ptr)
+    struct __get_nested_helper
     {
-      if (auto __ne_ptr = dynamic_cast<const nested_exception*>(__ptr))
-	__ne_ptr->rethrow_nested();
-    }
+      static const nested_exception*
+      _S_get(const _Ex& __ex)
+      { return dynamic_cast<const nested_exception*>(&__ex); }
+    };
 
-  // Otherwise, no effects.
-  inline void
-  __rethrow_if_nested_impl(const void*)
-  { }
+  template<typename _Ex>
+    struct __get_nested_helper<_Ex*>
+    {
+      static const nested_exception*
+      _S_get(const _Ex* __ex)
+      { return dynamic_cast<const nested_exception*>(__ex); }
+    };
+
+  template<typename _Ex>
+    inline const nested_exception*
+    __get_nested_exception(const _Ex& __ex)
+    { return __get_nested_helper<_Ex>::_S_get(__ex); }
+
+  template<typename _Ex>
+    void
+    __throw_with_nested(_Ex&&, const nested_exception* = 0)
+    __attribute__ ((__noreturn__));
+
+  template<typename _Ex>
+    void
+    __throw_with_nested(_Ex&&, ...) __attribute__ ((__noreturn__));
+
+  // This function should never be called, but is needed to avoid a warning
+  // about ambiguous base classes when instantiating throw_with_nested<_Ex>()
+  // with a type that has an accessible nested_exception base.
+  template<typename _Ex>
+    inline void
+    __throw_with_nested(_Ex&& __ex, const nested_exception* = 0)
+    { throw __ex; }
+
+  template<typename _Ex>
+    inline void
+    __throw_with_nested(_Ex&& __ex, ...)
+    { throw _Nested_exception<_Ex>(static_cast<_Ex&&>(__ex)); }
+  
+  template<typename _Ex>
+    void
+    throw_with_nested(_Ex __ex) __attribute__ ((__noreturn__));
+
+  /// If @p __ex is derived from nested_exception, @p __ex. 
+  /// Else, an implementation-defined object derived from both.
+  template<typename _Ex>
+    inline void
+    throw_with_nested(_Ex __ex)
+    {
+      if (__get_nested_exception(__ex))
+        throw __ex;
+      __throw_with_nested(static_cast<_Ex&&>(__ex), &__ex);
+    }
 
   /// If @p __ex is derived from nested_exception, @p __ex.rethrow_nested().
   template<typename _Ex>
     inline void
     rethrow_if_nested(const _Ex& __ex)
-    { std::__rethrow_if_nested_impl(std::__addressof(__ex)); }
+    {
+      if (const nested_exception* __nested = __get_nested_exception(__ex))
+        __nested->rethrow_nested();
+    }
+
+  /// Overload, See N2619
+  inline void
+  rethrow_if_nested(const nested_exception& __ex)
+  { __ex.rethrow_nested(); }
 
   // @} group exceptions
 } // namespace std
 
 } // extern "C++"
 
-#endif // C++11
+#endif // __GXX_EXPERIMENTAL_CXX0X__
 
 #pragma GCC visibility pop
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: gc.h,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: gc.h,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* gc.h -- Functions for garbage collecting unused node contents.
    Id: gc.h,v 1.3 2004/04/11 17:56:45 karl Exp 

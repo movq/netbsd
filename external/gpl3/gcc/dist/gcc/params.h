@@ -1,5 +1,6 @@
 /* params.h - Run-time parameters.
-   Copyright (C) 2001-2019 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2003, 2004, 2005, 2007, 2008, 2009
+   Free Software Foundation, Inc.
    Written by Mark Mitchell <mark@codesourcery.com>.
 
 This file is part of GCC.
@@ -38,14 +39,16 @@ along with GCC; see the file COPYING3.  If not see
 
 /* The information associated with each parameter.  */
 
-struct param_info
+typedef struct param_info
 {
   /* The name used with the `--param <name>=<value>' switch to set this
      value.  */
-  const char *option;
+  const char *const option;
+  /* The associated value.  */
+  int value;
 
-  /* The default value.  */
-  int default_value;
+  /* True if the parameter was explicitly set.  */
+  bool set;
 
   /* Minimum acceptable value.  */
   int min_value;
@@ -54,11 +57,8 @@ struct param_info
   int max_value;
 
   /* A short description of the option.  */
-  const char *help;
-
-  /* The optional names corresponding to the values.  */
-  const char **value_names;
-};
+  const char *const help;
+} param_info;
 
 /* An array containing the compiler parameters and their current
    values.  */
@@ -72,64 +72,33 @@ extern size_t get_num_compiler_params (void);
 
 extern void add_params (const param_info params[], size_t n);
 
-/* Set the VALUE associated with the parameter given by NAME in the
-   table PARAMS using PARAMS_SET to indicate which have been
-   explicitly set.  */
+/* Set the VALUE associated with the parameter given by NAME.  */
 
-extern void set_param_value (const char *name, int value,
-			     int *params, int *params_set);
+extern void set_param_value (const char *name, int value);
 
 
 /* The parameters in use by language-independent code.  */
 
-enum compiler_param
+typedef enum compiler_param
 {
-#include "params.list"
+#define DEFPARAM(enumerator, option, msgid, default, min, max) \
+  enumerator,
+#include "params.def"
+#undef DEFPARAM
   LAST_PARAM
-};
+} compiler_param;
 
-extern bool find_param (const char *, enum compiler_param *);
-extern const char *find_param_fuzzy (const char *name);
-extern bool param_string_value_p (enum compiler_param, const char *, int *);
-
-/* The value of the parameter given by ENUM.  Not an lvalue.  */
+/* The value of the parameter given by ENUM.  */
 #define PARAM_VALUE(ENUM) \
-  ((int) global_options.x_param_values[(int) ENUM])
+  (compiler_params[(int) ENUM].value)
 
-/* Set the value of the parameter given by NUM to VALUE, implicitly,
-   if it has not been set explicitly by the user, in the table PARAMS
-   using PARAMS_SET to indicate which have been explicitly set.  */
-
-extern void maybe_set_param_value (compiler_param num, int value,
-				   int *params, int *params_set);
-
-/* Set the default value of a parameter given by NUM to VALUE, before
-   option processing.  */
-
-extern void set_default_param_value (compiler_param num, int value);
-
-/* Add all parameters and default values that can be set in both the
-   driver and the compiler proper.  */
-
-extern void global_init_params (void);
-
-/* Note that all parameters have been added and all default values
-   set.  */
-extern void finish_params (void);
-
-/* Reset all state in params.c  */
-
-extern void params_c_finalize (void);
-
-/* Return the default value of parameter NUM.  */
-
-extern int default_param_value (compiler_param num);
-
-/* Initialize an array PARAMS with default values of the
-   parameters.  */
-extern void init_param_values (int *params);
+/* True if the value of the parameter was explicitly changed.  */
+#define PARAM_SET_P(ENUM) \
+  (compiler_params[(int) ENUM].set)
 
 /* Macros for the various parameters.  */
+#define STRUCT_REORG_COLD_STRUCT_RATIO \
+  PARAM_VALUE (PARAM_STRUCT_REORG_COLD_STRUCT_RATIO)
 #define MAX_INLINE_INSNS_SINGLE \
   PARAM_VALUE (PARAM_MAX_INLINE_INSNS_SINGLE)
 #define MAX_INLINE_INSNS \
@@ -152,18 +121,10 @@ extern void init_param_values (int *params);
   PARAM_VALUE (PARAM_MAX_PENDING_LIST_LENGTH)
 #define MAX_GCSE_MEMORY \
   ((size_t) PARAM_VALUE (PARAM_MAX_GCSE_MEMORY))
-#define MAX_GCSE_INSERTION_RATIO \
-  ((size_t) PARAM_VALUE (PARAM_MAX_GCSE_INSERTION_RATIO))
 #define GCSE_AFTER_RELOAD_PARTIAL_FRACTION \
   PARAM_VALUE (PARAM_GCSE_AFTER_RELOAD_PARTIAL_FRACTION)
 #define GCSE_AFTER_RELOAD_CRITICAL_FRACTION \
   PARAM_VALUE (PARAM_GCSE_AFTER_RELOAD_CRITICAL_FRACTION)
-#define GCSE_COST_DISTANCE_RATIO \
-  PARAM_VALUE (PARAM_GCSE_COST_DISTANCE_RATIO)
-#define GCSE_UNRESTRICTED_COST \
-  PARAM_VALUE (PARAM_GCSE_UNRESTRICTED_COST)
-#define MAX_HOIST_DEPTH \
-  PARAM_VALUE (PARAM_MAX_HOIST_DEPTH)
 #define MAX_UNROLLED_INSNS \
   PARAM_VALUE (PARAM_MAX_UNROLLED_INSNS)
 #define MAX_SMS_LOOP_NUMBER \
@@ -196,10 +157,6 @@ extern void init_param_values (int *params);
   PARAM_VALUE (PARAM_L1_CACHE_LINE_SIZE)
 #define L2_CACHE_SIZE \
   PARAM_VALUE (PARAM_L2_CACHE_SIZE)
-#define PREFETCH_DYNAMIC_STRIDES \
-  PARAM_VALUE (PARAM_PREFETCH_DYNAMIC_STRIDES)
-#define PREFETCH_MINIMUM_STRIDE \
-  PARAM_VALUE (PARAM_PREFETCH_MINIMUM_STRIDE)
 #define USE_CANONICAL_TYPES \
   PARAM_VALUE (PARAM_USE_CANONICAL_TYPES)
 #define IRA_MAX_LOOPS_NUM \
@@ -208,10 +165,6 @@ extern void init_param_values (int *params);
   PARAM_VALUE (PARAM_IRA_MAX_CONFLICT_TABLE_SIZE)
 #define IRA_LOOP_RESERVED_REGS \
   PARAM_VALUE (PARAM_IRA_LOOP_RESERVED_REGS)
-#define LRA_MAX_CONSIDERED_RELOAD_PSEUDOS \
-  PARAM_VALUE (PARAM_LRA_MAX_CONSIDERED_RELOAD_PSEUDOS)
-#define LRA_INHERITANCE_EBB_PROBABILITY_CUTOFF \
-  PARAM_VALUE (PARAM_LRA_INHERITANCE_EBB_PROBABILITY_CUTOFF)
 #define SWITCH_CONVERSION_BRANCH_RATIO \
   PARAM_VALUE (PARAM_SWITCH_CONVERSION_BRANCH_RATIO)
 #define LOOP_INVARIANT_MAX_BBS_IN_LOOP \
@@ -224,33 +177,4 @@ extern void init_param_values (int *params);
   PARAM_VALUE (PARAM_PREFETCH_MIN_INSN_TO_MEM_RATIO)
 #define MIN_NONDEBUG_INSN_UID \
   PARAM_VALUE (PARAM_MIN_NONDEBUG_INSN_UID)
-#define MAX_STORES_TO_SINK \
-  PARAM_VALUE (PARAM_MAX_STORES_TO_SINK)
-#define ALLOW_LOAD_DATA_RACES \
-  PARAM_VALUE (PARAM_ALLOW_LOAD_DATA_RACES)
-#define ALLOW_STORE_DATA_RACES \
-  PARAM_VALUE (PARAM_ALLOW_STORE_DATA_RACES)
-#define ALLOW_PACKED_LOAD_DATA_RACES \
-  PARAM_VALUE (PARAM_ALLOW_PACKED_LOAD_DATA_RACES)
-#define ALLOW_PACKED_STORE_DATA_RACES \
-  PARAM_VALUE (PARAM_ALLOW_PACKED_STORE_DATA_RACES)
-#define ASAN_STACK \
-  PARAM_VALUE (PARAM_ASAN_STACK)
-#define ASAN_PROTECT_ALLOCAS \
-  PARAM_VALUE (PARAM_ASAN_PROTECT_ALLOCAS)
-#define ASAN_GLOBALS \
-  PARAM_VALUE (PARAM_ASAN_GLOBALS)
-#define ASAN_INSTRUMENT_READS \
-  PARAM_VALUE (PARAM_ASAN_INSTRUMENT_READS)
-#define ASAN_INSTRUMENT_WRITES \
-  PARAM_VALUE (PARAM_ASAN_INSTRUMENT_WRITES)
-#define ASAN_MEMINTRIN \
-  PARAM_VALUE (PARAM_ASAN_MEMINTRIN)
-#define ASAN_USE_AFTER_RETURN \
-  PARAM_VALUE (PARAM_ASAN_USE_AFTER_RETURN)
-#define ASAN_INSTRUMENTATION_WITH_CALL_THRESHOLD \
-  PARAM_VALUE (PARAM_ASAN_INSTRUMENTATION_WITH_CALL_THRESHOLD)
-#define ASAN_PARAM_USE_AFTER_SCOPE_DIRECT_EMISSION_THRESHOLD \
-  ((unsigned) PARAM_VALUE (PARAM_USE_AFTER_SCOPE_DIRECT_EMISSION_THRESHOLD))
-
 #endif /* ! GCC_PARAMS_H */

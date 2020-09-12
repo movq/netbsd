@@ -1,11 +1,15 @@
-<book xmlns="http://docbook.org/ns/docbook" version="5.0">
+<?xml version='1.0'?>
+<!DOCTYPE book PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" 
+ "http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd" 
+[ ]>
 
-<article xml:id="api" xreflabel="API">
+<book>
+
+<article id="api" xreflabel="API">
 <?dbhtml filename="api.html"?>
 
-<title>The GNU C++ Library API Reference</title>
-
-<info>
+<articleinfo>
+  <title>API Documentation</title>
   <copyright>
     <year>
       2008
@@ -13,22 +17,19 @@
     <year>
       2010
     </year>
-    <year>
-      2014
-    </year>
     <holder>
-      <link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="https://www.fsf.org">FSF
-      </link>
+      <ulink url="http://www.fsf.org/">FSF
+      </ulink>
     </holder>
   </copyright>
   <legalnotice>
     <para>
-      <link linkend="manual.intro.status.license">License
+      <link linkend="manual.intro.status.license">License 
       </link>
     </para>
   </legalnotice>
-</info>
-
+</articleinfo>
+ 
 <para>
   The GNU C++ library sources have been specially formatted so that
   with the proper invocation of another tool (Doxygen), a set of
@@ -40,21 +41,55 @@
 </para>
 
 <para>
-  The API documentation, rendered into HTML, can be viewed online
-  <link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="http://gcc.gnu.org/onlinedocs/">for each GCC release</link>
-  and
-  <link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="http://gcc.gnu.org/onlinedocs/libstdc++/latest-doxygen/index.html">
-  for the main development tree
-  </link>
-  (see the date on the first page).
+  The API documentation, rendered into HTML, can be viewed online:
 </para>
+
+<itemizedlist>
+  <listitem>
+    <para>
+      <ulink url="http://gcc.gnu.org/onlinedocs/libstdc++/libstdc++-html-USERS-3.4/index.html">for the 3.4 release
+      </ulink>
+    </para>
+  </listitem>
+  <listitem>
+    <para>
+      <ulink url="http://gcc.gnu.org/onlinedocs/libstdc++/libstdc++-html-USERS-4.1/index.html">for the 4.1 release
+      </ulink>
+    </para>
+  </listitem>
+  <listitem>
+    <para>
+      <ulink url="http://gcc.gnu.org/onlinedocs/libstdc++/libstdc++-html-USERS-4.2/index.html">for the 4.2 release
+      </ulink>
+    </para>
+  </listitem>
+  <listitem>
+    <para>
+      <ulink url="http://gcc.gnu.org/onlinedocs/libstdc++/libstdc++-html-USERS-4.3/index.html">for the 4.3 release
+      </ulink>
+    </para>
+  </listitem>
+  <listitem>
+    <para>
+      <ulink url="http://gcc.gnu.org/onlinedocs/libstdc++/libstdc++-html-USERS-4.4/index.html">for the 4.4 release
+      </ulink>
+    </para>
+  </listitem>
+  <listitem>
+    <para>
+      <ulink url="http://gcc.gnu.org/onlinedocs/libstdc++/latest-doxygen/index.html">&quot;the latest collection&quot;
+      </ulink>
+      (For the main development tree; see the date on the first page.)
+    </para>
+  </listitem>
+</itemizedlist>
 
 <para>
   The rendered HTML, as above, is also available for download on the
-  gcc.gnu.org site in a directory located at
+  gcc.org site in a directory located at
    <literal>&lt;URL:ftp://gcc.gnu.org/pub/gcc/libstdc++/doxygen/&gt;</literal>.
    You will almost certainly need to use one of the
-   <link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="http://gcc.gnu.org/mirrors.html">mirror sites</link> to download
+   <ulink url="http://gcc.gnu.org/mirrors.html">mirror sites</ulink> to download
    the tarball. After unpacking, simply load libstdc++-html-*/index.html
    into a browser.
 </para>

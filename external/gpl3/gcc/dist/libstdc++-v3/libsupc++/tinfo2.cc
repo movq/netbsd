@@ -1,6 +1,7 @@
 // Methods for type_info for -*- C++ -*- Run Time Type Identification.
 
-// Copyright (C) 1994-2019 Free Software Foundation, Inc.
+// Copyright (C) 1994, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2009
+// Free Software Foundation
 //
 // This file is part of GCC.
 //
@@ -31,7 +32,7 @@ using std::type_info;
 #if !__GXX_TYPEINFO_EQUALITY_INLINE
 
 bool
-type_info::before (const type_info &arg) const _GLIBCXX_NOEXCEPT
+type_info::before (const type_info &arg) const
 {
 #if __GXX_MERGED_TYPEINFO_NAMES
   return name () < arg.name ();

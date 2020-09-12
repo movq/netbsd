@@ -47,8 +47,8 @@ struct LFStack {
     u64 cmp = atomic_load(&head_, memory_order_acquire);
     for (;;) {
       T *cur = (T*)(uptr)(cmp & kPtrMask);
-      if (!cur)
-        return nullptr;
+      if (cur == 0)
+        return 0;
       T *nxt = cur->next;
       u64 cnt = (cmp & kCounterMask);
       u64 xch = (u64)(uptr)nxt | cnt;
@@ -66,6 +66,6 @@ struct LFStack {
 
   atomic_uint64_t head_;
 };
-} // namespace __sanitizer
+}  // namespace __sanitizer
 
-#endif // SANITIZER_LFSTACK_H
+#endif  // #ifndef SANITIZER_LFSTACK_H

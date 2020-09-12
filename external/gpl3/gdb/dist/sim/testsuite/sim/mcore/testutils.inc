@@ -38,7 +38,7 @@
 	movi r4, 5;
 	# Trigger OS trap.
 	trap 1;
-	exit 1
+	exit 0
 	.data
 	1: .asciz "fail\n"
 	.endm

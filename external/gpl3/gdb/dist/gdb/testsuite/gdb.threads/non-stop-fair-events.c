@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2014-2019 Free Software Foundation, Inc.
+   Copyright 2014-2015 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -22,11 +22,6 @@
 
 #define NUM_THREADS 10
 const int num_threads = NUM_THREADS;
-/* Allow for as much timeout as DejaGnu wants, plus a bit of
-   slack.  */
-
-volatile unsigned int timeout = TIMEOUT;
-#define SECONDS (timeout + 20)
 
 pthread_t child_thread[NUM_THREADS];
 volatile pthread_t signal_thread;
@@ -58,8 +53,6 @@ child_function (void *arg)
 
   while (1)
     {
-      /* Reset the timer before going to INF_LOOP.  */
-      alarm (SECONDS);
       INF_LOOP; /* set thread breakpoint here */
       loop_broke ();
     }
@@ -71,10 +64,7 @@ main (void)
   int res;
   int i;
 
-  /* Call these early so that we're sure their PLTs are quickly
-     resolved now, instead of in the busy threads.  */
-  pthread_kill (pthread_self (), 0);
-  alarm (0);
+  alarm (60);
 
   signal (SIGUSR1, handler);
 
@@ -86,8 +76,6 @@ main (void)
   while (1)
     {
       pthread_kill (signal_thread, SIGUSR1); /* set kill breakpoint here */
-      /* Reset the timer before going to INF_LOOP.  */
-      alarm (SECONDS);
       INF_LOOP;
       loop_broke ();
     }

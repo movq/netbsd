@@ -1,5 +1,5 @@
 /* Iterator routines for manipulating GENERIC and GIMPLE tree statements.
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Andrew MacLeod  <amacleod@redhat.com>
 
 This file is part of GCC.
@@ -22,29 +22,29 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "tree.h"
+#include "gimple.h"
 #include "tree-iterator.h"
+#include "ggc.h"
 
 
 /* This is a cache of STATEMENT_LIST nodes.  We create and destroy them
    fairly often during gimplification.  */
 
-static GTY ((deletable (""))) vec<tree, va_gc> *stmt_list_cache;
+static GTY ((deletable (""))) tree stmt_list_cache;
 
 tree
 alloc_stmt_list (void)
 {
-  tree list;
-  if (!vec_safe_is_empty (stmt_list_cache))
+  tree list = stmt_list_cache;
+  if (list)
     {
-      list = stmt_list_cache->pop ();
-      memset (list, 0, sizeof (struct tree_base));
+      stmt_list_cache = TREE_CHAIN (list);
+      gcc_assert (stmt_list_cache != list);
+      memset (list, 0, sizeof(struct tree_common));
       TREE_SET_CODE (list, STATEMENT_LIST);
     }
   else
-    {
-      list = make_node (STATEMENT_LIST);
-      TREE_SIDE_EFFECTS (list) = 0;
-    }
+    list = make_node (STATEMENT_LIST);
   TREE_TYPE (list) = void_type_node;
   return list;
 }
@@ -54,55 +54,11 @@ free_stmt_list (tree t)
 {
   gcc_assert (!STATEMENT_LIST_HEAD (t));
   gcc_assert (!STATEMENT_LIST_TAIL (t));
-  vec_safe_push (stmt_list_cache, t);
-}
-
-/* A subroutine of append_to_statement_list{,_force}.  T is not NULL.  */
-
-static void
-append_to_statement_list_1 (tree t, tree *list_p)
-{
-  tree list = *list_p;
-  tree_stmt_iterator i;
-
-  if (!list)
-    {
-      if (t && TREE_CODE (t) == STATEMENT_LIST)
-	{
-	  *list_p = t;
-	  return;
-	}
-      *list_p = list = alloc_stmt_list ();
-    }
-  else if (TREE_CODE (list) != STATEMENT_LIST)
-    {
-      tree first = list;
-      *list_p = list = alloc_stmt_list ();
-      i = tsi_last (list);
-      tsi_link_after (&i, first, TSI_CONTINUE_LINKING);
-    }
-
-  i = tsi_last (list);
-  tsi_link_after (&i, t, TSI_CONTINUE_LINKING);
-}
-
-/* Add T to the end of the list container pointed to by LIST_P.
-   If T is an expression with no effects, it is ignored.  */
-
-void
-append_to_statement_list (tree t, tree *list_p)
-{
-  if (t && (TREE_SIDE_EFFECTS (t) || TREE_CODE (t) == DEBUG_BEGIN_STMT))
-    append_to_statement_list_1 (t, list_p);
-}
-
-/* Similar, but the statement is always added, regardless of side effects.  */
-
-void
-append_to_statement_list_force (tree t, tree *list_p)
-{
-  if (t != NULL_TREE)
-    append_to_statement_list_1 (t, list_p);
+  /* If this triggers, it's a sign that the same list is being freed
+     twice.  */
+  gcc_assert (t != stmt_list_cache || stmt_list_cache == NULL);
+  TREE_CHAIN (t) = stmt_list_cache;
+  stmt_list_cache = t;
 }
 
 /* Links a statement, or a chain of statements, before the current stmt.  */
@@ -133,15 +89,14 @@ tsi_link_before (tree_stmt_iterator *i, tree t, enum tsi_iterator_update mode)
     }
   else
     {
-      head = ggc_alloc<tree_statement_list_node> ();
+      head = GGC_NEW (struct tree_statement_list_node);
       head->prev = NULL;
       head->next = NULL;
       head->stmt = t;
       tail = head;
     }
 
-  if (TREE_CODE (t) != DEBUG_BEGIN_STMT)
-    TREE_SIDE_EFFECTS (i->container) = 1;
+  TREE_SIDE_EFFECTS (i->container) = 1;
 
   cur = i->ptr;
 
@@ -210,15 +165,14 @@ tsi_link_after (tree_stmt_iterator *i, tree t, enum tsi_iterator_update mode)
     }
   else
     {
-      head = ggc_alloc<tree_statement_list_node> ();
+      head = GGC_NEW (struct tree_statement_list_node);
       head->prev = NULL;
       head->next = NULL;
       head->stmt = t;
       tail = head;
     }
 
-  if (TREE_CODE (t) != DEBUG_BEGIN_STMT)
-    TREE_SIDE_EFFECTS (i->container) = 1;
+  TREE_SIDE_EFFECTS (i->container) = 1;
 
   cur = i->ptr;
 
@@ -284,9 +238,8 @@ tsi_delink (tree_stmt_iterator *i)
   i->ptr = next;
 }
 
-/* Return the first expression in a sequence of COMPOUND_EXPRs, or in
-   a STATEMENT_LIST, disregarding DEBUG_BEGIN_STMTs, recursing into a
-   STATEMENT_LIST if that's the first non-DEBUG_BEGIN_STMT.  */
+/* Return the first expression in a sequence of COMPOUND_EXPRs,
+   or in a STATEMENT_LIST.  */
 
 tree
 expr_first (tree expr)
@@ -297,20 +250,7 @@ expr_first (tree expr)
   if (TREE_CODE (expr) == STATEMENT_LIST)
     {
       struct tree_statement_list_node *n = STATEMENT_LIST_HEAD (expr);
-      if (!n)
-	return NULL_TREE;
-      while (TREE_CODE (n->stmt) == DEBUG_BEGIN_STMT)
-	{
-	  n = n->next;
-	  if (!n)
-	    return NULL_TREE;
-	}
-      /* If the first non-debug stmt is not a statement list, we
-	 already know it's what we're looking for.  */
-      if (TREE_CODE (n->stmt) != STATEMENT_LIST)
-	return n->stmt;
-
-      return expr_first (n->stmt);
+      return n ? n->stmt : NULL_TREE;
     }
 
   while (TREE_CODE (expr) == COMPOUND_EXPR)
@@ -319,9 +259,8 @@ expr_first (tree expr)
   return expr;
 }
 
-/* Return the last expression in a sequence of COMPOUND_EXPRs, or in a
-   STATEMENT_LIST, disregarding DEBUG_BEGIN_STMTs, recursing into a
-   STATEMENT_LIST if that's the last non-DEBUG_BEGIN_STMT.  */
+/* Return the last expression in a sequence of COMPOUND_EXPRs,
+   or in a STATEMENT_LIST.  */
 
 tree
 expr_last (tree expr)
@@ -332,20 +271,7 @@ expr_last (tree expr)
   if (TREE_CODE (expr) == STATEMENT_LIST)
     {
       struct tree_statement_list_node *n = STATEMENT_LIST_TAIL (expr);
-      if (!n)
-	return NULL_TREE;
-      while (TREE_CODE (n->stmt) == DEBUG_BEGIN_STMT)
-	{
-	  n = n->prev;
-	  if (!n)
-	    return NULL_TREE;
-	}
-      /* If the last non-debug stmt is not a statement list, we
-	 already know it's what we're looking for.  */
-      if (TREE_CODE (n->stmt) != STATEMENT_LIST)
-	return n->stmt;
-
-      return expr_last (n->stmt);
+      return n ? n->stmt : NULL_TREE;
     }
 
   while (TREE_CODE (expr) == COMPOUND_EXPR)

@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2011-2019 Free Software Foundation, Inc.
+   Copyright 2011-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,18 +15,18 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-extern int get_test_minsym (void);
+extern int get_pck__foo__bar__minsym (void);
 
-static int
-test_minsym (void)
+int
+pck__foo__bar__minsym__2 (void)
 {
-  return get_test_minsym ();
+  return get_pck__foo__bar__minsym ();
 }
 
 int
 main (void)
 {
-  int val = test_minsym ();
+  int val = pck__foo__bar__minsym__2 ();
 
   if (val != 124) /* BREAK */
     return 1;

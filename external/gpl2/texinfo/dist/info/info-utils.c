@@ -1,4 +1,4 @@
-/*	$NetBSD: info-utils.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: info-utils.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* info-utils.c -- miscellanous.
    Id: info-utils.c,v 1.4 2004/04/11 17:56:45 karl Exp 

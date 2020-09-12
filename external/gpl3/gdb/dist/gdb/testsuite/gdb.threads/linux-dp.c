@@ -11,7 +11,6 @@
 #include <pthread.h>
 #include <sys/time.h>
 #include <sys/types.h>
-#include <unistd.h>
 
 /* The number of philosophers at the table.  */
 int num_philosophers;

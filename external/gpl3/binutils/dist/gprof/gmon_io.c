@@ -1,6 +1,7 @@
 /* gmon_io.c - Input and output from/to gmon.out files.
 
-   Copyright (C) 1999-2020 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -61,7 +62,7 @@ int gmon_input = 0;
 int gmon_file_version = 0;	/* 0 == old (non-versioned) file format.  */
 
 static enum gmon_ptr_size
-gmon_get_ptr_size (void)
+gmon_get_ptr_size ()
 {
   int size;
 
@@ -87,7 +88,7 @@ gmon_get_ptr_size (void)
 }
 
 static enum gmon_ptr_signedness
-gmon_get_ptr_signedness (void)
+gmon_get_ptr_signedness ()
 {
   int sext;
 
@@ -492,14 +493,14 @@ gmon_out_read (const char *filename)
       if (!histograms)
 	{
 	  num_histograms = 1;
-	  histograms = (struct histogram *) xmalloc (sizeof (struct histogram));
+	  histograms = xmalloc (sizeof (struct histogram));
 	  histograms->lowpc = tmp.low_pc;
 	  histograms->highpc = tmp.high_pc;
 	  histograms->num_bins = hist_num_bins;
 	  hist_scale = (double)((tmp.high_pc - tmp.low_pc) / sizeof (UNIT))
 	    / hist_num_bins;
-	  histograms->sample = (int *) xmalloc (hist_num_bins * sizeof (int));
-	  memset (histograms->sample, 0,
+	  histograms->sample = xmalloc (hist_num_bins * sizeof (int));
+	  memset (histograms->sample, 0, 
 		  hist_num_bins * sizeof (int));
 	}
 
@@ -532,7 +533,7 @@ gmon_out_read (const char *filename)
 	      done (1);
 	    }
 
-	  histograms->sample[i]
+	  histograms->sample[i] 
 	    += bfd_get_16 (core_bfd, (bfd_byte *) raw_bin_count);
 	}
 
@@ -549,6 +550,8 @@ gmon_out_read (const char *filename)
 	  /* Add this arc.  */
 	  cg_tally (from_pc, self_pc, count);
 	}
+
+      fclose (ifp);
 
       if (hz == HZ_WRONG)
 	{
@@ -569,9 +572,6 @@ gmon_out_read (const char *filename)
 	       whoami, file_format);
       done (1);
     }
-
-  if (ifp != stdin)
-    fclose (ifp);
 
   if (output_style & STYLE_GMON_INFO)
     {
@@ -671,7 +671,7 @@ gmon_out_write (const char *filename)
 	    case ptr_64bit:
 	      hdrsize = GMON_HDRSIZE_OLDBSD_64;
 	      /* FIXME: Checking host compiler defines here means that we can't
-		 use a cross gprof alpha OSF.  */
+		 use a cross gprof alpha OSF.  */ 
 #if defined(__alpha__) && defined (__osf__)
 	      padsize = 4;
 #endif
@@ -683,7 +683,7 @@ gmon_out_write (const char *filename)
 	 old BSD and 4.4BSD formats.  */
       if (gmon_io_write_vma (ofp, histograms->lowpc)
           || gmon_io_write_vma (ofp, histograms->highpc)
-          || gmon_io_write_32 (ofp, histograms->num_bins
+          || gmon_io_write_32 (ofp, histograms->num_bins 
 			       * sizeof (UNIT) + hdrsize))
 	{
 	  perror (filename);

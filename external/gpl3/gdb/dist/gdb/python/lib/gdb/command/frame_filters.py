@@ -1,5 +1,5 @@
 # Frame-filter commands.
-# Copyright (C) 2013-2019 Free Software Foundation, Inc.
+# Copyright (C) 2013-2014 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -42,7 +42,8 @@ class ShowFilterPrefixCmd(gdb.Command):
 class InfoFrameFilter(gdb.Command):
     """List all registered Python frame-filters.
 
-Usage: info frame-filters"""
+    Usage: info frame-filters
+    """
 
     def __init__(self):
         super(InfoFrameFilter, self).__init__("info frame-filter",
@@ -55,44 +56,52 @@ Usage: info frame-filters"""
         else:
             return "No"
 
-    def print_list(self, title, frame_filters, blank_line):
+    def list_frame_filters(self, frame_filters):
+        """ Internal worker function to list and print frame filters
+        in a dictionary.
+
+        Arguments:
+           frame_filters: The name of the dictionary, as
+           specified by GDB user commands.
+        """
+
         sorted_frame_filters = sorted(frame_filters.items(),
                                       key=lambda i: gdb.frames.get_priority(i[1]),
                                       reverse=True)
 
         if len(sorted_frame_filters) == 0:
-            return 0
+            print("  No frame filters registered.")
+        else:
+            print("  Priority  Enabled  Name")
+            for frame_filter in sorted_frame_filters:
+                name = frame_filter[0]
+                try:
+                    priority = '{:<8}'.format(
+                        str(gdb.frames.get_priority(frame_filter[1])))
+                    enabled = '{:<7}'.format(
+                        self.enabled_string(gdb.frames.get_enabled(frame_filter[1])))
+                except Exception:
+                    e = sys.exc_info()[1]
+                    print("  Error printing filter '"+name+"': "+str(e))
+                else:
+                    print("  %s  %s  %s" % (priority, enabled, name))
 
+    def print_list(self, title, filter_list, blank_line):
         print(title)
-        print("  Priority  Enabled  Name")
-        for frame_filter in sorted_frame_filters:
-            name = frame_filter[0]
-            try:
-                priority = '{:<8}'.format(
-                    str(gdb.frames.get_priority(frame_filter[1])))
-                enabled = '{:<7}'.format(
-                    self.enabled_string(gdb.frames.get_enabled(frame_filter[1])))
-                print("  %s  %s  %s" % (priority, enabled, name))
-            except Exception:
-                e = sys.exc_info()[1]
-                print("  Error printing filter '"+name+"': "+str(e))
+        self.list_frame_filters(filter_list)
         if blank_line:
             print("")
-        return 1
 
     def invoke(self, arg, from_tty):
-        any_printed = self.print_list("global frame-filters:", gdb.frame_filters, True)
+        self.print_list("global frame-filters:", gdb.frame_filters, True)
 
         cp = gdb.current_progspace()
-        any_printed += self.print_list("progspace %s frame-filters:" % cp.filename,
-                                       cp.frame_filters, True)
+        self.print_list("progspace %s frame-filters:" % cp.filename,
+                        cp.frame_filters, True)
 
         for objfile in gdb.objfiles():
-            any_printed += self.print_list("objfile %s frame-filters:" % objfile.filename,
-                                           objfile.frame_filters, False)
-
-        if any_printed == 0:
-            print ("No frame filters.")
+            self.print_list("objfile %s frame-filters:" % objfile.filename,
+                            objfile.frame_filters, False)
 
 # Internal enable/disable functions.
 
@@ -111,13 +120,11 @@ def _enable_parse_arg(cmd_name, arg):
 
     argv = gdb.string_to_argv(arg);
     argc = len(argv)
-    if argc == 0:
-        raise gdb.GdbError(cmd_name + " requires an argument")
-    if argv[0] == "all":
-        if argc > 1:
-            raise gdb.GdbError(cmd_name + ": with 'all' " \
-                               "you may not specify a filter.")
-    elif argc != 2:
+    if argv[0] == "all" and argc > 1:
+        raise gdb.GdbError(cmd_name + ": with 'all' " \
+                          "you may not specify a filter.")
+    else:
+        if argv[0] != "all" and argc != 2:
             raise gdb.GdbError(cmd_name + " takes exactly two arguments.")
 
     return argv
@@ -143,7 +150,7 @@ def _do_enable_frame_filter(command_tuple, flag):
         try:
             ff = op_list[frame_filter]
         except KeyError:
-            msg = "frame-filter '" + str(frame_filter) + "' not found."
+            msg = "frame-filter '" + str(name) + "' not found."
             raise gdb.GdbError(msg)
 
         gdb.frames.set_enabled(ff, flag)
@@ -208,19 +215,21 @@ def _complete_frame_filter_name(word, printer_dict):
     return flist
 
 class EnableFrameFilter(gdb.Command):
-    """GDB command to enable the specified frame-filter.
+    """GDB command to disable the specified frame-filter.
 
-Usage: enable frame-filter DICTIONARY [NAME]
+    Usage: enable frame-filter enable DICTIONARY [NAME]
 
-DICTIONARY is the name of the frame filter dictionary on which to
-operate.  If dictionary is set to "all", perform operations on all
-dictionaries.  Named dictionaries are: "global" for the global
-frame filter dictionary, "progspace" for the program space's frame
-filter dictionary.  If either all, or the two named dictionaries
-are not specified, the dictionary name is assumed to be the name
-of an "objfile" -- a shared library or an executable.
+    DICTIONARY is the name of the frame filter dictionary on which to
+    operate.  If dictionary is set to "all", perform operations on all
+    dictionaries.  Named dictionaries are: "global" for the global
+    frame filter dictionary, "progspace" for the program space's frame
+    filter dictionary.  If either all, or the two named dictionaries
+    are not specified, the dictionary name is assumed to be the name
+    of the object-file name.
 
-NAME matches the name of the frame-filter to operate on."""
+    NAME matches the name of the frame-filter to operate on.  If
+    DICTIONARY is "all", NAME is ignored.
+    """
     def __init__(self):
         super(EnableFrameFilter, self).__init__("enable frame-filter",
                                                  gdb.COMMAND_DATA)
@@ -241,17 +250,19 @@ NAME matches the name of the frame-filter to operate on."""
 class DisableFrameFilter(gdb.Command):
     """GDB command to disable the specified frame-filter.
 
-Usage: disable frame-filter DICTIONARY [NAME]
+    Usage: disable frame-filter disable DICTIONARY [NAME]
 
-DICTIONARY is the name of the frame filter dictionary on which to
-operate.  If dictionary is set to "all", perform operations on all
-dictionaries.  Named dictionaries are: "global" for the global
-frame filter dictionary, "progspace" for the program space's frame
-filter dictionary.  If either all, or the two named dictionaries
-are not specified, the dictionary name is assumed to be the name
-of an "objfile" -- a shared library or an executable.
+    DICTIONARY is the name of the frame filter dictionary on which to
+    operate.  If dictionary is set to "all", perform operations on all
+    dictionaries.  Named dictionaries are: "global" for the global
+    frame filter dictionary, "progspace" for the program space's frame
+    filter dictionary.  If either all, or the two named dictionaries
+    are not specified, the dictionary name is assumed to be the name
+    of the object-file name.
 
-NAME matches the name of the frame-filter to operate on."""
+    NAME matches the name of the frame-filter to operate on.  If
+    DICTIONARY is "all", NAME is ignored.
+    """
     def __init__(self):
         super(DisableFrameFilter, self).__init__("disable frame-filter",
                                                   gdb.COMMAND_DATA)
@@ -272,19 +283,19 @@ NAME matches the name of the frame-filter to operate on."""
 class SetFrameFilterPriority(gdb.Command):
     """GDB command to set the priority of the specified frame-filter.
 
-Usage: set frame-filter priority DICTIONARY NAME PRIORITY
+    Usage: set frame-filter priority DICTIONARY NAME PRIORITY
 
-DICTIONARY is the name of the frame filter dictionary on which to
-operate.  Named dictionaries are: "global" for the global frame
-filter dictionary, "progspace" for the program space's framefilter
-dictionary.  If either of these two are not specified, the
-dictionary name is assumed to be the name of an "objfile" -- a
-shared library or an executable.
+    DICTIONARY is the name of the frame filter dictionary on which to
+    operate.  Named dictionaries are: "global" for the global frame
+    filter dictionary, "progspace" for the program space's framefilter
+    dictionary.  If either of these two are not specified, the
+    dictionary name is assumed to be the name of the object-file name.
 
-NAME matches the name of the frame filter to operate on.
+    NAME matches the name of the frame filter to operate on.
 
-PRIORITY is the an integer to assign the new priority to the frame
-filter."""
+    PRIORITY is the an integer to assign the new priority to the frame
+    filter.
+    """
 
     def __init__(self):
         super(SetFrameFilterPriority, self).__init__("set frame-filter " \
@@ -336,7 +347,7 @@ filter."""
         try:
             ff = op_list[frame_filter]
         except KeyError:
-            msg = "frame-filter '" + str(frame_filter) + "' not found."
+            msg = "frame-filter '" + str(name) + "' not found."
             raise gdb.GdbError(msg)
 
         gdb.frames.set_priority(ff, priority)
@@ -358,16 +369,16 @@ filter."""
 class ShowFrameFilterPriority(gdb.Command):
     """GDB command to show the priority of the specified frame-filter.
 
-Usage: show frame-filter priority DICTIONARY NAME
+    Usage: show frame-filter priority DICTIONARY NAME
 
-DICTIONARY is the name of the frame filter dictionary on which to
-operate.  Named dictionaries are: "global" for the global frame
-filter dictionary, "progspace" for the program space's framefilter
-dictionary.  If either of these two are not specified, the
-dictionary name is assumed to be the name of an "objfile" -- a
-shared library or an executable.
+    DICTIONARY is the name of the frame filter dictionary on which to
+    operate.  Named dictionaries are: "global" for the global frame
+    filter dictionary, "progspace" for the program space's framefilter
+    dictionary.  If either of these two are not specified, the
+    dictionary name is assumed to be the name of the object-file name.
 
-NAME matches the name of the frame-filter to operate on."""
+    NAME matches the name of the frame-filter to operate on.
+    """
 
     def __init__(self):
         super(ShowFrameFilterPriority, self).__init__("show frame-filter " \

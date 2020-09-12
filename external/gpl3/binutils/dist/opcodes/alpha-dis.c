@@ -1,5 +1,6 @@
 /* alpha-dis.c -- Disassemble Alpha AXP instructions
-   Copyright (C) 1996-2020 Free Software Foundation, Inc.
+   Copyright 1996, 1998, 1999, 2000, 2001, 2002, 2007
+   Free Software Foundation, Inc.
    Contributed by Richard Henderson <rth@tamu.edu>,
    patterned after the PPC opcode handling written by Ian Lance Taylor.
 
@@ -20,9 +21,9 @@
    Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
    02110-1301, USA.  */
 
-#include "sysdep.h"
 #include <stdio.h>
-#include "disassemble.h"
+#include "sysdep.h"
+#include "dis-asm.h"
 #include "opcode/alpha.h"
 
 /* OSF register names.  */
@@ -54,7 +55,9 @@ static const char * const vms_regnames[64] = {
 /* Disassemble Alpha instructions.  */
 
 int
-print_insn_alpha (bfd_vma memaddr, struct disassemble_info *info)
+print_insn_alpha (memaddr, info)
+     bfd_vma memaddr;
+     struct disassemble_info *info;
 {
   static const struct alpha_opcode *opcode_index[AXP_NOPS+1];
   const char * const * regnames;

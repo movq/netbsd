@@ -1,5 +1,6 @@
 /* Decimal floating point support.
-   Copyright (C) 2005-2019 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2006, 2007, 2008, 2009 Free Software
+   Foundation, Inc.
 
 This file is part of GCC.
 
@@ -22,14 +23,19 @@ along with GCC; see the file COPYING3.  If not see
 #include "coretypes.h"
 #include "tm.h"
 #include "tree.h"
+#include "toplev.h"
+#include "real.h"
+#include "tm_p.h"
 #include "dfp.h"
 
 /* The order of the following headers is important for making sure
    decNumber structure is large enough to hold decimal128 digits.  */
 
 #include "decimal128.h"
+#include "decimal128Local.h"
 #include "decimal64.h"
 #include "decimal32.h"
+#include "decNumber.h"
 
 #ifndef WORDS_BIGENDIAN
 #define WORDS_BIGENDIAN 0
@@ -106,33 +112,7 @@ decimal_to_decnumber (const REAL_VALUE_TYPE *r, decNumber *dn)
         decNumberFromString (dn, "nan", &set);
       break;
     case rvc_normal:
-      if (!r->decimal)
-	{
-	  /* dconst{1,2,m1,half} are used in various places in
-	     the middle-end and optimizers, allow them here
-	     as an exception by converting them to decimal.  */
-	  if (memcmp (r, &dconst1, sizeof (*r)) == 0)
-	    {
-	      decNumberFromString (dn, "1", &set);
-	      break;
-	    }
-	  if (memcmp (r, &dconst2, sizeof (*r)) == 0)
-	    {
-	      decNumberFromString (dn, "2", &set);
-	      break;
-	    }
-	  if (memcmp (r, &dconstm1, sizeof (*r)) == 0)
-	    {
-	      decNumberFromString (dn, "-1", &set);
-	      break;
-	    }
-	  if (memcmp (r, &dconsthalf, sizeof (*r)) == 0)
-	    {
-	      decNumberFromString (dn, "0.5", &set);
-	      break;
-	    }
-	  gcc_unreachable ();
-	}
+      gcc_assert (r->decimal);
       decimal128ToNumber ((const decimal128 *) r->sig, dn);
       break;
     default:
@@ -339,13 +319,13 @@ decode_decimal128 (const struct real_format *fmt ATTRIBUTE_UNUSED,
 
 static void
 decimal_to_binary (REAL_VALUE_TYPE *to, const REAL_VALUE_TYPE *from,
-		   const real_format *fmt)
+		   enum machine_mode mode)
 {
   char string[256];
   const decimal128 *const d128 = (const decimal128 *) from->sig;
 
   decimal128ToString (d128, string);
-  real_from_string3 (to, string, fmt);
+  real_from_string3 (to, string, mode);
 }
 
 
@@ -455,13 +435,15 @@ decimal_round_for_format (const struct real_format *fmt, REAL_VALUE_TYPE *r)
    binary and decimal types.  */
 
 void
-decimal_real_convert (REAL_VALUE_TYPE *r, const real_format *fmt,
+decimal_real_convert (REAL_VALUE_TYPE *r, enum machine_mode mode,
 		      const REAL_VALUE_TYPE *a)
 {
+  const struct real_format *fmt = REAL_MODE_FORMAT (mode);
+
   if (a->decimal && fmt->b == 10)
     return;
   if (a->decimal)
-      decimal_to_binary (r, a, fmt);
+      decimal_to_binary (r, a, mode);
   else
       decimal_from_binary (r, a);
 }
@@ -599,11 +581,11 @@ decimal_real_to_integer (const REAL_VALUE_TYPE *r)
   return real_to_integer (&to);
 }
 
-/* Likewise, but returns a wide_int with PRECISION.  *FAIL is set if the
-   value does not fit.  */
+/* Likewise, but to an integer pair, HI+LOW.  */
 
-wide_int
-decimal_real_to_integer (const REAL_VALUE_TYPE *r, bool *fail, int precision)
+void
+decimal_real_to_integer2 (HOST_WIDE_INT *plow, HOST_WIDE_INT *phigh,
+			  const REAL_VALUE_TYPE *r)
 {
   decContext set;
   decNumber dn, dn2, dn3;
@@ -623,7 +605,7 @@ decimal_real_to_integer (const REAL_VALUE_TYPE *r, bool *fail, int precision)
      function.  */
   decNumberToString (&dn, string);
   real_from_string (&to, string);
-  return real_to_integer (&to, fail, precision);
+  real_to_integer2 (plow, phigh, &to);
 }
 
 /* Perform the decimal floating point operation described by CODE.
@@ -714,19 +696,19 @@ decimal_real_arithmetic (REAL_VALUE_TYPE *r, enum tree_code code,
    If SIGN is nonzero, R is set to the most negative finite value.  */
 
 void
-decimal_real_maxval (REAL_VALUE_TYPE *r, int sign, machine_mode mode)
+decimal_real_maxval (REAL_VALUE_TYPE *r, int sign, enum machine_mode mode)
 {
   const char *max;
 
   switch (mode)
     {
-    case E_SDmode:
+    case SDmode:
       max = "9.999999E96";
       break;
-    case E_DDmode:
+    case DDmode:
       max = "9.999999999999999E384";
       break;
-    case E_TDmode:
+    case TDmode:
       max = "9.999999999999999999999999999999999E6144";
       break;
     default:

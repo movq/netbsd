@@ -31,7 +31,7 @@
 	comment "subroutine end"
 	.purgem gdbasm_end
 	.macro gdbasm_end name
-	.size   \name, . - \name
+	.size   \name, .-_foo1
 	.align	1
 	.endm
 
@@ -65,19 +65,13 @@
 
 	comment "crt0 startup"
 	.macro gdbasm_startup
-	comment "If there is a _stack symbol, use it for setting up the stack"
-	comment "pointer.  In hosted mode (when there is no _stack symbol),"
-	comment "the operating system will have initialized it already."
-	mov.l	.stackaddr, r0
-	tst	r0, r0
-	bt	.afterstackaddr
-	mov	r0, r15
+	mov.l	.stackaddr,r15
 	bra	.afterstackaddr
+	nop
 	nop
 	.align 2
 .stackaddr:
-	.weak	_stack
-	.long	_stack
+	.long	196608		! 0x30000
 	.align	1
 .afterstackaddr:
 	.endm

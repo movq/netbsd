@@ -1,5 +1,6 @@
 /* BFD back-end for OSF/1 core files.
-   Copyright (C) 1993-2019 Free Software Foundation, Inc.
+   Copyright 1993, 1994, 1995, 1998, 1999, 2001, 2002, 2003, 2004, 2005, 2006,
+   2007 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -33,8 +34,18 @@
 
 /* forward declarations */
 
+static asection *make_bfd_asection
+  PARAMS ((bfd *, const char *, flagword, bfd_size_type, bfd_vma, file_ptr));
+static const bfd_target *osf_core_core_file_p
+  PARAMS ((bfd *));
+static char *osf_core_core_file_failing_command
+  PARAMS ((bfd *));
+static int osf_core_core_file_failing_signal
+  PARAMS ((bfd *));
 #define osf_core_core_file_matches_executable_p generic_core_file_matches_executable_p
 #define osf_core_core_file_pid _bfd_nocore_core_file_pid
+static void swap_abort
+  PARAMS ((void));
 
 /* These are stored in the bfd's tdata */
 
@@ -45,16 +56,17 @@ struct osf_core_struct
 };
 
 #define core_hdr(bfd) ((bfd)->tdata.osf_core_data)
-#define core_signal(bfd)  (core_hdr(bfd)->sig)
+#define core_signal(bfd) (core_hdr(bfd)->sig)
 #define core_command(bfd) (core_hdr(bfd)->cmd)
 
 static asection *
-make_bfd_asection (bfd *abfd,
-		   const char *name,
-		   flagword flags,
-		   bfd_size_type size,
-		   bfd_vma vma,
-		   file_ptr filepos)
+make_bfd_asection (abfd, name, flags, size, vma, filepos)
+     bfd *abfd;
+     const char *name;
+     flagword flags;
+     bfd_size_type size;
+     bfd_vma vma;
+     file_ptr filepos;
 {
   asection *asect;
 
@@ -71,7 +83,8 @@ make_bfd_asection (bfd *abfd,
 }
 
 static const bfd_target *
-osf_core_core_file_p (bfd *abfd)
+osf_core_core_file_p (abfd)
+     bfd *abfd;
 {
   int val;
   int i;
@@ -80,7 +93,7 @@ osf_core_core_file_p (bfd *abfd)
   bfd_size_type amt;
 
   amt = sizeof core_header;
-  val = bfd_bread (& core_header, amt, abfd);
+  val = bfd_bread ((PTR) &core_header, amt, abfd);
   if (val != sizeof core_header)
     return NULL;
 
@@ -101,7 +114,7 @@ osf_core_core_file_p (bfd *abfd)
       flagword flags;
 
       amt = sizeof core_scnhdr;
-      val = bfd_bread (& core_scnhdr, amt, abfd);
+      val = bfd_bread ((PTR) &core_scnhdr, amt, abfd);
       if (val != sizeof core_scnhdr)
 	break;
 
@@ -124,8 +137,8 @@ osf_core_core_file_p (bfd *abfd)
 	  flags = SEC_HAS_CONTENTS;
 	  break;
 	default:
-	  _bfd_error_handler (_("unhandled OSF/1 core file section type %d"),
-			      core_scnhdr.scntype);
+	  (*_bfd_error_handler) (_("Unhandled OSF/1 core file section type %d\n"),
+				 core_scnhdr.scntype);
 	  continue;
 	}
 
@@ -148,22 +161,24 @@ osf_core_core_file_p (bfd *abfd)
 }
 
 static char *
-osf_core_core_file_failing_command (bfd *abfd)
+osf_core_core_file_failing_command (abfd)
+     bfd *abfd;
 {
   return core_command (abfd);
 }
 
 static int
-osf_core_core_file_failing_signal (bfd *abfd)
+osf_core_core_file_failing_signal (abfd)
+     bfd *abfd;
 {
   return core_signal (abfd);
 }
 
 /* If somebody calls any byte-swapping routines, shoot them.  */
 static void
-swap_abort (void)
+swap_abort()
 {
-  abort (); /* This way doesn't require any declaration for ANSI to fuck up */
+  abort(); /* This way doesn't require any declaration for ANSI to fuck up */
 }
 
 #define	NO_GET ((bfd_vma (*) (const void *)) swap_abort)
@@ -173,7 +188,7 @@ swap_abort (void)
 #define	NO_PUT64 ((void (*) (bfd_uint64_t, void *)) swap_abort)
 #define	NO_GETS64 ((bfd_int64_t (*) (const void *)) swap_abort)
 
-const bfd_target core_osf_vec =
+const bfd_target osf_core_vec =
   {
     "osf-core",
     bfd_target_unknown_flavour,
@@ -183,10 +198,9 @@ const bfd_target core_osf_vec =
      HAS_LINENO | HAS_DEBUG |
      HAS_SYMS | HAS_LOCALS | WP_TEXT | D_PAGED),
     (SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_RELOC), /* section flags */
-    0,				/* symbol prefix */
-    ' ',			/* ar_pad_char */
-    16,				/* ar_max_namelen */
-    0,				/* match priority.  */
+    0,			                                   /* symbol prefix */
+    ' ',						   /* ar_pad_char */
+    16,							   /* ar_max_namelen */
     NO_GET64, NO_GETS64, NO_PUT64,	/* 64 bit data */
     NO_GET, NO_GETS, NO_PUT,		/* 32 bit data */
     NO_GET, NO_GETS, NO_PUT,		/* 16 bit data */
@@ -201,16 +215,12 @@ const bfd_target core_osf_vec =
       osf_core_core_file_p		/* a core file */
     },
     {				/* bfd_set_format */
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error
+      bfd_false, bfd_false,
+      bfd_false, bfd_false
     },
     {				/* bfd_write_contents */
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error
+      bfd_false, bfd_false,
+      bfd_false, bfd_false
     },
 
     BFD_JUMP_TABLE_GENERIC (_bfd_generic),
@@ -225,5 +235,5 @@ const bfd_target core_osf_vec =
 
     NULL,
 
-    NULL			/* backend_data */
+    (PTR) 0			/* backend_data */
   };

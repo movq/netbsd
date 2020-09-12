@@ -1,4 +1,4 @@
-/*	$NetBSD: plural.c,v 1.1.1.1 2016/01/14 00:11:28 christos Exp $	*/
+/*	$NetBSD: plural.c,v 1.1 2016/01/14 00:11:28 christos Exp $	*/
 
 /* A Bison parser, made from plural.y
    by GNU bison 1.35.  */

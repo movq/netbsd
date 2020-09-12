@@ -1,6 +1,8 @@
 // istream classes -*- C++ -*-
 
-// Copyright (C) 1997-2019 Free Software Foundation, Inc.
+// Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+// 2006, 2007, 2008, 2009
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,9 +24,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file bits/istream.tcc
+/** @file istream.tcc
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{istream}
+ *  You should not attempt to use it directly.
  */
 
 //
@@ -36,11 +38,9 @@
 
 #pragma GCC system_header
 
-#include <bits/cxxabi_forced.h>
+#include <cxxabi-forced.h>
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   template<typename _CharT, typename _Traits>
     basic_istream<_CharT, _Traits>::sentry::
@@ -48,36 +48,28 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     {
       ios_base::iostate __err = ios_base::goodbit;
       if (__in.good())
-	__try
-	  {
-	    if (__in.tie())
-	      __in.tie()->flush();
-	    if (!__noskip && bool(__in.flags() & ios_base::skipws))
-	      {
-		const __int_type __eof = traits_type::eof();
-		__streambuf_type* __sb = __in.rdbuf();
-		__int_type __c = __sb->sgetc();
+	{
+	  if (__in.tie())
+	    __in.tie()->flush();
+	  if (!__noskip && bool(__in.flags() & ios_base::skipws))
+	    {
+	      const __int_type __eof = traits_type::eof();
+	      __streambuf_type* __sb = __in.rdbuf();
+	      __int_type __c = __sb->sgetc();
 
-		const __ctype_type& __ct = __check_facet(__in._M_ctype);
-		while (!traits_type::eq_int_type(__c, __eof)
-		       && __ct.is(ctype_base::space,
-				  traits_type::to_char_type(__c)))
-		  __c = __sb->snextc();
+	      const __ctype_type& __ct = __check_facet(__in._M_ctype);
+	      while (!traits_type::eq_int_type(__c, __eof)
+		     && __ct.is(ctype_base::space, 
+				traits_type::to_char_type(__c)))
+		__c = __sb->snextc();
 
-		// _GLIBCXX_RESOLVE_LIB_DEFECTS
-		// 195. Should basic_istream::sentry's constructor ever
-		// set eofbit?
-		if (traits_type::eq_int_type(__c, __eof))
-		  __err |= ios_base::eofbit;
-	      }
-	  }
-	__catch(__cxxabiv1::__forced_unwind&)
-	  {
-	    __in._M_setstate(ios_base::badbit);
-	    __throw_exception_again;
-	  }
-	__catch(...)
-	  { __in._M_setstate(ios_base::badbit); }
+	      // _GLIBCXX_RESOLVE_LIB_DEFECTS
+	      // 195. Should basic_istream::sentry's constructor ever
+	      // set eofbit?
+	      if (traits_type::eq_int_type(__c, __eof))
+		__err |= ios_base::eofbit;
+	    }
+	}
 
       if (__in.good() && __err == ios_base::goodbit)
 	_M_ok = true;
@@ -721,8 +713,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       // _GLIBCXX_RESOLVE_LIB_DEFECTS
       // 60. What is a formatted input function?
       _M_gcount = 0;
-      // Clear eofbit per N3168.
-      this->clear(this->rdstate() & ~ios_base::eofbit);
       sentry __cerb(*this, true);
       if (__cerb)
 	{
@@ -756,8 +746,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       // _GLIBCXX_RESOLVE_LIB_DEFECTS
       // 60. What is a formatted input function?
       _M_gcount = 0;
-      // Clear eofbit per N3168.
-      this->clear(this->rdstate() & ~ios_base::eofbit);
       sentry __cerb(*this, true);
       if (__cerb)
 	{
@@ -827,23 +815,19 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       // _GLIBCXX_RESOLVE_LIB_DEFECTS
       // DR60.  Do not change _M_gcount.
       pos_type __ret = pos_type(-1);
-      sentry __cerb(*this, true);
-      if (__cerb)
+      __try
 	{
-	  __try
-	    {
-	      if (!this->fail())
-		__ret = this->rdbuf()->pubseekoff(0, ios_base::cur,
-						  ios_base::in);
-	    }
-	  __catch(__cxxabiv1::__forced_unwind&)
-	    {
-	      this->_M_setstate(ios_base::badbit);
-	      __throw_exception_again;
-	    }
-	  __catch(...)
-	    { this->_M_setstate(ios_base::badbit); }
+	  if (!this->fail())
+	    __ret = this->rdbuf()->pubseekoff(0, ios_base::cur,
+					      ios_base::in);
 	}
+      __catch(__cxxabiv1::__forced_unwind&)
+	{
+	  this->_M_setstate(ios_base::badbit);
+	  __throw_exception_again;
+	}
+      __catch(...)
+	{ this->_M_setstate(ios_base::badbit); }
       return __ret;
     }
 
@@ -854,35 +838,29 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     {
       // _GLIBCXX_RESOLVE_LIB_DEFECTS
       // DR60.  Do not change _M_gcount.
-      // Clear eofbit per N3168.
-      this->clear(this->rdstate() & ~ios_base::eofbit);
-      sentry __cerb(*this, true);
-      if (__cerb)
+      ios_base::iostate __err = ios_base::goodbit;
+      __try
 	{
-	  ios_base::iostate __err = ios_base::goodbit;
-	  __try
+	  if (!this->fail())
 	    {
-	      if (!this->fail())
-		{
-		  // 136.  seekp, seekg setting wrong streams?
-		  const pos_type __p = this->rdbuf()->pubseekpos(__pos,
-								 ios_base::in);
-		  
-		  // 129.  Need error indication from seekp() and seekg()
-		  if (__p == pos_type(off_type(-1)))
-		    __err |= ios_base::failbit;
-		}
+	      // 136.  seekp, seekg setting wrong streams?
+	      const pos_type __p = this->rdbuf()->pubseekpos(__pos,
+							     ios_base::in);
+	      
+	      // 129.  Need error indication from seekp() and seekg()
+	      if (__p == pos_type(off_type(-1)))
+		__err |= ios_base::failbit;
 	    }
-	  __catch(__cxxabiv1::__forced_unwind&)
-	    {
-	      this->_M_setstate(ios_base::badbit);
-	      __throw_exception_again;
-	    }
-	  __catch(...)
-	    { this->_M_setstate(ios_base::badbit); }
-	  if (__err)
-	    this->setstate(__err);
 	}
+      __catch(__cxxabiv1::__forced_unwind&)
+	{
+	  this->_M_setstate(ios_base::badbit);
+	  __throw_exception_again;
+	}
+      __catch(...)
+	{ this->_M_setstate(ios_base::badbit); }
+      if (__err)
+	this->setstate(__err);
       return *this;
     }
 
@@ -893,35 +871,29 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     {
       // _GLIBCXX_RESOLVE_LIB_DEFECTS
       // DR60.  Do not change _M_gcount.
-      // Clear eofbit per N3168.
-      this->clear(this->rdstate() & ~ios_base::eofbit);
-      sentry __cerb(*this, true);
-      if (__cerb)
+      ios_base::iostate __err = ios_base::goodbit;
+      __try
 	{
-	  ios_base::iostate __err = ios_base::goodbit;
-	  __try
+	  if (!this->fail())
 	    {
-	      if (!this->fail())
-		{
-		  // 136.  seekp, seekg setting wrong streams?
-		  const pos_type __p = this->rdbuf()->pubseekoff(__off, __dir,
-								 ios_base::in);
+	      // 136.  seekp, seekg setting wrong streams?
+	      const pos_type __p = this->rdbuf()->pubseekoff(__off, __dir,
+							     ios_base::in);
 	      
-		  // 129.  Need error indication from seekp() and seekg()
-		  if (__p == pos_type(off_type(-1)))
-		    __err |= ios_base::failbit;
-		}
+	      // 129.  Need error indication from seekp() and seekg()
+	      if (__p == pos_type(off_type(-1)))
+		__err |= ios_base::failbit;
 	    }
-	  __catch(__cxxabiv1::__forced_unwind&)
-	    {
-	      this->_M_setstate(ios_base::badbit);
-	      __throw_exception_again;
-	    }
-	  __catch(...)
-	    { this->_M_setstate(ios_base::badbit); }
-	  if (__err)
-	    this->setstate(__err);
 	}
+      __catch(__cxxabiv1::__forced_unwind&)
+	{
+	  this->_M_setstate(ios_base::badbit);
+	  __throw_exception_again;
+	}
+      __catch(...)
+	{ this->_M_setstate(ios_base::badbit); }
+      if (__err)
+	this->setstate(__err);
       return *this;
     }
 
@@ -1044,6 +1016,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   // Inhibit implicit instantiations for required instantiations,
   // which are defined via explicit instantiations elsewhere.
+  // NB:  This syntax is a GNU extension.
 #if _GLIBCXX_EXTERN_TEMPLATE
   extern template class basic_istream<char>;
   extern template istream& ws(istream&);
@@ -1094,7 +1067,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #endif
 #endif
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace std
+_GLIBCXX_END_NAMESPACE
 
 #endif

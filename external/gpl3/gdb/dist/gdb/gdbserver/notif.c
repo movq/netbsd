@@ -1,5 +1,5 @@
 /* Notification to GDB.
-   Copyright (C) 1989-2019 Free Software Foundation, Inc.
+   Copyright (C) 1989-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -47,7 +47,6 @@
 
    # 3 is done by function 'handle_notif_ack'.  */
 
-#include "server.h"
 #include "notif.h"
 
 static struct notif_server *notifs[] =
@@ -79,22 +78,19 @@ notif_write_event (struct notif_server *notif, char *own_buf)
 int
 handle_notif_ack (char *own_buf, int packet_len)
 {
-  size_t i;
-  struct notif_server *np;
+  int i = 0;
+  struct notif_server *np = NULL;
 
   for (i = 0; i < ARRAY_SIZE (notifs); i++)
     {
-      const char *ack_name = notifs[i]->ack_name;
-
-      if (startswith (own_buf, ack_name)
-	  && packet_len == strlen (ack_name))
+      np = notifs[i];
+      if (strncmp (own_buf, np->ack_name, strlen (np->ack_name)) == 0
+	  && packet_len == strlen (np->ack_name))
 	break;
     }
 
-  if (i == ARRAY_SIZE (notifs))
+  if (np == NULL)
     return 0;
-
-  np = notifs[i];
 
   /* If we're waiting for GDB to acknowledge a pending event,
      consider that done.  */
@@ -104,8 +100,8 @@ handle_notif_ack (char *own_buf, int packet_len)
 	= QUEUE_deque (notif_event_p, np->queue);
 
       if (remote_debug)
-	debug_printf ("%s: acking %d\n", np->ack_name,
-		      QUEUE_length (notif_event_p, np->queue));
+	fprintf (stderr, "%s: acking %d\n", np->ack_name,
+		 QUEUE_length (notif_event_p, np->queue));
 
       xfree (head);
     }
@@ -124,8 +120,8 @@ notif_event_enque (struct notif_server *notif,
   QUEUE_enque (notif_event_p, notif->queue, event);
 
   if (remote_debug)
-    debug_printf ("pending events: %s %d\n", notif->notif_name,
-		  QUEUE_length (notif_event_p, notif->queue));
+    fprintf (stderr, "pending events: %s %d\n", notif->notif_name,
+	     QUEUE_length (notif_event_p, notif->queue));
 
 }
 

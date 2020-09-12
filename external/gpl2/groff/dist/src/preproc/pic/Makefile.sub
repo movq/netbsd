@@ -29,7 +29,3 @@ GRAM=$(srcdir)/pic.y
 YTABC=pic.cpp
 YTABH=pic_tab.h
 NAMEPREFIX=$(g)
-
-pic_tab.h:	pic.cpp
-lex.cpp:	pic_tab.h
-

@@ -1,4 +1,4 @@
-/* Copyright (C) 2012-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2012-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,7 +19,7 @@
 #include "command.h"
 #include "gdbcmd.h"
 #include "target.h"
-#include "common/agent.h"
+#include "agent.h"
 
 /* Enum strings for "set|show agent".  */
 
@@ -44,14 +44,17 @@ show_can_use_agent (struct ui_file *file, int from_tty,
 }
 
 static void
-set_can_use_agent (const char *args, int from_tty, struct cmd_list_element *c)
+set_can_use_agent (char *args, int from_tty, struct cmd_list_element *c)
 {
   if (target_use_agent (can_use_agent == can_use_agent_on) == 0)
     /* Something wrong during setting, set flag to default value.  */
     can_use_agent = can_use_agent_off;
 }
 
-#include "observable.h"
+/* -Wmissing-prototypes */
+extern initialize_file_ftype _initialize_agent;
+
+#include "observer.h"
 #include "objfiles.h"
 
 static void
@@ -66,7 +69,7 @@ agent_new_objfile (struct objfile *objfile)
 void
 _initialize_agent (void)
 {
-  gdb::observers::new_objfile.attach (agent_new_objfile);
+  observer_attach_new_objfile (agent_new_objfile);
 
   add_setshow_enum_cmd ("agent", class_run,
 			can_use_agent_enum,

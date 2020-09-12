@@ -1,6 +1,7 @@
 /* cpu.h --- declarations for the M32C core.
 
-Copyright (C) 2005-2019 Free Software Foundation, Inc.
+Copyright (C) 2005, 2007, 2008, 2009, 2010, 2011
+Free Software Foundation, Inc.
 Contributed by Red Hat, Inc.
 
 This file is part of the GNU simulators.
@@ -220,11 +221,9 @@ extern unsigned int heaptop;
 extern unsigned int heapbottom;
 
 /* Points to one of the below functions, set by m32c_load().  */
-extern int (*decode_opcode) (void);
+extern int (*decode_opcode) ();
 
-extern int decode_r8c (void);
-extern int decode_m32c (void);
+extern int decode_r8c ();
+extern int decode_m32c ();
 
-extern void trace_register_changes (void);
-
-extern void m32c_dump_all_registers (void);
+extern void trace_register_changes ();

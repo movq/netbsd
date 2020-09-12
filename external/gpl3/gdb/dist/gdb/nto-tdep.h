@@ -1,6 +1,7 @@
 /* nto-tdep.h - QNX Neutrino target header.
 
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    Contributed by QNX Software Systems Ltd.
 
@@ -19,8 +20,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef NTO_TDEP_H
-#define NTO_TDEP_H
+#ifndef _NTO_TDEP_H
+#define _NTO_TDEP_H
 
 #include "solist.h"
 #include "osabi.h"
@@ -31,6 +32,9 @@
 
 struct nto_target_ops
 {
+/* For 'maintenance debug nto-debug' command.  */
+  int internal_debugging;
+
 /* The CPUINFO flags from the remote.  Currently used by
    i386 for fxsave but future proofing other hosts.
    This is initialized in procfs_attach or nto_start_remote
@@ -75,6 +79,8 @@ struct nto_target_ops
 };
 
 extern struct nto_target_ops current_nto_target;
+
+#define nto_internal_debugging (current_nto_target.internal_debugging)
 
 #define nto_cpuinfo_flags (current_nto_target.cpuinfo_flags)
 
@@ -134,28 +140,12 @@ typedef struct _debug_regs
   qnx_reg64 padding[1024];
 } nto_regset_t;
 
-struct nto_thread_info : public private_thread_info
+struct private_thread_info
 {
-  short tid = 0;
-  unsigned char state = 0;
-  unsigned char flags = 0;
-  std::string name;
-};
-
-static inline nto_thread_info *
-get_nto_thread_info (thread_info *thread)
-{
-  return static_cast<nto_thread_info *> (thread->priv.get ());
-}
-
-/* Per-inferior data, common for both procfs and remote.  */
-struct nto_inferior_data
-{
-  /* Last stopped flags result from wait function */
-  unsigned int stopped_flags;
-
-  /* Last known stopped PC */
-  CORE_ADDR stopped_pc;
+  short tid;
+  unsigned char state;
+  unsigned char flags;
+  char name[1];
 };
 
 /* Generic functions in nto-tdep.c.  */
@@ -170,8 +160,7 @@ void nto_relocate_section_addresses (struct so_list *,
 
 int nto_map_arch_to_cputype (const char *);
 
-int nto_find_and_open_solib (const char *, unsigned,
-			     gdb::unique_xmalloc_ptr<char> *);
+int nto_find_and_open_solib (char *, unsigned, char **);
 
 enum gdb_osabi nto_elf_osabi_sniffer (bfd *abfd);
 
@@ -183,12 +172,6 @@ void nto_dummy_supply_regset (struct regcache *regcache, char *regs);
 
 int nto_in_dynsym_resolve_code (CORE_ADDR pc);
 
-const char *nto_extra_thread_info (struct target_ops *self, struct thread_info *);
+char *nto_extra_thread_info (struct thread_info *);
 
-LONGEST nto_read_auxv_from_initial_stack (CORE_ADDR inital_stack,
-					  gdb_byte *readbuf,
-					  LONGEST len, size_t sizeof_auxv_t);
-
-struct nto_inferior_data *nto_inferior_data (struct inferior *inf);
-
-#endif /* NTO_TDEP_H */
+#endif

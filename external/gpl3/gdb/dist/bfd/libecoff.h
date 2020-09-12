@@ -1,5 +1,7 @@
 /* BFD ECOFF object file private structure.
-   Copyright (C) 1993-2019 Free Software Foundation, Inc.
+   Copyright 1993, 1994, 1995, 1996, 1999, 2001, 2002, 2003, 2004,
+   2005, 2006, 2007, 2008, 2009, 2010
+   Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -242,7 +244,6 @@ extern bfd_boolean _bfd_ecoff_get_section_contents
   (bfd *, asection *, void * location, file_ptr, bfd_size_type);
 
 #define _bfd_ecoff_bfd_link_split_section _bfd_generic_link_split_section
-#define _bfd_ecoff_bfd_link_check_relocs  _bfd_generic_link_check_relocs
 
 extern bfd_boolean _bfd_ecoff_bfd_copy_private_bfd_data
   (bfd *, bfd *);
@@ -275,8 +276,9 @@ extern bfd_boolean _bfd_ecoff_write_armap
   bfd_generic_openr_next_archived_file
 #define _bfd_ecoff_get_elt_at_index _bfd_generic_get_elt_at_index
 #define _bfd_ecoff_generic_stat_arch_elt bfd_generic_stat_arch_elt
-#define _bfd_ecoff_update_armap_timestamp _bfd_bool_bfd_true
-#define _bfd_ecoff_bfd_is_target_special_symbol _bfd_bool_bfd_asymbol_false
+#define _bfd_ecoff_update_armap_timestamp bfd_true
+#define _bfd_ecoff_bfd_is_target_special_symbol  \
+  ((bfd_boolean (*) (bfd *, asymbol *)) bfd_false)
 
 extern long _bfd_ecoff_get_symtab_upper_bound (bfd *);
 extern long _bfd_ecoff_canonicalize_symtab (bfd *, asymbol **);
@@ -285,15 +287,12 @@ extern void _bfd_ecoff_print_symbol
   (bfd *, void *, asymbol *, bfd_print_symbol_type);
 extern void _bfd_ecoff_get_symbol_info
   (bfd *, asymbol *, symbol_info *);
-#define _bfd_ecoff_get_symbol_version_string \
-  _bfd_nosymbols_get_symbol_version_string
 extern bfd_boolean _bfd_ecoff_bfd_is_local_label_name
   (bfd *, const char *);
 #define _bfd_ecoff_get_lineno _bfd_nosymbols_get_lineno
 extern bfd_boolean _bfd_ecoff_find_nearest_line
-  (bfd *, asymbol **, asection *, bfd_vma,
-   const char **, const char **, unsigned int *, unsigned int *);
-#define _bfd_ecoff_find_line _bfd_nosymbols_find_line
+  (bfd *, asection *, asymbol **, bfd_vma, const char **, const char **,
+   unsigned int *);
 #define _bfd_ecoff_bfd_make_debug_symbol _bfd_nosymbols_bfd_make_debug_symbol
 #define _bfd_ecoff_read_minisymbols _bfd_generic_read_minisymbols
 #define _bfd_ecoff_minisymbol_to_symbol _bfd_generic_minisymbol_to_symbol
@@ -301,7 +300,7 @@ extern bfd_boolean _bfd_ecoff_find_nearest_line
 
 #define _bfd_ecoff_get_reloc_upper_bound coff_get_reloc_upper_bound
 extern long _bfd_ecoff_canonicalize_reloc
-  (bfd *, asection *, arelent **, asymbol **);
+  (bfd *, asection *, arelent **, asymbol **symbols);
 /* ecoff_bfd_reloc_type_lookup defined by backend. */
 
 extern bfd_boolean _bfd_ecoff_set_arch_mach
@@ -314,6 +313,7 @@ extern int _bfd_ecoff_sizeof_headers (bfd *, struct bfd_link_info *);
 /* ecoff_bfd_relax_section defined by backend.  */
 extern struct bfd_link_hash_table *_bfd_ecoff_bfd_link_hash_table_create
   (bfd *);
+#define _bfd_ecoff_bfd_link_hash_table_free _bfd_generic_link_hash_table_free
 extern bfd_boolean _bfd_ecoff_bfd_link_add_symbols
   (bfd *, struct bfd_link_info *);
 #define _bfd_ecoff_bfd_link_just_syms _bfd_generic_link_just_syms
@@ -325,8 +325,8 @@ extern bfd_boolean _bfd_ecoff_bfd_final_link
 /* Hook functions for the generic COFF section reading code.  */
 
 extern void * _bfd_ecoff_mkobject_hook (bfd *, void *, void *);
-extern void _bfd_ecoff_set_alignment_hook
-  (bfd *, asection *, void *);
+#define _bfd_ecoff_set_alignment_hook \
+  ((void (*) (bfd *, asection *, void *)) bfd_void)
 extern bfd_boolean _bfd_ecoff_set_arch_mach_hook
   (bfd *, void *);
 extern bfd_boolean _bfd_ecoff_no_long_sections

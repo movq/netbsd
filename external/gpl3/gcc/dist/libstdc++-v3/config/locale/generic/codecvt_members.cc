@@ -1,6 +1,7 @@
 // std::codecvt implementation details, generic version -*- C++ -*-
 
-// Copyright (C) 2002-2019 Free Software Foundation, Inc.
+// Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2009
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -33,15 +34,13 @@
 #include <climits>  // For MB_LEN_MAX
 #include <cstring>
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   // Specializations.
 #ifdef _GLIBCXX_USE_WCHAR_T
   codecvt_base::result
   codecvt<wchar_t, char, mbstate_t>::
-  do_out(state_type& __state, const intern_type* __from,
+  do_out(state_type& __state, const intern_type* __from, 
 	 const intern_type* __from_end, const intern_type*& __from_next,
 	 extern_type* __to, extern_type* __to_end,
 	 extern_type*& __to_next) const
@@ -88,7 +87,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		__ret = partial;
 		break;
 	      }
-
+	    
 	    memcpy(__to, __buf, __conv);
 	    __state = __tmp_state;
 	    __to += __conv;
@@ -101,18 +100,18 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
     __from_next = __from;
     __to_next = __to;
-    return __ret;
+    return __ret; 
   }
-
+  
   codecvt_base::result
   codecvt<wchar_t, char, mbstate_t>::
-  do_in(state_type& __state, const extern_type* __from,
+  do_in(state_type& __state, const extern_type* __from, 
 	const extern_type* __from_end, const extern_type*& __from_next,
 	intern_type* __to, intern_type* __to_end,
 	intern_type*& __to_next) const
   {
     result __ret = ok;
-    // This temporary state object is necessary so __state won't be modified
+    // This temporary state object is neccessary so __state won't be modified
     // if [__from, __from_end) is a partial multibyte character.
     state_type __tmp_state(__state);
 
@@ -153,10 +152,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
     __from_next = __from;
     __to_next = __to;
-    return __ret;
+    return __ret; 
   }
 
-  int
+  int 
   codecvt<wchar_t, char, mbstate_t>::
   do_encoding() const throw()
   {
@@ -166,9 +165,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     if (MB_CUR_MAX == 1)
       __ret = 1;
     return __ret;
-  }
+  }  
 
-  int
+  int 
   codecvt<wchar_t, char, mbstate_t>::
   do_max_length() const throw()
   {
@@ -176,8 +175,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     int __ret = MB_CUR_MAX;
     return __ret;
   }
-
-  int
+  
+  int 
   codecvt<wchar_t, char, mbstate_t>::
   do_length(state_type& __state, const extern_type* __from,
 	    const extern_type* __end, size_t __max) const
@@ -187,7 +186,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
     while (__from < __end && __max)
       {
-	size_t __conv = mbrtowc(0, __from, __end - __from, &__tmp_state);
+	size_t __conv = mbrtowc(NULL, __from, __end - __from, &__tmp_state);
 	if (__conv == static_cast<size_t>(-1))
 	  {
 	    // Invalid source character
@@ -211,9 +210,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	__max--;
       }
 
-    return __ret;
+    return __ret; 
   }
 #endif
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE

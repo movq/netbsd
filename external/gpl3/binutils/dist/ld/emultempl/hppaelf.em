@@ -1,5 +1,6 @@
 # This shell script emits a C file. -*- C -*-
-#   Copyright (C) 1991-2020 Free Software Foundation, Inc.
+#   Copyright 1991, 1993, 1994, 1997, 1999, 2000, 2001, 2002, 2003, 2004,
+#   2005, 2007, 2008 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -19,7 +20,7 @@
 # MA 02110-1301, USA.
 #
 
-# This file is sourced from elf.em, and defines extra hppa-elf
+# This file is sourced from elf32.em, and defines extra hppa-elf
 # specific routines.
 #
 fragment <<EOF
@@ -50,16 +51,14 @@ static bfd_signed_vma group_size = 1;
 static void
 hppaelf_after_parse (void)
 {
-  if (bfd_link_relocatable (&link_info))
+  if (link_info.relocatable)
     lang_add_unique (".text");
 
   /* Enable this once we split millicode stuff from libgcc:
      lang_add_input_file ("milli",
-			  lang_input_file_is_l_enum,
+     			  lang_input_file_is_l_enum,
 			  NULL);
   */
-
-  ldelf_after_parse ();
 }
 
 /* This is called before the input files are opened.  We create a new
@@ -69,8 +68,7 @@ static void
 hppaelf_create_output_section_statements (void)
 {
   if (!(bfd_get_flavour (link_info.output_bfd) == bfd_target_elf_flavour
-	&& (elf_object_id (link_info.output_bfd) == HPPA32_ELF_DATA
-	    || elf_object_id (link_info.output_bfd) == HPPA64_ELF_DATA)))
+	&& elf_object_id (link_info.output_bfd) == HPPA_ELF_TDATA))
     return;
 
   stub_file = lang_add_input_file ("linker stubs",
@@ -82,13 +80,12 @@ hppaelf_create_output_section_statements (void)
 			      bfd_get_arch (link_info.output_bfd),
 			      bfd_get_mach (link_info.output_bfd)))
     {
-      einfo (_("%F%P: can not create BFD: %E\n"));
+      einfo ("%X%P: can not create BFD %E\n");
       return;
     }
 
   stub_file->the_bfd->flags |= BFD_LINKER_CREATED;
   ldlang_add_file (stub_file);
-  elf32_hppa_init_stub_bfd (stub_file->the_bfd, &link_info);
 }
 
 
@@ -178,6 +175,7 @@ hppaelf_add_stub_section (const char *stub_sec_name, asection *input_section)
   asection *stub_sec;
   flagword flags;
   asection *output_section;
+  const char *secname;
   lang_output_section_statement_type *os;
   struct hook_stub_info info;
 
@@ -189,11 +187,12 @@ hppaelf_add_stub_section (const char *stub_sec_name, asection *input_section)
     goto err_ret;
 
   output_section = input_section->output_section;
-  os = lang_output_section_get (output_section);
+  secname = bfd_get_section_name (output_section->owner, output_section);
+  os = lang_output_section_find (secname);
 
   info.input_section = input_section;
   lang_list_init (&info.add);
-  lang_add_section (&info.add, stub_sec, NULL, os);
+  lang_add_section (&info.add, stub_sec, os);
 
   if (info.add.head == NULL)
     goto err_ret;
@@ -202,7 +201,7 @@ hppaelf_add_stub_section (const char *stub_sec_name, asection *input_section)
     return stub_sec;
 
  err_ret:
-  einfo (_("%X%P: can not make stub section: %E\n"));
+  einfo ("%X%P: can not make stub section: %E\n");
   return NULL;
 }
 
@@ -215,7 +214,7 @@ hppaelf_layout_sections_again (void)
   /* If we have changed sizes of the stub sections, then we need
      to recalculate all the section offsets.  This may mean we need to
      add even more stubs.  */
-  ldelf_map_segments (TRUE);
+  gld${EMULATION_NAME}_map_segments (TRUE);
   need_laying_out = -1;
 }
 
@@ -227,7 +226,7 @@ build_section_lists (lang_statement_union_type *statement)
     {
       asection *i = statement->input_section.section;
 
-      if (i->sec_info_type != SEC_INFO_TYPE_JUST_SYMS
+      if (!((lang_input_statement_type *) i->owner->usrdata)->just_syms_flag
 	  && (i->flags & SEC_EXCLUDE) == 0
 	  && i->output_section != NULL
 	  && i->output_section->owner == link_info.output_bfd)
@@ -238,36 +237,31 @@ build_section_lists (lang_statement_union_type *statement)
 }
 
 
-/* For the PA we use this opportunity to size and build linker stubs.  */
+/* Final emulation specific call.  For the PA we use this opportunity
+   to build linker stubs.  */
 
 static void
-gld${EMULATION_NAME}_after_allocation (void)
+gld${EMULATION_NAME}_finish (void)
 {
-  int ret;
-
-  /* bfd_elf_discard_info just plays with data and debugging sections,
-     ie. doesn't affect code size, so we can delay resizing the
+  /* bfd_elf_discard_info just plays with debugging sections,
+     ie. doesn't affect any code, so we can delay resizing the
      sections.  It's likely we'll resize everything in the process of
      adding stubs.  */
-  ret = bfd_elf_discard_info (link_info.output_bfd, &link_info);
-  if (ret < 0)
-    {
-      einfo (_("%X%P: .eh_frame/.stab edit: %E\n"));
-      return;
-    }
-  else if (ret > 0)
+  if (bfd_elf_discard_info (link_info.output_bfd, &link_info))
     need_laying_out = 1;
 
   /* If generating a relocatable output file, then we don't
      have to examine the relocs.  */
-  if (stub_file != NULL && !bfd_link_relocatable (&link_info))
+  if (stub_file != NULL && !link_info.relocatable)
     {
-      ret = elf32_hppa_setup_section_lists (link_info.output_bfd, &link_info);
+      int ret = elf32_hppa_setup_section_lists (link_info.output_bfd,
+						&link_info);
+
       if (ret != 0)
 	{
 	  if (ret < 0)
 	    {
-	      einfo (_("%X%P: can not size stub section: %E\n"));
+	      einfo ("%X%P: can not size stub section: %E\n");
 	      return;
 	    }
 
@@ -282,21 +276,21 @@ gld${EMULATION_NAME}_after_allocation (void)
 				       &hppaelf_add_stub_section,
 				       &hppaelf_layout_sections_again))
 	    {
-	      einfo (_("%X%P: can not size stub section: %E\n"));
+	      einfo ("%X%P: can not size stub section: %E\n");
 	      return;
 	    }
 	}
     }
 
   if (need_laying_out != -1)
-    ldelf_map_segments (need_laying_out);
+    gld${EMULATION_NAME}_map_segments (need_laying_out);
 
-  if (!bfd_link_relocatable (&link_info))
+  if (! link_info.relocatable)
     {
       /* Set the global data pointer.  */
       if (! elf32_hppa_set_gp (link_info.output_bfd, &link_info))
 	{
-	  einfo (_("%X%P: can not set gp\n"));
+	  einfo ("%X%P: can not set gp\n");
 	  return;
 	}
 
@@ -304,10 +298,33 @@ gld${EMULATION_NAME}_after_allocation (void)
       if (stub_file != NULL && stub_file->the_bfd->sections != NULL)
 	{
 	  if (! elf32_hppa_build_stubs (&link_info))
-	    einfo (_("%X%P: can not build stubs: %E\n"));
+	    einfo ("%X%P: can not build stubs: %E\n");
 	}
     }
+
+  finish_default ();
 }
+
+
+/* Avoid processing the fake stub_file in vercheck, stat_needed and
+   check_needed routines.  */
+
+static void (*real_func) (lang_input_statement_type *);
+
+static void hppa_for_each_input_file_wrapper (lang_input_statement_type *l)
+{
+  if (l != stub_file)
+    (*real_func) (l);
+}
+
+static void
+hppa_lang_for_each_input_file (void (*func) (lang_input_statement_type *))
+{
+  real_func = func;
+  lang_for_each_input_file (&hppa_for_each_input_file_wrapper);
+}
+
+#define lang_for_each_input_file hppa_lang_for_each_input_file
 
 EOF
 
@@ -349,9 +366,9 @@ PARSE_AND_LIST_ARGS_CASES='
     case OPTION_STUBGROUP_SIZE:
       {
 	const char *end;
-	group_size = bfd_scan_vma (optarg, &end, 0);
-	if (*end)
-	  einfo (_("%F%P: invalid number `%s'\''\n"), optarg);
+        group_size = bfd_scan_vma (optarg, &end, 0);
+        if (*end)
+	  einfo (_("%P%F: invalid number `%s'\''\n"), optarg);
       }
       break;
 '
@@ -359,5 +376,5 @@ PARSE_AND_LIST_ARGS_CASES='
 # Put these extra hppaelf routines in ld_${EMULATION_NAME}_emulation
 #
 LDEMUL_AFTER_PARSE=hppaelf_after_parse
-LDEMUL_AFTER_ALLOCATION=gld${EMULATION_NAME}_after_allocation
+LDEMUL_FINISH=gld${EMULATION_NAME}_finish
 LDEMUL_CREATE_OUTPUT_SECTION_STATEMENTS=hppaelf_create_output_section_statements

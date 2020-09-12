@@ -1,24 +1,24 @@
 /* terminal.c -- controlling the terminal with termcap. */
 
-/* Copyright (C) 1996-2009 Free Software Foundation, Inc.
+/* Copyright (C) 1996-2005 Free Software Foundation, Inc.
 
-   This file is part of the GNU Readline Library (Readline), a library
-   for reading lines of text with interactive input and history editing.      
+   This file is part of the GNU Readline Library, a library for
+   reading lines of text with interactive input and history editing.
 
-   Readline is free software: you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation, either version 3 of the License, or
+   The GNU Readline Library is free software; you can redistribute it
+   and/or modify it under the terms of the GNU General Public License
+   as published by the Free Software Foundation; either version 2, or
    (at your option) any later version.
 
-   Readline is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   The GNU Readline Library is distributed in the hope that it will be
+   useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+   of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
 
-   You should have received a copy of the GNU General Public License
-   along with Readline.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
+   The GNU General Public License is often shipped with GNU software, and
+   is generally kept in a file called COPYING or LICENSE.  If you do not
+   have a copy of the license, write to the Free Software Foundation,
+   59 Temple Place, Suite 330, Boston, MA 02111 USA. */
 #define READLINE_LIBRARY
 
 #if defined (HAVE_CONFIG_H)
@@ -31,10 +31,6 @@
 #if defined (HAVE_SYS_FILE_H)
 #  include <sys/file.h>
 #endif /* HAVE_SYS_FILE_H */
-
-#if defined (HAVE_SYS_IOCTL_H)
-#include <sys/ioctl.h>
-#endif /* HAVE_SYS_IOCTL_H */
 
 #if defined (HAVE_UNISTD_H)
 #  include <unistd.h>
@@ -75,23 +71,14 @@
 #include "xmalloc.h"
 
 #if defined (__MINGW32__)
-#  include <windows.h>
-#  include <wincon.h>
-
-static void _win_get_screensize PARAMS((int *, int *));
-#endif
-
-#if defined (__EMX__)
-static void _emx_get_screensize PARAMS((int *, int *));
+# include <windows.h>
+# include <wincon.h>
 #endif
 
 #define CUSTOM_REDISPLAY_FUNC() (rl_redisplay_function != rl_redisplay)
 #define CUSTOM_INPUT_FUNC() (rl_getc_function != rl_getc)
 
-/*  If the calling application sets this to a non-zero value, readline will
-    use the $LINES and $COLUMNS environment variables to set its idea of the
-    window size before interrogating the kernel. */
-int rl_prefer_env_winsize = 0;
+int rl_prefer_env_winsize;
 
 /* **************************************************************** */
 /*								    */
@@ -106,12 +93,12 @@ static char *term_string_buffer = (char *)NULL;
 
 static int tcap_initialized;
 
-#if !defined (__linux__) && !defined (NCURSES_VERSION)
+#if !defined (__linux__)
 #  if defined (__EMX__) || defined (NEED_EXTERN_PC)
 extern 
 #  endif /* __EMX__ || NEED_EXTERN_PC */
 char PC, *BC, *UP;
-#endif /* !__linux__ && !NCURSES_VERSION */
+#endif /* __linux__ */
 
 /* Some strings to control terminal actions.  These are output by tputs (). */
 char *_rl_term_clreol;
@@ -135,7 +122,9 @@ char *_rl_term_IC;
 char *_rl_term_dc;
 char *_rl_term_DC;
 
+#if defined (HACK_TERMCAP_MOTION)
 char *_rl_term_forward_char;
+#endif  /* HACK_TERMCAP_MOTION */
 
 /* How to go up a line. */
 char *_rl_term_up;
@@ -206,26 +195,6 @@ _emx_get_screensize (swp, shp)
 }
 #endif
 
-#if defined (__MINGW32__)
-static void
-_win_get_screensize (swp, shp)
-     int *swp, *shp;
-{
-  HANDLE hConOut;
-  CONSOLE_SCREEN_BUFFER_INFO scr;
-
-  hConOut = GetStdHandle (STD_OUTPUT_HANDLE);
-  if (hConOut != INVALID_HANDLE_VALUE)
-    {
-      if (GetConsoleScreenBufferInfo (hConOut, &scr))
-	{
-	  *swp = scr.dwSize.X;
-	  *shp = scr.srWindow.Bottom - scr.srWindow.Top + 1;
-	}
-    }
-}
-#endif
-
 /* Get readline's idea of the screen size.  TTY is a file descriptor open
    to the terminal.  If IGNORE_ENV is true, we do not pay attention to the
    values of $LINES and $COLUMNS.  The tests for TERM_STRING_BUFFER being
@@ -249,10 +218,22 @@ _rl_get_screen_size (tty, ignore_env)
     }
 #endif /* TIOCGWINSZ */
 
+  /* For MinGW, we get the console size from the Windows API.  */
+#if defined (__MINGW32__)
+  HANDLE hConOut = GetStdHandle (STD_OUTPUT_HANDLE);
+  if (hConOut != INVALID_HANDLE_VALUE)
+    {
+      CONSOLE_SCREEN_BUFFER_INFO scr;
+      if (GetConsoleScreenBufferInfo (hConOut, &scr))
+	{
+	  wc = scr.dwSize.X;
+	  wr = scr.srWindow.Bottom - scr.srWindow.Top + 1;
+	}
+    }
+#endif
+
 #if defined (__EMX__)
-  _emx_get_screensize (&wc, &wr);
-#elif defined (__MINGW32__)
-  _win_get_screensize (&wc, &wr);
+  _emx_get_screensize (&_rl_screenwidth, &_rl_screenheight);
 #endif
 
   if (ignore_env || rl_prefer_env_winsize == 0)
@@ -366,24 +347,24 @@ rl_reset_screen_size ()
 void
 rl_resize_terminal ()
 {
-  _rl_get_screen_size (fileno (rl_instream), 1);
-  if (_rl_echoing_p)
+  if (readline_echoing_p)
     {
+      _rl_get_screen_size (fileno (rl_instream), 1);
       if (CUSTOM_REDISPLAY_FUNC ())
 	rl_forced_update_display ();
-      else if (RL_ISSTATE(RL_STATE_REDISPLAYING) == 0)
+      else
 	_rl_redisplay_after_sigwinch ();
     }
 }
 
 struct _tc_string {
-     const char * const tc_var;
+     const char *tc_var;
      char **tc_value;
 };
 
 /* This should be kept sorted, just in case we decide to change the
    search algorithm to something smarter. */
-static const struct _tc_string tc_strings[] =
+static struct _tc_string tc_strings[] =
 {
   { "@7", &_rl_term_at7 },
   { "DC", &_rl_term_DC },
@@ -408,7 +389,9 @@ static const struct _tc_string tc_strings[] =
   { "le", &_rl_term_backspace },
   { "mm", &_rl_term_mm },
   { "mo", &_rl_term_mo },
+#if defined (HACK_TERMCAP_MOTION)
   { "nd", &_rl_term_forward_char },
+#endif
   { "pc", &_rl_term_pc },
   { "up", &_rl_term_up },
   { "vb", &_rl_visible_bell },
@@ -522,7 +505,9 @@ _rl_init_terminal_io (terminal_name)
       _rl_term_ks = _rl_term_ke = _rl_term_at7 = (char *)NULL;
       _rl_term_mm = _rl_term_mo = (char *)NULL;
       _rl_term_ve = _rl_term_vs = (char *)NULL;
-      _rl_term_forward_char = (char *)NULL;
+#if defined (HACK_TERMCAP_MOTION)
+      term_forward_char = (char *)NULL;
+#endif
       _rl_terminal_can_insert = term_has_meta = 0;
 
       /* Reasonable defaults for tgoto().  Readline currently only uses
@@ -561,8 +546,8 @@ _rl_init_terminal_io (terminal_name)
 
   /* Check to see if this terminal has a meta key and clear the capability
      variables if there is none. */
-  term_has_meta = tgetflag ("km") != 0;
-  if (term_has_meta == 0)
+  term_has_meta = (tgetflag ("km") || tgetflag ("MT"));
+  if (!term_has_meta)
     _rl_term_mm = _rl_term_mo = (char *)NULL;
 
 #endif /* !__MSDOS__ */
@@ -678,10 +663,10 @@ _rl_backspace (count)
 int
 rl_crlf ()
 {
-#if defined (NEW_TTY_DRIVER) || defined (__MINT__)
+#if defined (NEW_TTY_DRIVER)
   if (_rl_term_cr)
     tputs (_rl_term_cr, 1, _rl_output_character_function);
-#endif /* NEW_TTY_DRIVER || __MINT__ */
+#endif /* NEW_TTY_DRIVER */
   putc ('\n', _rl_out_stream);
   return 0;
 }
@@ -690,7 +675,7 @@ rl_crlf ()
 int
 rl_ding ()
 {
-  if (_rl_echoing_p)
+  if (readline_echoing_p)
     {
       switch (_rl_bell_preference)
         {

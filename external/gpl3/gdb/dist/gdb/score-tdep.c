@@ -1,7 +1,8 @@
 /* Target-dependent code for the S+core architecture, for GDB,
    the GNU Debugger.
 
-   Copyright (C) 2006-2019 Free Software Foundation, Inc.
+   Copyright (C) 2006, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    Contributed by Qinwei (qinwei@sunnorth.com.cn)
    Contributed by Ching-Peng Lin (cplin@sunplus.com)
@@ -22,6 +23,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
+#include "gdb_assert.h"
 #include "inferior.h"
 #include "symtab.h"
 #include "objfiles.h"
@@ -126,12 +128,21 @@ score_register_sim_regno (struct gdbarch *gdbarch, int regnum)
 }
 #endif
 
+static int
+score_print_insn (bfd_vma memaddr, struct disassemble_info *info)
+{
+  if (info->endian == BFD_ENDIAN_BIG)
+    return print_insn_big_score (memaddr, info);
+  else
+    return print_insn_little_score (memaddr, info);
+}
+
 static inst_t *
-score7_fetch_inst (struct gdbarch *gdbarch, CORE_ADDR addr, gdb_byte *memblock)
+score7_fetch_inst (struct gdbarch *gdbarch, CORE_ADDR addr, char *memblock)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   static inst_t inst = { 0, 0, 0 };
-  gdb_byte buf[SCORE_INSTLEN] = { 0 };
+  char buf[SCORE_INSTLEN] = { 0 };
   int big;
   int ret;
 
@@ -211,6 +222,7 @@ score3_adjust_pc_and_fetch_inst (CORE_ADDR *pcptr, int *lenptr,
 
 #define EXTRACT_LEN 2
   CORE_ADDR adjust_pc = *pcptr & ~0x1;
+  int inst_len;
   gdb_byte buf[5][EXTRACT_LEN] =
     {
       {'\0', '\0'},
@@ -297,88 +309,69 @@ score3_adjust_pc_and_fetch_inst (CORE_ADDR *pcptr, int *lenptr,
   return &inst;
 }
 
-/* Implement the breakpoint_kind_from_pc gdbarch method.  */
-
-static int
-score7_breakpoint_kind_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr)
+static const gdb_byte *
+score7_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
+			   int *lenptr)
 {
-  int ret;
-  unsigned int raw;
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   gdb_byte buf[SCORE_INSTLEN] = { 0 };
+  int ret;
+  unsigned int raw;
 
   if ((ret = target_read_memory (*pcptr & ~0x3, buf, SCORE_INSTLEN)) != 0)
     {
       error (_("Error: target_read_memory in file:%s, line:%d!"),
-	     __FILE__, __LINE__);
+             __FILE__, __LINE__);
     }
   raw = extract_unsigned_integer (buf, SCORE_INSTLEN, byte_order);
 
-  if (!(raw & 0x80008000))
+  if (byte_order == BFD_ENDIAN_BIG)
     {
-      /* 16bits instruction.  */
-      *pcptr &= ~0x1;
-      return 2;
+      if (!(raw & 0x80008000))
+        {
+          /* 16bits instruction.  */
+          static gdb_byte big_breakpoint16[] = { 0x60, 0x02 };
+          *pcptr &= ~0x1;
+          *lenptr = sizeof (big_breakpoint16);
+          return big_breakpoint16;
+        }
+      else
+        {
+          /* 32bits instruction.  */
+          static gdb_byte big_breakpoint32[] = { 0x80, 0x00, 0x80, 0x06 };
+          *pcptr &= ~0x3;
+          *lenptr = sizeof (big_breakpoint32);
+          return big_breakpoint32;
+        }
     }
   else
     {
-      /* 32bits instruction.  */
-      *pcptr &= ~0x3;
-      return 4;
+      if (!(raw & 0x80008000))
+        {
+          /* 16bits instruction.  */
+          static gdb_byte little_breakpoint16[] = { 0x02, 0x60 };
+          *pcptr &= ~0x1;
+          *lenptr = sizeof (little_breakpoint16);
+          return little_breakpoint16;
+        }
+      else
+        {
+          /* 32bits instruction.  */
+          static gdb_byte little_breakpoint32[] = { 0x06, 0x80, 0x00, 0x80 };
+          *pcptr &= ~0x3;
+          *lenptr = sizeof (little_breakpoint32);
+          return little_breakpoint32;
+        }
     }
 }
-
-/* Implement the sw_breakpoint_from_kind gdbarch method.  */
 
 static const gdb_byte *
-score7_sw_breakpoint_from_kind (struct gdbarch *gdbarch, int kind, int *size)
+score3_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
+			   int *lenptr)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
-
-  *size = kind;
-
-  if (kind == 4)
-    {
-      static gdb_byte big_breakpoint32[] = { 0x80, 0x00, 0x80, 0x06 };
-      static gdb_byte little_breakpoint32[] = { 0x06, 0x80, 0x00, 0x80 };
-
-      if (byte_order == BFD_ENDIAN_BIG)
-	return big_breakpoint32;
-      else
-	return little_breakpoint32;
-    }
-  else
-    {
-      static gdb_byte big_breakpoint16[] = { 0x60, 0x02 };
-      static gdb_byte little_breakpoint16[] = { 0x02, 0x60 };
-
-      if (byte_order == BFD_ENDIAN_BIG)
-	return big_breakpoint16;
-      else
-	return little_breakpoint16;
-    }
-}
-
-/* Implement the breakpoint_kind_from_pc gdbarch method.  */
-
-static int
-score3_breakpoint_kind_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr)
-{
-  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  CORE_ADDR adjust_pc = *pcptr; 
   int len;
-
-  score3_adjust_pc_and_fetch_inst (pcptr, &len, byte_order);
-
-  return len;
-}
-
-/* Implement the sw_breakpoint_from_kind gdbarch method.  */
-
-static const gdb_byte *
-score3_sw_breakpoint_from_kind (struct gdbarch *gdbarch, int kind, int *size)
-{
-  int index = 0;
-  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   static gdb_byte score_break_insns[6][6] = {
     /* The following three instructions are big endian.  */
     { 0x00, 0x20 },
@@ -389,10 +382,18 @@ score3_sw_breakpoint_from_kind (struct gdbarch *gdbarch, int kind, int *size)
     { 0x00, 0x80, 0x06, 0x00 },
     { 0x00, 0x80, 0x00, 0x80, 0x00, 0x00 }};
 
-  *size = kind;
+  gdb_byte *p = NULL;
+  int index = 0;
 
-  index = ((byte_order == BFD_ENDIAN_BIG) ? 0 : 3) + (kind / 2 - 1);
-  return score_break_insns[index];
+  score3_adjust_pc_and_fetch_inst (&adjust_pc, &len, byte_order);
+
+  index = ((byte_order == BFD_ENDIAN_BIG) ? 0 : 3) + (len / 2 - 1);
+  p = score_break_insns[index];
+
+  *pcptr = adjust_pc;
+  *lenptr = len;
+
+  return p;
 }
 
 static CORE_ADDR
@@ -442,15 +443,15 @@ score_xfer_register (struct regcache *regcache, int regnum, int length,
     }
 
   if (readbuf != NULL)
-    regcache->cooked_read_part (regnum, reg_offset, length,
-				readbuf + buf_offset);
+    regcache_cooked_read_part (regcache, regnum, reg_offset, length,
+                               readbuf + buf_offset);
   if (writebuf != NULL)
-    regcache->cooked_write_part (regnum, reg_offset, length,
-				 writebuf + buf_offset);
+    regcache_cooked_write_part (regcache, regnum, reg_offset, length,
+                                writebuf + buf_offset);
 }
 
 static enum return_value_convention
-score_return_value (struct gdbarch *gdbarch, struct value *function,
+score_return_value (struct gdbarch *gdbarch, struct type *func_type,
                     struct type *type, struct regcache *regcache,
                     gdb_byte * readbuf, const gdb_byte * writebuf)
 {
@@ -511,8 +512,7 @@ static CORE_ADDR
 score_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
                        struct regcache *regcache, CORE_ADDR bp_addr,
                        int nargs, struct value **args, CORE_ADDR sp,
-		       function_call_return_method return_method,
-		       CORE_ADDR struct_addr)
+                       int struct_return, CORE_ADDR struct_addr)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   int argnum;
@@ -536,7 +536,7 @@ score_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
   /* Step 3, Check if struct return then save the struct address to
      r4 and increase the stack_offset by 4.  */
-  if (return_method == return_method_struct)
+  if (struct_return)
     {
       regcache_cooked_write_unsigned (regcache, argreg++, struct_addr);
       stack_offset += SCORE_REGSIZE;
@@ -552,9 +552,12 @@ score_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       enum type_code typecode = TYPE_CODE (arg_type);
       const gdb_byte *val = value_contents (arg);
       int downward_offset = 0;
+      int odd_sized_struct_p;
       int arg_last_part_p = 0;
 
       arglen = TYPE_LENGTH (arg_type);
+      odd_sized_struct_p = (arglen > SCORE_REGSIZE
+                            && arglen % SCORE_REGSIZE != 0);
 
       /* If a arg should be aligned to 8 bytes (long long or double),
          the value should be put to even register numbers.  */
@@ -737,10 +740,8 @@ score3_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
   return pc;
 }
 
-/* Implement the stack_frame_destroyed_p gdbarch method. */
-
 static int
-score7_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR cur_pc)
+score7_in_function_epilogue_p (struct gdbarch *gdbarch, CORE_ADDR cur_pc)
 {
   inst_t *inst = score7_fetch_inst (gdbarch, cur_pc, NULL);
 
@@ -763,10 +764,8 @@ score7_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR cur_pc)
     return 0;
 }
 
-/* Implement the stack_frame_destroyed_p gdbarch method. */
-
 static int
-score3_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR cur_pc)
+score3_in_function_epilogue_p (struct gdbarch *gdbarch, CORE_ADDR cur_pc)
 {
   CORE_ADDR pc = cur_pc;
   inst_t *inst
@@ -810,16 +809,22 @@ score3_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR cur_pc)
     return 0;
 }
 
-static gdb_byte *
+static char *
 score7_malloc_and_get_memblock (CORE_ADDR addr, CORE_ADDR size)
 {
   int ret;
-  gdb_byte *memblock = NULL;
+  char *memblock = NULL;
 
-  if (size == 0)
+  if (size < 0)
+    {
+      error (_("Error: malloc size < 0 in file:%s, line:%d!"),
+             __FILE__, __LINE__);
+      return NULL;
+    }
+  else if (size == 0)
     return NULL;
 
-  memblock = (gdb_byte *) xmalloc (size);
+  memblock = (char *) xmalloc (size);
   memset (memblock, 0, size);
   ret = target_read_memory (addr & ~0x3, memblock, size);
   if (ret)
@@ -832,13 +837,13 @@ score7_malloc_and_get_memblock (CORE_ADDR addr, CORE_ADDR size)
 }
 
 static void
-score7_free_memblock (gdb_byte *memblock)
+score7_free_memblock (char *memblock)
 {
   xfree (memblock);
 }
 
 static void
-score7_adjust_memblock_ptr (gdb_byte **memblock, CORE_ADDR prev_pc,
+score7_adjust_memblock_ptr (char **memblock, CORE_ADDR prev_pc,
                            CORE_ADDR cur_pc)
 {
   if (prev_pc == -1)
@@ -874,8 +879,8 @@ score7_analyze_prologue (CORE_ADDR startaddr, CORE_ADDR pc,
   int fp_offset_p = 0;
   int inst_len = 0;
 
-  gdb_byte *memblock = NULL;
-  gdb_byte *memblock_ptr = NULL;
+  char *memblock = NULL;
+  char *memblock_ptr = NULL;
   CORE_ADDR prev_pc = -1;
 
   /* Allocate MEMBLOCK if PC - STARTADDR > 0.  */
@@ -1082,10 +1087,12 @@ score3_analyze_prologue (CORE_ADDR startaddr, CORE_ADDR pc,
   int fp_offset_p = 0;
   int inst_len = 0;
 
+  CORE_ADDR prev_pc = -1;
+
   sp = get_frame_register_unsigned (this_frame, SCORE_SP_REGNUM);
   fp = get_frame_register_unsigned (this_frame, SCORE_FP_REGNUM);
 
-  for (; cur_pc < pc; cur_pc += inst_len)
+  for (; cur_pc < pc; prev_pc = cur_pc, cur_pc += inst_len)
     {
       inst_t *inst = NULL;
 
@@ -1173,6 +1180,7 @@ score3_analyze_prologue (CORE_ADDR startaddr, CORE_ADDR pc,
               /* addi! r2, offset */
               if (pc - cur_pc >= 2)
                 {
+		  unsigned int save_v = inst->v;
 		  inst_t *inst2;
 		  
 		  cur_pc += inst->len;
@@ -1258,6 +1266,7 @@ score3_analyze_prologue (CORE_ADDR startaddr, CORE_ADDR pc,
               /* addi r2, offset */
               if (pc - cur_pc >= 2)
                 {
+		  unsigned int save_v = inst->v;
 		  inst_t *inst2;
 		  
 		  cur_pc += inst->len;
@@ -1312,7 +1321,7 @@ score_make_prologue_cache (struct frame_info *this_frame, void **this_cache)
   struct score_frame_cache *cache;
 
   if ((*this_cache) != NULL)
-    return (struct score_frame_cache *) (*this_cache);
+    return (*this_cache);
 
   cache = FRAME_OBSTACK_ZALLOC (struct score_frame_cache);
   (*this_cache) = cache;
@@ -1328,17 +1337,15 @@ score_make_prologue_cache (struct frame_info *this_frame, void **this_cache)
       return cache;
 
     if (target_mach == bfd_mach_score3)
-      score3_analyze_prologue (start_addr, pc, this_frame,
-			       (struct score_frame_cache *) *this_cache);
+      score3_analyze_prologue (start_addr, pc, this_frame, *this_cache);
     else
-      score7_analyze_prologue (start_addr, pc, this_frame,
-			       (struct score_frame_cache *) *this_cache);
+      score7_analyze_prologue (start_addr, pc, this_frame, *this_cache);
   }
 
   /* Save SP.  */
   trad_frame_set_value (cache->saved_regs, SCORE_SP_REGNUM, cache->base);
 
-  return (struct score_frame_cache *) (*this_cache);
+  return (*this_cache);
 }
 
 static void
@@ -1393,69 +1400,85 @@ score_prologue_frame_base_sniffer (struct frame_info *this_frame)
   return &score_prologue_frame_base;
 }
 
-/* Core file support.  */
-
-static const struct regcache_map_entry score7_linux_gregmap[] =
-  {
-    /* FIXME: According to the current Linux kernel, r0 is preceded by
-       9 rather than 7 words.  */
-    { 7, REGCACHE_MAP_SKIP, 4 },
-    { 32, 0, 4 },		/* r0 ... r31 */
-    { 1, 55, 4 },		/* CEL */
-    { 1, 54, 4 },		/* CEH */
-    { 1, 53, 4 },		/* sr0, i.e. cnt or COUNTER */
-    { 1, 52, 4 },		/* sr1, i.e. lcr or LDCR */
-    { 1, 51, 4 },		/* sr2, i.e. scr or STCR */
-    { 1, 49, 4 },		/* PC (same slot as EPC) */
-    { 1, 38, 4 },		/* EMA */
-    { 1, 32, 4 },		/* PSR */
-    { 1, 34, 4 },		/* ECR */
-    { 1, 33, 4 },		/* COND */
-    { 0 }
-  };
-
-#define SCORE7_LINUX_EPC_OFFSET (44 * 4)
-#define SCORE7_LINUX_SIZEOF_GREGSET (49 * 4)
+/* Core file support (dirty hack)
+  
+   The core file MUST be generated by GNU/Linux on S+core.  */
 
 static void
 score7_linux_supply_gregset(const struct regset *regset,
-			    struct regcache *regcache,
-			    int regnum, const void *buf,
-			    size_t size)
+                struct regcache *regcache,
+                int regnum, const void *gregs_buf, size_t len)
 {
-  regcache_supply_regset (regset, regcache, regnum, buf, size);
+  int regno;
+  elf_gregset_t *gregs;
 
-  /* Supply the EPC from the same slot as the PC.  Note that the
-     collect function will store the PC in that slot.  */
-  if ((regnum == -1 || regnum == SCORE_EPC_REGNUM)
-      && size >= SCORE7_LINUX_EPC_OFFSET + 4)
-    regcache->raw_supply
-      (SCORE_EPC_REGNUM, (const gdb_byte *) buf + SCORE7_LINUX_EPC_OFFSET);
+  gdb_assert (regset != NULL);
+  gdb_assert ((regcache != NULL) && (gregs_buf != NULL));
+
+  gregs = (elf_gregset_t *) gregs_buf;
+
+  for (regno = 0; regno < 32; regno++)
+    if (regnum == -1 || regnum == regno)
+      regcache_raw_supply (regcache, regno, gregs->regs + regno);
+
+  {
+    struct sreg {
+      int regnum;
+      void *buf;
+    } sregs [] = {
+      { 55, &(gregs->cel) },  /* CEL */
+      { 54, &(gregs->ceh) },  /* CEH */
+      { 53, &(gregs->sr0) },  /* sr0, i.e. cnt or COUNTER */
+      { 52, &(gregs->sr1) },  /* sr1, i.e. lcr or LDCR */
+      { 51, &(gregs->sr1) },  /* sr2, i.e. scr or STCR */
+
+      /* Exception occured at this address, exactly the PC we want */
+      { 49, &(gregs->cp0_epc) }, /* PC */
+
+      { 38, &(gregs->cp0_ema) }, /* EMA */
+      { 37, &(gregs->cp0_epc) }, /* EPC */
+      { 34, &(gregs->cp0_ecr) }, /* ECR */
+      { 33, &(gregs->cp0_condition) }, /* COND */
+      { 32, &(gregs->cp0_psr) }, /* PSR */
+    };
+
+    for (regno = 0; regno < sizeof(sregs)/sizeof(sregs[0]); regno++)
+      if (regnum == -1 || regnum == sregs[regno].regnum)
+	regcache_raw_supply (regcache,
+			     sregs[regno].regnum, sregs[regno].buf);
+  }
 }
 
-static const struct regset score7_linux_gregset =
-  {
-    score7_linux_gregmap,
-    score7_linux_supply_gregset,
-    regcache_collect_regset
-  };
+/* Return the appropriate register set from the core section identified
+   by SECT_NAME and SECT_SIZE.  */
 
-/* Iterate over core file register note sections.  */
-
-static void
-score7_linux_iterate_over_regset_sections (struct gdbarch *gdbarch,
-					   iterate_over_regset_sections_cb *cb,
-					   void *cb_data,
-					   const struct regcache *regcache)
+static const struct regset *
+score7_linux_regset_from_core_section(struct gdbarch *gdbarch,
+                    const char *sect_name, size_t sect_size)
 {
-  cb (".reg", SCORE7_LINUX_SIZEOF_GREGSET, SCORE7_LINUX_SIZEOF_GREGSET,
-      &score7_linux_gregset, NULL, cb_data);
+  struct gdbarch_tdep *tdep;
+
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (sect_name != NULL);
+
+  tdep = gdbarch_tdep (gdbarch);
+
+  if (strcmp(sect_name, ".reg") == 0 && sect_size == sizeof(elf_gregset_t))
+    {
+      if (tdep->gregset == NULL)
+	tdep->gregset = regset_alloc (gdbarch,
+				      score7_linux_supply_gregset, NULL);
+      return tdep->gregset;
+    }
+
+  return NULL;
 }
 
 static struct gdbarch *
 score_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 {
   struct gdbarch *gdbarch;
+  struct gdbarch_tdep *tdep;
   target_mach = info.bfd_arch_info->mach;
 
   arches = gdbarch_list_lookup_by_info (arches, &info);
@@ -1463,7 +1486,8 @@ score_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     {
       return (arches->gdbarch);
     }
-  gdbarch = gdbarch_alloc (&info, NULL);
+  tdep = xcalloc(1, sizeof(struct gdbarch_tdep));
+  gdbarch = gdbarch_alloc (&info, tdep);
 
   set_gdbarch_short_bit (gdbarch, 16);
   set_gdbarch_int_bit (gdbarch, 32);
@@ -1482,32 +1506,27 @@ score_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_inner_than (gdbarch, core_addr_lessthan);
   set_gdbarch_unwind_sp (gdbarch, score_unwind_sp);
   set_gdbarch_unwind_pc (gdbarch, score_unwind_pc);
+  set_gdbarch_print_insn (gdbarch, score_print_insn);
 
   switch (target_mach)
     {
     case bfd_mach_score7:
-      set_gdbarch_breakpoint_kind_from_pc (gdbarch,
-					   score7_breakpoint_kind_from_pc);
-      set_gdbarch_sw_breakpoint_from_kind (gdbarch,
-					   score7_sw_breakpoint_from_kind);
+      set_gdbarch_breakpoint_from_pc (gdbarch, score7_breakpoint_from_pc);
       set_gdbarch_skip_prologue (gdbarch, score7_skip_prologue);
-      set_gdbarch_stack_frame_destroyed_p (gdbarch,
-					   score7_stack_frame_destroyed_p);
+      set_gdbarch_in_function_epilogue_p (gdbarch,
+					  score7_in_function_epilogue_p);
       set_gdbarch_register_name (gdbarch, score7_register_name);
       set_gdbarch_num_regs (gdbarch, SCORE7_NUM_REGS);
       /* Core file support.  */
-      set_gdbarch_iterate_over_regset_sections
-	(gdbarch, score7_linux_iterate_over_regset_sections);
+      set_gdbarch_regset_from_core_section (gdbarch,
+					    score7_linux_regset_from_core_section);
       break;
 
     case bfd_mach_score3:
-      set_gdbarch_breakpoint_kind_from_pc (gdbarch,
-					   score3_breakpoint_kind_from_pc);
-      set_gdbarch_sw_breakpoint_from_kind (gdbarch,
-					   score3_sw_breakpoint_from_kind);
+      set_gdbarch_breakpoint_from_pc (gdbarch, score3_breakpoint_from_pc);
       set_gdbarch_skip_prologue (gdbarch, score3_skip_prologue);
-      set_gdbarch_stack_frame_destroyed_p (gdbarch,
-					   score3_stack_frame_destroyed_p);
+      set_gdbarch_in_function_epilogue_p (gdbarch,
+					  score3_in_function_epilogue_p);
       set_gdbarch_register_name (gdbarch, score3_register_name);
       set_gdbarch_num_regs (gdbarch, SCORE3_NUM_REGS);
       break;
@@ -1530,6 +1549,8 @@ score_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   return gdbarch;
 }
+
+extern initialize_file_ftype _initialize_score_tdep;
 
 void
 _initialize_score_tdep (void)

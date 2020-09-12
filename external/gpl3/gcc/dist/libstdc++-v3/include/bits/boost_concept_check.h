@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2004-2019 Free Software Foundation, Inc.
+// Copyright (C) 2004, 2005, 2006, 2007, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -29,9 +29,9 @@
 // to its suitability for any purpose.
 //
 
-/** @file bits/boost_concept_check.h
+/** @file boost_concept_check.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{iterator}
+ *  You should not attempt to use it directly.
  */
 
 // GCC Note:  based on version 1.12.0 of the Boost library.
@@ -41,15 +41,10 @@
 
 #pragma GCC system_header
 
-#include <bits/c++config.h>
+#include <cstddef>                // for ptrdiff_t, used next
 #include <bits/stl_iterator_base_types.h>    // for traits and tags
 
-namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-local-typedefs"
+_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
 
 #define _IsUnused __attribute__ ((__unused__))
 
@@ -113,7 +108,7 @@ struct _Aux_require_same<_Tp,_Tp> { typedef _Tp _Type; };
   struct _SameTypeConcept
   {
     void __constraints() {
-      typedef typename _Aux_require_same<_Tp1, _Tp2>::_Type _Required _IsUnused;
+      typedef typename _Aux_require_same<_Tp1, _Tp2>::_Type _Required;
     }
   };
 
@@ -443,11 +438,11 @@ struct _Aux_require_same<_Tp,_Tp> { typedef _Tp _Type; };
     void __constraints() {
       __function_requires< _TrivialIteratorConcept<_Tp> >();
       // require iterator_traits typedef's
-      typedef typename std::iterator_traits<_Tp>::difference_type _Diff _IsUnused;
+      typedef typename std::iterator_traits<_Tp>::difference_type _Diff;
 //      __function_requires< _SignedIntegerConcept<_Diff> >();
-      typedef typename std::iterator_traits<_Tp>::reference _Ref _IsUnused;
-      typedef typename std::iterator_traits<_Tp>::pointer _Pt _IsUnused;
-      typedef typename std::iterator_traits<_Tp>::iterator_category _Cat _IsUnused;
+      typedef typename std::iterator_traits<_Tp>::reference _Ref;
+      typedef typename std::iterator_traits<_Tp>::pointer _Pt;
+      typedef typename std::iterator_traits<_Tp>::iterator_category _Cat;
       __function_requires< _ConvertibleConcept<
         typename std::iterator_traits<_Tp>::iterator_category,
         std::input_iterator_tag> >();
@@ -531,7 +526,7 @@ struct _Aux_require_same<_Tp,_Tp> { typedef _Tp _Type; };
         typename std::iterator_traits<_Tp>::iterator_category,
         std::random_access_iterator_tag> >();
       // ??? We don't use _Ref, are we just checking for "referenceability"?
-      typedef typename std::iterator_traits<_Tp>::reference _Ref _IsUnused;
+      typedef typename std::iterator_traits<_Tp>::reference _Ref;
 
       __i += __n;                       // require assignment addition operator
       __i = __i + __n; __i = __n + __i; // require addition with difference type
@@ -783,10 +778,8 @@ struct _Aux_require_same<_Tp,_Tp> { typedef _Tp _Type; };
     typename _BackInsertionSequence::value_type __t;
   };
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
-#pragma GCC diagnostic pop
 #undef _IsUnused
 
 #endif // _GLIBCXX_BOOST_CONCEPT_CHECK

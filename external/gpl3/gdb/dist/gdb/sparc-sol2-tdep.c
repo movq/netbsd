@@ -1,6 +1,7 @@
 /* Target-dependent code for Solaris SPARC.
 
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2006, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,16 +26,18 @@
 #include "objfiles.h"
 #include "osabi.h"
 #include "regcache.h"
-#include "regset.h"
 #include "target.h"
 #include "trad-frame.h"
+
+#include "gdb_assert.h"
+#include "gdb_string.h"
 
 #include "sol2-tdep.h"
 #include "sparc-tdep.h"
 #include "solib-svr4.h"
 
 /* From <sys/regset.h>.  */
-const struct sparc_gregmap sparc32_sol2_gregmap =
+const struct sparc_gregset sparc32_sol2_gregset =
 {
   32 * 4,			/* %psr */
   33 * 4,			/* %pc */
@@ -45,58 +48,6 @@ const struct sparc_gregmap sparc32_sol2_gregmap =
   1 * 4,			/* %g1 */
   16 * 4,			/* %l0 */
 };
-
-const struct sparc_fpregmap sparc32_sol2_fpregmap =
-{
-  0 * 4,			/* %f0 */
-  33 * 4,			/* %fsr */
-};
-
-static void
-sparc32_sol2_supply_core_gregset (const struct regset *regset,
-				  struct regcache *regcache,
-				  int regnum, const void *gregs, size_t len)
-{
-  sparc32_supply_gregset (&sparc32_sol2_gregmap, regcache, regnum, gregs);
-}
-
-static void
-sparc32_sol2_collect_core_gregset (const struct regset *regset,
-				   const struct regcache *regcache,
-				   int regnum, void *gregs, size_t len)
-{
-  sparc32_collect_gregset (&sparc32_sol2_gregmap, regcache, regnum, gregs);
-}
-
-static void
-sparc32_sol2_supply_core_fpregset (const struct regset *regset,
-				   struct regcache *regcache,
-				   int regnum, const void *fpregs, size_t len)
-{
-  sparc32_supply_fpregset (&sparc32_sol2_fpregmap, regcache, regnum, fpregs);
-}
-
-static void
-sparc32_sol2_collect_core_fpregset (const struct regset *regset,
-				    const struct regcache *regcache,
-				    int regnum, void *fpregs, size_t len)
-{
-  sparc32_collect_fpregset (&sparc32_sol2_fpregmap, regcache, regnum, fpregs);
-}
-
-static const struct regset sparc32_sol2_gregset =
-  {
-    NULL,
-    sparc32_sol2_supply_core_gregset,
-    sparc32_sol2_collect_core_gregset
-  };
-
-static const struct regset sparc32_sol2_fpregset =
-  {
-    NULL,
-    sparc32_sol2_supply_core_fpregset,
-    sparc32_sol2_collect_core_fpregset
-  };
 
 
 /* The Solaris signal trampolines reside in libc.  For normal signals,
@@ -116,7 +67,7 @@ static const struct regset sparc32_sol2_fpregset =
    ignore this.  */
 
 int
-sparc_sol2_pc_in_sigtramp (CORE_ADDR pc, const char *name)
+sparc_sol2_pc_in_sigtramp (CORE_ADDR pc, char *name)
 {
   return (name && (strcmp (name, "sigacthandler") == 0
 		   || strcmp (name, "ucbsigvechandler") == 0
@@ -132,7 +83,7 @@ sparc32_sol2_sigtramp_frame_cache (struct frame_info *this_frame,
   int regnum;
 
   if (*this_cache)
-    return (struct sparc_frame_cache *) *this_cache;
+    return *this_cache;
 
   cache = sparc_frame_cache (this_frame, this_cache);
   gdb_assert (cache == *this_cache);
@@ -142,8 +93,7 @@ sparc32_sol2_sigtramp_frame_cache (struct frame_info *this_frame,
   /* The third argument is a pointer to an instance of `ucontext_t',
      which has a member `uc_mcontext' that contains the saved
      registers.  */
-  regnum =
-    (cache->copied_regs_mask & 0x04) ? SPARC_I2_REGNUM : SPARC_O2_REGNUM;
+  regnum = (cache->frameless_p ? SPARC_O2_REGNUM : SPARC_I2_REGNUM);
   mcontext_addr = get_frame_register_unsigned (this_frame, regnum) + 40;
 
   cache->saved_regs[SPARC32_PSR_REGNUM].addr = mcontext_addr + 0 * 4;
@@ -202,7 +152,7 @@ sparc32_sol2_sigtramp_frame_sniffer (const struct frame_unwind *self,
 				     void **this_cache)
 {
   CORE_ADDR pc = get_frame_pc (this_frame);
-  const char *name;
+  char *name;
 
   find_pc_partial_function (pc, &name, NULL, NULL);
   if (sparc_sol2_pc_in_sigtramp (pc, name))
@@ -223,8 +173,8 @@ static const struct frame_unwind sparc32_sol2_sigtramp_frame_unwind =
 
 /* Unglobalize NAME.  */
 
-const char *
-sparc_sol2_static_transform_name (const char *name)
+char *
+sparc_sol2_static_transform_name (char *name)
 {
   /* The Sun compilers (Sun ONE Studio, Forte Developer, Sun WorkShop,
      SunPRO) convert file static variables into global values, a
@@ -244,7 +194,7 @@ sparc_sol2_static_transform_name (const char *name)
 
   if (name[0] == '$')
     {
-      const char *p = strrchr (name, '.');
+      char *p = strrchr (name, '.');
       if (p)
         return p + 1;
     }
@@ -257,12 +207,6 @@ void
 sparc32_sol2_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-
-  tdep->gregset = &sparc32_sol2_gregset;
-  tdep->sizeof_gregset = 152;
-
-  tdep->fpregset = &sparc32_sol2_fpregset;
-  tdep->sizeof_fpregset = 400;
 
   /* The Sun compilers (Sun ONE Studio, Forte Developer, Sun WorkShop, SunPRO)
      compiler puts out 0 instead of the address in N_SO stabs.  Starting with
@@ -292,6 +236,10 @@ sparc32_sol2_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   /* How to print LWP PTIDs from core files.  */
   set_gdbarch_core_pid_to_str (gdbarch, sol2_core_pid_to_str);
 }
+
+
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+void _initialize_sparc_sol2_tdep (void);
 
 void
 _initialize_sparc_sol2_tdep (void)

@@ -32,9 +32,6 @@ Let me know what you think.
 
 Jeff
 */
-/*
-Copyright (C) 1999 Jeff Solomon
-*/
 
 #if defined (HAVE_CONFIG_H)
 #include <config.h>

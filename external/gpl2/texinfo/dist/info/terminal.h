@@ -1,4 +1,4 @@
-/*	$NetBSD: terminal.h,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: terminal.h,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* terminal.h -- The external interface to terminal I/O.
    Id: terminal.h,v 1.3 2004/04/11 17:56:46 karl Exp 

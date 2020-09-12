@@ -1,6 +1,7 @@
 // Allocators -*- C++ -*-
 
-// Copyright (C) 2001-2019 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -35,33 +36,28 @@
  * purpose.  It is provided "as is" without express or implied warranty.
  */
 
-/** @file bits/allocator.h
+/** @file allocator.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{memory}
+ *  You should not attempt to use it directly.
  */
 
 #ifndef _ALLOCATOR_H
 #define _ALLOCATOR_H 1
 
-#include <bits/c++allocator.h> // Define the base class to std::allocator.
-#include <bits/memoryfwd.h>
-#if __cplusplus >= 201103L
-#include <type_traits>
-#endif
+// Define the base class to std::allocator.
+#include <bits/c++allocator.h>
 
-#define __cpp_lib_incomplete_container_elements 201505
-#if __cplusplus >= 201103L
-# define __cpp_lib_allocator_is_always_equal 201411
-#endif
-
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   /**
-   *  @addtogroup allocators
-   *  @{
+   * @defgroup allocators Allocators
+   * @ingroup memory
+   *
+   * Classes encapsulating memory operations.
    */
+
+  template<typename _Tp>
+    class allocator;
 
   /// allocator<void> specialization.
   template<>
@@ -75,41 +71,19 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       typedef void        value_type;
 
       template<typename _Tp1>
-	struct rebind
-	{ typedef allocator<_Tp1> other; };
-
-#if __cplusplus >= 201103L
-      // _GLIBCXX_RESOLVE_LIB_DEFECTS
-      // 2103. std::allocator propagate_on_container_move_assignment
-      typedef true_type propagate_on_container_move_assignment;
-
-      typedef true_type is_always_equal;
-
-      template<typename _Up, typename... _Args>
-	void
-	construct(_Up* __p, _Args&&... __args)
-	noexcept(noexcept(::new((void *)__p)
-			    _Up(std::forward<_Args>(__args)...)))
-	{ ::new((void *)__p) _Up(std::forward<_Args>(__args)...); }
-
-      template<typename _Up>
-	void
-	destroy(_Up* __p)
-	noexcept(noexcept(__p->~_Up()))
-	{ __p->~_Up(); }
-#endif
+        struct rebind
+        { typedef allocator<_Tp1> other; };
     };
 
   /**
    * @brief  The @a standard allocator, as per [20.4].
+   * @ingroup allocators
    *
-   *  See https://gcc.gnu.org/onlinedocs/libstdc++/manual/memory.html#std.util.memory.allocator
-   *  for further details.
-   *
-   *  @tparam  _Tp  Type of allocated object.
+   *  Further details:
+   *  http://gcc.gnu.org/onlinedocs/libstdc++/manual/bk01pt04ch11.html
    */
   template<typename _Tp>
-    class allocator : public __allocator_base<_Tp>
+    class allocator: public __glibcxx_base_allocator<_Tp>
     {
    public:
       typedef size_t     size_type;
@@ -121,44 +95,18 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       typedef _Tp        value_type;
 
       template<typename _Tp1>
-	struct rebind
-	{ typedef allocator<_Tp1> other; };
+        struct rebind
+        { typedef allocator<_Tp1> other; };
 
-#if __cplusplus >= 201103L
-      // _GLIBCXX_RESOLVE_LIB_DEFECTS
-      // 2103. std::allocator propagate_on_container_move_assignment
-      typedef true_type propagate_on_container_move_assignment;
+      allocator() throw() { }
 
-      typedef true_type is_always_equal;
-#endif
-
-      // _GLIBCXX_RESOLVE_LIB_DEFECTS
-      // 3035. std::allocator's constructors should be constexpr
-      _GLIBCXX20_CONSTEXPR
-      allocator() _GLIBCXX_NOTHROW { }
-
-      _GLIBCXX20_CONSTEXPR
-      allocator(const allocator& __a) _GLIBCXX_NOTHROW
-      : __allocator_base<_Tp>(__a) { }
-
-#if __cplusplus >= 201103L
-      // Avoid implicit deprecation.
-      allocator& operator=(const allocator&) = default;
-#endif
+      allocator(const allocator& __a) throw()
+      : __glibcxx_base_allocator<_Tp>(__a) { }
 
       template<typename _Tp1>
-	_GLIBCXX20_CONSTEXPR
-	allocator(const allocator<_Tp1>&) _GLIBCXX_NOTHROW { }
+        allocator(const allocator<_Tp1>&) throw() { }
 
-      ~allocator() _GLIBCXX_NOTHROW { }
-
-      friend bool
-      operator==(const allocator&, const allocator&) _GLIBCXX_NOTHROW
-      { return true; }
-
-      friend bool
-      operator!=(const allocator&, const allocator&) _GLIBCXX_NOTHROW
-      { return false; }
+      ~allocator() throw() { }
 
       // Inherit everything else.
     };
@@ -166,63 +114,44 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _T1, typename _T2>
     inline bool
     operator==(const allocator<_T1>&, const allocator<_T2>&)
-    _GLIBCXX_NOTHROW
+    { return true; }
+
+  template<typename _Tp>
+    inline bool
+    operator==(const allocator<_Tp>&, const allocator<_Tp>&)
     { return true; }
 
   template<typename _T1, typename _T2>
     inline bool
     operator!=(const allocator<_T1>&, const allocator<_T2>&)
-    _GLIBCXX_NOTHROW
     { return false; }
 
-  // Invalid allocator<cv T> partial specializations.
-  // allocator_traits::rebind_alloc can be used to form a valid allocator type.
   template<typename _Tp>
-    class allocator<const _Tp>
-    {
-    public:
-      typedef _Tp value_type;
-      template<typename _Up> allocator(const allocator<_Up>&) { }
-    };
-
-  template<typename _Tp>
-    class allocator<volatile _Tp>
-    {
-    public:
-      typedef _Tp value_type;
-      template<typename _Up> allocator(const allocator<_Up>&) { }
-    };
-
-  template<typename _Tp>
-    class allocator<const volatile _Tp>
-    {
-    public:
-      typedef _Tp value_type;
-      template<typename _Up> allocator(const allocator<_Up>&) { }
-    };
-
-  /// @} group allocator
+    inline bool
+    operator!=(const allocator<_Tp>&, const allocator<_Tp>&)
+    { return false; }
 
   // Inhibit implicit instantiations for required instantiations,
   // which are defined via explicit instantiations elsewhere.
+  // NB: This syntax is a GNU extension.
 #if _GLIBCXX_EXTERN_TEMPLATE
   extern template class allocator<char>;
   extern template class allocator<wchar_t>;
 #endif
 
   // Undefine.
-#undef __allocator_base
+#undef __glibcxx_base_allocator
 
   // To implement Option 3 of DR 431.
   template<typename _Alloc, bool = __is_empty(_Alloc)>
     struct __alloc_swap
-    { static void _S_do_it(_Alloc&, _Alloc&) _GLIBCXX_NOEXCEPT { } };
+    { static void _S_do_it(_Alloc&, _Alloc&) { } };
 
   template<typename _Alloc>
     struct __alloc_swap<_Alloc, false>
     {
       static void
-      _S_do_it(_Alloc& __one, _Alloc& __two) _GLIBCXX_NOEXCEPT
+      _S_do_it(_Alloc& __one, _Alloc& __two)
       {
 	// Precondition: swappable allocators.
 	if (__one != __two)
@@ -247,37 +176,31 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       { return __one != __two; }
     };
 
-#if __cplusplus >= 201103L
-  template<typename _Tp, bool
-    = __or_<is_copy_constructible<typename _Tp::value_type>,
-            is_nothrow_move_constructible<typename _Tp::value_type>>::value>
-    struct __shrink_to_fit_aux
-    { static bool _S_do_it(_Tp&) noexcept { return false; } };
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+   // A very basic implementation for now.  In general we have to wait for
+   // the availability of the infrastructure described in N2983:  we should
+   // try when either T has a move constructor which cannot throw or T is
+   // CopyContructible.
+   // NB: This code doesn't properly belong here, we should find a more
+   // suited place common to std::vector and std::deque.
+   template<typename _Tp,
+	    bool = __has_trivial_copy(typename _Tp::value_type)>
+     struct __shrink_to_fit
+     { static void _S_do_it(_Tp&) { } };
 
-  template<typename _Tp>
-    struct __shrink_to_fit_aux<_Tp, true>
-    {
-      static bool
-      _S_do_it(_Tp& __c) noexcept
-      {
-#if __cpp_exceptions
-	try
-	  {
-	    _Tp(__make_move_if_noexcept_iterator(__c.begin()),
-		__make_move_if_noexcept_iterator(__c.end()),
-		__c.get_allocator()).swap(__c);
-	    return true;
-	  }
-	catch(...)
-	  { return false; }
-#else
-	return false;
-#endif
-      }
-    };
+   template<typename _Tp>
+     struct __shrink_to_fit<_Tp, true>
+     {
+       static void
+       _S_do_it(_Tp& __v)
+       {
+	 __try
+	   { _Tp(__v).swap(__v); }
+	 __catch(...) { }
+       }
+     };
 #endif
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace std
+_GLIBCXX_END_NAMESPACE
 
 #endif

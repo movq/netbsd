@@ -1,6 +1,6 @@
 /* GDB commands implemented in Scheme.
 
-   Copyright (C) 2008-2019 Free Software Foundation, Inc.
+   Copyright (C) 2008-2015 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -114,7 +114,7 @@ static const struct cmdscm_completer cmdscm_completers[] =
   { "COMPLETE_FILENAME", filename_completer },
   { "COMPLETE_LOCATION", location_completer },
   { "COMPLETE_COMMAND", command_completer },
-  { "COMPLETE_SYMBOL", symbol_completer },
+  { "COMPLETE_SYMBOL", make_symbol_completion_list_fn },
   { "COMPLETE_EXPRESSION", expression_completer },
 };
 
@@ -267,9 +267,9 @@ gdbscm_command_valid_p (SCM self)
 static SCM
 gdbscm_dont_repeat (SCM self)
 {
-  /* We currently don't need anything from SELF, but still verify it.
-     Call for side effects.  */
-  cmdscm_get_valid_command_smob_arg_unsafe (self, SCM_ARG1, FUNC_NAME);
+  /* We currently don't need anything from SELF, but still verify it.  */
+  command_smob *c_smob
+    = cmdscm_get_valid_command_smob_arg_unsafe (self, SCM_ARG1, FUNC_NAME);
 
   dont_repeat ();
 
@@ -286,13 +286,17 @@ cmdscm_destroyer (struct cmd_list_element *self, void *context)
   command_smob *c_smob = (command_smob *) context;
 
   cmdscm_release_command (c_smob);
+
+  /* We allocated the name, doc string, and perhaps the prefix name.  */
+  xfree ((char *) self->name);
+  xfree ((char *) self->doc);
+  xfree ((char *) self->prefixname);
 }
 
 /* Called by gdb to invoke the command.  */
 
 static void
-cmdscm_function (struct cmd_list_element *command,
-		 const char *args, int from_tty)
+cmdscm_function (struct cmd_list_element *command, char *args, int from_tty)
 {
   command_smob *c_smob/*obj*/ = (command_smob *) get_cmd_context (command);
   SCM arg_scm, tty_scm, result;
@@ -316,10 +320,10 @@ cmdscm_function (struct cmd_list_element *command,
 	 itself.  */
       if (gdbscm_user_error_p (gdbscm_exception_key (result)))
 	{
-	  gdb::unique_xmalloc_ptr<char> msg
-	    = gdbscm_exception_message_to_string (result);
+	  char *msg = gdbscm_exception_message_to_string (result);
 
-	  error ("%s", msg.get ());
+	  make_cleanup (xfree, msg);
+	  error ("%s", msg);
 	}
       else
 	{
@@ -349,8 +353,9 @@ cmdscm_bad_completion_result (const char *msg, SCM completion)
    The result is a boolean indicating success.  */
 
 static int
-cmdscm_add_completion (SCM completion, completion_tracker &tracker)
+cmdscm_add_completion (SCM completion, VEC (char_ptr) **result)
 {
+  char *item;
   SCM except_scm;
 
   if (!scm_is_string (completion))
@@ -361,9 +366,8 @@ cmdscm_add_completion (SCM completion, completion_tracker &tracker)
       return 0;
     }
 
-  gdb::unique_xmalloc_ptr<char> item
-    = gdbscm_scm_to_string (completion, NULL, host_charset (), 1,
-			    &except_scm);
+  item = gdbscm_scm_to_string (completion, NULL, host_charset (), 1,
+			       &except_scm);
   if (item == NULL)
     {
       /* Inform the user, but otherwise ignore the entire result.  */
@@ -371,21 +375,21 @@ cmdscm_add_completion (SCM completion, completion_tracker &tracker)
       return 0;
     }
 
-  tracker.add_completion (std::move (item));
+  VEC_safe_push (char_ptr, *result, item);
 
   return 1;
 }
 
 /* Called by gdb for command completion.  */
 
-static void
+static VEC (char_ptr) *
 cmdscm_completer (struct cmd_list_element *command,
-		  completion_tracker &tracker,
 		  const char *text, const char *word)
 {
   command_smob *c_smob/*obj*/ = (command_smob *) get_cmd_context (command);
   SCM completer_result_scm;
-  SCM text_scm, word_scm;
+  SCM text_scm, word_scm, result_scm;
+  VEC (char_ptr) *result = NULL;
 
   gdb_assert (c_smob != NULL);
   gdb_assert (gdbscm_is_procedure (c_smob->complete));
@@ -407,7 +411,7 @@ cmdscm_completer (struct cmd_list_element *command,
     {
       /* Inform the user, but otherwise ignore.  */
       gdbscm_print_gdb_exception (SCM_BOOL_F, completer_result_scm);
-      return;
+      goto done;
     }
 
   if (gdbscm_is_true (scm_list_p (completer_result_scm)))
@@ -418,8 +422,11 @@ cmdscm_completer (struct cmd_list_element *command,
 	{
 	  SCM next = scm_car (list);
 
-	  if (!cmdscm_add_completion (next, tracker))
-	    break;
+	  if (!cmdscm_add_completion (next, &result))
+	    {
+	      VEC_free (char_ptr, result);
+	      goto done;
+	    }
 
 	  list = scm_cdr (list);
 	}
@@ -433,13 +440,17 @@ cmdscm_completer (struct cmd_list_element *command,
 	{
 	  if (gdbscm_is_exception (next))
 	    {
-	      /* Inform the user.  */
+	      /* Inform the user, but otherwise ignore the entire result.  */
 	      gdbscm_print_gdb_exception (SCM_BOOL_F, completer_result_scm);
-	      break;
+	      VEC_free (char_ptr, result);
+	      goto done;
 	    }
 
-	  if (cmdscm_add_completion (next, tracker))
-	    break;
+	  if (!cmdscm_add_completion (next, &result))
+	    {
+	      VEC_free (char_ptr, result);
+	      goto done;
+	    }
 
 	  next = itscm_safe_call_next_x (iter, NULL);
 	}
@@ -450,6 +461,9 @@ cmdscm_completer (struct cmd_list_element *command,
       cmdscm_bad_completion_result (_("Bad completer result: "),
 				    completer_result_scm);
     }
+
+ done:
+  return result;
 }
 
 /* Helper for gdbscm_make_command which locates the command list to use and
@@ -497,7 +511,7 @@ gdbscm_parse_command_name (const char *name,
 		   || name[i - 1] == '_');
        --i)
     ;
-  result = (char *) xmalloc (lastchar - i + 2);
+  result = xmalloc (lastchar - i + 2);
   memcpy (result, &name[i], lastchar - i + 1);
   result[lastchar - i + 1] = '\0';
 
@@ -510,7 +524,7 @@ gdbscm_parse_command_name (const char *name,
       return result;
     }
 
-  prefix_text = (char *) xmalloc (i + 2);
+  prefix_text = xmalloc (i + 2);
   memcpy (prefix_text, name, i + 1);
   prefix_text[i + 1] = '\0';
 
@@ -521,7 +535,7 @@ gdbscm_parse_command_name (const char *name,
       msg = xstrprintf (_("could not find command prefix '%s'"), prefix_text);
       xfree (prefix_text);
       xfree (result);
-      scm_dynwind_begin ((scm_t_dynwind_flags) 0);
+      scm_dynwind_begin (0);
       gdbscm_dynwind_xfree (msg);
       gdbscm_out_of_range_error (func_name, arg_pos,
 				 gdbscm_scm_from_c_string (name), msg);
@@ -537,7 +551,7 @@ gdbscm_parse_command_name (const char *name,
   msg = xstrprintf (_("'%s' is not a prefix command"), prefix_text);
   xfree (prefix_text);
   xfree (result);
-  scm_dynwind_begin ((scm_t_dynwind_flags) 0);
+  scm_dynwind_begin (0);
   gdbscm_dynwind_xfree (msg);
   gdbscm_out_of_range_error (func_name, arg_pos,
 			     gdbscm_scm_from_c_string (name), msg);
@@ -547,7 +561,7 @@ gdbscm_parse_command_name (const char *name,
 static const scheme_integer_constant command_classes[] =
 {
   /* Note: alias and user are special; pseudo appears to be unused,
-     and there is no reason to expose tui, I think.  */
+     and there is no reason to expose tui or xdb, I think.  */
   { "COMMAND_NONE", no_class },
   { "COMMAND_RUNNING", class_run },
   { "COMMAND_DATA", class_vars },
@@ -592,8 +606,7 @@ char *
 gdbscm_canonicalize_command_name (const char *name, int want_trailing_space)
 {
   int i, out, seen_word;
-  char *result
-    = (char *) scm_gc_malloc_pointerless (strlen (name) + 2, FUNC_NAME);
+  char *result = scm_gc_malloc_pointerless (strlen (name) + 2, FUNC_NAME);
 
   i = out = seen_word = 0;
   while (name[i])
@@ -665,7 +678,7 @@ gdbscm_make_command (SCM name_scm, SCM rest)
   int doc_arg_pos = -1;
   char *s;
   char *name;
-  enum command_class command_class = no_class;
+  int command_class = no_class;
   SCM completer_class = SCM_BOOL_F;
   int is_prefix = 0;
   char *doc = NULL;
@@ -746,9 +759,10 @@ gdbscm_register_command_x (SCM self)
 {
   command_smob *c_smob
     = cmdscm_get_command_smob_arg_unsafe (self, SCM_ARG1, FUNC_NAME);
-  char *cmd_name;
+  char *cmd_name, *pfx_name;
   struct cmd_list_element **cmd_list;
   struct cmd_list_element *cmd = NULL;
+  volatile struct gdb_exception except;
 
   if (cmdscm_is_valid (c_smob))
     scm_misc_error (FUNC_NAME, _("command is already registered"), SCM_EOL);
@@ -758,7 +772,7 @@ gdbscm_register_command_x (SCM self)
   c_smob->cmd_name = gdbscm_gc_xstrdup (cmd_name);
   xfree (cmd_name);
 
-  TRY
+  TRY_CATCH (except, RETURN_MASK_ALL)
     {
       if (c_smob->is_prefix)
 	{
@@ -773,14 +787,10 @@ gdbscm_register_command_x (SCM self)
       else
 	{
 	  cmd = add_cmd (c_smob->cmd_name, c_smob->cmd_class,
-			 c_smob->doc, cmd_list);
+			 NULL, c_smob->doc, cmd_list);
 	}
     }
-  CATCH (except, RETURN_MASK_ALL)
-    {
-      GDBSCM_HANDLE_GDB_EXCEPTION (except);
-    }
-  END_CATCH
+  GDBSCM_HANDLE_GDB_EXCEPTION (except);
 
   /* Note: At this point the command exists in gdb.
      So no more errors after this point.  */
@@ -811,7 +821,7 @@ gdbscm_register_command_x (SCM self)
 
 static const scheme_function command_functions[] =
 {
-  { "make-command", 1, 0, 1, as_a_scm_t_subr (gdbscm_make_command),
+  { "make-command", 1, 0, 1, gdbscm_make_command,
     "\
 Make a GDB command object.\n\
 \n\
@@ -832,19 +842,19 @@ Make a GDB command object.\n\
     doc: The \"doc string\" of the command.\n\
   Returns: <gdb:command> object" },
 
-  { "register-command!", 1, 0, 0, as_a_scm_t_subr (gdbscm_register_command_x),
+  { "register-command!", 1, 0, 0, gdbscm_register_command_x,
     "\
 Register a <gdb:command> object with GDB." },
 
-  { "command?", 1, 0, 0, as_a_scm_t_subr (gdbscm_command_p),
+  { "command?", 1, 0, 0, gdbscm_command_p,
     "\
 Return #t if the object is a <gdb:command> object." },
 
-  { "command-valid?", 1, 0, 0, as_a_scm_t_subr (gdbscm_command_valid_p),
+  { "command-valid?", 1, 0, 0, gdbscm_command_valid_p,
     "\
 Return #t if the <gdb:command> object is valid." },
 
-  { "dont-repeat", 1, 0, 0, as_a_scm_t_subr (gdbscm_dont_repeat),
+  { "dont-repeat", 1, 0, 0, gdbscm_dont_repeat,
     "\
 Prevent command repetition when user enters an empty line.\n\
 \n\

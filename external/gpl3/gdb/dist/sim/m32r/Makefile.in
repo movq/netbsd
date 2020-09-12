@@ -1,5 +1,6 @@
 # Makefile template for Configure for the m32r simulator
-# Copyright (C) 1996-2019 Free Software Foundation, Inc.
+# Copyright (C) 1996, 1997, 1998, 1999, 2000, 2003, 2004, 2007, 2008, 2009,
+# 2010, 2011 Free Software Foundation, Inc.
 # Contributed by Cygnus Support.
 #
 # This file is part of GDB, the GNU debugger.
@@ -24,15 +25,25 @@ M32RX_OBJS = m32rx.o cpux.o decodex.o modelx.o mloopx.o
 M32R2_OBJS = m32r2.o cpu2.o decode2.o model2.o mloop2.o
 TRAPS_OBJ = @traps_obj@
 
+CONFIG_DEVICES = dv-sockser.o
+CONFIG_DEVICES =
+
 SIM_OBJS = \
 	$(SIM_NEW_COMMON_OBJS) \
+	sim-cpu.o \
+	sim-hload.o \
+	sim-hrw.o \
+	sim-model.o \
+	sim-reg.o \
 	cgen-utils.o cgen-trace.o cgen-scache.o \
-	cgen-run.o \
+	cgen-run.o sim-reason.o sim-engine.o sim-stop.o \
 	sim-if.o arch.o \
 	$(M32R_OBJS) \
 	$(M32RX_OBJS) \
 	$(M32R2_OBJS) \
-	$(TRAPS_OBJ)
+	$(TRAPS_OBJ) \
+	devices.o \
+	$(CONFIG_DEVICES)
 
 # Extra headers included by sim-main.h.
 SIM_EXTRA_DEPS = \
@@ -41,6 +52,7 @@ SIM_EXTRA_DEPS = \
 
 SIM_EXTRA_CFLAGS = @sim_extra_cflags@
 
+SIM_RUN_OBJS = nrun.o
 SIM_EXTRA_CLEAN = m32r-clean
 
 # This selects the m32r newlib/libgloss syscall definitions.

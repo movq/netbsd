@@ -1,5 +1,6 @@
 /* Target definitions for PowerPC running Darwin (Mac OS X).
-   Copyright (C) 1997-2019 Free Software Foundation, Inc.
+   Copyright (C) 1997, 2000, 2001, 2003, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
    Contributed by Apple Computer Inc.
 
    This file is part of GCC.
@@ -18,8 +19,8 @@
    along with GCC; see the file COPYING3.  If not see
    <http://www.gnu.org/licenses/>.  */
 
-#undef DARWIN_PPC
-#define DARWIN_PPC 1
+#undef  TARGET_VERSION
+#define TARGET_VERSION fprintf (stderr, " (Darwin/PowerPC)");
 
 /* The "Darwin ABI" is mostly like AIX, but with some key differences.  */
 
@@ -50,26 +51,15 @@
 #undef  PTRDIFF_TYPE
 #define PTRDIFF_TYPE (TARGET_64BIT ? "long int" : "int")
 
+/* Translate config/rs6000/darwin.opt to config/darwin.h.  */
+#define TARGET_DYNAMIC_NO_PIC (TARGET_MACHO_DYNAMIC_NO_PIC)
+
 #define TARGET_OS_CPP_BUILTINS()			\
   do							\
     {							\
+      if (!TARGET_64BIT) builtin_define ("__ppc__");	\
+      if (TARGET_64BIT) builtin_define ("__ppc64__");	\
       builtin_define ("__POWERPC__");			\
-      builtin_define ("__PPC__");			\
-      if (TARGET_64BIT)					\
-	{						\
-	  builtin_define ("__ppc64__");			\
-	  builtin_define ("__PPC64__");			\
-	  builtin_define ("__powerpc64__");		\
-	  builtin_assert ("cpu=powerpc64");		\
-	  builtin_assert ("machine=powerpc64");		\
-	}						\
-      else						\
-	{						\
-	  builtin_define ("__ppc__");			\
-	  builtin_define_std ("PPC");			\
-	  builtin_assert ("cpu=powerpc");		\
-	  builtin_assert ("machine=powerpc");		\
-	}						\
       builtin_define ("__NATURAL_ALIGNMENT__");		\
       darwin_cpp_builtins (pfile);			\
     }							\
@@ -97,22 +87,20 @@
 
 
 /* We want -fPIC by default, unless we're using -static to compile for
-   the kernel or some such.  The "-faltivec" option should have been
-   called "-maltivec" all along.  */
+   the kernel or some such.  */
 
 #define CC1_SPEC "\
   %(cc1_cpu) \
   %{g: %{!fno-eliminate-unused-debug-symbols: -feliminate-unused-debug-symbols }} \
   %{static: %{Zdynamic: %e conflicting code gen style switches are used}}\
-  %{!mkernel:%{!static:%{!mdynamic-no-pic:-fPIC}}} \
-  %{faltivec:-maltivec -include altivec.h} %{fno-altivec:-mno-altivec} \
-  %<faltivec %<fno-altivec " \
-  DARWIN_CC1_SPEC
+  %{!mmacosx-version-min=*:-mmacosx-version-min=%(darwin_minversion)} \
+  %{!mkernel:%{!static:%{!mdynamic-no-pic:-fPIC}}}"
 
-/* Default to PPC for single arch builds.  */
-#define DARWIN_ARCH_SPEC "ppc"
+#define DARWIN_ARCH_SPEC "%{m64:ppc64;:ppc}"
 
 #define DARWIN_SUBARCH_SPEC "			\
+ %{m64: ppc64}					\
+ %{!m64:					\
  %{mcpu=601:ppc601;				\
    mcpu=603:ppc603;				\
    mcpu=603e:ppc603;				\
@@ -127,51 +115,22 @@
    mcpu=970:ppc970;				\
    mcpu=power4:ppc970;				\
    mcpu=G5:ppc970;				\
-   :ppc}"
+   :ppc}}"
 
-/* We need to jam the crt to 10.5 for 10.6 (Rosetta) use.  */
-#undef DARWIN_CRT1_SPEC
-#define DARWIN_CRT1_SPEC						\
-  "%:version-compare(!> 10.5 mmacosx-version-min= -lcrt1.o)		\
-   %:version-compare(>< 10.5 10.7 mmacosx-version-min= -lcrt1.10.5.o)	\
-   %{fgnu-tm: -lcrttms.o}"
-
-/* crt2.o is at least partially required for 10.3.x and earlier.
-   It deals with registration of the unwind frames, where this is not
-   automatically provided by the system.  So we need it for any case that
-   might use exceptions.  */
-#undef DARWIN_CRT2_SPEC
+/* crt2.o is at least partially required for 10.3.x and earlier.  */
 #define DARWIN_CRT2_SPEC \
-"%{!m64:%{shared-libgcc|static-libstdc++|fexceptions|fobjc-exceptions|fgnu-runtime: \
-   %:version-compare(!> 10.4 mmacosx-version-min= crt2.o%s) \
-  }}"
+  "%{!m64:%:version-compare(!> 10.4 mmacosx-version-min= crt2.o%s)}"
 
-/* crt3 deals with providing cxa_atexit on earlier systems (or fixing it up,
-   for broken versions).  It's only needed for c++ code, so we can make it
-   conditional on shared-libgcc since that's forced on for c++.  */
-#undef DARWIN_CRT3_SPEC
-#define DARWIN_CRT3_SPEC \
-"%{!m64:%{shared-libgcc|static-libstdc++:							\
-   %:version-compare(>< 10.4 10.5 mmacosx-version-min= crt3.o%s) \
-   %:version-compare(!> 10.4 mmacosx-version-min= crt3_2.o%s) \
-  }}"
-
-/* As for crt1, we need to force the dylib crt for 10.6.  */
-#undef DARWIN_DYLIB1_SPEC
-#define DARWIN_DYLIB1_SPEC						\
-  "%:version-compare(!> 10.5 mmacosx-version-min= -ldylib1.o)		\
-   %:version-compare(>< 10.5 10.7 mmacosx-version-min= -ldylib1.10.5.o)"
-
-/* Likewise, the bundle crt.  */
-#undef DARWIN_BUNDLE1_SPEC
-#define DARWIN_BUNDLE1_SPEC \
-"%{!static:%:version-compare(< 10.7 mmacosx-version-min= -lbundle1.o)	\
-	   %{fgnu-tm: -lcrttms.o}}"
-
-/* The PPC regs save/restore functions are leaves and could, conceivably
-   be used by the tm destructor.  */
-#undef ENDFILE_SPEC
-#define ENDFILE_SPEC TM_DESTRUCTOR " -lef_ppc"
+/* Determine a minimum version based on compiler options.  */
+#define DARWIN_MINVERSION_SPEC					\
+  "%{m64:%{fgnu-runtime:10.4;					\
+	   ,objective-c|,objc-cpp-output:10.5;			\
+	   ,objective-c-header:10.5;				\
+	   ,objective-c++|,objective-c++-cpp-output:10.5;	\
+	   ,objective-c++-header|,objc++-cpp-output:10.5;	\
+	   :10.4};						\
+     shared-libgcc:10.3;					\
+     :10.1}"
 
 #undef SUBTARGET_EXTRA_SPECS
 #define SUBTARGET_EXTRA_SPECS			\
@@ -183,6 +142,18 @@
 /* Output a .machine directive.  */
 #undef TARGET_ASM_FILE_START
 #define TARGET_ASM_FILE_START rs6000_darwin_file_start
+
+/* The "-faltivec" option should have been called "-maltivec" all
+   along.  -ffix-and-continue and -findirect-data is for compatibility
+   for old compilers.  */
+
+#define SUBTARGET_OPTION_TRANSLATE_TABLE				\
+  { "-ffix-and-continue", "-mfix-and-continue" },			\
+  { "-findirect-data", "-mfix-and-continue" },				\
+  { "-faltivec", "-maltivec -include altivec.h" },			\
+  { "-fno-altivec", "-mno-altivec" },					\
+  { "-Waltivec-long-deprecated",	"-mwarn-altivec-long" },	\
+  { "-Wno-altivec-long-deprecated", "-mno-warn-altivec-long" }
 
 /* Make both r2 and r13 available for allocation.  */
 #define FIXED_R2 0
@@ -196,56 +167,36 @@
 #undef  RS6000_PIC_OFFSET_TABLE_REGNUM
 #define RS6000_PIC_OFFSET_TABLE_REGNUM 31
 
-/* Darwin's stack must remain 16-byte aligned for both 32 and 64 bit
-   ABIs.  */
+/* Pad the outgoing args area to 16 bytes instead of the usual 8.  */
 
-#undef  STACK_BOUNDARY
-#define STACK_BOUNDARY 128
-
-/* Offset within stack frame to start allocating local variables at.
-   For supported Darwin versions, FRAME_GROWS_DOWNWARD is true, therefore
-   this value is the offset to the END of the first local allocated.
-
-   On the RS/6000, the frame pointer is the same as the stack pointer,
-   except for dynamic allocations.  So we start after the fixed area and
-   outgoing parameter area.
-
-   If the function uses dynamic stack space (CALLS_ALLOCA is set), that
-   space needs to be aligned to STACK_BOUNDARY, i.e. the sum of the
-   sizes of the fixed area and the parameter area must be a multiple of
-   STACK_BOUNDARY.  */
-
-#undef RS6000_STARTING_FRAME_OFFSET
-#define RS6000_STARTING_FRAME_OFFSET					\
-  (cfun->calls_alloca							\
-   ? RS6000_ALIGN (crtl->outgoing_args_size + RS6000_SAVE_AREA, 16)	\
-   : (RS6000_ALIGN (crtl->outgoing_args_size, 16) + RS6000_SAVE_AREA))
-
-/* Offset from the stack pointer register to an item dynamically
-   allocated on the stack, e.g., by `alloca'.
-
-   The default value for this macro is `STACK_POINTER_OFFSET' plus the
-   length of the outgoing arguments.  The default is correct for most
-   machines.  See `function.c' for details.
-
-   This value must be a multiple of STACK_BOUNDARY (hard coded in
-   `emit-rtl.c').  */
+#undef STARTING_FRAME_OFFSET
+#define STARTING_FRAME_OFFSET						\
+  (FRAME_GROWS_DOWNWARD							\
+   ? 0									\
+   : (RS6000_ALIGN (crtl->outgoing_args_size, 16)		\
+      + RS6000_SAVE_AREA))
 
 #undef STACK_DYNAMIC_OFFSET
 #define STACK_DYNAMIC_OFFSET(FUNDECL)					\
-  RS6000_ALIGN (crtl->outgoing_args_size.to_constant()			\
-		+ STACK_POINTER_OFFSET, 16)
+  (RS6000_ALIGN (crtl->outgoing_args_size, 16)		\
+   + (STACK_POINTER_OFFSET))
+
+/* These are used by -fbranch-probabilities */
+#define HOT_TEXT_SECTION_NAME "__TEXT,__text,regular,pure_instructions"
+#define UNLIKELY_EXECUTED_TEXT_SECTION_NAME \
+                              "__TEXT,__unlikely,regular,pure_instructions"
+
+/* Define cutoff for using external functions to save floating point.
+   Currently on Darwin, always use inline stores.  */
+
+#undef	FP_SAVE_INLINE
+#define FP_SAVE_INLINE(FIRST_REG) ((FIRST_REG) < 64)
+#undef GP_SAVE_INLINE
+#define GP_SAVE_INLINE(FIRST_REG) ((FIRST_REG) < 32)
 
 /* Darwin uses a function call if everything needs to be saved/restored.  */
-
 #undef WORLD_SAVE_P
 #define WORLD_SAVE_P(INFO) ((INFO)->world_save_p)
-
-/* We don't use these on Darwin, they are just place-holders.  */
-#define SAVE_FP_PREFIX ""
-#define SAVE_FP_SUFFIX ""
-#define RESTORE_FP_PREFIX ""
-#define RESTORE_FP_SUFFIX ""
 
 /* The assembler wants the alternate register names, but without
    leading percent sign.  */
@@ -268,8 +219,8 @@
     "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",             \
     "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31",             \
     "vrsave", "vscr",							\
-    "sfp",								\
-    "tfhar", "tfiar", "texasr"						\
+    "spe_acc", "spefscr",                                               \
+    "sfp"								\
 }
 
 /* This outputs NAME to FILE.  */
@@ -291,10 +242,27 @@
 #define ASM_OUTPUT_INTERNAL_LABEL_PREFIX(FILE,PREFIX)	\
   fprintf (FILE, "%s", PREFIX)
 
+/* This says how to output an assembler line to define a global common
+   symbol.  */
+#define ASM_OUTPUT_COMMON(FILE, NAME, SIZE, ROUNDED)			\
+  do {									\
+    unsigned HOST_WIDE_INT _new_size = SIZE;				\
+    fputs (".comm ", (FILE));						\
+    RS6000_OUTPUT_BASENAME ((FILE), (NAME));				\
+    if (_new_size == 0) _new_size = 1;					\
+    fprintf ((FILE), ","HOST_WIDE_INT_PRINT_UNSIGNED"\n", _new_size);	\
+  } while (0)
+
 /* Override the standard rs6000 definition.  */
 
 #undef ASM_COMMENT_START
 #define ASM_COMMENT_START ";"
+
+/* FP save and restore routines.  */
+#define	SAVE_FP_PREFIX "._savef"
+#define SAVE_FP_SUFFIX ""
+#define	RESTORE_FP_PREFIX "._restf"
+#define RESTORE_FP_SUFFIX ""
 
 /* This is how to output an assembler line that says to advance
    the location counter to a multiple of 2**LOG bytes using the
@@ -315,9 +283,9 @@
 /* This is supported in cctools 465 and later.  The macro test
    above prevents using it in earlier build environments.  */
 #define ASM_OUTPUT_MAX_SKIP_ALIGN(FILE,LOG,MAX_SKIP)          \
-  if ((LOG) > 0)                                             \
+  if ((LOG) != 0)                                             \
     {                                                         \
-      if ((MAX_SKIP) <= 0)                                    \
+      if ((MAX_SKIP) == 0)                                    \
         fprintf ((FILE), "\t.p2align %d\n", (LOG));           \
       else                                                    \
         fprintf ((FILE), "\t.p2align %d,,%d\n", (LOG), (MAX_SKIP)); \
@@ -344,14 +312,14 @@
    default as well.  */
 
 #undef  TARGET_DEFAULT
-#define TARGET_DEFAULT (MASK_MULTIPLE | MASK_PPC_GFXOPT)
+#define TARGET_DEFAULT (MASK_POWERPC | MASK_MULTIPLE | MASK_NEW_MNEMONICS \
+                      | MASK_PPC_GFXOPT)
 
-/* Darwin always uses IBM long double, never IEEE long double.  */
+/* Darwin only runs on PowerPC, so short-circuit POWER patterns.  */
+#undef  TARGET_POWER
+#define TARGET_POWER 0
 #undef  TARGET_IEEEQUAD
 #define TARGET_IEEEQUAD 0
-
-#undef  TARGET_IEEEQUAD_DEFAULT
-#define TARGET_IEEEQUAD_DEFAULT 0
 
 /* Since Darwin doesn't do TOCs, stub this out.  */
 
@@ -379,27 +347,24 @@
   ((CONSTANT_P (X)						\
     && reg_classes_intersect_p ((CLASS), FLOAT_REGS))		\
    ? NO_REGS							\
-   : ((SYMBOL_REF_P (X) || GET_CODE (X) == HIGH)		\
+   : ((GET_CODE (X) == SYMBOL_REF || GET_CODE (X) == HIGH)	\
       && reg_class_subset_p (BASE_REGS, (CLASS)))		\
    ? BASE_REGS							\
    : (GET_MODE_CLASS (GET_MODE (X)) == MODE_INT			\
-      && (CLASS) == GEN_OR_FLOAT_REGS)				\
+      && (CLASS) == NON_SPECIAL_REGS)				\
    ? GENERAL_REGS						\
    : (CLASS))
 
-/* Compute field alignment.
-   This implements the 'power' alignment rule by pegging the alignment of
-   items (beyond the first aggregate field) to 32 bits.  The pegging is
-   suppressed for vector and long double items (both 128 in size).
-   There is a dummy use of the FIELD argument to avoid an unused variable
-   warning (see PR59496).  */
-#define ADJUST_FIELD_ALIGN(FIELD, TYPE, COMPUTED)		\
-  ((void) (FIELD),						\
-    (TARGET_ALIGN_NATURAL					\
-     ? (COMPUTED)						\
-     : (COMPUTED) == 128					\
-	? 128							\
-	: MIN ((COMPUTED), 32)))
+/* Compute field alignment.  This is similar to the version of the
+   macro in the Apple version of GCC, except that version supports
+   'mac68k' alignment, and that version uses the computed alignment
+   always for the first field of a structure.  The first-field
+   behavior is dealt with by
+   darwin_rs6000_special_round_type_align.  */
+#define ADJUST_FIELD_ALIGN(FIELD, COMPUTED)	\
+  (TARGET_ALIGN_NATURAL ? (COMPUTED)		\
+   : (COMPUTED) == 128 ? 128			\
+   : MIN ((COMPUTED), 32))
 
 /* Darwin increases natural record alignment to doubleword if the first
    field is an FP double while the FP fields remain word aligned.  */
@@ -418,8 +383,10 @@
    registers and memory.  FIRST is nonzero if this is the only
    element.  */
 #define BLOCK_REG_PADDING(MODE, TYPE, FIRST) \
-  (!(FIRST) ? PAD_UPWARD : targetm.calls.function_arg_padding (MODE, TYPE))
+  (!(FIRST) ? upward : FUNCTION_ARG_PADDING (MODE, TYPE))
 
+/* XXX: Darwin supports neither .quad, or .llong, but it also doesn't
+   support 64 bit PowerPC either, so this just keeps things happy.  */
 #define DOUBLE_INT_ASM_OP "\t.quad\t"
 
 /* For binary compatibility with 2.95; Darwin C APIs use bool from
@@ -432,13 +399,16 @@
   do \
     { \
       DARWIN_REGISTER_TARGET_PRAGMAS(); \
-      targetm.target_option.pragma_parse = rs6000_pragma_target_parse; \
       targetm.resolve_overloaded_builtin = altivec_resolve_overloaded_builtin; \
     } \
   while (0)
 
 #ifdef IN_LIBGCC2
 #include <stdbool.h>
+#endif
+
+#if !defined(__LP64__) && !defined(DARWIN_LIBSYSTEM_HAS_UNWIND)
+#define MD_UNWIND_SUPPORT "config/rs6000/darwin-unwind.h"
 #endif
 
 /* True, iff we're generating fast turn around debugging code.  When
@@ -456,45 +426,14 @@
 #define OFFS_ASSIGNIVAR_FAST		0xFFFEFEC0
 
 /* Old versions of Mac OS/Darwin don't have C99 functions available.  */
-#undef TARGET_LIBC_HAS_FUNCTION
-#define TARGET_LIBC_HAS_FUNCTION darwin_libc_has_function
+#undef TARGET_C99_FUNCTIONS
+#define TARGET_C99_FUNCTIONS					\
+  (TARGET_64BIT							\
+   || strverscmp (darwin_macosx_version_min, "10.3") >= 0)
 
 /* When generating kernel code or kexts, we don't use Altivec by
    default, as kernel code doesn't save/restore those registers.  */
 #define OS_MISSING_ALTIVEC (flag_mkernel || flag_apple_kext)
 
-/* Darwin has support for section anchors on powerpc*.  
-   It is disabled for any section containing a "zero-sized item" (because these
-   are re-written as size=1 to be compatible with the OSX ld64).
-   The re-writing would interfere with the computation of anchor offsets.
-   Therefore, we place zero-sized items in their own sections and make such
-   sections unavailable to section anchoring.  */
-
-#undef TARGET_ASM_OUTPUT_ANCHOR 
-#define TARGET_ASM_OUTPUT_ANCHOR darwin_asm_output_anchor
-
-#undef TARGET_USE_ANCHORS_FOR_SYMBOL_P
-#define TARGET_USE_ANCHORS_FOR_SYMBOL_P darwin_use_anchors_for_symbol_p
-
-#undef DARWIN_SECTION_ANCHORS
-#define DARWIN_SECTION_ANCHORS 1
-
-/* PPC Darwin has to rename some of the long double builtins.  */
-#undef  SUBTARGET_INIT_BUILTINS
-#define SUBTARGET_INIT_BUILTINS						\
-do {									\
-  darwin_patch_builtins ();						\
-  rs6000_builtin_decls[(unsigned) (RS6000_BUILTIN_CFSTRING)]		\
-    = darwin_init_cfstring_builtins ((unsigned) (RS6000_BUILTIN_CFSTRING)); \
-} while(0)
-
-/* So far, there is no rs6000_fold_builtin, if one is introduced, then
-   this will need to be modified similar to the x86 case.  */
-#define TARGET_FOLD_BUILTIN SUBTARGET_FOLD_BUILTIN
-
-/* First available SYMBOL flag bit for use by subtargets.  */
-#define SYMBOL_FLAG_SUBT_DEP (SYMBOL_FLAG_MACH_DEP)
-
-/* Use standard DWARF numbering for DWARF debugging information.  */
-#define RS6000_USE_DWARF_NUMBERING
-
+/* Darwin has to rename some of the long double builtins.  */
+#define SUBTARGET_INIT_BUILTINS darwin_patch_builtins ()

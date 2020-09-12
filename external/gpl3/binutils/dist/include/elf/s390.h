@@ -1,12 +1,12 @@
 /* 390 ELF support for BFD.
-   Copyright (C) 2000-2020 Free Software Foundation, Inc.
+   Copyright 2000, 2001, 2003 Free Software Foundation, Inc.
    Contributed by Carl B. Pedersen and Martin Schwidefsky.
 
    This file is part of BFD, the Binary File Descriptor library.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 3 of the License, or
+   the Free Software Foundation; either version 2 of the License, or
    (at your option) any later version.
 
    This program is distributed in the hope that it will be useful,
@@ -33,13 +33,6 @@
 
 #include "elf/reloc-macros.h"
 
-/* Processor specific flags for the ELF header e_flags field.  */
-
-#define EF_S390_HIGH_GPRS        0x00000001
-
-/* Request 4k page table size.  */
-#define PT_S390_PGSTE (PT_LOPROC + 0)
-
 /* Relocation types.  */
 
 START_RELOC_NUMBERS (elf_s390_reloc_type)
@@ -60,12 +53,8 @@ START_RELOC_NUMBERS (elf_s390_reloc_type)
     RELOC_NUMBER (R_390_GOTPC, 14)	/* 32 bit PC relative offset to GOT.  */
     RELOC_NUMBER (R_390_GOT16, 15)	/* 16 bit GOT offset.  */
     RELOC_NUMBER (R_390_PC16, 16)	/* PC relative 16 bit.  */
-    RELOC_NUMBER (R_390_PC12DBL, 62)	/* PC relative 12 bit shifted by 1.  */
-    RELOC_NUMBER (R_390_PLT12DBL, 63)	/* 12 bit PC rel. PLT shifted by 1.  */
     RELOC_NUMBER (R_390_PC16DBL, 17)	/* PC relative 16 bit shifted by 1.  */
     RELOC_NUMBER (R_390_PLT16DBL, 18)	/* 16 bit PC rel. PLT shifted by 1.  */
-    RELOC_NUMBER (R_390_PC24DBL, 64)	/* PC relative 24 bit shifted by 1.  */
-    RELOC_NUMBER (R_390_PLT24DBL, 65)	/* 24 bit PC rel. PLT shifted by 1.  */
     RELOC_NUMBER (R_390_PC32DBL, 19)	/* PC relative 32 bit shifted by 1.  */
     RELOC_NUMBER (R_390_PLT32DBL, 20)	/* 32 bit PC rel. PLT shifted by 1.  */
     RELOC_NUMBER (R_390_GOTPCDBL, 21)	/* 32 bit PC rel. GOT shifted by 1.  */
@@ -126,23 +115,11 @@ START_RELOC_NUMBERS (elf_s390_reloc_type)
     RELOC_NUMBER (R_390_GOTPLT20, 59)	/* 20 bit offset to jump slot.  */
     RELOC_NUMBER (R_390_TLS_GOTIE20, 60)/* 20 bit GOT offset for statis TLS
 					   block offset.  */
-    RELOC_NUMBER (R_390_IRELATIVE, 61)  /* IFUNC relocation.  */
     /* These are GNU extensions to enable C++ vtable garbage collection.  */
     RELOC_NUMBER (R_390_GNU_VTINHERIT, 250)
     RELOC_NUMBER (R_390_GNU_VTENTRY, 251)
 END_RELOC_NUMBERS (R_390_max)
 
-/* Object attribute tags.  */
-enum
-{
-  /* 0-3 are generic. */
-  /* 4 is reserved for the FP ABI. */
-
-  /* Vector ABI:
-     0 = not affected by the vector ABI, or not tagged.
-     1 = software vector ABI being used
-     2 = hardware vector ABI being used.  */
-  Tag_GNU_S390_ABI_Vector = 8,
-};
-
 #endif /* _ELF_390_H */
+
+

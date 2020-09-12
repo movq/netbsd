@@ -2,7 +2,7 @@
 #define __lttf2 __lttf2_shared
 #endif
 
-#include "soft-fp/letf2.c"
+#include "config/soft-fp/letf2.c"
 
 #ifdef SHARED
 #undef __lttf2

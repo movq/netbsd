@@ -1,4 +1,4 @@
-# Copyright (C) 2008-2019 Free Software Foundation, Inc.
+# Copyright (C) 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,14 +16,20 @@
 
 # Tests for Powerpc Decimal Floating Point registers setting and fetching
 
+if $tracelevel then {
+    strace $tracelevel
+}
+
 if ![istarget "powerpc*"] then {
     verbose "Skipping powerpc decimal floating point register tests."
     return
 }
 
-standard_testfile
+set testfile "ppc-dfp"
+set binfile ${objdir}/${subdir}/${testfile}
+set srcfile ${testfile}.c
 
-if [get_compiler_info] {
+if [get_compiler_info $binfile] {
     warning "get_compiler failed"
     return -1
 }
@@ -35,7 +41,7 @@ if ![test_compiler_info gcc*] {
 }
 
 if { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {quiet debug}] != "" } {
-    unsupported "this machine doesn't support Decimal Floating Point."
+    unsupported "This machine doesn't support Decimal Floating Point."
     return -1
 }
 
@@ -54,7 +60,7 @@ gdb_run_cmd
 # Unless the program bails out after checking AT_HWCAP.
 gdb_expect {
   -re "$inferior_exited_re with code 01.\[\r\n\]+$gdb_prompt $" {
-    unsupported "this machine doesn't support Decimal Floating Point."
+    unsupported "This machine doesn't support Decimal Floating Point."
     return -1
   }
 

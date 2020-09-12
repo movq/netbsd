@@ -1,4 +1,4 @@
-/*	$NetBSD: dribble.h,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: dribble.h,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* dribble.h -- Functions and vars declared in dribble.c. */
 

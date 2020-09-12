@@ -1,6 +1,7 @@
 /* Target-dependent code for UltraSPARC.
 
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2006, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,7 +24,7 @@
 struct frame_info;
 struct gdbarch;
 struct regcache;
-struct sparc_gregmap;
+struct sparc_gregset;
 struct trad_frame_saved_reg;
 
 #include "sparc-tdep.h"
@@ -56,12 +57,9 @@ enum sparc64_regnum
   SPARC64_FSR_REGNUM,		/* %fsr */
   SPARC64_FPRS_REGNUM,		/* %fprs */
   SPARC64_Y_REGNUM,		/* %y */
-};
 
-/* Pseudo registers.  */
-enum sparc64_pseudo_regnum
-{
-  SPARC64_CWP_REGNUM = 0,	/* %cwp */
+  /* Pseudo registers.  */
+  SPARC64_CWP_REGNUM,		/* %cwp */
   SPARC64_PSTATE_REGNUM,	/* %pstate */
   SPARC64_ASI_REGNUM,		/* %asi */
   SPARC64_CCR_REGNUM,		/* %ccr */
@@ -100,44 +98,37 @@ enum sparc64_pseudo_regnum
 extern void sparc64_init_abi (struct gdbarch_info info,
 			      struct gdbarch *gdbarch);
 
-extern void sparc64_supply_gregset (const struct sparc_gregmap *gregmap,
+extern void sparc64_supply_gregset (const struct sparc_gregset *gregset,
 				    struct regcache *regcache,
 				    int regnum, const void *gregs);
-extern void sparc64_collect_gregset (const struct sparc_gregmap *gregmap,
+extern void sparc64_collect_gregset (const struct sparc_gregset *gregset,
 				     const struct regcache *regcache,
 				     int regnum, void *gregs);
-extern void sparc64_supply_fpregset (const struct sparc_fpregmap *fpregmap,
-				     struct regcache *regcache,
+extern void sparc64_supply_fpregset (struct regcache *regcache,
 				     int regnum, const void *fpregs);
-extern void sparc64_collect_fpregset (const struct sparc_fpregmap *fpregmap,
-				      const struct regcache *regcache,
+extern void sparc64_collect_fpregset (const struct regcache *regcache,
 				      int regnum, void *fpregs);
 
 /* Functions and variables exported from sparc64-sol2-tdep.c.  */
 
 /* Register offsets for Solaris 2.  */
-extern const struct sparc_gregmap sparc64_sol2_gregmap;
-extern const struct sparc_fpregmap sparc64_sol2_fpregmap;
+extern const struct sparc_gregset sparc64_sol2_gregset;
 
 extern void sparc64_sol2_init_abi (struct gdbarch_info info,
 				   struct gdbarch *gdbarch);
 
-/* Variables exported from sparc64-fbsd-tdep.c.  */
+/* Variables exported from sparc64fbsd-tdep.c.  */
 
 /* Register offsets for FreeBSD/sparc64.  */
-extern const struct sparc_gregmap sparc64fbsd_gregmap;
+extern const struct sparc_gregset sparc64fbsd_gregset;
 
-/* Functions and variables exported from sparc64-nbsd-tdep.c.  */
+/* Functions and variables exported from sparc64nbsd-tdep.c.  */
 
 /* Register offsets for NetBSD/sparc64.  */
-extern const struct sparc_gregmap sparc64nbsd_gregmap;
+extern const struct sparc_gregset sparc64nbsd_gregset;
 
 extern struct trad_frame_saved_reg *
   sparc64nbsd_sigcontext_saved_regs (CORE_ADDR sigcontext_addr,
 				     struct frame_info *next_frame);
-
-extern const struct sparc_fpregmap sparc64_bsd_fpregmap;
-
-extern void sparc64_forget_process (pid_t pid);
 
 #endif /* sparc64-tdep.h */

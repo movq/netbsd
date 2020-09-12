@@ -1,5 +1,6 @@
 /* Functions for deciding which macros are currently in scope.
-   Copyright (C) 2002-2019 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
    Contributed by Red Hat, Inc.
 
    This file is part of GDB.
@@ -35,21 +36,19 @@
 struct macro_table *macro_user_macros;
 
 
-gdb::unique_xmalloc_ptr<struct macro_scope>
+struct macro_scope *
 sal_macro_scope (struct symtab_and_line sal)
 {
   struct macro_source_file *main_file, *inclusion;
-  struct compunit_symtab *cust;
+  struct macro_scope *ms;
 
-  if (sal.symtab == NULL)
-    return NULL;
-  cust = SYMTAB_COMPUNIT (sal.symtab);
-  if (COMPUNIT_MACRO_TABLE (cust) == NULL)
-    return NULL;
+  if (! sal.symtab
+      || ! sal.symtab->macro_table)
+    return 0;
 
-  gdb::unique_xmalloc_ptr<struct macro_scope> ms (XNEW (struct macro_scope));
+  ms = (struct macro_scope *) xmalloc (sizeof (*ms));
 
-  main_file = macro_main (COMPUNIT_MACRO_TABLE (cust));
+  main_file = macro_main (sal.symtab->macro_table);
   inclusion = macro_lookup_inclusion (main_file, sal.symtab->filename);
 
   if (inclusion)
@@ -76,29 +75,32 @@ sal_macro_scope (struct symtab_and_line sal)
       ms->file = main_file;
       ms->line = -1;
 
-      complaint (_("symtab found for `%s', but that file\n"
+      complaint (&symfile_complaints,
+                 _("symtab found for `%s', but that file\n"
                  "is not covered in the compilation unit's macro information"),
-                 symtab_to_filename_for_display (sal.symtab));
+                 sal.symtab->filename);
     }
 
   return ms;
 }
 
 
-gdb::unique_xmalloc_ptr<struct macro_scope>
+struct macro_scope *
 user_macro_scope (void)
 {
-  gdb::unique_xmalloc_ptr<struct macro_scope> ms (XNEW (struct macro_scope));
+  struct macro_scope *ms;
+
+  ms = XNEW (struct macro_scope);
   ms->file = macro_main (macro_user_macros);
   ms->line = -1;
   return ms;
 }
 
-gdb::unique_xmalloc_ptr<struct macro_scope>
+struct macro_scope *
 default_macro_scope (void)
 {
   struct symtab_and_line sal;
-  gdb::unique_xmalloc_ptr<struct macro_scope> ms;
+  struct macro_scope *ms;
   struct frame_info *frame;
   CORE_ADDR pc;
 
@@ -152,10 +154,13 @@ standard_macro_lookup (const char *name, void *baton)
   return result;
 }
 
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+extern initialize_file_ftype _initialize_macroscope;
+
 void
 _initialize_macroscope (void)
 {
-  macro_user_macros = new_macro_table (NULL, NULL, NULL);
+  macro_user_macros = new_macro_table (0, 0);
   macro_set_main (macro_user_macros, "<user-defined>");
   macro_allow_redefinitions (macro_user_macros);
 }

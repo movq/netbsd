@@ -1,7 +1,7 @@
 /* GNU/Linux/x86 specific low level interface, for the in-process
    agent library for GDB.
 
-   Copyright (C) 2010-2019 Free Software Foundation, Inc.
+   Copyright (C) 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,10 +19,6 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "server.h"
-#include <sys/mman.h>
-#include "tracepoint.h"
-#include "linux-x86-tdesc.h"
-#include "common/x86-xstate.h"
 
 /* GDB register numbers.  */
 
@@ -48,6 +44,9 @@ enum i386_gdb_regnum
 };
 
 #define i386_num_regs 16
+
+/* Defined in auto-generated file i386-linux.c.  */
+void init_registers_i386_linux (void);
 
 #define FT_CR_EAX 15
 #define FT_CR_ECX 14
@@ -96,8 +95,8 @@ supply_fast_tracepoint_registers (struct regcache *regcache,
     }
 }
 
-ULONGEST
-get_raw_reg (const unsigned char *raw_regs, int regnum)
+ULONGEST __attribute__ ((visibility("default"), used))
+gdb_agent_get_raw_reg (unsigned char *raw_regs, int regnum)
 {
   /* This should maybe be allowed to return an error code, or perhaps
      better, have the emit_reg detect this, and emit a constant zero,
@@ -192,103 +191,8 @@ supply_static_tracepoint_registers (struct regcache *regcache,
    may use it proper at some point.  */
 const char *gdbserver_xmltarget;
 
-/* Attempt to allocate memory for trampolines in the first 64 KiB of
-   memory to enable smaller jump patches.  */
-
-static void
-initialize_fast_tracepoint_trampoline_buffer (void)
-{
-  const CORE_ADDR buffer_end = 64 * 1024;
-  /* Ensure that the buffer will be at least 1 KiB in size, which is
-     enough space for over 200 fast tracepoints.  */
-  const int min_buffer_size = 1024;
-  char buf[IPA_BUFSIZ];
-  CORE_ADDR mmap_min_addr = buffer_end + 1;
-  ULONGEST buffer_size;
-  FILE *f = fopen ("/proc/sys/vm/mmap_min_addr", "r");
-
-  if (!f)
-    {    
-      snprintf (buf, sizeof (buf), "mmap_min_addr open failed: %s",
-		strerror (errno));
-      set_trampoline_buffer_space (0, 0, buf);
-      return;
-    }
-
-  if (fgets (buf, IPA_BUFSIZ, f))
-    sscanf (buf, "%llu", &mmap_min_addr);
-      
-  fclose (f);
-      
-  buffer_size = buffer_end - mmap_min_addr;
-
-  if (buffer_size >= min_buffer_size)
-    {
-      if (mmap ((void *) (uintptr_t) mmap_min_addr, buffer_size,
-		PROT_READ | PROT_EXEC | PROT_WRITE,
-		MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS,
-		-1, 0)
-	  != MAP_FAILED)
-	set_trampoline_buffer_space (mmap_min_addr, buffer_end, NULL);
-      else
-	{
-	  snprintf (buf, IPA_BUFSIZ, "low-64K-buffer mmap() failed: %s",
-		    strerror (errno));
-	  set_trampoline_buffer_space (0, 0, buf);
-	}
-    }
-  else
-    {
-      snprintf (buf, IPA_BUFSIZ, "mmap_min_addr is %d, must be %d or less",
-		(int) mmap_min_addr, (int) buffer_end - min_buffer_size);
-      set_trampoline_buffer_space (0, 0, buf);
-    }
-}
-
-/* Map the tdesc index to xcr0 mask.  */
-static uint64_t idx2mask[X86_TDESC_LAST] = {
-  X86_XSTATE_X87_MASK,
-  X86_XSTATE_SSE_MASK,
-  X86_XSTATE_AVX_MASK,
-  X86_XSTATE_MPX_MASK,
-  X86_XSTATE_AVX_MPX_MASK,
-  X86_XSTATE_AVX_AVX512_MASK,
-  X86_XSTATE_AVX_MPX_AVX512_PKU_MASK,
-};
-
-/* Return target_desc to use for IPA, given the tdesc index passed by
-   gdbserver.  */
-
-const struct target_desc *
-get_ipa_tdesc (int idx)
-{
-  if (idx >= X86_TDESC_LAST)
-    {
-      internal_error (__FILE__, __LINE__,
-		      "unknown ipa tdesc index: %d", idx);
-    }
-  return i386_linux_read_description (idx2mask[idx]);
-}
-
-/* Allocate buffer for the jump pads.  On i386, we can reach an arbitrary
-   address with a jump instruction, so just allocate normally.  */
-
-void *
-alloc_jump_pad_buffer (size_t size)
-{
-  void *res = mmap (NULL, size, PROT_READ | PROT_WRITE | PROT_EXEC,
-		    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-
-  if (res == MAP_FAILED)
-    return NULL;
-
-  return res;
-}
-
 void
 initialize_low_tracepoint (void)
 {
-  initialize_fast_tracepoint_trampoline_buffer ();
-  for (auto i = 0; i < X86_TDESC_LAST; i++)
-    i386_linux_read_description (idx2mask[i]);
+  init_registers_i386_linux ();
 }

@@ -1,5 +1,5 @@
 ; Lattice Mico32 CPU description.  -*- Scheme -*-
-; Copyright 2008-2013  Free Software Foundation, Inc.
+; Copyright 2008, 2009  Free Software Foundation, Inc.
 ; Contributed by Jon Beniston <jon@beniston.com>
 ;
 ; This file is part of the GNU Binutils.
@@ -101,11 +101,9 @@
                (EBA 7)
                (DC 8)
                (DEBA 9)
-	       (CFG2 10)
                (JTX 14) (JRX 15)          
                (BP0 16) (BP1 17) (BP2 18) (BP3 19)
                (WP0 24) (WP1 25) (WP2 26) (WP3 27)     
-               (PSW 29) (TLBVADDR 30) (TLBPADDR 31) (TLBBADVADDR 31)
               )
   )
   () ()
@@ -128,15 +126,11 @@
 
 (df f-branch "branch offset field" (PCREL-ADDR) 15 16 INT
         ((value pc) (sra SI (sub SI value pc) 2))
-	((value pc) (add SI pc (sub (xor (sll (and value #xffff) 2)
-					 #x20000)
-				    #x20000)))
+        ((value pc) (add SI pc (sra SI (sll SI value 16) 14)))
 )
 (df f-call "call offset field" (PCREL-ADDR) 25 26 INT 
         ((value pc) (sra SI (sub SI value pc) 2))
-	((value pc) (add SI pc (sub (xor (sll (and value #x3ffffff) 2)
-					 #x8000000)
-				    #x8000000)))
+        ((value pc) (add SI pc (sra SI (sll SI value 6) 4)))
 )
 
 

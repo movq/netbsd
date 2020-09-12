@@ -1,5 +1,6 @@
 ;; GCC machine description for MMIX
-;; Copyright (C) 2000-2019 Free Software Foundation, Inc.
+;; Copyright (C) 2000, 2001, 2002, 2003, 2004, 2005, 2007
+;; Free Software Foundation, Inc.
 ;; Contributed by Hans-Peter Nilsson (hp@bitrange.com)
 
 ;; This file is part of GCC.
@@ -42,7 +43,6 @@
 ;; Operand and operator predicates.
 
 (include "predicates.md")
-(include "constraints.md")
 
 ;; FIXME: Can we remove the reg-to-reg for smaller modes?  Shouldn't they
 ;; be synthesized ok?
@@ -274,7 +274,7 @@
 (define_insn "iordi3"
   [(set (match_operand:DI 0 "register_operand" "=r,r")
 	(ior:DI (match_operand:DI 1 "register_operand" "%r,0")
-		(match_operand:DI 2 "mmix_reg_or_constant_operand" "rI,LS")))]
+		(match_operand:DI 2 "mmix_reg_or_constant_operand" "rH,LS")))]
   ""
   "@
    OR %0,%1,%2
@@ -529,7 +529,7 @@ DIVU %1,%1,%2\;GET %0,:rR\;NEGU %2,0,%0\;CSNN %0,$255,%2")
 	 better way.  */
       stack_slot
 	= validize_mem (assign_stack_temp (SFmode,
-					   GET_MODE_SIZE (SFmode)));
+					   GET_MODE_SIZE (SFmode), 0));
       emit_insn (gen_floatdisf2 (stack_slot, operands[1]));
       emit_move_insn (operands[0], stack_slot);
       DONE;
@@ -563,7 +563,7 @@ DIVU %1,%1,%2\;GET %0,:rR\;NEGU %2,0,%0\;CSNN %0,$255,%2")
 	 way.  */
       stack_slot
 	= validize_mem (assign_stack_temp (SFmode,
-					   GET_MODE_SIZE (SFmode)));
+					   GET_MODE_SIZE (SFmode), 0));
       emit_insn (gen_floatunsdisf2 (stack_slot, operands[1]));
       emit_move_insn (operands[0], stack_slot);
       DONE;
@@ -623,10 +623,10 @@ DIVU %1,%1,%2\;GET %0,:rR\;NEGU %2,0,%0\;CSNN %0,$255,%2")
 ;; possible to do that?  Bug in GCC?  Anyway, this used to be a simple
 ;; pattern with a memory_operand predicate, but was split up with a
 ;; define_expand with the old pattern as "anonymous".
-;; FIXME: Perhaps with TARGET_SECONDARY_MEMORY_NEEDED?
+;; FIXME: Perhaps with SECONDARY_MEMORY_NEEDED?
 (define_expand "truncdfsf2"
-  [(set (match_operand:SF 0 "nonimmediate_operand")
-	(float_truncate:SF (match_operand:DF 1 "register_operand")))]
+  [(set (match_operand:SF 0 "memory_operand" "")
+	(float_truncate:SF (match_operand:DF 1 "register_operand" "")))]
   ""
   "
 {
@@ -645,7 +645,7 @@ DIVU %1,%1,%2\;GET %0,:rR\;NEGU %2,0,%0\;CSNN %0,$255,%2")
 	 way.  */
       stack_slot
 	= validize_mem (assign_stack_temp (SFmode,
-					   GET_MODE_SIZE (SFmode)));
+					   GET_MODE_SIZE (SFmode), 0));
       emit_insn (gen_truncdfsf2 (stack_slot, operands[1]));
       emit_move_insn (operands[0], stack_slot);
       DONE;
@@ -660,8 +660,8 @@ DIVU %1,%1,%2\;GET %0,:rR\;NEGU %2,0,%0\;CSNN %0,$255,%2")
 
 ;; Same comment as for truncdfsf2.
 (define_expand "extendsfdf2"
-  [(set (match_operand:DF 0 "register_operand")
-	(float_extend:DF (match_operand:SF 1 "nonimmediate_operand")))]
+  [(set (match_operand:DF 0 "register_operand" "=r")
+	(float_extend:DF (match_operand:SF 1 "memory_operand" "m")))]
   ""
   "
 {
@@ -678,7 +678,7 @@ DIVU %1,%1,%2\;GET %0,:rR\;NEGU %2,0,%0\;CSNN %0,$255,%2")
 	 better way.  */
       stack_slot
 	= validize_mem (assign_stack_temp (SFmode,
-					   GET_MODE_SIZE (SFmode)));
+					   GET_MODE_SIZE (SFmode), 0));
       emit_move_insn (stack_slot, operands[1]);
       emit_insn (gen_extendsfdf2 (operands[0], stack_slot));
       DONE;
@@ -1037,7 +1037,6 @@ DIVU %1,%1,%2\;GET %0,:rR\;NEGU %2,0,%0\;CSNN %0,$255,%2")
 ;; first ("p") alternative by adding ? in the first operand
 ;; might do the trick.  We define 'U' as a synonym to 'p', but without the
 ;; caveats (and very small advantages) of 'p'.
-;; As of r190682 still so: newlib/libc/stdlib/dtoa.c ICEs if "p" is used.
 (define_insn "*call_real"
   [(call (mem:QI
 	  (match_operand:DI 0 "mmix_symbolic_or_address_operand" "s,rU"))
@@ -1119,7 +1118,7 @@ DIVU %1,%1,%2\;GET %0,:rR\;NEGU %2,0,%0\;CSNN %0,$255,%2")
 ;; of "pop 0,0" until rO equals the saved value.  (If it goes lower, we
 ;; should die with a trap.)
 (define_expand "nonlocal_goto_receiver"
-  [(parallel [(unspec_volatile [(match_dup 1)] 1)
+  [(parallel [(unspec_volatile [(const_int 0)] 1)
 	      (clobber (scratch:DI))
 	      (clobber (reg:DI MMIX_rJ_REGNUM))])
    (set (reg:DI MMIX_rJ_REGNUM) (match_dup 0))]
@@ -1130,13 +1129,6 @@ DIVU %1,%1,%2\;GET %0,:rR\;NEGU %2,0,%0\;CSNN %0,$255,%2")
     = mmix_get_hard_reg_initial_val (Pmode,
 				     MMIX_INCOMING_RETURN_ADDRESS_REGNUM);
 
-  /* We need the frame-pointer to be live or the equivalent
-     expression, so refer to it in the pattern.  We can't use a MEM
-     (that may contain out-of-range offsets in the final expression)
-     for fear that middle-end will legitimize it or replace the address
-     using temporary registers (which are not revived at this point).  */
-  operands[1] = frame_pointer_rtx;
-
   /* Mark this function as containing a landing-pad.  */
   cfun->machine->has_landing_pad = 1;
 }")
@@ -1146,40 +1138,45 @@ DIVU %1,%1,%2\;GET %0,:rR\;NEGU %2,0,%0\;CSNN %0,$255,%2")
 ;; address and re-use them after the register stack unwind, so it's best
 ;; to form the address ourselves.
 (define_insn "*nonlocal_goto_receiver_expanded"
-  [(unspec_volatile [(match_operand:DI 1 "frame_pointer_operand" "Yf")] 1)
+  [(unspec_volatile [(const_int 0)] 1)
    (clobber (match_scratch:DI 0 "=&r"))
    (clobber (reg:DI MMIX_rJ_REGNUM))]
   ""
 {
-  rtx my_operands[3];
+  rtx temp_reg = operands[0];
+  rtx my_operands[2];
+  HOST_WIDEST_INT offs;
   const char *my_template
     = "GETA $255,0f\;PUT rJ,$255\;LDOU $255,%a0\n\
 0:\;GET %1,rO\;CMPU %1,%1,$255\;BNP %1,1f\;POP 0,0\n1:";
 
-  my_operands[1] = operands[0];
-  my_operands[2] = GEN_INT (-MMIX_fp_rO_OFFSET);
+  my_operands[1] = temp_reg;
 
-  if (operands[1] == hard_frame_pointer_rtx)
+  /* If we have a frame-pointer (hence unknown stack-pointer offset),
+     just use the frame-pointer and the known offset.  */
+  if (frame_pointer_needed)
     {
-      mmix_output_register_setting (asm_out_file, REGNO (operands[0]),
-				    MMIX_fp_rO_OFFSET, 1);
-      my_operands[0]
-	= gen_rtx_PLUS (Pmode, hard_frame_pointer_rtx, operands[0]);
+      my_operands[0] = GEN_INT (-MMIX_fp_rO_OFFSET);
+
+      output_asm_insn ("NEGU %1,0,%0", my_operands);
+      my_operands[0] = gen_rtx_PLUS (Pmode, frame_pointer_rtx, temp_reg);
     }
   else
     {
-      int64_t offs = INTVAL (XEXP (operands[1], 1));
-      offs += MMIX_fp_rO_OFFSET;
+      /* We know the fp-based offset, so "eliminate" it to be sp-based.  */
+      offs
+	= (mmix_initial_elimination_offset (MMIX_FRAME_POINTER_REGNUM,
+					    MMIX_STACK_POINTER_REGNUM)
+	   + MMIX_fp_rO_OFFSET);
 
-      if (insn_const_int_ok_for_constraint (offs, CONSTRAINT_I))
+      if (offs >= 0 && offs <= 255)
 	my_operands[0]
 	  = gen_rtx_PLUS (Pmode, stack_pointer_rtx, GEN_INT (offs));
       else
 	{
-	  mmix_output_register_setting (asm_out_file, REGNO (operands[0]),
+	  mmix_output_register_setting (asm_out_file, REGNO (temp_reg),
 					offs, 1);
-	  my_operands[0]
-	    = gen_rtx_PLUS (Pmode, stack_pointer_rtx, operands[0]);
+	  my_operands[0] = gen_rtx_PLUS (Pmode, stack_pointer_rtx, temp_reg);
 	}
     }
 

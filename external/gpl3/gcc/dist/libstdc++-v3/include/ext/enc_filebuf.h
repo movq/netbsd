@@ -1,6 +1,6 @@
 // filebuf with encoding state type -*- C++ -*-
 
-// Copyright (C) 2002-2019 Free Software Foundation, Inc.
+// Copyright (C) 2002, 2003, 2004, 2007, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -33,9 +33,7 @@
 #include <locale>
 #include <ext/codecvt_specializations.h>
 
-namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
 
   /// class enc_filebuf.
   template<typename _CharT>
@@ -59,7 +57,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       __glibcxx_class_requires(state_type, _SGIAssignableConcept)
     };
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 #endif

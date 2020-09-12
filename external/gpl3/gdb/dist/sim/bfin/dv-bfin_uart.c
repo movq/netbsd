@@ -1,7 +1,7 @@
 /* Blackfin Universal Asynchronous Receiver/Transmitter (UART) model.
    For "old style" UARTs on BF53x/etc... parts.
 
-   Copyright (C) 2010-2019 Free Software Foundation, Inc.
+   Copyright (C) 2010-2011 Free Software Foundation, Inc.
    Contributed by Analog Devices, Inc.
 
    This file is part of simulators.
@@ -74,6 +74,12 @@ static const char *mmr_name (struct bfin_uart *uart, bu32 idx)
 }
 #define mmr_name(off) mmr_name (uart, (off) / 4)
 
+#ifndef HAVE_DV_SOCKSER
+# define dv_sockser_status(sd) -1
+# define dv_sockser_write(sd, byte) do { ; } while (0)
+# define dv_sockser_read(sd) 0xff
+#endif
+
 static void
 bfin_uart_poll (struct hw *me, void *data)
 {
@@ -111,21 +117,10 @@ bfin_uart_reschedule (struct hw *me)
 }
 
 bu16
-bfin_uart_write_byte (struct hw *me, bu16 thr, bu16 mcr)
+bfin_uart_write_byte (struct hw *me, bu16 thr)
 {
-  struct bfin_uart *uart = hw_data (me);
   unsigned char ch = thr;
-
-  if (mcr & LOOP_ENA)
-    {
-      /* XXX: This probably doesn't work exactly right with
-              external FIFOs ...  */
-      uart->saved_byte = thr;
-      uart->saved_count = 1;
-    }
-
   bfin_uart_write_buffer (me, &ch, 1);
-
   return thr;
 }
 
@@ -138,15 +133,13 @@ bfin_uart_io_write_buffer (struct hw *me, const void *source,
   bu32 value;
   bu16 *valuep;
 
-  /* Invalid access mode is higher priority than missing register.  */
-  if (!dv_bfin_mmr_require_16 (me, addr, nr_bytes, true))
-    return 0;
-
   value = dv_load_2 (source);
   mmr_off = addr - uart->base;
   valuep = (void *)((unsigned long)uart + mmr_base() + mmr_off);
 
   HW_TRACE_WRITE ();
+
+  dv_bfin_mmr_require_16 (me, addr, nr_bytes, true);
 
   /* XXX: All MMRs are "8bit" ... what happens to high 8bits ?  */
   switch (mmr_off)
@@ -156,7 +149,7 @@ bfin_uart_io_write_buffer (struct hw *me, const void *source,
 	uart->dll = value;
       else
 	{
-	  uart->thr = bfin_uart_write_byte (me, value, uart->mcr);
+	  uart->thr = bfin_uart_write_byte (me, value);
 
 	  if (uart->ier & ETBEI)
 	    hw_port_event (me, DV_PORT_TX, 1);
@@ -183,7 +176,7 @@ bfin_uart_io_write_buffer (struct hw *me, const void *source,
       break;
     default:
       dv_bfin_mmr_invalid (me, addr, nr_bytes, true);
-      return 0;
+      break;
     }
 
   return nr_bytes;
@@ -191,7 +184,7 @@ bfin_uart_io_write_buffer (struct hw *me, const void *source,
 
 /* Switch between socket and stdin on the fly.  */
 bu16
-bfin_uart_get_next_byte (struct hw *me, bu16 rbr, bu16 mcr, bool *fresh)
+bfin_uart_get_next_byte (struct hw *me, bu16 rbr, bool *fresh)
 {
   SIM_DESC sd = hw_system (me);
   struct bfin_uart *uart = hw_data (me);
@@ -204,26 +197,23 @@ bfin_uart_get_next_byte (struct hw *me, bu16 rbr, bu16 mcr, bool *fresh)
     fresh = &_fresh;
 
   *fresh = false;
-
-  if (uart->saved_count > 0)
+  if (status & DV_SOCKSER_DISCONNECTED)
     {
-      *fresh = true;
-      rbr = uart->saved_byte;
-      --uart->saved_count;
-    }
-  else if (mcr & LOOP_ENA)
-    {
-      /* RX is disconnected, so only return local data.  */
-    }
-  else if (status & DV_SOCKSER_DISCONNECTED)
-    {
-      char byte;
-      int ret = sim_io_poll_read (sd, 0/*STDIN*/, &byte, 1);
-
-      if (ret > 0)
+      if (uart->saved_count > 0)
 	{
 	  *fresh = true;
-	  rbr = byte;
+	  rbr = uart->saved_byte;
+	  --uart->saved_count;
+	}
+      else
+	{
+	  char byte;
+	  int ret = sim_io_poll_read (sd, 0/*STDIN*/, &byte, 1);
+	  if (ret > 0)
+	    {
+	      *fresh = true;
+	      rbr = byte;
+	    }
 	}
     }
   else
@@ -249,7 +239,7 @@ bfin_uart_get_status (struct hw *me)
     }
   else
     lsr |= (status & DV_SOCKSER_INPUT_EMPTY ? 0 : DR) |
-	   (status & DV_SOCKSER_OUTPUT_EMPTY ? TEMT | THRE : 0);
+		 (status & DV_SOCKSER_OUTPUT_EMPTY ? TEMT | THRE : 0);
 
   return lsr;
 }
@@ -262,14 +252,12 @@ bfin_uart_io_read_buffer (struct hw *me, void *dest,
   bu32 mmr_off;
   bu16 *valuep;
 
-  /* Invalid access mode is higher priority than missing register.  */
-  if (!dv_bfin_mmr_require_16 (me, addr, nr_bytes, false))
-    return 0;
-
   mmr_off = addr - uart->base;
   valuep = (void *)((unsigned long)uart + mmr_base() + mmr_off);
 
   HW_TRACE_READ ();
+
+  dv_bfin_mmr_require_16 (me, addr, nr_bytes, false);
 
   switch (mmr_off)
     {
@@ -278,7 +266,7 @@ bfin_uart_io_read_buffer (struct hw *me, void *dest,
 	dv_store_2 (dest, uart->dll);
       else
 	{
-	  uart->rbr = bfin_uart_get_next_byte (me, uart->rbr, uart->mcr, NULL);
+	  uart->rbr = bfin_uart_get_next_byte (me, uart->rbr, NULL);
 	  dv_store_2 (dest, uart->rbr);
 	}
       break;
@@ -304,7 +292,7 @@ bfin_uart_io_read_buffer (struct hw *me, void *dest,
       break;
     default:
       dv_bfin_mmr_invalid (me, addr, nr_bytes, false);
-      return 0;
+      break;
     }
 
   return nr_bytes;

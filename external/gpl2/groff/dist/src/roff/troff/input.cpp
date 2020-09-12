@@ -1,4 +1,4 @@
-/*	$NetBSD: input.cpp,v 1.5 2020/06/16 00:47:21 christos Exp $	*/
+/*	$NetBSD: input.cpp,v 1.1 2016/01/13 18:41:48 christos Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 1989, 1990, 1991, 1992, 2000, 2001, 2002, 2003, 2004, 2005
@@ -2798,12 +2798,11 @@ void process_input_stack()
 	    do {
 	      node *n;
 	      cc = get_copy(&n);
-	      if (cc != EOF) {
+	      if (cc != EOF)
 		if (cc != '\0')
 		  curdiv->transparent_output(transparent_translate(cc));
 		else
 		  curdiv->transparent_output(n);
-	      }
 	    } while (cc != '\n' && cc != EOF);
 	    if (cc == EOF)
 	      curdiv->transparent_output('\n');
@@ -4238,12 +4237,12 @@ static void interpolate_arg(symbol nm)
     string args;
     for (int i = 1; i <= limit; i++) {
       args += '"';
-      args += (char)BEGIN_QUOTE;
+      args += BEGIN_QUOTE;
       input_iterator *p = input_stack::get_arg(i);
       int c;
       while ((c = p->get(0)) != EOF)
 	args += c;
-      args += (char)END_QUOTE;
+      args += END_QUOTE;
       args += '"';
       if (i != limit)
 	args += ' ';
@@ -7242,14 +7241,6 @@ void usage(FILE *stream, const char *prog)
 "       -rcn -Tname -Fdir -Idir -Mdir [files...]\n",
 	  prog);
 }
- 
-static
-#ifdef LONG_FOR_TIME_T
-long
-#else /* not LONG_FOR_TIME_T */
-time_t
-#endif /* not LONG_FOR_TIME_T */
-timestamp;
 
 int main(int argc, char **argv)
 {
@@ -7281,7 +7272,6 @@ int main(int argc, char **argv)
   }
   static const struct option long_options[] = {
     { "help", no_argument, 0, CHAR_MAX + 1 },
-    { "timestamp", required_argument, 0, 'Y' },
     { "version", no_argument, 0, 'v' },
     { 0, 0, 0, 0 }
   };
@@ -7289,7 +7279,7 @@ int main(int argc, char **argv)
 #define DEBUG_OPTION "D"
 #endif
   while ((c = getopt_long(argc, argv,
-			  "abciI:vw:W:zCEf:m:n:o:r:d:F:M:T:tqs:RUY:"
+			  "abciI:vw:W:zCEf:m:n:o:r:d:F:M:T:tqs:RU"
 			  DEBUG_OPTION, long_options, 0))
 	 != EOF)
     switch(c) {
@@ -7391,9 +7381,6 @@ int main(int argc, char **argv)
     case CHAR_MAX + 1: // --help
       usage(stdout, argv[0]);
       exit(0);
-      break;
-    case 'Y': // --timestamp
-      timestamp = strtoul(optarg, NULL, 0);
       break;
     case '?':
       usage(stderr, argv[0]);
@@ -7497,7 +7484,7 @@ static void init_registers()
 #else /* not LONG_FOR_TIME_T */
   time_t
 #endif /* not LONG_FOR_TIME_T */
-    t = timestamp ? timestamp : time(0);
+    t = time(0);
   // Use struct here to work around misfeature in old versions of g++.
   struct tm *tt = localtime(&t);
   set_number_reg("seconds", int(tt->tm_sec));

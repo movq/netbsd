@@ -1,4 +1,4 @@
-/*	$NetBSD: mkstemp.cpp,v 1.1.1.1 2016/01/13 18:41:48 christos Exp $	*/
+/*	$NetBSD: mkstemp.cpp,v 1.1 2016/01/13 18:41:48 christos Exp $	*/
 
 /* Copyright (C) 2001 Free Software Foundation, Inc.
      Written by Werner Lemberg (wl@gnu.org)

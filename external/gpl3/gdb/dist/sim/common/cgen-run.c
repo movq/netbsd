@@ -1,5 +1,6 @@
 /* Main simulator loop for CGEN-based simulators.
-   Copyright (C) 1998-2019 Free Software Foundation, Inc.
+   Copyright (C) 1998, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
    Contributed by Cygnus Solutions.
 
 This file is part of GDB, the GNU debugger.
@@ -115,7 +116,7 @@ sim_resume (SIM_DESC sd, int step, int siggnal)
       /* Account for the last insn executed.  */
       SIM_CPU *cpu = STATE_CPU (sd, sim_engine_last_cpu_nr (sd));
       ++ CPU_INSN_COUNT (cpu);
-      CGEN_TRACE_INSN_FINI (cpu, NULL, 1);
+      TRACE_INSN_FINI (cpu, NULL, 1);
     }
 #endif
 

@@ -1,6 +1,6 @@
 // Helpers for ostream inserters -*- C++ -*-
 
-// Copyright (C) 2007-2019 Free Software Foundation, Inc.
+// Copyright (C) 2007, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,9 +22,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file bits/ostream_insert.h
+/** @file ostream_insert.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{ostream}
+ *  You should not attempt to use it directly.
  */
 
 #ifndef _OSTREAM_INSERT_H
@@ -33,11 +33,9 @@
 #pragma GCC system_header
 
 #include <iosfwd>
-#include <bits/cxxabi_forced.h>
+#include <cxxabi-forced.h>
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   template<typename _CharT, typename _Traits>
     inline void
@@ -114,6 +112,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   // Inhibit implicit instantiations for required instantiations,
   // which are defined via explicit instantiations elsewhere.
+  // NB:  This syntax is a GNU extension.
 #if _GLIBCXX_EXTERN_TEMPLATE
   extern template ostream& __ostream_insert(ostream&, const char*, streamsize);
 
@@ -123,7 +122,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #endif
 #endif
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace std
+_GLIBCXX_END_NAMESPACE
 
 #endif /* _OSTREAM_INSERT_H */

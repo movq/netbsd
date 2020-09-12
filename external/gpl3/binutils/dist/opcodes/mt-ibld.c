@@ -1,10 +1,10 @@
-/* DO NOT EDIT!  -*- buffer-read-only: t -*- vi:set ro:  */
 /* Instruction building/extraction support for mt. -*- C -*-
 
    THIS FILE IS MACHINE GENERATED WITH CGEN: Cpu tools GENerator.
    - the resultant file is machine generated, cgen-ibld.in isn't
 
-   Copyright (C) 1996-2020 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2005, 2006, 2007
+   Free Software Foundation, Inc.
 
    This file is part of libopcodes.
 
@@ -33,7 +33,6 @@
 #include "symcat.h"
 #include "mt-desc.h"
 #include "mt-opc.h"
-#include "cgen/basic-modes.h"
 #include "opintl.h"
 #include "safe-ctype.h"
 
@@ -138,7 +137,7 @@ insert_normal (CGEN_CPU_DESC cd,
   if (length == 0)
     return NULL;
 
-  if (word_length > 8 * sizeof (CGEN_INSN_INT))
+  if (word_length > 32)
     abort ();
 
   /* For architectures with insns smaller than the base-insn-bitsize,
@@ -155,7 +154,7 @@ insert_normal (CGEN_CPU_DESC cd,
     {
       long minval = - (1L << (length - 1));
       unsigned long maxval = mask;
-
+      
       if ((value > 0 && (unsigned long) value > maxval)
 	  || value < minval)
 	{
@@ -193,7 +192,7 @@ insert_normal (CGEN_CPU_DESC cd,
 	{
 	  long minval = - (1L << (length - 1));
 	  long maxval =   (1L << (length - 1)) - 1;
-
+	  
 	  if (value < minval || value > maxval)
 	    {
 	      sprintf
@@ -208,19 +207,12 @@ insert_normal (CGEN_CPU_DESC cd,
 #if CGEN_INT_INSN_P
 
   {
-    int shift_within_word, shift_to_word, shift;
+    int shift;
 
-    /* How to shift the value to BIT0 of the word.  */
-    shift_to_word = total_length - (word_offset + word_length);
-
-    /* How to shift the value to the field within the word.  */
     if (CGEN_INSN_LSB0_P)
-      shift_within_word = start + 1 - length;
+      shift = (word_offset + start + 1) - length;
     else
-      shift_within_word = word_length - start - length;
-
-    /* The total SHIFT, then mask in the value.  */
-    shift = shift_to_word + shift_within_word;
+      shift = total_length - (word_offset + start + length);
     *buffer = (*buffer & ~(mask << shift)) | ((value & mask) << shift);
   }
 
@@ -449,7 +441,7 @@ extract_normal (CGEN_CPU_DESC cd,
       return 1;
     }
 
-  if (word_length > 8 * sizeof (CGEN_INSN_INT))
+  if (word_length > 32)
     abort ();
 
   /* For architectures with insns smaller than the insn-base-bitsize,
@@ -476,7 +468,7 @@ extract_normal (CGEN_CPU_DESC cd,
     {
       unsigned char *bufp = ex_info->insn_bytes + word_offset / 8;
 
-      if (word_length > 8 * sizeof (CGEN_INSN_INT))
+      if (word_length > 32)
 	abort ();
 
       if (fill_cache (cd, ex_info, word_offset / 8, word_length / 8, pc) == 0)
@@ -689,7 +681,7 @@ mt_cgen_insert_operand (CGEN_CPU_DESC cd,
     case MT_OPERAND_LOOPSIZE :
       {
         long value = fields->f_loopo;
-        value = ((USI) (value) >> (2));
+        value = ((unsigned int) (value) >> (2));
         errmsg = insert_normal (cd, value, 0, 0, 7, 8, 32, total_length, buffer);
       }
       break;
@@ -750,9 +742,8 @@ mt_cgen_insert_operand (CGEN_CPU_DESC cd,
 
     default :
       /* xgettext:c-format */
-      opcodes_error_handler
-	(_("internal error: unrecognized field %d while building insn"),
-	 opindex);
+      fprintf (stderr, _("Unrecognized field %d while building insn.\n"),
+	       opindex);
       abort ();
   }
 
@@ -971,21 +962,20 @@ mt_cgen_extract_operand (CGEN_CPU_DESC cd,
 
     default :
       /* xgettext:c-format */
-      opcodes_error_handler
-	(_("internal error: unrecognized field %d while decoding insn"),
-	 opindex);
+      fprintf (stderr, _("Unrecognized field %d while decoding insn.\n"),
+	       opindex);
       abort ();
     }
 
   return length;
 }
 
-cgen_insert_fn * const mt_cgen_insert_handlers[] =
+cgen_insert_fn * const mt_cgen_insert_handlers[] = 
 {
   insert_insn_normal,
 };
 
-cgen_extract_fn * const mt_cgen_extract_handlers[] =
+cgen_extract_fn * const mt_cgen_extract_handlers[] = 
 {
   extract_insn_normal,
 };
@@ -1172,9 +1162,8 @@ mt_cgen_get_int_operand (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
 
     default :
       /* xgettext:c-format */
-      opcodes_error_handler
-	(_("internal error: unrecognized field %d while getting int operand"),
-	 opindex);
+      fprintf (stderr, _("Unrecognized field %d while getting int operand.\n"),
+		       opindex);
       abort ();
   }
 
@@ -1355,9 +1344,8 @@ mt_cgen_get_vma_operand (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
 
     default :
       /* xgettext:c-format */
-      opcodes_error_handler
-	(_("internal error: unrecognized field %d while getting vma operand"),
-	 opindex);
+      fprintf (stderr, _("Unrecognized field %d while getting vma operand.\n"),
+		       opindex);
       abort ();
   }
 
@@ -1545,9 +1533,8 @@ mt_cgen_set_int_operand (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
 
     default :
       /* xgettext:c-format */
-      opcodes_error_handler
-	(_("internal error: unrecognized field %d while setting int operand"),
-	 opindex);
+      fprintf (stderr, _("Unrecognized field %d while setting int operand.\n"),
+		       opindex);
       abort ();
   }
 }
@@ -1725,9 +1712,8 @@ mt_cgen_set_vma_operand (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
 
     default :
       /* xgettext:c-format */
-      opcodes_error_handler
-	(_("internal error: unrecognized field %d while setting vma operand"),
-	 opindex);
+      fprintf (stderr, _("Unrecognized field %d while setting vma operand.\n"),
+		       opindex);
       abort ();
   }
 }

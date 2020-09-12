@@ -1,4 +1,4 @@
-# Copyright 2013-2019 Free Software Foundation, Inc.
+# Copyright 2013-2014 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,7 +19,7 @@
 
 standard_testfile
 
-if {[prepare_for_testing "failed to prepare" $testfile $srcfile {debug additional_flags=-fpie "ldflags=-pie -Wl,-z,relro"}]} {
+if {[prepare_for_testing $testfile.exp $testfile $srcfile {debug additional_flags=-fpie "ldflags=-pie -Wl,-z,relro"}]} {
     return -1
 }
 
@@ -39,9 +39,22 @@ file attributes ${stripped_binfile} -permissions $perm
 
 clean_restart ${stripped_binfile}
 
+# Does this gdb support gcore?
+set test "help gcore"
+gdb_test_multiple $test $test {
+    -re "Undefined command: .gcore.*\r\n$gdb_prompt $" {
+	# gcore command not supported -- nothing to test here.
+	unsupported "gdb does not support gcore on this target"
+	return -1
+    }
+    -re "Save a core file .*\r\n$gdb_prompt $" {
+	pass $test
+    }
+}
+
 # The binary is stripped of debug info, but not minsyms.
 if ![runto break_here] {
-    fail "can't run to break_here"
+    fail "Can't run to break_here"
     return -1
 }
 

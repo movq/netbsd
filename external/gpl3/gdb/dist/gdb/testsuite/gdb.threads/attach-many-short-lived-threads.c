@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2014-2019 Free Software Foundation, Inc.
+   Copyright 2014-2015 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -113,17 +113,6 @@ detached_fn (void *arg)
   return NULL;
 }
 
-/* Allow for as much timeout as DejaGnu wants, plus a bit of
-   slack.  */
-#define SECONDS (TIMEOUT + 20)
-
-/* We'll exit after this many seconds.  */
-unsigned int seconds_left = SECONDS;
-
-/* GDB sets this whenever it's about to start a new detach/attach
-   sequence.  We react by resetting the seconds left counter.  */
-volatile int again = 0;
-
 int
 main (int argc, char *argv[])
 {
@@ -155,20 +144,8 @@ main (int argc, char *argv[])
       create_thread (&detached_attr, detached_fn, NULL);
     }
 
-  /* Exit after a while if GDB is gone/crashes.  But wait long enough
-     for one attach/detach sequence done by the .exp file.  */
-  while (--seconds_left > 0)
-    {
-      sleep (1);
-
-      if (again)
-	{
-	  /* GDB should be reattaching soon.  Restart the timer.  */
-	  again = 0;
-	  seconds_left = SECONDS;
-	}
-    }
-
-  printf ("timeout, exiting\n");
+  /* Long enough for all the attach/detach sequences done by the .exp
+     file.  */
+  sleep (180);
   return 0;
 }

@@ -1,5 +1,6 @@
+;; ??? This file needs auditing for thumb2
 ;; Patterns for the Intel Wireless MMX technology architecture.
-;; Copyright (C) 2003-2019 Free Software Foundation, Inc.
+;; Copyright (C) 2003, 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
 ;; Contributed by Red Hat.
 
 ;; This file is part of GCC.
@@ -18,41 +19,14 @@
 ;; along with GCC; see the file COPYING3.  If not see
 ;; <http://www.gnu.org/licenses/>.
 
-;; Register numbers. Need to sync with FIRST_IWMMXT_GR_REGNUM in arm.h
-(define_constants
-  [(WCGR0           96)
-   (WCGR1           97)
-   (WCGR2           98)
-   (WCGR3           99)
-  ]
-)
+;; Integer element sizes implemented by IWMMXT.
+(define_mode_iterator VMMX [V2SI V4HI V8QI])
 
-(define_insn "tbcstv8qi"
-  [(set (match_operand:V8QI                   0 "register_operand" "=y")
-        (vec_duplicate:V8QI (match_operand:QI 1 "s_register_operand" "r")))]
-  "TARGET_REALLY_IWMMXT"
-  "tbcstb%?\\t%0, %1"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_tbcst")]
-)
+;; Integer element sizes for shifts.
+(define_mode_iterator VSHFT [V4HI V2SI DI])
 
-(define_insn "tbcstv4hi"
-  [(set (match_operand:V4HI                   0 "register_operand" "=y")
-        (vec_duplicate:V4HI (match_operand:HI 1 "s_register_operand" "r")))]
-  "TARGET_REALLY_IWMMXT"
-  "tbcsth%?\\t%0, %1"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_tbcst")]
-)
-
-(define_insn "tbcstv2si"
-  [(set (match_operand:V2SI                   0 "register_operand" "=y")
-        (vec_duplicate:V2SI (match_operand:SI 1 "s_register_operand" "r")))]
-  "TARGET_REALLY_IWMMXT"
-  "tbcstw%?\\t%0, %1"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_tbcst")]
-)
+;; Determine element size suffix from vector mode.
+(define_mode_attr MMX_char [(V8QI "b") (V4HI "h") (V2SI "w") (DI "d")])
 
 (define_insn "iwmmxt_iordi3"
   [(set (match_operand:DI         0 "register_operand" "=y,?&r,?&r")
@@ -64,9 +38,7 @@
    #
    #"
   [(set_attr "predicable" "yes")
-   (set_attr "length" "4,8,8")
-   (set_attr "type" "wmmx_wor,*,*")]
-)
+   (set_attr "length" "4,8,8")])
 
 (define_insn "iwmmxt_xordi3"
   [(set (match_operand:DI         0 "register_operand" "=y,?&r,?&r")
@@ -78,9 +50,7 @@
    #
    #"
   [(set_attr "predicable" "yes")
-   (set_attr "length" "4,8,8")
-   (set_attr "type" "wmmx_wxor,*,*")]
-)
+   (set_attr "length" "4,8,8")])
 
 (define_insn "iwmmxt_anddi3"
   [(set (match_operand:DI         0 "register_operand" "=y,?&r,?&r")
@@ -92,9 +62,7 @@
    #
    #"
   [(set_attr "predicable" "yes")
-   (set_attr "length" "4,8,8")
-   (set_attr "type" "wmmx_wand,*,*")]
-)
+   (set_attr "length" "4,8,8")])
 
 (define_insn "iwmmxt_nanddi3"
   [(set (match_operand:DI                 0 "register_operand" "=y")
@@ -102,97 +70,64 @@
 		(not:DI (match_operand:DI 2 "register_operand"  "y"))))]
   "TARGET_REALLY_IWMMXT"
   "wandn%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wandn")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "*iwmmxt_arm_movdi"
-  [(set (match_operand:DI 0 "nonimmediate_di_operand" "=r, r, r, r, m,y,y,r, y,Uy,*w, r,*w,*w, *Uv")
-        (match_operand:DI 1 "di_operand"              "rDa,Db,Dc,mi,r,y,r,y,Uy,y,  r,*w,*w,*Uvi,*w"))]
+  [(set (match_operand:DI 0 "nonimmediate_di_operand" "=r, r, m,y,y,yr,y,yrUy")
+	(match_operand:DI 1 "di_operand"              "rIK,mi,r,y,yr,y,yrUy,y"))]
   "TARGET_REALLY_IWMMXT
    && (   register_operand (operands[0], DImode)
        || register_operand (operands[1], DImode))"
   "*
+{
   switch (which_alternative)
     {
-    case 0:
-    case 1:
-    case 2:
-      return \"#\";
-    case 3: case 4:
-      return output_move_double (operands, true, NULL);
-    case 5:
-      return \"wmov%?\\t%0,%1\";
-    case 6:
-      return \"tmcrr%?\\t%0,%Q1,%R1\";
-    case 7:
-      return \"tmrrc%?\\t%Q0,%R0,%1\";
-    case 8:
-      return \"wldrd%?\\t%0,%1\";
-    case 9:
-      return \"wstrd%?\\t%1,%0\";
-    case 10:
-      return \"fmdrr%?\\t%P0, %Q1, %R1\\t%@ int\";
-    case 11:
-      return \"fmrrd%?\\t%Q0, %R0, %P1\\t%@ int\";
-    case 12:
-      if (TARGET_VFP_SINGLE)
-	return \"fcpys%?\\t%0, %1\\t%@ int\;fcpys%?\\t%p0, %p1\\t%@ int\";
-      else
-	return \"fcpyd%?\\t%P0, %P1\\t%@ int\";
-    case 13: case 14:
-      return output_move_vfp (operands);
     default:
-      gcc_unreachable ();
+      return output_move_double (operands);
+    case 0:
+      return \"#\";
+    case 3:
+      return \"wmov%?\\t%0,%1\";
+    case 4:
+      return \"tmcrr%?\\t%0,%Q1,%R1\";
+    case 5:
+      return \"tmrrc%?\\t%Q0,%R0,%1\";
+    case 6:
+      return \"wldrd%?\\t%0,%1\";
+    case 7:
+      return \"wstrd%?\\t%1,%0\";
     }
-  "
-  [(set (attr "length") (cond [(eq_attr "alternative" "0,3,4") (const_int 8)
-                              (eq_attr "alternative" "1") (const_int 12)
-                              (eq_attr "alternative" "2") (const_int 16)
-                              (eq_attr "alternative" "12")
-                               (if_then_else
-                                 (eq (symbol_ref "TARGET_VFP_SINGLE") (const_int 1))
-                                 (const_int 8)
-                                 (const_int 4))]
-                              (const_int 4)))
-   (set_attr "type" "*,*,*,load_8,store_8,*,*,*,*,*,f_mcrr,f_mrrc,\
-                     ffarithd,f_loadd,f_stored")
-   (set_attr "arm_pool_range" "*,*,*,1020,*,*,*,*,*,*,*,*,*,1020,*")
-   (set_attr "arm_neg_pool_range" "*,*,*,1008,*,*,*,*,*,*,*,*,*,1008,*")]
+}"
+  [(set_attr "length"         "8,8,8,4,4,4,4,4")
+   (set_attr "type"           "*,load1,store2,*,*,*,*,*")
+   (set_attr "pool_range"     "*,1020,*,*,*,*,*,*")
+   (set_attr "neg_pool_range" "*,1012,*,*,*,*,*,*")]
 )
 
 (define_insn "*iwmmxt_movsi_insn"
-  [(set (match_operand:SI 0 "nonimmediate_operand" "=rk,r,r,r,rk, m,z,r,?z,?Uy,*t, r,*t,*t  ,*Uv")
-	(match_operand:SI 1 "general_operand"      " rk,I,K,j,mi,rk,r,z,Uy,  z, r,*t,*t,*Uvi, *t"))]
+  [(set (match_operand:SI 0 "nonimmediate_operand" "=rk,r,r,rk, m,z,r,?z,Uy,z")
+	(match_operand:SI 1 "general_operand"      "rk, I,K,mi,rk,r,z,Uy,z, z"))]
   "TARGET_REALLY_IWMMXT
    && (   register_operand (operands[0], SImode)
        || register_operand (operands[1], SImode))"
   "*
    switch (which_alternative)
-     {
-     case 0: return \"mov\\t%0, %1\";
-     case 1: return \"mov\\t%0, %1\";
-     case 2: return \"mvn\\t%0, #%B1\";
-     case 3: return \"movw\\t%0, %1\";
-     case 4: return \"ldr\\t%0, %1\";
-     case 5: return \"str\\t%1, %0\";
-     case 6: return \"tmcr\\t%0, %1\";
-     case 7: return \"tmrc\\t%0, %1\";
-     case 8: return arm_output_load_gr (operands);
-     case 9: return \"wstrw\\t%1, %0\";
-     case 10:return \"fmsr\\t%0, %1\";
-     case 11:return \"fmrs\\t%0, %1\";
-     case 12:return \"fcpys\\t%0, %1\\t%@ int\";
-     case 13: case 14:
-       return output_move_vfp (operands);
-     default:
-       gcc_unreachable ();
-     }"
-  [(set_attr "type"           "*,*,*,*,load_4,store_4,*,*,*,*,f_mcr,f_mrc,\
-                               fmov,f_loads,f_stores")
-   (set_attr "length"         "*,*,*,*,*,        *,*,*,  16,     *,*,*,*,*,*")
-   (set_attr "pool_range"     "*,*,*,*,4096,     *,*,*,1024,     *,*,*,*,1020,*")
-   (set_attr "neg_pool_range" "*,*,*,*,4084,     *,*,*,   *,  1012,*,*,*,1008,*")
+   {
+   case 0: return \"mov\\t%0, %1\";
+   case 1: return \"mov\\t%0, %1\";
+   case 2: return \"mvn\\t%0, #%B1\";
+   case 3: return \"ldr\\t%0, %1\";
+   case 4: return \"str\\t%1, %0\";
+   case 5: return \"tmcr\\t%0, %1\";
+   case 6: return \"tmrc\\t%0, %1\";
+   case 7: return arm_output_load_gr (operands);
+   case 8: return \"wstrw\\t%1, %0\";
+   default:return \"wstrw\\t%1, [sp, #-4]!\;wldrw\\t%0, [sp], #4\\t@move CG reg\";
+  }"
+  [(set_attr "type"           "*,*,*,load1,store1,*,*,load1,store1,*")
+   (set_attr "length"         "*,*,*,*,        *,*,*,  16,     *,8")
+   (set_attr "pool_range"     "*,*,*,4096,     *,*,*,1024,     *,*")
+   (set_attr "neg_pool_range" "*,*,*,4084,     *,*,*,   *,  1012,*")
    ;; Note - the "predicable" attribute is not allowed to have alternatives.
    ;; Since the wSTRw wCx instruction is not predicable, we cannot support
    ;; predicating any of the alternatives in this template.  Instead,
@@ -227,7 +162,7 @@
    case 4: return \"tmcr%?\\t%0, %1\";
    default: return \"tmrc%?\\t%0, %1\";
   }"
-  [(set_attr "type"           "*,*,load_4,store_4,*,*")
+  [(set_attr "type"           "*,*,load1,store1,*,*")
    (set_attr "pool_range"     "*,*,4096,     *,*,*")
    (set_attr "neg_pool_range" "*,*,4084,     *,*,*")]
 )
@@ -245,113 +180,23 @@
    case 3: return \"tmrrc%?\\t%Q0, %R0, %1\";
    case 4: return \"tmcrr%?\\t%0, %Q1, %R1\";
    case 5: return \"#\";
-   default: return output_move_double (operands, true, NULL);
+   default: return output_move_double (operands);
    }"
   [(set_attr "predicable" "yes")
    (set_attr "length"         "4,     4,   4,4,4,8,   8,8")
-   (set_attr "type"           "wmmx_wmov,wmmx_wstr,wmmx_wldr,wmmx_tmrrc,wmmx_tmcrr,*,load_4,store_4")
+   (set_attr "type"           "*,store1,load1,*,*,*,load1,store1")
    (set_attr "pool_range"     "*,     *, 256,*,*,*, 256,*")
-   (set_attr "neg_pool_range" "*,     *, 244,*,*,*, 244,*")]
-)
-
-(define_expand "iwmmxt_setwcgr0"
-  [(set (reg:SI WCGR0)
-	(match_operand:SI 0 "register_operand"  ""))]
-  "TARGET_REALLY_IWMMXT"
-  {}
-)
-
-(define_expand "iwmmxt_setwcgr1"
-  [(set (reg:SI WCGR1)
-	(match_operand:SI 0 "register_operand"  ""))]
-  "TARGET_REALLY_IWMMXT"
-  {}
-)
-
-(define_expand "iwmmxt_setwcgr2"
-  [(set (reg:SI WCGR2)
-	(match_operand:SI 0 "register_operand"  ""))]
-  "TARGET_REALLY_IWMMXT"
-  {}
-)
-
-(define_expand "iwmmxt_setwcgr3"
-  [(set (reg:SI WCGR3)
-	(match_operand:SI 0 "register_operand"  ""))]
-  "TARGET_REALLY_IWMMXT"
-  {}
-)
-
-(define_expand "iwmmxt_getwcgr0"
-  [(set (match_operand:SI 0 "register_operand"  "")
-        (reg:SI WCGR0))]
-  "TARGET_REALLY_IWMMXT"
-  {}
-)
-
-(define_expand "iwmmxt_getwcgr1"
-  [(set (match_operand:SI 0 "register_operand"  "")
-        (reg:SI WCGR1))]
-  "TARGET_REALLY_IWMMXT"
-  {}
-)
-
-(define_expand "iwmmxt_getwcgr2"
-  [(set (match_operand:SI 0 "register_operand"  "")
-        (reg:SI WCGR2))]
-  "TARGET_REALLY_IWMMXT"
-  {}
-)
-
-(define_expand "iwmmxt_getwcgr3"
-  [(set (match_operand:SI 0 "register_operand"  "")
-        (reg:SI WCGR3))]
-  "TARGET_REALLY_IWMMXT"
-  {}
-)
-
-(define_insn "*and<mode>3_iwmmxt"
-  [(set (match_operand:VMMX           0 "register_operand" "=y")
-        (and:VMMX (match_operand:VMMX 1 "register_operand"  "y")
-	          (match_operand:VMMX 2 "register_operand"  "y")))]
-  "TARGET_REALLY_IWMMXT"
-  "wand\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wand")]
-)
-
-(define_insn "*ior<mode>3_iwmmxt"
-  [(set (match_operand:VMMX           0 "register_operand" "=y")
-        (ior:VMMX (match_operand:VMMX 1 "register_operand"  "y")
-	          (match_operand:VMMX 2 "register_operand"  "y")))]
-  "TARGET_REALLY_IWMMXT"
-  "wor\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wor")]
-)
-
-(define_insn "*xor<mode>3_iwmmxt"
-  [(set (match_operand:VMMX           0 "register_operand" "=y")
-        (xor:VMMX (match_operand:VMMX 1 "register_operand"  "y")
-	          (match_operand:VMMX 2 "register_operand"  "y")))]
-  "TARGET_REALLY_IWMMXT"
-  "wxor\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wxor")]
-)
-
+   (set_attr "neg_pool_range" "*,     *, 244,*,*,*, 244,*")])
 
 ;; Vector add/subtract
 
 (define_insn "*add<mode>3_iwmmxt"
   [(set (match_operand:VMMX            0 "register_operand" "=y")
-        (plus:VMMX (match_operand:VMMX 1 "register_operand" "y")
-	           (match_operand:VMMX 2 "register_operand" "y")))]
+        (plus:VMMX (match_operand:VMMX 1 "register_operand"  "y")
+	           (match_operand:VMMX 2 "register_operand"  "y")))]
   "TARGET_REALLY_IWMMXT"
   "wadd<MMX_char>%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wadd")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "ssaddv8qi3"
   [(set (match_operand:V8QI               0 "register_operand" "=y")
@@ -359,9 +204,7 @@
 		      (match_operand:V8QI 2 "register_operand"  "y")))]
   "TARGET_REALLY_IWMMXT"
   "waddbss%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wadd")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "ssaddv4hi3"
   [(set (match_operand:V4HI               0 "register_operand" "=y")
@@ -369,9 +212,7 @@
 		      (match_operand:V4HI 2 "register_operand"  "y")))]
   "TARGET_REALLY_IWMMXT"
   "waddhss%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wadd")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "ssaddv2si3"
   [(set (match_operand:V2SI               0 "register_operand" "=y")
@@ -379,9 +220,7 @@
 		      (match_operand:V2SI 2 "register_operand"  "y")))]
   "TARGET_REALLY_IWMMXT"
   "waddwss%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wadd")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "usaddv8qi3"
   [(set (match_operand:V8QI               0 "register_operand" "=y")
@@ -389,9 +228,7 @@
 		      (match_operand:V8QI 2 "register_operand"  "y")))]
   "TARGET_REALLY_IWMMXT"
   "waddbus%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wadd")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "usaddv4hi3"
   [(set (match_operand:V4HI               0 "register_operand" "=y")
@@ -399,9 +236,7 @@
 		      (match_operand:V4HI 2 "register_operand"  "y")))]
   "TARGET_REALLY_IWMMXT"
   "waddhus%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wadd")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "usaddv2si3"
   [(set (match_operand:V2SI               0 "register_operand" "=y")
@@ -409,9 +244,7 @@
 		      (match_operand:V2SI 2 "register_operand"  "y")))]
   "TARGET_REALLY_IWMMXT"
   "waddwus%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wadd")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "*sub<mode>3_iwmmxt"
   [(set (match_operand:VMMX             0 "register_operand" "=y")
@@ -419,9 +252,7 @@
 		    (match_operand:VMMX 2 "register_operand"  "y")))]
   "TARGET_REALLY_IWMMXT"
   "wsub<MMX_char>%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wsub")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "sssubv8qi3"
   [(set (match_operand:V8QI                0 "register_operand" "=y")
@@ -429,9 +260,7 @@
 		       (match_operand:V8QI 2 "register_operand"  "y")))]
   "TARGET_REALLY_IWMMXT"
   "wsubbss%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wsub")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "sssubv4hi3"
   [(set (match_operand:V4HI                0 "register_operand" "=y")
@@ -439,9 +268,7 @@
 		       (match_operand:V4HI 2 "register_operand" "y")))]
   "TARGET_REALLY_IWMMXT"
   "wsubhss%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wsub")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "sssubv2si3"
   [(set (match_operand:V2SI                0 "register_operand" "=y")
@@ -449,9 +276,7 @@
 		       (match_operand:V2SI 2 "register_operand" "y")))]
   "TARGET_REALLY_IWMMXT"
   "wsubwss%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wsub")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "ussubv8qi3"
   [(set (match_operand:V8QI                0 "register_operand" "=y")
@@ -459,9 +284,7 @@
 		       (match_operand:V8QI 2 "register_operand" "y")))]
   "TARGET_REALLY_IWMMXT"
   "wsubbus%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wsub")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "ussubv4hi3"
   [(set (match_operand:V4HI                0 "register_operand" "=y")
@@ -469,9 +292,7 @@
 		       (match_operand:V4HI 2 "register_operand" "y")))]
   "TARGET_REALLY_IWMMXT"
   "wsubhus%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wsub")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "ussubv2si3"
   [(set (match_operand:V2SI                0 "register_operand" "=y")
@@ -479,9 +300,7 @@
 		       (match_operand:V2SI 2 "register_operand" "y")))]
   "TARGET_REALLY_IWMMXT"
   "wsubwus%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wsub")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "*mulv4hi3_iwmmxt"
   [(set (match_operand:V4HI            0 "register_operand" "=y")
@@ -489,77 +308,63 @@
 		   (match_operand:V4HI 2 "register_operand" "y")))]
   "TARGET_REALLY_IWMMXT"
   "wmulul%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wmul")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "smulv4hi3_highpart"
-  [(set (match_operand:V4HI 0 "register_operand" "=y")
-	  (truncate:V4HI
-	    (lshiftrt:V4SI
-	      (mult:V4SI (sign_extend:V4SI (match_operand:V4HI 1 "register_operand" "y"))
-	                 (sign_extend:V4SI (match_operand:V4HI 2 "register_operand" "y")))
-	      (const_int 16))))]
+  [(set (match_operand:V4HI                                0 "register_operand" "=y")
+	(truncate:V4HI
+	 (lshiftrt:V4SI
+	  (mult:V4SI (sign_extend:V4SI (match_operand:V4HI 1 "register_operand" "y"))
+		     (sign_extend:V4SI (match_operand:V4HI 2 "register_operand" "y")))
+	  (const_int 16))))]
   "TARGET_REALLY_IWMMXT"
   "wmulsm%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wmul")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "umulv4hi3_highpart"
-  [(set (match_operand:V4HI 0 "register_operand" "=y")
-	  (truncate:V4HI
-	    (lshiftrt:V4SI
-	      (mult:V4SI (zero_extend:V4SI (match_operand:V4HI 1 "register_operand" "y"))
-	                 (zero_extend:V4SI (match_operand:V4HI 2 "register_operand" "y")))
-	      (const_int 16))))]
+  [(set (match_operand:V4HI                                0 "register_operand" "=y")
+	(truncate:V4HI
+	 (lshiftrt:V4SI
+	  (mult:V4SI (zero_extend:V4SI (match_operand:V4HI 1 "register_operand" "y"))
+		     (zero_extend:V4SI (match_operand:V4HI 2 "register_operand" "y")))
+	  (const_int 16))))]
   "TARGET_REALLY_IWMMXT"
   "wmulum%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wmul")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wmacs"
   [(set (match_operand:DI               0 "register_operand" "=y")
 	(unspec:DI [(match_operand:DI   1 "register_operand" "0")
-	            (match_operand:V4HI 2 "register_operand" "y")
-	            (match_operand:V4HI 3 "register_operand" "y")] UNSPEC_WMACS))]
+		    (match_operand:V4HI 2 "register_operand" "y")
+		    (match_operand:V4HI 3 "register_operand" "y")] UNSPEC_WMACS))]
   "TARGET_REALLY_IWMMXT"
   "wmacs%?\\t%0, %2, %3"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wmac")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wmacsz"
   [(set (match_operand:DI               0 "register_operand" "=y")
 	(unspec:DI [(match_operand:V4HI 1 "register_operand" "y")
-	            (match_operand:V4HI 2 "register_operand" "y")] UNSPEC_WMACSZ))]
+		    (match_operand:V4HI 2 "register_operand" "y")] UNSPEC_WMACSZ))]
   "TARGET_REALLY_IWMMXT"
   "wmacsz%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wmac")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wmacu"
   [(set (match_operand:DI               0 "register_operand" "=y")
 	(unspec:DI [(match_operand:DI   1 "register_operand" "0")
-	            (match_operand:V4HI 2 "register_operand" "y")
-	            (match_operand:V4HI 3 "register_operand" "y")] UNSPEC_WMACU))]
+		    (match_operand:V4HI 2 "register_operand" "y")
+		    (match_operand:V4HI 3 "register_operand" "y")] UNSPEC_WMACU))]
   "TARGET_REALLY_IWMMXT"
   "wmacu%?\\t%0, %2, %3"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wmac")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wmacuz"
   [(set (match_operand:DI               0 "register_operand" "=y")
 	(unspec:DI [(match_operand:V4HI 1 "register_operand" "y")
-	            (match_operand:V4HI 2 "register_operand" "y")] UNSPEC_WMACUZ))]
+		    (match_operand:V4HI 2 "register_operand" "y")] UNSPEC_WMACUZ))]
   "TARGET_REALLY_IWMMXT"
   "wmacuz%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wmac")]
-)
+  [(set_attr "predicable" "yes")])
 
 ;; Same as xordi3, but don't show input operands so that we don't think
 ;; they are live.
@@ -568,207 +373,168 @@
         (unspec:DI [(const_int 0)] UNSPEC_CLRDI))]
   "TARGET_REALLY_IWMMXT"
   "wxor%?\\t%0, %0, %0"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wxor")]
-)
+  [(set_attr "predicable" "yes")])
 
 ;; Seems like cse likes to generate these, so we have to support them.
 
-(define_insn "iwmmxt_clrv8qi"
-  [(set (match_operand:V8QI 0 "s_register_operand" "=y")
+(define_insn "*iwmmxt_clrv8qi"
+  [(set (match_operand:V8QI 0 "register_operand" "=y")
         (const_vector:V8QI [(const_int 0) (const_int 0)
 			    (const_int 0) (const_int 0)
 			    (const_int 0) (const_int 0)
 			    (const_int 0) (const_int 0)]))]
   "TARGET_REALLY_IWMMXT"
   "wxor%?\\t%0, %0, %0"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wxor")]
-)
+  [(set_attr "predicable" "yes")])
 
-(define_insn "iwmmxt_clrv4hi"
-  [(set (match_operand:V4HI 0 "s_register_operand" "=y")
+(define_insn "*iwmmxt_clrv4hi"
+  [(set (match_operand:V4HI 0 "register_operand" "=y")
         (const_vector:V4HI [(const_int 0) (const_int 0)
 			    (const_int 0) (const_int 0)]))]
   "TARGET_REALLY_IWMMXT"
   "wxor%?\\t%0, %0, %0"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wxor")]
-)
+  [(set_attr "predicable" "yes")])
 
-(define_insn "iwmmxt_clrv2si"
+(define_insn "*iwmmxt_clrv2si"
   [(set (match_operand:V2SI 0 "register_operand" "=y")
         (const_vector:V2SI [(const_int 0) (const_int 0)]))]
   "TARGET_REALLY_IWMMXT"
   "wxor%?\\t%0, %0, %0"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wxor")]
-)
+  [(set_attr "predicable" "yes")])
 
 ;; Unsigned averages/sum of absolute differences
 
 (define_insn "iwmmxt_uavgrndv8qi3"
-  [(set (match_operand:V8QI                                    0 "register_operand" "=y")
-        (truncate:V8QI
-	  (lshiftrt:V8HI
-	    (plus:V8HI
-	      (plus:V8HI (zero_extend:V8HI (match_operand:V8QI 1 "register_operand" "y"))
-	                 (zero_extend:V8HI (match_operand:V8QI 2 "register_operand" "y")))
-	      (const_vector:V8HI [(const_int 1)
-	                          (const_int 1)
-	                          (const_int 1)
-	                          (const_int 1)
-	                          (const_int 1)
-	                          (const_int 1)
-	                          (const_int 1)
-	                          (const_int 1)]))
-	    (const_int 1))))]
+  [(set (match_operand:V8QI              0 "register_operand" "=y")
+        (ashiftrt:V8QI
+	 (plus:V8QI (plus:V8QI
+		     (match_operand:V8QI 1 "register_operand" "y")
+		     (match_operand:V8QI 2 "register_operand" "y"))
+		    (const_vector:V8QI [(const_int 1)
+					(const_int 1)
+					(const_int 1)
+					(const_int 1)
+					(const_int 1)
+					(const_int 1)
+					(const_int 1)
+					(const_int 1)]))
+	 (const_int 1)))]
   "TARGET_REALLY_IWMMXT"
   "wavg2br%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wavg2")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_uavgrndv4hi3"
-  [(set (match_operand:V4HI                                    0 "register_operand" "=y")
-        (truncate:V4HI
-	  (lshiftrt:V4SI
-            (plus:V4SI
-	      (plus:V4SI (zero_extend:V4SI (match_operand:V4HI 1 "register_operand" "y"))
-	                 (zero_extend:V4SI (match_operand:V4HI 2 "register_operand" "y")))
-	      (const_vector:V4SI [(const_int 1)
-	                          (const_int 1)
-	                          (const_int 1)
-	                          (const_int 1)]))
-	    (const_int 1))))]
+  [(set (match_operand:V4HI              0 "register_operand" "=y")
+        (ashiftrt:V4HI
+	 (plus:V4HI (plus:V4HI
+		     (match_operand:V4HI 1 "register_operand" "y")
+		     (match_operand:V4HI 2 "register_operand" "y"))
+		    (const_vector:V4HI [(const_int 1)
+					(const_int 1)
+					(const_int 1)
+					(const_int 1)]))
+	 (const_int 1)))]
   "TARGET_REALLY_IWMMXT"
   "wavg2hr%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wavg2")]
-)
+  [(set_attr "predicable" "yes")])
+
 
 (define_insn "iwmmxt_uavgv8qi3"
-  [(set (match_operand:V8QI                                  0 "register_operand" "=y")
-        (truncate:V8QI
-	  (lshiftrt:V8HI
-	    (plus:V8HI (zero_extend:V8HI (match_operand:V8QI 1 "register_operand" "y"))
-	               (zero_extend:V8HI (match_operand:V8QI 2 "register_operand" "y")))
-	    (const_int 1))))]
+  [(set (match_operand:V8QI                 0 "register_operand" "=y")
+        (ashiftrt:V8QI (plus:V8QI
+			(match_operand:V8QI 1 "register_operand" "y")
+			(match_operand:V8QI 2 "register_operand" "y"))
+		       (const_int 1)))]
   "TARGET_REALLY_IWMMXT"
   "wavg2b%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wavg2")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_uavgv4hi3"
-  [(set (match_operand:V4HI                                  0 "register_operand" "=y")
-        (truncate:V4HI
-	  (lshiftrt:V4SI
-	    (plus:V4SI (zero_extend:V4SI (match_operand:V4HI 1 "register_operand" "y"))
-	               (zero_extend:V4SI (match_operand:V4HI 2 "register_operand" "y")))
-	    (const_int 1))))]
+  [(set (match_operand:V4HI                 0 "register_operand" "=y")
+        (ashiftrt:V4HI (plus:V4HI
+			(match_operand:V4HI 1 "register_operand" "y")
+			(match_operand:V4HI 2 "register_operand" "y"))
+		       (const_int 1)))]
   "TARGET_REALLY_IWMMXT"
   "wavg2h%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wavg2")]
-)
+  [(set_attr "predicable" "yes")])
+
+(define_insn "iwmmxt_psadbw"
+  [(set (match_operand:V8QI                       0 "register_operand" "=y")
+        (abs:V8QI (minus:V8QI (match_operand:V8QI 1 "register_operand" "y")
+			      (match_operand:V8QI 2 "register_operand" "y"))))]
+  "TARGET_REALLY_IWMMXT"
+  "psadbw%?\\t%0, %1, %2"
+  [(set_attr "predicable" "yes")])
+
 
 ;; Insert/extract/shuffle
 
 (define_insn "iwmmxt_tinsrb"
-  [(set (match_operand:V8QI                0 "register_operand" "=y")
-        (vec_merge:V8QI
-	  (vec_duplicate:V8QI
-	    (truncate:QI (match_operand:SI 2 "nonimmediate_operand" "r")))
-	  (match_operand:V8QI              1 "register_operand"     "0")
-	  (match_operand:SI                3 "immediate_operand"    "i")))]
+  [(set (match_operand:V8QI                             0 "register_operand"    "=y")
+        (vec_merge:V8QI (match_operand:V8QI             1 "register_operand"     "0")
+			(vec_duplicate:V8QI
+			 (truncate:QI (match_operand:SI 2 "nonimmediate_operand" "r")))
+			(match_operand:SI               3 "immediate_operand"    "i")))]
   "TARGET_REALLY_IWMMXT"
-  "*
-   {
-     return arm_output_iwmmxt_tinsr (operands);
-   }
-   "
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_tinsr")]
-)
+  "tinsrb%?\\t%0, %2, %3"
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_tinsrh"
-  [(set (match_operand:V4HI                0 "register_operand"    "=y")
-        (vec_merge:V4HI
-          (vec_duplicate:V4HI
-            (truncate:HI (match_operand:SI 2 "nonimmediate_operand" "r")))
-	  (match_operand:V4HI              1 "register_operand"     "0")
-	  (match_operand:SI                3 "immediate_operand"    "i")))]
+  [(set (match_operand:V4HI                             0 "register_operand"    "=y")
+        (vec_merge:V4HI (match_operand:V4HI             1 "register_operand"     "0")
+			(vec_duplicate:V4HI
+			 (truncate:HI (match_operand:SI 2 "nonimmediate_operand" "r")))
+			(match_operand:SI               3 "immediate_operand"    "i")))]
   "TARGET_REALLY_IWMMXT"
-  "*
-   {
-     return arm_output_iwmmxt_tinsr (operands);
-   }
-   "
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_tinsr")]
-)
+  "tinsrh%?\\t%0, %2, %3"
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_tinsrw"
-  [(set (match_operand:V2SI   0 "register_operand"    "=y")
-        (vec_merge:V2SI
-          (vec_duplicate:V2SI
-            (match_operand:SI 2 "nonimmediate_operand" "r"))
-          (match_operand:V2SI 1 "register_operand"     "0")
-          (match_operand:SI   3 "immediate_operand"    "i")))]
+  [(set (match_operand:V2SI                 0 "register_operand"    "=y")
+        (vec_merge:V2SI (match_operand:V2SI 1 "register_operand"     "0")
+			(vec_duplicate:V2SI
+			 (match_operand:SI  2 "nonimmediate_operand" "r"))
+			(match_operand:SI   3 "immediate_operand"    "i")))]
   "TARGET_REALLY_IWMMXT"
-  "*
-   {
-     return arm_output_iwmmxt_tinsr (operands);
-   }
-   "
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_tinsr")]
-)
+  "tinsrw%?\\t%0, %2, %3"
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_textrmub"
-  [(set (match_operand:SI                                   0 "register_operand" "=r")
-        (zero_extend:SI (vec_select:QI (match_operand:V8QI  1 "register_operand" "y")
-		                       (parallel
-				         [(match_operand:SI 2 "immediate_operand" "i")]))))]
+  [(set (match_operand:SI                                  0 "register_operand" "=r")
+        (zero_extend:SI (vec_select:QI (match_operand:V8QI 1 "register_operand" "y")
+				       (parallel
+					[(match_operand:SI 2 "immediate_operand" "i")]))))]
   "TARGET_REALLY_IWMMXT"
   "textrmub%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_textrm")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_textrmsb"
-  [(set (match_operand:SI                                   0 "register_operand" "=r")
-        (sign_extend:SI (vec_select:QI (match_operand:V8QI  1 "register_operand" "y")
+  [(set (match_operand:SI                                  0 "register_operand" "=r")
+        (sign_extend:SI (vec_select:QI (match_operand:V8QI 1 "register_operand" "y")
 				       (parallel
-				         [(match_operand:SI 2 "immediate_operand" "i")]))))]
+					[(match_operand:SI 2 "immediate_operand" "i")]))))]
   "TARGET_REALLY_IWMMXT"
   "textrmsb%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_textrm")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_textrmuh"
-  [(set (match_operand:SI                                   0 "register_operand" "=r")
-        (zero_extend:SI (vec_select:HI (match_operand:V4HI  1 "register_operand" "y")
+  [(set (match_operand:SI                                  0 "register_operand" "=r")
+        (zero_extend:SI (vec_select:HI (match_operand:V4HI 1 "register_operand" "y")
 				       (parallel
-				         [(match_operand:SI 2 "immediate_operand" "i")]))))]
+					[(match_operand:SI 2 "immediate_operand" "i")]))))]
   "TARGET_REALLY_IWMMXT"
   "textrmuh%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_textrm")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_textrmsh"
-  [(set (match_operand:SI                                   0 "register_operand" "=r")
-        (sign_extend:SI (vec_select:HI (match_operand:V4HI  1 "register_operand" "y")
+  [(set (match_operand:SI                                  0 "register_operand" "=r")
+        (sign_extend:SI (vec_select:HI (match_operand:V4HI 1 "register_operand" "y")
 				       (parallel
-				         [(match_operand:SI 2 "immediate_operand" "i")]))))]
+					[(match_operand:SI 2 "immediate_operand" "i")]))))]
   "TARGET_REALLY_IWMMXT"
   "textrmsh%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_textrm")]
-)
+  [(set_attr "predicable" "yes")])
 
 ;; There are signed/unsigned variants of this instruction, but they are
 ;; pointless.
@@ -778,9 +544,7 @@
 		       (parallel [(match_operand:SI 2 "immediate_operand" "i")])))]
   "TARGET_REALLY_IWMMXT"
   "textrmsw%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_textrm")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wshufh"
   [(set (match_operand:V4HI               0 "register_operand" "=y")
@@ -788,120 +552,104 @@
 		      (match_operand:SI   2 "immediate_operand" "i")] UNSPEC_WSHUFH))]
   "TARGET_REALLY_IWMMXT"
   "wshufh%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wshufh")]
-)
+  [(set_attr "predicable" "yes")])
 
 ;; Mask-generating comparisons
 ;;
 ;; Note - you cannot use patterns like these here:
 ;;
-;;   (set (match:<vector>) (<comparator>:<vector> (match:<vector>) (match:<vector>)))
+;;   (set:<vector> (match:<vector>) (<comparator>:<vector> (match:<vector>) (match:<vector>)))
 ;;
 ;; Because GCC will assume that the truth value (1 or 0) is installed
 ;; into the entire destination vector, (with the '1' going into the least
 ;; significant element of the vector).  This is not how these instructions
 ;; behave.
+;;
+;; Unfortunately the current patterns are illegal.  They are SET insns
+;; without a SET in them.  They work in most cases for ordinary code
+;; generation, but there are circumstances where they can cause gcc to fail.
+;; XXX - FIXME.
 
 (define_insn "eqv8qi3"
-  [(set (match_operand:V8QI                        0 "register_operand" "=y")
-	(unspec_volatile:V8QI [(match_operand:V8QI 1 "register_operand"  "y")
-	                       (match_operand:V8QI 2 "register_operand"  "y")]
-	                      VUNSPEC_WCMP_EQ))]
+  [(unspec_volatile [(match_operand:V8QI 0 "register_operand" "=y")
+		     (match_operand:V8QI 1 "register_operand"  "y")
+		     (match_operand:V8QI 2 "register_operand"  "y")]
+		    VUNSPEC_WCMP_EQ)]
   "TARGET_REALLY_IWMMXT"
   "wcmpeqb%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wcmpeq")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "eqv4hi3"
-  [(set (match_operand:V4HI                        0 "register_operand" "=y")
-	(unspec_volatile:V4HI [(match_operand:V4HI 1 "register_operand"  "y")
-		               (match_operand:V4HI 2 "register_operand"  "y")]
-	                       VUNSPEC_WCMP_EQ))]
+  [(unspec_volatile [(match_operand:V4HI 0 "register_operand" "=y")
+		     (match_operand:V4HI 1 "register_operand"  "y")
+		     (match_operand:V4HI 2 "register_operand"  "y")]
+		    VUNSPEC_WCMP_EQ)]
   "TARGET_REALLY_IWMMXT"
   "wcmpeqh%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wcmpeq")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "eqv2si3"
-  [(set (match_operand:V2SI    0 "register_operand" "=y")
-	(unspec_volatile:V2SI
-	  [(match_operand:V2SI 1 "register_operand"  "y")
-	   (match_operand:V2SI 2 "register_operand"  "y")]
-           VUNSPEC_WCMP_EQ))]
+  [(unspec_volatile:V2SI [(match_operand:V2SI 0 "register_operand" "=y")
+			  (match_operand:V2SI 1 "register_operand"  "y")
+			  (match_operand:V2SI 2 "register_operand"  "y")]
+			 VUNSPEC_WCMP_EQ)]
   "TARGET_REALLY_IWMMXT"
   "wcmpeqw%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wcmpeq")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "gtuv8qi3"
-  [(set (match_operand:V8QI                        0 "register_operand" "=y")
-	(unspec_volatile:V8QI [(match_operand:V8QI 1 "register_operand"  "y")
-	                       (match_operand:V8QI 2 "register_operand"  "y")]
-	                       VUNSPEC_WCMP_GTU))]
+  [(unspec_volatile [(match_operand:V8QI 0 "register_operand" "=y")
+		     (match_operand:V8QI 1 "register_operand"  "y")
+		     (match_operand:V8QI 2 "register_operand"  "y")]
+		    VUNSPEC_WCMP_GTU)]
   "TARGET_REALLY_IWMMXT"
   "wcmpgtub%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wcmpgt")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "gtuv4hi3"
-  [(set (match_operand:V4HI                        0 "register_operand" "=y")
-        (unspec_volatile:V4HI [(match_operand:V4HI 1 "register_operand"  "y")
-                               (match_operand:V4HI 2 "register_operand"  "y")]
-                               VUNSPEC_WCMP_GTU))]
+  [(unspec_volatile [(match_operand:V4HI 0 "register_operand" "=y")
+		     (match_operand:V4HI 1 "register_operand"  "y")
+		     (match_operand:V4HI 2 "register_operand"  "y")]
+		    VUNSPEC_WCMP_GTU)]
   "TARGET_REALLY_IWMMXT"
   "wcmpgtuh%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wcmpgt")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "gtuv2si3"
-  [(set (match_operand:V2SI                        0 "register_operand" "=y")
-	(unspec_volatile:V2SI [(match_operand:V2SI 1 "register_operand"  "y")
-	                       (match_operand:V2SI 2 "register_operand"  "y")]
-	                       VUNSPEC_WCMP_GTU))]
+  [(unspec_volatile [(match_operand:V2SI 0 "register_operand" "=y")
+		     (match_operand:V2SI 1 "register_operand"  "y")
+		     (match_operand:V2SI 2 "register_operand"  "y")]
+		    VUNSPEC_WCMP_GTU)]
   "TARGET_REALLY_IWMMXT"
   "wcmpgtuw%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wcmpgt")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "gtv8qi3"
-  [(set (match_operand:V8QI                        0 "register_operand" "=y")
-	(unspec_volatile:V8QI [(match_operand:V8QI 1 "register_operand"  "y")
-	                       (match_operand:V8QI 2 "register_operand"  "y")]
-	                       VUNSPEC_WCMP_GT))]
+  [(unspec_volatile [(match_operand:V8QI 0 "register_operand" "=y")
+		     (match_operand:V8QI 1 "register_operand"  "y")
+		     (match_operand:V8QI 2 "register_operand"  "y")]
+		    VUNSPEC_WCMP_GT)]
   "TARGET_REALLY_IWMMXT"
   "wcmpgtsb%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wcmpgt")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "gtv4hi3"
-  [(set (match_operand:V4HI                        0 "register_operand" "=y")
-	(unspec_volatile:V4HI [(match_operand:V4HI 1 "register_operand"  "y")
-	                       (match_operand:V4HI 2 "register_operand"  "y")]
-	                       VUNSPEC_WCMP_GT))]
+  [(unspec_volatile [(match_operand:V4HI 0 "register_operand" "=y")
+		     (match_operand:V4HI 1 "register_operand"  "y")
+		     (match_operand:V4HI 2 "register_operand"  "y")]
+		    VUNSPEC_WCMP_GT)]
   "TARGET_REALLY_IWMMXT"
   "wcmpgtsh%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wcmpgt")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "gtv2si3"
-  [(set (match_operand:V2SI                        0 "register_operand" "=y")
-	(unspec_volatile:V2SI [(match_operand:V2SI 1 "register_operand"  "y")
-	                       (match_operand:V2SI 2 "register_operand"  "y")]
-	                       VUNSPEC_WCMP_GT))]
+  [(unspec_volatile [(match_operand:V2SI 0 "register_operand" "=y")
+		     (match_operand:V2SI 1 "register_operand"  "y")
+		     (match_operand:V2SI 2 "register_operand"  "y")]
+		    VUNSPEC_WCMP_GT)]
   "TARGET_REALLY_IWMMXT"
   "wcmpgtsw%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wcmpgt")]
-)
+  [(set_attr "predicable" "yes")])
 
 ;; Max/min insns
 
@@ -911,9 +659,7 @@
 		   (match_operand:VMMX 2 "register_operand" "y")))]
   "TARGET_REALLY_IWMMXT"
   "wmaxs<MMX_char>%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wmax")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "*umax<mode>3_iwmmxt"
   [(set (match_operand:VMMX            0 "register_operand" "=y")
@@ -921,9 +667,7 @@
 		   (match_operand:VMMX 2 "register_operand" "y")))]
   "TARGET_REALLY_IWMMXT"
   "wmaxu<MMX_char>%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wmax")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "*smin<mode>3_iwmmxt"
   [(set (match_operand:VMMX            0 "register_operand" "=y")
@@ -931,9 +675,7 @@
 		   (match_operand:VMMX 2 "register_operand" "y")))]
   "TARGET_REALLY_IWMMXT"
   "wmins<MMX_char>%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wmin")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "*umin<mode>3_iwmmxt"
   [(set (match_operand:VMMX            0 "register_operand" "=y")
@@ -941,835 +683,657 @@
 		   (match_operand:VMMX 2 "register_operand" "y")))]
   "TARGET_REALLY_IWMMXT"
   "wminu<MMX_char>%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wmin")]
-)
+  [(set_attr "predicable" "yes")])
 
 ;; Pack/unpack insns.
 
 (define_insn "iwmmxt_wpackhss"
-  [(set (match_operand:V8QI                     0 "register_operand" "=y")
+  [(set (match_operand:V8QI                    0 "register_operand" "=y")
 	(vec_concat:V8QI
-	  (ss_truncate:V4QI (match_operand:V4HI 1 "register_operand" "y"))
-	  (ss_truncate:V4QI (match_operand:V4HI 2 "register_operand" "y"))))]
+	 (ss_truncate:V4QI (match_operand:V4HI 1 "register_operand" "y"))
+	 (ss_truncate:V4QI (match_operand:V4HI 2 "register_operand" "y"))))]
   "TARGET_REALLY_IWMMXT"
   "wpackhss%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wpack")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wpackwss"
-  [(set (match_operand:V4HI                     0 "register_operand" "=y")
-        (vec_concat:V4HI
-	  (ss_truncate:V2HI (match_operand:V2SI 1 "register_operand" "y"))
-	  (ss_truncate:V2HI (match_operand:V2SI 2 "register_operand" "y"))))]
+  [(set (match_operand:V4HI                    0 "register_operand" "=y")
+	(vec_concat:V4HI
+	 (ss_truncate:V2HI (match_operand:V2SI 1 "register_operand" "y"))
+	 (ss_truncate:V2HI (match_operand:V2SI 2 "register_operand" "y"))))]
   "TARGET_REALLY_IWMMXT"
   "wpackwss%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wpack")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wpackdss"
-  [(set (match_operand:V2SI                 0 "register_operand" "=y")
+  [(set (match_operand:V2SI                0 "register_operand" "=y")
 	(vec_concat:V2SI
-	  (ss_truncate:SI (match_operand:DI 1 "register_operand" "y"))
-	  (ss_truncate:SI (match_operand:DI 2 "register_operand" "y"))))]
+	 (ss_truncate:SI (match_operand:DI 1 "register_operand" "y"))
+	 (ss_truncate:SI (match_operand:DI 2 "register_operand" "y"))))]
   "TARGET_REALLY_IWMMXT"
   "wpackdss%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wpack")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wpackhus"
-  [(set (match_operand:V8QI                     0 "register_operand" "=y")
+  [(set (match_operand:V8QI                    0 "register_operand" "=y")
 	(vec_concat:V8QI
-	  (us_truncate:V4QI (match_operand:V4HI 1 "register_operand" "y"))
-	  (us_truncate:V4QI (match_operand:V4HI 2 "register_operand" "y"))))]
+	 (us_truncate:V4QI (match_operand:V4HI 1 "register_operand" "y"))
+	 (us_truncate:V4QI (match_operand:V4HI 2 "register_operand" "y"))))]
   "TARGET_REALLY_IWMMXT"
   "wpackhus%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wpack")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wpackwus"
-  [(set (match_operand:V4HI                     0 "register_operand" "=y")
+  [(set (match_operand:V4HI                    0 "register_operand" "=y")
 	(vec_concat:V4HI
-	  (us_truncate:V2HI (match_operand:V2SI 1 "register_operand" "y"))
-	  (us_truncate:V2HI (match_operand:V2SI 2 "register_operand" "y"))))]
+	 (us_truncate:V2HI (match_operand:V2SI 1 "register_operand" "y"))
+	 (us_truncate:V2HI (match_operand:V2SI 2 "register_operand" "y"))))]
   "TARGET_REALLY_IWMMXT"
   "wpackwus%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wpack")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wpackdus"
-  [(set (match_operand:V2SI                 0 "register_operand" "=y")
+  [(set (match_operand:V2SI                0 "register_operand" "=y")
 	(vec_concat:V2SI
-	  (us_truncate:SI (match_operand:DI 1 "register_operand" "y"))
-	  (us_truncate:SI (match_operand:DI 2 "register_operand" "y"))))]
+	 (us_truncate:SI (match_operand:DI 1 "register_operand" "y"))
+	 (us_truncate:SI (match_operand:DI 2 "register_operand" "y"))))]
   "TARGET_REALLY_IWMMXT"
   "wpackdus%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wpack")]
-)
+  [(set_attr "predicable" "yes")])
+
 
 (define_insn "iwmmxt_wunpckihb"
-  [(set (match_operand:V8QI                                      0 "register_operand" "=y")
+  [(set (match_operand:V8QI                   0 "register_operand" "=y")
 	(vec_merge:V8QI
-	  (vec_select:V8QI (match_operand:V8QI 1 "register_operand" "y")
-		           (parallel [(const_int 4)
-			              (const_int 0)
-			              (const_int 5)
-			              (const_int 1)
-			              (const_int 6)
-			              (const_int 2)
-			              (const_int 7)
-			              (const_int 3)]))
-          (vec_select:V8QI (match_operand:V8QI 2 "register_operand" "y")
-			   (parallel [(const_int 0)
-			              (const_int 4)
-			              (const_int 1)
-			              (const_int 5)
-			              (const_int 2)
-			              (const_int 6)
-			              (const_int 3)
-			              (const_int 7)]))
-          (const_int 85)))]
+	 (vec_select:V8QI (match_operand:V8QI 1 "register_operand" "y")
+			  (parallel [(const_int 4)
+				     (const_int 0)
+				     (const_int 5)
+				     (const_int 1)
+				     (const_int 6)
+				     (const_int 2)
+				     (const_int 7)
+				     (const_int 3)]))
+	 (vec_select:V8QI (match_operand:V8QI 2 "register_operand" "y")
+			  (parallel [(const_int 0)
+				     (const_int 4)
+				     (const_int 1)
+				     (const_int 5)
+				     (const_int 2)
+				     (const_int 6)
+				     (const_int 3)
+				     (const_int 7)]))
+	 (const_int 85)))]
   "TARGET_REALLY_IWMMXT"
   "wunpckihb%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wunpckih")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wunpckihh"
-  [(set (match_operand:V4HI                                      0 "register_operand" "=y")
+  [(set (match_operand:V4HI                   0 "register_operand" "=y")
 	(vec_merge:V4HI
-	  (vec_select:V4HI (match_operand:V4HI 1 "register_operand" "y")
-		           (parallel [(const_int 2)
-			              (const_int 0)
-			              (const_int 3)
-			              (const_int 1)]))
-	  (vec_select:V4HI (match_operand:V4HI 2 "register_operand" "y")
-		           (parallel [(const_int 0)
-			              (const_int 2)
-			              (const_int 1)
-			              (const_int 3)]))
-          (const_int 5)))]
+	 (vec_select:V4HI (match_operand:V4HI 1 "register_operand" "y")
+			  (parallel [(const_int 0)
+				     (const_int 2)
+				     (const_int 1)
+				     (const_int 3)]))
+	 (vec_select:V4HI (match_operand:V4HI 2 "register_operand" "y")
+			  (parallel [(const_int 2)
+				     (const_int 0)
+				     (const_int 3)
+				     (const_int 1)]))
+	 (const_int 5)))]
   "TARGET_REALLY_IWMMXT"
   "wunpckihh%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wunpckih")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wunpckihw"
-  [(set (match_operand:V2SI                    0 "register_operand" "=y")
+  [(set (match_operand:V2SI                   0 "register_operand" "=y")
 	(vec_merge:V2SI
-	  (vec_select:V2SI (match_operand:V2SI 1 "register_operand" "y")
-		           (parallel [(const_int 1)
-		                      (const_int 0)]))
-          (vec_select:V2SI (match_operand:V2SI 2 "register_operand" "y")
-		           (parallel [(const_int 0)
-			              (const_int 1)]))
-          (const_int 1)))]
+	 (vec_select:V2SI (match_operand:V2SI 1 "register_operand" "y")
+			  (parallel [(const_int 0)
+				     (const_int 1)]))
+	 (vec_select:V2SI (match_operand:V2SI 2 "register_operand" "y")
+			  (parallel [(const_int 1)
+				     (const_int 0)]))
+	 (const_int 1)))]
   "TARGET_REALLY_IWMMXT"
   "wunpckihw%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wunpckih")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wunpckilb"
-  [(set (match_operand:V8QI                                      0 "register_operand" "=y")
+  [(set (match_operand:V8QI                   0 "register_operand" "=y")
 	(vec_merge:V8QI
-	  (vec_select:V8QI (match_operand:V8QI 1 "register_operand" "y")
-		           (parallel [(const_int 0)
-			              (const_int 4)
-			              (const_int 1)
-			              (const_int 5)
-		                      (const_int 2)
-				      (const_int 6)
-				      (const_int 3)
-				      (const_int 7)]))
-	  (vec_select:V8QI (match_operand:V8QI 2 "register_operand" "y")
-		           (parallel [(const_int 4)
-			              (const_int 0)
-			              (const_int 5)
-			              (const_int 1)
-			              (const_int 6)
-			              (const_int 2)
-			              (const_int 7)
-			              (const_int 3)]))
-	  (const_int 85)))]
+	 (vec_select:V8QI (match_operand:V8QI 1 "register_operand" "y")
+			  (parallel [(const_int 0)
+				     (const_int 4)
+				     (const_int 1)
+				     (const_int 5)
+				     (const_int 2)
+				     (const_int 6)
+				     (const_int 3)
+				     (const_int 7)]))
+	 (vec_select:V8QI (match_operand:V8QI 2 "register_operand" "y")
+			  (parallel [(const_int 4)
+				     (const_int 0)
+				     (const_int 5)
+				     (const_int 1)
+				     (const_int 6)
+				     (const_int 2)
+				     (const_int 7)
+				     (const_int 3)]))
+	 (const_int 85)))]
   "TARGET_REALLY_IWMMXT"
   "wunpckilb%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wunpckil")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wunpckilh"
-  [(set (match_operand:V4HI                                      0 "register_operand" "=y")
+  [(set (match_operand:V4HI                   0 "register_operand" "=y")
 	(vec_merge:V4HI
-	  (vec_select:V4HI (match_operand:V4HI 1 "register_operand" "y")
-		           (parallel [(const_int 0)
-			              (const_int 2)
-			              (const_int 1)
-			              (const_int 3)]))
-	  (vec_select:V4HI (match_operand:V4HI 2 "register_operand" "y")
-			   (parallel [(const_int 2)
-			              (const_int 0)
-			              (const_int 3)
-			              (const_int 1)]))
-	  (const_int 5)))]
+	 (vec_select:V4HI (match_operand:V4HI 1 "register_operand" "y")
+			  (parallel [(const_int 2)
+				     (const_int 0)
+				     (const_int 3)
+				     (const_int 1)]))
+	 (vec_select:V4HI (match_operand:V4HI 2 "register_operand" "y")
+			  (parallel [(const_int 0)
+				     (const_int 2)
+				     (const_int 1)
+				     (const_int 3)]))
+	 (const_int 5)))]
   "TARGET_REALLY_IWMMXT"
   "wunpckilh%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wunpckil")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wunpckilw"
-  [(set (match_operand:V2SI                    0 "register_operand" "=y")
+  [(set (match_operand:V2SI                   0 "register_operand" "=y")
 	(vec_merge:V2SI
-	  (vec_select:V2SI (match_operand:V2SI 1 "register_operand" "y")
-		           (parallel [(const_int 0)
-				      (const_int 1)]))
-	  (vec_select:V2SI (match_operand:V2SI 2 "register_operand" "y")
-		           (parallel [(const_int 1)
-			              (const_int 0)]))
-	  (const_int 1)))]
+	 (vec_select:V2SI (match_operand:V2SI 1 "register_operand" "y")
+			   (parallel [(const_int 1)
+				      (const_int 0)]))
+	 (vec_select:V2SI (match_operand:V2SI 2 "register_operand" "y")
+			  (parallel [(const_int 0)
+				     (const_int 1)]))
+	 (const_int 1)))]
   "TARGET_REALLY_IWMMXT"
   "wunpckilw%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wunpckil")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wunpckehub"
-  [(set (match_operand:V4HI                     0 "register_operand" "=y")
-	(vec_select:V4HI
-	  (zero_extend:V8HI (match_operand:V8QI 1 "register_operand" "y"))
-	  (parallel [(const_int 4) (const_int 5)
-	             (const_int 6) (const_int 7)])))]
+  [(set (match_operand:V4HI                   0 "register_operand" "=y")
+	(zero_extend:V4HI
+	 (vec_select:V4QI (match_operand:V8QI 1 "register_operand" "y")
+			  (parallel [(const_int 4) (const_int 5)
+				     (const_int 6) (const_int 7)]))))]
   "TARGET_REALLY_IWMMXT"
   "wunpckehub%?\\t%0, %1"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wunpckeh")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wunpckehuh"
-  [(set (match_operand:V2SI                     0 "register_operand" "=y")
-	(vec_select:V2SI
-	  (zero_extend:V4SI (match_operand:V4HI 1 "register_operand" "y"))
-	  (parallel [(const_int 2) (const_int 3)])))]
+  [(set (match_operand:V2SI                   0 "register_operand" "=y")
+	(zero_extend:V2SI
+	 (vec_select:V2HI (match_operand:V4HI 1 "register_operand" "y")
+			  (parallel [(const_int 2) (const_int 3)]))))]
   "TARGET_REALLY_IWMMXT"
   "wunpckehuh%?\\t%0, %1"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wunpckeh")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wunpckehuw"
-  [(set (match_operand:DI                       0 "register_operand" "=y")
-	(vec_select:DI
-	  (zero_extend:V2DI (match_operand:V2SI 1 "register_operand" "y"))
-	  (parallel [(const_int 1)])))]
+  [(set (match_operand:DI                   0 "register_operand" "=y")
+	(zero_extend:DI
+	 (vec_select:SI (match_operand:V2SI 1 "register_operand" "y")
+			(parallel [(const_int 1)]))))]
   "TARGET_REALLY_IWMMXT"
   "wunpckehuw%?\\t%0, %1"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wunpckeh")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wunpckehsb"
-  [(set (match_operand:V4HI                     0 "register_operand" "=y")
-        (vec_select:V4HI
-	  (sign_extend:V8HI (match_operand:V8QI 1 "register_operand" "y"))
-	  (parallel [(const_int 4) (const_int 5)
-	             (const_int 6) (const_int 7)])))]
+  [(set (match_operand:V4HI                   0 "register_operand" "=y")
+	(sign_extend:V4HI
+	 (vec_select:V4QI (match_operand:V8QI 1 "register_operand" "y")
+			  (parallel [(const_int 4) (const_int 5)
+				     (const_int 6) (const_int 7)]))))]
   "TARGET_REALLY_IWMMXT"
   "wunpckehsb%?\\t%0, %1"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wunpckeh")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wunpckehsh"
-  [(set (match_operand:V2SI                     0 "register_operand" "=y")
-	(vec_select:V2SI
-	  (sign_extend:V4SI (match_operand:V4HI 1 "register_operand" "y"))
-	  (parallel [(const_int 2) (const_int 3)])))]
+  [(set (match_operand:V2SI                   0 "register_operand" "=y")
+	(sign_extend:V2SI
+	 (vec_select:V2HI (match_operand:V4HI 1 "register_operand" "y")
+			  (parallel [(const_int 2) (const_int 3)]))))]
   "TARGET_REALLY_IWMMXT"
   "wunpckehsh%?\\t%0, %1"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wunpckeh")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wunpckehsw"
-  [(set (match_operand:DI                       0 "register_operand" "=y")
-	(vec_select:DI
-	  (sign_extend:V2DI (match_operand:V2SI 1 "register_operand" "y"))
-	  (parallel [(const_int 1)])))]
+  [(set (match_operand:DI                   0 "register_operand" "=y")
+	(sign_extend:DI
+	 (vec_select:SI (match_operand:V2SI 1 "register_operand" "y")
+			(parallel [(const_int 1)]))))]
   "TARGET_REALLY_IWMMXT"
   "wunpckehsw%?\\t%0, %1"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wunpckeh")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wunpckelub"
-  [(set (match_operand:V4HI                     0 "register_operand" "=y")
-	(vec_select:V4HI
-	  (zero_extend:V8HI (match_operand:V8QI 1 "register_operand" "y"))
-	  (parallel [(const_int 0) (const_int 1)
-		     (const_int 2) (const_int 3)])))]
+  [(set (match_operand:V4HI                   0 "register_operand" "=y")
+	(zero_extend:V4HI
+	 (vec_select:V4QI (match_operand:V8QI 1 "register_operand" "y")
+			  (parallel [(const_int 0) (const_int 1)
+				     (const_int 2) (const_int 3)]))))]
   "TARGET_REALLY_IWMMXT"
   "wunpckelub%?\\t%0, %1"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wunpckel")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wunpckeluh"
-  [(set (match_operand:V2SI                     0 "register_operand" "=y")
-	(vec_select:V2SI
-	  (zero_extend:V4SI (match_operand:V4HI 1 "register_operand" "y"))
-	  (parallel [(const_int 0) (const_int 1)])))]
+  [(set (match_operand:V2SI                   0 "register_operand" "=y")
+	(zero_extend:V2SI
+	 (vec_select:V2HI (match_operand:V4HI 1 "register_operand" "y")
+			  (parallel [(const_int 0) (const_int 1)]))))]
   "TARGET_REALLY_IWMMXT"
   "wunpckeluh%?\\t%0, %1"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wunpckel")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wunpckeluw"
-  [(set (match_operand:DI                       0 "register_operand" "=y")
-	(vec_select:DI
-	  (zero_extend:V2DI (match_operand:V2SI 1 "register_operand" "y"))
-	  (parallel [(const_int 0)])))]
+  [(set (match_operand:DI                   0 "register_operand" "=y")
+	(zero_extend:DI
+	 (vec_select:SI (match_operand:V2SI 1 "register_operand" "y")
+			(parallel [(const_int 0)]))))]
   "TARGET_REALLY_IWMMXT"
   "wunpckeluw%?\\t%0, %1"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wunpckel")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wunpckelsb"
-  [(set (match_operand:V4HI                     0 "register_operand" "=y")
-	(vec_select:V4HI
-	  (sign_extend:V8HI (match_operand:V8QI 1 "register_operand" "y"))
-	  (parallel [(const_int 0) (const_int 1)
-		     (const_int 2) (const_int 3)])))]
+  [(set (match_operand:V4HI                   0 "register_operand" "=y")
+	(sign_extend:V4HI
+	 (vec_select:V4QI (match_operand:V8QI 1 "register_operand" "y")
+			  (parallel [(const_int 0) (const_int 1)
+				     (const_int 2) (const_int 3)]))))]
   "TARGET_REALLY_IWMMXT"
   "wunpckelsb%?\\t%0, %1"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wunpckel")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wunpckelsh"
-  [(set (match_operand:V2SI                     0 "register_operand" "=y")
-	(vec_select:V2SI
-	  (sign_extend:V4SI (match_operand:V4HI 1 "register_operand" "y"))
-	  (parallel [(const_int 0) (const_int 1)])))]
+  [(set (match_operand:V2SI                   0 "register_operand" "=y")
+	(sign_extend:V2SI
+	 (vec_select:V2HI (match_operand:V4HI 1 "register_operand" "y")
+			  (parallel [(const_int 0) (const_int 1)]))))]
   "TARGET_REALLY_IWMMXT"
   "wunpckelsh%?\\t%0, %1"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wunpckel")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wunpckelsw"
-  [(set (match_operand:DI                       0 "register_operand" "=y")
-        (vec_select:DI
-	  (sign_extend:V2DI (match_operand:V2SI 1 "register_operand" "y"))
-	  (parallel [(const_int 0)])))]
+  [(set (match_operand:DI                   0 "register_operand" "=y")
+	(sign_extend:DI
+	 (vec_select:SI (match_operand:V2SI 1 "register_operand" "y")
+			(parallel [(const_int 0)]))))]
   "TARGET_REALLY_IWMMXT"
   "wunpckelsw%?\\t%0, %1"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wunpckel")]
-)
+  [(set_attr "predicable" "yes")])
 
 ;; Shifts
 
-(define_insn "ror<mode>3"
-  [(set (match_operand:VSHFT                 0 "register_operand" "=y,y")
-        (rotatert:VSHFT (match_operand:VSHFT 1 "register_operand" "y,y")
-		        (match_operand:SI    2 "imm_or_reg_operand" "z,i")))]
+(define_insn "rorv4hi3"
+  [(set (match_operand:V4HI                0 "register_operand" "=y")
+        (rotatert:V4HI (match_operand:V4HI 1 "register_operand" "y")
+		       (match_operand:SI   2 "register_operand" "z")))]
   "TARGET_REALLY_IWMMXT"
-  "*
-  switch  (which_alternative)
-    {
-    case 0:
-      return \"wror<MMX_char>g%?\\t%0, %1, %2\";
-    case 1:
-      return arm_output_iwmmxt_shift_immediate (\"wror<MMX_char>\", operands, true);
-    default:
-      gcc_unreachable ();
-    }
-  "
-  [(set_attr "predicable" "yes")
-   (set_attr "arch" "*, iwmmxt2")
-   (set_attr "type" "wmmx_wror, wmmx_wror")]
-)
+  "wrorhg%?\\t%0, %1, %2"
+  [(set_attr "predicable" "yes")])
+
+(define_insn "rorv2si3"
+  [(set (match_operand:V2SI                0 "register_operand" "=y")
+        (rotatert:V2SI (match_operand:V2SI 1 "register_operand" "y")
+		       (match_operand:SI   2 "register_operand" "z")))]
+  "TARGET_REALLY_IWMMXT"
+  "wrorwg%?\\t%0, %1, %2"
+  [(set_attr "predicable" "yes")])
+
+(define_insn "rordi3"
+  [(set (match_operand:DI              0 "register_operand" "=y")
+	(rotatert:DI (match_operand:DI 1 "register_operand" "y")
+		   (match_operand:SI   2 "register_operand" "z")))]
+  "TARGET_REALLY_IWMMXT"
+  "wrordg%?\\t%0, %1, %2"
+  [(set_attr "predicable" "yes")])
 
 (define_insn "ashr<mode>3_iwmmxt"
-  [(set (match_operand:VSHFT                 0 "register_operand" "=y,y")
-        (ashiftrt:VSHFT (match_operand:VSHFT 1 "register_operand" "y,y")
-			(match_operand:SI    2 "imm_or_reg_operand" "z,i")))]
+  [(set (match_operand:VSHFT                 0 "register_operand" "=y")
+        (ashiftrt:VSHFT (match_operand:VSHFT 1 "register_operand" "y")
+			(match_operand:SI    2 "register_operand" "z")))]
   "TARGET_REALLY_IWMMXT"
-  "*
-  switch  (which_alternative)
-    {
-    case 0:
-      return \"wsra<MMX_char>g%?\\t%0, %1, %2\";
-    case 1:
-      return arm_output_iwmmxt_shift_immediate (\"wsra<MMX_char>\", operands, true);
-    default:
-      gcc_unreachable ();
-    }
-  "
-  [(set_attr "predicable" "yes")
-   (set_attr "arch" "*, iwmmxt2")
-   (set_attr "type" "wmmx_wsra, wmmx_wsra")]
-)
+  "wsra<MMX_char>g%?\\t%0, %1, %2"
+  [(set_attr "predicable" "yes")])
 
 (define_insn "lshr<mode>3_iwmmxt"
-  [(set (match_operand:VSHFT                 0 "register_operand" "=y,y")
-        (lshiftrt:VSHFT (match_operand:VSHFT 1 "register_operand" "y,y")
-			(match_operand:SI    2 "imm_or_reg_operand" "z,i")))]
+  [(set (match_operand:VSHFT                 0 "register_operand" "=y")
+        (lshiftrt:VSHFT (match_operand:VSHFT 1 "register_operand" "y")
+			(match_operand:SI    2 "register_operand" "z")))]
   "TARGET_REALLY_IWMMXT"
-  "*
-  switch  (which_alternative)
-    {
-    case 0:
-      return \"wsrl<MMX_char>g%?\\t%0, %1, %2\";
-    case 1:
-      return arm_output_iwmmxt_shift_immediate (\"wsrl<MMX_char>\", operands, false);
-    default:
-      gcc_unreachable ();
-    }
-  "
-  [(set_attr "predicable" "yes")
-   (set_attr "arch" "*, iwmmxt2")
-   (set_attr "type" "wmmx_wsrl, wmmx_wsrl")]
-)
+  "wsrl<MMX_char>g%?\\t%0, %1, %2"
+  [(set_attr "predicable" "yes")])
 
 (define_insn "ashl<mode>3_iwmmxt"
-  [(set (match_operand:VSHFT               0 "register_operand" "=y,y")
-        (ashift:VSHFT (match_operand:VSHFT 1 "register_operand" "y,y")
-		      (match_operand:SI    2 "imm_or_reg_operand" "z,i")))]
+  [(set (match_operand:VSHFT               0 "register_operand" "=y")
+        (ashift:VSHFT (match_operand:VSHFT 1 "register_operand" "y")
+		      (match_operand:SI    2 "register_operand" "z")))]
   "TARGET_REALLY_IWMMXT"
-  "*
-  switch  (which_alternative)
-    {
-    case 0:
-      return \"wsll<MMX_char>g%?\\t%0, %1, %2\";
-    case 1:
-      return arm_output_iwmmxt_shift_immediate (\"wsll<MMX_char>\", operands, false);
-    default:
-      gcc_unreachable ();
-    }
-  "
-  [(set_attr "predicable" "yes")
-   (set_attr "arch" "*, iwmmxt2")
-   (set_attr "type" "wmmx_wsll, wmmx_wsll")]
-)
+  "wsll<MMX_char>g%?\\t%0, %1, %2"
+  [(set_attr "predicable" "yes")])
 
-(define_insn "ror<mode>3_di"
-  [(set (match_operand:VSHFT                 0 "register_operand" "=y,y")
-        (rotatert:VSHFT (match_operand:VSHFT 1 "register_operand" "y,y")
-		        (match_operand:DI    2 "imm_or_reg_operand" "y,i")))]
+(define_insn "rorv4hi3_di"
+  [(set (match_operand:V4HI                0 "register_operand" "=y")
+        (rotatert:V4HI (match_operand:V4HI 1 "register_operand" "y")
+		       (match_operand:DI   2 "register_operand" "y")))]
   "TARGET_REALLY_IWMMXT"
-  "*
-  switch (which_alternative)
-    {
-    case 0:
-      return \"wror<MMX_char>%?\\t%0, %1, %2\";
-    case 1:
-      return arm_output_iwmmxt_shift_immediate (\"wror<MMX_char>\", operands, true);
-    default:
-      gcc_unreachable ();
-    }
-  "
-  [(set_attr "predicable" "yes")
-   (set_attr "arch" "*, iwmmxt2")
-   (set_attr "type" "wmmx_wror, wmmx_wror")]
-)
+  "wrorh%?\\t%0, %1, %2"
+  [(set_attr "predicable" "yes")])
 
-(define_insn "ashr<mode>3_di"
-  [(set (match_operand:VSHFT                 0 "register_operand" "=y,y")
-        (ashiftrt:VSHFT (match_operand:VSHFT 1 "register_operand" "y,y")
-		        (match_operand:DI    2 "imm_or_reg_operand" "y,i")))]
+(define_insn "rorv2si3_di"
+  [(set (match_operand:V2SI                0 "register_operand" "=y")
+        (rotatert:V2SI (match_operand:V2SI 1 "register_operand" "y")
+		       (match_operand:DI   2 "register_operand" "y")))]
   "TARGET_REALLY_IWMMXT"
-  "*
-  switch (which_alternative)
-    {
-    case 0:
-      return \"wsra<MMX_char>%?\\t%0, %1, %2\";
-    case 1:
-      return arm_output_iwmmxt_shift_immediate (\"wsra<MMX_char>\", operands, true);
-    default:
-      gcc_unreachable ();
-    }
-  "
-  [(set_attr "predicable" "yes")
-   (set_attr "arch" "*, iwmmxt2")
-   (set_attr "type" "wmmx_wsra, wmmx_wsra")]
-)
+  "wrorw%?\\t%0, %1, %2"
+  [(set_attr "predicable" "yes")])
 
-(define_insn "lshr<mode>3_di"
-  [(set (match_operand:VSHFT                 0 "register_operand" "=y,y")
-        (lshiftrt:VSHFT (match_operand:VSHFT 1 "register_operand" "y,y")
-		        (match_operand:DI    2 "register_operand" "y,i")))]
+(define_insn "rordi3_di"
+  [(set (match_operand:DI              0 "register_operand" "=y")
+	(rotatert:DI (match_operand:DI 1 "register_operand" "y")
+		   (match_operand:DI   2 "register_operand" "y")))]
   "TARGET_REALLY_IWMMXT"
-  "*
-  switch (which_alternative)
-    {
-    case 0:
-      return \"wsrl<MMX_char>%?\\t%0, %1, %2\";
-    case 1:
-      return arm_output_iwmmxt_shift_immediate (\"wsrl<MMX_char>\", operands, false);
-    default:
-      gcc_unreachable ();
-    }
-  "
-  [(set_attr "predicable" "yes")
-   (set_attr "arch" "*, iwmmxt2")
-   (set_attr "type" "wmmx_wsrl, wmmx_wsrl")]
-)
+  "wrord%?\\t%0, %1, %2"
+  [(set_attr "predicable" "yes")])
 
-(define_insn "ashl<mode>3_di"
-  [(set (match_operand:VSHFT               0 "register_operand" "=y,y")
-        (ashift:VSHFT (match_operand:VSHFT 1 "register_operand" "y,y")
-		      (match_operand:DI    2 "imm_or_reg_operand" "y,i")))]
+(define_insn "ashrv4hi3_di"
+  [(set (match_operand:V4HI                0 "register_operand" "=y")
+        (ashiftrt:V4HI (match_operand:V4HI 1 "register_operand" "y")
+		       (match_operand:DI   2 "register_operand" "y")))]
   "TARGET_REALLY_IWMMXT"
-  "*
-  switch (which_alternative)
-    {
-    case 0:
-      return \"wsll<MMX_char>%?\\t%0, %1, %2\";
-    case 1:
-      return arm_output_iwmmxt_shift_immediate (\"wsll<MMX_char>\", operands, false);
-    default:
-      gcc_unreachable ();
-    }
-  "
-  [(set_attr "predicable" "yes")
-   (set_attr "arch" "*, iwmmxt2")
-   (set_attr "type" "wmmx_wsll, wmmx_wsll")]
-)
+  "wsrah%?\\t%0, %1, %2"
+  [(set_attr "predicable" "yes")])
+
+(define_insn "ashrv2si3_di"
+  [(set (match_operand:V2SI                0 "register_operand" "=y")
+        (ashiftrt:V2SI (match_operand:V2SI 1 "register_operand" "y")
+		       (match_operand:DI   2 "register_operand" "y")))]
+  "TARGET_REALLY_IWMMXT"
+  "wsraw%?\\t%0, %1, %2"
+  [(set_attr "predicable" "yes")])
+
+(define_insn "ashrdi3_di"
+  [(set (match_operand:DI              0 "register_operand" "=y")
+	(ashiftrt:DI (match_operand:DI 1 "register_operand" "y")
+		   (match_operand:DI   2 "register_operand" "y")))]
+  "TARGET_REALLY_IWMMXT"
+  "wsrad%?\\t%0, %1, %2"
+  [(set_attr "predicable" "yes")])
+
+(define_insn "lshrv4hi3_di"
+  [(set (match_operand:V4HI                0 "register_operand" "=y")
+        (lshiftrt:V4HI (match_operand:V4HI 1 "register_operand" "y")
+		       (match_operand:DI   2 "register_operand" "y")))]
+  "TARGET_REALLY_IWMMXT"
+  "wsrlh%?\\t%0, %1, %2"
+  [(set_attr "predicable" "yes")])
+
+(define_insn "lshrv2si3_di"
+  [(set (match_operand:V2SI                0 "register_operand" "=y")
+        (lshiftrt:V2SI (match_operand:V2SI 1 "register_operand" "y")
+		       (match_operand:DI   2 "register_operand" "y")))]
+  "TARGET_REALLY_IWMMXT"
+  "wsrlw%?\\t%0, %1, %2"
+  [(set_attr "predicable" "yes")])
+
+(define_insn "lshrdi3_di"
+  [(set (match_operand:DI              0 "register_operand" "=y")
+	(lshiftrt:DI (match_operand:DI 1 "register_operand" "y")
+		     (match_operand:DI 2 "register_operand" "y")))]
+  "TARGET_REALLY_IWMMXT"
+  "wsrld%?\\t%0, %1, %2"
+  [(set_attr "predicable" "yes")])
+
+(define_insn "ashlv4hi3_di"
+  [(set (match_operand:V4HI              0 "register_operand" "=y")
+        (ashift:V4HI (match_operand:V4HI 1 "register_operand" "y")
+		     (match_operand:DI   2 "register_operand" "y")))]
+  "TARGET_REALLY_IWMMXT"
+  "wsllh%?\\t%0, %1, %2"
+  [(set_attr "predicable" "yes")])
+
+(define_insn "ashlv2si3_di"
+  [(set (match_operand:V2SI              0 "register_operand" "=y")
+        (ashift:V2SI (match_operand:V2SI 1 "register_operand" "y")
+		       (match_operand:DI 2 "register_operand" "y")))]
+  "TARGET_REALLY_IWMMXT"
+  "wsllw%?\\t%0, %1, %2"
+  [(set_attr "predicable" "yes")])
+
+(define_insn "ashldi3_di"
+  [(set (match_operand:DI            0 "register_operand" "=y")
+	(ashift:DI (match_operand:DI 1 "register_operand" "y")
+		   (match_operand:DI 2 "register_operand" "y")))]
+  "TARGET_REALLY_IWMMXT"
+  "wslld%?\\t%0, %1, %2"
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wmadds"
-  [(set (match_operand:V2SI                                        0 "register_operand" "=y")
-	(plus:V2SI
-	  (mult:V2SI
-	    (vec_select:V2SI (sign_extend:V4SI (match_operand:V4HI 1 "register_operand" "y"))
-	                     (parallel [(const_int 1) (const_int 3)]))
-	    (vec_select:V2SI (sign_extend:V4SI (match_operand:V4HI 2 "register_operand" "y"))
-	                     (parallel [(const_int 1) (const_int 3)])))
-	  (mult:V2SI
-	    (vec_select:V2SI (sign_extend:V4SI (match_dup 1))
-	                     (parallel [(const_int 0) (const_int 2)]))
-	    (vec_select:V2SI (sign_extend:V4SI (match_dup 2))
-	                     (parallel [(const_int 0) (const_int 2)])))))]
+  [(set (match_operand:V4HI               0 "register_operand" "=y")
+        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "y")
+		      (match_operand:V4HI 2 "register_operand" "y")] UNSPEC_WMADDS))]
   "TARGET_REALLY_IWMMXT"
   "wmadds%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wmadd")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wmaddu"
-  [(set (match_operand:V2SI               0 "register_operand" "=y")
-	(plus:V2SI
-	  (mult:V2SI
-	    (vec_select:V2SI (zero_extend:V4SI (match_operand:V4HI 1 "register_operand" "y"))
-	                     (parallel [(const_int 1) (const_int 3)]))
-	    (vec_select:V2SI (zero_extend:V4SI (match_operand:V4HI 2 "register_operand" "y"))
-	                     (parallel [(const_int 1) (const_int 3)])))
-	  (mult:V2SI
-	    (vec_select:V2SI (zero_extend:V4SI (match_dup 1))
-	                     (parallel [(const_int 0) (const_int 2)]))
-	    (vec_select:V2SI (zero_extend:V4SI (match_dup 2))
-	                     (parallel [(const_int 0) (const_int 2)])))))]
+  [(set (match_operand:V4HI               0 "register_operand" "=y")
+        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "y")
+		      (match_operand:V4HI 2 "register_operand" "y")] UNSPEC_WMADDU))]
   "TARGET_REALLY_IWMMXT"
   "wmaddu%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wmadd")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_tmia"
-  [(set (match_operand:DI                     0 "register_operand" "=y")
-	(plus:DI (match_operand:DI            1 "register_operand" "0")
+  [(set (match_operand:DI                    0 "register_operand" "=y")
+	(plus:DI (match_operand:DI           1 "register_operand" "0")
 		 (mult:DI (sign_extend:DI
-			    (match_operand:SI 2 "register_operand" "r"))
+			   (match_operand:SI 2 "register_operand" "r"))
 			  (sign_extend:DI
-			    (match_operand:SI 3 "register_operand" "r")))))]
+			   (match_operand:SI 3 "register_operand" "r")))))]
   "TARGET_REALLY_IWMMXT"
   "tmia%?\\t%0, %2, %3"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_tmia")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_tmiaph"
-  [(set (match_operand:DI                                    0 "register_operand" "=y")
-	(plus:DI (match_operand:DI                           1 "register_operand" "0")
+  [(set (match_operand:DI          0 "register_operand" "=y")
+	(plus:DI (match_operand:DI 1 "register_operand" "0")
 		 (plus:DI
-		   (mult:DI (sign_extend:DI
-			      (truncate:HI (match_operand:SI 2 "register_operand" "r")))
-			    (sign_extend:DI
-			      (truncate:HI (match_operand:SI 3 "register_operand" "r"))))
-		   (mult:DI (sign_extend:DI
-			      (truncate:HI (ashiftrt:SI (match_dup 2) (const_int 16))))
-			    (sign_extend:DI
-			      (truncate:HI (ashiftrt:SI (match_dup 3) (const_int 16))))))))]
+		  (mult:DI (sign_extend:DI
+			    (truncate:HI (match_operand:SI 2 "register_operand" "r")))
+			   (sign_extend:DI
+			    (truncate:HI (match_operand:SI 3 "register_operand" "r"))))
+		  (mult:DI (sign_extend:DI
+			    (truncate:HI (ashiftrt:SI (match_dup 2) (const_int 16))))
+			   (sign_extend:DI
+			    (truncate:HI (ashiftrt:SI (match_dup 3) (const_int 16))))))))]
   "TARGET_REALLY_IWMMXT"
   "tmiaph%?\\t%0, %2, %3"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_tmiaph")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_tmiabb"
-  [(set (match_operand:DI                                  0 "register_operand" "=y")
-	(plus:DI (match_operand:DI                         1 "register_operand" "0")
+  [(set (match_operand:DI          0 "register_operand" "=y")
+	(plus:DI (match_operand:DI 1 "register_operand" "0")
 		 (mult:DI (sign_extend:DI
-			    (truncate:HI (match_operand:SI 2 "register_operand" "r")))
+			   (truncate:HI (match_operand:SI 2 "register_operand" "r")))
 			  (sign_extend:DI
-			    (truncate:HI (match_operand:SI 3 "register_operand" "r"))))))]
+			   (truncate:HI (match_operand:SI 3 "register_operand" "r"))))))]
   "TARGET_REALLY_IWMMXT"
   "tmiabb%?\\t%0, %2, %3"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_tmiaxy")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_tmiatb"
-  [(set (match_operand:DI                         0 "register_operand" "=y")
-	(plus:DI (match_operand:DI                1 "register_operand" "0")
+  [(set (match_operand:DI          0 "register_operand" "=y")
+	(plus:DI (match_operand:DI 1 "register_operand" "0")
 		 (mult:DI (sign_extend:DI
-			    (truncate:HI
-			      (ashiftrt:SI
-				(match_operand:SI 2 "register_operand" "r")
-				(const_int 16))))
+			   (truncate:HI (ashiftrt:SI
+					 (match_operand:SI 2 "register_operand" "r")
+					 (const_int 16))))
 			  (sign_extend:DI
-			    (truncate:HI
-			      (match_operand:SI   3 "register_operand" "r"))))))]
+			   (truncate:HI (match_operand:SI 3 "register_operand" "r"))))))]
   "TARGET_REALLY_IWMMXT"
   "tmiatb%?\\t%0, %2, %3"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_tmiaxy")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_tmiabt"
-  [(set (match_operand:DI                         0 "register_operand" "=y")
-	(plus:DI (match_operand:DI                1 "register_operand" "0")
+  [(set (match_operand:DI          0 "register_operand" "=y")
+	(plus:DI (match_operand:DI 1 "register_operand" "0")
 		 (mult:DI (sign_extend:DI
-			    (truncate:HI
-			      (match_operand:SI   2 "register_operand" "r")))
+			   (truncate:HI (match_operand:SI 2 "register_operand" "r")))
 			  (sign_extend:DI
-			    (truncate:HI
-			      (ashiftrt:SI
-				(match_operand:SI 3 "register_operand" "r")
-				(const_int 16)))))))]
+			   (truncate:HI (ashiftrt:SI
+					 (match_operand:SI 3 "register_operand" "r")
+					 (const_int 16)))))))]
   "TARGET_REALLY_IWMMXT"
   "tmiabt%?\\t%0, %2, %3"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_tmiaxy")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_tmiatt"
   [(set (match_operand:DI          0 "register_operand" "=y")
 	(plus:DI (match_operand:DI 1 "register_operand" "0")
 		 (mult:DI (sign_extend:DI
-			    (truncate:HI
-			      (ashiftrt:SI
-				(match_operand:SI 2 "register_operand" "r")
-				(const_int 16))))
+			   (truncate:HI (ashiftrt:SI
+					 (match_operand:SI 2 "register_operand" "r")
+					 (const_int 16))))
 			  (sign_extend:DI
-			    (truncate:HI
-			      (ashiftrt:SI
-				(match_operand:SI 3 "register_operand" "r")
-				(const_int 16)))))))]
+			   (truncate:HI (ashiftrt:SI
+					 (match_operand:SI 3 "register_operand" "r")
+					 (const_int 16)))))))]
   "TARGET_REALLY_IWMMXT"
   "tmiatt%?\\t%0, %2, %3"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_tmiaxy")]
-)
+  [(set_attr "predicable" "yes")])
+
+(define_insn "iwmmxt_tbcstqi"
+  [(set (match_operand:V8QI                   0 "register_operand" "=y")
+	(vec_duplicate:V8QI (match_operand:QI 1 "register_operand" "r")))]
+  "TARGET_REALLY_IWMMXT"
+  "tbcstb%?\\t%0, %1"
+  [(set_attr "predicable" "yes")])
+
+(define_insn "iwmmxt_tbcsthi"
+  [(set (match_operand:V4HI                   0 "register_operand" "=y")
+	(vec_duplicate:V4HI (match_operand:HI 1 "register_operand" "r")))]
+  "TARGET_REALLY_IWMMXT"
+  "tbcsth%?\\t%0, %1"
+  [(set_attr "predicable" "yes")])
+
+(define_insn "iwmmxt_tbcstsi"
+  [(set (match_operand:V2SI                   0 "register_operand" "=y")
+	(vec_duplicate:V2SI (match_operand:SI 1 "register_operand" "r")))]
+  "TARGET_REALLY_IWMMXT"
+  "tbcstw%?\\t%0, %1"
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_tmovmskb"
   [(set (match_operand:SI               0 "register_operand" "=r")
 	(unspec:SI [(match_operand:V8QI 1 "register_operand" "y")] UNSPEC_TMOVMSK))]
   "TARGET_REALLY_IWMMXT"
   "tmovmskb%?\\t%0, %1"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_tmovmsk")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_tmovmskh"
   [(set (match_operand:SI               0 "register_operand" "=r")
 	(unspec:SI [(match_operand:V4HI 1 "register_operand" "y")] UNSPEC_TMOVMSK))]
   "TARGET_REALLY_IWMMXT"
   "tmovmskh%?\\t%0, %1"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_tmovmsk")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_tmovmskw"
   [(set (match_operand:SI               0 "register_operand" "=r")
 	(unspec:SI [(match_operand:V2SI 1 "register_operand" "y")] UNSPEC_TMOVMSK))]
   "TARGET_REALLY_IWMMXT"
   "tmovmskw%?\\t%0, %1"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_tmovmsk")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_waccb"
   [(set (match_operand:DI               0 "register_operand" "=y")
 	(unspec:DI [(match_operand:V8QI 1 "register_operand" "y")] UNSPEC_WACC))]
   "TARGET_REALLY_IWMMXT"
   "waccb%?\\t%0, %1"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wacc")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wacch"
   [(set (match_operand:DI               0 "register_operand" "=y")
 	(unspec:DI [(match_operand:V4HI 1 "register_operand" "y")] UNSPEC_WACC))]
   "TARGET_REALLY_IWMMXT"
   "wacch%?\\t%0, %1"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wacc")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_waccw"
   [(set (match_operand:DI               0 "register_operand" "=y")
 	(unspec:DI [(match_operand:V2SI 1 "register_operand" "y")] UNSPEC_WACC))]
   "TARGET_REALLY_IWMMXT"
   "waccw%?\\t%0, %1"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wacc")]
-)
+  [(set_attr "predicable" "yes")])
 
-;; use unspec here to prevent 8 * imm to be optimized by cse
-(define_insn "iwmmxt_waligni"
-  [(set (match_operand:V8QI                                0 "register_operand" "=y")
-	(unspec:V8QI [(subreg:V8QI
-		        (ashiftrt:TI
-		          (subreg:TI (vec_concat:V16QI
-				       (match_operand:V8QI 1 "register_operand" "y")
-				       (match_operand:V8QI 2 "register_operand" "y")) 0)
-		          (mult:SI
-		            (match_operand:SI              3 "immediate_operand" "i")
-		            (const_int 8))) 0)] UNSPEC_WALIGNI))]
-  "TARGET_REALLY_IWMMXT"
-  "waligni%?\\t%0, %1, %2, %3"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_waligni")]
-)
-
-(define_insn "iwmmxt_walignr"
-  [(set (match_operand:V8QI                           0 "register_operand" "=y")
+(define_insn "iwmmxt_walign"
+  [(set (match_operand:V8QI                           0 "register_operand" "=y,y")
 	(subreg:V8QI (ashiftrt:TI
-		       (subreg:TI (vec_concat:V16QI
-				    (match_operand:V8QI 1 "register_operand" "y")
-				    (match_operand:V8QI 2 "register_operand" "y")) 0)
-		       (mult:SI
-		         (zero_extract:SI (match_operand:SI 3 "register_operand" "z") (const_int 3) (const_int 0))
-		         (const_int 8))) 0))]
+		      (subreg:TI (vec_concat:V16QI
+				  (match_operand:V8QI 1 "register_operand" "y,y")
+				  (match_operand:V8QI 2 "register_operand" "y,y")) 0)
+		      (mult:SI
+		       (match_operand:SI              3 "nonmemory_operand" "i,z")
+		       (const_int 8))) 0))]
   "TARGET_REALLY_IWMMXT"
-  "walignr%U3%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_walignr")]
-)
+  "@
+   waligni%?\\t%0, %1, %2, %3
+   walignr%U3%?\\t%0, %1, %2"
+  [(set_attr "predicable" "yes")])
 
-(define_insn "iwmmxt_walignr0"
-  [(set (match_operand:V8QI                           0 "register_operand" "=y")
-	(subreg:V8QI (ashiftrt:TI
-		       (subreg:TI (vec_concat:V16QI
-				    (match_operand:V8QI 1 "register_operand" "y")
-				    (match_operand:V8QI 2 "register_operand" "y")) 0)
-		       (mult:SI
-		         (zero_extract:SI (reg:SI WCGR0) (const_int 3) (const_int 0))
-		         (const_int 8))) 0))]
+(define_insn "iwmmxt_tmrc"
+  [(set (match_operand:SI                      0 "register_operand" "=r")
+	(unspec_volatile:SI [(match_operand:SI 1 "immediate_operand" "i")]
+			    VUNSPEC_TMRC))]
   "TARGET_REALLY_IWMMXT"
-  "walignr0%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_walignr")]
-)
+  "tmrc%?\\t%0, %w1"
+  [(set_attr "predicable" "yes")])
 
-(define_insn "iwmmxt_walignr1"
-  [(set (match_operand:V8QI                           0 "register_operand" "=y")
-	(subreg:V8QI (ashiftrt:TI
-		       (subreg:TI (vec_concat:V16QI
-				    (match_operand:V8QI 1 "register_operand" "y")
-				    (match_operand:V8QI 2 "register_operand" "y")) 0)
-		       (mult:SI
-		         (zero_extract:SI (reg:SI WCGR1) (const_int 3) (const_int 0))
-		         (const_int 8))) 0))]
+(define_insn "iwmmxt_tmcr"
+  [(unspec_volatile:SI [(match_operand:SI 0 "immediate_operand" "i")
+			(match_operand:SI 1 "register_operand"  "r")]
+		       VUNSPEC_TMCR)]
   "TARGET_REALLY_IWMMXT"
-  "walignr1%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_walignr")]
-)
-
-(define_insn "iwmmxt_walignr2"
-  [(set (match_operand:V8QI                           0 "register_operand" "=y")
-	(subreg:V8QI (ashiftrt:TI
-		       (subreg:TI (vec_concat:V16QI
-				    (match_operand:V8QI 1 "register_operand" "y")
-				    (match_operand:V8QI 2 "register_operand" "y")) 0)
-		       (mult:SI
-		         (zero_extract:SI (reg:SI WCGR2) (const_int 3) (const_int 0))
-		         (const_int 8))) 0))]
-  "TARGET_REALLY_IWMMXT"
-  "walignr2%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_walignr")]
-)
-
-(define_insn "iwmmxt_walignr3"
-  [(set (match_operand:V8QI                           0 "register_operand" "=y")
-	(subreg:V8QI (ashiftrt:TI
-		       (subreg:TI (vec_concat:V16QI
-				    (match_operand:V8QI 1 "register_operand" "y")
-				    (match_operand:V8QI 2 "register_operand" "y")) 0)
-		       (mult:SI
-		         (zero_extract:SI (reg:SI WCGR3) (const_int 3) (const_int 0))
-		         (const_int 8))) 0))]
-  "TARGET_REALLY_IWMMXT"
-  "walignr3%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_walignr")]
-)
+  "tmcr%?\\t%w0, %1"
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wsadb"
-  [(set (match_operand:V2SI               0 "register_operand" "=y")
-        (unspec:V2SI [
-		      (match_operand:V2SI 1 "register_operand" "0")
-		      (match_operand:V8QI 2 "register_operand" "y")
-		      (match_operand:V8QI 3 "register_operand" "y")] UNSPEC_WSAD))]
+  [(set (match_operand:V8QI               0 "register_operand" "=y")
+        (unspec:V8QI [(match_operand:V8QI 1 "register_operand" "y")
+		      (match_operand:V8QI 2 "register_operand" "y")] UNSPEC_WSAD))]
   "TARGET_REALLY_IWMMXT"
-  "wsadb%?\\t%0, %2, %3"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wsad")]
-)
+  "wsadb%?\\t%0, %1, %2"
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wsadh"
-  [(set (match_operand:V2SI               0 "register_operand" "=y")
-        (unspec:V2SI [
-		      (match_operand:V2SI 1 "register_operand" "0")
-		      (match_operand:V4HI 2 "register_operand" "y")
-		      (match_operand:V4HI 3 "register_operand" "y")] UNSPEC_WSAD))]
+  [(set (match_operand:V4HI               0 "register_operand" "=y")
+        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "y")
+		      (match_operand:V4HI 2 "register_operand" "y")] UNSPEC_WSAD))]
   "TARGET_REALLY_IWMMXT"
-  "wsadh%?\\t%0, %2, %3"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wsad")]
-)
+  "wsadh%?\\t%0, %1, %2"
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wsadbz"
-  [(set (match_operand:V2SI               0 "register_operand" "=y")
-        (unspec:V2SI [(match_operand:V8QI 1 "register_operand" "y")
+  [(set (match_operand:V8QI               0 "register_operand" "=y")
+        (unspec:V8QI [(match_operand:V8QI 1 "register_operand" "y")
 		      (match_operand:V8QI 2 "register_operand" "y")] UNSPEC_WSADZ))]
   "TARGET_REALLY_IWMMXT"
   "wsadbz%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wsad")]
-)
+  [(set_attr "predicable" "yes")])
 
 (define_insn "iwmmxt_wsadhz"
-  [(set (match_operand:V2SI               0 "register_operand" "=y")
-        (unspec:V2SI [(match_operand:V4HI 1 "register_operand" "y")
+  [(set (match_operand:V4HI               0 "register_operand" "=y")
+        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "y")
 		      (match_operand:V4HI 2 "register_operand" "y")] UNSPEC_WSADZ))]
   "TARGET_REALLY_IWMMXT"
   "wsadhz%?\\t%0, %1, %2"
-  [(set_attr "predicable" "yes")
-   (set_attr "type" "wmmx_wsad")]
-)
+  [(set_attr "predicable" "yes")])
 
-(include "iwmmxt2.md")

@@ -1,4 +1,4 @@
-# Copyright 2008-2019 Free Software Foundation, Inc.
+# Copyright 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,47 +21,40 @@
 #
 
 # This test suitable only for process record-replay
-if ![supports_process_record] {
+if ![target_info exists gdb,use_precord] {
     return
 }
 
-standard_testfile step-reverse.c
-set precsave [standard_output_file step.precsave]
+set testfile "step-reverse"
+set srcfile  ${testfile}.c
 
-if { [prepare_for_testing "failed to prepare" $testfile $srcfile] } {
+if { [prepare_for_testing $testfile.exp $testfile $srcfile] } {
     return -1
 }
 
 runto main
 
-if [supports_process_record] {
+if [target_info exists gdb,use_precord] {
     # Activate process record/replay
-    gdb_test_no_output "record" "turn on process record"
+    gdb_test_no_output "record" "Turn on process record"
 }
 
 set end_of_main [gdb_get_line_number "end of main" ]
 gdb_test "break $end_of_main" \
-    "Breakpoint $decimal at .*$srcfile, line $end_of_main\." \
-    "breakpoint at end of main"
+    "Breakpoint $decimal at .*/$srcfile, line $end_of_main\." \
+    "BP at end of main"
 
-# This can take awhile.
-with_timeout_factor 20 {
-    gdb_test "continue" "Breakpoint .* end of main .*" "run to end of main"
-}
+gdb_test "continue" "Breakpoint .* end of main .*" "run to end of main"
 
-# So can this, against gdbserver, for example.
+gdb_test "record save step.precsave" \
+    "Saved core file step.precsave with execution log\."  \
+    "save process recfile"
 
-with_timeout_factor 10 {
-    gdb_test "record save $precsave" \
-	"Saved core file $precsave with execution log\."  \
-	"save process recfile"
-}
-
-gdb_test "kill" "" "kill process, prepare to debug log file" \
+gdb_test "kill" "" "Kill process, prepare to debug log file" \
     "Kill the program being debugged\\? \\(y or n\\) " "y"
 
-gdb_test "record restore $precsave" \
-    "Restored records from core file .*" \
+gdb_test "record restore step.precsave" \
+    "Program terminated with signal .*" \
     "reload core file"
 
 # plain vanilla step/next (no count)
@@ -240,25 +233,20 @@ gdb_test_multiple "stepi" "$test_message" {
 
 # step backward into function (thru return)
 
-gdb_test "step" "(RETURN FROM CALLEE|ARRIVED IN CALLEE).*" \
-    "reverse step into fn call"
+set test_message "reverse step into fn call"
+gdb_test_multiple "step" "$test_message" {
+    -re "RETURN FROM CALLEE.*$gdb_prompt $" {
+	send_gdb "step\n"
+	exp_continue
+    }
+    -re "ARRIVED IN CALLEE.*$gdb_prompt $" {
+	pass "$test_message"
+    }
+}
 
 # step backward out of called function (thru call)
 
-set test_message "reverse step out of called fn"
-gdb_test_multiple "step" "$test_message" {
-    -re "STEP INTO THIS CALL.*.*$gdb_prompt $" {
-	pass "$test_message"
-    }
-    -re "ARRIVED IN CALLEE.*$gdb_prompt $" {
-	send_gdb "step\n"
-	exp_continue
-    }
-    -re "ENTER CALLEE.*$gdb_prompt $" {
-	send_gdb "step\n"
-	exp_continue
-    }
-}
+gdb_test "step" ".*STEP INTO THIS CALL.*" "reverse step out of called fn"
 
 # next backward over call
 

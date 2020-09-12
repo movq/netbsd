@@ -1,6 +1,7 @@
 /* Utilities to execute a program in a subprocess (possibly linked by pipes
    with other subprocesses), and wait for it.  Generic MSDOS specialization.
-   Copyright (C) 1996-2020 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2003, 2005
+   Free Software Foundation, Inc.
 
 This file is part of the libiberty library.
 Libiberty is free software; you can redistribute it and/or
@@ -58,7 +59,7 @@ static pid_t pex_msdos_exec_child (struct pex_obj *, int, const char *,
 				  int, int, int, int,
 				  int, const char **, int *);
 static int pex_msdos_close (struct pex_obj *, int);
-static pid_t pex_msdos_wait (struct pex_obj *, pid_t, int *, struct pex_time *,
+static int pex_msdos_wait (struct pex_obj *, pid_t, int *, struct pex_time *,
 			   int, const char **, int *);
 static void pex_msdos_cleanup (struct pex_obj *);
 
@@ -281,7 +282,7 @@ pex_msdos_exec_child (struct pex_obj *obj, int flags, const char *executable,
    has already completed, and we just need to return the exit
    status.  */
 
-static pid_t
+static int
 pex_msdos_wait (struct pex_obj *obj, pid_t pid, int *status,
 		struct pex_time *time, int done ATTRIBUTE_UNUSED,
 		const char **errmsg ATTRIBUTE_UNUSED,
@@ -309,8 +310,10 @@ pex_msdos_cleanup (struct pex_obj  *obj)
 
   ms = (struct pex_msdos *) obj->sysdep;
   for (i = 0; i < PEX_MSDOS_FILE_COUNT; ++i)
-    free (msdos->files[i]);
-  free (msdos->statuses);
+    if (msdos->files[i] != NULL)
+      free (msdos->files[i]);
+  if (msdos->statuses != NULL)
+    free (msdos->statuses);
   free (msdos);
   obj->sysdep = NULL;
 }

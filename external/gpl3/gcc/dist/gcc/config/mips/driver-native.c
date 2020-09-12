@@ -1,5 +1,5 @@
 /* Subroutines for the gcc driver.
-   Copyright (C) 2008-2019 Free Software Foundation, Inc.
+   Copyright (C) 2008 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -16,8 +16,6 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
-
-#define IN_TARGET_CODE 1
 
 #include "config.h"
 #include "system.h"
@@ -60,23 +58,15 @@ host_detect_local_cpu (int argc, const char **argv)
     if (strncmp (buf, "cpu model", sizeof ("cpu model") - 1) == 0)
       {
 	if (strstr (buf, "Godson2 V0.2") != NULL
-	    || strstr (buf, "Loongson-2 V0.2") != NULL
-	    || strstr (buf, "Loongson-2E") != NULL)
+	    || strstr (buf, "Loongson-2 V0.2") != NULL)
 	  cpu = "loongson2e";
 	else if (strstr (buf, "Godson2 V0.3") != NULL
-		 || strstr (buf, "Loongson-2 V0.3") != NULL
-		 || strstr (buf, "Loongson-2F") != NULL)
+		 || strstr (buf, "Loongson-2 V0.3") != NULL)
 	  cpu = "loongson2f";
-	else if (strstr (buf, "Godson3 V0.5") != NULL
-		 || strstr (buf, "Loongson-3 V0.5") != NULL
-		 || strstr (buf, "Loongson-3A") != NULL)
-	  cpu = "loongson3a";
 	else if (strstr (buf, "SiByte SB1") != NULL)
 	  cpu = "sb1";
 	else if (strstr (buf, "R5000") != NULL)
 	  cpu = "r5000";
-	else if (strstr (buf, "Octeon II") != NULL)
-	  cpu = "octeon2";
 	else if (strstr (buf, "Octeon") != NULL)
 	  cpu = "octeon";
 	break;

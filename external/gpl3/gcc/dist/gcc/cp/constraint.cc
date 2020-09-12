@@ -1,5 +1,5 @@
 /* Processing rules for constraints.
-   Copyright (C) 2013-2019 Free Software Foundation, Inc.
+   Copyright (C) 2013-2016 Free Software Foundation, Inc.
    Contributed by Andrew Sutton (andrew.n.sutton@gmail.com)
 
 This file is part of GCC.
@@ -116,10 +116,10 @@ function_concept_check_p (tree t)
 {
   gcc_assert (TREE_CODE (t) == CALL_EXPR);
   tree fn = CALL_EXPR_FN (t);
-  if (fn != NULL_TREE
-      && TREE_CODE (fn) == TEMPLATE_ID_EXPR)
+  if (TREE_CODE (fn) == TEMPLATE_ID_EXPR
+      && TREE_CODE (TREE_OPERAND (fn, 0)) == OVERLOAD)
     {
-      tree f1 = OVL_FIRST (TREE_OPERAND (fn, 0));
+      tree f1 = get_first_fn (fn);
       if (TREE_CODE (f1) == TEMPLATE_DECL
 	  && DECL_DECLARED_CONCEPT_P (DECL_TEMPLATE_RESULT (f1)))
         return true;
@@ -204,10 +204,10 @@ resolve_constraint_check (tree ovl, tree args)
 {
   int nerrs = 0;
   tree cands = NULL_TREE;
-  for (lkp_iterator iter (ovl); iter; ++iter)
+  for (tree p = ovl; p != NULL_TREE; p = OVL_NEXT (p))
     {
       // Get the next template overload.
-      tree tmpl = *iter;
+      tree tmpl = OVL_CURRENT (p);
       if (TREE_CODE (tmpl) != TEMPLATE_DECL)
         continue;
 
@@ -508,7 +508,7 @@ get_variable_initializer (tree var)
 tree
 get_concept_definition (tree decl)
 {
-  if (VAR_P (decl))
+  if (TREE_CODE (decl) == VAR_DECL)
     return get_variable_initializer (decl);
   else if (TREE_CODE (decl) == FUNCTION_DECL)
     return get_returned_expression (decl);
@@ -738,13 +738,17 @@ normalize_template_id_expression (tree t)
     }
 
   /* Check that we didn't refer to a function concept like a variable.  */
-  tree fn = OVL_FIRST (TREE_OPERAND (t, 0));
-  if (TREE_CODE (fn) == TEMPLATE_DECL
-      && DECL_DECLARED_CONCEPT_P (DECL_TEMPLATE_RESULT (fn)))
+  tree tmpl = TREE_OPERAND (t, 0);
+  if (TREE_CODE (tmpl) == OVERLOAD)
     {
-      error_at (location_of (t),
-		"invalid reference to function concept %qD", fn);
-      return error_mark_node;
+      tree fn = OVL_FUNCTION (tmpl);
+      if (TREE_CODE (fn) == TEMPLATE_DECL
+          && DECL_DECLARED_CONCEPT_P (DECL_TEMPLATE_RESULT (fn)))
+        {
+          error_at (location_of (t),
+                    "invalid reference to function concept %qD", fn);
+          return error_mark_node;
+        }
     }
 
   return build_nt (PRED_CONSTR, t);
@@ -804,7 +808,7 @@ check_for_logical_overloads (tree t)
 
   if (DECL_OVERLOADED_OPERATOR_P (fn))
     {
-      location_t loc = cp_expr_loc_or_loc (t, input_location);
+      location_t loc = EXPR_LOC_OR_LOC (t, input_location);
       error_at (loc, "constraint %qE, uses overloaded operator", t);
       return true;
     }
@@ -1259,9 +1263,6 @@ finish_shorthand_constraint (tree decl, tree constr)
   if (!constr)
     return NULL_TREE;
 
-  if (error_operand_p (constr))
-    return NULL_TREE;
-
   tree proto = CONSTRAINED_PARM_PROTOTYPE (constr);
   tree con = CONSTRAINED_PARM_CONCEPT (constr);
   tree args = CONSTRAINED_PARM_EXTRA_ARGS (constr);
@@ -1282,9 +1283,17 @@ finish_shorthand_constraint (tree decl, tree constr)
   /* Build the concept check. If it the constraint needs to be
      applied to all elements of the parameter pack, then make
      the constraint an expansion. */
+  tree check;
   tree tmpl = DECL_TI_TEMPLATE (con);
-  tree check = VAR_P (con) ? tmpl : ovl_make (tmpl);
-  check = build_concept_check (check, arg, args);
+  if (TREE_CODE (con) == VAR_DECL)
+    {
+      check = build_concept_check (tmpl, arg, args);
+    }
+  else
+    {
+      tree ovl = build_overload (tmpl, NULL_TREE);
+      check = build_concept_check (ovl, arg, args);
+    }
 
   /* Make the check a pack expansion if needed.
 
@@ -1583,7 +1592,7 @@ tsubst_check_constraint (tree t, tree args,
 
   /* Substitute through by building an template-id expression
      and then substituting into that. */
-  tree expr = build_nt (TEMPLATE_ID_EXPR, tmpl, targs);
+  tree expr = build_nt(TEMPLATE_ID_EXPR, tmpl, targs);
   ++processing_template_decl;
   tree result = tsubst_expr (expr, args, complain, in_decl, false);
   --processing_template_decl;
@@ -1921,7 +1930,7 @@ tsubst_constraint_info (tree t, tree args,
 tree
 tsubst_constraint (tree t, tree args, tsubst_flags_t complain, tree in_decl)
 {
-  if (t == NULL_TREE || t == error_mark_node)
+  if (t == NULL_TREE)
     return t;
   switch (TREE_CODE (t))
   {
@@ -2015,7 +2024,7 @@ satisfy_predicate_constraint (tree t, tree args,
   tree type = cv_unqualified (TREE_TYPE (expr));
   if (!same_type_p (type, boolean_type_node))
     {
-      error_at (cp_expr_loc_or_loc (expr, input_location),
+      error_at (EXPR_LOC_OR_LOC (expr, input_location),
                 "constraint %qE does not have type %qT",
                 expr, boolean_type_node);
       return boolean_false_node;
@@ -2380,21 +2389,15 @@ constraints_satisfied_p (tree decl)
   tree args = NULL_TREE;
   if (tree ti = DECL_TEMPLATE_INFO (decl))
     {
-      tree tmpl = TI_TEMPLATE (ti);
-      ci = get_constraints (tmpl);
-      int depth = TMPL_PARMS_DEPTH (DECL_TEMPLATE_PARMS (tmpl));
-      args = get_innermost_template_args (TI_ARGS (ti), depth);
+      ci = get_constraints (TI_TEMPLATE (ti));
+      args = INNERMOST_TEMPLATE_ARGS (TI_ARGS (ti));
     }
   else
     {
       ci = get_constraints (decl);
     }
 
-  if (!push_tinst_level (decl))
-    return true;
   tree eval = satisfy_associated_constraints (ci, args);
-  pop_tinst_level ();
-
   return eval == boolean_true_node;
 }
 
@@ -2511,12 +2514,7 @@ check_function_concept (tree fn)
     {
       location_t loc = DECL_SOURCE_LOCATION (fn);
       if (TREE_CODE (body) == STATEMENT_LIST && !STATEMENT_LIST_HEAD (body))
-	{
-	  if (seen_error ())
-	    /* The definition was probably erroneous, not empty.  */;
-	  else
-	    error_at (loc, "definition of concept %qD is empty", fn);
-	}
+        error_at (loc, "definition of concept %qD is empty", fn);
       else
         error_at (loc, "definition of concept %qD has multiple statements", fn);
     }
@@ -2860,7 +2858,7 @@ diagnose_check_constraint (location_t loc, tree orig, tree cur, tree args)
     {
       if (elide_constraint_failure_p ())
         return;
-      inform (loc, "in the expansion of concept %<%E %S%>", check, sub);
+      inform (loc, "in the expansion of concept %qE %S", check, sub);
       cur = get_concept_definition (decl);
       tsubst_expr (cur, targs, tf_warning_or_error, NULL_TREE, false);
       return;

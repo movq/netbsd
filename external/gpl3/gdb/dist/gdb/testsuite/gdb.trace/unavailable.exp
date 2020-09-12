@@ -1,4 +1,5 @@
-# Copyright 1998-2019 Free Software Foundation, Inc.
+# Copyright 1998, 2005, 2007, 2008, 2009, 2010, 2011
+# Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,16 +16,33 @@
 
 load_lib "trace-support.exp"
 
-standard_testfile unavailable.cc
+set testfile "unavailable"
+set srcfile ${testfile}.cc
 set executable $testfile
+set binfile $objdir/$subdir/$executable
 
-if {[prepare_for_testing "failed to prepare" $testfile $srcfile \
-	 {debug nowarnings c++}]} {
+if { [gdb_compile "$srcdir/$subdir/$srcfile" $binfile \
+	executable {debug nowarnings c++}] != "" } {
+    untested unavailable.exp
     return -1
 }
 
 set ws "\[\r\n\t \]+"
 set cr "\[\r\n\]+"
+
+if [istarget "x86_64-*"] then {
+    set fpreg "rbp"
+    set spreg "rsp"
+    set pcreg "rip"
+} elseif [istarget "i?86-*"] then {
+    set fpreg "ebp"
+    set spreg "esp"
+    set pcreg "eip"
+} else {
+    set fpreg "fp"
+    set spreg "sp"
+    set pcreg "pc"
+}
 
 #
 # Utility procs
@@ -61,8 +79,8 @@ proc prepare_for_trace_test {} {
 
     runto_main
 
-    gdb_breakpoint "begin" qualified
-    gdb_breakpoint "end" qualified
+    gdb_test "break begin" ".*" ""
+    gdb_test "break end" ".*" ""
 }
 
 proc run_trace_experiment { test_func } {
@@ -85,42 +103,26 @@ proc run_trace_experiment { test_func } {
 	    "tfind test frame"
 }
 
-# Test that "display VAR" works as expected, assuming VAR is wholly
-# unavailable.
-
-proc test_maybe_regvar_display { var } {
-    global gdb_prompt
-
-    # Evaluating VAR's location description may throw an internal
-    # "unavailable" exception, if for example, the value of a register
-    # necessary for computing VAR's location is unavailable.  Such an
-    # exception is caught, and should not cause automatic disablement
-    # of the current display being printed.  (GDB used to disable the
-    # current display whenever any exception was thrown.)
-    set test "display $var"
-    gdb_test_multiple "$test" "$test" {
-	-re "Disabling display ? to avoid infinite recursion.*$gdb_prompt $" {
-	    fail "$test"
-	}
-	-re "display ${var}\r\n1: ${var} = <unavailable>\r\n$gdb_prompt $" {
-	    pass "$test"
-	}
-    }
-    gdb_test "info display" ".*1:\[ \t\]+y\[ \t\]+${var}" "display ${var} is enabled"
-
-    gdb_test "undisp" \
-	"" \
-	"delete $var display" \
-	".*Delete all auto-display expressions.*y or n. $" \
-	"y"
-}
-
 #
 # Test procs
 #
 
-proc gdb_collect_args_test_1 {} {
+proc gdb_collect_args_test {} {
     global cr
+    global gdb_prompt
+    global pf_prefix
+
+    set old_pf_prefix $pf_prefix
+    set pf_prefix "$pf_prefix unavailable arguments:"
+
+    prepare_for_trace_test
+
+    gdb_test "trace args_test_func" \
+	"Tracepoint \[0-9\]+ at .*" \
+	"set tracepoint"
+
+    # Begin the test.
+    run_trace_experiment args_test_func
 
     # Test printing the variables, and also their addresses.  We
     # haven't collected any stack, so there's no way GDB can figure
@@ -144,14 +146,15 @@ proc gdb_collect_args_test_1 {} {
 
     # struct arg as one of several args (near end of list)
 
-    gdb_test "print argstruct" " = <unavailable>"
+    gdb_test "print argstruct" \
+	" = \{memberc = <unavailable>, memberi = <unavailable>, memberf = <unavailable>, memberd = <unavailable>\}"
 
     gdb_test "print argstruct.memberc" " = <unavailable>"
     gdb_test "print argstruct.memberi" " = <unavailable>"
     gdb_test "print argstruct.memberf" " = <unavailable>"
     gdb_test "print argstruct.memberd" " = <unavailable>"
 
-    gdb_test "print argarray" " = <unavailable>"
+    gdb_test "print argarray" " = \\(int \\*\\) <unavailable>"
 
     gdb_test "print &argarray" \
 	"Can't take address of \"argarray\" which isn't an lvalue\."
@@ -164,62 +167,35 @@ proc gdb_collect_args_test_1 {} {
     set r "${r}argi = <unavailable>${cr}"
     set r "${r}argf = <unavailable>${cr}"
     set r "${r}argd = <unavailable>${cr}"
-    set r "${r}argstruct = <unavailable>${cr}"
+    set r "${r}argstruct = {memberc = <unavailable>, memberi = <unavailable>, memberf = <unavailable>, memberd = <unavailable>}${cr}"
     set r "${r}argarray = <unavailable>${cr}"
     gdb_test "info args" "$r" "info args"
 
-    test_maybe_regvar_display "argc"
+    gdb_test "tfind none" \
+	"#0  end .*" \
+	"cease trace debugging"
+
+    set pf_prefix $old_pf_prefix
 }
 
-proc gdb_collect_args_test {} {
-    with_test_prefix "unavailable arguments" {
-	global gdb_prompt
-	global testfile srcdir subdir binfile
-	global trace_file_targets
+proc gdb_collect_locals_test { func msg } {
+    global cr
+    global gdb_prompt
+    global pf_prefix
 
-	prepare_for_trace_test
+    set old_pf_prefix $pf_prefix
+    set pf_prefix "$pf_prefix unavailable locals: $msg:"
 
-	gdb_test "trace args_test_func" \
+    prepare_for_trace_test
+
+    set testline [gdb_get_line_number "set $func tracepoint here"]
+
+    gdb_test "trace $testline" \
 	    "Tracepoint \[0-9\]+ at .*" \
 	    "set tracepoint"
 
-	# Begin the test.
-	run_trace_experiment args_test_func
-
-	gdb_collect_args_test_1
-
-	gdb_test "tfind none" \
-	    "#0  end .*" \
-	    "cease trace debugging"
-
-	set tracefile [standard_output_file ${testfile}]
-	gdb_test "tsave ${tracefile}.args.tfile" \
-	    "Trace data saved to file '${tracefile}.args.tfile'\.\\r" \
-	    "tsave ${testfile}.args.tfile"
-	gdb_test "tsave -ctf ${tracefile}.args.ctf" \
-	    "Trace data saved to directory '${tracefile}.args.ctf'\.\\r" \
-	    "save ctf trace file"
-
-	foreach target_name ${trace_file_targets} {
-	    # Restart GDB and read the trace data in ${TARGET_NAME} target.
-	    gdb_exit
-	    gdb_start
-	    gdb_reinitialize_dir $srcdir/$subdir
-	    gdb_file_cmd $binfile
-	    gdb_test "target ${target_name} ${tracefile}.args.${target_name}" ".*" \
-		"change to ${target_name} target"
-
-	    with_test_prefix "${target_name}" {
-		gdb_test "tfind start" "#0  args_test_func .*" \
-		    "tfind test frame"
-		gdb_collect_args_test_1
-	    }
-	}
-    }
-}
-
-proc gdb_collect_locals_test_1 { func } {
-    global cr
+    # Begin the test.
+    run_trace_experiment $func
 
     gdb_test "print locc" " = <unavailable>"
     gdb_test "print loci" " = <unavailable>"
@@ -240,71 +216,43 @@ proc gdb_collect_locals_test_1 { func } {
     set r ""
     set r "${r}locf = <unavailable>${cr}"
     set r "${r}locd = <unavailable>${cr}"
-    set r "${r}locst = <unavailable>${cr}"
-    set r "${r}locar = <unavailable>${cr}"
+    set r "${r}locst = {memberc = <unavailable>, memberi = <unavailable>, memberf = <unavailable>, memberd = <unavailable>}${cr}"
+    set r "${r}locar = {<unavailable>, <unavailable>, <unavailable>, <unavailable>}${cr}"
     set r "${r}i = <unavailable>${cr}"
     if { $func == "local_test_func" } {
-	set r "${r}locdefst = <unavailable>${cr}"
+	set r "${r}locdefst = {<No data fields>}${cr}"
     }
     set r "${r}locc = <unavailable>${cr}"
     set r "${r}loci = <unavailable>${cr}"
     gdb_test "info locals" "$r" "info locals"
 
-    test_maybe_regvar_display "loci"
+    gdb_test "tfind none" \
+	"#0  end .*" \
+	"cease trace debugging"
+
+    set pf_prefix $old_pf_prefix
 }
 
-proc gdb_collect_locals_test { func msg } {
-    with_test_prefix "unavailable locals: $msg" {
-	global gdb_prompt
-	global testfile srcdir subdir binfile
-	global trace_file_targets
+proc gdb_unavailable_registers_test { } {
+    global gdb_prompt
+    global spreg
+    global pcreg
+    global pf_prefix
 
-	prepare_for_trace_test
+    set old_pf_prefix $pf_prefix
+    set pf_prefix "$pf_prefix unavailable registers:"
 
-	set testline [gdb_get_line_number "set $func tracepoint here"]
+    prepare_for_trace_test
 
-	gdb_test "trace $testline" \
+    # We'll simply re-use the globals_test_function for this test
+    gdb_test "trace globals_test_func" \
 	    "Tracepoint \[0-9\]+ at .*" \
 	    "set tracepoint"
 
-	# Begin the test.
-	run_trace_experiment $func
+    # Collect nothing.
 
-	gdb_collect_locals_test_1 $func
-
-	gdb_test "tfind none" \
-	    "#0  end .*" \
-	    "cease trace debugging"
-
-	set tracefile [standard_output_file ${testfile}]
-	gdb_test "tsave ${tracefile}.locals.tfile" \
-	    "Trace data saved to file '${tracefile}.locals.tfile'\.\\r" \
-	    "tsave ${testfile}.locals.tfile"
-	gdb_test "tsave -ctf ${tracefile}.locals.ctf" \
-	    "Trace data saved to directory '${tracefile}.locals.ctf'\.\\r" \
-	    "save ctf trace file"
-
-	foreach target_name ${trace_file_targets} {
-	    # Restart GDB and read the trace data in ${TARGET_NAME} target.
-	    gdb_exit
-	    gdb_start
-	    gdb_reinitialize_dir $srcdir/$subdir
-	    gdb_file_cmd $binfile
-	    gdb_test "target ${target_name} ${tracefile}.locals.${target_name}" ".*" \
-		"change to ${target_name} target"
-
-	    with_test_prefix "${target_name}" {
-		gdb_test "tfind start" "#0  $func .*" \
-		    "tfind test frame"
-		gdb_collect_locals_test_1 $func
-	    }
-	}
-    }
-}
-
-proc gdb_unavailable_registers_test_1 { } {
-    global spreg
-    global pcreg
+    # Begin the test.
+    run_trace_experiment globals_test_func
 
     # On some archs, the $sp/$pc are a real raw registers.  On others,
     # like x86, they're user registers.  Test both variants.
@@ -313,12 +261,12 @@ proc gdb_unavailable_registers_test_1 { } {
 
     # Test reading uncollected pseudo-registers.  The set of which
     # depends on target.
-    if [is_amd64_regs_target] {
+    if [istarget "x86_64-*"] then {
 	# Check the raw register first.
 	test_register_unavailable "\$rax"
 	test_register_unavailable "\$eax"
 	test_register_unavailable "\$ax"
-    } elseif [is_x86_like_target] {
+    } elseif [istarget "i?86-*"] then {
 	# Check the raw register first.
 	test_register_unavailable "\$eax"
 	test_register_unavailable "\$ax"
@@ -330,130 +278,67 @@ proc gdb_unavailable_registers_test_1 { } {
     test_register "\$pc"
 
     gdb_test "info registers" \
-	".*<unavailable>.*<unavailable>.*" \
+	"\\*value not available\\*.*\\*value not available\\*" \
 	"info registers, multiple registers not available"
 
     gdb_test "info registers \$$spreg" \
-	"<unavailable>" \
+	"\\*value not available\\*" \
 	"info registers \$$spreg reports not available"
+
+    gdb_test "tfind none" "#0  end .*" "cease trace debugging"
+
+    set pf_prefix $old_pf_prefix
 }
 
-proc gdb_unavailable_registers_test { } {
-    with_test_prefix "unavailable registers" {
-	global testfile srcdir subdir binfile
-	global trace_file_targets
-
-	prepare_for_trace_test
-
-	# We'll simply re-use the globals_test_function for this test
-	gdb_test "trace globals_test_func" \
-	    "Tracepoint \[0-9\]+ at .*" \
-	    "set tracepoint"
-
-	# Collect nothing.
-
-	# Begin the test.
-	run_trace_experiment globals_test_func
-
-	gdb_unavailable_registers_test_1
-
-	gdb_test "tfind none" "#0  end .*" "cease trace debugging"
-
-	set tracefile [standard_output_file ${testfile}]
-	gdb_test "tsave ${tracefile}.registers.tfile" \
-	    "Trace data saved to file '${tracefile}.registers.tfile'\.\\r" \
-	    "tsave ${testfile}.registers.tfile"
-	gdb_test "tsave -ctf ${tracefile}.registers.ctf" \
-	    "Trace data saved to directory '${tracefile}.registers.ctf'\.\\r" \
-	    "save ctf trace file"
-
-	foreach target_name ${trace_file_targets} {
-	    # Restart GDB and read the trace data in ${TARGET_NAME} target.
-	    gdb_exit
-	    gdb_start
-	    gdb_reinitialize_dir $srcdir/$subdir
-	    gdb_file_cmd $binfile
-	    gdb_test "target ${target_name} ${tracefile}.registers.${target_name}" ".*" \
-		"change to ${target_name} target"
-
-	    with_test_prefix "${target_name}" {
-		gdb_test "tfind start" "#0  globals_test_func .*" \
-		    "tfind test frame"
-		gdb_unavailable_registers_test_1
-	    }
-	}
-    }
-}
-
-proc gdb_unavailable_floats_1 { } {
-    global gdb_prompt
-
-    # Necessarily target specific.
-    if {[istarget "x86_64-*-*"] || [istarget i?86-*]} {
-	send_gdb "info float\n"
-	gdb_expect_list "info float" ".*$gdb_prompt $" {
-	    "Status Word:         <unavailable>"
-	    "Control Word:        <unavailable>"
-	    "Tag Word:            <unavailable>"
-	    "Instruction Pointer: <unavailable>:<unavailable>"
-	    "Operand Pointer:     <unavailable>:<unavailable>"
-	    "Opcode:              <unavailable>"
-	}
-    }
-}
-
-proc gdb_unavailable_floats { } {
-    with_test_prefix "unavailable floats" {
-	global testfile srcdir subdir binfile
-	global trace_file_targets
-
-	prepare_for_trace_test
-
-	# We'll simply re-use the globals_test_function for this test
-	gdb_test "trace globals_test_func" \
-	    "Tracepoint \[0-9\]+ at .*" \
-	    "set tracepoint"
-
-	# Collect nothing.
-
-	# Begin the test.
-	run_trace_experiment globals_test_func
-
-	gdb_unavailable_floats_1
-
-	gdb_test "tfind none" "#0  end .*" "cease trace debugging"
-
-	set tracefile [standard_output_file ${testfile}]
-	gdb_test "tsave ${tracefile}.floats.tfile" \
-	    "Trace data saved to file '${tracefile}.floats.tfile'\.\\r" \
-	    "tsave ${testfile}.floats.tfile"
-	gdb_test "tsave -ctf ${tracefile}.floats.ctf" \
-	    "Trace data saved to directory '${tracefile}.floats.ctf'\.\\r" \
-	    "save ctf trace file"
-
-	foreach target_name ${trace_file_targets} {
-	    # Restart GDB and read the trace data in ${TARGET_NAME} target.
-	    gdb_exit
-	    gdb_start
-	    gdb_reinitialize_dir $srcdir/$subdir
-	    gdb_file_cmd $binfile
-	    gdb_test "target ${target_name} ${tracefile}.floats.${target_name}" ".*" \
-		"change to ${target_name} target"
-
-	    with_test_prefix "${target_name}" {
-		gdb_test "tfind start" "#0  globals_test_func .*" \
-		    "tfind test frame"
-		gdb_unavailable_floats_1
-	    }
-	}
-    }
-}
-
-proc gdb_collect_globals_test_1 { } {
+proc gdb_collect_globals_test { } {
     global ws
     global cr
     global gdb_prompt
     global hex
+    global pf_prefix
+
+    set old_pf_prefix $pf_prefix
+    set pf_prefix "$pf_prefix collect globals:"
+
+    prepare_for_trace_test
+
+    set testline [gdb_get_line_number "set globals_test_func tracepoint here"]
+
+    gdb_test "trace $testline" \
+	    "Tracepoint \[0-9\]+ at .*" \
+	    "set tracepoint"
+
+    # We collect the initial sizeof(pointer) bytes of derived_partial
+    # in an attempt of collecting the vptr.  Not portable, but should
+    # work everywhere we need to care.
+    gdb_trace_setactions "define actions" \
+	"" \
+	"collect struct_b.struct_a.array\[2\]" "^$" \
+	"collect struct_b.struct_a.array\[100\]" "^$" \
+	\
+	"collect a" "^$" \
+	"collect c" "^$" \
+	\
+	"collect tarray\[0\].a" "^$" \
+	"collect tarray\[1\].a" "^$" \
+	"collect tarray\[3\].a" "^$" \
+	"collect tarray\[3\].b" "^$" \
+	"collect tarray\[4\].b" "^$" \
+	"collect tarray\[5\].b" "^$" \
+	\
+	"collect g_string_p" "^$" \
+	"collect g_string_partial\[1\]" "^$" \
+	"collect g_string_partial\[2\]" "^$" \
+	\
+	"collect g_structref_p" "^$" \
+	\
+	"collect *((char *)&derived_partial)@sizeof\(void *\)" "^$" \
+	"collect derived_whole" "^$" \
+	\
+	"collect virtual_partial.z" "^$"
+
+    # Begin the test.
+    run_trace_experiment globals_test_func
 
     gdb_test "print globalc" " = <unavailable>"
     gdb_test "print globali" " = <unavailable>"
@@ -465,11 +350,12 @@ proc gdb_collect_globals_test_1 { } {
     gdb_test "print globalstruct.memberf" " = <unavailable>"
     gdb_test "print globalstruct.memberd" " = <unavailable>"
 
-    gdb_test "print globalstruct" " = <unavailable>"
+    gdb_test "print globalstruct" \
+	    " = {memberc = <unavailable>, memberi = <unavailable>, memberf = <unavailable>, memberd = <unavailable>}"
 
     gdb_test "print globalp == &globalstruct" \
-	"value is not available" \
-	"can't compare using non collected global pointer"
+	    "value is not available" \
+	    "can't compare using non collected global pointer"
 
     gdb_test "print globalarr\[1\]" " = <unavailable>"
     gdb_test "print globalarr\[2\]" " = <unavailable>"
@@ -515,7 +401,8 @@ proc gdb_collect_globals_test_1 { } {
 
     # Static fields
 
-    gdb_test "print struct_b.static_struct_a" " = <unavailable>"
+    gdb_test "print struct_b.static_struct_a" \
+	" = {a = <unavailable>, b = <unavailable>, array = {<unavailable> <repeats 10000 times>}, ptr = <unavailable>, bitfield = <unavailable>}"
 
     # Bitfields
 
@@ -533,7 +420,8 @@ proc gdb_collect_globals_test_1 { } {
 	"\\$\[0-9\]+ = <unavailable>$cr" \
 	"referenced integer was not collected (taking address of reference)"
 
-    gdb_test "print *g_structref_p" " = <unavailable>"
+    gdb_test "print *g_structref_p" \
+	" = {d = <unavailable>, ref = <unavailable>}"
 
     # Strings
 
@@ -543,11 +431,11 @@ proc gdb_collect_globals_test_1 { } {
 	"non collected const string is still printable"
 
     gdb_test "print g_string_p" \
-	" = $hex <g_const_string> \"hello world\"" \
+	" = $hex \"hello world\"" \
 	"printing constant string through collected pointer"
 
     gdb_test "print g_string_unavail" \
-	" = <unavailable>" \
+	" = \{<unavailable> <repeats 12 times>\}" \
 	"printing non collected string"
 
     # Incomplete strings print as an array.
@@ -585,143 +473,76 @@ proc gdb_collect_globals_test_1 { } {
     # unavailable-ness is propagated.  History values are easy
     # non-lazy values, so use those.  The first test just sets up for
     # the second.
-    gdb_test "print g_smallstruct" " = <unavailable>"
+    gdb_test "print g_smallstruct" " = \\{member = <unavailable>\\}"
     gdb_test "print \$.member" " = <unavailable>"
 
     # Cast to baseclass, checking the unavailable-ness is propagated.
-    gdb_test "print (small_struct) g_smallstruct_b" " = <unavailable>"
+    gdb_test "print (small_struct) g_smallstruct_b" " = \\{member = <unavailable>\\}"
 
     # Same cast, but starting from a non-lazy, value.
-    gdb_test "print g_smallstruct_b" " = <unavailable>"
-    gdb_test "print (small_struct) \$" " = <unavailable>"
+    gdb_test "print g_smallstruct_b" " = \\{<small_struct> = \\{member = <unavailable>\\}, <No data fields>\\}"
+    gdb_test "print (small_struct) \$" " = \\{member = <unavailable>\\}"
 
     gdb_test_no_output "set print object on"
 
-    with_test_prefix "print object on" {
-	# With print object on, printing a pointer may need to fetch
-	# the pointed-to object, to check its run-time type.  Make
-	# sure that fails gracefully and transparently when the
-	# pointer itself is unavailable.
-	gdb_test "print virtualp" " = <unavailable>"
+    set old_pf_prefix_2 $pf_prefix
+    set pf_prefix "$pf_prefix print object on:"
 
-	# no vtable pointer available
-	gdb_test "print derived_unavail" " = <unavailable>"
+    # With print object on, printing a pointer may need to fetch the
+    # pointed-to object, to check its run-time type.  Make sure that
+    # fails gracefully and transparently when the pointer itself is
+    # unavailable.
+    gdb_test "print virtualp" " = \\(Virtual \\*\\) <unavailable>"
 
-	# vtable pointer available, but nothing else
-	gdb_test "print derived_partial" \
-	    " = \\(Derived\\) {<Middle> = {<Base> = <unavailable>, _vptr.Middle = <unavailable>, y = <unavailable>}, _vptr.Derived = $hex <vtable for Derived.*>, z = <unavailable>}"
+    # no vtable pointer available
+    gdb_test "print derived_unavail" \
+	" = {<Middle> = <unavailable>, _vptr.Derived = <unavailable>, z = <unavailable>}"
 
-	# whole object available
-	gdb_test "print derived_whole" \
-	    " = \\(Derived\\) {<Middle> = {<Base> = {x = 2}, _vptr.Middle = ${hex}( <\[^>]*>)?, y = 3}, _vptr.Derived = $hex <vtable for Derived.*>, z = 4}"
-    }
+    # vtable pointer available, but nothing else
+    gdb_test "print derived_partial" \
+	" = \\(Derived\\) {<Middle> = {<Base> = <unavailable>, _vptr.Middle = <unavailable>, y = <unavailable>}, _vptr.Derived = $hex, z = <unavailable>}"
+
+    # whole object available
+    gdb_test "print derived_whole" \
+	" = \\(Derived\\) {<Middle> = {<Base> = {x = 2}, _vptr.Middle = $hex, y = 3}, _vptr.Derived = $hex, z = 4}"
+
+    set pf_prefix $old_pf_prefix_2
 
     gdb_test_no_output "set print object off"
 
-    with_test_prefix "print object off" {
-	gdb_test "print virtualp" " = <unavailable>"
+    set pf_prefix "$pf_prefix print object off:"
 
-	# no vtable pointer available
-	gdb_test "print derived_unavail" \
-	    " = <unavailable>"
+    gdb_test "print virtualp" " = \\(Virtual \\*\\) <unavailable>"
 
-	# vtable pointer available, but nothing else
-	gdb_test "print derived_partial" \
-	    " = {<Middle> = {<Base> = <unavailable>, _vptr.Middle = <unavailable>, y = <unavailable>}, _vptr.Derived = $hex <vtable for Derived.*>, z = <unavailable>}"
+    # no vtable pointer available
+    gdb_test "print derived_unavail" \
+	" = {<Middle> = <unavailable>, _vptr.Derived = <unavailable>, z = <unavailable>}"
 
-	# whole object available
-	gdb_test "print derived_whole" \
-	    " = {<Middle> = {<Base> = {x = 2}, _vptr.Middle = ${hex}( <\[^>]*>)?, y = 3}, _vptr.Derived = $hex <vtable for Derived.*>, z = 4}"
-    }
+    # vtable pointer available, but nothing else
+    gdb_test "print derived_partial" \
+	" = {<Middle> = {<Base> = <unavailable>, _vptr.Middle = <unavailable>, y = <unavailable>}, _vptr.Derived = $hex, z = <unavailable>}"
+
+    # whole object available
+    gdb_test "print derived_whole" \
+	" = {<Middle> = {<Base> = {x = 2}, _vptr.Middle = $hex, y = 3}, _vptr.Derived = $hex, z = 4}"
+
+    set pf_prefix $old_pf_prefix_2
 
     # An instance of a virtual class where we collected everything but
     # the vptr.
     gdb_test "print virtual_partial" \
 	" = {_vptr.Virtual = <unavailable>, z = 0}"
-}
 
-proc gdb_collect_globals_test { } {
-    with_test_prefix "collect globals" {
-	global testfile binfile srcdir subdir
-	global trace_file_targets
+    gdb_test "tfind none" \
+	"#0  end .*" \
+	"cease trace debugging"
 
-	prepare_for_trace_test
-
-	set testline [gdb_get_line_number "set globals_test_func tracepoint here"]
-
-	gdb_test "trace $testline" \
-	    "Tracepoint \[0-9\]+ at .*" \
-	    "set tracepoint"
-
-	# We collect the initial sizeof(pointer) bytes of derived_partial
-	# in an attempt of collecting the vptr.  Not portable, but should
-	# work everywhere we need to care.
-	gdb_trace_setactions "define actions" \
-	    "" \
-	    "collect struct_b.struct_a.array\[2\]" "^$" \
-	    "collect struct_b.struct_a.array\[100\]" "^$" \
-	    \
-	    "collect a" "^$" \
-	    "collect c" "^$" \
-	    \
-	    "collect tarray\[0\].a" "^$" \
-	    "collect tarray\[1\].a" "^$" \
-	    "collect tarray\[3\].a" "^$" \
-	    "collect tarray\[3\].b" "^$" \
-	    "collect tarray\[4\].b" "^$" \
-	    "collect tarray\[5\].b" "^$" \
-	    \
-	    "collect g_string_p" "^$" \
-	    "collect g_string_partial\[1\]" "^$" \
-	    "collect g_string_partial\[2\]" "^$" \
-	    \
-	    "collect g_structref_p" "^$" \
-	    \
-	    "collect *((char *)&derived_partial)@sizeof\(void *\)" "^$" \
-	    "collect derived_whole" "^$" \
-	    \
-	    "collect virtual_partial.z" "^$"
-
-	# Begin the test.
-	run_trace_experiment globals_test_func
-
-	gdb_collect_globals_test_1
-
-	gdb_test "tfind none" \
-	    "#0  end .*" \
-	    "cease trace debugging"
-
-	set tracefile [standard_output_file ${testfile}]
-	gdb_test "tsave ${tracefile}.globals.tfile" \
-	    "Trace data saved to file '${tracefile}.globals.tfile'\.\\r" \
-	    "tsave ${testfile}.globals.tfile"
-	gdb_test "tsave -ctf ${tracefile}.globals.ctf" \
-	    "Trace data saved to directory '${tracefile}.globals.ctf'\.\\r" \
-	    "save ctf trace file"
-
-	foreach target_name ${trace_file_targets} {
-	    # Restart GDB and read the trace data in ${TARGET_NAME} target.
-	    gdb_exit
-	    gdb_start
-	    gdb_reinitialize_dir $srcdir/$subdir
-	    gdb_file_cmd $binfile
-	    gdb_test "target ${target_name} ${tracefile}.globals.${target_name}" ".*" \
-		"change to ${target_name} target"
-
-	    with_test_prefix "${target_name}" {
-		gdb_test "tfind start" "#0  globals_test_func .*" \
-		    "tfind test frame"
-		gdb_collect_globals_test_1
-	    }
-	}
-
-    }
+    set pf_prefix $old_pf_prefix
 }
 
 proc gdb_trace_collection_test {} {
     gdb_collect_globals_test
     gdb_unavailable_registers_test
-    gdb_unavailable_floats
 
     gdb_collect_args_test
     gdb_collect_locals_test local_test_func "auto locals"
@@ -729,20 +550,14 @@ proc gdb_trace_collection_test {} {
     gdb_collect_locals_test statlocal_test_func "static locals"
 }
 
+clean_restart $executable
 runto_main
 
+# We generously give ourselves one "pass" if we successfully
+# detect that this test cannot be run on this target!
 if { ![gdb_target_supports_trace] } then {
-    unsupported "current target does not support trace"
-    return 1
-}
-
-set trace_file_targets [list "tfile"]
-gdb_test_multiple "target ctf" "" {
-    -re "Undefined target command: \"ctf\"\.  Try \"help target\"\.\r\n$gdb_prompt $" {
-    }
-    -re "No CTF directory specified.*\r\n$gdb_prompt $" {
-	lappend trace_file_targets "ctf"
-    }
+    pass "Current target does not support trace"
+    return 1;
 }
 
 # Body of test encased in a proc so we can return prematurely.

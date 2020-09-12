@@ -1,5 +1,6 @@
 ;; Machine Descriptions for R8C/M16C/M32C
-;; Copyright (C) 2005-2019 Free Software Foundation, Inc.
+;; Copyright (C) 2005, 2007, 2008
+;; Free Software Foundation, Inc.
 ;; Contributed by Red Hat.
 ;;
 ;; This file is part of GCC.
@@ -25,7 +26,7 @@
 
 (define_predicate "m32c_any_operand"
   (ior (match_operand 0 "general_operand")
-       (match_code "mem,const_int,const_double"))
+       (match_operand 1 "memory_operand"))
   {
     return ! m32c_illegal_subreg_p (op);
   }
@@ -35,11 +36,7 @@
 
 (define_predicate "m32c_nonimmediate_operand"
   (ior (match_operand 0 "nonimmediate_operand")
-       (match_code "mem"))
-  {
-    return ! m32c_illegal_subreg_p (op);
-  }
-)
+       (match_operand 1 "memory_operand")))
 
 ; TRUE if the operand is a pseudo-register.
 (define_predicate "m32c_pseudo"
@@ -138,7 +135,7 @@
 
 ; Likewise, plus TRUE for memory references.
 (define_predicate "mra_operand"
-  (and (and (match_operand 0 "m32c_nonimmediate_operand" "")
+  (and (and (match_operand 0 "nonimmediate_operand" "")
 	    (not (match_operand 1 "cr_operand" "")))
        (not (match_operand 2 "m32c_wide_subreg" ""))))
 
@@ -182,12 +179,12 @@
 ; TRUE for memory operands that are not indexed
 (define_predicate "memsym_operand"
   (and (match_operand 0 "memory_operand" "")
-       (match_test "satisfies_constraint_Si (op)")))
+       (match_test "m32c_extra_constraint_p (op, 'S', \"Si\")")))
 
 ; TRUE for memory operands with small integer addresses
 (define_predicate "memimmed_operand"
   (and (match_operand 0 "memory_operand" "")
-       (match_test "satisfies_constraint_Sp (op)")))
+       (match_test "m32c_extra_constraint_p (op, 'S', \"Sp\")")))
 
 ; TRUE for r1h.  This is complicated since r1h isn't a register GCC
 ; normally knows about.
@@ -210,11 +207,11 @@
 (define_predicate "shiftcount_operand"
   (ior (match_operand 0 "mra_operand" "")
        (and (match_operand 2 "const_int_operand" "")
-	    (match_test "INTVAL (op) >= -8 && INTVAL (op) && INTVAL (op) <= 8"))))
+	    (match_test "-8 <= INTVAL (op) && INTVAL (op) && INTVAL (op) <= 8"))))
 (define_predicate "longshiftcount_operand"
   (ior (match_operand 0 "mra_operand" "")
        (and (match_operand 2 "const_int_operand" "")
-	    (match_test "INTVAL (op) >= -32 && INTVAL (op) && INTVAL (op) <= 32"))))
+	    (match_test "-32 <= INTVAL (op) && INTVAL (op) && INTVAL (op) <= 32"))))
 
 ; TRUE for r0..r3, a0..a1, or sp.
 (define_predicate "mra_or_sp_operand"
@@ -273,22 +270,22 @@
 ; TRUE for constants we can multiply pointers by
 (define_predicate "m32c_psi_scale"
   (and (match_operand 0 "const_int_operand")
-       (match_test "satisfies_constraint_Ilb (op)")))
+       (match_test "m32c_const_ok_for_constraint_p(INTVAL(op), 'I', \"Ilb\")")))
 
 ; TRUE for one bit set (bit) or clear (mask) out of N bits.
 
 (define_predicate "m32c_1bit8_operand"
   (and (match_operand 0 "const_int_operand")
-       (match_test "satisfies_constraint_Ilb (op)")))
+       (match_test "m32c_const_ok_for_constraint_p(INTVAL(op), 'I', \"Ilb\")")))
 
 (define_predicate "m32c_1bit16_operand"
   (and (match_operand 0 "const_int_operand")
-       (match_test "satisfies_constraint_Ilw (op)")))
+       (match_test "m32c_const_ok_for_constraint_p(INTVAL(op), 'I', \"Ilw\")")))
 
 (define_predicate "m32c_1mask8_operand"
   (and (match_operand 0 "const_int_operand")
-       (match_test "satisfies_constraint_ImB (op)")))
+       (match_test "m32c_const_ok_for_constraint_p(INTVAL(op), 'I', \"ImB\")")))
 
 (define_predicate "m32c_1mask16_operand"
   (and (match_operand 0 "const_int_operand")
-       (match_test "satisfies_constraint_Imw (op)")))
+       (match_test "m32c_const_ok_for_constraint_p(INTVAL(op), 'I', \"Imw\")")))

@@ -1,5 +1,5 @@
 ;; Predicate definitions for ARM and Thumb
-;; Copyright (C) 2004-2019 Free Software Foundation, Inc.
+;; Copyright (C) 2004, 2007, 2008 Free Software Foundation, Inc.
 ;; Contributed by ARM Ltd.
 
 ;; This file is part of GCC.
@@ -26,55 +26,16 @@
   /* We don't consider registers whose class is NO_REGS
      to be a register operand.  */
   /* XXX might have to check for lo regs only for thumb ??? */
-  return (REG_P (op)
+  return (GET_CODE (op) == REG
 	  && (REGNO (op) >= FIRST_PSEUDO_REGISTER
 	      || REGNO_REG_CLASS (REGNO (op)) != NO_REGS));
 })
 
-; Predicate for stack protector guard's address in
-; stack_protect_combined_set_insn and stack_protect_combined_test_insn patterns
-(define_predicate "guard_addr_operand"
-  (match_test "true")
-{
-  return (CONSTANT_ADDRESS_P (op)
-	  || !targetm.cannot_force_const_mem (mode, op));
-})
-
-; Predicate for stack protector guard in stack_protect_combined_set and
-; stack_protect_combined_test patterns
-(define_predicate "guard_operand"
-  (match_code "mem")
-{
-  return guard_addr_operand (XEXP (op, 0), mode);
-})
-
-(define_predicate "imm_for_neon_inv_logic_operand"
-  (match_code "const_vector")
-{
-  return (TARGET_NEON
-          && neon_immediate_valid_for_logic (op, mode, 1, NULL, NULL));
-})
-
-(define_predicate "neon_inv_logic_op2"
-  (ior (match_operand 0 "imm_for_neon_inv_logic_operand")
-       (match_operand 0 "s_register_operand")))
-
-(define_predicate "imm_for_neon_logic_operand"
-  (match_code "const_vector")
-{
-  return (TARGET_NEON
-          && neon_immediate_valid_for_logic (op, mode, 0, NULL, NULL));
-})
-
-(define_predicate "neon_logic_op2"
-  (ior (match_operand 0 "imm_for_neon_logic_operand")
-       (match_operand 0 "s_register_operand")))
-
-;; Any general register.
-(define_predicate "arm_hard_general_register_operand"
+;; Any hard register.
+(define_predicate "arm_hard_register_operand"
   (match_code "reg")
 {
-  return REGNO (op) <= LAST_ARM_REGNUM;
+  return REGNO (op) < FIRST_PSEUDO_REGISTER;
 })
 
 ;; A low register.
@@ -94,15 +55,23 @@
   if (GET_CODE (op) == SUBREG)
     op = SUBREG_REG (op);
 
-  return (REG_P (op)
+  return (GET_CODE (op) == REG
 	  && (REGNO (op) <= LAST_ARM_REGNUM
 	      || REGNO (op) >= FIRST_PSEUDO_REGISTER));
 })
 
-(define_predicate "arm_general_adddi_operand"
-  (ior (match_operand 0 "arm_general_register_operand")
-       (and (match_code "const_int")
-	    (match_test "const_ok_for_dimode_op (INTVAL (op), PLUS)"))))
+(define_predicate "f_register_operand"
+  (match_code "reg,subreg")
+{
+  if (GET_CODE (op) == SUBREG)
+    op = SUBREG_REG (op);
+
+  /* We don't consider registers whose class is NO_REGS
+     to be a register operand.  */
+  return (GET_CODE (op) == REG
+	  && (REGNO (op) >= FIRST_PSEUDO_REGISTER
+	      || REGNO_REG_CLASS (REGNO (op)) == FPA_REGS));
+})
 
 (define_predicate "vfp_register_operand"
   (match_code "reg,subreg")
@@ -112,28 +81,12 @@
 
   /* We don't consider registers whose class is NO_REGS
      to be a register operand.  */
-  return (REG_P (op)
+  return (GET_CODE (op) == REG
 	  && (REGNO (op) >= FIRST_PSEUDO_REGISTER
-	      || REGNO_REG_CLASS (REGNO (op)) == VFP_D0_D7_REGS
 	      || REGNO_REG_CLASS (REGNO (op)) == VFP_LO_REGS
 	      || (TARGET_VFPD32
 		  && REGNO_REG_CLASS (REGNO (op)) == VFP_REGS)));
 })
-
-(define_predicate "vfp_hard_register_operand"
-  (match_code "reg")
-{
-  return (IS_VFP_REGNUM (REGNO (op)));
-})
-
-(define_predicate "zero_operand"
-  (and (match_code "const_int,const_double,const_vector")
-       (match_test "op == CONST0_RTX (mode)")))
-
-;; Match a register, or zero in the appropriate mode.
-(define_predicate "reg_or_zero_operand"
-  (ior (match_operand 0 "s_register_operand")
-       (match_operand 0 "zero_operand")))
 
 (define_special_predicate "subreg_lowpart_operator"
   (and (match_code "subreg")
@@ -148,12 +101,6 @@
   (and (match_code "const_int")
        (match_test "const_ok_for_arm (INTVAL (op))")))
 
-;; A constant value which fits into two instructions, each taking
-;; an arithmetic constant operand for one of the words.
-(define_predicate "arm_immediate_di_operand"
-  (and (match_code "const_int,const_double")
-       (match_test "arm_const_double_by_immediates (op)")))
-
 (define_predicate "arm_neg_immediate_operand"
   (and (match_code "const_int")
        (match_test "const_ok_for_arm (-INTVAL (op))")))
@@ -161,9 +108,6 @@
 (define_predicate "arm_not_immediate_operand"
   (and (match_code "const_int")
        (match_test "const_ok_for_arm (~INTVAL (op))")))
-
-(define_predicate "const0_operand"
-  (match_test "op == CONST0_RTX (mode)"))
 
 ;; Something valid on the RHS of an ARM data-processing instruction
 (define_predicate "arm_rhs_operand"
@@ -174,54 +118,9 @@
   (ior (match_operand 0 "arm_rhs_operand")
        (match_operand 0 "memory_operand")))
 
-(define_predicate "const_int_I_operand"
-  (and (match_operand 0 "const_int_operand")
-       (match_test "satisfies_constraint_I (op)")))
-
-(define_predicate "const_int_M_operand"
-  (and (match_operand 0 "const_int_operand")
-       (match_test "satisfies_constraint_M (op)")))
-
-;; This doesn't have to do much because the constant is already checked
-;; in the shift_operator predicate.
-(define_predicate "shift_amount_operand"
-  (ior (and (match_test "TARGET_ARM")
-	    (match_operand 0 "s_register_operand"))
-       (match_operand 0 "const_int_operand")))
-
-(define_predicate "const_neon_scalar_shift_amount_operand"
-  (and (match_code "const_int")
-       (match_test "IN_RANGE (UINTVAL (op), 1, GET_MODE_BITSIZE (mode))")))
-
-(define_predicate "ldrd_strd_offset_operand"
-  (and (match_operand 0 "const_int_operand")
-       (match_test "TARGET_LDRD && offset_ok_for_ldrd_strd (INTVAL (op))")))
-
 (define_predicate "arm_add_operand"
   (ior (match_operand 0 "arm_rhs_operand")
        (match_operand 0 "arm_neg_immediate_operand")))
-
-(define_predicate "arm_anddi_operand_neon"
-  (ior (match_operand 0 "s_register_operand")
-       (and (match_code "const_int")
-	    (match_test "const_ok_for_dimode_op (INTVAL (op), AND)"))
-       (match_operand 0 "neon_inv_logic_op2")))
-
-(define_predicate "arm_iordi_operand_neon"
-  (ior (match_operand 0 "s_register_operand")
-       (and (match_code "const_int")
-	    (match_test "const_ok_for_dimode_op (INTVAL (op), IOR)"))
-       (match_operand 0 "neon_logic_op2")))
-
-(define_predicate "arm_xordi_operand"
-  (ior (match_operand 0 "s_register_operand")
-       (and (match_code "const_int")
-	    (match_test "const_ok_for_dimode_op (INTVAL (op), XOR)"))))
-
-(define_predicate "arm_adddi_operand"
-  (ior (match_operand 0 "s_register_operand")
-       (and (match_code "const_int")
-	    (match_test "const_ok_for_dimode_op (INTVAL (op), PLUS)"))))
 
 (define_predicate "arm_addimm_operand"
   (ior (match_operand 0 "arm_immediate_operand")
@@ -230,10 +129,6 @@
 (define_predicate "arm_not_operand"
   (ior (match_operand 0 "arm_rhs_operand")
        (match_operand 0 "arm_not_immediate_operand")))
-
-(define_predicate "arm_di_operand"
-  (ior (match_operand 0 "s_register_operand")
-       (match_operand 0 "arm_immediate_di_operand")))
 
 ;; True if the operand is a memory reference which contains an
 ;; offsettable address.
@@ -255,19 +150,36 @@
   (and (match_code "mem,reg,subreg")
        (match_test "(!CONSTANT_P (op)
 		     && (true_regnum(op) == -1
-			 || (REG_P (op)
+			 || (GET_CODE (op) == REG
 			     && REGNO (op) >= FIRST_PSEUDO_REGISTER)))")))
+
+;; True for valid operands for the rhs of an floating point insns.
+;;   Allows regs or certain consts on FPA, just regs for everything else.
+(define_predicate "arm_float_rhs_operand"
+  (ior (match_operand 0 "s_register_operand")
+       (and (match_code "const_double")
+	    (match_test "TARGET_FPA && arm_const_double_rtx (op)"))))
+
+(define_predicate "arm_float_add_operand"
+  (ior (match_operand 0 "arm_float_rhs_operand")
+       (and (match_code "const_double")
+	    (match_test "TARGET_FPA && neg_const_double_rtx_ok_for_fpa (op)"))))
 
 (define_predicate "vfp_compare_operand"
   (ior (match_operand 0 "s_register_operand")
        (and (match_code "const_double")
 	    (match_test "arm_const_double_rtx (op)"))))
 
+(define_predicate "arm_float_compare_operand"
+  (if_then_else (match_test "TARGET_VFP")
+		(match_operand 0 "vfp_compare_operand")
+		(match_operand 0 "arm_float_rhs_operand")))
+
 ;; True for valid index operands.
 (define_predicate "index_operand"
   (ior (match_operand 0 "s_register_operand")
        (and (match_operand 0 "immediate_operand")
-	    (match_test "(!CONST_INT_P (op)
+	    (match_test "(GET_CODE (op) != CONST_INT
 			  || (INTVAL (op) < 4096 && INTVAL (op) > -4096))"))))
 
 ;; True for operators that can be combined with a shift in ARM state.
@@ -275,58 +187,20 @@
   (and (match_code "plus,minus,ior,xor,and")
        (match_test "mode == GET_MODE (op)")))
 
-(define_special_predicate "shiftable_operator_strict_it"
-  (and (match_code "plus,and")
-       (match_test "mode == GET_MODE (op)")))
-
 ;; True for logical binary operators.
 (define_special_predicate "logical_binary_operator"
   (and (match_code "ior,xor,and")
        (match_test "mode == GET_MODE (op)")))
 
-;; True for commutative operators
-(define_special_predicate "commutative_binary_operator"
-  (and (match_code "ior,xor,and,plus")
-       (match_test "mode == GET_MODE (op)")))
-
 ;; True for shift operators.
-;; Notes:
-;;  * mult is only permitted with a constant shift amount
-;;  * patterns that permit register shift amounts only in ARM mode use
-;;    shift_amount_operand, patterns that always allow registers do not,
-;;    so we don't have to worry about that sort of thing here.
 (define_special_predicate "shift_operator"
   (and (ior (ior (and (match_code "mult")
 		      (match_test "power_of_two_operand (XEXP (op, 1), mode)"))
 		 (and (match_code "rotate")
-		      (match_test "CONST_INT_P (XEXP (op, 1))
-				   && (UINTVAL (XEXP (op, 1))) < 32")))
-	    (and (match_code "ashift,ashiftrt,lshiftrt,rotatert")
-		 (match_test "!CONST_INT_P (XEXP (op, 1))
-			      || (UINTVAL (XEXP (op, 1))) < 32")))
+		      (match_test "GET_CODE (XEXP (op, 1)) == CONST_INT
+				   && ((unsigned HOST_WIDE_INT) INTVAL (XEXP (op, 1))) < 32")))
+	    (match_code "ashift,ashiftrt,lshiftrt,rotatert"))
        (match_test "mode == GET_MODE (op)")))
-
-(define_special_predicate "shift_nomul_operator"
-  (and (ior (and (match_code "rotate")
-		 (match_test "CONST_INT_P (XEXP (op, 1))
-			      && (UINTVAL (XEXP (op, 1))) < 32"))
-	    (and (match_code "ashift,ashiftrt,lshiftrt,rotatert")
-		 (match_test "!CONST_INT_P (XEXP (op, 1))
-			      || (UINTVAL (XEXP (op, 1))) < 32")))
-       (match_test "mode == GET_MODE (op)")))
-
-;; True for shift operators which can be used with saturation instructions.
-(define_special_predicate "sat_shift_operator"
-  (and (ior (and (match_code "mult")
-                 (match_test "power_of_two_operand (XEXP (op, 1), mode)"))
-            (and (match_code "ashift,ashiftrt")
-                 (match_test "CONST_INT_P (XEXP (op, 1))
-		              && (UINTVAL (XEXP (op, 1)) < 32)")))
-       (match_test "mode == GET_MODE (op)")))
-
-;; True for MULT, to identify which variant of shift_operator is in use.
-(define_special_predicate "mult_operator"
-  (match_code "mult"))
 
 ;; True for operators that have 16-bit thumb variants.  */
 (define_special_predicate "thumb_16bit_operator"
@@ -338,67 +212,11 @@
 
 ;; True for integer comparisons and, if FP is active, for comparisons
 ;; other than LTGT or UNEQ.
-(define_special_predicate "expandable_comparison_operator"
-  (match_code "eq,ne,le,lt,ge,gt,geu,gtu,leu,ltu,
-	       unordered,ordered,unlt,unle,unge,ungt"))
-
-;; Likewise, but only accept comparisons that are directly supported
-;; by ARM condition codes.
 (define_special_predicate "arm_comparison_operator"
-  (and (match_operand 0 "expandable_comparison_operator")
-       (match_test "maybe_get_arm_condition_code (op) != ARM_NV")))
-
-;; Likewise, but don't ignore the mode.
-;; RTL SET operations require their operands source and destination have
-;; the same modes, so we can't ignore the modes there.  See PR target/69161.
-(define_predicate "arm_comparison_operator_mode"
-  (and (match_operand 0 "expandable_comparison_operator")
-       (match_test "maybe_get_arm_condition_code (op) != ARM_NV")))
-
-(define_special_predicate "lt_ge_comparison_operator"
-  (match_code "lt,ge"))
-
-;; Match a "borrow" operation for use with SBC.  The precise code will
-;; depend on the form of the comparison.  This is generally the inverse of
-;; a carry operation, since the logic of SBC uses "not borrow" in it's
-;; calculation.
-(define_special_predicate "arm_borrow_operation"
-  (match_code "geu,ltu")
-  {
-    if (XEXP (op, 1) != const0_rtx)
-      return false;
-    rtx op0 = XEXP (op, 0);
-    if (!REG_P (op0) || REGNO (op0) != CC_REGNUM)
-      return false;
-    machine_mode ccmode = GET_MODE (op0);
-    if (ccmode == CC_Cmode)
-      return GET_CODE (op) == GEU;
-    else if (ccmode == CCmode)
-      return GET_CODE (op) == LTU;
-    return false;
-  }
-)
-
-;; The vsel instruction only accepts the ARM condition codes listed below.
-(define_special_predicate "arm_vsel_comparison_operator"
-  (and (match_operand 0 "expandable_comparison_operator")
-       (match_test "maybe_get_arm_condition_code (op) == ARM_GE
-                    || maybe_get_arm_condition_code (op) == ARM_GT
-                    || maybe_get_arm_condition_code (op) == ARM_EQ
-                    || maybe_get_arm_condition_code (op) == ARM_VS
-                    || maybe_get_arm_condition_code (op) == ARM_LT
-                    || maybe_get_arm_condition_code (op) == ARM_LE
-                    || maybe_get_arm_condition_code (op) == ARM_NE
-                    || maybe_get_arm_condition_code (op) == ARM_VC")))
-
-(define_special_predicate "arm_cond_move_operator"
-  (if_then_else (match_test "arm_restrict_it")
-		(and (match_test "TARGET_VFP5")
-		     (match_operand 0 "arm_vsel_comparison_operator"))
-		(match_operand 0 "expandable_comparison_operator")))
-
-(define_special_predicate "noov_comparison_operator"
-  (match_code "lt,ge,eq,ne"))
+  (ior (match_code "eq,ne,le,lt,ge,gt,geu,gtu,leu,ltu")
+       (and (match_test "TARGET_32BIT && TARGET_HARD_FLOAT
+			 && (TARGET_FPA || TARGET_VFP)")
+            (match_code "unordered,ordered,unlt,unle,unge,ungt"))))
 
 (define_special_predicate "minmax_operator"
   (and (match_code "smin,smax,umin,umax")
@@ -434,19 +252,10 @@
 	     || mode == CC_DGTUmode));
 })
 
-;; Any register, including CC
-(define_predicate "cc_register_operand"
-  (and (match_code "reg")
-       (ior (match_operand 0 "s_register_operand")
-	    (match_operand 0 "cc_register"))))
-
 (define_special_predicate "arm_extendqisi_mem_op"
   (and (match_operand 0 "memory_operand")
-       (match_test "TARGET_ARM ? arm_legitimate_address_outer_p (mode,
-                                                                 XEXP (op, 0),
-						                 SIGN_EXTEND,
-								 0)
-                               : memory_address_p (QImode, XEXP (op, 0))")))
+       (match_test "arm_legitimate_address_outer_p (mode, XEXP (op, 0),
+						    SIGN_EXTEND, 0)")))
 
 (define_special_predicate "arm_reg_or_extendqisi_mem_op"
   (ior (match_operand 0 "arm_extendqisi_mem_op")
@@ -455,7 +264,7 @@
 (define_predicate "power_of_two_operand"
   (match_code "const_int")
 {
-  unsigned HOST_WIDE_INT value = INTVAL (op) & 0xffffffff;
+  HOST_WIDE_INT value = INTVAL (op);
 
   return value != 0 && (value & (value - 1)) == 0;
 })
@@ -469,7 +278,7 @@
    if (GET_CODE (op) == SUBREG)
      op = SUBREG_REG (op);
 
-   return MEM_P (op) && memory_address_p (DImode, XEXP (op, 0));
+   return GET_CODE (op) == MEM && memory_address_p (DImode, XEXP (op, 0));
 })
 
 (define_predicate "di_operand"
@@ -486,7 +295,7 @@
   if (GET_CODE (op) == SUBREG)
     op = SUBREG_REG (op);
 
-  return MEM_P (op) && memory_address_p (DFmode, XEXP (op, 0));
+  return GET_CODE (op) == MEM && memory_address_p (DFmode, XEXP (op, 0));
 })
 
 (define_predicate "soft_df_operand"
@@ -494,54 +303,124 @@
        (and (match_code "reg,subreg,mem")
 	    (match_operand 0 "nonimmediate_soft_df_operand"))))
 
-;; Predicate for thumb2_movsf_vfp.  Compared to general_operand, this
-;; forbids constant loaded via literal pool iff literal pools are disabled.
-(define_predicate "hard_sf_operand"
-  (and (match_operand 0 "general_operand")
-       (ior (not (match_code "const_double"))
-	    (not (match_test "arm_disable_literal_pool"))
-	    (match_test "satisfies_constraint_Dv (op)"))))
+(define_predicate "const_shift_operand"
+  (and (match_code "const_int")
+       (ior (match_operand 0 "power_of_two_operand")
+	    (match_test "((unsigned HOST_WIDE_INT) INTVAL (op)) < 32"))))
 
-;; Predicate for thumb2_movdf_vfp.  Compared to soft_df_operand used in
-;; movdf_soft_insn, this forbids constant loaded via literal pool iff
-;; literal pools are disabled.
-(define_predicate "hard_df_operand"
-  (and (match_operand 0 "soft_df_operand")
-       (ior (not (match_code "const_double"))
-	    (not (match_test "arm_disable_literal_pool"))
-	    (match_test "satisfies_constraint_Dy (op)")
-	    (match_test "satisfies_constraint_G (op)"))))
 
 (define_special_predicate "load_multiple_operation"
   (match_code "parallel")
 {
- return ldm_stm_operation_p (op, /*load=*/true, SImode,
-                                 /*consecutive=*/false,
-                                 /*return_pc=*/false);
+  HOST_WIDE_INT count = XVECLEN (op, 0);
+  int dest_regno;
+  rtx src_addr;
+  HOST_WIDE_INT i = 1, base = 0;
+  rtx elt;
+
+  if (count <= 1
+      || GET_CODE (XVECEXP (op, 0, 0)) != SET)
+    return false;
+
+  /* Check to see if this might be a write-back.  */
+  if (GET_CODE (SET_SRC (elt = XVECEXP (op, 0, 0))) == PLUS)
+    {
+      i++;
+      base = 1;
+
+      /* Now check it more carefully.  */
+      if (GET_CODE (SET_DEST (elt)) != REG
+          || GET_CODE (XEXP (SET_SRC (elt), 0)) != REG
+          || GET_CODE (XEXP (SET_SRC (elt), 1)) != CONST_INT
+          || INTVAL (XEXP (SET_SRC (elt), 1)) != (count - 1) * 4)
+        return false;
+    }
+
+  /* Perform a quick check so we don't blow up below.  */
+  if (count <= i
+      || GET_CODE (XVECEXP (op, 0, i - 1)) != SET
+      || GET_CODE (SET_DEST (XVECEXP (op, 0, i - 1))) != REG
+      || GET_CODE (SET_SRC (XVECEXP (op, 0, i - 1))) != MEM)
+    return false;
+
+  dest_regno = REGNO (SET_DEST (XVECEXP (op, 0, i - 1)));
+  src_addr = XEXP (SET_SRC (XVECEXP (op, 0, i - 1)), 0);
+
+  for (; i < count; i++)
+    {
+      elt = XVECEXP (op, 0, i);
+
+      if (GET_CODE (elt) != SET
+          || GET_CODE (SET_DEST (elt)) != REG
+          || GET_MODE (SET_DEST (elt)) != SImode
+          || REGNO (SET_DEST (elt)) != (unsigned int)(dest_regno + i - base)
+          || GET_CODE (SET_SRC (elt)) != MEM
+          || GET_MODE (SET_SRC (elt)) != SImode
+          || GET_CODE (XEXP (SET_SRC (elt), 0)) != PLUS
+          || !rtx_equal_p (XEXP (XEXP (SET_SRC (elt), 0), 0), src_addr)
+          || GET_CODE (XEXP (XEXP (SET_SRC (elt), 0), 1)) != CONST_INT
+          || INTVAL (XEXP (XEXP (SET_SRC (elt), 0), 1)) != (i - base) * 4)
+        return false;
+    }
+
+  return true;
 })
 
 (define_special_predicate "store_multiple_operation"
   (match_code "parallel")
 {
- return ldm_stm_operation_p (op, /*load=*/false, SImode,
-                                 /*consecutive=*/false,
-                                 /*return_pc=*/false);
-})
+  HOST_WIDE_INT count = XVECLEN (op, 0);
+  int src_regno;
+  rtx dest_addr;
+  HOST_WIDE_INT i = 1, base = 0;
+  rtx elt;
 
-(define_special_predicate "pop_multiple_return"
-  (match_code "parallel")
-{
- return ldm_stm_operation_p (op, /*load=*/true, SImode,
-                                 /*consecutive=*/false,
-                                 /*return_pc=*/true);
-})
+  if (count <= 1
+      || GET_CODE (XVECEXP (op, 0, 0)) != SET)
+    return false;
 
-(define_special_predicate "pop_multiple_fp"
-  (match_code "parallel")
-{
- return ldm_stm_operation_p (op, /*load=*/true, DFmode,
-                                 /*consecutive=*/true,
-                                 /*return_pc=*/false);
+  /* Check to see if this might be a write-back.  */
+  if (GET_CODE (SET_SRC (elt = XVECEXP (op, 0, 0))) == PLUS)
+    {
+      i++;
+      base = 1;
+
+      /* Now check it more carefully.  */
+      if (GET_CODE (SET_DEST (elt)) != REG
+          || GET_CODE (XEXP (SET_SRC (elt), 0)) != REG
+          || GET_CODE (XEXP (SET_SRC (elt), 1)) != CONST_INT
+          || INTVAL (XEXP (SET_SRC (elt), 1)) != (count - 1) * 4)
+        return false;
+    }
+
+  /* Perform a quick check so we don't blow up below.  */
+  if (count <= i
+      || GET_CODE (XVECEXP (op, 0, i - 1)) != SET
+      || GET_CODE (SET_DEST (XVECEXP (op, 0, i - 1))) != MEM
+      || GET_CODE (SET_SRC (XVECEXP (op, 0, i - 1))) != REG)
+    return false;
+
+  src_regno = REGNO (SET_SRC (XVECEXP (op, 0, i - 1)));
+  dest_addr = XEXP (SET_DEST (XVECEXP (op, 0, i - 1)), 0);
+
+  for (; i < count; i++)
+    {
+      elt = XVECEXP (op, 0, i);
+
+      if (GET_CODE (elt) != SET
+          || GET_CODE (SET_SRC (elt)) != REG
+          || GET_MODE (SET_SRC (elt)) != SImode
+          || REGNO (SET_SRC (elt)) != (unsigned int)(src_regno + i - base)
+          || GET_CODE (SET_DEST (elt)) != MEM
+          || GET_MODE (SET_DEST (elt)) != SImode
+          || GET_CODE (XEXP (SET_DEST (elt), 0)) != PLUS
+          || !rtx_equal_p (XEXP (XEXP (SET_DEST (elt), 0), 0), dest_addr)
+          || GET_CODE (XEXP (XEXP (SET_DEST (elt), 0), 1)) != CONST_INT
+          || INTVAL (XEXP (XEXP (SET_DEST (elt), 0), 1)) != (i - base) * 4)
+        return false;
+    }
+
+  return true;
 })
 
 (define_special_predicate "multi_register_push"
@@ -555,34 +434,6 @@
   return true;
 })
 
-(define_predicate "push_mult_memory_operand"
-  (match_code "mem")
-{
-  /* ??? Given how PUSH_MULT is generated in the prologues, is there
-     any point in testing for thumb1 specially?  All of the variants
-     use the same form.  */
-  if (TARGET_THUMB1)
-    {
-      /* ??? No attempt is made to represent STMIA, or validate that
-	 the stack adjustment matches the register count.  This is
-	 true of the ARM/Thumb2 path as well.  */
-      rtx x = XEXP (op, 0);
-      if (GET_CODE (x) != PRE_MODIFY)
-	return false;
-      if (XEXP (x, 0) != stack_pointer_rtx)
-	return false;
-      x = XEXP (x, 1);
-      if (GET_CODE (x) != PLUS)
-	return false;
-      if (XEXP (x, 0) != stack_pointer_rtx)
-	return false;
-      return CONST_INT_P (XEXP (x, 1));
-    }
-
-  /* ARM and Thumb2 handle pre-modify in their legitimate_address.  */
-  return memory_operand (op, mode);
-})
-
 ;;-------------------------------------------------------------------------
 ;;
 ;; Thumb predicates
@@ -592,7 +443,7 @@
   (ior (and (match_code "reg,subreg")
 	    (match_operand 0 "s_register_operand"))
        (and (match_code "const_int")
-	    (match_test "(UINTVAL (op)) < 256"))))
+	    (match_test "((unsigned HOST_WIDE_INT) INTVAL (op)) < 256"))))
 
 (define_predicate "thumb1_cmpneg_operand"
   (and (match_code "const_int")
@@ -615,12 +466,35 @@
 
 ;;-------------------------------------------------------------------------
 ;;
-;; iWMMXt predicates
+;; MAVERICK predicates
 ;;
 
-(define_predicate "imm_or_reg_operand"
-  (ior (match_operand 0 "immediate_operand")
-       (match_operand 0 "register_operand")))
+(define_predicate "cirrus_register_operand"
+  (match_code "reg,subreg")
+{
+  if (GET_CODE (op) == SUBREG)
+    op = SUBREG_REG (op);
+
+  return (GET_CODE (op) == REG
+	  && (REGNO_REG_CLASS (REGNO (op)) == CIRRUS_REGS
+	      || REGNO_REG_CLASS (REGNO (op)) == GENERAL_REGS));
+})
+
+(define_predicate "cirrus_fp_register"
+  (match_code "reg,subreg")
+{
+  if (GET_CODE (op) == SUBREG)
+    op = SUBREG_REG (op);
+
+  return (GET_CODE (op) == REG
+	  && (REGNO (op) >= FIRST_PSEUDO_REGISTER
+	      || REGNO_REG_CLASS (REGNO (op)) == CIRRUS_REGS));
+})
+
+(define_predicate "cirrus_shift_const"
+  (and (match_code "const_int")
+       (match_test "((unsigned HOST_WIDE_INT) INTVAL (op)) < 64")))
+
 
 ;; Neon predicates
 
@@ -632,85 +506,33 @@
 })
 
 (define_predicate "imm_for_neon_mov_operand"
-  (match_code "const_vector,const_int")
+  (match_code "const_vector")
 {
   return neon_immediate_valid_for_move (op, mode, NULL, NULL);
 })
 
-(define_predicate "imm_for_neon_lshift_operand"
+(define_predicate "imm_for_neon_logic_operand"
   (match_code "const_vector")
 {
-  return neon_immediate_valid_for_shift (op, mode, NULL, NULL, true);
+  return neon_immediate_valid_for_logic (op, mode, 0, NULL, NULL);
 })
 
-(define_predicate "imm_for_neon_rshift_operand"
+(define_predicate "imm_for_neon_inv_logic_operand"
   (match_code "const_vector")
 {
-  return neon_immediate_valid_for_shift (op, mode, NULL, NULL, false);
+  return neon_immediate_valid_for_logic (op, mode, 1, NULL, NULL);
 })
 
-(define_predicate "imm_lshift_or_reg_neon"
-  (ior (match_operand 0 "s_register_operand")
-       (match_operand 0 "imm_for_neon_lshift_operand")))
-
-(define_predicate "imm_rshift_or_reg_neon"
-  (ior (match_operand 0 "s_register_operand")
-       (match_operand 0 "imm_for_neon_rshift_operand")))
-
-;; Predicates for named expanders that overlap multiple ISAs.
-
-(define_predicate "cmpdi_operand"
-  (and (match_test "TARGET_32BIT")
-       (match_operand 0 "arm_di_operand")))
-
-;; True if the operand is memory reference suitable for a ldrex/strex.
-(define_predicate "arm_sync_memory_operand"
-  (and (match_operand 0 "memory_operand")
-       (match_code "reg" "0")))
-
-;; Predicates for parallel expanders based on mode.
-(define_special_predicate "vect_par_constant_high" 
-  (match_code "parallel")
-{
-  return arm_simd_check_vect_par_cnst_half_p (op, mode, true);
-})
-
-(define_special_predicate "vect_par_constant_low"
-  (match_code "parallel")
-{
-  return arm_simd_check_vect_par_cnst_half_p (op, mode, false);
-})
-
-(define_predicate "const_double_vcvt_power_of_two_reciprocal"
-  (and (match_code "const_double")
-       (match_test "TARGET_32BIT
-		    && vfp3_const_double_for_fract_bits (op)")))
-
-(define_predicate "const_double_vcvt_power_of_two"
-  (and (match_code "const_double")
-       (match_test "TARGET_32BIT
-		    && vfp3_const_double_for_bits (op) > 0")))
-
-(define_predicate "neon_struct_operand"
-  (and (match_code "mem")
-       (match_test "TARGET_32BIT && neon_vector_mem_operand (op, 2, true)")))
-
-(define_predicate "neon_permissive_struct_operand"
-  (and (match_code "mem")
-       (match_test "TARGET_32BIT && neon_vector_mem_operand (op, 2, false)")))
-
-(define_predicate "neon_perm_struct_or_reg_operand"
-  (ior (match_operand 0 "neon_permissive_struct_operand")
+(define_predicate "neon_logic_op2"
+  (ior (match_operand 0 "imm_for_neon_logic_operand")
        (match_operand 0 "s_register_operand")))
 
-(define_special_predicate "add_operator"
-  (match_code "plus"))
-
-(define_predicate "mem_noofs_operand"
-  (and (match_code "mem")
-       (match_code "reg" "0")))
-
-(define_predicate "call_insn_operand"
-  (ior (and (match_code "symbol_ref")
-	    (match_test "!arm_is_long_call_p (SYMBOL_REF_DECL (op))"))
+(define_predicate "neon_inv_logic_op2"
+  (ior (match_operand 0 "imm_for_neon_inv_logic_operand")
        (match_operand 0 "s_register_operand")))
+
+;; TODO: We could check lane numbers more precisely based on the mode.
+(define_predicate "neon_lane_number"
+  (and (match_code "const_int")
+       (match_test "INTVAL (op) >= 0 && INTVAL (op) <= 15")))
+

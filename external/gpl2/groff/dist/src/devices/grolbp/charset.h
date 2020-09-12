@@ -1,4 +1,4 @@
-/*	$NetBSD: charset.h,v 1.1.1.1 2016/01/13 18:41:49 christos Exp $	*/
+/*	$NetBSD: charset.h,v 1.1 2016/01/13 18:41:49 christos Exp $	*/
 
 // Definition of the WP54 character set
 

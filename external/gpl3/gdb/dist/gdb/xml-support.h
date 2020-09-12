@@ -1,6 +1,7 @@
 /* Helper routines for parsing XML using Expat.
 
-   Copyright (C) 2006-2019 Free Software Foundation, Inc.
+   Copyright (C) 2006, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,9 +23,7 @@
 #define XML_SUPPORT_H
 
 #include "gdb_obstack.h"
-#include "common/vec.h"
-#include "common/xml-utils.h"
-#include "common/byte-vector.h"
+#include "vec.h"
 
 struct gdb_xml_parser;
 struct gdb_xml_element;
@@ -49,25 +48,28 @@ LONGEST xml_builtin_xfer_partial (const char *filename,
 
 extern const char *xml_builtin[][2];
 
+/* Return a malloc allocated string with special characters from TEXT
+   replaced by entity references.  */
+
+char *xml_escape_text (const char *text);
+
 /* Support for XInclude.  */
 
 /* Callback to fetch a new XML file, based on the provided HREF.  */
 
-typedef gdb::optional<gdb::char_vector> (*xml_fetch_another) (const char *href,
-							      void *baton);
+typedef char *(*xml_fetch_another) (const char *href, void *baton);
 
-/* Append the expansion of TEXT after processing <xi:include> tags in
-   RESULT.  FETCHER will be called (with FETCHER_BATON) to retrieve
-   any new files.  DEPTH should be zero on the initial call.
+/* Return a new string which is the expansion of TEXT after processing
+   <xi:include> tags.  FETCHER will be called (with FETCHER_BATON) to
+   retrieve any new files.  DEPTH should be zero on the initial call.
 
-   On failure, this function uses NAME in a warning and returns false.
+   On failure, this function uses NAME in a warning and returns NULL.
    It may throw an exception, but does not for XML parsing
    problems.  */
 
-bool xml_process_xincludes (std::string &result,
-			    const char *name, const char *text,
-			    xml_fetch_another fetcher, void *fetcher_baton,
-			    int depth);
+char *xml_process_xincludes (const char *name, const char *text,
+			     xml_fetch_another fetcher, void *fetcher_baton,
+			     int depth);
 
 /* Simplified XML parser infrastructure.  */
 
@@ -75,13 +77,11 @@ bool xml_process_xincludes (std::string &result,
 
 struct gdb_xml_value
 {
-  gdb_xml_value (const char *name_, void *value_)
-  : name (name_), value (value_)
-  {}
-
   const char *name;
-  gdb::unique_xmalloc_ptr<void> value;
+  void *value;
 };
+typedef struct gdb_xml_value gdb_xml_value_s;
+DEF_VEC_O(gdb_xml_value_s);
 
 /* The type of an attribute handler.
 
@@ -149,7 +149,7 @@ enum gdb_xml_element_flag
 
 typedef void (gdb_xml_element_start_handler)
      (struct gdb_xml_parser *parser, const struct gdb_xml_element *element,
-      void *user_data, std::vector<gdb_xml_value> &attributes);
+      void *user_data, VEC(gdb_xml_value_s) *attributes);
 
 /* A handler called at the end of an element.
 
@@ -176,6 +176,27 @@ struct gdb_xml_element
   gdb_xml_element_end_handler *end_handler;
 };
 
+/* Initialize and return a parser.  Register a cleanup to destroy the
+   parser.  */
+
+struct gdb_xml_parser *gdb_xml_create_parser_and_cleanup
+  (const char *name, const struct gdb_xml_element *elements,
+   void *user_data);
+
+/* Associate DTD_NAME, which must be the name of a compiled-in DTD,
+   with PARSER.  */
+
+void gdb_xml_use_dtd (struct gdb_xml_parser *parser, const char *dtd_name);
+
+/* Invoke PARSER on BUFFER.  BUFFER is the data to parse, which
+   should be NUL-terminated.
+
+   The return value is 0 for success or -1 for error.  It may throw,
+   but only if something unexpected goes wrong during parsing; parse
+   errors will be caught, warned about, and reported as failure.  */
+
+int gdb_xml_parse (struct gdb_xml_parser *parser, const char *buffer);
+
 /* Parse a XML document.  DOCUMENT is the data to parse, which should
    be NUL-terminated. If non-NULL, use the compiled-in DTD named
    DTD_NAME to drive the parsing.
@@ -191,19 +212,19 @@ int gdb_xml_parse_quick (const char *name, const char *dtd_name,
 /* Issue a debugging message from one of PARSER's handlers.  */
 
 void gdb_xml_debug (struct gdb_xml_parser *parser, const char *format, ...)
-  ATTRIBUTE_PRINTF (2, 3);
+     ATTRIBUTE_PRINTF (2, 0);
 
 /* Issue an error message from one of PARSER's handlers, and stop
    parsing.  */
 
 void gdb_xml_error (struct gdb_xml_parser *parser, const char *format, ...)
-  ATTRIBUTE_NORETURN ATTRIBUTE_PRINTF (2, 3);
+     ATTRIBUTE_NORETURN ATTRIBUTE_PRINTF (2, 0);
 
 /* Find the attribute named NAME in the set of parsed attributes
    ATTRIBUTES.  Returns NULL if not found.  */
 
-struct gdb_xml_value *xml_find_attribute
-  (std::vector<gdb_xml_value> &attributes, const char *name);
+struct gdb_xml_value *xml_find_attribute (VEC(gdb_xml_value_s) *attributes,
+					  const char *name);
 
 /* Parse an integer attribute into a ULONGEST.  */
 
@@ -231,11 +252,17 @@ extern gdb_xml_attribute_handler gdb_xml_parse_attr_enum;
 ULONGEST gdb_xml_parse_ulongest (struct gdb_xml_parser *parser,
 				 const char *value);
 
-/* Open FILENAME, read all its text into memory, close it, and return
-   the text.  If something goes wrong, return an uninstantiated optional
-   and warn.  */
+/* Simple printf to obstack function.  Current implemented formatters:
+   %s - grow an xml escaped text in OBSTACK.  */
 
-extern gdb::optional<gdb::char_vector> xml_fetch_content_from_file
-    (const char *filename, void *baton);
+extern void obstack_xml_printf (struct obstack *obstack,
+                               const char *format, ...)
+  ATTRIBUTE_PRINTF_2;
+
+/* Open FILENAME, read all its text into memory, close it, and return
+   the text.  If something goes wrong, return NULL and warn.  */
+
+extern char *xml_fetch_content_from_file (const char *filename,
+                                          void *baton);
 
 #endif

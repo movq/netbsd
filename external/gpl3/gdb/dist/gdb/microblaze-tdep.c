@@ -1,6 +1,6 @@
 /* Target-dependent code for Xilinx MicroBlaze.
 
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -29,18 +29,18 @@
 #include "inferior.h"
 #include "regcache.h"
 #include "target.h"
+#include "frame.h"
 #include "frame-base.h"
 #include "frame-unwind.h"
 #include "dwarf2-frame.h"
 #include "osabi.h"
-#include "target-descriptions.h"
-#include "../opcodes/microblaze-opcm.h"
-#include "../opcodes/microblaze-dis.h"
-#include "microblaze-tdep.h"
-#include "remote.h"
 
-#include "features/microblaze-with-stack-protect.c"
-#include "features/microblaze.c"
+#include "gdb_assert.h"
+#include "gdb_string.h"
+#include "target-descriptions.h"
+#include "opcodes/microblaze-opcm.h"
+#include "opcodes/microblaze-dis.h"
+#include "microblaze-tdep.h"
 
 /* Instruction macros used for analyzing the prologue.  */
 /* This set of instruction macros need to be changed whenever the
@@ -74,15 +74,14 @@ static const char *microblaze_register_names[] =
   "rpc",  "rmsr", "rear", "resr", "rfsr", "rbtr",
   "rpvr0", "rpvr1", "rpvr2", "rpvr3", "rpvr4", "rpvr5", "rpvr6",
   "rpvr7", "rpvr8", "rpvr9", "rpvr10", "rpvr11",
-  "redr", "rpid", "rzpr", "rtlbx", "rtlbsx", "rtlblo", "rtlbhi",
-  "rslr", "rshr"
+  "redr", "rpid", "rzpr", "rtlbx", "rtlbsx", "rtlblo", "rtlbhi"
 };
 
 #define MICROBLAZE_NUM_REGS ARRAY_SIZE (microblaze_register_names)
 
-static unsigned int microblaze_debug_flag = 0;
+static int microblaze_debug_flag = 0;
 
-static void ATTRIBUTE_PRINTF (1, 2)
+void
 microblaze_debug (const char *fmt, ...)
 { 
   if (microblaze_debug_flag)
@@ -121,23 +120,52 @@ microblaze_register_type (struct gdbarch *gdbarch, int regnum)
 
 /* Fetch the instruction at PC.  */
 
-static unsigned long
+unsigned long
 microblaze_fetch_instruction (CORE_ADDR pc)
 {
-  enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
+  enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch);
   gdb_byte buf[4];
 
   /* If we can't read the instruction at PC, return zero.  */
-  if (target_read_code (pc, buf, sizeof (buf)))
+  if (target_read_memory (pc, buf, sizeof (buf)))
     return 0;
 
   return extract_unsigned_integer (buf, 4, byte_order);
 }
 
-constexpr gdb_byte microblaze_break_insn[] = MICROBLAZE_BREAKPOINT;
 
-typedef BP_MANIPULATION (microblaze_break_insn) microblaze_breakpoint;
+static CORE_ADDR
+microblaze_push_dummy_code (struct gdbarch *gdbarch, CORE_ADDR sp,
+			    CORE_ADDR funcaddr,
+			    struct value **args, int nargs,
+			    struct type *value_type,
+			    CORE_ADDR *real_pc, CORE_ADDR *bp_addr,
+			    struct regcache *regcache)
+{
+  error (_("push_dummy_code not implemented"));
+  return sp;
+}
 
+
+static CORE_ADDR
+microblaze_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
+			    struct regcache *regcache, CORE_ADDR bp_addr,
+			    int nargs, struct value **args, CORE_ADDR sp,
+			    int struct_return, CORE_ADDR struct_addr)
+{
+  error (_("store_arguments not implemented"));
+  return sp;
+}
+
+static const gdb_byte *
+microblaze_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pc, 
+			       int *len)
+{
+  static gdb_byte break_insn[] = MICROBLAZE_BREAKPOINT;
+
+  *len = sizeof (break_insn);
+  return break_insn;
+}
 
 /* Allocate and initialize a frame cache.  */
 
@@ -145,6 +173,7 @@ static struct microblaze_frame_cache *
 microblaze_alloc_frame_cache (void)
 {
   struct microblaze_frame_cache *cache;
+  int i;
 
   cache = FRAME_OBSTACK_ZALLOC (struct microblaze_frame_cache);
 
@@ -199,10 +228,10 @@ microblaze_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 			     CORE_ADDR current_pc,
 			     struct microblaze_frame_cache *cache)
 {
-  const char *name;
+  char *name;
   CORE_ADDR func_addr, func_end, addr, stop, prologue_end_addr = 0;
   unsigned long insn;
-  int rd, ra, rb, imm;
+  int rn, rd, ra, rb, imm;
   enum microblaze_instr op;
   int flags = 0;
   int save_hidden_pointer_found = 0;
@@ -353,13 +382,12 @@ microblaze_analyze_prologue (struct gdbarch *gdbarch, CORE_ADDR pc,
 	 instruction.  */
 
       {
-	unsigned ctrl_op = (unsigned)insn >> 26;
+	unsigned op = (unsigned)insn >> 26;
 
 	/* continue if not control flow (branch, return).  */
-	if (ctrl_op != 0x26 && ctrl_op != 0x27 && ctrl_op != 0x2d
-	    && ctrl_op != 0x2e && ctrl_op != 0x2f)
+	if (op != 0x26 && op != 0x27 && op != 0x2d && op != 0x2e && op != 0x2f)
 	  continue;
-	else if (ctrl_op == 0x2c)
+	else if (op == 0x2c)
 	  continue;    /* continue if imm.  */
       }
 
@@ -398,7 +426,7 @@ microblaze_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
 /* Return PC of first real instruction of the function starting at
    START_PC.  */
 
-static CORE_ADDR
+CORE_ADDR
 microblaze_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR start_pc)
 {
   struct symtab_and_line sal;
@@ -428,15 +456,16 @@ microblaze_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR start_pc)
 
 /* Normal frames.  */
 
-static struct microblaze_frame_cache *
+struct microblaze_frame_cache *
 microblaze_frame_cache (struct frame_info *next_frame, void **this_cache)
 {
   struct microblaze_frame_cache *cache;
   struct gdbarch *gdbarch = get_frame_arch (next_frame);
+  CORE_ADDR func, pc, fp;
   int rn;
 
   if (*this_cache)
-    return (struct microblaze_frame_cache *) *this_cache;
+    return *this_cache;
 
   cache = microblaze_alloc_frame_cache ();
   *this_cache = cache;
@@ -446,8 +475,7 @@ microblaze_frame_cache (struct frame_info *next_frame, void **this_cache)
   for (rn = 0; rn < gdbarch_num_regs (gdbarch); rn++)
     cache->register_offsets[rn] = -1;
 
-  /* Call for side effects.  */
-  get_frame_func (next_frame);
+  func = get_frame_func (next_frame);
 
   cache->pc = get_frame_address_in_block (next_frame);
 
@@ -530,17 +558,16 @@ microblaze_extract_return_value (struct type *type, struct regcache *regcache,
   switch (TYPE_LENGTH (type))
     {
       case 1:	/* return last byte in the register.  */
-	regcache->cooked_read (MICROBLAZE_RETVAL_REGNUM, buf);
+	regcache_cooked_read (regcache, MICROBLAZE_RETVAL_REGNUM, buf);
 	memcpy(valbuf, buf + MICROBLAZE_REGISTER_SIZE - 1, 1);
 	return;
       case 2:	/* return last 2 bytes in register.  */
-	regcache->cooked_read (MICROBLAZE_RETVAL_REGNUM, buf);
 	memcpy(valbuf, buf + MICROBLAZE_REGISTER_SIZE - 2, 2);
 	return;
       case 4:	/* for sizes 4 or 8, copy the required length.  */
       case 8:
-	regcache->cooked_read (MICROBLAZE_RETVAL_REGNUM, buf);
-	regcache->cooked_read (MICROBLAZE_RETVAL_REGNUM + 1, buf+4);
+	regcache_cooked_read (regcache, MICROBLAZE_RETVAL_REGNUM, buf);
+	regcache_cooked_read (regcache, MICROBLAZE_RETVAL_REGNUM+1, buf+4);
 	memcpy (valbuf, buf, TYPE_LENGTH (type));
 	return;
       default:
@@ -574,17 +601,17 @@ microblaze_store_return_value (struct type *type, struct regcache *regcache,
     {
        gdb_assert (len == 8);
        memcpy (buf, valbuf, 8);
-       regcache->cooked_write (MICROBLAZE_RETVAL_REGNUM+1, buf + 4);
+       regcache_cooked_write (regcache, MICROBLAZE_RETVAL_REGNUM+1, buf + 4);
     }
   else
     /* ??? Do we need to do any sign-extension here?  */
     memcpy (buf + 4 - len, valbuf, len);
 
-  regcache->cooked_write (MICROBLAZE_RETVAL_REGNUM, buf);
+  regcache_cooked_write (regcache, MICROBLAZE_RETVAL_REGNUM, buf);
 }
 
 static enum return_value_convention
-microblaze_return_value (struct gdbarch *gdbarch, struct value *function,
+microblaze_return_value (struct gdbarch *gdbarch, struct type *func_type,
 			 struct type *type, struct regcache *regcache,
 			 gdb_byte *readbuf, const gdb_byte *writebuf)
 {
@@ -602,6 +629,11 @@ microblaze_stabs_argument_has_addr (struct gdbarch *gdbarch, struct type *type)
   return (TYPE_LENGTH (type) == 16);
 }
 
+static void
+microblaze_write_pc (struct regcache *regcache, CORE_ADDR pc)
+{
+  regcache_cooked_write_unsigned (regcache, MICROBLAZE_PC_REGNUM, pc);
+}
 
 static int dwarf2_to_reg_map[78] =
 { 0  /* r0  */,   1  /* r1  */,   2  /* r2  */,   3  /* r3  */,  /*  0- 3 */
@@ -629,21 +661,8 @@ static int dwarf2_to_reg_map[78] =
 static int
 microblaze_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int reg)
 {
-  if (reg >= 0 && reg < sizeof (dwarf2_to_reg_map))
-    return dwarf2_to_reg_map[reg];
-  return -1;
-}
-
-static void
-microblaze_register_g_packet_guesses (struct gdbarch *gdbarch)
-{
-  register_remote_g_packet_guess (gdbarch,
-                                  4 * MICROBLAZE_NUM_CORE_REGS,
-                                  tdesc_microblaze);
-
-  register_remote_g_packet_guess (gdbarch,
-                                  4 * MICROBLAZE_NUM_REGS,
-                                  tdesc_microblaze_with_stack_protect);
+  gdb_assert (reg < sizeof (dwarf2_to_reg_map));
+  return dwarf2_to_reg_map[reg];
 }
 
 static struct gdbarch *
@@ -651,55 +670,14 @@ microblaze_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 {
   struct gdbarch_tdep *tdep;
   struct gdbarch *gdbarch;
-  struct tdesc_arch_data *tdesc_data = NULL;
-  const struct target_desc *tdesc = info.target_desc;
 
   /* If there is already a candidate, use it.  */
   arches = gdbarch_list_lookup_by_info (arches, &info);
   if (arches != NULL)
     return arches->gdbarch;
-  if (tdesc == NULL)
-    tdesc = tdesc_microblaze;
-
-  /* Check any target description for validity.  */
-  if (tdesc_has_registers (tdesc))
-    {
-      const struct tdesc_feature *feature;
-      int valid_p;
-      int i;
-
-      feature = tdesc_find_feature (tdesc,
-                                    "org.gnu.gdb.microblaze.core");
-      if (feature == NULL)
-        return NULL;
-      tdesc_data = tdesc_data_alloc ();
-
-      valid_p = 1;
-      for (i = 0; i < MICROBLAZE_NUM_CORE_REGS; i++)
-        valid_p &= tdesc_numbered_register (feature, tdesc_data, i,
-                                            microblaze_register_names[i]);
-      feature = tdesc_find_feature (tdesc,
-                                    "org.gnu.gdb.microblaze.stack-protect");
-      if (feature != NULL)
-        {
-          valid_p = 1;
-          valid_p &= tdesc_numbered_register (feature, tdesc_data,
-                                              MICROBLAZE_SLR_REGNUM,
-                                              "rslr");
-          valid_p &= tdesc_numbered_register (feature, tdesc_data,
-                                              MICROBLAZE_SHR_REGNUM,
-                                              "rshr");
-        }
-
-      if (!valid_p)
-        {
-          tdesc_data_cleanup (tdesc_data);
-          return NULL;
-        }
-    }
 
   /* Allocate space for the new architecture.  */
-  tdep = XCNEW (struct gdbarch_tdep);
+  tdep = XMALLOC (struct gdbarch_tdep);
   gdbarch = gdbarch_alloc (&info, tdep);
 
   set_gdbarch_long_double_bit (gdbarch, 128);
@@ -717,6 +695,8 @@ microblaze_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   /* Call dummy code.  */
   set_gdbarch_call_dummy_location (gdbarch, ON_STACK);
+  set_gdbarch_push_dummy_code (gdbarch, microblaze_push_dummy_code);
+  set_gdbarch_push_dummy_call (gdbarch, microblaze_push_dummy_call);
 
   set_gdbarch_return_value (gdbarch, microblaze_return_value);
   set_gdbarch_stabs_argument_has_addr
@@ -727,16 +707,15 @@ microblaze_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   /* Stack grows downward.  */
   set_gdbarch_inner_than (gdbarch, core_addr_lessthan);
 
-  set_gdbarch_breakpoint_kind_from_pc (gdbarch,
-				       microblaze_breakpoint::kind_from_pc);
-  set_gdbarch_sw_breakpoint_from_kind (gdbarch,
-				       microblaze_breakpoint::bp_from_kind);
+  set_gdbarch_breakpoint_from_pc (gdbarch, microblaze_breakpoint_from_pc);
 
   set_gdbarch_frame_args_skip (gdbarch, 8);
 
-  set_gdbarch_unwind_pc (gdbarch, microblaze_unwind_pc);
+  set_gdbarch_print_insn (gdbarch, print_insn_microblaze);
 
-  microblaze_register_g_packet_guesses (gdbarch);
+  set_gdbarch_write_pc (gdbarch, microblaze_write_pc);
+
+  set_gdbarch_unwind_pc (gdbarch, microblaze_unwind_pc);
 
   frame_base_set_default (gdbarch, &microblaze_frame_base);
 
@@ -747,27 +726,26 @@ microblaze_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   dwarf2_append_unwinders (gdbarch);
   frame_unwind_append_unwinder (gdbarch, &microblaze_frame_unwind);
   frame_base_append_sniffer (gdbarch, dwarf2_frame_base_sniffer);
-  if (tdesc_data != NULL)
-    tdesc_use_registers (gdbarch, tdesc, tdesc_data);
 
   return gdbarch;
 }
+
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+void _initialize_microblaze_tdep (void);
 
 void
 _initialize_microblaze_tdep (void)
 {
   register_gdbarch_init (bfd_arch_microblaze, microblaze_gdbarch_init);
 
-  initialize_tdesc_microblaze_with_stack_protect ();
-  initialize_tdesc_microblaze ();
   /* Debug this files internals.  */
-  add_setshow_zuinteger_cmd ("microblaze", class_maintenance,
-			     &microblaze_debug_flag, _("\
+  add_setshow_zinteger_cmd ("microblaze", class_maintenance,
+			    &microblaze_debug_flag, _("\
 Set microblaze debugging."), _("\
 Show microblaze debugging."), _("\
 When non-zero, microblaze specific debugging is enabled."),
-			     NULL,
-			     NULL,
-			     &setdebuglist, &showdebuglist);
+			    NULL,
+			    NULL, 
+			    &setdebuglist, &showdebuglist);
 
 }

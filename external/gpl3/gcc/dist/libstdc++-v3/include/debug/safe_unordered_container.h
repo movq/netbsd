@@ -1,6 +1,6 @@
 // Safe container implementation  -*- C++ -*-
 
-// Copyright (C) 2011-2019 Free Software Foundation, Inc.
+// Copyright (C) 2011-2013 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -29,7 +29,7 @@
 #ifndef _GLIBCXX_DEBUG_SAFE_UNORDERED_CONTAINER_H
 #define _GLIBCXX_DEBUG_SAFE_UNORDERED_CONTAINER_H 1
 
-#include <debug/assertions.h>
+#include <debug/debug.h>
 #include <debug/macros.h>
 #include <debug/functions.h>
 #include <debug/safe_unordered_base.h>
@@ -57,30 +57,7 @@ namespace __gnu_debug
   template<typename _Container>
     class _Safe_unordered_container : public _Safe_unordered_container_base
     {
-    private:
-      _Container&
-      _M_cont() noexcept
-      { return *static_cast<_Container*>(this); }
-
-    protected:
-      void
-      _M_invalidate_locals()
-      {
-	auto __local_end = _M_cont()._M_base().cend(0);
-	this->_M_invalidate_local_if(
-		[__local_end](__decltype(__local_end) __it)
-		{ return __it != __local_end; });
-      }
-
-      void
-      _M_invalidate_all()
-      {
-	auto __end = _M_cont()._M_base().cend();
-	this->_M_invalidate_if([__end](__decltype(__end) __it)
-			       { return __it != __end; });
-	_M_invalidate_locals();
-      }
-
+    public:
       /** Invalidates all iterators @c x that reference this container,
 	  are not singular, and for which @c __pred(x) returns @c
 	  true. @c __pred will be invoked with the normal iterators nested
@@ -91,7 +68,7 @@ namespace __gnu_debug
 
       /** Invalidates all local iterators @c x that reference this container,
 	  are not singular, and for which @c __pred(x) returns @c
-	  true. @c __pred will be invoked with the normal local iterators
+	  true. @c __pred will be invoked with the normal ilocal iterators
 	  nested in the safe ones. */
       template<typename _Predicate>
 	void

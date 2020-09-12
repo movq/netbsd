@@ -1,6 +1,7 @@
 // Wrapper for underlying C-language localization -*- C++ -*-
 
-// Copyright (C) 2001-2019 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2009
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,9 +23,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file bits/c++locale.h
+/** @file c++locale.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{locale}
+ *  You should not attempt to use it directly.
  */
 
 //
@@ -39,12 +40,11 @@
 #pragma GCC system_header
 
 #include <clocale>
+#include <cstddef>
 
 #define _GLIBCXX_NUM_CATEGORIES 0
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   typedef int*			__c_locale;
 
@@ -53,12 +53,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   // fall back to the unsafe vsprintf which, in general, can be dangerous
   // and should be avoided.
   inline int
-  __convert_from_v(const __c_locale&, char* __out,
+  __convert_from_v(const __c_locale&, char* __out, 
 		   const int __size __attribute__((__unused__)),
 		   const char* __fmt, ...)
   {
-    char* __old = std::setlocale(LC_NUMERIC, 0);
-    char* __sav = 0;
+    char* __old = std::setlocale(LC_NUMERIC, NULL);
+    char* __sav = NULL;
     if (__builtin_strcmp(__old, "C"))
       {
 	const size_t __len = __builtin_strlen(__old) + 1;
@@ -70,7 +70,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     __builtin_va_list __args;
     __builtin_va_start(__args, __fmt);
 
-#if _GLIBCXX_USE_C99_STDIO && !_GLIBCXX_HAVE_BROKEN_VSNPRINTF
+#ifdef _GLIBCXX_USE_C99
     const int __ret = __builtin_vsnprintf(__out, __size, __fmt, __args);
 #else
     const int __ret = __builtin_vsprintf(__out, __fmt, __args);
@@ -86,7 +86,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     return __ret;
   }
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 #endif

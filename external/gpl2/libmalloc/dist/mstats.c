@@ -1,4 +1,4 @@
-/*	$NetBSD: mstats.c,v 1.1.1.1 2016/01/13 21:42:18 christos Exp $	*/
+/*	$NetBSD: mstats.c,v 1.1 2016/01/13 21:42:18 christos Exp $	*/
 
 /* Access the statistics maintained by `malloc'.
    Copyright 1990, 1991, 1992 Free Software Foundation, Inc.

@@ -1,6 +1,6 @@
 /* Data structures associated with breakpoints shared in both GDB and
    GDBserver.
-   Copyright (C) 1992-2019 Free Software Foundation, Inc.
+   Copyright (C) 1992-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -16,9 +16,8 @@
 
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
-
-#ifndef COMMON_BREAK_COMMON_H
-#define COMMON_BREAK_COMMON_H
+#ifndef BREAK_COMMON_H
+#define BREAK_COMMON_H 1
 
 enum target_hw_bp_type
   {
@@ -28,4 +27,4 @@ enum target_hw_bp_type
     hw_execute = 3		/* Execute HW breakpoint */
   };
 
-#endif /* COMMON_BREAK_COMMON_H */
+#endif

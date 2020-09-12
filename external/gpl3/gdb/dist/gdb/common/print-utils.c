@@ -1,6 +1,6 @@
 /* Cell-based print utility routines for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2019 Free Software Foundation, Inc.
+   Copyright (C) 1986-2015 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,17 +19,19 @@
 
 #include "common-defs.h"
 #include "print-utils.h"
+#include <stdint.h>
+
 /* Temporary storage using circular buffer.  */
 
-/* Number of cells in the circular buffer.  */
 #define NUMCELLS 16
+#define CELLSIZE 50
 
 /* Return the next entry in the circular buffer.  */
 
-char *
-get_print_cell (void)
+static char *
+get_cell (void)
 {
-  static char buf[NUMCELLS][PRINT_CELL_SIZE];
+  static char buf[NUMCELLS][CELLSIZE];
   static int cell = 0;
 
   if (++cell >= NUMCELLS)
@@ -38,12 +40,12 @@ get_print_cell (void)
 }
 
 static char *
-decimal2str (const char *sign, ULONGEST addr, int width)
+decimal2str (char *sign, ULONGEST addr, int width)
 {
   /* Steal code from valprint.c:print_decimal().  Should this worry
      about the real size of addr as the above does?  */
   unsigned long temp[3];
-  char *str = get_print_cell ();
+  char *str = get_cell ();
   int i = 0;
 
   do
@@ -62,14 +64,14 @@ decimal2str (const char *sign, ULONGEST addr, int width)
   switch (i)
     {
     case 1:
-      xsnprintf (str, PRINT_CELL_SIZE, "%s%0*lu", sign, width, temp[0]);
+      xsnprintf (str, CELLSIZE, "%s%0*lu", sign, width, temp[0]);
       break;
     case 2:
-      xsnprintf (str, PRINT_CELL_SIZE, "%s%0*lu%09lu", sign, width,
+      xsnprintf (str, CELLSIZE, "%s%0*lu%09lu", sign, width,
 		 temp[1], temp[0]);
       break;
     case 3:
-      xsnprintf (str, PRINT_CELL_SIZE, "%s%0*lu%09lu%09lu", sign, width,
+      xsnprintf (str, CELLSIZE, "%s%0*lu%09lu%09lu", sign, width,
 		 temp[2], temp[1], temp[0]);
       break;
     default:
@@ -84,7 +86,7 @@ static char *
 octal2str (ULONGEST addr, int width)
 {
   unsigned long temp[3];
-  char *str = get_print_cell ();
+  char *str = get_cell ();
   int i = 0;
 
   do
@@ -104,15 +106,15 @@ octal2str (ULONGEST addr, int width)
     {
     case 1:
       if (temp[0] == 0)
-	xsnprintf (str, PRINT_CELL_SIZE, "%*o", width, 0);
+	xsnprintf (str, CELLSIZE, "%*o", width, 0);
       else
-	xsnprintf (str, PRINT_CELL_SIZE, "0%0*lo", width, temp[0]);
+	xsnprintf (str, CELLSIZE, "0%0*lo", width, temp[0]);
       break;
     case 2:
-      xsnprintf (str, PRINT_CELL_SIZE, "0%0*lo%010lo", width, temp[1], temp[0]);
+      xsnprintf (str, CELLSIZE, "0%0*lo%010lo", width, temp[1], temp[0]);
       break;
     case 3:
-      xsnprintf (str, PRINT_CELL_SIZE, "0%0*lo%010lo%010lo", width,
+      xsnprintf (str, CELLSIZE, "0%0*lo%010lo%010lo", width,
 		 temp[2], temp[1], temp[0]);
       break;
     default:
@@ -155,18 +157,18 @@ phex (ULONGEST l, int sizeof_l)
   switch (sizeof_l)
     {
     case 8:
-      str = get_print_cell ();
-      xsnprintf (str, PRINT_CELL_SIZE, "%08lx%08lx",
+      str = get_cell ();
+      xsnprintf (str, CELLSIZE, "%08lx%08lx",
 		 (unsigned long) (l >> thirty_two),
 		 (unsigned long) (l & 0xffffffff));
       break;
     case 4:
-      str = get_print_cell ();
-      xsnprintf (str, PRINT_CELL_SIZE, "%08lx", (unsigned long) l);
+      str = get_cell ();
+      xsnprintf (str, CELLSIZE, "%08lx", (unsigned long) l);
       break;
     case 2:
-      str = get_print_cell ();
-      xsnprintf (str, PRINT_CELL_SIZE, "%04x", (unsigned short) (l & 0xffff));
+      str = get_cell ();
+      xsnprintf (str, CELLSIZE, "%04x", (unsigned short) (l & 0xffff));
       break;
     default:
       str = phex (l, sizeof (l));
@@ -189,22 +191,22 @@ phex_nz (ULONGEST l, int sizeof_l)
       {
 	unsigned long high = (unsigned long) (l >> thirty_two);
 
-	str = get_print_cell ();
+	str = get_cell ();
 	if (high == 0)
-	  xsnprintf (str, PRINT_CELL_SIZE, "%lx",
+	  xsnprintf (str, CELLSIZE, "%lx",
 		     (unsigned long) (l & 0xffffffff));
 	else
-	  xsnprintf (str, PRINT_CELL_SIZE, "%lx%08lx", high,
+	  xsnprintf (str, CELLSIZE, "%lx%08lx", high,
 		     (unsigned long) (l & 0xffffffff));
 	break;
       }
     case 4:
-      str = get_print_cell ();
-      xsnprintf (str, PRINT_CELL_SIZE, "%lx", (unsigned long) l);
+      str = get_cell ();
+      xsnprintf (str, CELLSIZE, "%lx", (unsigned long) l);
       break;
     case 2:
-      str = get_print_cell ();
-      xsnprintf (str, PRINT_CELL_SIZE, "%x", (unsigned short) (l & 0xffff));
+      str = get_cell ();
+      xsnprintf (str, CELLSIZE, "%x", (unsigned short) (l & 0xffff));
       break;
     default:
       str = phex_nz (l, sizeof (l));
@@ -219,9 +221,9 @@ phex_nz (ULONGEST l, int sizeof_l)
 char *
 hex_string (LONGEST num)
 {
-  char *result = get_print_cell ();
+  char *result = get_cell ();
 
-  xsnprintf (result, PRINT_CELL_SIZE, "0x%s", phex_nz (num, sizeof (num)));
+  xsnprintf (result, CELLSIZE, "0x%s", phex_nz (num, sizeof (num)));
   return result;
 }
 
@@ -230,14 +232,14 @@ hex_string (LONGEST num)
 char *
 hex_string_custom (LONGEST num, int width)
 {
-  char *result = get_print_cell ();
-  char *result_end = result + PRINT_CELL_SIZE - 1;
+  char *result = get_cell ();
+  char *result_end = result + CELLSIZE - 1;
   const char *hex = phex_nz (num, sizeof (num));
   int hex_len = strlen (hex);
 
   if (hex_len > width)
     width = hex_len;
-  if (width + 2 >= PRINT_CELL_SIZE)
+  if (width + 2 >= CELLSIZE)
     internal_error (__FILE__, __LINE__, _("\
 hex_string_custom: insufficient space to store result"));
 
@@ -250,10 +252,10 @@ hex_string_custom: insufficient space to store result"));
 /* See print-utils.h.  */
 
 char *
-int_string (LONGEST val, int radix, int is_signed, int width,
+int_string (LONGEST val, int radix, int is_signed, int width, 
 	    int use_c_format)
 {
-  switch (radix)
+  switch (radix) 
     {
     case 16:
       {
@@ -287,14 +289,14 @@ int_string (LONGEST val, int radix, int is_signed, int width,
       internal_error (__FILE__, __LINE__,
 		      _("failed internal consistency check"));
     }
-}
+}	
 
 /* See print-utils.h.  */
 
 const char *
 core_addr_to_string (const CORE_ADDR addr)
 {
-  char *str = get_print_cell ();
+  char *str = get_cell ();
 
   strcpy (str, "0x");
   strcat (str, phex (addr, sizeof (addr)));
@@ -306,7 +308,7 @@ core_addr_to_string (const CORE_ADDR addr)
 const char *
 core_addr_to_string_nz (const CORE_ADDR addr)
 {
-  char *str = get_print_cell ();
+  char *str = get_cell ();
 
   strcpy (str, "0x");
   strcat (str, phex_nz (addr, sizeof (addr)));
@@ -316,11 +318,10 @@ core_addr_to_string_nz (const CORE_ADDR addr)
 /* See print-utils.h.  */
 
 const char *
-host_address_to_string_1 (const void *addr)
+host_address_to_string (const void *addr)
 {
-  char *str = get_print_cell ();
+  char *str = get_cell ();
 
-  xsnprintf (str, PRINT_CELL_SIZE, "0x%s",
-	     phex_nz ((uintptr_t) addr, sizeof (addr)));
+  xsnprintf (str, CELLSIZE, "0x%s", phex_nz ((uintptr_t) addr, sizeof (addr)));
   return str;
 }

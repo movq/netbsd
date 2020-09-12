@@ -1,5 +1,5 @@
 // -*- C++ -*- std::unexpected handler
-// Copyright (C) 2002-2019 Free Software Foundation, Inc.
+// Copyright (C) 2002, 2009 Free Software Foundation
 //
 // This file is part of GCC.
 //

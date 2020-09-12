@@ -1,4 +1,5 @@
-# Copyright 2001-2019 Free Software Foundation, Inc.
+# Copyright 2001, 2004, 2007, 2008, 2009, 2010, 2011
+# Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,15 +16,21 @@
 
 # This file was written by Michael Snyder (msnyder@redhat.com)
 
+if $tracelevel then {
+	strace $tracelevel
+}
+
 
 # Define if you want to skip this test
 # (could be very time-consuming on remote targets with slow connection).
 #
 if [target_info exists gdb,skip_huge_test] {
-    return
+    return;
 }
 
-standard_testfile .c
+set testfile "huge"
+set srcfile ${testfile}.c
+set binfile ${objdir}/${subdir}/${testfile}
 
 for { set size [expr 2 * 1024 * 1024] } { $size > 10 } { set size [expr $size / 2] } {
   if { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" \
@@ -31,23 +38,24 @@ for { set size [expr 2 * 1024 * 1024] } { $size > 10 } { set size [expr $size / 
       == "" } break
 }
 if { $size < 10 } {
-     untested "size less than 10"
+     untested huge.exp
      return -1
 }
 
 # Start with a fresh gdb.
 
-clean_restart ${binfile}
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
 
 set prev_timeout $timeout
 set timeout 30
 
 if { ! [ runto_main ] } then {
-    untested "couldn't run to main"
+    untested huge.exp
     return -1
 }
-
-gdb_test_no_output "set max-value-size unlimited"
 
 gdb_test "print a" ".1 = .0 .repeats \[0123456789\]+ times.." "print a very large data object"
 

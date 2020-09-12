@@ -1,6 +1,6 @@
 /* rl78.c --- opcode semantics for stand-alone RL78 simulator.
 
-   Copyright (C) 2008-2019 Free Software Foundation, Inc.
+   Copyright (C) 2008-2013 Free Software Foundation, Inc.
    Contributed by Red Hat, Inc.
 
    This file is part of the GNU simulators.
@@ -421,16 +421,10 @@ decode_opcode (void)
   int a, b, v, v2;
   unsigned int u, u2;
   int obits;
-  RL78_Dis_Isa isa;
-
-  isa = (rl78_g10_mode ? RL78_ISA_G10
-	: g14_multiply ? RL78_ISA_G14
-	: g13_multiply ? RL78_ISA_G13
-	: RL78_ISA_DEFAULT);
 
   rl78_data.dpc = pc;
   opcode_size = rl78_decode_opcode (pc, &opcode,
-				    rl78_get_byte, &rl78_data, isa);
+				    rl78_get_byte, &rl78_data);
 
   opcode_pc = pc;
   pc += opcode_size;
@@ -857,7 +851,7 @@ decode_opcode (void)
 
       rl78_data.dpc = pc;
       opcode_size = rl78_decode_opcode (pc, &opcode,
-					rl78_get_byte, &rl78_data, isa);
+					rl78_get_byte, &rl78_data);
       pc += opcode_size;
       tprintf (" skipped: %s\n", opcode.syntax);
       break;

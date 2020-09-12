@@ -1,6 +1,6 @@
 /* GDB/Scheme charset interface.
 
-   Copyright (C) 2014-2019 Free Software Foundation, Inc.
+   Copyright (C) 2014-2015 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -48,12 +48,13 @@ gdbscm_scm_from_c_string (const char *string)
 
 /* Convert an SCM string to a C (latin1) string.
    "latin1" is chosen because Guile won't throw an exception.
+   Space for the result is allocated with malloc, caller must free.
    It is an error to call this if STRING is not a string.  */
 
-gdb::unique_xmalloc_ptr<char>
+char *
 gdbscm_scm_to_c_string (SCM string)
 {
-  return gdb::unique_xmalloc_ptr<char> (scm_to_latin1_string (string));
+  return scm_to_latin1_string (string);
 }
 
 /* Use printf to construct a Scheme string.  */
@@ -62,12 +63,14 @@ SCM
 gdbscm_scm_from_printf (const char *format, ...)
 {
   va_list args;
+  char *string;
   SCM result;
 
   va_start (args, format);
-  std::string string = string_vprintf (format, args);
+  string = xstrvprintf (format, args);
   va_end (args);
-  result = scm_from_latin1_string (string.c_str ());
+  result = scm_from_latin1_string (string);
+  xfree (string);
 
   return result;
 }
@@ -80,7 +83,7 @@ struct scm_to_stringn_data
   SCM string;
   size_t *lenp;
   const char *charset;
-  scm_t_string_failed_conversion_handler conversion_kind;
+  int conversion_kind;
   char *result;
 };
 
@@ -90,7 +93,7 @@ struct scm_to_stringn_data
 static SCM
 gdbscm_call_scm_to_stringn (void *datap)
 {
-  struct scm_to_stringn_data *data = (struct scm_to_stringn_data *) datap;
+  struct scm_to_stringn_data *data = datap;
 
   data->result = scm_to_stringn (data->string, data->lenp, data->charset,
 				 data->conversion_kind);
@@ -110,9 +113,10 @@ gdbscm_call_scm_to_stringn (void *datap)
    If STRICT is zero, then escape sequences are used for characters that
    can't be converted, and EXCEPT_SCMP may be passed as NULL.
 
+   Space for the result is allocated with malloc, caller must free.
    It is an error to call this if STRING is not a string.  */
 
-gdb::unique_xmalloc_ptr<char>
+char *
 gdbscm_scm_to_string (SCM string, size_t *lenp,
 		      const char *charset, int strict, SCM *except_scmp)
 {
@@ -132,7 +136,7 @@ gdbscm_scm_to_string (SCM string, size_t *lenp,
   if (gdbscm_is_false (scm_result))
     {
       gdb_assert (data.result != NULL);
-      return gdb::unique_xmalloc_ptr<char> (data.result);
+      return data.result;
     }
   gdb_assert (gdbscm_is_exception (scm_result));
   *except_scmp = scm_result;
@@ -147,7 +151,7 @@ struct scm_from_stringn_data
   const char *string;
   size_t len;
   const char *charset;
-  scm_t_string_failed_conversion_handler conversion_kind;
+  int conversion_kind;
   SCM result;
 };
 
@@ -157,7 +161,7 @@ struct scm_from_stringn_data
 static SCM
 gdbscm_call_scm_from_stringn (void *datap)
 {
-  struct scm_from_stringn_data *data = (struct scm_from_stringn_data *) datap;
+  struct scm_from_stringn_data *data = datap;
 
   data->result = scm_from_stringn (data->string, data->len, data->charset,
 				   data->conversion_kind);
@@ -210,9 +214,10 @@ gdbscm_scm_from_string (const char *string, size_t len,
 
    Returns NULL if there is a conversion error, with the exception object
    stored in *EXCEPT_SCMP.
+   Space for the result is allocated with malloc, caller must free.
    It is an error to call this if STRING is not a string.  */
 
-gdb::unique_xmalloc_ptr<char>
+char *
 gdbscm_scm_to_host_string (SCM string, size_t *lenp, SCM *except_scmp)
 {
   return gdbscm_scm_to_string (string, lenp, host_charset (), 1, except_scmp);
@@ -236,6 +241,8 @@ static SCM
 gdbscm_string_to_argv (SCM string_scm)
 {
   char *string;
+  char **c_argv;
+  int i;
   SCM result = SCM_EOL;
 
   gdbscm_parse_function_args (FUNC_NAME, SCM_ARG1, NULL, "s",
@@ -247,10 +254,11 @@ gdbscm_string_to_argv (SCM string_scm)
       return SCM_EOL;
     }
 
-  gdb_argv c_argv (string);
-  for (char *arg : c_argv)
-    result = scm_cons (gdbscm_scm_from_c_string (arg), result);
+  c_argv = gdb_buildargv (string);
+  for (i = 0; c_argv[i] != NULL; ++i)
+    result = scm_cons (gdbscm_scm_from_c_string (c_argv[i]), result);
 
+  freeargv (c_argv);
   xfree (string);
 
   return scm_reverse_x (result, SCM_EOL);
@@ -260,7 +268,7 @@ gdbscm_string_to_argv (SCM string_scm)
 
 static const scheme_function string_functions[] =
 {
-  { "string->argv", 1, 0, 0, as_a_scm_t_subr (gdbscm_string_to_argv),
+  { "string->argv", 1, 0, 0, gdbscm_string_to_argv,
   "\
 Convert a string to a list of strings split up according to\n\
 gdb's argv parsing rules." },

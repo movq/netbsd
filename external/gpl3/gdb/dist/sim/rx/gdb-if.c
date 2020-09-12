@@ -1,6 +1,6 @@
 /* gdb-if.c -- sim interface to GDB.
 
-Copyright (C) 2008-2019 Free Software Foundation, Inc.
+Copyright (C) 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 Contributed by Red Hat, Inc.
 
 This file is part of the GNU simulators.
@@ -54,14 +54,14 @@ static struct sim_state the_minisim = {
   "This is the sole rx minisim instance.  See libsim.a's global variables."
 };
 
-static int rx_sim_is_open;
+static int open;
 
 SIM_DESC
 sim_open (SIM_OPEN_KIND kind,
 	  struct host_callback_struct *callback,
-	  struct bfd *abfd, char * const *argv)
+	  struct bfd *abfd, char **argv)
 {
-  if (rx_sim_is_open)
+  if (open)
     fprintf (stderr, "rx minisim: re-opened sim\n");
 
   /* The 'run' interface doesn't use this function, so we don't care
@@ -79,7 +79,7 @@ sim_open (SIM_OPEN_KIND kind,
   execution_error_init_debugger ();
 
   sim_disasm_init (abfd);
-  rx_sim_is_open = 1;
+  open = 1;
   return &the_minisim;
 }
 
@@ -98,7 +98,7 @@ sim_close (SIM_DESC sd, int quitting)
   /* Not much to do.  At least free up our memory.  */
   init_mem ();
 
-  rx_sim_is_open = 0;
+  open = 0;
 }
 
 static bfd *
@@ -192,7 +192,7 @@ addr_in_swap_list (bfd_vma addr)
 }
 
 SIM_RC
-sim_load (SIM_DESC sd, const char *prog, struct bfd *abfd, int from_tty)
+sim_load (SIM_DESC sd, char *prog, struct bfd *abfd, int from_tty)
 {
   check_desc (sd);
 
@@ -201,21 +201,20 @@ sim_load (SIM_DESC sd, const char *prog, struct bfd *abfd, int from_tty)
   if (!abfd)
     return SIM_RC_FAIL;
 
-  rx_load (abfd, get_callbacks ());
+  rx_load (abfd);
   build_swap_list (abfd);
 
   return SIM_RC_OK;
 }
 
 SIM_RC
-sim_create_inferior (SIM_DESC sd, struct bfd *abfd,
-		     char * const *argv, char * const *env)
+sim_create_inferior (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
 {
   check_desc (sd);
 
   if (abfd)
     {
-      rx_load (abfd, NULL);
+      rx_load (abfd);
       build_swap_list (abfd);
     }
 
@@ -651,35 +650,52 @@ int siggnal;
 
 
 /* Given a signal number used by the RX bsp (that is, newlib),
-   return a target signal number used by GDB.  */
-static int
-rx_signal_to_gdb_signal (int rx)
+   return a host signal number.  (Oddly, the gdb/sim interface uses
+   host signal numbers...)  */
+int
+rx_signal_to_host (int rx)
 {
   switch (rx)
     {
     case 4:
-      return GDB_SIGNAL_ILL;
+#ifdef SIGILL
+      return SIGILL;
+#else
+      return SIGSEGV;
+#endif
 
     case 5:
-      return GDB_SIGNAL_TRAP;
+      return SIGTRAP;
 
     case 10:
-      return GDB_SIGNAL_BUS;
+#ifdef SIGBUS
+      return SIGBUS;
+#else
+      return SIGSEGV;
+#endif
 
     case 11:
-      return GDB_SIGNAL_SEGV;
+      return SIGSEGV;
 
     case 24:
-      return GDB_SIGNAL_XCPU;
+#ifdef SIGXCPU
+      return SIGXCPU;
+#else
+      break;
+#endif
 
     case 2:
-      return GDB_SIGNAL_INT;
+      return SIGINT;
 
     case 8:
-      return GDB_SIGNAL_FPE;
+#ifdef SIGFPE
+      return SIGFPE;
+#else
+      break;
+#endif
 
     case 6:
-      return GDB_SIGNAL_ABRT;
+      return SIGABRT;
     }
 
   return 0;
@@ -694,17 +710,17 @@ handle_step (int rc)
   if (execution_error_get_last_error () != SIM_ERR_NONE)
     {
       reason = sim_stopped;
-      siggnal = GDB_SIGNAL_SEGV;
+      siggnal = TARGET_SIGNAL_SEGV;
     }
   if (RX_STEPPED (rc) || RX_HIT_BREAK (rc))
     {
       reason = sim_stopped;
-      siggnal = GDB_SIGNAL_TRAP;
+      siggnal = TARGET_SIGNAL_TRAP;
     }
   else if (RX_STOPPED (rc))
     {
       reason = sim_stopped;
-      siggnal = rx_signal_to_gdb_signal (RX_STOP_SIG (rc));
+      siggnal = rx_signal_to_host (RX_STOP_SIG (rc));
     }
   else
     {
@@ -750,7 +766,7 @@ sim_resume (SIM_DESC sd, int step, int sig_to_deliver)
 	    {
 	      stop = 0;
 	      reason = sim_stopped;
-	      siggnal = GDB_SIGNAL_INT;
+	      siggnal = TARGET_SIGNAL_INT;
 	      break;
 	    }
 
@@ -761,7 +777,7 @@ sim_resume (SIM_DESC sd, int step, int sig_to_deliver)
 	  if (execution_error_get_last_error () != SIM_ERR_NONE)
 	    {
 	      reason = sim_stopped;
-	      siggnal = GDB_SIGNAL_SEGV;
+	      siggnal = TARGET_SIGNAL_SEGV;
 	      break;
 	    }
 
@@ -792,12 +808,11 @@ sim_stop_reason (SIM_DESC sd, enum sim_stop *reason_p, int *sigrc_p)
 }
 
 void
-sim_do_command (SIM_DESC sd, const char *cmd)
+sim_do_command (SIM_DESC sd, char *cmd)
 {
-  const char *args;
-  char *p = strdup (cmd);
-
   check_desc (sd);
+
+  char *p = cmd;
 
   /* Skip leading whitespace.  */
   while (isspace (*p))
@@ -810,6 +825,7 @@ sim_do_command (SIM_DESC sd, const char *cmd)
 
   /* Null-terminate the command word, and record the start of any
      further arguments.  */
+  char *args;
   if (*p)
     {
       *p = '\0';
@@ -845,12 +861,4 @@ sim_do_command (SIM_DESC sd, const char *cmd)
   else
     printf ("The 'sim' command expects either 'trace' or 'verbose'"
 	    " as a subcommand.\n");
-
-  free (p);
-}
-
-char **
-sim_complete_command (SIM_DESC sd, const char *text, const char *word)
-{
-  return NULL;
 }

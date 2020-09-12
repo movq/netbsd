@@ -1,7 +1,7 @@
 /* Generate attribute information shared between driver and core
    compilers (insn-attr-common.h) from machine description.  Split out
    of genattr.c.
-   Copyright (C) 1991-2019 Free Software Foundation, Inc.
+   Copyright (C) 1991-2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -33,15 +33,14 @@ static void
 write_upcase (const char *str)
 {
   for (; *str; str++)
-    putchar (TOUPPER (*str));
+    putchar (TOUPPER(*str));
 }
 
 static void
-gen_attr (md_rtx_info *info)
+gen_attr (rtx attr)
 {
   const char *p, *tag;
 
-  rtx attr = info->def;
   p = XSTR (attr, 1);
   if (*p != '\0')
     {
@@ -61,8 +60,9 @@ gen_attr (md_rtx_info *info)
 }
 
 int
-main (int argc, const char **argv)
+main (int argc, char **argv)
 {
+  rtx desc;
   bool have_delay = false;
   bool have_sched = false;
 
@@ -78,31 +78,34 @@ main (int argc, const char **argv)
 
   /* Read the machine description.  */
 
-  md_rtx_info info;
-  while (read_md_rtx (&info))
-    switch (GET_CODE (info.def))
-      {
-      case DEFINE_ATTR:
-	gen_attr (&info);
+  while (1)
+    {
+      int line_no, insn_code_number;
+
+      desc = read_md_rtx (&line_no, &insn_code_number);
+      if (desc == NULL)
 	break;
 
-      case DEFINE_DELAY:
-	have_delay = true;
-	break;
+      if (GET_CODE (desc) == DEFINE_ATTR)
+	gen_attr (desc);
 
-      case DEFINE_INSN_RESERVATION:
-	if (!have_sched)
-	  {
-	    printf ("#define INSN_SCHEDULING\n");
-	    have_sched = true;
-	  }
-	break;
-
-      default:
-	break;
-      }
-
-	    printf ("#define DELAY_SLOTS %d\n", have_delay);
+      if (GET_CODE (desc) == DEFINE_DELAY)
+        {
+	  if (!have_delay)
+	    {
+	      printf ("#define DELAY_SLOTS\n");
+	      have_delay = true;
+	    }
+	}
+      else if (GET_CODE (desc) == DEFINE_INSN_RESERVATION)
+	{
+	  if (!have_sched)
+	    {
+	      printf ("#define INSN_SCHEDULING\n");
+	      have_sched = true;
+	    }
+	}
+    }
   puts ("\n#endif /* GCC_INSN_ATTR_COMMON_H */");
 
   if (ferror (stdout) || fflush (stdout) || fclose (stdout))

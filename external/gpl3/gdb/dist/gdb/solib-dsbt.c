@@ -1,5 +1,5 @@
 /* Handle TIC6X (DSBT) shared libraries for GDB, the GNU Debugger.
-   Copyright (C) 2010-2019 Free Software Foundation, Inc.
+   Copyright (C) 2010-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,6 +18,7 @@
 
 
 #include "defs.h"
+#include "gdb_string.h"
 #include "inferior.h"
 #include "gdbcore.h"
 #include "solib.h"
@@ -28,6 +29,7 @@
 #include "command.h"
 #include "gdbcmd.h"
 #include "elf-bfd.h"
+#include "exceptions.h"
 #include "gdb_bfd.h"
 
 #define GOT_MODULE_OFFSET 4
@@ -123,15 +125,10 @@ struct ext_link_map
 
 /* Link map info to include in an allocated so_list entry */
 
-struct lm_info_dsbt : public lm_info_base
+struct lm_info
 {
-  ~lm_info_dsbt ()
-  {
-    xfree (this->map);
-  }
-
   /* The loadmap, digested into an easier to use form.  */
-  int_elf32_dsbt_loadmap *map = NULL;
+  struct int_elf32_dsbt_loadmap *map;
 };
 
 /* Per pspace dsbt specific data.  */
@@ -142,7 +139,7 @@ struct dsbt_info
      of loaded shared objects.  ``main_executable_lm_info'' provides
      a way to get at this information so that it doesn't need to be
      frequently recomputed.  Initialized by dsbt_relocate_main_executable.  */
-  struct lm_info_dsbt *main_executable_lm_info;
+  struct lm_info *main_executable_lm_info;
 
   /* Load maps for the main executable and the interpreter.  These are obtained
      from ptrace.  They are the starting point for getting into the program,
@@ -157,6 +154,8 @@ struct dsbt_info
   /* Link map address for main module.  */
   CORE_ADDR main_lm_addr;
 
+  int enable_break2_done;
+
   CORE_ADDR interp_text_sect_low;
   CORE_ADDR interp_text_sect_high;
   CORE_ADDR interp_plt_sect_low;
@@ -169,7 +168,10 @@ static const struct program_space_data *solib_dsbt_pspace_data;
 static void
 dsbt_pspace_data_cleanup (struct program_space *pspace, void *arg)
 {
-  xfree (arg);
+  struct dsbt_info *info;
+
+  info = program_space_data (pspace, solib_dsbt_pspace_data);
+  xfree (info);
 }
 
 /* Get the current dsbt data.  If none is found yet, add it now.  This
@@ -180,14 +182,14 @@ get_dsbt_info (void)
 {
   struct dsbt_info *info;
 
-  info = (struct dsbt_info *) program_space_data (current_program_space,
-						  solib_dsbt_pspace_data);
+  info = program_space_data (current_program_space, solib_dsbt_pspace_data);
   if (info != NULL)
     return info;
 
-  info = XCNEW (struct dsbt_info);
+  info = XZALLOC (struct dsbt_info);
   set_program_space_data (current_program_space, solib_dsbt_pspace_data, info);
 
+  info->enable_break2_done = 0;
   info->lm_base_cache = 0;
   info->main_lm_addr = 0;
 
@@ -224,10 +226,10 @@ dsbt_print_loadmap (struct int_elf32_dsbt_loadmap *map)
 /* Decode int_elf32_dsbt_loadmap from BUF.  */
 
 static struct int_elf32_dsbt_loadmap *
-decode_loadmap (const gdb_byte *buf)
+decode_loadmap (gdb_byte *buf)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
-  const struct ext_elf32_dsbt_loadmap *ext_ldmbuf;
+  struct ext_elf32_dsbt_loadmap *ext_ldmbuf;
   struct int_elf32_dsbt_loadmap *int_ldmbuf;
 
   int version, seg, nsegs;
@@ -257,7 +259,7 @@ decode_loadmap (const gdb_byte *buf)
      external loadsegs.  I.e, allocate the internal loadsegs.  */
   int_ldmbuf_size = (sizeof (struct int_elf32_dsbt_loadmap)
 		     + (nsegs - 1) * sizeof (struct int_elf32_dsbt_loadseg));
-  int_ldmbuf = (struct int_elf32_dsbt_loadmap *) xmalloc (int_ldmbuf_size);
+  int_ldmbuf = xmalloc (int_ldmbuf_size);
 
   /* Place extracted information in internal structs.  */
   int_ldmbuf->version = version;
@@ -278,6 +280,7 @@ decode_loadmap (const gdb_byte *buf)
 				    byte_order);
     }
 
+  xfree (ext_ldmbuf);
   return int_ldmbuf;
 }
 
@@ -291,26 +294,26 @@ static struct dsbt_info *get_dsbt_info (void);
 static void
 dsbt_get_initial_loadmaps (void)
 {
+  gdb_byte *buf;
   struct dsbt_info *info = get_dsbt_info ();
-  gdb::optional<gdb::byte_vector> buf
-    = target_read_alloc (current_top_target (), TARGET_OBJECT_FDPIC, "exec");
 
-  if (!buf || buf->empty ())
+  if (0 >= target_read_alloc (&current_target, TARGET_OBJECT_FDPIC,
+			      "exec", (gdb_byte**) &buf))
     {
       info->exec_loadmap = NULL;
       error (_("Error reading DSBT exec loadmap"));
     }
-  info->exec_loadmap = decode_loadmap (buf->data ());
+  info->exec_loadmap = decode_loadmap (buf);
   if (solib_dsbt_debug)
     dsbt_print_loadmap (info->exec_loadmap);
 
-  buf = target_read_alloc (current_top_target (), TARGET_OBJECT_FDPIC, "exec");
-  if (!buf || buf->empty ())
+  if (0 >= target_read_alloc (&current_target, TARGET_OBJECT_FDPIC,
+			      "interp", (gdb_byte**)&buf))
     {
       info->interp_loadmap = NULL;
       error (_("Error reading DSBT interp loadmap"));
     }
-  info->interp_loadmap = decode_loadmap (buf->data ());
+  info->interp_loadmap = decode_loadmap (buf);
   if (solib_dsbt_debug)
     dsbt_print_loadmap (info->interp_loadmap);
 }
@@ -333,7 +336,7 @@ fetch_loadmap (CORE_ADDR ldmaddr)
 
   /* Fetch initial portion of the loadmap.  */
   if (target_read_memory (ldmaddr, (gdb_byte *) &ext_ldmbuf_partial,
-			  sizeof ext_ldmbuf_partial))
+                          sizeof ext_ldmbuf_partial))
     {
       /* Problem reading the target's memory.  */
       return NULL;
@@ -341,7 +344,7 @@ fetch_loadmap (CORE_ADDR ldmaddr)
 
   /* Extract the version.  */
   version = extract_unsigned_integer (ext_ldmbuf_partial.version,
-				      sizeof ext_ldmbuf_partial.version,
+                                      sizeof ext_ldmbuf_partial.version,
 				      byte_order);
   if (version != 0)
     {
@@ -360,7 +363,7 @@ fetch_loadmap (CORE_ADDR ldmaddr)
   /* Allocate space for the complete (external) loadmap.  */
   ext_ldmbuf_size = sizeof (struct ext_elf32_dsbt_loadmap)
     + (nsegs - 1) * sizeof (struct ext_elf32_dsbt_loadseg);
-  ext_ldmbuf = (struct ext_elf32_dsbt_loadmap *) xmalloc (ext_ldmbuf_size);
+  ext_ldmbuf = xmalloc (ext_ldmbuf_size);
 
   /* Copy over the portion of the loadmap that's already been read.  */
   memcpy (ext_ldmbuf, &ext_ldmbuf_partial, sizeof ext_ldmbuf_partial);
@@ -379,7 +382,7 @@ fetch_loadmap (CORE_ADDR ldmaddr)
      external loadsegs.  I.e, allocate the internal loadsegs.  */
   int_ldmbuf_size = sizeof (struct int_elf32_dsbt_loadmap)
     + (nsegs - 1) * sizeof (struct int_elf32_dsbt_loadseg);
-  int_ldmbuf = (struct int_elf32_dsbt_loadmap *) xmalloc (int_ldmbuf_size);
+  int_ldmbuf = xmalloc (int_ldmbuf_size);
 
   /* Place extracted information in internal structs.  */
   int_ldmbuf->version = version;
@@ -405,7 +408,7 @@ fetch_loadmap (CORE_ADDR ldmaddr)
 }
 
 static void dsbt_relocate_main_executable (void);
-static int enable_break (void);
+static int enable_break2 (void);
 
 /* Scan for DYNTAG in .dynamic section of ABFD. If DYNTAG is found 1 is
    returned and the corresponding PTR is set.  */
@@ -457,7 +460,7 @@ scan_dyntag (int dyntag, bfd *abfd, CORE_ADDR *ptr)
   /* Read in .dynamic from the BFD.  We will get the actual value
      from memory later.  */
   sect_size = bfd_section_size (abfd, sect);
-  buf = bufstart = (gdb_byte *) alloca (sect_size);
+  buf = bufstart = alloca (sect_size);
   if (!bfd_get_section_contents (abfd, sect,
 				 buf, 0, sect_size))
     return 0;
@@ -506,10 +509,16 @@ scan_dyntag (int dyntag, bfd *abfd, CORE_ADDR *ptr)
   return 0;
 }
 
-/* See solist.h. */
+/* If no open symbol file, attempt to locate and open the main symbol
+   file.
+
+   If FROM_TTYP dereferences to a non-zero integer, allow messages to
+   be printed.  This parameter is a pointer rather than an int because
+   open_symbol_file_object is called via catch_errors and
+   catch_errors requires a pointer argument. */
 
 static int
-open_symbol_file_object (int from_tty)
+open_symbol_file_object (void *from_ttyp)
 {
   /* Unimplemented.  */
   return 0;
@@ -520,7 +529,7 @@ open_symbol_file_object (int from_tty)
 
 static CORE_ADDR
 displacement_from_map (struct int_elf32_dsbt_loadmap *map,
-		       CORE_ADDR addr)
+                       CORE_ADDR addr)
 {
   int seg;
 
@@ -547,7 +556,7 @@ static CORE_ADDR
 lm_base (void)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
-  struct bound_minimal_symbol got_sym;
+  struct minimal_symbol *got_sym;
   CORE_ADDR addr;
   gdb_byte buf[TIC6X_PTR_SIZE];
   struct dsbt_info *info = get_dsbt_info ();
@@ -567,9 +576,9 @@ lm_base (void)
   got_sym = lookup_minimal_symbol ("_GLOBAL_OFFSET_TABLE_", NULL,
 				   symfile_objfile);
 
-  if (got_sym.minsym != 0)
+  if (got_sym != 0)
     {
-      addr = BMSYMBOL_VALUE_ADDRESS (got_sym);
+      addr = SYMBOL_VALUE_ADDRESS (got_sym);
       if (solib_dsbt_debug)
 	fprintf_unfiltered (gdb_stdlog,
 			    "lm_base: get addr %x by _GLOBAL_OFFSET_TABLE_.\n",
@@ -638,11 +647,11 @@ dsbt_current_sos (void)
      for details.)
 
      Note that the relocation of the main executable is also performed
-     by solib_create_inferior_hook, however, in the case of core
+     by SOLIB_CREATE_INFERIOR_HOOK, however, in the case of core
      files, this hook is called too late in order to be of benefit to
-     solib_add.  solib_add eventually calls this function,
+     SOLIB_ADD.  SOLIB_ADD eventually calls this function,
      dsbt_current_sos, and also precedes the call to
-     solib_create_inferior_hook.   (See post_create_inferior in
+     SOLIB_CREATE_INFERIOR_HOOK.   (See post_create_inferior in
      infcmd.c.)  */
   if (info->main_executable_lm_info == 0 && core_bfd != NULL)
     dsbt_relocate_main_executable ();
@@ -650,7 +659,7 @@ dsbt_current_sos (void)
   /* Locate the address of the first link map struct.  */
   lm_addr = lm_base ();
 
-  /* We have at least one link map entry.  Fetch the lot of them,
+  /* We have at least one link map entry.  Fetch the the lot of them,
      building the solist chain.  */
   while (lm_addr)
     {
@@ -695,7 +704,7 @@ dsbt_current_sos (void)
       if (dsbt_index != 0)
 	{
 	  int errcode;
-	  gdb::unique_xmalloc_ptr<char> name_buf;
+	  char *name_buf;
 	  struct int_elf32_dsbt_loadmap *loadmap;
 	  struct so_list *sop;
 	  CORE_ADDR addr;
@@ -708,10 +717,9 @@ dsbt_current_sos (void)
 	      break;
 	    }
 
-	  sop = XCNEW (struct so_list);
-	  lm_info_dsbt *li = new lm_info_dsbt;
-	  sop->lm_info = li;
-	  li->map = loadmap;
+	  sop = xcalloc (1, sizeof (struct so_list));
+	  sop->lm_info = xcalloc (1, sizeof (struct lm_info));
+	  sop->lm_info->map = loadmap;
 	  /* Fetch the name.  */
 	  addr = extract_unsigned_integer (lm_buf.l_name,
 					   sizeof (lm_buf.l_name),
@@ -726,10 +734,11 @@ dsbt_current_sos (void)
 	    {
 	      if (solib_dsbt_debug)
 		fprintf_unfiltered (gdb_stdlog, "current_sos: name = %s\n",
-				    name_buf.get ());
+				    name_buf);
 
-	      strncpy (sop->so_name, name_buf.get (), SO_NAME_MAX_PATH_SIZE - 1);
+	      strncpy (sop->so_name, name_buf, SO_NAME_MAX_PATH_SIZE - 1);
 	      sop->so_name[SO_NAME_MAX_PATH_SIZE - 1] = '\0';
+	      xfree (name_buf);
 	      strcpy (sop->so_original_name, sop->so_name);
 	    }
 
@@ -745,6 +754,8 @@ dsbt_current_sos (void)
 					  sizeof (lm_buf.l_next), byte_order);
     }
 
+  enable_break2 ();
+
   return sos_head;
 }
 
@@ -758,7 +769,7 @@ dsbt_in_dynsym_resolve_code (CORE_ADDR pc)
 
   return ((pc >= info->interp_text_sect_low && pc < info->interp_text_sect_high)
 	  || (pc >= info->interp_plt_sect_low && pc < info->interp_plt_sect_high)
-	  || in_plt_section (pc));
+	  || in_plt_section (pc, NULL));
 }
 
 /* Print a warning about being unable to set the dynamic linker
@@ -768,14 +779,14 @@ static void
 enable_break_failure_warning (void)
 {
   warning (_("Unable to find dynamic linker breakpoint function.\n"
-	     "GDB will be unable to debug shared library initializers\n"
-	     "and track explicitly loaded dynamic code."));
+           "GDB will be unable to debug shared library initializers\n"
+	   "and track explicitly loaded dynamic code."));
 }
 
 /* Helper function for gdb_bfd_lookup_symbol.  */
 
 static int
-cmp_name (const asymbol *sym, const void *data)
+cmp_name (asymbol *sym, void *data)
 {
   return (strcmp (sym->name, (const char *) data) == 0);
 }
@@ -784,15 +795,30 @@ cmp_name (const asymbol *sym, const void *data)
    for arranging for the inferior to hit a breakpoint after mapping in
    the shared libraries.  This function enables that breakpoint.
 
-   On the TIC6X, using the shared library (DSBT), GDB can try to place
-   a breakpoint on '_dl_debug_state' to monitor the shared library
-   event.  */
+   On the TIC6X, using the shared library (DSBT), the symbol
+   _dl_debug_addr points to the r_debug struct which contains
+   a field called r_brk.  r_brk is the address of the function
+   descriptor upon which a breakpoint must be placed.  Being a
+   function descriptor, we must extract the entry point in order
+   to set the breakpoint.
+
+   Our strategy will be to get the .interp section from the
+   executable.  This section will provide us with the name of the
+   interpreter.  We'll open the interpreter and then look up
+   the address of _dl_debug_addr.  We then relocate this address
+   using the interpreter's loadmap.  Once the relocated address
+   is known, we fetch the value (address) corresponding to r_brk
+   and then use that value to fetch the entry point of the function
+   we're interested in.  */
 
 static int
-enable_break (void)
+enable_break2 (void)
 {
+  enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
+  int success = 0;
+  char **bkpt_namep;
   asection *interp_sect;
-  struct dsbt_info *info;
+  struct dsbt_info *info = get_dsbt_info ();
 
   if (exec_bfd == NULL)
     return 0;
@@ -800,7 +826,8 @@ enable_break (void)
   if (!target_has_execution)
     return 0;
 
-  info = get_dsbt_info ();
+  if (info->enable_break2_done)
+    return 1;
 
   info->interp_text_sect_low = 0;
   info->interp_text_sect_high = 0;
@@ -813,32 +840,28 @@ enable_break (void)
   if (interp_sect)
     {
       unsigned int interp_sect_size;
-      char *buf;
+      gdb_byte *buf;
+      bfd *tmp_bfd = NULL;
       CORE_ADDR addr;
+      gdb_byte addr_buf[TIC6X_PTR_SIZE];
       struct int_elf32_dsbt_loadmap *ldm;
-      int ret;
+      volatile struct gdb_exception ex;
 
       /* Read the contents of the .interp section into a local buffer;
-	 the contents specify the dynamic linker this program uses.  */
+         the contents specify the dynamic linker this program uses.  */
       interp_sect_size = bfd_section_size (exec_bfd, interp_sect);
-      buf = (char *) alloca (interp_sect_size);
+      buf = alloca (interp_sect_size);
       bfd_get_section_contents (exec_bfd, interp_sect,
 				buf, 0, interp_sect_size);
 
       /* Now we need to figure out where the dynamic linker was
-	 loaded so that we can load its symbols and place a breakpoint
-	 in the dynamic linker itself.  */
+         loaded so that we can load its symbols and place a breakpoint
+         in the dynamic linker itself.  */
 
-      gdb_bfd_ref_ptr tmp_bfd;
-      TRY
-	{
-	  tmp_bfd = solib_bfd_open (buf);
-	}
-      CATCH (ex, RETURN_MASK_ALL)
-	{
-	}
-      END_CATCH
-
+      TRY_CATCH (ex, RETURN_MASK_ALL)
+        {
+          tmp_bfd = solib_bfd_open (buf);
+        }
       if (tmp_bfd == NULL)
 	{
 	  enable_break_failure_warning ();
@@ -849,62 +872,104 @@ enable_break (void)
       ldm = info->interp_loadmap;
 
       /* Record the relocated start and end address of the dynamic linker
-	 text and plt section for dsbt_in_dynsym_resolve_code.  */
-      interp_sect = bfd_get_section_by_name (tmp_bfd.get (), ".text");
+         text and plt section for dsbt_in_dynsym_resolve_code.  */
+      interp_sect = bfd_get_section_by_name (tmp_bfd, ".text");
       if (interp_sect)
 	{
 	  info->interp_text_sect_low
-	    = bfd_section_vma (tmp_bfd.get (), interp_sect);
+	    = bfd_section_vma (tmp_bfd, interp_sect);
 	  info->interp_text_sect_low
 	    += displacement_from_map (ldm, info->interp_text_sect_low);
 	  info->interp_text_sect_high
 	    = info->interp_text_sect_low
-	    + bfd_section_size (tmp_bfd.get (), interp_sect);
+	    + bfd_section_size (tmp_bfd, interp_sect);
 	}
-      interp_sect = bfd_get_section_by_name (tmp_bfd.get (), ".plt");
+      interp_sect = bfd_get_section_by_name (tmp_bfd, ".plt");
       if (interp_sect)
 	{
 	  info->interp_plt_sect_low =
-	    bfd_section_vma (tmp_bfd.get (), interp_sect);
+	    bfd_section_vma (tmp_bfd, interp_sect);
 	  info->interp_plt_sect_low
 	    += displacement_from_map (ldm, info->interp_plt_sect_low);
 	  info->interp_plt_sect_high =
-	    info->interp_plt_sect_low + bfd_section_size (tmp_bfd.get (),
-							  interp_sect);
+	    info->interp_plt_sect_low + bfd_section_size (tmp_bfd, interp_sect);
 	}
 
-      addr = gdb_bfd_lookup_symbol (tmp_bfd.get (), cmp_name,
-				    "_dl_debug_state");
-      if (addr != 0)
+      addr = gdb_bfd_lookup_symbol (tmp_bfd, cmp_name, "_dl_debug_addr");
+      if (addr == 0)
+	{
+	  warning (_("Could not find symbol _dl_debug_addr in dynamic linker"));
+	  enable_break_failure_warning ();
+	  gdb_bfd_unref (tmp_bfd);
+	  return 0;
+	}
+
+      if (solib_dsbt_debug)
+	fprintf_unfiltered (gdb_stdlog,
+	                    "enable_break: _dl_debug_addr (prior to relocation) = %s\n",
+			    hex_string_custom (addr, 8));
+
+      addr += displacement_from_map (ldm, addr);
+
+      if (solib_dsbt_debug)
+	fprintf_unfiltered (gdb_stdlog,
+	                    "enable_break: _dl_debug_addr (after relocation) = %s\n",
+			    hex_string_custom (addr, 8));
+
+      /* Fetch the address of the r_debug struct.  */
+      if (target_read_memory (addr, addr_buf, sizeof addr_buf) != 0)
+	{
+	  warning (_("Unable to fetch contents of _dl_debug_addr "
+		     "(at address %s) from dynamic linker"),
+	           hex_string_custom (addr, 8));
+	}
+      addr = extract_unsigned_integer (addr_buf, sizeof addr_buf, byte_order);
+
+      if (solib_dsbt_debug)
+	fprintf_unfiltered (gdb_stdlog,
+	                    "enable_break: _dl_debug_addr[0..3] = %s\n",
+	                    hex_string_custom (addr, 8));
+
+      /* If it's zero, then the ldso hasn't initialized yet, and so
+         there are no shared libs yet loaded.  */
+      if (addr == 0)
 	{
 	  if (solib_dsbt_debug)
 	    fprintf_unfiltered (gdb_stdlog,
-				"enable_break: _dl_debug_state (prior to relocation) = %s\n",
-				hex_string_custom (addr, 8));
-	  addr += displacement_from_map (ldm, addr);
-
-	  if (solib_dsbt_debug)
-	    fprintf_unfiltered (gdb_stdlog,
-				"enable_break: _dl_debug_state (after relocation) = %s\n",
-				hex_string_custom (addr, 8));
-
-	  /* Now (finally!) create the solib breakpoint.  */
-	  create_solib_event_breakpoint (target_gdbarch (), addr);
-
-	  ret = 1;
+	                        "enable_break: ldso not yet initialized\n");
+	  /* Do not warn, but mark to run again.  */
+	  return 0;
 	}
-      else
+
+      /* Fetch the r_brk field.  It's 8 bytes from the start of
+         _dl_debug_addr.  */
+      if (target_read_memory (addr + 8, addr_buf, sizeof addr_buf) != 0)
 	{
-	  if (solib_dsbt_debug)
-	    fprintf_unfiltered (gdb_stdlog,
-				"enable_break: _dl_debug_state is not found\n");
-	  ret = 0;
+	  warning (_("Unable to fetch _dl_debug_addr->r_brk "
+		     "(at address %s) from dynamic linker"),
+	           hex_string_custom (addr + 8, 8));
+	  enable_break_failure_warning ();
+	  gdb_bfd_unref (tmp_bfd);
+	  return 0;
 	}
+      addr = extract_unsigned_integer (addr_buf, sizeof addr_buf, byte_order);
 
-      /* We're done with the loadmap.  */
+      /* We're done with the temporary bfd.  */
+      gdb_bfd_unref (tmp_bfd);
+
+      /* We're also done with the loadmap.  */
       xfree (ldm);
 
-      return ret;
+      /* Remove all the solib event breakpoints.  Their addresses
+         may have changed since the last time we ran the program.  */
+      remove_solib_event_breakpoints ();
+
+      /* Now (finally!) create the solib breakpoint.  */
+      create_solib_event_breakpoint (target_gdbarch (), addr);
+
+      info->enable_break2_done = 1;
+
+      return 1;
     }
 
   /* Tell the user we couldn't set a dynamic linker breakpoint.  */
@@ -914,10 +979,59 @@ enable_break (void)
   return 0;
 }
 
+static int
+enable_break (void)
+{
+  asection *interp_sect;
+  struct minimal_symbol *start;
+
+  /* Check for the presence of a .interp section.  If there is no
+     such section, the executable is statically linked.  */
+
+  interp_sect = bfd_get_section_by_name (exec_bfd, ".interp");
+
+  if (interp_sect == NULL)
+    {
+      if (solib_dsbt_debug)
+	fprintf_unfiltered (gdb_stdlog,
+			    "enable_break: No .interp section found.\n");
+      return 0;
+    }
+
+  start = lookup_minimal_symbol ("_start", NULL, symfile_objfile);
+  if (start == NULL)
+    {
+      if (solib_dsbt_debug)
+	fprintf_unfiltered (gdb_stdlog,
+			    "enable_break: symbol _start is not found.\n");
+      return 0;
+    }
+
+  create_solib_event_breakpoint (target_gdbarch (),
+				 SYMBOL_VALUE_ADDRESS (start));
+
+  if (solib_dsbt_debug)
+    fprintf_unfiltered (gdb_stdlog,
+			"enable_break: solib event breakpoint placed at : %s\n",
+			hex_string_custom (SYMBOL_VALUE_ADDRESS (start), 8));
+  return 1;
+}
+
+/* Once the symbols from a shared object have been loaded in the usual
+   way, we are called to do any system specific symbol handling that
+   is needed.  */
+
+static void
+dsbt_special_symbol_handling (void)
+{
+}
+
 static void
 dsbt_relocate_main_executable (void)
 {
   struct int_elf32_dsbt_loadmap *ldm;
+  struct cleanup *old_chain;
+  struct section_offsets *new_offsets;
   int changed;
   struct obj_section *osect;
   struct dsbt_info *info = get_dsbt_info ();
@@ -925,12 +1039,13 @@ dsbt_relocate_main_executable (void)
   dsbt_get_initial_loadmaps ();
   ldm = info->exec_loadmap;
 
-  delete info->main_executable_lm_info;
-  info->main_executable_lm_info = new lm_info_dsbt;
+  xfree (info->main_executable_lm_info);
+  info->main_executable_lm_info = xcalloc (1, sizeof (struct lm_info));
   info->main_executable_lm_info->map = ldm;
 
-  gdb::unique_xmalloc_ptr<struct section_offsets> new_offsets
-    (XCNEWVEC (struct section_offsets, symfile_objfile->num_sections));
+  new_offsets = xcalloc (symfile_objfile->num_sections,
+			 sizeof (struct section_offsets));
+  old_chain = make_cleanup (xfree, new_offsets);
   changed = 0;
 
   ALL_OBJFILE_OSECTIONS (symfile_objfile, osect)
@@ -939,7 +1054,7 @@ dsbt_relocate_main_executable (void)
       int osect_idx;
       int seg;
 
-      osect_idx = osect - symfile_objfile->sections;
+      osect_idx = osect->the_bfd_section->index;
 
       /* Current address of section.  */
       addr = obj_section_addr (osect);
@@ -964,7 +1079,9 @@ dsbt_relocate_main_executable (void)
     }
 
   if (changed)
-    objfile_relocate (symfile_objfile, new_offsets.get ());
+    objfile_relocate (symfile_objfile, new_offsets);
+
+  do_cleanups (old_chain);
 
   /* Now that symfile_objfile has been relocated, we can compute the
      GOT value and stash it away.  */
@@ -972,10 +1089,12 @@ dsbt_relocate_main_executable (void)
 
 /* When gdb starts up the inferior, it nurses it along (through the
    shell) until it is ready to execute it's first instruction.  At this
-   point, this function gets called via solib_create_inferior_hook.
+   point, this function gets called via expansion of the macro
+   SOLIB_CREATE_INFERIOR_HOOK.
 
    For the DSBT shared library, the main executable needs to be relocated.
-   The shared library breakpoints also need to be enabled.  */
+   The shared library breakpoints also need to be enabled.
+ */
 
 static void
 dsbt_solib_create_inferior_hook (int from_tty)
@@ -997,32 +1116,36 @@ dsbt_clear_solib (void)
   struct dsbt_info *info = get_dsbt_info ();
 
   info->lm_base_cache = 0;
+  info->enable_break2_done = 0;
   info->main_lm_addr = 0;
-
-  delete info->main_executable_lm_info;
-  info->main_executable_lm_info = NULL;
+  if (info->main_executable_lm_info != 0)
+    {
+      xfree (info->main_executable_lm_info->map);
+      xfree (info->main_executable_lm_info);
+      info->main_executable_lm_info = 0;
+    }
 }
 
 static void
 dsbt_free_so (struct so_list *so)
 {
-  lm_info_dsbt *li = (lm_info_dsbt *) so->lm_info;
-
-  delete li;
+  xfree (so->lm_info->map);
+  xfree (so->lm_info);
 }
 
 static void
 dsbt_relocate_section_addresses (struct so_list *so,
-				 struct target_section *sec)
+                                 struct target_section *sec)
 {
   int seg;
-  lm_info_dsbt *li = (lm_info_dsbt *) so->lm_info;
-  int_elf32_dsbt_loadmap *map = li->map;
+  struct int_elf32_dsbt_loadmap *map;
+
+  map = so->lm_info->map;
 
   for (seg = 0; seg < map->nsegs; seg++)
     {
       if (map->segs[seg].p_vaddr <= sec->addr
-	  && sec->addr < map->segs[seg].p_vaddr + map->segs[seg].p_memsz)
+          && sec->addr < map->segs[seg].p_vaddr + map->segs[seg].p_memsz)
 	{
 	  CORE_ADDR displ = map->segs[seg].addr - map->segs[seg].p_vaddr;
 
@@ -1041,6 +1164,9 @@ show_dsbt_debug (struct ui_file *file, int from_tty,
 
 struct target_so_ops dsbt_so_ops;
 
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+extern initialize_file_ftype _initialize_dsbt_solib;
+
 void
 _initialize_dsbt_solib (void)
 {
@@ -1051,6 +1177,7 @@ _initialize_dsbt_solib (void)
   dsbt_so_ops.free_so = dsbt_free_so;
   dsbt_so_ops.clear_solib = dsbt_clear_solib;
   dsbt_so_ops.solib_create_inferior_hook = dsbt_solib_create_inferior_hook;
+  dsbt_so_ops.special_symbol_handling = dsbt_special_symbol_handling;
   dsbt_so_ops.current_sos = dsbt_current_sos;
   dsbt_so_ops.open_symbol_file_object = open_symbol_file_object;
   dsbt_so_ops.in_dynsym_resolve_code = dsbt_in_dynsym_resolve_code;

@@ -1,5 +1,7 @@
 /* Perform simple optimizations to clean up the result of reload.
-   Copyright (C) 1987-2019 Free Software Foundation, Inc.
+   Copyright (C) 1987, 1988, 1989, 1992, 1993, 1994, 1995, 1996, 1997,
+   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
+   2010 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,56 +22,56 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "backend.h"
-#include "target.h"
+#include "tm.h"
+
+#include "machmode.h"
+#include "hard-reg-set.h"
 #include "rtl.h"
-#include "tree.h"
-#include "predict.h"
-#include "df.h"
-#include "memmodel.h"
 #include "tm_p.h"
+#include "obstack.h"
+#include "insn-config.h"
+#include "flags.h"
+#include "function.h"
+#include "expr.h"
 #include "optabs.h"
 #include "regs.h"
-#include "emit-rtl.h"
-#include "recog.h"
-
-#include "cfgrtl.h"
-#include "cfgbuild.h"
-#include "cfgcleanup.h"
+#include "basic-block.h"
 #include "reload.h"
+#include "recog.h"
+#include "output.h"
 #include "cselib.h"
+#include "real.h"
+#include "toplev.h"
+#include "except.h"
+#include "tree.h"
+#include "timevar.h"
 #include "tree-pass.h"
+#include "df.h"
 #include "dbgcnt.h"
 
 static int reload_cse_noop_set_p (rtx);
-static bool reload_cse_simplify (rtx_insn *, rtx);
-static void reload_cse_regs_1 (void);
-static int reload_cse_simplify_set (rtx, rtx_insn *);
-static int reload_cse_simplify_operands (rtx_insn *, rtx);
+static void reload_cse_simplify (rtx, rtx);
+static void reload_cse_regs_1 (rtx);
+static int reload_cse_simplify_set (rtx, rtx);
+static int reload_cse_simplify_operands (rtx, rtx);
 
 static void reload_combine (void);
-static void reload_combine_note_use (rtx *, rtx_insn *, int, rtx);
+static void reload_combine_note_use (rtx *, rtx);
 static void reload_combine_note_store (rtx, const_rtx, void *);
 
-static bool reload_cse_move2add (rtx_insn *);
+static void reload_cse_move2add (rtx);
 static void move2add_note_store (rtx, const_rtx, void *);
 
 /* Call cse / combine like post-reload optimization phases.
    FIRST is the first instruction.  */
-
-static void
-reload_cse_regs (rtx_insn *first ATTRIBUTE_UNUSED)
+void
+reload_cse_regs (rtx first ATTRIBUTE_UNUSED)
 {
-  bool moves_converted;
-  reload_cse_regs_1 ();
+  reload_cse_regs_1 (first);
   reload_combine ();
-  moves_converted = reload_cse_move2add (first);
+  reload_cse_move2add (first);
   if (flag_expensive_optimizations)
-    {
-      if (moves_converted)
-	reload_combine ();
-      reload_cse_regs_1 ();
-    }
+    reload_cse_regs_1 (first);
 }
 
 /* See whether a single set SET is a noop.  */
@@ -82,18 +84,11 @@ reload_cse_noop_set_p (rtx set)
   return rtx_equal_for_cselib_p (SET_DEST (set), SET_SRC (set));
 }
 
-/* Try to simplify INSN.  Return true if the CFG may have changed.  */
-static bool
-reload_cse_simplify (rtx_insn *insn, rtx testreg)
+/* Try to simplify INSN.  */
+static void
+reload_cse_simplify (rtx insn, rtx testreg)
 {
   rtx body = PATTERN (insn);
-  basic_block insn_bb = BLOCK_FOR_INSN (insn);
-  unsigned insn_bb_succs = EDGE_COUNT (insn_bb->succs);
-
-  /* If NO_FUNCTION_CSE has been set by the target, then we should not try
-     to cse function calls.  */
-  if (NO_FUNCTION_CSE && CALL_P (insn))
-    return false;
 
   if (GET_CODE (body) == SET)
     {
@@ -108,10 +103,12 @@ reload_cse_simplify (rtx_insn *insn, rtx testreg)
 
       if (!count && reload_cse_noop_set_p (body))
 	{
-	  if (check_for_inc_dec (insn))
-	    delete_insn_and_edges (insn);
-	  /* We're done with this insn.  */
-	  goto done;
+	  rtx value = SET_DEST (body);
+	  if (REG_P (value)
+	      && ! REG_FUNCTION_VALUE_P (value))
+	    value = 0;
+	  delete_insn_and_edges (insn);
+	  return;
 	}
 
       if (count > 0)
@@ -133,8 +130,6 @@ reload_cse_simplify (rtx_insn *insn, rtx testreg)
 	  for (i = XVECLEN (body, 0) - 1; i >= 0; --i)
 	    {
 	      rtx part = XVECEXP (body, 0, i);
-	      /* asms can only have full clobbers, not clobber_highs.  */
-	      gcc_assert (GET_CODE (part) != CLOBBER_HIGH);
 	      if (GET_CODE (part) == CLOBBER && REG_P (XEXP (part, 0)))
 		cselib_invalidate_rtx (XEXP (part, 0));
 	    }
@@ -157,18 +152,15 @@ reload_cse_simplify (rtx_insn *insn, rtx testreg)
 		  value = SET_DEST (part);
 		}
 	    }
-	  else if (GET_CODE (part) != CLOBBER
-		   && GET_CODE (part) != CLOBBER_HIGH
-		   && GET_CODE (part) != USE)
+	  else if (GET_CODE (part) != CLOBBER)
 	    break;
 	}
 
       if (i < 0)
 	{
-	  if (check_for_inc_dec (insn))
-	    delete_insn_and_edges (insn);
+	  delete_insn_and_edges (insn);
 	  /* We're done with this insn.  */
-	  goto done;
+	  return;
 	}
 
       /* It's not a no-op, but we can try to simplify it.  */
@@ -181,9 +173,6 @@ reload_cse_simplify (rtx_insn *insn, rtx testreg)
       else
 	reload_cse_simplify_operands (insn, testreg);
     }
-
-done:
-  return (EDGE_COUNT (insn_bb->succs) != insn_bb_succs);
 }
 
 /* Do a very simple CSE pass over the hard registers.
@@ -204,30 +193,25 @@ done:
    if possible, much like an optional reload would.  */
 
 static void
-reload_cse_regs_1 (void)
+reload_cse_regs_1 (rtx first)
 {
-  bool cfg_changed = false;
-  basic_block bb;
-  rtx_insn *insn;
-  rtx testreg = gen_rtx_REG (word_mode, LAST_VIRTUAL_REGISTER + 1);
+  rtx insn;
+  rtx testreg = gen_rtx_REG (VOIDmode, -1);
 
   cselib_init (CSELIB_RECORD_MEMORY);
   init_alias_analysis ();
 
-  FOR_EACH_BB_FN (bb, cfun)
-    FOR_BB_INSNS (bb, insn)
-      {
-	if (INSN_P (insn))
-	  cfg_changed |= reload_cse_simplify (insn, testreg);
+  for (insn = first; insn; insn = NEXT_INSN (insn))
+    {
+      if (INSN_P (insn))
+	reload_cse_simplify (insn, testreg);
 
-	cselib_process_insn (insn);
-      }
+      cselib_process_insn (insn);
+    }
 
   /* Clean up.  */
   end_alias_analysis ();
   cselib_finish ();
-  if (cfg_changed)
-    cleanup_cfg (0);
 }
 
 /* Try to simplify a single SET instruction.  SET is the set pattern.
@@ -237,16 +221,18 @@ reload_cse_regs_1 (void)
    and change the set into a register copy.  */
 
 static int
-reload_cse_simplify_set (rtx set, rtx_insn *insn)
+reload_cse_simplify_set (rtx set, rtx insn)
 {
   int did_change = 0;
   int dreg;
   rtx src;
-  reg_class_t dclass;
+  enum reg_class dclass;
   int old_cost;
   cselib_val *val;
   struct elt_loc_list *l;
+#ifdef LOAD_EXTEND_OP
   enum rtx_code extend_op = UNKNOWN;
+#endif
   bool speed = optimize_bb_for_speed_p (BLOCK_FOR_INSN (insn));
 
   dreg = true_regnum (SET_DEST (set));
@@ -259,27 +245,30 @@ reload_cse_simplify_set (rtx set, rtx_insn *insn)
 
   dclass = REGNO_REG_CLASS (dreg);
 
+#ifdef LOAD_EXTEND_OP
   /* When replacing a memory with a register, we need to honor assumptions
      that combine made wrt the contents of sign bits.  We'll do this by
      generating an extend instruction instead of a reg->reg copy.  Thus
      the destination must be a register that we can widen.  */
   if (MEM_P (src)
-      && (extend_op = load_extend_op (GET_MODE (src))) != UNKNOWN
+      && GET_MODE_BITSIZE (GET_MODE (src)) < BITS_PER_WORD
+      && (extend_op = LOAD_EXTEND_OP (GET_MODE (src))) != UNKNOWN
       && !REG_P (SET_DEST (set)))
     return 0;
+#endif
 
-  val = cselib_lookup (src, GET_MODE (SET_DEST (set)), 0, VOIDmode);
+  val = cselib_lookup (src, GET_MODE (SET_DEST (set)), 0);
   if (! val)
     return 0;
 
   /* If memory loads are cheaper than register copies, don't change them.  */
   if (MEM_P (src))
-    old_cost = memory_move_cost (GET_MODE (src), dclass, true);
+    old_cost = MEMORY_MOVE_COST (GET_MODE (src), dclass, 1);
   else if (REG_P (src))
-    old_cost = register_move_cost (GET_MODE (src),
+    old_cost = REGISTER_MOVE_COST (GET_MODE (src),
 				   REGNO_REG_CLASS (REGNO (src)), dclass);
   else
-    old_cost = set_src_cost (src, GET_MODE (SET_DEST (set)), speed);
+    old_cost = rtx_cost (src, SET, speed);
 
   for (l = val->locs; l; l = l->next)
     {
@@ -288,42 +277,45 @@ reload_cse_simplify_set (rtx set, rtx_insn *insn)
 
       if (CONSTANT_P (this_rtx) && ! references_value_p (this_rtx, 0))
 	{
+#ifdef LOAD_EXTEND_OP
 	  if (extend_op != UNKNOWN)
 	    {
-	      wide_int result;
+	      HOST_WIDE_INT this_val;
 
-	      if (!CONST_SCALAR_INT_P (this_rtx))
+	      /* ??? I'm lazy and don't wish to handle CONST_DOUBLE.  Other
+		 constants, such as SYMBOL_REF, cannot be extended.  */
+	      if (!CONST_INT_P (this_rtx))
 		continue;
 
+	      this_val = INTVAL (this_rtx);
 	      switch (extend_op)
 		{
 		case ZERO_EXTEND:
-		  result = wide_int::from (rtx_mode_t (this_rtx,
-						       GET_MODE (src)),
-					   BITS_PER_WORD, UNSIGNED);
+		  this_val &= GET_MODE_MASK (GET_MODE (src));
 		  break;
 		case SIGN_EXTEND:
-		  result = wide_int::from (rtx_mode_t (this_rtx,
-						       GET_MODE (src)),
-					   BITS_PER_WORD, SIGNED);
-		  break;
+		  /* ??? In theory we're already extended.  */
+		  if (this_val == trunc_int_for_mode (this_val, GET_MODE (src)))
+		    break;
 		default:
 		  gcc_unreachable ();
 		}
-	      this_rtx = immed_wide_int_const (result, word_mode);
+	      this_rtx = GEN_INT (this_val);
 	    }
-
-	  this_cost = set_src_cost (this_rtx, GET_MODE (SET_DEST (set)), speed);
+#endif
+	  this_cost = rtx_cost (this_rtx, SET, speed);
 	}
       else if (REG_P (this_rtx))
 	{
+#ifdef LOAD_EXTEND_OP
 	  if (extend_op != UNKNOWN)
 	    {
 	      this_rtx = gen_rtx_fmt_e (extend_op, word_mode, this_rtx);
-	      this_cost = set_src_cost (this_rtx, word_mode, speed);
+	      this_cost = rtx_cost (this_rtx, SET, speed);
 	    }
 	  else
-	    this_cost = register_move_cost (GET_MODE (this_rtx),
+#endif
+	    this_cost = REGISTER_MOVE_COST (GET_MODE (this_rtx),
 					    REGNO_REG_CLASS (REGNO (this_rtx)),
 					    dclass);
 	}
@@ -337,14 +329,21 @@ reload_cse_simplify_set (rtx set, rtx_insn *insn)
 	      && REG_P (this_rtx)
 	      && !REG_P (SET_SRC (set))))
 	{
-	  if (extend_op != UNKNOWN
-	      && REG_CAN_CHANGE_MODE_P (REGNO (SET_DEST (set)),
-					GET_MODE (SET_DEST (set)), word_mode))
+#ifdef LOAD_EXTEND_OP
+	  if (GET_MODE_BITSIZE (GET_MODE (SET_DEST (set))) < BITS_PER_WORD
+	      && extend_op != UNKNOWN
+#ifdef CANNOT_CHANGE_MODE_CLASS
+	      && !CANNOT_CHANGE_MODE_CLASS (GET_MODE (SET_DEST (set)),
+					    word_mode,
+					    REGNO_REG_CLASS (REGNO (SET_DEST (set))))
+#endif
+	      )
 	    {
 	      rtx wide_dest = gen_rtx_REG (word_mode, REGNO (SET_DEST (set)));
 	      ORIGINAL_REGNO (wide_dest) = ORIGINAL_REGNO (SET_DEST (set));
 	      validate_change (insn, &SET_DEST (set), wide_dest, 1);
 	    }
+#endif
 
 	  validate_unshare_change (insn, &SET_SRC (set), this_rtx, 1);
 	  old_cost = this_cost, did_change = 1;
@@ -366,7 +365,7 @@ reload_cse_simplify_set (rtx set, rtx_insn *insn)
    hard registers.  */
 
 static int
-reload_cse_simplify_operands (rtx_insn *insn, rtx testreg)
+reload_cse_simplify_operands (rtx insn, rtx testreg)
 {
   int i, j;
 
@@ -387,10 +386,14 @@ reload_cse_simplify_operands (rtx_insn *insn, rtx testreg)
   /* Array of alternatives, sorted in order of decreasing desirability.  */
   int *alternative_order;
 
-  extract_constrain_insn (insn);
+  extract_insn (insn);
 
   if (recog_data.n_alternatives == 0 || recog_data.n_operands == 0)
     return 0;
+
+  /* Figure out which alternative currently matches.  */
+  if (! constrain_operands (1))
+    fatal_insn_not_found (insn);
 
   alternative_reject = XALLOCAVEC (int, recog_data.n_alternatives);
   alternative_nregs = XALLOCAVEC (int, recog_data.n_alternatives);
@@ -408,18 +411,18 @@ reload_cse_simplify_operands (rtx_insn *insn, rtx testreg)
       CLEAR_HARD_REG_SET (equiv_regs[i]);
 
       /* cselib blows up on CODE_LABELs.  Trying to fix that doesn't seem
-	 right, so avoid the problem here.  Similarly NOTE_INSN_DELETED_LABEL.
-	 Likewise if we have a constant and the insn pattern doesn't tell us
-	 the mode we need.  */
+	 right, so avoid the problem here.  Likewise if we have a constant
+         and the insn pattern doesn't tell us the mode we need.  */
       if (LABEL_P (recog_data.operand[i])
-	  || (NOTE_P (recog_data.operand[i])
-	      && NOTE_KIND (recog_data.operand[i]) == NOTE_INSN_DELETED_LABEL)
 	  || (CONSTANT_P (recog_data.operand[i])
 	      && recog_data.operand_mode[i] == VOIDmode))
 	continue;
 
       op = recog_data.operand[i];
-      if (MEM_P (op) && load_extend_op (GET_MODE (op)) != UNKNOWN)
+#ifdef LOAD_EXTEND_OP
+      if (MEM_P (op)
+	  && GET_MODE_BITSIZE (GET_MODE (op)) < BITS_PER_WORD
+	  && LOAD_EXTEND_OP (GET_MODE (op)) != UNKNOWN)
 	{
 	  rtx set = single_set (insn);
 
@@ -436,13 +439,15 @@ reload_cse_simplify_operands (rtx_insn *insn, rtx testreg)
 		   || GET_CODE (SET_SRC (set)) == ZERO_EXTEND
 		   || GET_CODE (SET_SRC (set)) == SIGN_EXTEND)
 	    ; /* Continue ordinary processing.  */
+#ifdef CANNOT_CHANGE_MODE_CLASS
 	  /* If the register cannot change mode to word_mode, it follows that
 	     it cannot have been used in word_mode.  */
 	  else if (REG_P (SET_DEST (set))
-		   && !REG_CAN_CHANGE_MODE_P (REGNO (SET_DEST (set)),
-					      GET_MODE (SET_DEST (set)),
-					      word_mode))
+		   && CANNOT_CHANGE_MODE_CLASS (GET_MODE (SET_DEST (set)),
+						word_mode,
+						REGNO_REG_CLASS (REGNO (SET_DEST (set)))))
 	    ; /* Continue ordinary processing.  */
+#endif
 	  /* If this is a straight load, make the extension explicit.  */
 	  else if (REG_P (SET_DEST (set))
 		   && recog_data.n_operands == 2
@@ -450,7 +455,7 @@ reload_cse_simplify_operands (rtx_insn *insn, rtx testreg)
 		   && SET_DEST (set) == recog_data.operand[1-i])
 	    {
 	      validate_change (insn, recog_data.operand_loc[i],
-			       gen_rtx_fmt_e (load_extend_op (GET_MODE (op)),
+			       gen_rtx_fmt_e (LOAD_EXTEND_OP (GET_MODE (op)),
 					      word_mode, op),
 			       1);
 	      validate_change (insn, recog_data.operand_loc[1-i],
@@ -465,10 +470,8 @@ reload_cse_simplify_operands (rtx_insn *insn, rtx testreg)
 	       safe to optimize, but is it worth the trouble?  */
 	    continue;
 	}
-
-      if (side_effects_p (op))
-	continue;
-      v = cselib_lookup (op, recog_data.operand_mode[i], 0, VOIDmode);
+#endif /* LOAD_EXTEND_OP */
+      v = cselib_lookup (op, recog_data.operand_mode[i], 0);
       if (! v)
 	continue;
 
@@ -477,10 +480,9 @@ reload_cse_simplify_operands (rtx_insn *insn, rtx testreg)
 	  SET_HARD_REG_BIT (equiv_regs[i], REGNO (l->loc));
     }
 
-  alternative_mask preferred = get_preferred_alternatives (insn);
   for (i = 0; i < recog_data.n_operands; i++)
     {
-      machine_mode mode;
+      enum machine_mode mode;
       int regno;
       const char *p;
 
@@ -520,7 +522,8 @@ reload_cse_simplify_operands (rtx_insn *insn, rtx testreg)
 	  if (! TEST_HARD_REG_BIT (equiv_regs[i], regno))
 	    continue;
 
-	  set_mode_and_regno (testreg, mode, regno);
+	  SET_REGNO (testreg, regno);
+	  PUT_MODE (testreg, mode);
 
 	  /* We found a register equal to this operand.  Now look for all
 	     alternatives that can accept this register and have not been
@@ -533,15 +536,29 @@ reload_cse_simplify_operands (rtx_insn *insn, rtx testreg)
 
 	      switch (c)
 		{
-		case 'g':
-		  rclass = reg_class_subunion[rclass][GENERAL_REGS];
+		case '=':  case '+':  case '?':
+		case '#':  case '&':  case '!':
+		case '*':  case '%':
+		case '0':  case '1':  case '2':  case '3':  case '4':
+		case '5':  case '6':  case '7':  case '8':  case '9':
+		case '<':  case '>':  case 'V':  case 'o':
+		case 'E':  case 'F':  case 'G':  case 'H':
+		case 's':  case 'i':  case 'n':
+		case 'I':  case 'J':  case 'K':  case 'L':
+		case 'M':  case 'N':  case 'O':  case 'P':
+		case 'p':  case 'X':  case TARGET_MEM_CONSTRAINT:
+		  /* These don't say anything we care about.  */
+		  break;
+
+		case 'g': case 'r':
+		  rclass = reg_class_subunion[(int) rclass][(int) GENERAL_REGS];
 		  break;
 
 		default:
 		  rclass
 		    = (reg_class_subunion
-		       [rclass]
-		       [reg_class_for_constraint (lookup_constraint (p))]);
+		       [(int) rclass]
+		       [(int) REG_CLASS_FROM_CONSTRAINT ((unsigned char) c, p)]);
 		  break;
 
 		case ',': case '\0':
@@ -550,15 +567,12 @@ reload_cse_simplify_operands (rtx_insn *insn, rtx testreg)
 		     alternative yet and the operand being replaced is not
 		     a cheap CONST_INT.  */
 		  if (op_alt_regno[i][j] == -1
-		      && TEST_BIT (preferred, j)
 		      && reg_fits_class_p (testreg, rclass, 0, mode)
 		      && (!CONST_INT_P (recog_data.operand[i])
-			  || (set_src_cost (recog_data.operand[i], mode,
-					    optimize_bb_for_speed_p
-					     (BLOCK_FOR_INSN (insn)))
-			      > set_src_cost (testreg, mode,
-					      optimize_bb_for_speed_p
-					       (BLOCK_FOR_INSN (insn))))))
+			  || (rtx_cost (recog_data.operand[i], SET,
+			  		optimize_bb_for_speed_p (BLOCK_FOR_INSN (insn)))
+			      > rtx_cost (testreg, SET,
+			  		optimize_bb_for_speed_p (BLOCK_FOR_INSN (insn))))))
 		    {
 		      alternative_nregs[j]++;
 		      op_alt_regno[i][j] = regno;
@@ -589,6 +603,7 @@ reload_cse_simplify_operands (rtx_insn *insn, rtx testreg)
       int best = i;
       int best_reject = alternative_reject[alternative_order[i]];
       int best_nregs = alternative_nregs[alternative_order[i]];
+      int tmp;
 
       for (j = i + 1; j < recog_data.n_alternatives; j++)
 	{
@@ -604,7 +619,9 @@ reload_cse_simplify_operands (rtx_insn *insn, rtx testreg)
 	    }
 	}
 
-      std::swap (alternative_order[best], alternative_order[i]);
+      tmp = alternative_order[best];
+      alternative_order[best] = alternative_order[i];
+      alternative_order[i] = tmp;
     }
 
   /* Substitute the operands as determined by op_alt_regno for the best
@@ -613,7 +630,7 @@ reload_cse_simplify_operands (rtx_insn *insn, rtx testreg)
 
   for (i = 0; i < recog_data.n_operands; i++)
     {
-      machine_mode mode = recog_data.operand_mode[i];
+      enum machine_mode mode = recog_data.operand_mode[i];
       if (op_alt_regno[i][j] == -1)
 	continue;
 
@@ -624,7 +641,7 @@ reload_cse_simplify_operands (rtx_insn *insn, rtx testreg)
   for (i = recog_data.n_dups - 1; i >= 0; i--)
     {
       int op = recog_data.dup_num[i];
-      machine_mode mode = recog_data.operand_mode[op];
+      enum machine_mode mode = recog_data.operand_mode[op];
 
       if (op_alt_regno[op][j] == -1)
 	continue;
@@ -643,45 +660,30 @@ reload_cse_simplify_operands (rtx_insn *insn, rtx testreg)
 
 /* The maximum number of uses of a register we can keep track of to
    replace them with reg+reg addressing.  */
-#define RELOAD_COMBINE_MAX_USES 16
+#define RELOAD_COMBINE_MAX_USES 6
 
-/* Describes a recorded use of a register.  */
-struct reg_use
-{
-  /* The insn where a register has been used.  */
-  rtx_insn *insn;
-  /* Points to the memory reference enclosing the use, if any, NULL_RTX
-     otherwise.  */
-  rtx containing_mem;
-  /* Location of the register within INSN.  */
-  rtx *usep;
-  /* The reverse uid of the insn.  */
-  int ruid;
-};
+/* INSN is the insn where a register has been used, and USEP points to the
+   location of the register within the rtl.  */
+struct reg_use { rtx insn, *usep; };
 
 /* If the register is used in some unknown fashion, USE_INDEX is negative.
    If it is dead, USE_INDEX is RELOAD_COMBINE_MAX_USES, and STORE_RUID
-   indicates where it is first set or clobbered.
+   indicates where it becomes live again.
    Otherwise, USE_INDEX is the index of the last encountered use of the
-   register (which is first among these we have seen since we scan backwards).
-   USE_RUID indicates the first encountered, i.e. last, of these uses.
-   If ALL_OFFSETS_MATCH is true, all encountered uses were inside a PLUS
-   with a constant offset; OFFSET contains this constant in that case.
+   register (which is first among these we have seen since we scan backwards),
+   OFFSET contains the constant offset that is added to the register in
+   all encountered uses, and USE_RUID indicates the first encountered, i.e.
+   last, of these uses.
    STORE_RUID is always meaningful if we only want to use a value in a
    register in a different place: it denotes the next insn in the insn
-   stream (i.e. the last encountered) that sets or clobbers the register.
-   REAL_STORE_RUID is similar, but clobbers are ignored when updating it.
-   EXPR is the expression used when storing the register.  */
+   stream (i.e. the last encountered) that sets or clobbers the register.  */
 static struct
   {
     struct reg_use reg_use[RELOAD_COMBINE_MAX_USES];
-    rtx offset;
     int use_index;
+    rtx offset;
     int store_ruid;
-    int real_store_ruid;
     int use_ruid;
-    bool all_offsets_match;
-    rtx expr;
   } reg_state[FIRST_PSEUDO_REGISTER];
 
 /* Reverse linear uid.  This is increased in reload_combine while scanning
@@ -689,568 +691,42 @@ static struct
    and the store_ruid / use_ruid fields in reg_state.  */
 static int reload_combine_ruid;
 
-/* The RUID of the last label we encountered in reload_combine.  */
-static int last_label_ruid;
-
-/* The RUID of the last jump we encountered in reload_combine.  */
-static int last_jump_ruid;
-
-/* The register numbers of the first and last index register.  A value of
-   -1 in LAST_INDEX_REG indicates that we've previously computed these
-   values and found no suitable index registers.  */
-static int first_index_reg = -1;
-static int last_index_reg;
-
 #define LABEL_LIVE(LABEL) \
   (label_live[CODE_LABEL_NUMBER (LABEL) - min_labelno])
-
-/* Subroutine of reload_combine_split_ruids, called to fix up a single
-   ruid pointed to by *PRUID if it is higher than SPLIT_RUID.  */
-
-static inline void
-reload_combine_split_one_ruid (int *pruid, int split_ruid)
-{
-  if (*pruid > split_ruid)
-    (*pruid)++;
-}
-
-/* Called when we insert a new insn in a position we've already passed in
-   the scan.  Examine all our state, increasing all ruids that are higher
-   than SPLIT_RUID by one in order to make room for a new insn.  */
-
-static void
-reload_combine_split_ruids (int split_ruid)
-{
-  unsigned i;
-
-  reload_combine_split_one_ruid (&reload_combine_ruid, split_ruid);
-  reload_combine_split_one_ruid (&last_label_ruid, split_ruid);
-  reload_combine_split_one_ruid (&last_jump_ruid, split_ruid);
-
-  for (i = 0; i < FIRST_PSEUDO_REGISTER; i++)
-    {
-      int j, idx = reg_state[i].use_index;
-      reload_combine_split_one_ruid (&reg_state[i].use_ruid, split_ruid);
-      reload_combine_split_one_ruid (&reg_state[i].store_ruid, split_ruid);
-      reload_combine_split_one_ruid (&reg_state[i].real_store_ruid,
-				     split_ruid);
-      if (idx < 0)
-	continue;
-      for (j = idx; j < RELOAD_COMBINE_MAX_USES; j++)
-	{
-	  reload_combine_split_one_ruid (&reg_state[i].reg_use[j].ruid,
-					 split_ruid);
-	}
-    }
-}
-
-/* Called when we are about to rescan a previously encountered insn with
-   reload_combine_note_use after modifying some part of it.  This clears all
-   information about uses in that particular insn.  */
-
-static void
-reload_combine_purge_insn_uses (rtx_insn *insn)
-{
-  unsigned i;
-
-  for (i = 0; i < FIRST_PSEUDO_REGISTER; i++)
-    {
-      int j, k, idx = reg_state[i].use_index;
-      if (idx < 0)
-	continue;
-      j = k = RELOAD_COMBINE_MAX_USES;
-      while (j-- > idx)
-	{
-	  if (reg_state[i].reg_use[j].insn != insn)
-	    {
-	      k--;
-	      if (k != j)
-		reg_state[i].reg_use[k] = reg_state[i].reg_use[j];
-	    }
-	}
-      reg_state[i].use_index = k;
-    }
-}
-
-/* Called when we need to forget about all uses of REGNO after an insn
-   which is identified by RUID.  */
-
-static void
-reload_combine_purge_reg_uses_after_ruid (unsigned regno, int ruid)
-{
-  int j, k, idx = reg_state[regno].use_index;
-  if (idx < 0)
-    return;
-  j = k = RELOAD_COMBINE_MAX_USES;
-  while (j-- > idx)
-    {
-      if (reg_state[regno].reg_use[j].ruid >= ruid)
-	{
-	  k--;
-	  if (k != j)
-	    reg_state[regno].reg_use[k] = reg_state[regno].reg_use[j];
-	}
-    }
-  reg_state[regno].use_index = k;
-}
-
-/* Find the use of REGNO with the ruid that is highest among those
-   lower than RUID_LIMIT, and return it if it is the only use of this
-   reg in the insn.  Return NULL otherwise.  */
-
-static struct reg_use *
-reload_combine_closest_single_use (unsigned regno, int ruid_limit)
-{
-  int i, best_ruid = 0;
-  int use_idx = reg_state[regno].use_index;
-  struct reg_use *retval;
-
-  if (use_idx < 0)
-    return NULL;
-  retval = NULL;
-  for (i = use_idx; i < RELOAD_COMBINE_MAX_USES; i++)
-    {
-      struct reg_use *use = reg_state[regno].reg_use + i; 
-      int this_ruid = use->ruid;
-      if (this_ruid >= ruid_limit)
-	continue;
-      if (this_ruid > best_ruid)
-	{
-	  best_ruid = this_ruid;
-	  retval = use;
-	}
-      else if (this_ruid == best_ruid)
-	retval = NULL;
-    }
-  if (last_label_ruid >= best_ruid)
-    return NULL;
-  return retval;
-}
-
-/* After we've moved an add insn, fix up any debug insns that occur
-   between the old location of the add and the new location.  REG is
-   the destination register of the add insn; REPLACEMENT is the
-   SET_SRC of the add.  FROM and TO specify the range in which we
-   should make this change on debug insns.  */
-
-static void
-fixup_debug_insns (rtx reg, rtx replacement, rtx_insn *from, rtx_insn *to)
-{
-  rtx_insn *insn;
-  for (insn = from; insn != to; insn = NEXT_INSN (insn))
-    {
-      rtx t;
-
-      if (!DEBUG_BIND_INSN_P (insn))
-	continue;
-      
-      t = INSN_VAR_LOCATION_LOC (insn);
-      t = simplify_replace_rtx (t, reg, replacement);
-      validate_change (insn, &INSN_VAR_LOCATION_LOC (insn), t, 0);
-    }
-}
-
-/* Subroutine of reload_combine_recognize_const_pattern.  Try to replace REG
-   with SRC in the insn described by USE, taking costs into account.  Return
-   true if we made the replacement.  */
-
-static bool
-try_replace_in_use (struct reg_use *use, rtx reg, rtx src)
-{
-  rtx_insn *use_insn = use->insn;
-  rtx mem = use->containing_mem;
-  bool speed = optimize_bb_for_speed_p (BLOCK_FOR_INSN (use_insn));
-
-  if (mem != NULL_RTX)
-    {
-      addr_space_t as = MEM_ADDR_SPACE (mem);
-      rtx oldaddr = XEXP (mem, 0);
-      rtx newaddr = NULL_RTX;
-      int old_cost = address_cost (oldaddr, GET_MODE (mem), as, speed);
-      int new_cost;
-
-      newaddr = simplify_replace_rtx (oldaddr, reg, src);
-      if (memory_address_addr_space_p (GET_MODE (mem), newaddr, as))
-	{
-	  XEXP (mem, 0) = newaddr;
-	  new_cost = address_cost (newaddr, GET_MODE (mem), as, speed);
-	  XEXP (mem, 0) = oldaddr;
-	  if (new_cost <= old_cost
-	      && validate_change (use_insn,
-				  &XEXP (mem, 0), newaddr, 0))
-	    return true;
-	}
-    }
-  else
-    {
-      rtx new_set = single_set (use_insn);
-      if (new_set
-	  && REG_P (SET_DEST (new_set))
-	  && GET_CODE (SET_SRC (new_set)) == PLUS
-	  && REG_P (XEXP (SET_SRC (new_set), 0))
-	  && CONSTANT_P (XEXP (SET_SRC (new_set), 1)))
-	{
-	  rtx new_src;
-	  machine_mode mode = GET_MODE (SET_DEST (new_set));
-	  int old_cost = set_src_cost (SET_SRC (new_set), mode, speed);
-
-	  gcc_assert (rtx_equal_p (XEXP (SET_SRC (new_set), 0), reg));
-	  new_src = simplify_replace_rtx (SET_SRC (new_set), reg, src);
-
-	  if (set_src_cost (new_src, mode, speed) <= old_cost
-	      && validate_change (use_insn, &SET_SRC (new_set),
-				  new_src, 0))
-	    return true;
-	}
-    }
-  return false;
-}
-
-/* Called by reload_combine when scanning INSN.  This function tries to detect
-   patterns where a constant is added to a register, and the result is used
-   in an address.
-   Return true if no further processing is needed on INSN; false if it wasn't
-   recognized and should be handled normally.  */
-
-static bool
-reload_combine_recognize_const_pattern (rtx_insn *insn)
-{
-  int from_ruid = reload_combine_ruid;
-  rtx set, pat, reg, src, addreg;
-  unsigned int regno;
-  struct reg_use *use;
-  bool must_move_add;
-  rtx_insn *add_moved_after_insn = NULL;
-  int add_moved_after_ruid = 0;
-  int clobbered_regno = -1;
-
-  set = single_set (insn);
-  if (set == NULL_RTX)
-    return false;
-
-  reg = SET_DEST (set);
-  src = SET_SRC (set);
-  if (!REG_P (reg)
-      || REG_NREGS (reg) != 1
-      || GET_MODE (reg) != Pmode
-      || reg == stack_pointer_rtx)
-    return false;
-
-  regno = REGNO (reg);
-
-  /* We look for a REG1 = REG2 + CONSTANT insn, followed by either
-     uses of REG1 inside an address, or inside another add insn.  If
-     possible and profitable, merge the addition into subsequent
-     uses.  */
-  if (GET_CODE (src) != PLUS
-      || !REG_P (XEXP (src, 0))
-      || !CONSTANT_P (XEXP (src, 1)))
-    return false;
-
-  addreg = XEXP (src, 0);
-  must_move_add = rtx_equal_p (reg, addreg);
-
-  pat = PATTERN (insn);
-  if (must_move_add && set != pat)
-    {
-      /* We have to be careful when moving the add; apart from the
-	 single_set there may also be clobbers.  Recognize one special
-	 case, that of one clobber alongside the set (likely a clobber
-	 of the CC register).  */
-      gcc_assert (GET_CODE (PATTERN (insn)) == PARALLEL);
-      if (XVECLEN (pat, 0) != 2 || XVECEXP (pat, 0, 0) != set
-	  || GET_CODE (XVECEXP (pat, 0, 1)) != CLOBBER
-	  || !REG_P (XEXP (XVECEXP (pat, 0, 1), 0)))
-	return false;
-      clobbered_regno = REGNO (XEXP (XVECEXP (pat, 0, 1), 0));
-    }
-
-  do
-    {
-      use = reload_combine_closest_single_use (regno, from_ruid);
-
-      if (use)
-	/* Start the search for the next use from here.  */
-	from_ruid = use->ruid;
-
-      if (use && GET_MODE (*use->usep) == Pmode)
-	{
-	  bool delete_add = false;
-	  rtx_insn *use_insn = use->insn;
-	  int use_ruid = use->ruid;
-
-	  /* Avoid moving the add insn past a jump.  */
-	  if (must_move_add && use_ruid <= last_jump_ruid)
-	    break;
-
-	  /* If the add clobbers another hard reg in parallel, don't move
-	     it past a real set of this hard reg.  */
-	  if (must_move_add && clobbered_regno >= 0
-	      && reg_state[clobbered_regno].real_store_ruid >= use_ruid)
-	    break;
-
-	  /* Do not separate cc0 setter and cc0 user on HAVE_cc0 targets.  */
-	  if (HAVE_cc0 && must_move_add && sets_cc0_p (PATTERN (use_insn)))
-	    break;
-
-	  gcc_assert (reg_state[regno].store_ruid <= use_ruid);
-	  /* Avoid moving a use of ADDREG past a point where it is stored.  */
-	  if (reg_state[REGNO (addreg)].store_ruid > use_ruid)
-	    break;
-
-	  /* We also must not move the addition past an insn that sets
-	     the same register, unless we can combine two add insns.  */
-	  if (must_move_add && reg_state[regno].store_ruid == use_ruid)
-	    {
-	      if (use->containing_mem == NULL_RTX)
-		delete_add = true;
-	      else
-		break;
-	    }
-
-	  if (try_replace_in_use (use, reg, src))
-	    {
-	      reload_combine_purge_insn_uses (use_insn);
-	      reload_combine_note_use (&PATTERN (use_insn), use_insn,
-				       use_ruid, NULL_RTX);
-
-	      if (delete_add)
-		{
-		  fixup_debug_insns (reg, src, insn, use_insn);
-		  delete_insn (insn);
-		  return true;
-		}
-	      if (must_move_add)
-		{
-		  add_moved_after_insn = use_insn;
-		  add_moved_after_ruid = use_ruid;
-		}
-	      continue;
-	    }
-	}
-      /* If we get here, we couldn't handle this use.  */
-      if (must_move_add)
-	break;
-    }
-  while (use);
-
-  if (!must_move_add || add_moved_after_insn == NULL_RTX)
-    /* Process the add normally.  */
-    return false;
-
-  fixup_debug_insns (reg, src, insn, add_moved_after_insn);
-
-  reorder_insns (insn, insn, add_moved_after_insn);
-  reload_combine_purge_reg_uses_after_ruid (regno, add_moved_after_ruid);
-  reload_combine_split_ruids (add_moved_after_ruid - 1);
-  reload_combine_note_use (&PATTERN (insn), insn,
-			   add_moved_after_ruid, NULL_RTX);
-  reg_state[regno].store_ruid = add_moved_after_ruid;
-
-  return true;
-}
-
-/* Called by reload_combine when scanning INSN.  Try to detect a pattern we
-   can handle and improve.  Return true if no further processing is needed on
-   INSN; false if it wasn't recognized and should be handled normally.  */
-
-static bool
-reload_combine_recognize_pattern (rtx_insn *insn)
-{
-  rtx set, reg, src;
-
-  set = single_set (insn);
-  if (set == NULL_RTX)
-    return false;
-
-  reg = SET_DEST (set);
-  src = SET_SRC (set);
-  if (!REG_P (reg) || REG_NREGS (reg) != 1)
-    return false;
-
-  unsigned int regno = REGNO (reg);
-  machine_mode mode = GET_MODE (reg);
-
-  if (reg_state[regno].use_index < 0
-      || reg_state[regno].use_index >= RELOAD_COMBINE_MAX_USES)
-    return false;
-
-  for (int i = reg_state[regno].use_index;
-       i < RELOAD_COMBINE_MAX_USES; i++)
-    {
-      struct reg_use *use = reg_state[regno].reg_use + i;
-      if (GET_MODE (*use->usep) != mode)
-	return false;
-      /* Don't try to adjust (use (REGX)).  */
-      if (GET_CODE (PATTERN (use->insn)) == USE
-	  && &XEXP (PATTERN (use->insn), 0) == use->usep)
-	return false;
-    }
-
-  /* Look for (set (REGX) (CONST_INT))
-     (set (REGX) (PLUS (REGX) (REGY)))
-     ...
-     ... (MEM (REGX)) ...
-     and convert it to
-     (set (REGZ) (CONST_INT))
-     ...
-     ... (MEM (PLUS (REGZ) (REGY)))... .
-
-     First, check that we have (set (REGX) (PLUS (REGX) (REGY)))
-     and that we know all uses of REGX before it dies.
-     Also, explicitly check that REGX != REGY; our life information
-     does not yet show whether REGY changes in this insn.  */
-
-  if (GET_CODE (src) == PLUS
-      && reg_state[regno].all_offsets_match
-      && last_index_reg != -1
-      && REG_P (XEXP (src, 1))
-      && rtx_equal_p (XEXP (src, 0), reg)
-      && !rtx_equal_p (XEXP (src, 1), reg)
-      && last_label_ruid < reg_state[regno].use_ruid)
-    {
-      rtx base = XEXP (src, 1);
-      rtx_insn *prev = prev_nonnote_nondebug_insn (insn);
-      rtx prev_set = prev ? single_set (prev) : NULL_RTX;
-      rtx index_reg = NULL_RTX;
-      rtx reg_sum = NULL_RTX;
-      int i;
-
-      /* Now we need to set INDEX_REG to an index register (denoted as
-	 REGZ in the illustration above) and REG_SUM to the expression
-	 register+register that we want to use to substitute uses of REG
-	 (typically in MEMs) with.  First check REG and BASE for being
-	 index registers; we can use them even if they are not dead.  */
-      if (TEST_HARD_REG_BIT (reg_class_contents[INDEX_REG_CLASS], regno)
-	  || TEST_HARD_REG_BIT (reg_class_contents[INDEX_REG_CLASS],
-				REGNO (base)))
-	{
-	  index_reg = reg;
-	  reg_sum = src;
-	}
-      else
-	{
-	  /* Otherwise, look for a free index register.  Since we have
-	     checked above that neither REG nor BASE are index registers,
-	     if we find anything at all, it will be different from these
-	     two registers.  */
-	  for (i = first_index_reg; i <= last_index_reg; i++)
-	    {
-	      if (TEST_HARD_REG_BIT (reg_class_contents[INDEX_REG_CLASS], i)
-		  && reg_state[i].use_index == RELOAD_COMBINE_MAX_USES
-		  && reg_state[i].store_ruid <= reg_state[regno].use_ruid
-		  && (call_used_regs[i] || df_regs_ever_live_p (i))
-		  && (!frame_pointer_needed || i != HARD_FRAME_POINTER_REGNUM)
-		  && !fixed_regs[i] && !global_regs[i]
-		  && hard_regno_nregs (i, GET_MODE (reg)) == 1
-		  && targetm.hard_regno_scratch_ok (i))
-		{
-		  index_reg = gen_rtx_REG (GET_MODE (reg), i);
-		  reg_sum = gen_rtx_PLUS (GET_MODE (reg), index_reg, base);
-		  break;
-		}
-	    }
-	}
-
-      /* Check that PREV_SET is indeed (set (REGX) (CONST_INT)) and that
-	 (REGY), i.e. BASE, is not clobbered before the last use we'll
-	 create.  */
-      if (reg_sum
-	  && prev_set
-	  && CONST_INT_P (SET_SRC (prev_set))
-	  && rtx_equal_p (SET_DEST (prev_set), reg)
-	  && (reg_state[REGNO (base)].store_ruid
-	      <= reg_state[regno].use_ruid))
-	{
-	  /* Change destination register and, if necessary, the constant
-	     value in PREV, the constant loading instruction.  */
-	  validate_change (prev, &SET_DEST (prev_set), index_reg, 1);
-	  if (reg_state[regno].offset != const0_rtx)
-	    {
-	      HOST_WIDE_INT c
-		= trunc_int_for_mode (UINTVAL (SET_SRC (prev_set))
-				      + UINTVAL (reg_state[regno].offset),
-				      GET_MODE (index_reg));
-	      validate_change (prev, &SET_SRC (prev_set), GEN_INT (c), 1);
-	    }
-
-	  /* Now for every use of REG that we have recorded, replace REG
-	     with REG_SUM.  */
-	  for (i = reg_state[regno].use_index;
-	       i < RELOAD_COMBINE_MAX_USES; i++)
-	    validate_unshare_change (reg_state[regno].reg_use[i].insn,
-				     reg_state[regno].reg_use[i].usep,
-				     /* Each change must have its own
-					replacement.  */
-				     reg_sum, 1);
-
-	  if (apply_change_group ())
-	    {
-	      struct reg_use *lowest_ruid = NULL;
-
-	      /* For every new use of REG_SUM, we have to record the use
-		 of BASE therein, i.e. operand 1.  */
-	      for (i = reg_state[regno].use_index;
-		   i < RELOAD_COMBINE_MAX_USES; i++)
-		{
-		  struct reg_use *use = reg_state[regno].reg_use + i;
-		  reload_combine_note_use (&XEXP (*use->usep, 1), use->insn,
-					   use->ruid, use->containing_mem);
-		  if (lowest_ruid == NULL || use->ruid < lowest_ruid->ruid)
-		    lowest_ruid = use;
-		}
-
-	      fixup_debug_insns (reg, reg_sum, insn, lowest_ruid->insn);
-
-	      /* Delete the reg-reg addition.  */
-	      delete_insn (insn);
-
-	      if (reg_state[regno].offset != const0_rtx
-		  /* Previous REG_EQUIV / REG_EQUAL notes for PREV
-		     are now invalid.  */
-		  && remove_reg_equal_equiv_notes (prev))
-		df_notes_rescan (prev);
-
-	      reg_state[regno].use_index = RELOAD_COMBINE_MAX_USES;
-	      return true;
-	    }
-	}
-    }
-  return false;
-}
 
 static void
 reload_combine (void)
 {
-  rtx_insn *insn, *prev;
+  rtx insn, set;
+  int first_index_reg = -1;
+  int last_index_reg = 0;
+  int i;
   basic_block bb;
   unsigned int r;
+  int last_label_ruid;
   int min_labelno, n_labels;
   HARD_REG_SET ever_live_at_start, *label_live;
 
+  /* If reg+reg can be used in offsetable memory addresses, the main chunk of
+     reload has already used it where appropriate, so there is no use in
+     trying to generate it now.  */
+  if (double_reg_address_ok && INDEX_REG_CLASS != NO_REGS)
+    return;
+
   /* To avoid wasting too much time later searching for an index register,
      determine the minimum and maximum index register numbers.  */
-  if (INDEX_REG_CLASS == NO_REGS)
-    last_index_reg = -1;
-  else if (first_index_reg == -1 && last_index_reg == 0)
-    {
-      for (r = 0; r < FIRST_PSEUDO_REGISTER; r++)
-	if (TEST_HARD_REG_BIT (reg_class_contents[INDEX_REG_CLASS], r))
-	  {
-	    if (first_index_reg == -1)
-	      first_index_reg = r;
+  for (r = 0; r < FIRST_PSEUDO_REGISTER; r++)
+    if (TEST_HARD_REG_BIT (reg_class_contents[INDEX_REG_CLASS], r))
+      {
+	if (first_index_reg == -1)
+	  first_index_reg = r;
 
-	    last_index_reg = r;
-	  }
+	last_index_reg = r;
+      }
 
-      /* If no index register is available, we can quit now.  Set LAST_INDEX_REG
-	 to -1 so we'll know to quit early the next time we get here.  */
-      if (first_index_reg == -1)
-	{
-	  last_index_reg = -1;
-	  return;
-	}
-    }
+  /* If no index register is available, we can quit now.  */
+  if (first_index_reg == -1)
+    return;
 
   /* Set up LABEL_LIVE and EVER_LIVE_AT_START.  The register lifetime
      information is a bit fuzzy immediately after reload, but it's
@@ -1261,7 +737,7 @@ reload_combine (void)
   label_live = XNEWVEC (HARD_REG_SET, n_labels);
   CLEAR_HARD_REG_SET (ever_live_at_start);
 
-  FOR_EACH_BB_REVERSE_FN (bb, cfun)
+  FOR_EACH_BB_REVERSE (bb)
     {
       insn = BB_HEAD (bb);
       if (LABEL_P (insn))
@@ -1277,23 +753,19 @@ reload_combine (void)
     }
 
   /* Initialize last_label_ruid, reload_combine_ruid and reg_state.  */
-  last_label_ruid = last_jump_ruid = reload_combine_ruid = 0;
+  last_label_ruid = reload_combine_ruid = 0;
   for (r = 0; r < FIRST_PSEUDO_REGISTER; r++)
     {
-      reg_state[r].store_ruid = 0;
-      reg_state[r].real_store_ruid = 0;
+      reg_state[r].store_ruid = reload_combine_ruid;
       if (fixed_regs[r])
 	reg_state[r].use_index = -1;
       else
 	reg_state[r].use_index = RELOAD_COMBINE_MAX_USES;
     }
 
-  for (insn = get_last_insn (); insn; insn = prev)
+  for (insn = get_last_insn (); insn; insn = PREV_INSN (insn))
     {
-      bool control_flow_insn;
       rtx note;
-
-      prev = PREV_INSN (insn);
 
       /* We cannot do our optimization across labels.  Invalidating all the use
 	 information we have would be costly, so we just note where the label
@@ -1301,45 +773,154 @@ reload_combine (void)
       if (LABEL_P (insn))
 	last_label_ruid = reload_combine_ruid;
       else if (BARRIER_P (insn))
-	{
-	  /* Crossing a barrier resets all the use information.  */
-	  for (r = 0; r < FIRST_PSEUDO_REGISTER; r++)
-	    if (! fixed_regs[r])
-	      reg_state[r].use_index = RELOAD_COMBINE_MAX_USES;
-	}
-      else if (INSN_P (insn) && volatile_insn_p (PATTERN (insn)))
-	/* Optimizations across insns being marked as volatile must be
-	   prevented.  All the usage information is invalidated
-	   here.  */
 	for (r = 0; r < FIRST_PSEUDO_REGISTER; r++)
-	  if (! fixed_regs[r]
-	      && reg_state[r].use_index != RELOAD_COMBINE_MAX_USES)
-	    reg_state[r].use_index = -1;
+	  if (! fixed_regs[r])
+	      reg_state[r].use_index = RELOAD_COMBINE_MAX_USES;
 
-      if (! NONDEBUG_INSN_P (insn))
+      if (! INSN_P (insn))
 	continue;
 
       reload_combine_ruid++;
 
-      control_flow_insn = control_flow_insn_p (insn);
-      if (control_flow_insn)
-	last_jump_ruid = reload_combine_ruid;
+      /* Look for (set (REGX) (CONST_INT))
+	 (set (REGX) (PLUS (REGX) (REGY)))
+	 ...
+	 ... (MEM (REGX)) ...
+	 and convert it to
+	 (set (REGZ) (CONST_INT))
+	 ...
+	 ... (MEM (PLUS (REGZ) (REGY)))... .
 
-      if (reload_combine_recognize_const_pattern (insn)
-	  || reload_combine_recognize_pattern (insn))
-	continue;
+	 First, check that we have (set (REGX) (PLUS (REGX) (REGY)))
+	 and that we know all uses of REGX before it dies.
+	 Also, explicitly check that REGX != REGY; our life information
+	 does not yet show whether REGY changes in this insn.  */
+      set = single_set (insn);
+      if (set != NULL_RTX
+	  && REG_P (SET_DEST (set))
+	  && (hard_regno_nregs[REGNO (SET_DEST (set))]
+			      [GET_MODE (SET_DEST (set))]
+	      == 1)
+	  && GET_CODE (SET_SRC (set)) == PLUS
+	  && REG_P (XEXP (SET_SRC (set), 1))
+	  && rtx_equal_p (XEXP (SET_SRC (set), 0), SET_DEST (set))
+	  && !rtx_equal_p (XEXP (SET_SRC (set), 1), SET_DEST (set))
+	  && last_label_ruid < reg_state[REGNO (SET_DEST (set))].use_ruid)
+	{
+	  rtx reg = SET_DEST (set);
+	  rtx plus = SET_SRC (set);
+	  rtx base = XEXP (plus, 1);
+	  rtx prev = prev_nonnote_nondebug_insn (insn);
+	  rtx prev_set = prev ? single_set (prev) : NULL_RTX;
+	  unsigned int regno = REGNO (reg);
+	  rtx index_reg = NULL_RTX;
+	  rtx reg_sum = NULL_RTX;
+
+	  /* Now we need to set INDEX_REG to an index register (denoted as
+	     REGZ in the illustration above) and REG_SUM to the expression
+	     register+register that we want to use to substitute uses of REG
+	     (typically in MEMs) with.  First check REG and BASE for being
+	     index registers; we can use them even if they are not dead.  */
+	  if (TEST_HARD_REG_BIT (reg_class_contents[INDEX_REG_CLASS], regno)
+	      || TEST_HARD_REG_BIT (reg_class_contents[INDEX_REG_CLASS],
+				    REGNO (base)))
+	    {
+	      index_reg = reg;
+	      reg_sum = plus;
+	    }
+	  else
+	    {
+	      /* Otherwise, look for a free index register.  Since we have
+		 checked above that neither REG nor BASE are index registers,
+		 if we find anything at all, it will be different from these
+		 two registers.  */
+	      for (i = first_index_reg; i <= last_index_reg; i++)
+		{
+		  if (TEST_HARD_REG_BIT (reg_class_contents[INDEX_REG_CLASS],
+					 i)
+		      && reg_state[i].use_index == RELOAD_COMBINE_MAX_USES
+		      && reg_state[i].store_ruid <= reg_state[regno].use_ruid
+		      && hard_regno_nregs[i][GET_MODE (reg)] == 1)
+		    {
+		      index_reg = gen_rtx_REG (GET_MODE (reg), i);
+		      reg_sum = gen_rtx_PLUS (GET_MODE (reg), index_reg, base);
+		      break;
+		    }
+		}
+	    }
+
+	  /* Check that PREV_SET is indeed (set (REGX) (CONST_INT)) and that
+	     (REGY), i.e. BASE, is not clobbered before the last use we'll
+	     create.  */
+	  if (reg_sum
+	      && prev_set
+	      && CONST_INT_P (SET_SRC (prev_set))
+	      && rtx_equal_p (SET_DEST (prev_set), reg)
+	      && reg_state[regno].use_index >= 0
+	      && (reg_state[REGNO (base)].store_ruid
+		  <= reg_state[regno].use_ruid))
+	    {
+	      int i;
+
+	      /* Change destination register and, if necessary, the constant
+		 value in PREV, the constant loading instruction.  */
+	      validate_change (prev, &SET_DEST (prev_set), index_reg, 1);
+	      if (reg_state[regno].offset != const0_rtx)
+		validate_change (prev,
+				 &SET_SRC (prev_set),
+				 GEN_INT (INTVAL (SET_SRC (prev_set))
+					  + INTVAL (reg_state[regno].offset)),
+				 1);
+
+	      /* Now for every use of REG that we have recorded, replace REG
+		 with REG_SUM.  */
+	      for (i = reg_state[regno].use_index;
+		   i < RELOAD_COMBINE_MAX_USES; i++)
+		validate_unshare_change (reg_state[regno].reg_use[i].insn,
+				 	 reg_state[regno].reg_use[i].usep,
+				 	 /* Each change must have its own
+				    	    replacement.  */
+				 	 reg_sum, 1);
+
+	      if (apply_change_group ())
+		{
+		  /* For every new use of REG_SUM, we have to record the use
+		     of BASE therein, i.e. operand 1.  */
+		  for (i = reg_state[regno].use_index;
+		       i < RELOAD_COMBINE_MAX_USES; i++)
+		    reload_combine_note_use
+		      (&XEXP (*reg_state[regno].reg_use[i].usep, 1),
+		       reg_state[regno].reg_use[i].insn);
+
+		  if (reg_state[REGNO (base)].use_ruid
+		      > reg_state[regno].use_ruid)
+		    reg_state[REGNO (base)].use_ruid
+		      = reg_state[regno].use_ruid;
+
+		  /* Delete the reg-reg addition.  */
+		  delete_insn (insn);
+
+		  if (reg_state[regno].offset != const0_rtx)
+		    /* Previous REG_EQUIV / REG_EQUAL notes for PREV
+		       are now invalid.  */
+		    remove_reg_equal_equiv_notes (prev);
+
+		  reg_state[regno].use_index = RELOAD_COMBINE_MAX_USES;
+		  reg_state[REGNO (index_reg)].store_ruid
+		    = reload_combine_ruid;
+		  continue;
+		}
+	    }
+	}
 
       note_stores (PATTERN (insn), reload_combine_note_store, NULL);
 
       if (CALL_P (insn))
 	{
 	  rtx link;
-	  HARD_REG_SET used_regs;
-
-	  get_call_reg_set_usage (insn, &used_regs, call_used_reg_set);
 
 	  for (r = 0; r < FIRST_PSEUDO_REGISTER; r++)
-	    if (TEST_HARD_REG_BIT (used_regs, r))
+	    if (call_used_regs[r])
 	      {
 		reg_state[r].use_index = RELOAD_COMBINE_MAX_USES;
 		reg_state[r].store_ruid = reload_combine_ruid;
@@ -1348,17 +929,15 @@ reload_combine (void)
 	  for (link = CALL_INSN_FUNCTION_USAGE (insn); link;
 	       link = XEXP (link, 1))
 	    {
-	      rtx setuse = XEXP (link, 0);
-	      rtx usage_rtx = XEXP (setuse, 0);
-	      /* We could support CLOBBER_HIGH and treat it in the same way as
-		 HARD_REGNO_CALL_PART_CLOBBERED, but no port needs that yet.  */
-	      gcc_assert (GET_CODE (setuse) != CLOBBER_HIGH);
-
-	      if ((GET_CODE (setuse) == USE || GET_CODE (setuse) == CLOBBER)
-		  && REG_P (usage_rtx))
+	      rtx usage_rtx = XEXP (XEXP (link, 0), 0);
+	      if (REG_P (usage_rtx))
 	        {
-		  unsigned int end_regno = END_REGNO (usage_rtx);
-		  for (unsigned int i = REGNO (usage_rtx); i < end_regno; ++i)
+		  unsigned int i;
+		  unsigned int start_reg = REGNO (usage_rtx);
+		  unsigned int num_regs =
+			hard_regno_nregs[start_reg][GET_MODE (usage_rtx)];
+		  unsigned int end_reg  = start_reg + num_regs - 1;
+		  for (i = start_reg; i <= end_reg; i++)
 		    if (GET_CODE (XEXP (link, 0)) == CLOBBER)
 		      {
 		        reg_state[i].use_index = RELOAD_COMBINE_MAX_USES;
@@ -1368,9 +947,10 @@ reload_combine (void)
 		      reg_state[i].use_index = -1;
 	         }
 	     }
-	}
 
-      if (control_flow_insn && !ANY_RETURN_P (PATTERN (insn)))
+	}
+      else if (JUMP_P (insn)
+	       && GET_CODE (PATTERN (insn)) != RETURN)
 	{
 	  /* Non-spill registers might be used at the call destination in
 	     some unknown fashion, so we have to mark the unknown use.  */
@@ -1378,31 +958,24 @@ reload_combine (void)
 
 	  if ((condjump_p (insn) || condjump_in_parallel_p (insn))
 	      && JUMP_LABEL (insn))
-	    {
-	      if (ANY_RETURN_P (JUMP_LABEL (insn)))
-		live = NULL;
-	      else
-		live = &LABEL_LIVE (JUMP_LABEL (insn));
-	    }
+	    live = &LABEL_LIVE (JUMP_LABEL (insn));
 	  else
 	    live = &ever_live_at_start;
 
-	  if (live)
-	    for (r = 0; r < FIRST_PSEUDO_REGISTER; r++)
-	      if (TEST_HARD_REG_BIT (*live, r))
-		reg_state[r].use_index = -1;
+	  for (i = FIRST_PSEUDO_REGISTER - 1; i >= 0; --i)
+	    if (TEST_HARD_REG_BIT (*live, i))
+	      reg_state[i].use_index = -1;
 	}
 
-      reload_combine_note_use (&PATTERN (insn), insn, reload_combine_ruid,
-			       NULL_RTX);
-
+      reload_combine_note_use (&PATTERN (insn), insn);
       for (note = REG_NOTES (insn); note; note = XEXP (note, 1))
 	{
-	  if (REG_NOTE_KIND (note) == REG_INC && REG_P (XEXP (note, 0)))
+	  if (REG_NOTE_KIND (note) == REG_INC
+	      && REG_P (XEXP (note, 0)))
 	    {
 	      int regno = REGNO (XEXP (note, 0));
+
 	      reg_state[regno].store_ruid = reload_combine_ruid;
-	      reg_state[regno].real_store_ruid = reload_combine_ruid;
 	      reg_state[regno].use_index = -1;
 	    }
 	}
@@ -1412,15 +985,15 @@ reload_combine (void)
 }
 
 /* Check if DST is a register or a subreg of a register; if it is,
-   update store_ruid, real_store_ruid and use_index in the reg_state
-   structure accordingly.  Called via note_stores from reload_combine.  */
+   update reg_state[regno].store_ruid and reg_state[regno].use_index
+   accordingly.  Called via note_stores from reload_combine.  */
 
 static void
 reload_combine_note_store (rtx dst, const_rtx set, void *data ATTRIBUTE_UNUSED)
 {
   int regno = 0;
   int i;
-  machine_mode mode = GET_MODE (dst);
+  enum machine_mode mode = GET_MODE (dst);
 
   if (GET_CODE (dst) == SUBREG)
     {
@@ -1430,31 +1003,6 @@ reload_combine_note_store (rtx dst, const_rtx set, void *data ATTRIBUTE_UNUSED)
 				   GET_MODE (dst));
       dst = SUBREG_REG (dst);
     }
-
-  /* Some targets do argument pushes without adding REG_INC notes.  */
-
-  if (MEM_P (dst))
-    {
-      dst = XEXP (dst, 0);
-      if (GET_CODE (dst) == PRE_INC || GET_CODE (dst) == POST_INC
-	  || GET_CODE (dst) == PRE_DEC || GET_CODE (dst) == POST_DEC
-	  || GET_CODE (dst) == PRE_MODIFY || GET_CODE (dst) == POST_MODIFY)
-	{
-	  unsigned int end_regno = END_REGNO (XEXP (dst, 0));
-	  for (unsigned int i = REGNO (XEXP (dst, 0)); i < end_regno; ++i)
-	    {
-	      /* We could probably do better, but for now mark the register
-		 as used in an unknown fashion and set/clobbered at this
-		 insn.  */
-	      reg_state[i].use_index = -1;
-	      reg_state[i].store_ruid = reload_combine_ruid;
-	      reg_state[i].real_store_ruid = reload_combine_ruid;
-	    }
-	}
-      else
-        return;
-    }
-
   if (!REG_P (dst))
     return;
   regno += REGNO (dst);
@@ -1462,23 +1010,21 @@ reload_combine_note_store (rtx dst, const_rtx set, void *data ATTRIBUTE_UNUSED)
   /* note_stores might have stripped a STRICT_LOW_PART, so we have to be
      careful with registers / register parts that are not full words.
      Similarly for ZERO_EXTRACT.  */
-  if (GET_CODE (SET_DEST (set)) == ZERO_EXTRACT
+  if (GET_CODE (set) != SET
+      || GET_CODE (SET_DEST (set)) == ZERO_EXTRACT
       || GET_CODE (SET_DEST (set)) == STRICT_LOW_PART)
     {
-      for (i = end_hard_regno (mode, regno) - 1; i >= regno; i--)
+      for (i = hard_regno_nregs[regno][mode] - 1 + regno; i >= regno; i--)
 	{
 	  reg_state[i].use_index = -1;
 	  reg_state[i].store_ruid = reload_combine_ruid;
-	  reg_state[i].real_store_ruid = reload_combine_ruid;
 	}
     }
   else
     {
-      for (i = end_hard_regno (mode, regno) - 1; i >= regno; i--)
+      for (i = hard_regno_nregs[regno][mode] - 1 + regno; i >= regno; i--)
 	{
 	  reg_state[i].store_ruid = reload_combine_ruid;
-	  if (GET_CODE (set) == SET)
-	    reg_state[i].real_store_ruid = reload_combine_ruid;
 	  reg_state[i].use_index = RELOAD_COMBINE_MAX_USES;
 	}
     }
@@ -1489,7 +1035,7 @@ reload_combine_note_store (rtx dst, const_rtx set, void *data ATTRIBUTE_UNUSED)
    *XP is the pattern of INSN, or a part of it.
    Called from reload_combine, and recursively by itself.  */
 static void
-reload_combine_note_use (rtx *xp, rtx_insn *insn, int ruid, rtx containing_mem)
+reload_combine_note_use (rtx *xp, rtx insn)
 {
   rtx x = *xp;
   enum rtx_code code = x->code;
@@ -1502,7 +1048,7 @@ reload_combine_note_use (rtx *xp, rtx_insn *insn, int ruid, rtx containing_mem)
     case SET:
       if (REG_P (SET_DEST (x)))
 	{
-	  reload_combine_note_use (&SET_SRC (x), insn, ruid, NULL_RTX);
+	  reload_combine_note_use (&SET_SRC (x), insn);
 	  return;
 	}
       break;
@@ -1511,11 +1057,13 @@ reload_combine_note_use (rtx *xp, rtx_insn *insn, int ruid, rtx containing_mem)
       /* If this is the USE of a return value, we can't change it.  */
       if (REG_P (XEXP (x, 0)) && REG_FUNCTION_VALUE_P (XEXP (x, 0)))
 	{
-	  /* Mark the return register as used in an unknown fashion.  */
+	/* Mark the return register as used in an unknown fashion.  */
 	  rtx reg = XEXP (x, 0);
-	  unsigned int end_regno = END_REGNO (reg);
-	  for (unsigned int regno = REGNO (reg); regno < end_regno; ++regno)
-	    reg_state[regno].use_index = -1;
+	  int regno = REGNO (reg);
+	  int nregs = hard_regno_nregs[regno][GET_MODE (reg)];
+
+	  while (--nregs >= 0)
+	    reg_state[regno + nregs].use_index = -1;
 	  return;
 	}
       break;
@@ -1528,10 +1076,6 @@ reload_combine_note_use (rtx *xp, rtx_insn *insn, int ruid, rtx containing_mem)
 	  return;
 	}
       break;
-
-    case CLOBBER_HIGH:
-      gcc_assert (REG_P (SET_DEST (x)));
-      return;
 
     case PLUS:
       /* We are interested in (plus (reg) (const_int)) .  */
@@ -1550,7 +1094,7 @@ reload_combine_note_use (rtx *xp, rtx_insn *insn, int ruid, rtx containing_mem)
 	/* No spurious USEs of pseudo registers may remain.  */
 	gcc_assert (regno < FIRST_PSEUDO_REGISTER);
 
-	nregs = REG_NREGS (x);
+	nregs = hard_regno_nregs[regno][GET_MODE (x)];
 
 	/* We can't substitute into multi-hard-reg uses.  */
 	if (nregs > 1)
@@ -1560,11 +1104,6 @@ reload_combine_note_use (rtx *xp, rtx_insn *insn, int ruid, rtx containing_mem)
 	    return;
 	  }
 
-	/* We may be called to update uses in previously seen insns.
-	   Don't add uses beyond the last store we saw.  */
-	if (ruid < reg_state[regno].store_ruid)
-	  return;
-
 	/* If this register is already used in some unknown fashion, we
 	   can't do anything.
 	   If we decrement the index from zero to -1, we can't store more
@@ -1573,33 +1112,28 @@ reload_combine_note_use (rtx *xp, rtx_insn *insn, int ruid, rtx containing_mem)
 	if (use_index < 0)
 	  return;
 
-	if (use_index == RELOAD_COMBINE_MAX_USES - 1)
+	if (use_index != RELOAD_COMBINE_MAX_USES - 1)
+	  {
+	    /* We have found another use for a register that is already
+	       used later.  Check if the offsets match; if not, mark the
+	       register as used in an unknown fashion.  */
+	    if (! rtx_equal_p (offset, reg_state[regno].offset))
+	      {
+		reg_state[regno].use_index = -1;
+		return;
+	      }
+	  }
+	else
 	  {
 	    /* This is the first use of this register we have seen since we
 	       marked it as dead.  */
 	    reg_state[regno].offset = offset;
-	    reg_state[regno].all_offsets_match = true;
-	    reg_state[regno].use_ruid = ruid;
+	    reg_state[regno].use_ruid = reload_combine_ruid;
 	  }
-	else
-	  {
-	    if (reg_state[regno].use_ruid > ruid)
-	      reg_state[regno].use_ruid = ruid;
-
-	    if (! rtx_equal_p (offset, reg_state[regno].offset))
-	      reg_state[regno].all_offsets_match = false;
-	  }
-
 	reg_state[regno].reg_use[use_index].insn = insn;
-	reg_state[regno].reg_use[use_index].ruid = ruid;
-	reg_state[regno].reg_use[use_index].containing_mem = containing_mem;
 	reg_state[regno].reg_use[use_index].usep = xp;
 	return;
       }
-
-    case MEM:
-      containing_mem = x;
-      break;
 
     default:
       break;
@@ -1610,12 +1144,11 @@ reload_combine_note_use (rtx *xp, rtx_insn *insn, int ruid, rtx containing_mem)
   for (i = GET_RTX_LENGTH (code) - 1; i >= 0; i--)
     {
       if (fmt[i] == 'e')
-	reload_combine_note_use (&XEXP (x, i), insn, ruid, containing_mem);
+	reload_combine_note_use (&XEXP (x, i), insn);
       else if (fmt[i] == 'E')
 	{
 	  for (j = XVECLEN (x, i) - 1; j >= 0; j--)
-	    reload_combine_note_use (&XVECEXP (x, i, j), insn, ruid,
-				     containing_mem);
+	    reload_combine_note_use (&XVECEXP (x, i, j), insn);
 	}
     }
 }
@@ -1627,28 +1160,18 @@ reload_combine_note_use (rtx *xp, rtx_insn *insn, int ruid, rtx containing_mem)
    information about register contents we have would be costly, so we
    use move2add_last_label_luid to note where the label is and then
    later disable any optimization that would cross it.
-   reg_offset[n] / reg_base_reg[n] / reg_symbol_ref[n] / reg_mode[n]
-   are only valid if reg_set_luid[n] is greater than
-   move2add_last_label_luid.
-   For a set that established a new (potential) base register with
-   non-constant value, we use move2add_luid from the place where the
-   setting insn is encountered; registers based off that base then
-   get the same reg_set_luid.  Constants all get
-   move2add_last_label_luid + 1 as their reg_set_luid.  */
+   reg_offset[n] / reg_base_reg[n] / reg_mode[n] are only valid if
+   reg_set_luid[n] is greater than move2add_last_label_luid.  */
 static int reg_set_luid[FIRST_PSEUDO_REGISTER];
 
 /* If reg_base_reg[n] is negative, register n has been set to
-   reg_offset[n] or reg_symbol_ref[n] + reg_offset[n] in mode reg_mode[n].
+   reg_offset[n] in mode reg_mode[n] .
    If reg_base_reg[n] is non-negative, register n has been set to the
    sum of reg_offset[n] and the value of register reg_base_reg[n]
-   before reg_set_luid[n], calculated in mode reg_mode[n] .
-   For multi-hard-register registers, all but the first one are
-   recorded as BLKmode in reg_mode.  Setting reg_mode to VOIDmode
-   marks it as invalid.  */
+   before reg_set_luid[n], calculated in mode reg_mode[n] .  */
 static HOST_WIDE_INT reg_offset[FIRST_PSEUDO_REGISTER];
 static int reg_base_reg[FIRST_PSEUDO_REGISTER];
-static rtx reg_symbol_ref[FIRST_PSEUDO_REGISTER];
-static machine_mode reg_mode[FIRST_PSEUDO_REGISTER];
+static enum machine_mode reg_mode[FIRST_PSEUDO_REGISTER];
 
 /* move2add_luid is linearly increased while scanning the instructions
    from first to last.  It is used to set reg_set_luid in
@@ -1664,259 +1187,17 @@ static int move2add_last_label_luid;
 #define MODES_OK_FOR_MOVE2ADD(OUTMODE, INMODE) \
   (GET_MODE_SIZE (OUTMODE) == GET_MODE_SIZE (INMODE) \
    || (GET_MODE_SIZE (OUTMODE) <= GET_MODE_SIZE (INMODE) \
-       && TRULY_NOOP_TRUNCATION_MODES_P (OUTMODE, INMODE)))
-
-/* Record that REG is being set to a value with the mode of REG.  */
-
-static void
-move2add_record_mode (rtx reg)
-{
-  int regno, nregs;
-  machine_mode mode = GET_MODE (reg);
-
-  if (GET_CODE (reg) == SUBREG)
-    {
-      regno = subreg_regno (reg);
-      nregs = subreg_nregs (reg);
-    }
-  else if (REG_P (reg))
-    {
-      regno = REGNO (reg);
-      nregs = REG_NREGS (reg);
-    }
-  else
-    gcc_unreachable ();
-  for (int i = nregs - 1; i > 0; i--)
-    reg_mode[regno + i] = BLKmode;
-  reg_mode[regno] = mode;
-}
-
-/* Record that REG is being set to the sum of SYM and OFF.  */
+       && TRULY_NOOP_TRUNCATION (GET_MODE_BITSIZE (OUTMODE), \
+				 GET_MODE_BITSIZE (INMODE))))
 
 static void
-move2add_record_sym_value (rtx reg, rtx sym, rtx off)
-{
-  int regno = REGNO (reg);
-
-  move2add_record_mode (reg);
-  reg_set_luid[regno] = move2add_luid;
-  reg_base_reg[regno] = -1;
-  reg_symbol_ref[regno] = sym;
-  reg_offset[regno] = INTVAL (off);
-}
-
-/* Check if REGNO contains a valid value in MODE.  */
-
-static bool
-move2add_valid_value_p (int regno, scalar_int_mode mode)
-{
-  if (reg_set_luid[regno] <= move2add_last_label_luid)
-    return false;
-
-  if (mode != reg_mode[regno])
-    {
-      scalar_int_mode old_mode;
-      if (!is_a <scalar_int_mode> (reg_mode[regno], &old_mode)
-	  || !MODES_OK_FOR_MOVE2ADD (mode, old_mode))
-	return false;
-      /* The value loaded into regno in reg_mode[regno] is also valid in
-	 mode after truncation only if (REG:mode regno) is the lowpart of
-	 (REG:reg_mode[regno] regno).  Now, for big endian, the starting
-	 regno of the lowpart might be different.  */
-      poly_int64 s_off = subreg_lowpart_offset (mode, old_mode);
-      s_off = subreg_regno_offset (regno, old_mode, s_off, mode);
-      if (maybe_ne (s_off, 0))
-	/* We could in principle adjust regno, check reg_mode[regno] to be
-	   BLKmode, and return s_off to the caller (vs. -1 for failure),
-	   but we currently have no callers that could make use of this
-	   information.  */
-	return false;
-    }
-
-  for (int i = end_hard_regno (mode, regno) - 1; i > regno; i--)
-    if (reg_mode[i] != BLKmode)
-      return false;
-  return true;
-}
-
-/* This function is called with INSN that sets REG (of mode MODE)
-   to (SYM + OFF), while REG is known to already have value (SYM + offset).
-   This function tries to change INSN into an add instruction
-   (set (REG) (plus (REG) (OFF - offset))) using the known value.
-   It also updates the information about REG's known value.
-   Return true if we made a change.  */
-
-static bool
-move2add_use_add2_insn (scalar_int_mode mode, rtx reg, rtx sym, rtx off,
-			rtx_insn *insn)
-{
-  rtx pat = PATTERN (insn);
-  rtx src = SET_SRC (pat);
-  int regno = REGNO (reg);
-  rtx new_src = gen_int_mode (UINTVAL (off) - reg_offset[regno], mode);
-  bool speed = optimize_bb_for_speed_p (BLOCK_FOR_INSN (insn));
-  bool changed = false;
-
-  /* (set (reg) (plus (reg) (const_int 0))) is not canonical;
-     use (set (reg) (reg)) instead.
-     We don't delete this insn, nor do we convert it into a
-     note, to avoid losing register notes or the return
-     value flag.  jump2 already knows how to get rid of
-     no-op moves.  */
-  if (new_src == const0_rtx)
-    {
-      /* If the constants are different, this is a
-	 truncation, that, if turned into (set (reg)
-	 (reg)), would be discarded.  Maybe we should
-	 try a truncMN pattern?  */
-      if (INTVAL (off) == reg_offset [regno])
-	changed = validate_change (insn, &SET_SRC (pat), reg, 0);
-    }
-  else
-    {
-      struct full_rtx_costs oldcst, newcst;
-      rtx tem = gen_rtx_PLUS (mode, reg, new_src);
-
-      get_full_set_rtx_cost (pat, &oldcst);
-      SET_SRC (pat) = tem;
-      get_full_set_rtx_cost (pat, &newcst);
-      SET_SRC (pat) = src;
-
-      if (costs_lt_p (&newcst, &oldcst, speed)
-	  && have_add2_insn (reg, new_src))
-	changed = validate_change (insn, &SET_SRC (pat), tem, 0);	
-      else if (sym == NULL_RTX && mode != BImode)
-	{
-	  scalar_int_mode narrow_mode;
-	  FOR_EACH_MODE_UNTIL (narrow_mode, mode)
-	    {
-	      if (have_insn_for (STRICT_LOW_PART, narrow_mode)
-		  && ((reg_offset[regno] & ~GET_MODE_MASK (narrow_mode))
-		      == (INTVAL (off) & ~GET_MODE_MASK (narrow_mode))))
-		{
-		  rtx narrow_reg = gen_lowpart_common (narrow_mode, reg);
-		  rtx narrow_src = gen_int_mode (INTVAL (off),
-						 narrow_mode);
-		  rtx new_set
-		    = gen_rtx_SET (gen_rtx_STRICT_LOW_PART (VOIDmode,
-							    narrow_reg),
-				   narrow_src);
-		  get_full_set_rtx_cost (new_set, &newcst);
-		  if (costs_lt_p (&newcst, &oldcst, speed))
-		    {
-		      changed = validate_change (insn, &PATTERN (insn),
-						 new_set, 0);
-		      if (changed)
-			break;
-		    }
-		}
-	    }
-	}
-    }
-  move2add_record_sym_value (reg, sym, off);
-  return changed;
-}
-
-
-/* This function is called with INSN that sets REG (of mode MODE) to
-   (SYM + OFF), but REG doesn't have known value (SYM + offset).  This
-   function tries to find another register which is known to already have
-   value (SYM + offset) and change INSN into an add instruction
-   (set (REG) (plus (the found register) (OFF - offset))) if such
-   a register is found.  It also updates the information about
-   REG's known value.
-   Return true iff we made a change.  */
-
-static bool
-move2add_use_add3_insn (scalar_int_mode mode, rtx reg, rtx sym, rtx off,
-			rtx_insn *insn)
-{
-  rtx pat = PATTERN (insn);
-  rtx src = SET_SRC (pat);
-  int regno = REGNO (reg);
-  int min_regno = 0;
-  bool speed = optimize_bb_for_speed_p (BLOCK_FOR_INSN (insn));
-  int i;
-  bool changed = false;
-  struct full_rtx_costs oldcst, newcst, mincst;
-  rtx plus_expr;
-
-  init_costs_to_max (&mincst);
-  get_full_set_rtx_cost (pat, &oldcst);
-
-  plus_expr = gen_rtx_PLUS (GET_MODE (reg), reg, const0_rtx);
-  SET_SRC (pat) = plus_expr;
-
-  for (i = 0; i < FIRST_PSEUDO_REGISTER; i++)
-    if (move2add_valid_value_p (i, mode)
-	&& reg_base_reg[i] < 0
-	&& reg_symbol_ref[i] != NULL_RTX
-	&& rtx_equal_p (sym, reg_symbol_ref[i]))
-      {
-	rtx new_src = gen_int_mode (UINTVAL (off) - reg_offset[i],
-				    GET_MODE (reg));
-	/* (set (reg) (plus (reg) (const_int 0))) is not canonical;
-	   use (set (reg) (reg)) instead.
-	   We don't delete this insn, nor do we convert it into a
-	   note, to avoid losing register notes or the return
-	   value flag.  jump2 already knows how to get rid of
-	   no-op moves.  */
-	if (new_src == const0_rtx)
-	  {
-	    init_costs_to_zero (&mincst);
-	    min_regno = i;
-	    break;
-	  }
-	else
-	  {
-	    XEXP (plus_expr, 1) = new_src;
-	    get_full_set_rtx_cost (pat, &newcst);
-
-	    if (costs_lt_p (&newcst, &mincst, speed))
-	      {
-		mincst = newcst;
-		min_regno = i;
-	      }
-	  }
-      }
-  SET_SRC (pat) = src;
-
-  if (costs_lt_p (&mincst, &oldcst, speed))
-    {
-      rtx tem;
-
-      tem = gen_rtx_REG (GET_MODE (reg), min_regno);
-      if (i != min_regno)
-	{
-	  rtx new_src = gen_int_mode (UINTVAL (off) - reg_offset[min_regno],
-				      GET_MODE (reg));
-	  tem = gen_rtx_PLUS (GET_MODE (reg), tem, new_src);
-	}
-      if (validate_change (insn, &SET_SRC (pat), tem, 0))
-	changed = true;
-    }
-  reg_set_luid[regno] = move2add_luid;
-  move2add_record_sym_value (reg, sym, off);
-  return changed;
-}
-
-/* Convert move insns with constant inputs to additions if they are cheaper.
-   Return true if any changes were made.  */
-static bool
-reload_cse_move2add (rtx_insn *first)
+reload_cse_move2add (rtx first)
 {
   int i;
-  rtx_insn *insn;
-  bool changed = false;
+  rtx insn;
 
   for (i = FIRST_PSEUDO_REGISTER - 1; i >= 0; i--)
-    {
-      reg_set_luid[i] = 0;
-      reg_offset[i] = 0;
-      reg_base_reg[i] = 0;
-      reg_symbol_ref[i] = NULL_RTX;
-      reg_mode[i] = VOIDmode;
-    }
+    reg_set_luid[i] = 0;
 
   move2add_last_label_luid = 0;
   move2add_luid = 2;
@@ -1938,10 +1219,8 @@ reload_cse_move2add (rtx_insn *first)
       pat = PATTERN (insn);
       /* For simplicity, we only perform this optimization on
 	 straightforward SETs.  */
-      scalar_int_mode mode;
       if (GET_CODE (pat) == SET
-	  && REG_P (SET_DEST (pat))
-	  && is_a <scalar_int_mode> (GET_MODE (SET_DEST (pat)), &mode))
+	  && REG_P (SET_DEST (pat)))
 	{
 	  rtx reg = SET_DEST (pat);
 	  int regno = REGNO (reg);
@@ -1949,7 +1228,8 @@ reload_cse_move2add (rtx_insn *first)
 
 	  /* Check if we have valid information on the contents of this
 	     register in the mode of REG.  */
-	  if (move2add_valid_value_p (regno, mode)
+	  if (reg_set_luid[regno] > move2add_last_label_luid
+	      && MODES_OK_FOR_MOVE2ADD (GET_MODE (reg), reg_mode[regno])
               && dbg_cnt (cse2_move2add))
 	    {
 	      /* Try to transform (set (REGX) (CONST_INT A))
@@ -1965,12 +1245,65 @@ reload_cse_move2add (rtx_insn *first)
 				  (set (STRICT_LOW_PART (REGX)) (CONST_INT B))
 	      */
 
-	      if (CONST_INT_P (src)
-		  && reg_base_reg[regno] < 0
-		  && reg_symbol_ref[regno] == NULL_RTX)
+	      if (CONST_INT_P (src) && reg_base_reg[regno] < 0)
 		{
-		  changed |= move2add_use_add2_insn (mode, reg, NULL_RTX,
-						     src, insn);
+		  rtx new_src = gen_int_mode (INTVAL (src) - reg_offset[regno],
+					      GET_MODE (reg));
+		  bool speed = optimize_bb_for_speed_p (BLOCK_FOR_INSN (insn));
+
+		  /* (set (reg) (plus (reg) (const_int 0))) is not canonical;
+		     use (set (reg) (reg)) instead.
+		     We don't delete this insn, nor do we convert it into a
+		     note, to avoid losing register notes or the return
+		     value flag.  jump2 already knows how to get rid of
+		     no-op moves.  */
+		  if (new_src == const0_rtx)
+		    {
+		      /* If the constants are different, this is a
+			 truncation, that, if turned into (set (reg)
+			 (reg)), would be discarded.  Maybe we should
+			 try a truncMN pattern?  */
+		      if (INTVAL (src) == reg_offset [regno])
+			validate_change (insn, &SET_SRC (pat), reg, 0);
+		    }
+		  else if (rtx_cost (new_src, PLUS, speed) < rtx_cost (src, SET, speed)
+			   && have_add2_insn (reg, new_src))
+		    {
+		      rtx tem = gen_rtx_PLUS (GET_MODE (reg), reg, new_src);
+		      validate_change (insn, &SET_SRC (pat), tem, 0);
+		    }
+		  else if (GET_MODE (reg) != BImode)
+		    {
+		      enum machine_mode narrow_mode;
+		      for (narrow_mode = GET_CLASS_NARROWEST_MODE (MODE_INT);
+			   narrow_mode != VOIDmode
+			   && narrow_mode != GET_MODE (reg);
+			   narrow_mode = GET_MODE_WIDER_MODE (narrow_mode))
+			{
+			  if (have_insn_for (STRICT_LOW_PART, narrow_mode)
+			      && ((reg_offset[regno]
+				   & ~GET_MODE_MASK (narrow_mode))
+				  == (INTVAL (src)
+				      & ~GET_MODE_MASK (narrow_mode))))
+			    {
+			      rtx narrow_reg = gen_rtx_REG (narrow_mode,
+							    REGNO (reg));
+			      rtx narrow_src = gen_int_mode (INTVAL (src),
+							     narrow_mode);
+			      rtx new_set =
+				gen_rtx_SET (VOIDmode,
+					     gen_rtx_STRICT_LOW_PART (VOIDmode,
+								      narrow_reg),
+					     narrow_src);
+			      if (validate_change (insn, &PATTERN (insn),
+						   new_set, 0))
+				break;
+			    }
+			}
+		    }
+		  reg_set_luid[regno] = move2add_luid;
+		  reg_mode[regno] = GET_MODE (reg);
+		  reg_offset[regno] = INTVAL (src);
 		  continue;
 		}
 
@@ -1987,9 +1320,10 @@ reload_cse_move2add (rtx_insn *first)
 	      else if (REG_P (src)
 		       && reg_set_luid[regno] == reg_set_luid[REGNO (src)]
 		       && reg_base_reg[regno] == reg_base_reg[REGNO (src)]
-		       && move2add_valid_value_p (REGNO (src), mode))
+		       && MODES_OK_FOR_MOVE2ADD (GET_MODE (reg),
+						 reg_mode[REGNO (src)]))
 		{
-		  rtx_insn *next = next_nonnote_nondebug_insn (insn);
+		  rtx next = next_nonnote_nondebug_insn (insn);
 		  rtx set = NULL_RTX;
 		  if (next)
 		    set = single_set (next);
@@ -2000,14 +1334,14 @@ reload_cse_move2add (rtx_insn *first)
 		      && CONST_INT_P (XEXP (SET_SRC (set), 1)))
 		    {
 		      rtx src3 = XEXP (SET_SRC (set), 1);
-		      unsigned HOST_WIDE_INT added_offset = UINTVAL (src3);
+		      HOST_WIDE_INT added_offset = INTVAL (src3);
 		      HOST_WIDE_INT base_offset = reg_offset[REGNO (src)];
 		      HOST_WIDE_INT regno_offset = reg_offset[regno];
 		      rtx new_src =
 			gen_int_mode (added_offset
 				      + base_offset
 				      - regno_offset,
-				      mode);
+				      GET_MODE (reg));
 		      bool success = false;
 		      bool speed = optimize_bb_for_speed_p (BLOCK_FOR_INSN (insn));
 
@@ -2015,82 +1349,29 @@ reload_cse_move2add (rtx_insn *first)
 			/* See above why we create (set (reg) (reg)) here.  */
 			success
 			  = validate_change (next, &SET_SRC (set), reg, 0);
-		      else
+		      else if ((rtx_cost (new_src, PLUS, speed)
+				< COSTS_N_INSNS (1) + rtx_cost (src3, SET, speed))
+			       && have_add2_insn (reg, new_src))
 			{
-			  rtx old_src = SET_SRC (set);
-			  struct full_rtx_costs oldcst, newcst;
-			  rtx tem = gen_rtx_PLUS (mode, reg, new_src);
-
-			  get_full_set_rtx_cost (set, &oldcst);
-			  SET_SRC (set) = tem;
-			  get_full_set_src_cost (tem, mode, &newcst);
-			  SET_SRC (set) = old_src;
-			  costs_add_n_insns (&oldcst, 1);
-
-			  if (costs_lt_p (&newcst, &oldcst, speed)
-			      && have_add2_insn (reg, new_src))
-			    {
-			      rtx newpat = gen_rtx_SET (reg, tem);
-			      success
-				= validate_change (next, &PATTERN (next),
-						   newpat, 0);
-			    }
+			  rtx newpat = gen_rtx_SET (VOIDmode,
+						    reg,
+						    gen_rtx_PLUS (GET_MODE (reg),
+						 		  reg,
+								  new_src));
+			  success
+			    = validate_change (next, &PATTERN (next),
+					       newpat, 0);
 			}
 		      if (success)
 			delete_insn (insn);
-		      changed |= success;
 		      insn = next;
-		      move2add_record_mode (reg);
-		      reg_offset[regno]
-			= trunc_int_for_mode (added_offset + base_offset,
-					      mode);
+		      reg_mode[regno] = GET_MODE (reg);
+		      reg_offset[regno] =
+			trunc_int_for_mode (added_offset + base_offset,
+					    GET_MODE (reg));
 		      continue;
 		    }
 		}
-	    }
-
-	  /* Try to transform
-	     (set (REGX) (CONST (PLUS (SYMBOL_REF) (CONST_INT A))))
-	     ...
-	     (set (REGY) (CONST (PLUS (SYMBOL_REF) (CONST_INT B))))
-	     to
-	     (set (REGX) (CONST (PLUS (SYMBOL_REF) (CONST_INT A))))
-	     ...
-	     (set (REGY) (CONST (PLUS (REGX) (CONST_INT B-A))))  */
-	  if ((GET_CODE (src) == SYMBOL_REF
-	       || (GET_CODE (src) == CONST
-		   && GET_CODE (XEXP (src, 0)) == PLUS
-		   && GET_CODE (XEXP (XEXP (src, 0), 0)) == SYMBOL_REF
-		   && CONST_INT_P (XEXP (XEXP (src, 0), 1))))
-	      && dbg_cnt (cse2_move2add))
-	    {
-	      rtx sym, off;
-
-	      if (GET_CODE (src) == SYMBOL_REF)
-		{
-		  sym = src;
-		  off = const0_rtx;
-		}
-	      else
-		{
-		  sym = XEXP (XEXP (src, 0), 0);
-		  off = XEXP (XEXP (src, 0), 1);
-		}
-
-	      /* If the reg already contains the value which is sum of
-		 sym and some constant value, we can use an add2 insn.  */
-	      if (move2add_valid_value_p (regno, mode)
-		  && reg_base_reg[regno] < 0
-		  && reg_symbol_ref[regno] != NULL_RTX
-		  && rtx_equal_p (sym, reg_symbol_ref[regno]))
-		changed |= move2add_use_add2_insn (mode, reg, sym, off, insn);
-
-	      /* Otherwise, we have to find a register whose value is sum
-		 of sym and some constant value.  */
-	      else
-		changed |= move2add_use_add3_insn (mode, reg, sym, off, insn);
-
-	      continue;
 	    }
 	}
 
@@ -2102,13 +1383,10 @@ reload_cse_move2add (rtx_insn *first)
 	      /* Reset the information about this register.  */
 	      int regno = REGNO (XEXP (note, 0));
 	      if (regno < FIRST_PSEUDO_REGISTER)
-		{
-		  move2add_record_mode (XEXP (note, 0));
-		  reg_mode[regno] = VOIDmode;
-		}
+		reg_set_luid[regno] = 0;
 	    }
 	}
-      note_stores (PATTERN (insn), move2add_note_store, insn);
+      note_stores (PATTERN (insn), move2add_note_store, NULL);
 
       /* If INSN is a conditional branch, we try to extract an
 	 implicit set out of it.  */
@@ -2125,12 +1403,12 @@ reload_cse_move2add (rtx_insn *first)
 		 number of calls to gen_rtx_SET to avoid memory
 		 allocation if possible.  */
 	      && SCALAR_INT_MODE_P (GET_MODE (XEXP (cnd, 0)))
-	      && REG_NREGS (XEXP (cnd, 0)) == 1
+	      && hard_regno_nregs[REGNO (XEXP (cnd, 0))][GET_MODE (XEXP (cnd, 0))] == 1
 	      && CONST_INT_P (XEXP (cnd, 1)))
 	    {
 	      rtx implicit_set =
-		gen_rtx_SET (XEXP (cnd, 0), XEXP (cnd, 1));
-	      move2add_note_store (SET_DEST (implicit_set), implicit_set, insn);
+		gen_rtx_SET (VOIDmode, XEXP (cnd, 0), XEXP (cnd, 1));
+	      move2add_note_store (SET_DEST (implicit_set), implicit_set, 0);
 	    }
 	}
 
@@ -2138,48 +1416,37 @@ reload_cse_move2add (rtx_insn *first)
 	 unknown values.  */
       if (CALL_P (insn))
 	{
-	  rtx link;
-
 	  for (i = FIRST_PSEUDO_REGISTER - 1; i >= 0; i--)
 	    {
 	      if (call_used_regs[i])
 		/* Reset the information about this register.  */
-		reg_mode[i] = VOIDmode;
-	    }
-
-	  for (link = CALL_INSN_FUNCTION_USAGE (insn); link;
-	       link = XEXP (link, 1))
-	    {
-	      rtx setuse = XEXP (link, 0);
-	      rtx usage_rtx = XEXP (setuse, 0);
-	      /* CALL_INSN_FUNCTION_USAGEs can only have full clobbers, not
-		 clobber_highs.  */
-	      gcc_assert (GET_CODE (setuse) != CLOBBER_HIGH);
-	      if (GET_CODE (setuse) == CLOBBER
-		  && REG_P (usage_rtx))
-	        {
-		  unsigned int end_regno = END_REGNO (usage_rtx);
-		  for (unsigned int r = REGNO (usage_rtx); r < end_regno; ++r)
-		    /* Reset the information about this register.  */
-		    reg_mode[r] = VOIDmode;
-		}
+		reg_set_luid[i] = 0;
 	    }
 	}
     }
-  return changed;
 }
 
-/* SET is a SET or CLOBBER that sets DST.  DATA is the insn which
-   contains SET.
+/* SET is a SET or CLOBBER that sets DST.
    Update reg_set_luid, reg_offset and reg_base_reg accordingly.
    Called from reload_cse_move2add via note_stores.  */
 
 static void
-move2add_note_store (rtx dst, const_rtx set, void *data)
+move2add_note_store (rtx dst, const_rtx set, void *data ATTRIBUTE_UNUSED)
 {
-  rtx_insn *insn = (rtx_insn *) data;
   unsigned int regno = 0;
-  scalar_int_mode mode;
+  unsigned int nregs = 0;
+  unsigned int i;
+  enum machine_mode mode = GET_MODE (dst);
+
+  if (GET_CODE (dst) == SUBREG)
+    {
+      regno = subreg_regno_offset (REGNO (SUBREG_REG (dst)),
+				   GET_MODE (SUBREG_REG (dst)),
+				   SUBREG_BYTE (dst),
+				   GET_MODE (dst));
+      nregs = subreg_nregs (dst);
+      dst = SUBREG_REG (dst);
+    }
 
   /* Some targets do argument pushes without adding REG_INC notes.  */
 
@@ -2188,55 +1455,28 @@ move2add_note_store (rtx dst, const_rtx set, void *data)
       dst = XEXP (dst, 0);
       if (GET_CODE (dst) == PRE_INC || GET_CODE (dst) == POST_INC
 	  || GET_CODE (dst) == PRE_DEC || GET_CODE (dst) == POST_DEC)
-	reg_mode[REGNO (XEXP (dst, 0))] = VOIDmode;
+	reg_set_luid[REGNO (XEXP (dst, 0))] = 0;
       return;
     }
-
-  if (GET_CODE (dst) == SUBREG)
-    regno = subreg_regno (dst);
-  else if (REG_P (dst))
-    regno = REGNO (dst);
-  else
+  if (!REG_P (dst))
     return;
 
-  if (!is_a <scalar_int_mode> (GET_MODE (dst), &mode))
-    goto invalidate;
+  regno += REGNO (dst);
+  if (!nregs)
+    nregs = hard_regno_nregs[regno][mode];
 
-  if (GET_CODE (set) == SET)
-    {
-      rtx note, sym = NULL_RTX;
-      rtx off;
-
-      note = find_reg_equal_equiv_note (insn);
-      if (note && GET_CODE (XEXP (note, 0)) == SYMBOL_REF)
-	{
-	  sym = XEXP (note, 0);
-	  off = const0_rtx;
-	}
-      else if (note && GET_CODE (XEXP (note, 0)) == CONST
-	       && GET_CODE (XEXP (XEXP (note, 0), 0)) == PLUS
-	       && GET_CODE (XEXP (XEXP (XEXP (note, 0), 0), 0)) == SYMBOL_REF
-	       && CONST_INT_P (XEXP (XEXP (XEXP (note, 0), 0), 1)))
-	{
-	  sym = XEXP (XEXP (XEXP (note, 0), 0), 0);
-	  off = XEXP (XEXP (XEXP (note, 0), 0), 1);
-	}
-
-      if (sym != NULL_RTX)
-	{
-	  move2add_record_sym_value (dst, sym, off);
-	  return;
-	}
-    }
-
-  if (GET_CODE (set) == SET
+  if (SCALAR_INT_MODE_P (GET_MODE (dst))
+      && nregs == 1 && GET_CODE (set) == SET
       && GET_CODE (SET_DEST (set)) != ZERO_EXTRACT
       && GET_CODE (SET_DEST (set)) != STRICT_LOW_PART)
     {
       rtx src = SET_SRC (set);
       rtx base_reg;
-      unsigned HOST_WIDE_INT offset;
+      HOST_WIDE_INT offset;
       int base_regno;
+      /* This may be different from mode, if SET_DEST (set) is a
+	 SUBREG.  */
+      enum machine_mode dst_mode = GET_MODE (dst);
 
       switch (GET_CODE (src))
 	{
@@ -2246,18 +1486,22 @@ move2add_note_store (rtx dst, const_rtx set, void *data)
 	      base_reg = XEXP (src, 0);
 
 	      if (CONST_INT_P (XEXP (src, 1)))
-		offset = UINTVAL (XEXP (src, 1));
+		offset = INTVAL (XEXP (src, 1));
 	      else if (REG_P (XEXP (src, 1))
-		       && move2add_valid_value_p (REGNO (XEXP (src, 1)), mode))
+		       && (reg_set_luid[REGNO (XEXP (src, 1))]
+			   > move2add_last_label_luid)
+		       && (MODES_OK_FOR_MOVE2ADD
+			   (dst_mode, reg_mode[REGNO (XEXP (src, 1))])))
 		{
-		  if (reg_base_reg[REGNO (XEXP (src, 1))] < 0
-		      && reg_symbol_ref[REGNO (XEXP (src, 1))] == NULL_RTX)
+		  if (reg_base_reg[REGNO (XEXP (src, 1))] < 0)
 		    offset = reg_offset[REGNO (XEXP (src, 1))];
 		  /* Maybe the first register is known to be a
 		     constant.  */
-		  else if (move2add_valid_value_p (REGNO (base_reg), mode)
-			   && reg_base_reg[REGNO (base_reg)] < 0
-			   && reg_symbol_ref[REGNO (base_reg)] == NULL_RTX)
+		  else if (reg_set_luid[REGNO (base_reg)]
+			   > move2add_last_label_luid
+			   && (MODES_OK_FOR_MOVE2ADD
+			       (dst_mode, reg_mode[REGNO (XEXP (src, 1))]))
+			   && reg_base_reg[REGNO (base_reg)] < 0)
 		    {
 		      offset = reg_offset[REGNO (base_reg)];
 		      base_reg = XEXP (src, 1);
@@ -2281,89 +1525,64 @@ move2add_note_store (rtx dst, const_rtx set, void *data)
 	case CONST_INT:
 	  /* Start tracking the register as a constant.  */
 	  reg_base_reg[regno] = -1;
-	  reg_symbol_ref[regno] = NULL_RTX;
 	  reg_offset[regno] = INTVAL (SET_SRC (set));
 	  /* We assign the same luid to all registers set to constants.  */
 	  reg_set_luid[regno] = move2add_last_label_luid + 1;
-	  move2add_record_mode (dst);
+	  reg_mode[regno] = mode;
 	  return;
 
 	default:
-	  goto invalidate;
+	invalidate:
+	  /* Invalidate the contents of the register.  */
+	  reg_set_luid[regno] = 0;
+	  return;
 	}
 
       base_regno = REGNO (base_reg);
       /* If information about the base register is not valid, set it
 	 up as a new base register, pretending its value is known
 	 starting from the current insn.  */
-      if (!move2add_valid_value_p (base_regno, mode))
+      if (reg_set_luid[base_regno] <= move2add_last_label_luid)
 	{
 	  reg_base_reg[base_regno] = base_regno;
-	  reg_symbol_ref[base_regno] = NULL_RTX;
 	  reg_offset[base_regno] = 0;
 	  reg_set_luid[base_regno] = move2add_luid;
-	  gcc_assert (GET_MODE (base_reg) == mode);
-	  move2add_record_mode (base_reg);
+	  reg_mode[base_regno] = mode;
 	}
+      else if (! MODES_OK_FOR_MOVE2ADD (dst_mode,
+					reg_mode[base_regno]))
+	goto invalidate;
+
+      reg_mode[regno] = mode;
 
       /* Copy base information from our base register.  */
       reg_set_luid[regno] = reg_set_luid[base_regno];
       reg_base_reg[regno] = reg_base_reg[base_regno];
-      reg_symbol_ref[regno] = reg_symbol_ref[base_regno];
 
       /* Compute the sum of the offsets or constants.  */
-      reg_offset[regno]
-	= trunc_int_for_mode (offset + reg_offset[base_regno], mode);
-
-      move2add_record_mode (dst);
-    }
-  else if (GET_CODE (set) == CLOBBER_HIGH)
-    {
-      /* Only invalidate if actually clobbered.  */
-      if (reg_mode[regno] == BLKmode
-	  || reg_is_clobbered_by_clobber_high (regno, reg_mode[regno], dst))
-	 goto invalidate;
+      reg_offset[regno] = trunc_int_for_mode (offset
+					      + reg_offset[base_regno],
+					      dst_mode);
     }
   else
     {
-    invalidate:
-      /* Invalidate the contents of the register.  */
-      move2add_record_mode (dst);
-      reg_mode[regno] = VOIDmode;
+      unsigned int endregno = regno + nregs;
+
+      for (i = regno; i < endregno; i++)
+	/* Reset the information about this register.  */
+	reg_set_luid[i] = 0;
     }
 }
 
-namespace {
-
-const pass_data pass_data_postreload_cse =
+static bool
+gate_handle_postreload (void)
 {
-  RTL_PASS, /* type */
-  "postreload", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
-  TV_RELOAD_CSE_REGS, /* tv_id */
-  0, /* properties_required */
-  0, /* properties_provided */
-  0, /* properties_destroyed */
-  0, /* todo_flags_start */
-  TODO_df_finish, /* todo_flags_finish */
-};
+  return (optimize > 0 && reload_completed);
+}
 
-class pass_postreload_cse : public rtl_opt_pass
-{
-public:
-  pass_postreload_cse (gcc::context *ctxt)
-    : rtl_opt_pass (pass_data_postreload_cse, ctxt)
-  {}
 
-  /* opt_pass methods: */
-  virtual bool gate (function *) { return (optimize > 0 && reload_completed); }
-
-  virtual unsigned int execute (function *);
-
-}; // class pass_postreload_cse
-
-unsigned int
-pass_postreload_cse::execute (function *fun)
+static unsigned int
+rest_of_handle_postreload (void)
 {
   if (!dbg_cnt (postreload_cse))
     return 0;
@@ -2372,17 +1591,28 @@ pass_postreload_cse::execute (function *fun)
   reload_cse_regs (get_insns ());
   /* Reload_cse_regs can eliminate potentially-trapping MEMs.
      Remove any EH edges associated with them.  */
-  if (fun->can_throw_non_call_exceptions
-      && purge_all_dead_edges ())
-    cleanup_cfg (0);
+  if (flag_non_call_exceptions)
+    purge_all_dead_edges ();
 
   return 0;
 }
 
-} // anon namespace
-
-rtl_opt_pass *
-make_pass_postreload_cse (gcc::context *ctxt)
+struct rtl_opt_pass pass_postreload_cse =
 {
-  return new pass_postreload_cse (ctxt);
-}
+ {
+  RTL_PASS,
+  "postreload",                         /* name */
+  gate_handle_postreload,               /* gate */
+  rest_of_handle_postreload,            /* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  TV_RELOAD_CSE_REGS,                   /* tv_id */
+  0,                                    /* properties_required */
+  0,                                    /* properties_provided */
+  0,                                    /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_df_finish | TODO_verify_rtl_sharing |
+  TODO_dump_func                        /* todo_flags_finish */
+ }
+};

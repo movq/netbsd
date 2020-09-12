@@ -1,5 +1,6 @@
 /* Hooks for cfg representation specific functions.
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2007, 2008 Free Software Foundation,
+   Inc.
    Contributed by Sebastian Pop <s.pop@laposte.net>
 
 This file is part of GCC.
@@ -21,15 +22,13 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "backend.h"
+#include "tm.h"
+#include "tree.h"
 #include "rtl.h"
-#include "cfghooks.h"
+#include "basic-block.h"
+#include "tree-flow.h"
 #include "timevar.h"
-#include "pretty-print.h"
-#include "diagnostic-core.h"
-#include "dumpfile.h"
-#include "cfganal.h"
-#include "tree-ssa.h"
+#include "toplev.h"
 #include "cfgloop.h"
 
 /* A pointer to one of the hooks containers.  */
@@ -89,7 +88,7 @@ current_ir_type (void)
    Currently it does following: checks edge and basic block list correctness
    and calls into IL dependent checking then.  */
 
-DEBUG_FUNCTION void
+void
 verify_flow_info (void)
 {
   size_t *edge_checksum;
@@ -98,15 +97,15 @@ verify_flow_info (void)
   basic_block *last_visited;
 
   timevar_push (TV_CFG_VERIFY);
-  last_visited = XCNEWVEC (basic_block, last_basic_block_for_fn (cfun));
-  edge_checksum = XCNEWVEC (size_t, last_basic_block_for_fn (cfun));
+  last_visited = XCNEWVEC (basic_block, last_basic_block);
+  edge_checksum = XCNEWVEC (size_t, last_basic_block);
 
   /* Check bb chain & numbers.  */
-  last_bb_seen = ENTRY_BLOCK_PTR_FOR_FN (cfun);
-  FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR_FOR_FN (cfun)->next_bb, NULL, next_bb)
+  last_bb_seen = ENTRY_BLOCK_PTR;
+  FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR->next_bb, NULL, next_bb)
     {
-      if (bb != EXIT_BLOCK_PTR_FOR_FN (cfun)
-	  && bb != BASIC_BLOCK_FOR_FN (cfun, bb->index))
+      if (bb != EXIT_BLOCK_PTR
+	  && bb != BASIC_BLOCK (bb->index))
 	{
 	  error ("bb %d on wrong place", bb->index);
 	  err = 1;
@@ -123,7 +122,7 @@ verify_flow_info (void)
     }
 
   /* Now check the basic blocks (boundaries etc.) */
-  FOR_EACH_BB_REVERSE_FN (bb, cfun)
+  FOR_EACH_BB_REVERSE (bb)
     {
       int n_fallthru = 0;
       edge e;
@@ -141,20 +140,18 @@ verify_flow_info (void)
 	  err = 1;
 	}
 
-      if (!bb->count.verify ())
+      if (bb->count < 0)
 	{
-	  error ("verify_flow_info: Wrong count of block %i", bb->index);
+	  error ("verify_flow_info: Wrong count of block %i %i",
+		 bb->index, (int)bb->count);
 	  err = 1;
 	}
-      /* FIXME: Graphite and SLJL and target code still tends to produce
-	 edges with no probablity.  */
-      if (profile_status_for_fn (cfun) >= PROFILE_GUESSED
-          && !bb->count.initialized_p () && !flag_graphite && 0)
+      if (bb->frequency < 0)
 	{
-	  error ("verify_flow_info: Missing count of block %i", bb->index);
+	  error ("verify_flow_info: Wrong frequency of block %i %i",
+		 bb->index, bb->frequency);
 	  err = 1;
 	}
-
       FOR_EACH_EDGE (e, ei, bb->succs)
 	{
 	  if (last_visited [e->dest->index] == bb)
@@ -163,19 +160,16 @@ verify_flow_info (void)
 		     e->src->index, e->dest->index);
 	      err = 1;
 	    }
-	  /* FIXME: Graphite and SLJL and target code still tends to produce
-	     edges with no probablity.  */
-	  if (profile_status_for_fn (cfun) >= PROFILE_GUESSED
-	      && !e->probability.initialized_p () && !flag_graphite && 0)
+	  if (e->probability < 0 || e->probability > REG_BR_PROB_BASE)
 	    {
-	      error ("Uninitialized probability of edge %i->%i", e->src->index,
-		     e->dest->index);
+	      error ("verify_flow_info: Wrong probability of edge %i->%i %i",
+		     e->src->index, e->dest->index, e->probability);
 	      err = 1;
 	    }
-	  if (!e->probability.verify ())
+	  if (e->count < 0)
 	    {
-	      error ("verify_flow_info: Wrong probability of edge %i->%i",
-		     e->src->index, e->dest->index);
+	      error ("verify_flow_info: Wrong count of edge %i->%i %i",
+		     e->src->index, e->dest->index, (int)e->count);
 	      err = 1;
 	    }
 
@@ -189,9 +183,9 @@ verify_flow_info (void)
 	      error ("verify_flow_info: Basic block %d succ edge is corrupted",
 		     bb->index);
 	      fprintf (stderr, "Predecessor: ");
-	      dump_edge_info (stderr, e, TDF_DETAILS, 0);
+	      dump_edge_info (stderr, e, 0);
 	      fprintf (stderr, "\nSuccessor: ");
-	      dump_edge_info (stderr, e, TDF_DETAILS, 1);
+	      dump_edge_info (stderr, e, 1);
 	      fprintf (stderr, "\n");
 	      err = 1;
 	    }
@@ -210,9 +204,9 @@ verify_flow_info (void)
 	    {
 	      error ("basic block %d pred edge is corrupted", bb->index);
 	      fputs ("Predecessor: ", stderr);
-	      dump_edge_info (stderr, e, TDF_DETAILS, 0);
+	      dump_edge_info (stderr, e, 0);
 	      fputs ("\nSuccessor: ", stderr);
-	      dump_edge_info (stderr, e, TDF_DETAILS, 1);
+	      dump_edge_info (stderr, e, 1);
 	      fputc ('\n', stderr);
 	      err = 1;
 	    }
@@ -223,9 +217,9 @@ verify_flow_info (void)
 	      error ("its dest_idx should be %d, not %d",
 		     ei.index, e->dest_idx);
 	      fputs ("Predecessor: ", stderr);
-	      dump_edge_info (stderr, e, TDF_DETAILS, 0);
+	      dump_edge_info (stderr, e, 0);
 	      fputs ("\nSuccessor: ", stderr);
-	      dump_edge_info (stderr, e, TDF_DETAILS, 1);
+	      dump_edge_info (stderr, e, 1);
 	      fputc ('\n', stderr);
 	      err = 1;
 	    }
@@ -239,21 +233,21 @@ verify_flow_info (void)
     edge e;
     edge_iterator ei;
 
-    FOR_EACH_EDGE (e, ei, ENTRY_BLOCK_PTR_FOR_FN (cfun)->succs)
+    FOR_EACH_EDGE (e, ei, ENTRY_BLOCK_PTR->succs)
       edge_checksum[e->dest->index] += (size_t) e;
 
-    FOR_EACH_EDGE (e, ei, EXIT_BLOCK_PTR_FOR_FN (cfun)->preds)
+    FOR_EACH_EDGE (e, ei, EXIT_BLOCK_PTR->preds)
       edge_checksum[e->dest->index] -= (size_t) e;
   }
 
-  FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR_FOR_FN (cfun), NULL, next_bb)
+  FOR_BB_BETWEEN (bb, ENTRY_BLOCK_PTR, NULL, next_bb)
     if (edge_checksum[bb->index])
       {
 	error ("basic block %i edge lists are corrupted", bb->index);
 	err = 1;
       }
 
-  last_bb_seen = ENTRY_BLOCK_PTR_FOR_FN (cfun);
+  last_bb_seen = ENTRY_BLOCK_PTR;
 
   /* Clean up.  */
   free (last_visited);
@@ -266,90 +260,50 @@ verify_flow_info (void)
   timevar_pop (TV_CFG_VERIFY);
 }
 
-/* Print out one basic block BB to file OUTF.  INDENT is printed at the
-   start of each new line.  FLAGS are the TDF_* flags in dumpfile.h.
-
-   This function takes care of the purely graph related information.
-   The cfg hook for the active representation should dump
-   representation-specific information.  */
+/* Print out one basic block.  This function takes care of the purely
+   graph related information.  The cfg hook for the active representation
+   should dump representation-specific information.  */
 
 void
-dump_bb (FILE *outf, basic_block bb, int indent, dump_flags_t flags)
+dump_bb (basic_block bb, FILE *outf, int indent)
 {
-  if (flags & TDF_BLOCKS)
-    dump_bb_info (outf, bb, indent, flags, true, false);
-  if (cfg_hooks->dump_bb)
-    cfg_hooks->dump_bb (outf, bb, indent, flags);
-  if (flags & TDF_BLOCKS)
-    dump_bb_info (outf, bb, indent, flags, false, true);
-  fputc ('\n', outf);
-}
+  edge e;
+  edge_iterator ei;
+  char *s_indent;
 
-DEBUG_FUNCTION void
-debug (basic_block_def &ref)
-{
-  dump_bb (stderr, &ref, 0, TDF_NONE);
-}
+  s_indent = (char *) alloca ((size_t) indent + 1);
+  memset (s_indent, ' ', (size_t) indent);
+  s_indent[indent] = '\0';
 
-DEBUG_FUNCTION void
-debug (basic_block_def *ptr)
-{
-  if (ptr)
-    debug (*ptr);
+  fprintf (outf, ";;%s basic block %d, loop depth %d, count ",
+	   s_indent, bb->index, bb->loop_depth);
+  fprintf (outf, HOST_WIDEST_INT_PRINT_DEC, (HOST_WIDEST_INT) bb->count);
+  putc ('\n', outf);
+
+  fprintf (outf, ";;%s prev block ", s_indent);
+  if (bb->prev_bb)
+    fprintf (outf, "%d, ", bb->prev_bb->index);
   else
-    fprintf (stderr, "<nil>\n");
-}
+    fprintf (outf, "(nil), ");
+  fprintf (outf, "next block ");
+  if (bb->next_bb)
+    fprintf (outf, "%d", bb->next_bb->index);
+  else
+    fprintf (outf, "(nil)");
+  putc ('\n', outf);
 
-static void
-debug_slim (basic_block ptr)
-{
-  fprintf (stderr, "<basic_block %p (%d)>", (void *) ptr, ptr->index);
-}
+  fprintf (outf, ";;%s pred:      ", s_indent);
+  FOR_EACH_EDGE (e, ei, bb->preds)
+    dump_edge_info (outf, e, 0);
+  putc ('\n', outf);
 
-DEFINE_DEBUG_VEC (basic_block_def *)
-DEFINE_DEBUG_HASH_SET (basic_block_def *)
+  fprintf (outf, ";;%s succ:      ", s_indent);
+  FOR_EACH_EDGE (e, ei, bb->succs)
+    dump_edge_info (outf, e, 1);
+  putc ('\n', outf);
 
-/* Dumps basic block BB to pretty-printer PP, for use as a label of
-   a DOT graph record-node.  The implementation of this hook is
-   expected to write the label to the stream that is attached to PP.
-   Field separators between instructions are pipe characters printed
-   verbatim.  Instructions should be written with some characters
-   escaped, using pp_write_text_as_dot_label_to_stream().  */
-
-void
-dump_bb_for_graph (pretty_printer *pp, basic_block bb)
-{
-  if (!cfg_hooks->dump_bb_for_graph)
-    internal_error ("%s does not support dump_bb_for_graph",
-		    cfg_hooks->name);
-  /* TODO: Add pretty printer for counter.  */
-  if (bb->count.initialized_p ())
-    pp_printf (pp, "COUNT:" "%" PRId64, bb->count.to_gcov_type ());
-  pp_write_text_to_stream (pp);
-  if (!(dump_flags & TDF_SLIM))
-    cfg_hooks->dump_bb_for_graph (pp, bb);
-}
-
-/* Dump the complete CFG to FILE.  FLAGS are the TDF_* flags in dumpfile.h.  */
-void
-dump_flow_info (FILE *file, dump_flags_t flags)
-{
-  basic_block bb;
-
-  fprintf (file, "\n%d basic blocks, %d edges.\n", n_basic_blocks_for_fn (cfun),
-	   n_edges_for_fn (cfun));
-  FOR_ALL_BB_FN (bb, cfun)
-    dump_bb (file, bb, 0, flags);
-
-  putc ('\n', file);
-}
-
-/* Like above, but dump to stderr.  To be called from debuggers.  */
-void debug_flow_info (void);
-DEBUG_FUNCTION void
-debug_flow_info (void)
-{
-  dump_flow_info (stderr, TDF_DETAILS);
+  if (cfg_hooks->dump_bb)
+    cfg_hooks->dump_bb (bb, outf, indent, 0);
 }
 
 /* Redirect edge E to the given basic block DEST and update underlying program
@@ -421,50 +375,9 @@ void
 remove_edge (edge e)
 {
   if (current_loops != NULL)
-    {
-      rescan_loop_exit (e, false, true);
-
-      /* Removal of an edge inside an irreducible region or which leads
-	 to an irreducible region can turn the region into a natural loop.
-	 In that case, ask for the loop structure fixups.
-
-	 FIXME: Note that LOOPS_HAVE_MARKED_IRREDUCIBLE_REGIONS is not always
-	 set, so always ask for fixups when removing an edge in that case.  */
-      if (!loops_state_satisfies_p (LOOPS_HAVE_MARKED_IRREDUCIBLE_REGIONS)
-	  || (e->flags & EDGE_IRREDUCIBLE_LOOP)
-	  || (e->dest->flags & BB_IRREDUCIBLE_LOOP))
-	loops_state_set (LOOPS_NEED_FIXUP);
-    }
-
-  /* This is probably not needed, but it doesn't hurt.  */
-  /* FIXME: This should be called via a remove_edge hook.  */
-  if (current_ir_type () == IR_GIMPLE)
-    redirect_edge_var_map_clear (e);
+    rescan_loop_exit (e, false, true);
 
   remove_edge_raw (e);
-}
-
-/* Like redirect_edge_succ but avoid possible duplicate edge.  */
-
-edge
-redirect_edge_succ_nodup (edge e, basic_block new_succ)
-{
-  edge s;
-
-  s = find_edge (e->src, new_succ);
-  if (s && s != e)
-    {
-      s->flags |= e->flags;
-      s->probability += e->probability;
-      /* FIXME: This should be called via a hook and only for IR_GIMPLE.  */
-      redirect_edge_var_map_dup (s, e);
-      remove_edge (e);
-      e = s;
-    }
-  else
-    redirect_edge_succ (e, new_succ);
-
-  return e;
 }
 
 /* Redirect the edge E to basic block DEST even if it requires creating
@@ -475,6 +388,7 @@ basic_block
 redirect_edge_and_branch_force (edge e, basic_block dest)
 {
   basic_block ret, src = e->src;
+  struct loop *loop;
 
   if (!cfg_hooks->redirect_edge_and_branch_force)
     internal_error ("%s does not support redirect_edge_and_branch_force",
@@ -484,17 +398,16 @@ redirect_edge_and_branch_force (edge e, basic_block dest)
     rescan_loop_exit (e, false, true);
 
   ret = cfg_hooks->redirect_edge_and_branch_force (e, dest);
-
-  if (ret != NULL && dom_info_available_p (CDI_DOMINATORS))
+  if (ret != NULL
+      && dom_info_available_p (CDI_DOMINATORS))
     set_immediate_dominator (CDI_DOMINATORS, ret, src);
 
   if (current_loops != NULL)
     {
       if (ret != NULL)
 	{
-	  struct loop *loop
-	    = find_common_loop (single_pred (ret)->loop_father,
-				single_succ (ret)->loop_father);
+	  loop = find_common_loop (single_pred (ret)->loop_father,
+				   single_succ (ret)->loop_father);
 	  add_bb_to_loop (ret, loop);
 	}
       else if (find_edge (src, dest) == e)
@@ -508,8 +421,8 @@ redirect_edge_and_branch_force (edge e, basic_block dest)
    the labels).  If I is NULL, splits just after labels.  The newly created edge
    is returned.  The new basic block is created just after the old one.  */
 
-static edge
-split_block_1 (basic_block bb, void *i)
+edge
+split_block (basic_block bb, void *i)
 {
   basic_block new_bb;
   edge res;
@@ -522,6 +435,8 @@ split_block_1 (basic_block bb, void *i)
     return NULL;
 
   new_bb->count = bb->count;
+  new_bb->frequency = bb->frequency;
+  new_bb->loop_depth = bb->loop_depth;
   new_bb->discriminator = bb->discriminator;
 
   if (dom_info_available_p (CDI_DOMINATORS))
@@ -532,13 +447,9 @@ split_block_1 (basic_block bb, void *i)
 
   if (current_loops != NULL)
     {
-      edge_iterator ei;
-      edge e;
       add_bb_to_loop (new_bb, bb->loop_father);
-      /* Identify all loops bb may have been the latch of and adjust them.  */
-      FOR_EACH_EDGE (e, ei, new_bb->succs)
-	if (e->dest->loop_father->latch == bb)
-	  e->dest->loop_father->latch = new_bb;
+      if (bb->loop_father->latch == bb)
+	bb->loop_father->latch = new_bb;
     }
 
   res = make_single_succ_edge (bb, new_bb, EDGE_FALLTHRU);
@@ -552,24 +463,12 @@ split_block_1 (basic_block bb, void *i)
   return res;
 }
 
-edge
-split_block (basic_block bb, gimple *i)
-{
-  return split_block_1 (bb, i);
-}
-
-edge
-split_block (basic_block bb, rtx i)
-{
-  return split_block_1 (bb, i);
-}
-
 /* Splits block BB just after labels.  The newly created edge is returned.  */
 
 edge
 split_block_after_labels (basic_block bb)
 {
-  return split_block_1 (bb, NULL);
+  return split_block (bb, NULL);
 }
 
 /* Moves block BB immediately after block AFTER.  Returns false if the
@@ -603,10 +502,13 @@ delete_basic_block (basic_block bb)
       struct loop *loop = bb->loop_father;
 
       /* If we remove the header or the latch of a loop, mark the loop for
-	 removal.  */
+	 removal by setting its header and latch to NULL.  */
       if (loop->latch == bb
 	  || loop->header == bb)
-	mark_loop_for_removal (loop);
+	{
+	  loop->header = NULL;
+	  loop->latch = NULL;
+	}
 
       remove_bb_from_loops (bb);
     }
@@ -633,7 +535,8 @@ basic_block
 split_edge (edge e)
 {
   basic_block ret;
-  profile_count count = e->count ();
+  gcov_type count = e->count;
+  int freq = EDGE_FREQUENCY (e);
   edge f;
   bool irr = (e->flags & EDGE_IRREDUCIBLE_LOOP) != 0;
   struct loop *loop;
@@ -647,7 +550,9 @@ split_edge (edge e)
 
   ret = cfg_hooks->split_edge (e);
   ret->count = count;
-  single_succ_edge (ret)->probability = profile_probability::always ();
+  ret->frequency = freq;
+  single_succ_edge (ret)->probability = REG_BR_PROB_BASE;
+  single_succ_edge (ret)->count = count;
 
   if (irr)
     {
@@ -694,9 +599,7 @@ split_edge (edge e)
       loop = find_common_loop (src->loop_father, dest->loop_father);
       add_bb_to_loop (ret, loop);
 
-      /* If we split the latch edge of loop adjust the latch block.  */
-      if (loop->latch == src
-	  && loop->header == dest)
+      if (loop->latch == src)
 	loop->latch = ret;
     }
 
@@ -707,8 +610,8 @@ split_edge (edge e)
    HEAD and END are the first and the last statement belonging
    to the block.  If both are NULL, an empty block is created.  */
 
-static basic_block
-create_basic_block_1 (void *head, void *end, basic_block after)
+basic_block
+create_basic_block (void *head, void *end, basic_block after)
 {
   basic_block ret;
 
@@ -725,25 +628,12 @@ create_basic_block_1 (void *head, void *end, basic_block after)
   return ret;
 }
 
-basic_block
-create_basic_block (gimple_seq seq, basic_block after)
-{
-  return create_basic_block_1 (seq, NULL, after);
-}
-
-basic_block
-create_basic_block (rtx head, rtx end, basic_block after)
-{
-  return create_basic_block_1 (head, end, after);
-}
-
-
 /* Creates an empty basic block just after basic block AFTER.  */
 
 basic_block
 create_empty_bb (basic_block after)
 {
-  return create_basic_block_1 (NULL, NULL, after);
+  return create_basic_block (NULL, NULL, after);
 }
 
 /* Checks whether we may merge blocks BB1 and BB2.  */
@@ -793,30 +683,7 @@ merge_blocks (basic_block a, basic_block b)
   cfg_hooks->merge_blocks (a, b);
 
   if (current_loops != NULL)
-    {
-      /* If the block we merge into is a loop header do nothing unless ... */
-      if (a->loop_father->header == a)
-	{
-	  /* ... we merge two loop headers, in which case we kill
-	     the inner loop.  */
-	  if (b->loop_father->header == b)
-	    mark_loop_for_removal (b->loop_father);
-	}
-      /* If we merge a loop header into its predecessor, update the loop
-	 structure.  */
-      else if (b->loop_father->header == b)
-	{
-	  remove_bb_from_loops (a);
-	  add_bb_to_loop  (a, b->loop_father);
-	  a->loop_father->header = a;
-	}
-      /* If we merge a loop latch into its predecessor, update the loop
-         structure.  */
-      if (b->loop_father->latch
-	  && b->loop_father->latch == b)
-	b->loop_father->latch = a;
-      remove_bb_from_loops (b);
-    }
+    remove_bb_from_loops (b);
 
   /* Normally there should only be one successor of A and that is B, but
      partway though the merge of blocks for conditional_execution we'll
@@ -831,12 +698,7 @@ merge_blocks (basic_block a, basic_block b)
     {
       e->src = a;
       if (current_loops != NULL)
-	{
-	  /* If b was a latch, a now is.  */
-	  if (e->dest->loop_father->latch == b)
-	    e->dest->loop_father->latch = a;
-	  rescan_loop_exit (e, true, false);
-	}
+	rescan_loop_exit (e, true, false);
     }
   a->succs = b->succs;
   a->flags |= b->flags;
@@ -874,7 +736,6 @@ make_forwarder_block (basic_block bb, bool (*redirect_edge_p) (edge),
 
   fallthru = split_block_after_labels (bb);
   dummy = fallthru->src;
-  dummy->count = profile_count::zero ();
   bb = fallthru->dest;
 
   /* Redirect back edges we want to keep.  */
@@ -884,10 +745,19 @@ make_forwarder_block (basic_block bb, bool (*redirect_edge_p) (edge),
 
       if (redirect_edge_p (e))
 	{
-	  dummy->count += e->count ();
 	  ei_next (&ei);
 	  continue;
 	}
+
+      dummy->frequency -= EDGE_FREQUENCY (e);
+      dummy->count -= e->count;
+      if (dummy->frequency < 0)
+	dummy->frequency = 0;
+      if (dummy->count < 0)
+	dummy->count = 0;
+      fallthru->count -= e->count;
+      if (fallthru->count < 0)
+	fallthru->count = 0;
 
       e_src = e->src;
       jump = redirect_edge_and_branch_force (e, bb);
@@ -908,12 +778,11 @@ make_forwarder_block (basic_block bb, bool (*redirect_edge_p) (edge),
 
   if (dom_info_available_p (CDI_DOMINATORS))
     {
-      vec<basic_block> doms_to_fix;
-      doms_to_fix.create (2);
-      doms_to_fix.quick_push (dummy);
-      doms_to_fix.quick_push (bb);
+      VEC (basic_block, heap) *doms_to_fix = VEC_alloc (basic_block, heap, 2);
+      VEC_quick_push (basic_block, doms_to_fix, dummy);
+      VEC_quick_push (basic_block, doms_to_fix, bb);
       iterate_fix_dominators (CDI_DOMINATORS, doms_to_fix, false);
-      doms_to_fix.release ();
+      VEC_free (basic_block, heap, doms_to_fix);
     }
 
   if (current_loops != NULL)
@@ -951,8 +820,6 @@ make_forwarder_block (basic_block bb, bool (*redirect_edge_p) (edge),
   return fallthru;
 }
 
-/* Try to make the edge fallthru.  */
-
 void
 tidy_fallthru_edge (edge e)
 {
@@ -963,9 +830,7 @@ tidy_fallthru_edge (edge e)
 /* Fix up edges that now fall through, or rather should now fall through
    but previously required a jump around now deleted blocks.  Simplify
    the search by only examining blocks numerically adjacent, since this
-   is how they were created.
-
-   ??? This routine is currently RTL specific.  */
+   is how they were created.  */
 
 void
 tidy_fallthru_edges (void)
@@ -975,11 +840,10 @@ tidy_fallthru_edges (void)
   if (!cfg_hooks->tidy_fallthru_edge)
     return;
 
-  if (ENTRY_BLOCK_PTR_FOR_FN (cfun)->next_bb == EXIT_BLOCK_PTR_FOR_FN (cfun))
+  if (ENTRY_BLOCK_PTR->next_bb == EXIT_BLOCK_PTR)
     return;
 
-  FOR_BB_BETWEEN (b, ENTRY_BLOCK_PTR_FOR_FN (cfun)->next_bb,
-		  EXIT_BLOCK_PTR_FOR_FN (cfun)->prev_bb, next_bb)
+  FOR_BB_BETWEEN (b, ENTRY_BLOCK_PTR->next_bb, EXIT_BLOCK_PTR->prev_bb, next_bb)
     {
       edge s;
 
@@ -1002,48 +866,10 @@ tidy_fallthru_edges (void)
 	  s = single_succ_edge (b);
 	  if (! (s->flags & EDGE_COMPLEX)
 	      && s->dest == c
-	      && !(JUMP_P (BB_END (b)) && CROSSING_JUMP_P (BB_END (b))))
+	      && !find_reg_note (BB_END (b), REG_CROSSING_JUMP, NULL_RTX))
 	    tidy_fallthru_edge (s);
 	}
     }
-}
-
-/* Edge E is assumed to be fallthru edge.  Emit needed jump instruction
-   (and possibly create new basic block) to make edge non-fallthru.
-   Return newly created BB or NULL if none.  */
-
-basic_block
-force_nonfallthru (edge e)
-{
-  basic_block ret, src = e->src;
-
-  if (!cfg_hooks->force_nonfallthru)
-    internal_error ("%s does not support force_nonfallthru",
-		    cfg_hooks->name);
-
-  ret = cfg_hooks->force_nonfallthru (e);
-  if (ret != NULL)
-    {
-      if (dom_info_available_p (CDI_DOMINATORS))
-	set_immediate_dominator (CDI_DOMINATORS, ret, src);
-
-      if (current_loops != NULL)
-	{
-	  basic_block pred = single_pred (ret);
-	  basic_block succ = single_succ (ret);
-	  struct loop *loop
-	    = find_common_loop (pred->loop_father, succ->loop_father);
-	  rescan_loop_exit (e, false, true);
-	  add_bb_to_loop (ret, loop);
-
-	  /* If we split the latch edge of loop adjust the latch block.  */
-	  if (loop->latch == pred
-	      && loop->header == succ)
-	    loop->latch = ret;
-	}
-    }
-
-  return ret;
 }
 
 /* Returns true if we can duplicate basic block BB.  */
@@ -1055,7 +881,7 @@ can_duplicate_block_p (const_basic_block bb)
     internal_error ("%s does not support can_duplicate_block_p",
 		    cfg_hooks->name);
 
-  if (bb == EXIT_BLOCK_PTR_FOR_FN (cfun) || bb == ENTRY_BLOCK_PTR_FOR_FN (cfun))
+  if (bb == EXIT_BLOCK_PTR || bb == ENTRY_BLOCK_PTR)
     return false;
 
   return cfg_hooks->can_duplicate_block_p (bb);
@@ -1066,11 +892,11 @@ can_duplicate_block_p (const_basic_block bb)
    AFTER.  */
 
 basic_block
-duplicate_block (basic_block bb, edge e, basic_block after, copy_bb_data *id)
+duplicate_block (basic_block bb, edge e, basic_block after)
 {
   edge s, n;
   basic_block new_bb;
-  profile_count new_count = e ? e->count (): profile_count::uninitialized ();
+  gcov_type new_count = e ? e->count : 0;
   edge_iterator ei;
 
   if (!cfg_hooks->duplicate_block)
@@ -1080,13 +906,16 @@ duplicate_block (basic_block bb, edge e, basic_block after, copy_bb_data *id)
   if (bb->count < new_count)
     new_count = bb->count;
 
-  gcc_checking_assert (can_duplicate_block_p (bb));
+#ifdef ENABLE_CHECKING
+  gcc_assert (can_duplicate_block_p (bb));
+#endif
 
-  new_bb = cfg_hooks->duplicate_block (bb, id);
+  new_bb = cfg_hooks->duplicate_block (bb);
   if (after)
     move_block_after (new_bb, after);
 
-  new_bb->flags = (bb->flags & ~BB_DUPLICATED);
+  new_bb->loop_depth = bb->loop_depth;
+  new_bb->flags = bb->flags;
   FOR_EACH_EDGE (s, ei, bb->succs)
     {
       /* Since we are creating edges from a new block to successors
@@ -1094,6 +923,14 @@ duplicate_block (basic_block bb, edge e, basic_block after, copy_bb_data *id)
 	 is no need to actually check for duplicated edges.  */
       n = unchecked_make_edge (new_bb, s->dest, s->flags);
       n->probability = s->probability;
+      if (e && bb->count)
+	{
+	  /* Take care for overflows!  */
+	  n->count = s->count * (new_count * 10000 / bb->count) / 10000;
+	  s->count -= n->count;
+	}
+      else
+	n->count = s->count;
       n->aux = s->aux;
     }
 
@@ -1102,10 +939,21 @@ duplicate_block (basic_block bb, edge e, basic_block after, copy_bb_data *id)
       new_bb->count = new_count;
       bb->count -= new_count;
 
+      new_bb->frequency = EDGE_FREQUENCY (e);
+      bb->frequency -= EDGE_FREQUENCY (e);
+
       redirect_edge_and_branch_force (e, new_bb);
+
+      if (bb->count < 0)
+	bb->count = 0;
+      if (bb->frequency < 0)
+	bb->frequency = 0;
     }
   else
-    new_bb->count = bb->count;
+    {
+      new_bb->count = bb->count;
+      new_bb->frequency = bb->frequency;
+    }
 
   set_bb_original (new_bb, bb);
   set_bb_copy (bb, new_bb);
@@ -1116,27 +964,7 @@ duplicate_block (basic_block bb, edge e, basic_block after, copy_bb_data *id)
     {
       struct loop *cloop = bb->loop_father;
       struct loop *copy = get_loop_copy (cloop);
-      /* If we copied the loop header block but not the loop
-	 we have created a loop with multiple entries.  Ditch the loop,
-	 add the new block to the outer loop and arrange for a fixup.  */
-      if (!copy
-	  && cloop->header == bb)
-	{
-	  add_bb_to_loop (new_bb, loop_outer (cloop));
-	  mark_loop_for_removal (cloop);
-	}
-      else
-	{
-	  add_bb_to_loop (new_bb, copy ? copy : cloop);
-	  /* If we copied the loop latch block but not the loop, adjust
-	     loop state.  */
-	  if (!copy
-	      && cloop->latch == bb)
-	    {
-	      cloop->latch = NULL;
-	      loops_state_set (LOOPS_MAY_HAVE_MULTIPLE_LATCHES);
-	    }
-	}
+      add_bb_to_loop (new_bb, copy ? copy : cloop);
     }
 
   return new_bb;
@@ -1190,8 +1018,7 @@ flow_call_edges_add (sbitmap blocks)
 void
 execute_on_growing_pred (edge e)
 {
-  if (! (e->dest->flags & BB_DUPLICATED)
-      && cfg_hooks->execute_on_growing_pred)
+  if (cfg_hooks->execute_on_growing_pred)
     cfg_hooks->execute_on_growing_pred (e);
 }
 
@@ -1201,8 +1028,7 @@ execute_on_growing_pred (edge e)
 void
 execute_on_shrinking_pred (edge e)
 {
-  if (! (e->dest->flags & BB_DUPLICATED)
-      && cfg_hooks->execute_on_shrinking_pred)
+  if (cfg_hooks->execute_on_shrinking_pred)
     cfg_hooks->execute_on_shrinking_pred (e);
 }
 
@@ -1227,7 +1053,7 @@ bool
 cfg_hook_duplicate_loop_to_header_edge (struct loop *loop, edge e,
 					unsigned int ndupl,
 					sbitmap wont_exit, edge orig,
-					vec<edge> *to_remove,
+					VEC (edge, heap) **to_remove,
 					int flags)
 {
   gcc_assert (cfg_hooks->cfg_hook_duplicate_loop_to_header_edge);
@@ -1267,227 +1093,4 @@ lv_add_condition_to_bb (basic_block first, basic_block second,
 {
   gcc_assert (cfg_hooks->lv_add_condition_to_bb);
   cfg_hooks->lv_add_condition_to_bb (first, second, new_block, cond);
-}
-
-/* Checks whether all N blocks in BBS array can be copied.  */
-bool
-can_copy_bbs_p (basic_block *bbs, unsigned n)
-{
-  unsigned i;
-  edge e;
-  int ret = true;
-
-  for (i = 0; i < n; i++)
-    bbs[i]->flags |= BB_DUPLICATED;
-
-  for (i = 0; i < n; i++)
-    {
-      /* In case we should redirect abnormal edge during duplication, fail.  */
-      edge_iterator ei;
-      FOR_EACH_EDGE (e, ei, bbs[i]->succs)
-	if ((e->flags & EDGE_ABNORMAL)
-	    && (e->dest->flags & BB_DUPLICATED))
-	  {
-	    ret = false;
-	    goto end;
-	  }
-
-      if (!can_duplicate_block_p (bbs[i]))
-	{
-	  ret = false;
-	  break;
-	}
-    }
-
-end:
-  for (i = 0; i < n; i++)
-    bbs[i]->flags &= ~BB_DUPLICATED;
-
-  return ret;
-}
-
-/* Duplicates N basic blocks stored in array BBS.  Newly created basic blocks
-   are placed into array NEW_BBS in the same order.  Edges from basic blocks
-   in BBS are also duplicated and copies of those that lead into BBS are
-   redirected to appropriate newly created block.  The function assigns bbs
-   into loops (copy of basic block bb is assigned to bb->loop_father->copy
-   loop, so this must be set up correctly in advance)
-
-   If UPDATE_DOMINANCE is true then this function updates dominators locally
-   (LOOPS structure that contains the information about dominators is passed
-   to enable this), otherwise it does not update the dominator information
-   and it assumed that the caller will do this, perhaps by destroying and
-   recreating it instead of trying to do an incremental update like this
-   function does when update_dominance is true.
-
-   BASE is the superloop to that basic block belongs; if its header or latch
-   is copied, we do not set the new blocks as header or latch.
-
-   Created copies of N_EDGES edges in array EDGES are stored in array NEW_EDGES,
-   also in the same order.
-
-   Newly created basic blocks are put after the basic block AFTER in the
-   instruction stream, and the order of the blocks in BBS array is preserved.  */
-
-void
-copy_bbs (basic_block *bbs, unsigned n, basic_block *new_bbs,
-	  edge *edges, unsigned num_edges, edge *new_edges,
-	  struct loop *base, basic_block after, bool update_dominance)
-{
-  unsigned i, j;
-  basic_block bb, new_bb, dom_bb;
-  edge e;
-  copy_bb_data id;
-
-  /* Mark the blocks to be copied.  This is used by edge creation hooks
-     to decide whether to reallocate PHI nodes capacity to avoid reallocating
-     PHIs in the set of source BBs.  */
-  for (i = 0; i < n; i++)
-    bbs[i]->flags |= BB_DUPLICATED;
-
-  /* Duplicate bbs, update dominators, assign bbs to loops.  */
-  for (i = 0; i < n; i++)
-    {
-      /* Duplicate.  */
-      bb = bbs[i];
-      new_bb = new_bbs[i] = duplicate_block (bb, NULL, after, &id);
-      after = new_bb;
-      if (bb->loop_father)
-	{
-	  /* Possibly set loop header.  */
-	  if (bb->loop_father->header == bb && bb->loop_father != base)
-	    new_bb->loop_father->header = new_bb;
-	  /* Or latch.  */
-	  if (bb->loop_father->latch == bb && bb->loop_father != base)
-	    new_bb->loop_father->latch = new_bb;
-	}
-    }
-
-  /* Set dominators.  */
-  if (update_dominance)
-    {
-      for (i = 0; i < n; i++)
-	{
-	  bb = bbs[i];
-	  new_bb = new_bbs[i];
-
-	  dom_bb = get_immediate_dominator (CDI_DOMINATORS, bb);
-	  if (dom_bb->flags & BB_DUPLICATED)
-	    {
-	      dom_bb = get_bb_copy (dom_bb);
-	      set_immediate_dominator (CDI_DOMINATORS, new_bb, dom_bb);
-	    }
-	}
-    }
-
-  /* Redirect edges.  */
-  for (j = 0; j < num_edges; j++)
-    new_edges[j] = NULL;
-  for (i = 0; i < n; i++)
-    {
-      edge_iterator ei;
-      new_bb = new_bbs[i];
-      bb = bbs[i];
-
-      FOR_EACH_EDGE (e, ei, new_bb->succs)
-	{
-	  for (j = 0; j < num_edges; j++)
-	    if (edges[j] && edges[j]->src == bb && edges[j]->dest == e->dest)
-	      new_edges[j] = e;
-
-	  if (!(e->dest->flags & BB_DUPLICATED))
-	    continue;
-	  redirect_edge_and_branch_force (e, get_bb_copy (e->dest));
-	}
-    }
-
-  /* Clear information about duplicates.  */
-  for (i = 0; i < n; i++)
-    bbs[i]->flags &= ~BB_DUPLICATED;
-}
-
-/* Return true if BB contains only labels or non-executable
-   instructions */
-bool
-empty_block_p (basic_block bb)
-{
-  gcc_assert (cfg_hooks->empty_block_p);
-  return cfg_hooks->empty_block_p (bb);
-}
-
-/* Split a basic block if it ends with a conditional branch and if
-   the other part of the block is not empty.  */
-basic_block
-split_block_before_cond_jump (basic_block bb)
-{
-  gcc_assert (cfg_hooks->split_block_before_cond_jump);
-  return cfg_hooks->split_block_before_cond_jump (bb);
-}
-
-/* Work-horse for passes.c:check_profile_consistency.
-   Do book-keeping of the CFG for the profile consistency checker.
-   Store the counting in RECORD.  */
-
-void
-profile_record_check_consistency (profile_record *record)
-{
-  basic_block bb;
-  edge_iterator ei;
-  edge e;
-
-  FOR_ALL_BB_FN (bb, cfun)
-   {
-      if (bb != EXIT_BLOCK_PTR_FOR_FN (cfun)
-	  && profile_status_for_fn (cfun) != PROFILE_ABSENT)
-	{
-	  profile_probability sum = profile_probability::never ();
-	  FOR_EACH_EDGE (e, ei, bb->succs)
-	    sum += e->probability;
-	  if (EDGE_COUNT (bb->succs)
-	      && sum.differs_from_p (profile_probability::always ()))
-	    record->num_mismatched_freq_out++;
-	  profile_count lsum = profile_count::zero ();
-	  FOR_EACH_EDGE (e, ei, bb->succs)
-	    lsum += e->count ();
-	  if (EDGE_COUNT (bb->succs) && (lsum.differs_from_p (bb->count)))
-	    record->num_mismatched_count_out++;
-	}
-      if (bb != ENTRY_BLOCK_PTR_FOR_FN (cfun)
-	  && profile_status_for_fn (cfun) != PROFILE_ABSENT)
-	{
-	  profile_probability sum = profile_probability::never ();
-	  profile_count lsum = profile_count::zero ();
-	  FOR_EACH_EDGE (e, ei, bb->preds)
-	    {
-	      sum += e->probability;
-	      lsum += e->count ();
-	    }
-	  if (EDGE_COUNT (bb->preds)
-	      && sum.differs_from_p (profile_probability::always ()))
-	    record->num_mismatched_freq_in++;
-	  if (lsum.differs_from_p (bb->count))
-	    record->num_mismatched_count_in++;
-	}
-      if (bb == ENTRY_BLOCK_PTR_FOR_FN (cfun)
-	  || bb == EXIT_BLOCK_PTR_FOR_FN (cfun))
-	continue;
-      gcc_assert (cfg_hooks->account_profile_record);
-      cfg_hooks->account_profile_record (bb, record);
-   }
-}
-
-/* Work-horse for passes.c:acount_profile.
-   Do book-keeping of the CFG for the profile accounting.
-   Store the counting in RECORD.  */
-
-void
-profile_record_account_profile (profile_record *record)
-{
-  basic_block bb;
-
-  FOR_ALL_BB_FN (bb, cfun)
-   {
-      gcc_assert (cfg_hooks->account_profile_record);
-      cfg_hooks->account_profile_record (bb, record);
-   }
 }

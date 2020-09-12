@@ -1,5 +1,6 @@
 # tls.exp -- Expect script to test thread-local storage without debuginfo
-# Copyright (C) 2006-2019 Free Software Foundation, Inc.
+# Copyright (C) 2006, 2007, 2008, 2009, 2010, 2011
+# Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,7 +15,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-standard_testfile
+set testfile tls-nodebug
+set srcfile ${testfile}.c
+set binfile ${objdir}/${subdir}/${testfile}
 
 if [istarget "*-*-linux"] then {
     set target_cflags "-D_MIT_POSIX_THREADS"
@@ -26,17 +29,18 @@ if {[gdb_compile_pthreads "${srcdir}/${subdir}/${srcfile}" "${binfile}" executab
     return -1
 }
 
-clean_restart ${binfile}
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+
+gdb_load ${binfile}
 if ![runto_main] then {
-   fail "can't run to main"
+   fail "Can't run to main"
    return 0
 }
 
 # Formerly: Cannot access memory at address 0x0
-gdb_test "p thread_local" "'thread_local' has unknown type; cast it to its declared type" \
-    "thread local storage, unknown type"
-gdb_test "p (int) thread_local" "= 42" \
-    "thread local storage, cast"
+gdb_test "p thread_local" "= 42" "thread local storage"
 
 # Done!
 #

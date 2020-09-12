@@ -1,4 +1,4 @@
-/*	$NetBSD: multi.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: multi.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* multi.c -- multiple-column tables (@multitable) for makeinfo.
    Id: multi.c,v 1.8 2004/04/11 17:56:47 karl Exp 

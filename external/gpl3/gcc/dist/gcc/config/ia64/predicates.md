@@ -1,5 +1,5 @@
 ;; Predicate definitions for IA-64.
-;; Copyright (C) 2004-2019 Free Software Foundation, Inc.
+;; Copyright (C) 2004, 2005, 2007 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -69,17 +69,12 @@
 	     of constants here.  */
 	  t = SYMBOL_REF_DECL (op);
 	  if (DECL_P (t))
-	    {
-	      /* Common symbol isn't placed in small data section.  */
-	      if (DECL_COMMON (t))
-		return false;
-	      t = DECL_SIZE_UNIT (t);
-	    }
+	    t = DECL_SIZE_UNIT (t);
 	  else
 	    t = TYPE_SIZE_UNIT (TREE_TYPE (t));
-	  if (t && tree_fits_shwi_p (t))
+	  if (t && host_integerp (t, 0))
 	    {
-	      size = tree_to_shwi (t);
+	      size = tree_low_cst (t, 0);
 	      if (size < 0)
 		size = 0;
 	    }
@@ -91,32 +86,6 @@
 	 they deserve a slap on the wrist (such as provided by a relocation
 	 overflow), but that just leads to bugzilla noise.  */
       return (offset >= 0 && offset <= size);
-
-    default:
-      gcc_unreachable ();
-    }
-})
-
-;; True if OP refers to a local symbol [+any offset].
-;; To be encoded as:
-;;   movl % = @gprel(symbol+offset)
-;;   add  % = %, gp
-(define_predicate "local_symbolic_operand64"
-  (match_code "symbol_ref,const")
-{
-  switch (GET_CODE (op))
-    {
-    case CONST:
-      op = XEXP (op, 0);
-      if (GET_CODE (op) != PLUS
-	  || GET_CODE (XEXP (op, 0)) != SYMBOL_REF
-	  || GET_CODE (XEXP (op, 1)) != CONST_INT)
-	return false;
-      op = XEXP (op, 0);
-      /* FALLTHRU */
-
-    case SYMBOL_REF:
-	return SYMBOL_REF_LOCAL_P (op);
 
     default:
       gcc_unreachable ();
@@ -557,12 +526,6 @@
                     INTVAL (op) == 1   || INTVAL (op) == 4  ||
                     INTVAL (op) == 8   || INTVAL (op) == 16")))
 
-;; True if OP is one of the immediate values 0, 7, 15, 16
-(define_predicate "pmpyshr_operand"
-  (and (match_code "const_int")
-       (match_test "INTVAL (op) == 0 || INTVAL (op) == 7
-		    || INTVAL (op) == 15 || INTVAL (op) == 16")))
-
 ;; True if OP is 0..3.
 (define_predicate "const_int_2bit_operand"
   (and (match_code "const_int")
@@ -579,19 +542,6 @@
   (and (match_operand 0 "fr_reg_or_fp01_operand")
        (not (match_code "subreg"))))
 
-;; Like fr_reg_or_fp01_operand, but don't allow 0 if flag_signed_zero is set.
-;; Using f0 as the second arg to fadd or fsub, or as the third arg to fma or
-;; fms can cause a zero result to have the wrong sign.
-(define_predicate "fr_reg_or_signed_fp01_operand"
-  (ior (match_operand 0 "fr_register_operand")
-       (and (match_code "const_double")
-	    (match_test "satisfies_constraint_Z (op)"))))
-
-;; Like fr_reg_or_signed_fp01_operand, but don't allow any SUBREGs.
-(define_predicate "xfreg_or_signed_fp01_operand"
-  (and (match_operand 0 "fr_reg_or_signed_fp01_operand")
-       (not (match_code "subreg"))))
-
 ;; True if OP is a constant zero, or a register.
 (define_predicate "fr_reg_or_0_operand"
   (ior (match_operand 0 "fr_register_operand")
@@ -599,15 +549,9 @@
 	    (match_test "op == CONST0_RTX (GET_MODE (op))"))))
 
 ;; Return 1 if OP is a valid comparison operator for "cbranch" instructions.
-;; If we're assuming that FP operations cannot generate user-visible traps,
-;; then we can use the FP unordered-signaling instructions to implement the
-;; FP unordered-quiet comparison predicates.
 (define_predicate "ia64_cbranch_operator"
-  (if_then_else (match_test "flag_trapping_math")
-		(ior (match_operand 0 "ordered_comparison_operator")
-		      (match_code "ordered,unordered"))
-		(and (match_operand 0 "comparison_operator")
-		      (not (match_code "uneq,ltgt")))))
+  (ior (match_operand 0 "ordered_comparison_operator")
+       (match_code "ordered,unordered")))
 
 ;; True if this is a comparison operator, which accepts a normal 8-bit
 ;; signed immediate operand.
@@ -661,7 +605,3 @@
   return REG_P (op) && REG_POINTER (op);
 })
 
-;; True if this is the right-most vector element; for mux1 @brcst.
-(define_predicate "mux1_brcst_element"
-  (and (match_code "const_int")
-       (match_test "INTVAL (op) == (TARGET_BIG_ENDIAN ? 7 : 0)")))

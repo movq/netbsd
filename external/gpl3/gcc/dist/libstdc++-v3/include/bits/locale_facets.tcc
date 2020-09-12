@@ -1,6 +1,8 @@
 // Locale support -*- C++ -*-
 
-// Copyright (C) 1997-2019 Free Software Foundation, Inc.
+// Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+// 2006, 2007, 2008, 2009
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,9 +24,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file bits/locale_facets.tcc
+/** @file locale_facets.tcc
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{locale}
+ *  You should not attempt to use it directly.
  */
 
 #ifndef _LOCALE_FACETS_TCC
@@ -32,9 +34,7 @@
 
 #pragma GCC system_header
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   // Routine to access a cache for the facet.  If the cache didn't
   // exist before, it gets constructed on the fly.
@@ -56,7 +56,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	const locale::facet** __caches = __loc._M_impl->_M_caches;
 	if (!__caches[__i])
 	  {
-	    __numpunct_cache<_CharT>* __tmp = 0;
+	    __numpunct_cache<_CharT>* __tmp = NULL;
 	    __try
 	      {
 		__tmp = new __numpunct_cache<_CharT>;
@@ -77,6 +77,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     void
     __numpunct_cache<_CharT>::_M_cache(const locale& __loc)
     {
+      _M_allocated = true;
+
       const numpunct<_CharT>& __np = use_facet<numpunct<_CharT> >(__loc);
 
       char* __grouping = 0;
@@ -84,24 +86,24 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _CharT* __falsename = 0;
       __try
 	{
-	  const string& __g = __np.grouping();
-	  _M_grouping_size = __g.size();
+	  _M_grouping_size = __np.grouping().size();
 	  __grouping = new char[_M_grouping_size];
-	  __g.copy(__grouping, _M_grouping_size);
+	  __np.grouping().copy(__grouping, _M_grouping_size);
+	  _M_grouping = __grouping;
 	  _M_use_grouping = (_M_grouping_size
-			     && static_cast<signed char>(__grouping[0]) > 0
-			     && (__grouping[0]
+			     && static_cast<signed char>(_M_grouping[0]) > 0
+			     && (_M_grouping[0]
 				 != __gnu_cxx::__numeric_traits<char>::__max));
 
-	  const basic_string<_CharT>& __tn = __np.truename();
-	  _M_truename_size = __tn.size();
+	  _M_truename_size = __np.truename().size();
 	  __truename = new _CharT[_M_truename_size];
-	  __tn.copy(__truename, _M_truename_size);
+	  __np.truename().copy(__truename, _M_truename_size);
+	  _M_truename = __truename;
 
-	  const basic_string<_CharT>& __fn = __np.falsename();
-	  _M_falsename_size = __fn.size();
+	  _M_falsename_size = __np.falsename().size();
 	  __falsename = new _CharT[_M_falsename_size];
-	  __fn.copy(__falsename, _M_falsename_size);
+	  __np.falsename().copy(__falsename, _M_falsename_size);
+	  _M_falsename = __falsename;
 
 	  _M_decimal_point = __np.decimal_point();
 	  _M_thousands_sep = __np.thousands_sep();
@@ -113,11 +115,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  __ct.widen(__num_base::_S_atoms_in,
 		     __num_base::_S_atoms_in
 		     + __num_base::_S_iend, _M_atoms_in);
-
-	  _M_grouping = __grouping;
-	  _M_truename = __truename;
-	  _M_falsename = __falsename;
-	  _M_allocated = true;
 	}
       __catch(...)
 	{
@@ -140,10 +137,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   __verify_grouping(const char* __grouping, size_t __grouping_size,
 		    const string& __grouping_tmp) throw ();
 
-_GLIBCXX_BEGIN_NAMESPACE_LDBL
+_GLIBCXX_BEGIN_LDBL_NAMESPACE
 
   template<typename _CharT, typename _InIter>
-    _GLIBCXX_DEFAULT_ABI_TAG
     _InIter
     num_get<_CharT, _InIter>::
     _M_extract_float(_InIter __beg, _InIter __end, ios_base& __io,
@@ -369,16 +365,15 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
 
   template<typename _CharT, typename _InIter>
     template<typename _ValueT>
-      _GLIBCXX_DEFAULT_ABI_TAG
       _InIter
       num_get<_CharT, _InIter>::
       _M_extract_int(_InIter __beg, _InIter __end, ios_base& __io,
 		     ios_base::iostate& __err, _ValueT& __v) const
       {
-        typedef char_traits<_CharT>			    __traits_type;
+        typedef char_traits<_CharT>			     __traits_type;
 	using __gnu_cxx::__add_unsigned;
-	typedef typename __add_unsigned<_ValueT>::__type    __unsigned_type;
-	typedef __numpunct_cache<_CharT>                    __cache_type;
+	typedef typename __add_unsigned<_ValueT>::__type __unsigned_type;
+	typedef __numpunct_cache<_CharT>                     __cache_type;
 	__use_cache<__cache_type> __uc;
 	const locale& __loc = __io._M_getloc();
 	const __cache_type* __lc = __uc(__loc);
@@ -463,16 +458,15 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
 			      - __num_base::_S_izero : __base);
 
 	// Extract.
-	typedef __gnu_cxx::__numeric_traits<_ValueT> __num_traits;
 	string __found_grouping;
 	if (__lc->_M_use_grouping)
 	  __found_grouping.reserve(32);
 	bool __testfail = false;
 	bool __testoverflow = false;
 	const __unsigned_type __max =
-	  (__negative && __num_traits::__is_signed_val)
-	  ? -static_cast<__unsigned_type>(__num_traits::__min)
-	  : __num_traits::__max;
+	  (__negative && __gnu_cxx::__numeric_traits<_ValueT>::__is_signed)
+	  ? -__gnu_cxx::__numeric_traits<_ValueT>::__min
+	  : __gnu_cxx::__numeric_traits<_ValueT>::__max;
 	const __unsigned_type __smax = __max / __base;
 	__unsigned_type __result = 0;
 	int __digit = 0;
@@ -573,10 +567,11 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
 	  }
 	else if (__testoverflow)
 	  {
-	    if (__negative && __num_traits::__is_signed_val)
-	      __v = __num_traits::__min;
+	    if (__negative
+		&& __gnu_cxx::__numeric_traits<_ValueT>::__is_signed)
+	      __v = __gnu_cxx::__numeric_traits<_ValueT>::__min;
 	    else
-	      __v = __num_traits::__max;
+	      __v = __gnu_cxx::__numeric_traits<_ValueT>::__max;
 	    __err = ios_base::failbit;
 	  }
 	else
@@ -787,7 +782,7 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
       __len = static_cast<int>(__w);
     }
 
-_GLIBCXX_END_NAMESPACE_LDBL
+_GLIBCXX_END_LDBL_NAMESPACE
 
   template<typename _CharT, typename _ValueT>
     int
@@ -831,7 +826,7 @@ _GLIBCXX_END_NAMESPACE_LDBL
       return __bufend - __buf;
     }
 
-_GLIBCXX_BEGIN_NAMESPACE_LDBL
+_GLIBCXX_BEGIN_LDBL_NAMESPACE
 
   template<typename _CharT, typename _OutIter>
     void
@@ -896,7 +891,7 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
 	    if (__v >= 0)
 	      {
 		if (bool(__flags & ios_base::showpos)
-		    && __gnu_cxx::__numeric_traits<_ValueT>::__is_signed_val)
+		    && __gnu_cxx::__numeric_traits<_ValueT>::__is_signed)
 		  *--__cs = __lit[__num_base::_S_oplus], ++__len;
 	      }
 	    else
@@ -959,13 +954,13 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
     }
 
   // The following code uses vsnprintf (or vsprintf(), when
-  // _GLIBCXX_USE_C99_STDIO is not defined) to convert floating point
-  // values for insertion into a stream.  An optimization would be to
-  // replace them with code that works directly on a wide buffer and
-  // then use __pad to do the padding.  It would be good to replace
-  // them anyway to gain back the efficiency that C++ provides by
-  // knowing up front the type of the values to insert.  Also, sprintf
-  // is dangerous since may lead to accidental buffer overruns.  This
+  // _GLIBCXX_USE_C99 is not defined) to convert floating point values
+  // for insertion into a stream.  An optimization would be to replace
+  // them with code that works directly on a wide buffer and then use
+  // __pad to do the padding.  It would be good to replace them anyway
+  // to gain back the efficiency that C++ provides by knowing up front
+  // the type of the values to insert.  Also, sprintf is dangerous
+  // since may lead to accidental buffer overruns.  This
   // implementation follows the C++ standard fairly directly as
   // outlined in 22.2.2.2 [lib.locale.num.put]
   template<typename _CharT, typename _OutIter>
@@ -992,33 +987,21 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
 	char __fbuf[16];
 	__num_base::_S_format_float(__io, __fbuf, __mod);
 
-#if _GLIBCXX_USE_C99_STDIO && !_GLIBCXX_HAVE_BROKEN_VSNPRINTF
-	// Precision is always used except for hexfloat format.
-	const bool __use_prec =
-	  (__io.flags() & ios_base::floatfield) != ios_base::floatfield;
-
+#ifdef _GLIBCXX_USE_C99
 	// First try a buffer perhaps big enough (most probably sufficient
 	// for non-ios_base::fixed outputs)
 	int __cs_size = __max_digits * 3;
 	char* __cs = static_cast<char*>(__builtin_alloca(__cs_size));
-	if (__use_prec)
-	  __len = std::__convert_from_v(_S_get_c_locale(), __cs, __cs_size,
-					__fbuf, __prec, __v);
-	else
-	  __len = std::__convert_from_v(_S_get_c_locale(), __cs, __cs_size,
-					__fbuf, __v);
+	__len = std::__convert_from_v(_S_get_c_locale(), __cs, __cs_size,
+				      __fbuf, __prec, __v);
 
 	// If the buffer was not large enough, try again with the correct size.
 	if (__len >= __cs_size)
 	  {
 	    __cs_size = __len + 1;
 	    __cs = static_cast<char*>(__builtin_alloca(__cs_size));
-	    if (__use_prec)
-	      __len = std::__convert_from_v(_S_get_c_locale(), __cs, __cs_size,
-					    __fbuf, __prec, __v);
-	    else
-	      __len = std::__convert_from_v(_S_get_c_locale(), __cs, __cs_size,
-					    __fbuf, __v);
+	    __len = std::__convert_from_v(_S_get_c_locale(), __cs, __cs_size,
+					  __fbuf, __prec, __v);
 	  }
 #else
 	// Consider the possibility of long ios_base::fixed outputs
@@ -1194,7 +1177,7 @@ _GLIBCXX_BEGIN_NAMESPACE_LDBL
       return __s;
     }
 
-_GLIBCXX_END_NAMESPACE_LDBL
+_GLIBCXX_END_LDBL_NAMESPACE
 
   // Construct correctly padded string, as per 22.2.2.2.2
   // Assumes
@@ -1291,11 +1274,12 @@ _GLIBCXX_END_NAMESPACE_LDBL
 
   // Inhibit implicit instantiations for required instantiations,
   // which are defined via explicit instantiations elsewhere.
+  // NB: This syntax is a GNU extension.
 #if _GLIBCXX_EXTERN_TEMPLATE
-  extern template class _GLIBCXX_NAMESPACE_CXX11 numpunct<char>;
-  extern template class _GLIBCXX_NAMESPACE_CXX11 numpunct_byname<char>;
-  extern template class _GLIBCXX_NAMESPACE_LDBL num_get<char>;
-  extern template class _GLIBCXX_NAMESPACE_LDBL num_put<char>;
+  extern template class numpunct<char>;
+  extern template class numpunct_byname<char>;
+  extern template class _GLIBCXX_LDBL_NAMESPACE num_get<char>;
+  extern template class _GLIBCXX_LDBL_NAMESPACE num_put<char>;
   extern template class ctype_byname<char>;
 
   extern template
@@ -1331,10 +1315,10 @@ _GLIBCXX_END_NAMESPACE_LDBL
     has_facet<num_get<char> >(const locale&);
 
 #ifdef _GLIBCXX_USE_WCHAR_T
-  extern template class _GLIBCXX_NAMESPACE_CXX11 numpunct<wchar_t>;
-  extern template class _GLIBCXX_NAMESPACE_CXX11 numpunct_byname<wchar_t>;
-  extern template class _GLIBCXX_NAMESPACE_LDBL num_get<wchar_t>;
-  extern template class _GLIBCXX_NAMESPACE_LDBL num_put<wchar_t>;
+  extern template class numpunct<wchar_t>;
+  extern template class numpunct_byname<wchar_t>;
+  extern template class _GLIBCXX_LDBL_NAMESPACE num_get<wchar_t>;
+  extern template class _GLIBCXX_LDBL_NAMESPACE num_put<wchar_t>;
   extern template class ctype_byname<wchar_t>;
 
   extern template
@@ -1371,7 +1355,6 @@ _GLIBCXX_END_NAMESPACE_LDBL
 #endif
 #endif
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 #endif

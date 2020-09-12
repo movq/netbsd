@@ -1,6 +1,6 @@
 /* tc-xc16x.c -- Assembler for the Infineon XC16X.
-   Copyright (C) 2006-2020 Free Software Foundation, Inc.
-   Contributed by KPIT Cummins Infosystems
+   Copyright 2006, 2007 Free Software Foundation, Inc.
+   Contributed by KPIT Cummins Infosystems 
 
    This file is part of GAS, the GNU Assembler.
 
@@ -133,7 +133,7 @@ md_assemble (char *str)
 
   if (!insn.insn)
     {
-      as_bad ("%s", errmsg);
+      as_bad (errmsg);
       return;
     }
 
@@ -154,46 +154,38 @@ md_cgen_lookup_reloc (const CGEN_INSN *insn ATTRIBUTE_UNUSED,
   switch (operand->type)
     {
     case XC16X_OPERAND_REL:
-      /* ??? Adjust size?  */
       fixP->fx_where += 1;
       fixP->fx_pcrel = 1;
       return BFD_RELOC_8_PCREL;
 
     case XC16X_OPERAND_CADDR:
-      fixP->fx_size = 2;
       fixP->fx_where += 2;
       return BFD_RELOC_16;
 
     case XC16X_OPERAND_UIMM7:
-      /* ??? Adjust size?  */
       fixP->fx_where += 1;
       fixP->fx_pcrel = 1;
       return BFD_RELOC_8_PCREL;
 
     case XC16X_OPERAND_UIMM16:
     case XC16X_OPERAND_MEMORY:
-      fixP->fx_size = 2;
       fixP->fx_where += 2;
       return BFD_RELOC_16;
 
     case XC16X_OPERAND_UPOF16:
-      fixP->fx_size = 2;
       fixP->fx_where += 2;
       return BFD_RELOC_XC16X_POF;
 
     case XC16X_OPERAND_UPAG16:
-      fixP->fx_size = 2;
       fixP->fx_where += 2;
       return BFD_RELOC_XC16X_PAG;
 
     case XC16X_OPERAND_USEG8:
-      /* ??? This is an 8 bit field, why the 16 bit reloc?  */
       fixP->fx_where += 1;
       return BFD_RELOC_XC16X_SEG;
 
     case XC16X_OPERAND_USEG16:
     case  XC16X_OPERAND_USOF16:
-      fixP->fx_size = 2;
       fixP->fx_where += 2;
       return BFD_RELOC_XC16X_SOF;
 
@@ -201,7 +193,8 @@ md_cgen_lookup_reloc (const CGEN_INSN *insn ATTRIBUTE_UNUSED,
       break;
     }
 
-  return BFD_RELOC_NONE;
+  fixP->fx_where += 2;
+  return BFD_RELOC_XC16X_SOF;
 }
 
 /* Write a value out to the object file, using the appropriate endianness.  */
@@ -220,12 +213,12 @@ md_show_usage (FILE * stream)
 
 int
 md_parse_option (int c ATTRIBUTE_UNUSED,
-		 const char *arg ATTRIBUTE_UNUSED)
+		 char *arg ATTRIBUTE_UNUSED)
 {
   return 0;
 }
 
-const char *
+char *
 md_atof (int type, char *litP, int *sizeP)
 {
   return ieee_md_atof (type, litP, sizeP, FALSE);
@@ -234,8 +227,8 @@ md_atof (int type, char *litP, int *sizeP)
 valueT
 md_section_align (segT segment, valueT size)
 {
-  int align = bfd_section_alignment (segment);
-  return ((size + (1 << align) - 1) & -(1 << align));
+  int align = bfd_get_section_alignment (stdoutput, segment);
+  return ((size + (1 << align) - 1) & (-1 << align));
 }
 
 symbolS *
@@ -294,8 +287,8 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
 	}
     }
 
-  rel = XNEW (arelent);
-  rel->sym_ptr_ptr = XNEW (asymbol *);
+  rel = xmalloc (sizeof (arelent));
+  rel->sym_ptr_ptr = xmalloc (sizeof (asymbol *));
   *rel->sym_ptr_ptr = symbol_get_bfdsym (fixp->fx_addsy);
   rel->address = fixp->fx_frag->fr_address + fixp->fx_where;
   rel->addend = fixp->fx_offset;
@@ -334,7 +327,7 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 	  *valP = 256 - (*valP);
 	}
     }
-
+  
   gas_cgen_md_apply_fix (fixP, valP, seg);
   return;
 }

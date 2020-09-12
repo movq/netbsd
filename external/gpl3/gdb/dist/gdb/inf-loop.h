@@ -1,5 +1,6 @@
 /* Interface to the inferior event handling code for GDB, the GNU debugger.
-   Copyright (C) 1999-2019 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
    Written by Elena Zannoni <ezannoni@cygnus.com> of Cygnus Solutions.
 
    This file is part of GDB.
@@ -20,9 +21,8 @@
 #ifndef INF_LOOP_H
 #define INF_LOOP_H
 
-#include "target.h"             /* For enum inferior_event_type.  */
-
 extern void inferior_event_handler (enum inferior_event_type event_type, 
 				    void* client_data);
+extern void inferior_event_handler_wrapper (void *client_data);
 
 #endif /* #ifndef INF_LOOP_H */

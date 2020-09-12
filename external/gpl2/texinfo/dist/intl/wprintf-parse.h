@@ -1,4 +1,4 @@
-/*	$NetBSD: wprintf-parse.h,v 1.1.1.1 2016/01/14 00:11:28 christos Exp $	*/
+/*	$NetBSD: wprintf-parse.h,v 1.1 2016/01/14 00:11:28 christos Exp $	*/
 
 /* Parse printf format string.
    Copyright (C) 1999, 2002-2003 Free Software Foundation, Inc.

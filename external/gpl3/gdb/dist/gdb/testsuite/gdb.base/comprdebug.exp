@@ -1,4 +1,4 @@
-# Copyright 2012-2019 Free Software Foundation, Inc.
+# Copyright 2012-2013 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,11 +18,11 @@ standard_testfile average.c
 set ofile "${binfile}0.o"
 if {[gdb_compile $srcdir/$subdir/$srcfile $ofile \
 	 object {debug}] != ""} {
-    untested "failed to compile"
+    untested comprdebug.exp
     return
 }
 
-set objcopy_program [gdb_find_objcopy]
+set objcopy_program [transform objcopy]
 set cmd "$objcopy_program --compress-debug-sections $ofile"
 verbose "invoking $cmd"
 set result [catch "exec $cmd" output]
@@ -30,7 +30,7 @@ verbose "result is $result"
 verbose "output is $output"
 
 if {$result == 1} {
-    untested "failed to execute objcopy"
+    untested comprdebug.exp
     return
 }
 

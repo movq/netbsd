@@ -1,4 +1,4 @@
-# Copyright (C) 2009-2019 Free Software Foundation, Inc.
+# Copyright (C) 2009, 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,14 +16,22 @@
 # Test that GDB doesn't get stuck when thread hoping over a thread
 # specific breakpoint when the selected thread has gone away.
 
-standard_testfile
+set testfile "threxit-hop-specific"
+set srcfile ${testfile}.c
+set binfile ${objdir}/${subdir}/${testfile}
 
 if {[gdb_compile_pthreads "${srcdir}/${subdir}/${srcfile}" "${binfile}" \
-	 executable debug] != "" } {
+	 executable [list debug "incdir=${objdir}"]] != "" } {
     return -1
 }
 
-clean_restart ${binfile}
+# Start with a fresh gdb.
+
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+
+gdb_load ${binfile}
 
 runto_main
 

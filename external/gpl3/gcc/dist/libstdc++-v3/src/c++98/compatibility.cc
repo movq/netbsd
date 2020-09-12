@@ -1,6 +1,6 @@
 // Compatibility symbols for previous versions -*- C++ -*-
 
-// Copyright (C) 2005-2019 Free Software Foundation, Inc.
+// Copyright (C) 2005-2013 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,7 +22,6 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-#define _GLIBCXX_USE_CXX11_ABI 0
 #include <bits/c++config.h>
 
 #if defined(_GLIBCXX_SYMVER_GNU) && defined(_GLIBCXX_SHARED) \
@@ -62,7 +61,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     {
       if (__n == 1)
 	return ignore();
-
+      
       _M_gcount = 0;
       sentry __cerb(*this, true);
       if ( __n > 0 && __cerb)
@@ -94,7 +93,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 			{
 			  ++_M_gcount;
 			  __c = __sb->snextc();
-			}
+			} 
 		    }
 		  if (__n == __gnu_cxx::__numeric_traits<streamsize>::__max
 		      && !traits_type::eq_int_type(__c, __eof))
@@ -124,7 +123,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    this->setstate(__err);
 	}
       return *this;
-    }
+    } 
 
 #ifdef _GLIBCXX_USE_WCHAR_T
   template<>
@@ -134,7 +133,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     {
       if (__n == 1)
 	return ignore();
-
+      
       _M_gcount = 0;
       sentry __cerb(*this, true);
       if (__n > 0 && __cerb)
@@ -296,7 +295,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   // std::istream
   template
     basic_istream<char>&
-    basic_istream<char>::ignore();
+    basic_istream<char>::ignore(); 
 
   template
     bool
@@ -332,7 +331,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template
     void
-    basic_string<wchar_t>::_M_check_length(size_t, size_t,
+    basic_string<wchar_t>::_M_check_length(size_t, size_t, 
 					   const char*) const;
 
   template
@@ -341,7 +340,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template
     basic_istream<wchar_t>&
-    basic_istream<wchar_t>::ignore();
+    basic_istream<wchar_t>::ignore(); 
 
   template
     bool
@@ -365,33 +364,27 @@ _GLIBCXX_END_NAMESPACE_VERSION
 // In the future, GLIBCXX_ABI > 6 should remove all uses of
 // _GLIBCXX_*_SYMVER macros in this file.
 
-#ifdef _GLIBCXX_COMPAT_
 #define _GLIBCXX_3_4_SYMVER(XXname, name) \
    extern "C" void \
-   _X##name(...) \
+   _X##name() \
    __attribute__ ((alias(#XXname))); \
    asm (".symver " "_X" #name "," #name "@GLIBCXX_3.4");
 
 #define _GLIBCXX_3_4_5_SYMVER(XXname, name) \
    extern "C" void \
-   _Y##name(...) \
+   _Y##name() \
    __attribute__ ((alias(#XXname))); \
    asm (".symver " "_Y" #name  "," #name "@@GLIBCXX_3.4.5");
 
 #define _GLIBCXX_ASM_SYMVER(cur, old, version) \
    asm (".symver " #cur "," #old "@@" #version);
-#else
-#define _GLIBCXX_3_4_SYMVER(XXname, name)
-#define _GLIBCXX_3_4_5_SYMVER(XXname, name)
-#define _GLIBCXX_ASM_SYMVER(cur, old, version)
-#endif
 
 #define _GLIBCXX_APPLY_SYMVER _GLIBCXX_3_4_SYMVER
-#include <abi/compatibility.h>
+#include <bits/compatibility.h>
 #undef _GLIBCXX_APPLY_SYMVER
 
 #define _GLIBCXX_APPLY_SYMVER _GLIBCXX_3_4_5_SYMVER
-#include <abi/compatibility.h>
+#include <bits/compatibility.h>
 #undef _GLIBCXX_APPLY_SYMVER
 
 
@@ -402,7 +395,7 @@ _ZN10__gnu_norm15_List_node_base6unhookEv;
 _ZN10__gnu_norm15_List_node_base7reverseEv;
 _ZN10__gnu_norm15_List_node_base8transferEPS0_S1_;
 */
-#include "list.cc"
+#include "list.cc"  
 _GLIBCXX_ASM_SYMVER(_ZNSt8__detail17_List_node_baseXX7_M_hookEPS0_, \
 _ZN10__gnu_norm15_List_node_base4hookEPS0_, \
 GLIBCXX_3.4)
@@ -425,7 +418,7 @@ GLIBCXX_3.4)
 #undef _List_node_base
 
 // gcc-4.1.0
-// Long double versions of "C" math functions.
+// Long double versions of "C" math functions. 
 #if defined (_GLIBCXX_LONG_DOUBLE_COMPAT) \
     || (defined (__arm__) && defined (__linux__) && defined (__ARM_EABI__)) \
     || (defined (__hppa__) && defined (__linux__)) \

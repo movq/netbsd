@@ -1,5 +1,6 @@
 /* Test program for GDB crashes while doing bp commands that continue inferior.
-   Copyright 2003-2019 Free Software Foundation, Inc.
+   Copyright 2003, 2004, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of the gdb testsuite.
 
@@ -22,6 +23,11 @@ int
 main (int argc, char **argv)
 {
   int i;
+
+#ifdef usestubs
+  set_debug_traps();
+  breakpoint();
+#endif
 
   for (i = 0; i < 100; i++)
     printf (">>> %d\n", i); /* euphonium */

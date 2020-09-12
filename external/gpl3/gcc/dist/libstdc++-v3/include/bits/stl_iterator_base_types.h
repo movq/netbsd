@@ -1,6 +1,7 @@
 // Types used in iterator implementation -*- C++ -*-
 
-// Copyright (C) 2001-2019 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -48,9 +49,9 @@
  * purpose.  It is provided "as is" without express or implied warranty.
  */
 
-/** @file bits/stl_iterator_base_types.h
+/** @file stl_iterator_base_types.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{iterator}
+ *  You should not attempt to use it directly.
  *
  *  This file contains all of the general iterator-related utility types,
  *  such as iterator_traits and struct iterator.
@@ -62,14 +63,9 @@
 #pragma GCC system_header
 
 #include <bits/c++config.h>
+#include <cstddef>
 
-#if __cplusplus >= 201103L
-# include <type_traits>  // For __void_t, is_convertible
-#endif
-
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   /**
    *  @defgroup iterators Iterators
@@ -137,31 +133,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    *  argument.  Specialized versions for pointers and pointers-to-const
    *  provide tighter, more correct semantics.
   */
-#if __cplusplus >= 201103L
-  // _GLIBCXX_RESOLVE_LIB_DEFECTS
-  // 2408. SFINAE-friendly common_type/iterator_traits is missing in C++14
-  template<typename _Iterator, typename = __void_t<>>
-    struct __iterator_traits { };
-
-  template<typename _Iterator>
-    struct __iterator_traits<_Iterator,
-			     __void_t<typename _Iterator::iterator_category,
-				      typename _Iterator::value_type,
-				      typename _Iterator::difference_type,
-				      typename _Iterator::pointer,
-				      typename _Iterator::reference>>
-    {
-      typedef typename _Iterator::iterator_category iterator_category;
-      typedef typename _Iterator::value_type        value_type;
-      typedef typename _Iterator::difference_type   difference_type;
-      typedef typename _Iterator::pointer           pointer;
-      typedef typename _Iterator::reference         reference;
-    };
-
-  template<typename _Iterator>
-    struct iterator_traits
-    : public __iterator_traits<_Iterator> { };
-#else
   template<typename _Iterator>
     struct iterator_traits
     {
@@ -171,7 +142,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       typedef typename _Iterator::pointer           pointer;
       typedef typename _Iterator::reference         reference;
     };
-#endif
 
   /// Partial specialization for pointer types.
   template<typename _Tp>
@@ -200,43 +170,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    *  sugar for internal library use only.
   */
   template<typename _Iter>
-    inline _GLIBCXX_CONSTEXPR
-    typename iterator_traits<_Iter>::iterator_category
+    inline typename iterator_traits<_Iter>::iterator_category
     __iterator_category(const _Iter&)
     { return typename iterator_traits<_Iter>::iterator_category(); }
 
   //@}
 
-#if __cplusplus < 201103L
-  // If _Iterator has a base returns it otherwise _Iterator is returned
-  // untouched
-  template<typename _Iterator, bool _HasBase>
-    struct _Iter_base
-    {
-      typedef _Iterator iterator_type;
-      static iterator_type _S_base(_Iterator __it)
-      { return __it; }
-    };
-
-  template<typename _Iterator>
-    struct _Iter_base<_Iterator, true>
-    {
-      typedef typename _Iterator::iterator_type iterator_type;
-      static iterator_type _S_base(_Iterator __it)
-      { return __it.base(); }
-    };
-#endif
-
-#if __cplusplus >= 201103L
-  template<typename _InIter>
-    using _RequireInputIter = typename
-      enable_if<is_convertible<typename
-		iterator_traits<_InIter>::iterator_category,
-			       input_iterator_tag>::value>::type;
-#endif
-
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 #endif /* _STL_ITERATOR_BASE_TYPES_H */
 

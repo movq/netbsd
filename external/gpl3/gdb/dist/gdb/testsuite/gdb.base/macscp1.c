@@ -89,9 +89,9 @@ macscp_expr (void)
 
   foo = 0;  /* set breakpoint here */
 #define MACRO_TO_EXPAND foo
-  foo = 1;			/* set second breakpoint here */
+  foo = 1;
 #undef MACRO_TO_EXPAND
-  foo = 2;			/* stopping point for line test */
+  foo = 2;
 }
 
 #define TWENTY_THREE 23

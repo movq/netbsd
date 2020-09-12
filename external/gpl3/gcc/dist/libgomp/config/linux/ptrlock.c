@@ -1,8 +1,7 @@
-/* Copyright (C) 2008-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2008, 2009 Free Software Foundation, Inc.
    Contributed by Jakub Jelinek <jakub@redhat.com>.
 
-   This file is part of the GNU Offloading and Multi Processing Library
-   (libgomp).
+   This file is part of the GNU OpenMP Library (libgomp).
 
    Libgomp is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by
@@ -35,10 +34,7 @@ void *
 gomp_ptrlock_get_slow (gomp_ptrlock_t *ptrlock)
 {
   int *intptr;
-  uintptr_t oldval = 1;
-
-  __atomic_compare_exchange_n (ptrlock, &oldval, 2, false,
-			       MEMMODEL_RELAXED, MEMMODEL_RELAXED);
+  __sync_bool_compare_and_swap (ptrlock, 1, 2);
 
   /* futex works on ints, not pointers.
      But a valid work share pointer will be at least
@@ -51,16 +47,17 @@ gomp_ptrlock_get_slow (gomp_ptrlock_t *ptrlock)
 #endif
   do
     do_wait (intptr, 2);
-  while (__atomic_load_n (intptr, MEMMODEL_RELAXED) == 2);
+  while (*intptr == 2);
   __asm volatile ("" : : : "memory");
-  return (void *) __atomic_load_n (ptrlock, MEMMODEL_ACQUIRE);
+  return *ptrlock;
 }
 
 void
-gomp_ptrlock_set_slow (gomp_ptrlock_t *ptrlock)
+gomp_ptrlock_set_slow (gomp_ptrlock_t *ptrlock, void *ptr)
 {
   int *intptr;
 
+  *ptrlock = ptr;
   __asm volatile ("" : "=r" (intptr) : "0" (ptrlock));
 #if __BYTE_ORDER == __BIG_ENDIAN
   if (sizeof (*ptrlock) > sizeof (int))

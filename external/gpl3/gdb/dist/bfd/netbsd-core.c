@@ -1,5 +1,7 @@
 /* BFD back end for NetBSD style core files
-   Copyright (C) 1988-2019 Free Software Foundation, Inc.
+   Copyright 1988, 1989, 1991, 1992, 1993, 1996, 1998, 1999, 2000, 2001,
+   2002, 2003, 2004, 2005, 2006, 2007
+   Free Software Foundation, Inc.
    Written by Paul Kranenburg, EUR
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -22,7 +24,7 @@
 #include "sysdep.h"
 #include "bfd.h"
 #include "libbfd.h"
-#include "libaout.h"	       /* BFD a.out internal data structures.  */
+#include "libaout.h"           /* BFD a.out internal data structures.  */
 
 #include <sys/param.h>
 #include <sys/dir.h>
@@ -198,6 +200,10 @@ netbsd_core_file_p (bfd *abfd)
       bfd_default_set_arch_mach (abfd, bfd_arch_m68k, 0);
       break;
 
+    case M_88K_OPENBSD:
+      bfd_default_set_arch_mach (abfd, bfd_arch_m88k, 0);
+      break;
+
     case M_HPPA_OPENBSD:
       bfd_default_set_arch_mach (abfd, bfd_arch_hppa, bfd_mach_hppa11);
       break;
@@ -261,7 +267,7 @@ swap_abort (void)
 #define	NO_PUT64 ((void (*) (bfd_uint64_t, void *)) swap_abort)
 #define	NO_GETS64 ((bfd_int64_t (*) (const void *)) swap_abort)
 
-const bfd_target core_netbsd_vec =
+const bfd_target netbsd_core_vec =
   {
     "netbsd-core",
     bfd_target_unknown_flavour,
@@ -275,7 +281,7 @@ const bfd_target core_netbsd_vec =
     0,				/* Symbol prefix.  */
     ' ',			/* ar_pad_char.  */
     16,				/* ar_max_namelen.  */
-    0,				/* match priority.  */
+    0,				/* Match priority.  */
     NO_GET64, NO_GETS64, NO_PUT64,	/* 64 bit data.  */
     NO_GET, NO_GETS, NO_PUT,		/* 32 bit data.  */
     NO_GET, NO_GETS, NO_PUT,		/* 16 bit data.  */
@@ -290,16 +296,12 @@ const bfd_target core_netbsd_vec =
       netbsd_core_file_p		/* A core file.  */
     },
     {					/* bfd_set_format.  */
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error
+      bfd_false, bfd_false,
+      bfd_false, bfd_false
     },
     {					/* bfd_write_contents.  */
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error
+      bfd_false, bfd_false,
+      bfd_false, bfd_false
     },
 
     BFD_JUMP_TABLE_GENERIC (_bfd_generic),
@@ -314,5 +316,5 @@ const bfd_target core_netbsd_vec =
 
     NULL,
 
-    NULL				/* Backend_data.  */
+    (PTR) 0			        /* Backend_data.  */
   };

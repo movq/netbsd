@@ -1,5 +1,6 @@
 /* tc-bfin.h - header file for tc-bfin.c
-   Copyright (C) 2005-2020 Free Software Foundation, Inc.
+   Copyright 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -27,19 +28,21 @@
 
 /*
  * Define the target format macro here.   The value for this should be
- * "elf32-bfin", not "elf32-little-bfin".  Since the BFD source file
+ * "elf32-bfin", not "elf32-little-bfin".  Since the BFD source file 
  * elf32-bfin.c defines TARGET_LITTLE_NAME to be "elf32-little-bfin",
  * we must use this value, until this is corrected and BFD is rebuilt.  */
 #ifdef OBJ_ELF
-#define TARGET_FORMAT		"elf32-bfin"
+#define TARGET_FORMAT		"elf32-bfin" 
 #endif
 
 #define LISTING_HEADER "BFIN GAS "
 
 #define WORKING_DOT_WORD
 
+extern void bfin_start_line_hook (void);
 extern bfd_boolean bfin_start_label (char *);
 
+#define md_start_line_hook()    bfin_start_line_hook()
 #define md_number_to_chars	number_to_chars_littleendian
 #define md_convert_frag(b,s,f)	as_fatal ("bfin convert_frag\n");
 
@@ -52,14 +55,13 @@ extern bfd_boolean bfin_eol_in_insn (char *);
 /* Almost all instructions of Blackfin contain an = character.  */
 #define TC_EQUAL_IN_INSN(C, NAME) 1
 
-#define NOP_OPCODE 0x0000
+#define NOP_OPCODE 0x0000 
 
 #define LOCAL_LABELS_FB 1
 
 #define DOUBLESLASH_LINE_COMMENTS
 
-#define TC_START_LABEL(STR, NUL_CHAR, NEXT_CHAR)	\
-  (NEXT_CHAR == ':' && bfin_start_label (STR))
+#define TC_START_LABEL(ch ,ptr) (ch == ':' && bfin_start_label (ptr))
 #define tc_fix_adjustable(FIX) bfin_fix_adjustable (FIX)
 extern bfd_boolean bfin_fix_adjustable (struct fix *);
 
@@ -75,11 +77,5 @@ extern long md_pcrel_from_section (struct fix *, segT);
 
 /* This target is buggy, and sets fix size too large.  */
 #define TC_FX_SIZE_SLACK(FIX) 2
-
-extern unsigned int bfin_anomaly_checks;
-
-/* Anomaly checking */
-#define AC_05000074 0x00000001
-#define ENABLE_AC_05000074 (bfin_anomaly_checks & AC_05000074)
 
 /* end of tc-bfin.h */

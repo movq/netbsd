@@ -1,6 +1,7 @@
 /* Routines for handling XML memory maps provided by target.
 
-   Copyright (C) 2006-2019 Free Software Foundation, Inc.
+   Copyright (C) 2006, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,10 +20,14 @@
 
 #include "defs.h"
 #include "memory-map.h"
+#include "gdb_assert.h"
+#include "exceptions.h"
+
+#include "gdb_string.h"
 
 #if !defined(HAVE_LIBEXPAT)
 
-std::vector<mem_region>
+VEC(mem_region_s) *
 parse_memory_map (const char *memory_map)
 {
   static int have_warned;
@@ -34,7 +39,7 @@ parse_memory_map (const char *memory_map)
 		 "at compile time"));
     }
 
-  return std::vector<mem_region> ();
+  return NULL;
 }
 
 #else /* HAVE_LIBEXPAT */
@@ -43,37 +48,31 @@ parse_memory_map (const char *memory_map)
 
 /* Internal parsing data passed to all XML callbacks.  */
 struct memory_map_parsing_data
-{
-  memory_map_parsing_data (std::vector<mem_region> *memory_map_)
-  : memory_map (memory_map_)
-  {}
-
-  std::vector<mem_region> *memory_map;
-
-  std::string property_name;
-};
+  {
+    VEC(mem_region_s) **memory_map;
+    char property_name[32];
+  };
 
 /* Handle the start of a <memory> element.  */
 
 static void
 memory_map_start_memory (struct gdb_xml_parser *parser,
 			 const struct gdb_xml_element *element,
-			 void *user_data,
-			 std::vector<gdb_xml_value> &attributes)
+			 void *user_data, VEC(gdb_xml_value_s) *attributes)
 {
-  struct memory_map_parsing_data *data
-    = (struct memory_map_parsing_data *) user_data;
+  struct memory_map_parsing_data *data = user_data;
+  struct mem_region *r = VEC_safe_push (mem_region_s, *data->memory_map, NULL);
   ULONGEST *start_p, *length_p, *type_p;
 
-  start_p
-    = (ULONGEST *) xml_find_attribute (attributes, "start")->value.get ();
-  length_p
-    = (ULONGEST *) xml_find_attribute (attributes, "length")->value.get ();
-  type_p
-    = (ULONGEST *) xml_find_attribute (attributes, "type")->value.get ();
+  start_p = xml_find_attribute (attributes, "start")->value;
+  length_p = xml_find_attribute (attributes, "length")->value;
+  type_p = xml_find_attribute (attributes, "type")->value;
 
-  data->memory_map->emplace_back (*start_p, *start_p + *length_p,
-				  (enum mem_access_mode) *type_p);
+  mem_region_init (r);
+  r->lo = *start_p;
+  r->hi = r->lo + *length_p;
+  r->attrib.mode = *type_p;
+  r->attrib.blocksize = -1;
 }
 
 /* Handle the end of a <memory> element.  Verify that any necessary
@@ -84,11 +83,10 @@ memory_map_end_memory (struct gdb_xml_parser *parser,
 		       const struct gdb_xml_element *element,
 		       void *user_data, const char *body_text)
 {
-  struct memory_map_parsing_data *data
-    = (struct memory_map_parsing_data *) user_data;
-  const mem_region &r = data->memory_map->back ();
+  struct memory_map_parsing_data *data = user_data;
+  struct mem_region *r = VEC_last (mem_region_s, *data->memory_map);
 
-  if (r.attrib.mode == MEM_FLASH && r.attrib.blocksize == -1)
+  if (r->attrib.mode == MEM_FLASH && r->attrib.blocksize == -1)
     gdb_xml_error (parser, _("Flash block size is not set"));
 }
 
@@ -98,15 +96,13 @@ memory_map_end_memory (struct gdb_xml_parser *parser,
 static void
 memory_map_start_property (struct gdb_xml_parser *parser,
 			   const struct gdb_xml_element *element,
-			   void *user_data,
-			   std::vector<gdb_xml_value> &attributes)
+			   void *user_data, VEC(gdb_xml_value_s) *attributes)
 {
-  struct memory_map_parsing_data *data
-    = (struct memory_map_parsing_data *) user_data;
+  struct memory_map_parsing_data *data = user_data;
   char *name;
 
-  name = (char *) xml_find_attribute (attributes, "name")->value.get ();
-  data->property_name.assign (name);
+  name = xml_find_attribute (attributes, "name")->value;
+  snprintf (data->property_name, sizeof (data->property_name), "%s", name);
 }
 
 /* Handle the end of a <property> element and its value.  */
@@ -116,18 +112,27 @@ memory_map_end_property (struct gdb_xml_parser *parser,
 			 const struct gdb_xml_element *element,
 			 void *user_data, const char *body_text)
 {
-  struct memory_map_parsing_data *data
-    = (struct memory_map_parsing_data *) user_data;
+  struct memory_map_parsing_data *data = user_data;
+  char *name = data->property_name;
 
-  if (data->property_name == "blocksize")
+  if (strcmp (name, "blocksize") == 0)
     {
-      mem_region &r = data->memory_map->back ();
+      struct mem_region *r = VEC_last (mem_region_s, *data->memory_map);
 
-      r.attrib.blocksize = gdb_xml_parse_ulongest (parser, body_text);
+      r->attrib.blocksize = gdb_xml_parse_ulongest (parser, body_text);
     }
   else
-    gdb_xml_debug (parser, _("Unknown property \"%s\""),
-		   data->property_name.c_str ());
+    gdb_xml_debug (parser, _("Unknown property \"%s\""), name);
+}
+
+/* Discard the constructed memory map (if an error occurs).  */
+
+static void
+clear_result (void *p)
+{
+  VEC(mem_region_s) **result = p;
+  VEC_free (mem_region_s, *result);
+  *result = NULL;
 }
 
 /* The allowed elements and attributes for an XML memory map.  */
@@ -170,20 +175,25 @@ const struct gdb_xml_element memory_map_elements[] = {
   { NULL, NULL, NULL, GDB_XML_EF_NONE, NULL, NULL }
 };
 
-std::vector<mem_region>
+VEC(mem_region_s) *
 parse_memory_map (const char *memory_map)
 {
-  std::vector<mem_region> ret;
-  memory_map_parsing_data data (&ret);
+  VEC(mem_region_s) *result = NULL;
+  struct cleanup *back_to;
+  struct memory_map_parsing_data data = { NULL };
 
+  data.memory_map = &result;
+  back_to = make_cleanup (clear_result, &result);
   if (gdb_xml_parse_quick (_("target memory map"), NULL, memory_map_elements,
 			   memory_map, &data) == 0)
     {
       /* Parsed successfully, keep the result.  */
-      return ret;
+      discard_cleanups (back_to);
+      return result;
     }
 
-  return std::vector<mem_region> ();
+  do_cleanups (back_to);
+  return NULL;
 }
 
 #endif /* HAVE_LIBEXPAT */

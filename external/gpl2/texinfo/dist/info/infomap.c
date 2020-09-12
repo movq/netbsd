@@ -1,4 +1,4 @@
-/*	$NetBSD: infomap.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: infomap.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* infomap.c -- keymaps for Info.
    Id: infomap.c,v 1.10 2004/07/30 20:43:40 karl Exp 

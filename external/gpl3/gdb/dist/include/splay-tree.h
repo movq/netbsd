@@ -1,5 +1,6 @@
 /* A splay-tree datatype.  
-   Copyright (C) 1998-2019 Free Software Foundation, Inc.
+   Copyright 1998, 1999, 2000, 2002, 2005, 2007, 2009, 2010
+   Free Software Foundation, Inc.
    Contributed by Mark Mitchell (mark@markmitchell.com).
 
    This file is part of GCC.
@@ -36,19 +37,30 @@ extern "C" {
 
 #include "ansidecl.h"
 
-#ifdef HAVE_STDINT_H
-#include <stdint.h>
+#ifndef _WIN64
+  typedef unsigned long int libi_uhostptr_t;
+  typedef long int libi_shostptr_t;
+#else
+#ifdef __GNUC__
+  __extension__
 #endif
-#ifdef HAVE_INTTYPES_H
-#include <inttypes.h>
+  typedef unsigned long long libi_uhostptr_t;
+#ifdef __GNUC__
+  __extension__
+#endif
+  typedef long long libi_shostptr_t;
+#endif
+
+#ifndef GTY
+#define GTY(X)
 #endif
 
 /* Use typedefs for the key and data types to facilitate changing
    these types, if necessary.  These types should be sufficiently wide
    that any pointer or scalar can be cast to these types, and then
    cast back, without loss of precision.  */
-typedef uintptr_t splay_tree_key;
-typedef uintptr_t splay_tree_value;
+typedef libi_uhostptr_t splay_tree_key;
+typedef libi_uhostptr_t splay_tree_value;
 
 /* Forward declaration for a node in the tree.  */
 typedef struct splay_tree_node_s *splay_tree_node;
@@ -58,18 +70,11 @@ typedef struct splay_tree_node_s *splay_tree_node;
 typedef int (*splay_tree_compare_fn) (splay_tree_key, splay_tree_key);
 
 /* The type of a function used to deallocate any resources associated
-   with the key.  If you provide this function, the splay tree
-   will take the ownership of the memory of the splay_tree_key arg
-   of splay_tree_insert.  This function is called to release the keys
-   present in the tree when calling splay_tree_delete or splay_tree_remove.
-   If splay_tree_insert is called with a key equal to a key already
-   present in the tree, the old key and old value will be released.  */
+   with the key.  */
 typedef void (*splay_tree_delete_key_fn) (splay_tree_key);
 
 /* The type of a function used to deallocate any resources associated
-   with the value.  If you provide this function, the memory of the
-   splay_tree_value arg of splay_tree_insert is managed similarly to
-   the splay_tree_key memory: see splay_tree_delete_key_fn.  */
+   with the value.  */
 typedef void (*splay_tree_delete_value_fn) (splay_tree_value);
 
 /* The type of a function used to iterate over the tree.  */
@@ -88,22 +93,22 @@ typedef void *(*splay_tree_allocate_fn) (int, void *);
 typedef void (*splay_tree_deallocate_fn) (void *, void *);
 
 /* The nodes in the splay tree.  */
-struct splay_tree_node_s {
+struct GTY(()) splay_tree_node_s {
   /* The key.  */
-  splay_tree_key key;
+  splay_tree_key GTY ((use_param1)) key;
 
   /* The value.  */
-  splay_tree_value value;
+  splay_tree_value GTY ((use_param2)) value;
 
   /* The left and right children, respectively.  */
-  splay_tree_node left;
-  splay_tree_node right;
+  splay_tree_node GTY ((use_params)) left;
+  splay_tree_node GTY ((use_params)) right;
 };
 
 /* The splay tree itself.  */
-struct splay_tree_s {
+struct GTY(()) splay_tree_s {
   /* The root of the tree.  */
-  splay_tree_node root;
+  splay_tree_node GTY ((use_params)) root;
 
   /* The comparision function.  */
   splay_tree_compare_fn comp;
@@ -121,7 +126,7 @@ struct splay_tree_s {
   splay_tree_deallocate_fn deallocate;
 
   /* Parameter for allocate/free functions.  */
-  void *allocate_data;
+  void * GTY((skip)) allocate_data;
 };
 
 typedef struct splay_tree_s *splay_tree;
@@ -154,9 +159,7 @@ extern splay_tree_node splay_tree_max (splay_tree);
 extern splay_tree_node splay_tree_min (splay_tree);
 extern int splay_tree_foreach (splay_tree, splay_tree_foreach_fn, void*);
 extern int splay_tree_compare_ints (splay_tree_key, splay_tree_key);
-extern int splay_tree_compare_pointers (splay_tree_key, splay_tree_key);
-extern int splay_tree_compare_strings (splay_tree_key, splay_tree_key);
-extern void splay_tree_delete_pointers (splay_tree_value);
+extern int splay_tree_compare_pointers (splay_tree_key,	splay_tree_key);
 
 #ifdef __cplusplus
 }

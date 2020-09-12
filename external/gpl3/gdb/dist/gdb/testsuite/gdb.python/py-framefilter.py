@@ -1,4 +1,4 @@
-# Copyright (C) 2013-2019 Free Software Foundation, Inc.
+# Copyright (C) 2013-2014 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -92,12 +92,6 @@ class ElidingFrameDecorator(FrameDecorator):
     def elided(self):
         return iter(self.elided_frames)
 
-    def address (self):
-        # Regression test for an overflow in the python layer.
-        bitsize = 8 * gdb.lookup_type('void').pointer().sizeof
-        mask = (1 << bitsize) - 1
-        return 0xffffffffffffffff & mask
-
 class ElidingIterator:
     def __init__(self, ii):
         self.input_iterator = ii
@@ -134,17 +128,13 @@ class FrameElider ():
     def filter (self, frame_iter):
         return ElidingIterator (frame_iter)
 
-# This is here so the test can change the kind of error that is
-# thrown.
-name_error = RuntimeError
-
 # A simple decorator that gives an error when computing the function.
 class ErrorInName(FrameDecorator):
     def __init__(self, frame):
         FrameDecorator.__init__(self, frame)
 
     def function(self):
-        raise name_error('whoops')
+        raise RuntimeError('whoops')
 
 # A filter that supplies buggy frames.  Disabled by default.
 class ErrorFilter():
@@ -155,12 +145,7 @@ class ErrorFilter():
         gdb.frame_filters [self.name] = self
 
     def filter(self, frame_iter):
-        # Python 3.x moved the itertools.imap functionality to map(),
-        # so check if it is available.
-        if hasattr(itertools, "imap"):
-            return itertools.imap (ErrorInName, frame_iter)
-        else:
-            return map(ErrorInName, frame_iter)
+        return itertools.imap(ErrorInName, frame_iter)
 
 FrameFilter()
 FrameElider()

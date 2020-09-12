@@ -1,6 +1,6 @@
 // Profiling multimap implementation -*- C++ -*-
 
-// Copyright (C) 2009-2019 Free Software Foundation, Inc.
+// Copyright (C) 2009, 2010 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -29,10 +29,9 @@
 #ifndef _GLIBCXX_PROFILE_MULTIMAP_H
 #define _GLIBCXX_PROFILE_MULTIMAP_H 1
 
-#include <profile/base.h>
-#include <profile/ordered_base.h>
+#include <utility>
 
-namespace std _GLIBCXX_VISIBILITY(default)
+namespace std
 {
 namespace __profile
 {
@@ -40,563 +39,282 @@ namespace __profile
   template<typename _Key, typename _Tp, typename _Compare = std::less<_Key>,
 	   typename _Allocator = std::allocator<std::pair<const _Key, _Tp> > >
     class multimap
-    : public _GLIBCXX_STD_C::multimap<_Key, _Tp, _Compare, _Allocator>,
-      public _Ordered_profile<map<_Key, _Tp, _Compare, _Allocator> >
+    : public _GLIBCXX_STD_D::multimap<_Key, _Tp, _Compare, _Allocator>
     {
-      typedef _GLIBCXX_STD_C::multimap<_Key, _Tp, _Compare, _Allocator> _Base;
-
-      typedef typename _Base::iterator			_Base_iterator;
-      typedef typename _Base::const_iterator		_Base_const_iterator;
+      typedef _GLIBCXX_STD_D::multimap<_Key, _Tp, _Compare, _Allocator> _Base;
 
     public:
       // types:
-      typedef _Key					key_type;
-      typedef _Tp					mapped_type;
-      typedef std::pair<const _Key, _Tp>		value_type;
-      typedef _Compare					key_compare;
-      typedef typename _Base::reference			reference;
-      typedef typename _Base::const_reference		const_reference;
+      typedef _Key				     key_type;
+      typedef _Tp				     mapped_type;
+      typedef std::pair<const _Key, _Tp>             value_type;
+      typedef _Compare                               key_compare;
+      typedef _Allocator                             allocator_type;
+      typedef typename _Base::reference              reference;
+      typedef typename _Base::const_reference        const_reference;
 
-      typedef __iterator_tracker<_Base_iterator,
-				 multimap>		iterator;
-      typedef __iterator_tracker<_Base_const_iterator,
-				 multimap>		const_iterator;
-      typedef std::reverse_iterator<iterator>		reverse_iterator;
-      typedef std::reverse_iterator<const_iterator>	const_reverse_iterator;
+      typedef typename _Base::iterator               iterator;
+      typedef typename _Base::const_iterator         const_iterator;
+      typedef typename _Base::reverse_iterator       reverse_iterator;
+      typedef typename _Base::const_reverse_iterator const_reverse_iterator;
 
-      typedef typename _Base::size_type			size_type;
-      typedef typename _Base::difference_type		difference_type;
+      typedef typename _Base::size_type              size_type;
+      typedef typename _Base::difference_type        difference_type;
+      typedef typename _Base::pointer                pointer;
+      typedef typename _Base::const_pointer          const_pointer;
+
+      using _Base::value_compare;
 
       // 23.3.1.1 construct/copy/destroy:
-
-#if __cplusplus < 201103L
-      multimap()
-      : _Base() { }
-      multimap(const multimap& __x)
-      : _Base(__x) { }
-      ~multimap() { }
-#else
-      multimap() = default;
-      multimap(const multimap&) = default;
-      multimap(multimap&&) = default;
-      ~multimap() = default;
-#endif
-
-      explicit multimap(const _Compare& __comp,
+      explicit multimap(const _Compare& __comp = _Compare(),
 			const _Allocator& __a = _Allocator())
       : _Base(__comp, __a) { }
 
-#if __cplusplus >= 201103L
-      template<typename _InputIterator,
-	       typename = std::_RequireInputIter<_InputIterator>>
-#else
       template<typename _InputIterator>
-#endif
-	multimap(_InputIterator __first, _InputIterator __last,
-		 const _Compare& __comp = _Compare(),
-		 const _Allocator& __a = _Allocator())
-	: _Base(__first, __last, __comp, __a) { }
-
-#if __cplusplus >= 201103L
-      multimap(initializer_list<value_type> __l,
-	       const _Compare& __c = _Compare(),
+      multimap(_InputIterator __first, _InputIterator __last,
+	       const _Compare& __comp = _Compare(),
 	       const _Allocator& __a = _Allocator())
-      : _Base(__l, __c, __a) { }
+      : _Base(__first, __last, __comp, __a) { }
 
-      explicit
-      multimap(const _Allocator& __a)
-      : _Base(__a) { }
-
-      multimap(const multimap& __x, const _Allocator& __a)
-      : _Base(__x, __a) { }
-
-      multimap(multimap&& __x, const _Allocator& __a)
-      noexcept( noexcept(_Base(std::move(__x), __a)) )
-      : _Base(std::move(__x), __a) { }
-
-      multimap(initializer_list<value_type> __l, const _Allocator& __a)
-      : _Base(__l, __a) { }
-
-      template<typename _InputIterator>
-	multimap(_InputIterator __first, _InputIterator __last,
-		 const _Allocator& __a)
-	: _Base(__first, __last, __a) { }
-#endif
+      multimap(const multimap& __x)
+      : _Base(__x) { }
 
       multimap(const _Base& __x)
       : _Base(__x) { }
 
-#if __cplusplus < 201103L
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      multimap(multimap&& __x)
+      : _Base(std::forward<multimap>(__x))
+      { }
+
+      multimap(initializer_list<value_type> __l,
+	       const _Compare& __c = _Compare(),
+	       const allocator_type& __a = allocator_type())
+      : _Base(__l, __c, __a) { }
+#endif
+
+      ~multimap() { }
+
       multimap&
       operator=(const multimap& __x)
       {
-	this->_M_profile_destruct();
-	_M_base() = __x;
-	this->_M_profile_construct();
+	*static_cast<_Base*>(this) = __x;
 	return *this;
       }
-#else
-      multimap&
-      operator=(const multimap&) = default;
 
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
       multimap&
-      operator=(multimap&&) = default;
+      operator=(multimap&& __x)
+      {
+	// NB: DR 1204.
+	// NB: DR 675.
+	this->clear();
+	this->swap(__x);
+	return *this;
+      }
 
       multimap&
       operator=(initializer_list<value_type> __l)
       {
-	this->_M_profile_destruct();
-	_M_base() = __l;
-	this->_M_profile_construct();
+	this->clear();
+	this->insert(__l);
 	return *this;
       }
 #endif
 
-      // iterators
+      using _Base::get_allocator;
+
+      // iterators:
       iterator
-      begin() _GLIBCXX_NOEXCEPT
-      { return iterator(_Base::begin(), this); }
+      begin()
+      { return iterator(_Base::begin()); }
 
       const_iterator
-      begin() const _GLIBCXX_NOEXCEPT
-      { return const_iterator(_Base::begin(), this); }
+      begin() const
+      { return const_iterator(_Base::begin()); }
 
       iterator
-      end() _GLIBCXX_NOEXCEPT
-      { return iterator(_Base::end(), this); }
+      end()
+      { return iterator(_Base::end()); }
 
       const_iterator
-      end() const _GLIBCXX_NOEXCEPT
-      { return const_iterator(_Base::end(), this); }
-
-#if __cplusplus >= 201103L
-      const_iterator
-      cbegin() const noexcept
-      { return const_iterator(_Base::cbegin(), this); }
-
-      const_iterator
-      cend() const noexcept
-      { return const_iterator(_Base::cend(), this); }
-#endif
+      end() const
+      { return const_iterator(_Base::end()); }
 
       reverse_iterator
-      rbegin() _GLIBCXX_NOEXCEPT
-      {
-	__profcxx_map2umap_invalidate(this->_M_map2umap_info);
-	return reverse_iterator(end());
-      }
+      rbegin()
+      { return reverse_iterator(end()); }
 
       const_reverse_iterator
-      rbegin() const _GLIBCXX_NOEXCEPT
-      {
-	__profcxx_map2umap_invalidate(this->_M_map2umap_info);
-	return const_reverse_iterator(end());
-      }
+      rbegin() const
+      { return const_reverse_iterator(end()); }
 
       reverse_iterator
-      rend() _GLIBCXX_NOEXCEPT
-      {
-	__profcxx_map2umap_invalidate(this->_M_map2umap_info);
-	return reverse_iterator(begin());
-      }
+      rend()
+      { return reverse_iterator(begin()); }
 
       const_reverse_iterator
-      rend() const _GLIBCXX_NOEXCEPT
-      {
-	__profcxx_map2umap_invalidate(this->_M_map2umap_info);
-	return const_reverse_iterator(begin());
-      }
+      rend() const
+      { return const_reverse_iterator(begin()); }
 
-#if __cplusplus >= 201103L
-      const_reverse_iterator
-      crbegin() const noexcept
-      {
-	__profcxx_map2umap_invalidate(this->_M_map2umap_info);
-	return const_reverse_iterator(cend());
-      }
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+      const_iterator
+      cbegin() const
+      { return const_iterator(_Base::begin()); }
+
+      const_iterator
+      cend() const
+      { return const_iterator(_Base::end()); }
 
       const_reverse_iterator
-      crend() const noexcept
-      {
-	__profcxx_map2umap_invalidate(this->_M_map2umap_info);
-	return const_reverse_iterator(cbegin());
-      }
+      crbegin() const
+      { return const_reverse_iterator(end()); }
+
+      const_reverse_iterator
+      crend() const
+      { return const_reverse_iterator(begin()); }
 #endif
+
+      // capacity:
+      using _Base::empty;
+      using _Base::size;
+      using _Base::max_size;
 
       // modifiers:
-#if __cplusplus >= 201103L
-      template<typename... _Args>
-	iterator
-	emplace(_Args&&... __args)
-	{
-	  __profcxx_map2umap_insert(this->_M_map2umap_info, this->size(), 1);
-	  return iterator(_Base::emplace(std::forward<_Args>(__args)...), this);
-	}
-
-      template<typename... _Args>
-	iterator
-	emplace_hint(const_iterator __pos, _Args&&... __args)
-	{
-	  auto size_before = this->size();
-	  auto __res
-	    = _Base::emplace_hint(__pos.base(), std::forward<_Args>(__args)...);
-	  __profcxx_map2umap_insert(this->_M_map2umap_info,
-		size_before, _M_hint_used(__pos.base(), __res) ? 0 : 1);
-	  return iterator(__res, this);
-	}
-#endif
-
       iterator
       insert(const value_type& __x)
-      {
-	__profcxx_map2umap_insert(this->_M_map2umap_info, this->size(), 1);
-	return iterator(_Base::insert(__x), this);
-      }
+      { return iterator(_Base::insert(__x)); }
 
-#if __cplusplus >= 201103L
-      template<typename _Pair, typename = typename
-	       std::enable_if<std::is_constructible<value_type,
-						    _Pair&&>::value>::type>
-	iterator
-	insert(_Pair&& __x)
-	{
-	  __profcxx_map2umap_insert(this->_M_map2umap_info, this->size(), 1);
-	  return iterator(_Base::insert(std::forward<_Pair>(__x)), this);
-	}
-#endif
-
-#if __cplusplus >= 201103L
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
       void
       insert(std::initializer_list<value_type> __list)
-      { insert(__list.begin(), __list.end()); }
+      { _Base::insert(__list); }
 #endif
 
       iterator
-#if __cplusplus >= 201103L
-      insert(const_iterator __pos, const value_type& __x)
-#else
-      insert(iterator __pos, const value_type& __x)
-#endif
+      insert(iterator __position, const value_type& __x)
       {
-	size_type size_before = this->size();
-	_Base_iterator __res = _Base::insert(__pos.base(), __x);
-	__profcxx_map2umap_insert(this->_M_map2umap_info,
-		size_before, _M_hint_used(__pos.base(), __res) ? 0 : 1);
-	return iterator(__res, this);
+	return iterator(_Base::insert(__position, __x));
       }
-
-#if __cplusplus >= 201103L
-      template<typename _Pair, typename = typename
-	       std::enable_if<std::is_constructible<value_type,
-						    _Pair&&>::value>::type>
-	iterator
-	insert(const_iterator __pos, _Pair&& __x)
-	{
-	  size_type size_before = this->size();
-	  auto __res = _Base::insert(__pos.base(), std::forward<_Pair>(__x));
-	  __profcxx_map2umap_insert(this->_M_map2umap_info,
-		size_before, _M_hint_used(__pos.base(), __res) ? 0 : 1);
-	  return iterator(__res, this);
-	}
-#endif
 
       template<typename _InputIterator>
-	void
-	insert(_InputIterator __first, _InputIterator __last)
-	{
-	  for (; __first != __last; ++__first)
-	    insert(*__first);
+        void
+        insert(_InputIterator __first, _InputIterator __last)
+        {
+	  _Base::insert(__first, __last);
 	}
 
-#if __cplusplus >= 201103L
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
       iterator
-      erase(const_iterator __pos)
-      {
-	__profcxx_map2umap_erase(this->_M_map2umap_info, this->size(), 1);
-	return iterator(_Base::erase(__pos.base()), this);
-      }
-
-      iterator
-      erase(iterator __pos)
-      {
-	__profcxx_map2umap_erase(this->_M_map2umap_info, this->size(), 1);
-	return iterator(_Base::erase(__pos.base()), this);
-      }
+      erase(iterator __position)
+      { return _Base::erase(__position); }
 #else
       void
-      erase(iterator __pos)
-      {
-	__profcxx_map2umap_erase(this->_M_map2umap_info, this->size(), 1);
-	_Base::erase(__pos.base());
-      }
+      erase(iterator __position)
+      { _Base::erase(__position); }
 #endif
 
       size_type
       erase(const key_type& __x)
       {
-	__profcxx_map2umap_find(this->_M_map2umap_info, this->size());
-	__profcxx_map2umap_erase(this->_M_map2umap_info, this->size(), 1);
-	return _Base::erase(__x);
+	std::pair<iterator, iterator> __victims = this->equal_range(__x);
+	size_type __count = 0;
+	while (__victims.first != __victims.second)
+	{
+	  iterator __victim = __victims.first++;
+	  _Base::erase(__victim);
+	  ++__count;
+	}
+	return __count;
       }
 
-#if __cplusplus >= 201103L
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
       iterator
-      erase(const_iterator __first, const_iterator __last)
+      erase(iterator __first, iterator __last)
       {
-	if (__first != __last)
-	  {
-	    iterator __ret;
-	    for (; __first != __last;)
-	      __ret = erase(__first++);
-	    return __ret;
-	  }
-	else
-	  return iterator(_Base::erase(__first.base(), __last.base()), this);
+	// _GLIBCXX_RESOLVE_LIB_DEFECTS
+	// 151. can't currently clear() empty container
+	while (__first != __last)
+	  this->erase(__first++);
+	return __last;
       }
 #else
       void
       erase(iterator __first, iterator __last)
       {
-	for (; __first != __last;)
-	  erase(__first++);
+	// _GLIBCXX_RESOLVE_LIB_DEFECTS
+	// 151. can't currently clear() empty container
+	while (__first != __last)
+	  this->erase(__first++);
       }
 #endif
 
       void
       swap(multimap& __x)
-      _GLIBCXX_NOEXCEPT_IF( noexcept(declval<_Base&>().swap(__x)) )
       {
-	std::swap(this->_M_map2umap_info, __x._M_map2umap_info);
 	_Base::swap(__x);
       }
- 
+
       void
-      clear() _GLIBCXX_NOEXCEPT
-      {
-	this->_M_profile_destruct();
-	_Base::clear();
-	this->_M_profile_construct();
-      }
+      clear()
+      { this->erase(begin(), end()); }
+
+      // observers:
+      using _Base::key_comp;
+      using _Base::value_comp;
 
       // 23.3.1.3 multimap operations:
       iterator
       find(const key_type& __x)
-      {
-	__profcxx_map2umap_find(this->_M_map2umap_info, this->size());
-	return iterator(_Base::find(__x), this);
-      }
-
-#if __cplusplus > 201103L
-      template<typename _Kt,
-	       typename _Req =
-		 typename __has_is_transparent<_Compare, _Kt>::type>
-	iterator
-	find(const _Kt& __x)
-	{
-	  __profcxx_map2umap_find(this->_M_map2umap_info, this->size());
-	  return { _Base::find(__x), this };
-	}
-#endif
+      { return iterator(_Base::find(__x)); }
 
       const_iterator
       find(const key_type& __x) const
-      {
-	__profcxx_map2umap_find(this->_M_map2umap_info, this->size());
-	return const_iterator(_Base::find(__x), this);
-      }
+      { return const_iterator(_Base::find(__x)); }
 
-#if __cplusplus > 201103L
-      template<typename _Kt,
-	       typename _Req =
-		 typename __has_is_transparent<_Compare, _Kt>::type>
-	const_iterator
-	find(const _Kt& __x) const
-	{
-	  __profcxx_map2umap_find(this->_M_map2umap_info, this->size());
-	  return { _Base::find(__x), this };
-	}
-#endif
-
-      size_type
-      count(const key_type& __x) const
-      {
-	__profcxx_map2umap_find(this->_M_map2umap_info, this->size());
-	return _Base::count(__x);
-      }
-
-#if __cplusplus > 201103L
-      template<typename _Kt,
-	       typename _Req =
-		 typename __has_is_transparent<_Compare, _Kt>::type>
-	size_type
-	count(const _Kt& __x) const
-	{
-	  __profcxx_map2umap_find(this->_M_map2umap_info, this->size());
-	  return _Base::count(__x);
-	}
-#endif
+      using _Base::count;
 
       iterator
       lower_bound(const key_type& __x)
-      {
-	__profcxx_map2umap_find(this->_M_map2umap_info, this->size());
-	__profcxx_map2umap_invalidate(this->_M_map2umap_info);
-	return iterator(_Base::lower_bound(__x), this);
-      }
-
-#if __cplusplus > 201103L
-      template<typename _Kt,
-	       typename _Req =
-		 typename __has_is_transparent<_Compare, _Kt>::type>
-	iterator
-	lower_bound(const _Kt& __x)
-	{
-	  __profcxx_map2umap_find(this->_M_map2umap_info, this->size());
-	  __profcxx_map2umap_invalidate(this->_M_map2umap_info);
-	  return { _Base::lower_bound(__x), this };
-	}
-#endif
+      { return iterator(_Base::lower_bound(__x)); }
 
       const_iterator
       lower_bound(const key_type& __x) const
-      {
-	__profcxx_map2umap_find(this->_M_map2umap_info, this->size());
-	__profcxx_map2umap_invalidate(this->_M_map2umap_info);
-	return const_iterator(_Base::lower_bound(__x), this);
-      }
-
-#if __cplusplus > 201103L
-      template<typename _Kt,
-	       typename _Req =
-		 typename __has_is_transparent<_Compare, _Kt>::type>
-	const_iterator
-	lower_bound(const _Kt& __x) const
-	{
-	  __profcxx_map2umap_find(this->_M_map2umap_info, this->size());
-	  __profcxx_map2umap_invalidate(this->_M_map2umap_info);
-	  return { _Base::lower_bound(__x), this };
-	}
-#endif
+      { return const_iterator(_Base::lower_bound(__x)); }
 
       iterator
       upper_bound(const key_type& __x)
-      {
-	__profcxx_map2umap_find(this->_M_map2umap_info, this->size());
-	__profcxx_map2umap_invalidate(this->_M_map2umap_info);
-	return iterator(_Base::upper_bound(__x), this);
-      }
-
-#if __cplusplus > 201103L
-      template<typename _Kt,
-	       typename _Req =
-		 typename __has_is_transparent<_Compare, _Kt>::type>
-	iterator
-	upper_bound(const _Kt& __x)
-	{
-	  __profcxx_map2umap_find(this->_M_map2umap_info, this->size());
-	  __profcxx_map2umap_invalidate(this->_M_map2umap_info);
-	  return { _Base::upper_bound(__x), this };
-	}
-#endif
+      { return iterator(_Base::upper_bound(__x)); }
 
       const_iterator
       upper_bound(const key_type& __x) const
-      {
-	__profcxx_map2umap_find(this->_M_map2umap_info, this->size());
-	__profcxx_map2umap_invalidate(this->_M_map2umap_info);
-	return const_iterator(_Base::upper_bound(__x), this);
-      }
-
-#if __cplusplus > 201103L
-      template<typename _Kt,
-	       typename _Req =
-		 typename __has_is_transparent<_Compare, _Kt>::type>
-	const_iterator
-	upper_bound(const _Kt& __x) const
-	{
-	  __profcxx_map2umap_find(this->_M_map2umap_info, this->size());
-	  __profcxx_map2umap_invalidate(this->_M_map2umap_info);
-	  return { _Base::upper_bound(__x), this };
-	}
-#endif
+      { return const_iterator(_Base::upper_bound(__x)); }
 
       std::pair<iterator,iterator>
       equal_range(const key_type& __x)
       {
-	__profcxx_map2umap_find(this->_M_map2umap_info, this->size());
-	std::pair<_Base_iterator, _Base_iterator> __base_ret
-	  = _Base::equal_range(__x);
-	return std::make_pair(iterator(__base_ret.first, this),
-			      iterator(__base_ret.second, this));
+	typedef typename _Base::iterator _Base_iterator;
+	std::pair<_Base_iterator, _Base_iterator> __res =
+	_Base::equal_range(__x);
+	return std::make_pair(iterator(__res.first),
+			      iterator(__res.second));
       }
-
-#if __cplusplus > 201103L
-      template<typename _Kt,
-	       typename _Req =
-		 typename __has_is_transparent<_Compare, _Kt>::type>
-	std::pair<iterator, iterator>
-	equal_range(const _Kt& __x)
-	{
-	  __profcxx_map2umap_find(this->_M_map2umap_info, this->size());
-	  auto __res = _Base::equal_range(__x);
-	  return { { __res.first, this }, { __res.second, this } };
-	}
-#endif
 
       std::pair<const_iterator,const_iterator>
       equal_range(const key_type& __x) const
       {
-	__profcxx_map2umap_find(this->_M_map2umap_info, this->size());
-	std::pair<_Base_const_iterator, _Base_const_iterator> __base_ret
-	  = _Base::equal_range(__x);
-	return std::make_pair(const_iterator(__base_ret.first, this),
-			      const_iterator(__base_ret.second, this));
+	typedef typename _Base::const_iterator _Base_const_iterator;
+	std::pair<_Base_const_iterator, _Base_const_iterator> __res =
+	_Base::equal_range(__x);
+	return std::make_pair(const_iterator(__res.first),
+			      const_iterator(__res.second));
       }
-
-#if __cplusplus > 201103L
-      template<typename _Kt,
-	       typename _Req =
-		 typename __has_is_transparent<_Compare, _Kt>::type>
-	std::pair<const_iterator, const_iterator>
-	equal_range(const _Kt& __x) const
-	{
-	  __profcxx_map2umap_find(this->_M_map2umap_info, this->size());
-	  auto __res = _Base::equal_range(__x);
-	  return { { __res.first, this }, { __res.second, this } };
-	}
-#endif
 
       _Base&
-      _M_base() _GLIBCXX_NOEXCEPT	{ return *this; }
+      _M_base() { return *this; }
 
       const _Base&
-      _M_base() const _GLIBCXX_NOEXCEPT	{ return *this; }
-
-    private:
-      /** If hint is used we consider that the map and unordered_map
-       * operations have equivalent insertion cost so we do not update metrics
-       * about it.
-       * Note that to find out if hint has been used is libstdc++
-       * implementation dependent.
-       */
-      bool
-      _M_hint_used(_Base_const_iterator __hint, _Base_iterator __res)
-      {
-	return (__hint == __res
-		|| (__hint == _M_base().end() && ++__res == _M_base().end())
-		|| (__hint != _M_base().end() && (++__hint == __res
-						  || ++__res == --__hint)));
-      }
-
-      template<typename _K1, typename _T1, typename _C1, typename _A1>
-        friend bool
-        operator==(const multimap<_K1, _T1, _C1, _A1>&,
-		   const multimap<_K1, _T1, _C1, _A1>&);
-
-      template<typename _K1, typename _T1, typename _C1, typename _A1>
-        friend bool
-        operator<(const multimap<_K1, _T1, _C1, _A1>&,
-		  const multimap<_K1, _T1, _C1, _A1>&);
+      _M_base() const { return *this; }
     };
 
   template<typename _Key, typename _Tp,
@@ -604,57 +322,48 @@ namespace __profile
     inline bool
     operator==(const multimap<_Key, _Tp, _Compare, _Allocator>& __lhs,
 	       const multimap<_Key, _Tp, _Compare, _Allocator>& __rhs)
-    {
-      __profcxx_map2umap_invalidate(__lhs._M_map2umap_info);
-      __profcxx_map2umap_invalidate(__rhs._M_map2umap_info);
-      return __lhs._M_base() == __rhs._M_base();
-    }
-
-  template<typename _Key, typename _Tp,
-	   typename _Compare, typename _Allocator>
-    inline bool
-    operator<(const multimap<_Key, _Tp, _Compare, _Allocator>& __lhs,
-	      const multimap<_Key, _Tp, _Compare, _Allocator>& __rhs)
-    {
-      __profcxx_map2umap_invalidate(__lhs._M_map2umap_info);
-      __profcxx_map2umap_invalidate(__rhs._M_map2umap_info);
-      return __lhs._M_base() < __rhs._M_base();
-    }
+    { return __lhs._M_base() == __rhs._M_base(); }
 
   template<typename _Key, typename _Tp,
 	   typename _Compare, typename _Allocator>
     inline bool
     operator!=(const multimap<_Key, _Tp, _Compare, _Allocator>& __lhs,
 	       const multimap<_Key, _Tp, _Compare, _Allocator>& __rhs)
-    { return !(__lhs == __rhs); }
+    { return __lhs._M_base() != __rhs._M_base(); }
+
+  template<typename _Key, typename _Tp,
+	   typename _Compare, typename _Allocator>
+    inline bool
+    operator<(const multimap<_Key, _Tp, _Compare, _Allocator>& __lhs,
+	      const multimap<_Key, _Tp, _Compare, _Allocator>& __rhs)
+    { return __lhs._M_base() < __rhs._M_base(); }
 
   template<typename _Key, typename _Tp,
 	   typename _Compare, typename _Allocator>
     inline bool
     operator<=(const multimap<_Key, _Tp, _Compare, _Allocator>& __lhs,
 	       const multimap<_Key, _Tp, _Compare, _Allocator>& __rhs)
-    { return !(__rhs < __lhs); }
+    { return __lhs._M_base() <= __rhs._M_base(); }
 
   template<typename _Key, typename _Tp,
 	   typename _Compare, typename _Allocator>
     inline bool
     operator>=(const multimap<_Key, _Tp, _Compare, _Allocator>& __lhs,
 	       const multimap<_Key, _Tp, _Compare, _Allocator>& __rhs)
-    { return !(__lhs < __rhs); }
+    { return __lhs._M_base() >= __rhs._M_base(); }
 
   template<typename _Key, typename _Tp,
 	   typename _Compare, typename _Allocator>
     inline bool
     operator>(const multimap<_Key, _Tp, _Compare, _Allocator>& __lhs,
 	      const multimap<_Key, _Tp, _Compare, _Allocator>& __rhs)
-    { return __rhs < __lhs; }
+    { return __lhs._M_base() > __rhs._M_base(); }
 
   template<typename _Key, typename _Tp,
 	   typename _Compare, typename _Allocator>
     inline void
     swap(multimap<_Key, _Tp, _Compare, _Allocator>& __lhs,
 	 multimap<_Key, _Tp, _Compare, _Allocator>& __rhs)
-    _GLIBCXX_NOEXCEPT_IF(noexcept(__lhs.swap(__rhs)))
     { __lhs.swap(__rhs); }
 
 } // namespace __profile

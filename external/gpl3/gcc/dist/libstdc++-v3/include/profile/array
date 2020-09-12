@@ -1,6 +1,6 @@
 // Profile array implementation -*- C++ -*-
 
-// Copyright (C) 2012-2019 Free Software Foundation, Inc.
+// Copyright (C) 2012-2013 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -30,8 +30,6 @@
 #define _GLIBCXX_PROFILE_ARRAY 1
 
 #pragma GCC system_header
-
-#include <array>
 
 namespace std _GLIBCXX_VISIBILITY(default)
 {
@@ -65,85 +63,82 @@ namespace __profile
 
       void
       swap(array& __other)
-      noexcept(_AT_Type::_Is_nothrow_swappable::value)
+      noexcept(noexcept(swap(std::declval<_Tp&>(), std::declval<_Tp&>())))
       { std::swap_ranges(begin(), end(), __other.begin()); }
 
       // Iterators.
-      _GLIBCXX17_CONSTEXPR iterator
+      iterator
       begin() noexcept
       { return iterator(data()); }
 
-      _GLIBCXX17_CONSTEXPR const_iterator
+      const_iterator
       begin() const noexcept
       { return const_iterator(data()); }
 
-      _GLIBCXX17_CONSTEXPR iterator
+      iterator
       end() noexcept
       { return iterator(data() + _Nm); }
 
-      _GLIBCXX17_CONSTEXPR const_iterator
+      const_iterator
       end() const noexcept
       { return const_iterator(data() + _Nm); }
 
-      _GLIBCXX17_CONSTEXPR reverse_iterator
+      reverse_iterator 
       rbegin() noexcept
       { return reverse_iterator(end()); }
 
-      _GLIBCXX17_CONSTEXPR const_reverse_iterator
+      const_reverse_iterator 
       rbegin() const noexcept
       { return const_reverse_iterator(end()); }
 
-      _GLIBCXX17_CONSTEXPR reverse_iterator
+      reverse_iterator 
       rend() noexcept
       { return reverse_iterator(begin()); }
 
-      _GLIBCXX17_CONSTEXPR const_reverse_iterator
+      const_reverse_iterator 
       rend() const noexcept
       { return const_reverse_iterator(begin()); }
 
-      _GLIBCXX17_CONSTEXPR const_iterator
+      const_iterator
       cbegin() const noexcept
       { return const_iterator(data()); }
 
-      _GLIBCXX17_CONSTEXPR const_iterator
+      const_iterator
       cend() const noexcept
       { return const_iterator(data() + _Nm); }
 
-      _GLIBCXX17_CONSTEXPR const_reverse_iterator
+      const_reverse_iterator 
       crbegin() const noexcept
       { return const_reverse_iterator(end()); }
 
-      _GLIBCXX17_CONSTEXPR const_reverse_iterator
+      const_reverse_iterator 
       crend() const noexcept
       { return const_reverse_iterator(begin()); }
 
       // Capacity.
-      constexpr size_type
+      constexpr size_type 
       size() const noexcept { return _Nm; }
 
-      constexpr size_type
+      constexpr size_type 
       max_size() const noexcept { return _Nm; }
 
-      _GLIBCXX_NODISCARD constexpr bool
+      constexpr bool 
       empty() const noexcept { return size() == 0; }
 
       // Element access.
       reference
-      operator[](size_type __n) noexcept
+      operator[](size_type __n)
       {	return _AT_Type::_S_ref(_M_elems, __n); }
 
       constexpr const_reference
       operator[](size_type __n) const noexcept
       { return _AT_Type::_S_ref(_M_elems, __n); }
 
-      _GLIBCXX17_CONSTEXPR reference
+      reference
       at(size_type __n)
       {
 	if (__n >= _Nm)
-	  std::__throw_out_of_range_fmt(__N("array::at: __n "
-				            "(which is %zu) >= _Nm "
-					    "(which is %zu)"),
-					__n, _Nm);
+	  std::__throw_out_of_range(__N("array::at"));
 	return _AT_Type::_S_ref(_M_elems, __n);
       }
 
@@ -153,43 +148,41 @@ namespace __profile
 	// Result of conditional expression must be an lvalue so use
 	// boolean ? lvalue : (throw-expr, lvalue)
 	return __n < _Nm ? _AT_Type::_S_ref(_M_elems, __n)
-	  : (std::__throw_out_of_range_fmt(__N("array::at: __n (which is %zu) "
-					       ">= _Nm (which is %zu)"),
-					   __n, _Nm),
+	  : (std::__throw_out_of_range(__N("array::at")),
 	     _AT_Type::_S_ref(_M_elems, 0));
       }
 
-      _GLIBCXX17_CONSTEXPR reference
-      front() noexcept
+      reference 
+      front()
       { return *begin(); }
 
-      constexpr const_reference
-      front() const noexcept
+      constexpr const_reference 
+      front() const
       { return _AT_Type::_S_ref(_M_elems, 0); }
 
-      _GLIBCXX17_CONSTEXPR reference
-      back() noexcept
+      reference 
+      back()
       { return _Nm ? *(end() - 1) : *end(); }
 
-      constexpr const_reference
-      back() const noexcept
+      constexpr const_reference 
+      back() const
       {
 	return _Nm ? _AT_Type::_S_ref(_M_elems, _Nm - 1)
-		   : _AT_Type::_S_ref(_M_elems, 0);
+ 	           : _AT_Type::_S_ref(_M_elems, 0);	  
       }
 
-      _GLIBCXX17_CONSTEXPR pointer
+      pointer
       data() noexcept
-      { return _AT_Type::_S_ptr(_M_elems); }
+      { return std::__addressof(_AT_Type::_S_ref(_M_elems, 0)); }
 
-      _GLIBCXX17_CONSTEXPR const_pointer
+      const_pointer
       data() const noexcept
-      { return _AT_Type::_S_ptr(_M_elems); }
+      { return std::__addressof(_AT_Type::_S_ref(_M_elems, 0)); }
     };
 
   // Array comparisons.
   template<typename _Tp, std::size_t _Nm>
-    inline bool
+    inline bool 
     operator==(const array<_Tp, _Nm>& __one, const array<_Tp, _Nm>& __two)
     { return std::equal(__one.begin(), __one.end(), __two.begin()); }
 
@@ -201,9 +194,9 @@ namespace __profile
   template<typename _Tp, std::size_t _Nm>
     inline bool
     operator<(const array<_Tp, _Nm>& __a, const array<_Tp, _Nm>& __b)
-    {
+    { 
       return std::lexicographical_compare(__a.begin(), __a.end(),
-					  __b.begin(), __b.end());
+					  __b.begin(), __b.end()); 
     }
 
   template<typename _Tp, std::size_t _Nm>
@@ -242,7 +235,7 @@ namespace __profile
     get(array<_Tp, _Nm>&& __arr) noexcept
     {
       static_assert(_Int < _Nm, "index is out of bounds");
-      return std::move(__profile::get<_Int>(__arr));
+      return std::move(get<_Int>(__arr));
     }
 
   template<std::size_t _Int, typename _Tp, std::size_t _Nm>
@@ -255,27 +248,20 @@ namespace __profile
     }
 } // namespace __profile
 
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
   // Tuple interface to class template array.
 
   /// tuple_size
   template<typename _Tp, std::size_t _Nm>
-    struct tuple_size<std::__profile::array<_Tp, _Nm>>
+    struct tuple_size<__profile::array<_Tp, _Nm>>
     : public integral_constant<std::size_t, _Nm> { };
 
   /// tuple_element
   template<std::size_t _Int, typename _Tp, std::size_t _Nm>
-    struct tuple_element<_Int, std::__profile::array<_Tp, _Nm>>
+    struct tuple_element<_Int, __profile::array<_Tp, _Nm>>
     {
       static_assert(_Int < _Nm, "index is out of bounds");
       typedef _Tp type;
     };
-
-  template<typename _Tp, std::size_t _Nm>
-    struct __is_tuple_like_impl<std::__profile::array<_Tp, _Nm>> : true_type
-    { };
-
-_GLIBCXX_END_NAMESPACE_VERSION
 } // namespace std
 
 #endif // _GLIBCXX_PROFILE_ARRAY

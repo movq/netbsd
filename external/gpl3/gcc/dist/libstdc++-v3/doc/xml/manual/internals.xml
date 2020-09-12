@@ -1,15 +1,18 @@
-<section xmlns="http://docbook.org/ns/docbook" version="5.0" 
-	 xml:id="appendix.porting.internals" xreflabel="Portin Internals">
+<sect1 id="appendix.porting.internals" xreflabel="Portin Internals">
 <?dbhtml filename="internals.html"?>
 
-<info><title>Porting to New Hardware or Operating Systems</title>
+<sect1info>
   <keywordset>
-    <keyword>ISO C++</keyword>
-    <keyword>internals</keyword>
+    <keyword>
+      ISO C++
+    </keyword>
+    <keyword>
+      internals
+    </keyword>
   </keywordset>
-</info>
+</sect1info>
 
-
+<title>Porting to New Hardware or Operating Systems</title>
 
 <para>
 </para>
@@ -42,8 +45,8 @@ a "host."  The comment at the top of <code>configure.ac</code> explains why.)
    </para>
 
 
-<section xml:id="internals.os"><info><title>Operating System</title></info>
-
+<sect2 id="internals.os">
+<title>Operating System</title>
 
 <para>If you are porting to a new operating system (as opposed to a new chip
 using an existing operating system), you will need to create a new
@@ -133,14 +136,6 @@ to an expression that yields 0 if and only if the system headers
 are exposing proper support for the related set of functions.  If defined,
 it must be 0 while bootstrapping the compiler/rebuilding the library.
    </para>
-   <para><code>_GLIBCXX_NO_OBSOLETE_ISINF_ISNAN_DYNAMIC</code> may be defined
-to an expression that yields 0 if and only if the system headers
-are exposing non-standard <code>isinf(double)</code> and
-<code>isnan(double)</code> functions in the global namespace. Those functions
-should be detected automatically by the <code>configure</code> script when
-libstdc++ is built but if their presence depends on compilation flags or
-other macros the static configuration can be overridden.
-   </para>
    <para>Finally, you should bracket the entire file in an include-guard, like
 this:
    </para>
@@ -156,11 +151,11 @@ this:
    <para>We recommend copying an existing <code>os_defines.h</code> to use as a
 starting point.
    </para>
-</section>
+</sect2>
 
 
-<section xml:id="internals.cpu"><info><title>CPU</title></info>
-
+<sect2 id="internals.cpu">
+<title>CPU</title>
 
 <para>If you are porting to a new chip (as opposed to a new operating system
 running on an existing chip), you will need to create a new directory in the
@@ -188,11 +183,11 @@ example, <code>alpha</code>, <code>alphaev5</code>, and <code>alphaev6</code> al
 appropriate for your chip.
    </para>
 
-</section>
+</sect2>
 
 
-<section xml:id="internals.char_types"><info><title>Character Types</title></info>
-
+<sect2 id="internals.char_types">
+<title>Character Types</title>
 
 <para>The library requires that you provide three header files to implement
 character classification, analogous to that provided by the C libraries
@@ -258,8 +253,11 @@ not have to include <code>&lt;ctype.h&gt;</code> in this header; it will always 
 included before <code>ctype_base.h</code> is included.
    </para>
 
-   <para>The next file to write is <code>ctype_configure_char.cc</code>.
-The first function that must be written is the <code>ctype&lt;char&gt;::ctype</code> constructor.  Here is the IRIX example:
+   <para>The next file to write is <code>ctype_noninline.h</code>, which also does
+not require include guards.  This file defines a few member functions
+that will be included in <code>include/bits/locale_facets.h</code>.  The first
+function that must be written is the <code>ctype&lt;char&gt;::ctype</code>
+constructor.  Here is the IRIX example:
    </para>
 
 <programlisting>
@@ -401,11 +399,11 @@ from <code>__low</code> up until <code>__high</code> into the vector given by
      }
 </programlisting>
 
-</section>
+</sect2>
 
 
-<section xml:id="internals.thread_safety"><info><title>Thread Safety</title></info>
-
+<sect2 id="internals.thread_safety">
+<title>Thread Safety</title>
 
 <para>The C++ library string functionality requires a couple of atomic
 operations to provide thread-safety.  If you don't take any special
@@ -484,11 +482,11 @@ must be equivalent to those provided here, but using atomic operations:
      }
 </programlisting>
 
-</section>
+</sect2>
 
 
-<section xml:id="internals.numeric_limits"><info><title>Numeric Limits</title></info>
-
+<sect2 id="internals.numeric_limits">
+<title>Numeric Limits</title>
 
 <para>The C++ library requires information about the fundamental data types,
 such as the minimum and maximum representable values of each type.
@@ -506,11 +504,11 @@ To take that approach, create a new file called <code>cpu_limits.h</code> in
 your CPU configuration directory (see <link linkend="internals.cpu">CPU</link>).
    </para>
 
-</section>
+</sect2>
 
 
-<section xml:id="internals.libtool"><info><title>Libtool</title></info>
-
+<sect2 id="internals.libtool">
+<title>Libtool</title>
 
 <para>The C++ library is compiled, archived and linked with libtool.
 Explaining the full workings of libtool is beyond the scope of this
@@ -545,6 +543,6 @@ operating system.
    </para>
 
 
-</section>
+</sect2>
 
-</section>
+</sect1>

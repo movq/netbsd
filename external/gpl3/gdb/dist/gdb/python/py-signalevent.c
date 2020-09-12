@@ -1,6 +1,6 @@
 /* Python interface to inferior signal stop events.
 
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright (C) 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,27 +17,37 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "py-stopevent.h"
 
-gdbpy_ref<>
-create_signal_event_object (enum gdb_signal stop_signal)
+static PyTypeObject signal_event_object_type;
+
+PyObject *
+create_signal_event_object (enum target_signal stop_signal)
 {
-  gdbpy_ref<> signal_event_obj
-    = create_stop_event_object (&signal_event_object_type);
+  const char *signal_name;
+  PyObject *signal_event_obj =
+      create_stop_event_object (&signal_event_object_type);
 
-  if (signal_event_obj == NULL)
-    return NULL;
+  if (!signal_event_obj)
+    goto fail;
 
-  const char *signal_name = gdb_signal_to_name (stop_signal);
+  signal_name = target_signal_to_name (stop_signal);
 
-  gdbpy_ref<> signal_name_obj (PyString_FromString (signal_name));
-  if (signal_name_obj == NULL)
-    return NULL;
-  if (evpy_add_attribute (signal_event_obj.get (),
+  if (evpy_add_attribute (signal_event_obj,
                           "stop_signal",
-                          signal_name_obj.get ()) < 0)
-    return NULL;
+                          PyString_FromString (signal_name)) < 0)
+    goto fail;
 
   return signal_event_obj;
+
+  fail:
+   Py_XDECREF (signal_event_obj);
+   return NULL;
 }
+
+GDBPY_NEW_EVENT_TYPE (signal,
+                      "gdb.SignalEvent",
+                      "SignalEvent",
+                      "GDB signal event object",
+                      stop_event_object_type,
+                      static);

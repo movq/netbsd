@@ -1,5 +1,6 @@
 /* Remote serial support interface definitions for GDB, the GNU Debugger.
-   Copyright (C) 1992-2019 Free Software Foundation, Inc.
+   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1998, 1999, 2000, 2001, 2004,
+   2005, 2006, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -34,26 +35,14 @@ struct ui_file;
 
 typedef void *serial_ttystate;
 struct serial;
-struct serial_ops;
-
-/* Create a new serial for OPS.  The new serial is not opened.  */
 
 /* Try to open NAME.  Returns a new `struct serial *' on success, NULL
-   on failure.  The new serial object has a reference count of 1.
-   Note that some open calls can block and, if possible, should be
-   written to be non-blocking, with calls to ui_look_hook so they can
-   be cancelled.  An async interface for open could be added to GDB if
-   necessary.  */
+   on failure.  Note that some open calls can block and, if possible, 
+   should be  written to be non-blocking, with calls to ui_look_hook 
+   so they can be cancelled.  An async interface for open could be
+   added to GDB if necessary.  */
 
 extern struct serial *serial_open (const char *name);
-
-/* Open a new serial stream using OPS.  */
-
-extern struct serial *serial_open_ops (const struct serial_ops *ops);
-
-/* Returns true if SCB is open.  */
-
-extern int serial_is_open (struct serial *scb);
 
 /* Find an already opened serial stream using a file handle.  */
 
@@ -63,20 +52,12 @@ extern struct serial *serial_for_fd (int fd);
 
 extern struct serial *serial_fdopen (const int fd);
 
-/* Push out all buffers, close the device and unref SCB.  */
+/* Push out all buffers, close the device and destroy SCB.  */
 
 extern void serial_close (struct serial *scb);
 
-/* Increment reference count of SCB.  */
-
-extern void serial_ref (struct serial *scb);
-
-/* Decrement reference count of SCB.  */
-
-extern void serial_unref (struct serial *scb);
-
-/* Create a pipe, and put the read end in FILDES[0], and the write end
-   in FILDES[1].  Returns 0 for success, negative value for error (in
+/* Create a pipe, and put the read end in files[0], and the write end
+   in filde[1].  Returns 0 for success, negative value for error (in
    which case errno contains the error).  */
 
 extern int gdb_pipe (int fildes[2]);
@@ -111,10 +92,10 @@ enum serial_rc {
 
 extern int serial_readchar (struct serial *scb, int timeout);
 
-/* Write COUNT bytes from BUF to the port SCB.  Returns 0 for
+/* Write LEN chars from STRING to the port SCB.  Returns 0 for
    success, non-zero for failure.  */
 
-extern int serial_write (struct serial *scb, const void *buf, size_t count);
+extern int serial_write (struct serial *scb, const char *str, int len);
 
 /* Write a printf style string onto the serial port.  */
 
@@ -169,6 +150,16 @@ extern void serial_print_tty_state (struct serial *scb,
 				    serial_ttystate ttystate,
 				    struct ui_file *);
 
+/* Set the tty state to NEW_TTYSTATE, where OLD_TTYSTATE is the
+   current state (generally obtained from a recent call to
+   serial_get_tty_state()), but be careful not to discard any input.
+   This means that we never switch in or out of raw mode, even if
+   NEW_TTYSTATE specifies a switch.  */
+
+extern int serial_noflush_set_tty_state (struct serial *scb,
+					 serial_ttystate new_ttystate,
+					 serial_ttystate old_ttystate);
+
 /* Set the baudrate to the decimal value supplied.  Returns 0 for
    success, -1 for failure.  */
 
@@ -182,14 +173,6 @@ extern int serial_setbaudrate (struct serial *scb, int rate);
 #define SERIAL_2_STOPBITS 3
 
 extern int serial_setstopbits (struct serial *scb, int num);
-
-#define GDBPARITY_NONE     0
-#define GDBPARITY_ODD      1
-#define GDBPARITY_EVEN     2
-
-/* Set parity for serial port. Returns 0 for success, -1 for failure.  */
-
-extern int serial_setparity (struct serial *scb, int parity);
 
 /* Asynchronous serial interface: */
 
@@ -209,6 +192,13 @@ typedef void (serial_event_ftype) (struct serial *scb, void *context);
 extern void serial_async (struct serial *scb,
 			  serial_event_ftype *handler, void *context);
 
+/* Provide direct access to the underlying FD (if any) used to
+   implement the serial device.  This interface is clearly
+   deprecated.  Will call internal_error() if the operation isn't
+   applicable to the current serial device.  */
+
+extern int deprecated_serial_fd (struct serial *scb);
+
 /* Trace/debug mechanism.
 
    serial_debug() enables/disables internal debugging.
@@ -223,24 +213,27 @@ extern int serial_debug_p (struct serial *scb);
 
 struct serial
   {
-    /* serial objects are ref counted (but not the underlying
-       connection, just the object's lifetime in memory).  */
-    int refcnt;
-
     int fd;			/* File descriptor */
     /* File descriptor for a separate error stream that should be
        immediately forwarded to gdb_stderr.  This may be -1.
        If != -1, this descriptor should be non-blocking or
        ops->avail should be non-NULL.  */
     int error_fd;               
-    const struct serial_ops *ops; /* Function vector */
+    struct serial_ops *ops;	/* Function vector */
     void *state;       		/* Local context info for open FD */
     serial_ttystate ttystate;	/* Not used (yet) */
     int bufcnt;			/* Amount of data remaining in receive
 				   buffer.  -ve for sticky errors.  */
     unsigned char *bufp;	/* Current byte */
     unsigned char buf[BUFSIZ];	/* Da buffer itself */
+    int current_timeout;	/* (ser-unix.c termio{,s} only), last
+				   value of VTIME */
+    int timeout_remaining;	/* (ser-unix.c termio{,s} only), we
+				   still need to wait for this many
+				   more seconds.  */
+    char *name;			/* The name of the device or host */
     struct serial *next;	/* Pointer to the next `struct serial *' */
+    int refcnt;			/* Number of pointers to this block */
     int debug_p;		/* Trace this serial devices operation.  */
     int async_state;		/* Async internal state.  */
     void *async_context;	/* Async event thread's context */
@@ -249,12 +242,13 @@ struct serial
 
 struct serial_ops
   {
-    const char *name;
+    char *name;
+    struct serial_ops *next;
     int (*open) (struct serial *, const char *name);
     void (*close) (struct serial *);
     int (*fdopen) (struct serial *, int fd);
     int (*readchar) (struct serial *, int timeout);
-    int (*write) (struct serial *, const void *buf, size_t count);
+    int (*write) (struct serial *, const char *str, int len);
     /* Discard pending output */
     int (*flush_output) (struct serial *);
     /* Discard pending input */
@@ -266,11 +260,10 @@ struct serial_ops
     int (*set_tty_state) (struct serial *, serial_ttystate);
     void (*print_tty_state) (struct serial *, serial_ttystate,
 			     struct ui_file *);
+    int (*noflush_set_tty_state) (struct serial *, serial_ttystate,
+				  serial_ttystate);
     int (*setbaudrate) (struct serial *, int rate);
     int (*setstopbits) (struct serial *, int num);
-    /* Set the value PARITY as parity setting for serial object.
-       Return 0 in the case of success.  */
-    int (*setparity) (struct serial *, int parity);
     /* Wait for output to drain.  */
     int (*drain_output) (struct serial *);
     /* Change the serial device into/out of asynchronous mode, call
@@ -285,7 +278,7 @@ struct serial_ops
     int (*write_prim)(struct serial *scb, const void *buf, size_t count);
     /* Return that number of bytes that can be read from FD
        without blocking.  Return value of -1 means that the
-       read will not block even if less that requested bytes
+       the read will not block even if less that requested bytes
        are available.  */
     int (*avail)(struct serial *scb, int fd);
 
@@ -300,11 +293,11 @@ struct serial_ops
 
 /* Add a new serial interface to the interface list.  */
 
-extern void serial_add_interface (const struct serial_ops * optable);
+extern void serial_add_interface (struct serial_ops * optable);
 
 /* File in which to record the remote debugging session.  */
 
-extern void serial_log_command (struct target_ops *self, const char *);
+extern void serial_log_command (const char *);
 
 #ifdef USE_WIN32API
 

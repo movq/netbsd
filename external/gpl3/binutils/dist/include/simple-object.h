@@ -1,5 +1,5 @@
 /* simple-object.h -- simple routines to read and write object files
-   Copyright (C) 2010-2020 Free Software Foundation, Inc.
+   Copyright 2010 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Google.
 
 This program is free software; you can redistribute it and/or modify it
@@ -117,15 +117,14 @@ extern simple_object_attributes *
 simple_object_fetch_attributes (simple_object_read *simple_object,
 				const char **errmsg, int *err);
 
-/* Merge the FROM attributes into TO.  If two objects with these
-   attributes could be linked together without error, returns NULL.
-   Otherwise, returns an error message, and sets *ERR to an errno
-   value or 0 if there isn't one.  */
+/* Compare ATTRS1 and ATTRS2.  If they could be linked together
+   without error, return NULL.  Otherwise, return an error message,
+   set *ERR to an errno value or 0 if there isn't one.  */
 
 extern const char *
-simple_object_attributes_merge (simple_object_attributes *to,
-				simple_object_attributes *from,
-				int *err);
+simple_object_attributes_compare (simple_object_attributes *attrs1,
+			    simple_object_attributes *attrs2,
+			    int *err);
 
 /* Release all resources associated with ATTRS.  */
 
@@ -196,17 +195,6 @@ simple_object_write_to_file (simple_object_write *simple_object,
 
 extern void
 simple_object_release_write (simple_object_write *);
-
-/* Copy LTO debug sections from SRC_OBJECT to DEST.
-   If RENAME is true, rename LTO debug section into debug section (i.e.
-   when producing final binary) and if it is false, keep the sections with
-   original names (when incrementally linking).
-   If an error occurs, return the errno value in ERR and an error string.  */
-
-extern const char *
-simple_object_copy_lto_debug_sections (simple_object_read *src_object,
-				       const char *dest,
-				       int *err, int rename);
 
 #ifdef __cplusplus
 }

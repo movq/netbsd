@@ -1,9 +1,8 @@
-/* DO NOT EDIT!  -*- buffer-read-only: t -*- vi:set ro:  */
 /* Instruction opcode table for frv.
 
 THIS FILE IS MACHINE GENERATED WITH CGEN.
 
-Copyright (C) 1996-2020 Free Software Foundation, Inc.
+Copyright 1996-2007 Free Software Foundation, Inc.
 
 This file is part of the GNU Binutils and/or GDB, the GNU debugger.
 
@@ -32,12 +31,8 @@ This file is part of the GNU Binutils and/or GDB, the GNU debugger.
 #include "libiberty.h"
 
 /* -- opc.c */
-#include "opintl.h"
 #include "elf/frv.h"
 #include <stdio.h>
-
-/* DEBUG appears below as argument of OP macro.  */
-#undef DEBUG
 
 /* Returns TRUE if {MAJOR,MACH} is a major branch of the FRV
    development tree.  */
@@ -236,7 +231,7 @@ static CGEN_ATTR_VALUE_ENUM_TYPE fr400_unit_mapping[] =
 /* NIL      */     UNIT_NIL,
 /* I0       */     UNIT_I0,
 /* I1       */     UNIT_I1,
-/* I01      */     UNIT_I01,
+/* I01      */     UNIT_I01, 
 /* I2       */     UNIT_NIL, /* no I2 or I3 unit */
 /* I3       */     UNIT_NIL,
 /* IALL     */     UNIT_I01, /* only I0 and I1 units */
@@ -271,7 +266,7 @@ static CGEN_ATTR_VALUE_ENUM_TYPE fr450_unit_mapping[] =
 /* NIL      */     UNIT_NIL,
 /* I0       */     UNIT_I0,
 /* I1       */     UNIT_I1,
-/* I01      */     UNIT_I01,
+/* I01      */     UNIT_I01, 
 /* I2       */     UNIT_NIL, /* no I2 or I3 unit */
 /* I3       */     UNIT_NIL,
 /* IALL     */     UNIT_I01, /* only I0 and I1 units */
@@ -303,7 +298,7 @@ static CGEN_ATTR_VALUE_ENUM_TYPE fr500_unit_mapping[] =
 /* NIL      */     UNIT_NIL,
 /* I0       */     UNIT_I0,
 /* I1       */     UNIT_I1,
-/* I01      */     UNIT_I01,
+/* I01      */     UNIT_I01, 
 /* I2       */     UNIT_NIL, /* no I2 or I3 unit */
 /* I3       */     UNIT_NIL,
 /* IALL     */     UNIT_I01, /* only I0 and I1 units */
@@ -335,10 +330,10 @@ static CGEN_ATTR_VALUE_ENUM_TYPE fr550_unit_mapping[] =
 /* NIL      */     UNIT_NIL,
 /* I0       */     UNIT_I0,
 /* I1       */     UNIT_I1,
-/* I01      */     UNIT_I01,
+/* I01      */     UNIT_I01, 
 /* I2       */     UNIT_I2,
 /* I3       */     UNIT_I3,
-/* IALL     */     UNIT_IALL,
+/* IALL     */     UNIT_IALL, 
 /* FM0      */     UNIT_FM0,
 /* FM1      */     UNIT_FM1,
 /* FM01     */     UNIT_FM01,
@@ -455,9 +450,9 @@ add_next_to_vliw (FRV_VLIW *vliw, CGEN_ATTR_VALUE_ENUM_TYPE unit)
 
   if (next <= 0)
     {
-      /* xgettext:c-format */
-      opcodes_error_handler (_("internal error: bad vliw->next_slot value"));
-      abort ();
+      fprintf (stderr, "frv-opc.c line %d: bad vliw->next_slot value.\n",
+	       __LINE__);
+      abort (); /* Should never happen.  */
     }
 
   /* The table is sorted by units allowed within slots, so vliws with
@@ -765,8 +760,8 @@ fr500_check_insn_major_constraints (FRV_VLIW *vliw, CGEN_ATTR_VALUE_ENUM_TYPE ma
 	&&   ! find_major_in_vliw (vliw, FR500_MAJOR_F_6)
 	&&   ! find_major_in_vliw (vliw, FR500_MAJOR_F_7);
     default:
-      /* xgettext:c-format */
-      opcodes_error_handler (_("internal error: bad major code"));
+      fprintf (stderr, "frv-opc.c, line %d: bad major code, aborting.\n",
+	       __LINE__);
       abort ();
       break;
     }
@@ -800,7 +795,7 @@ check_insn_major_constraints (FRV_VLIW *vliw,
 int
 frv_vliw_add_insn (FRV_VLIW *vliw, const CGEN_INSN *insn)
 {
-  int slot_index;
+  int index;
   CGEN_ATTR_VALUE_ENUM_TYPE major;
   CGEN_ATTR_VALUE_ENUM_TYPE unit;
   VLIW_COMBO *new_vliw;
@@ -808,16 +803,16 @@ frv_vliw_add_insn (FRV_VLIW *vliw, const CGEN_INSN *insn)
   if (vliw->constraint_violation || CGEN_INSN_INVALID_P (insn))
     return 1;
 
-  slot_index = vliw->next_slot;
-  if (slot_index >= FRV_VLIW_SIZE)
+  index = vliw->next_slot;
+  if (index >= FRV_VLIW_SIZE)
     return 1;
 
   unit = CGEN_INSN_ATTR_VALUE (insn, CGEN_INSN_UNIT);
   if (unit == UNIT_NIL)
     {
-      /* xgettext:c-format */
-      opcodes_error_handler (_("internal error: bad insn unit"));
-      abort ();
+      fprintf (stderr, "frv-opc.c line %d: bad insn unit.\n",
+	       __LINE__);
+      abort (); /* No UNIT specified for this insn in frv.cpu.  */
     }
 
   switch (vliw->mach)
@@ -836,7 +831,7 @@ frv_vliw_add_insn (FRV_VLIW *vliw, const CGEN_INSN *insn)
       break;
     }
 
-  if (slot_index <= 0)
+  if (index <= 0)
     {
       /* Any insn can be added to slot 0.  */
       while (! match_unit (vliw, unit, (*vliw->current_vliw)[0]))
@@ -856,8 +851,8 @@ frv_vliw_add_insn (FRV_VLIW *vliw, const CGEN_INSN *insn)
       if (new_vliw && check_insn_major_constraints (vliw, major, insn))
 	{
 	  vliw->current_vliw = new_vliw;
-	  vliw->major[slot_index] = major;
-	  vliw->insn[slot_index] = insn;
+	  vliw->major[index] = major;
+	  vliw->insn[index] = insn;
 	  vliw->next_slot++;
 	  return 0;
 	}
@@ -891,7 +886,11 @@ static unsigned int dis_hash_insn (const char *, CGEN_INSN_INT);
 
 /* Instruction formats.  */
 
+#if defined (__STDC__) || defined (ALMOST_STDC) || defined (HAVE_STRINGIZE)
 #define F(f) & frv_cgen_ifld_table[FRV_##f]
+#else
+#define F(f) & frv_cgen_ifld_table[FRV_/**/f]
+#endif
 static const CGEN_IFMT ifmt_empty ATTRIBUTE_UNUSED = {
   0, 0, 0x0, { { 0 } }
 };
@@ -1502,8 +1501,16 @@ static const CGEN_IFMT ifmt_fnop ATTRIBUTE_UNUSED = {
 
 #undef F
 
+#if defined (__STDC__) || defined (ALMOST_STDC) || defined (HAVE_STRINGIZE)
 #define A(a) (1 << CGEN_INSN_##a)
+#else
+#define A(a) (1 << CGEN_INSN_/**/a)
+#endif
+#if defined (__STDC__) || defined (ALMOST_STDC) || defined (HAVE_STRINGIZE)
 #define OPERAND(op) FRV_OPERAND_##op
+#else
+#define OPERAND(op) FRV_OPERAND_/**/op
+#endif
 #define MNEM CGEN_SYNTAX_MNEMONIC /* syntax value for mnemonic */
 #define OP(field) CGEN_SYNTAX_MAKE_FIELD (OPERAND (field))
 
@@ -5982,7 +5989,11 @@ static const CGEN_OPCODE frv_cgen_insn_opcode_table[MAX_INSNS] =
 
 /* Formats for ALIAS macro-insns.  */
 
+#if defined (__STDC__) || defined (ALMOST_STDC) || defined (HAVE_STRINGIZE)
 #define F(f) & frv_cgen_ifld_table[FRV_##f]
+#else
+#define F(f) & frv_cgen_ifld_table[FRV_/**/f]
+#endif
 static const CGEN_IFMT ifmt_nop ATTRIBUTE_UNUSED = {
   32, 32, 0x7fffffff, { { F (F_PACK) }, { F (F_GRK) }, { F (F_OP) }, { F (F_GRI) }, { F (F_D12) }, { 0 } }
 };
@@ -6015,8 +6026,16 @@ static const CGEN_IFMT ifmt_cmov ATTRIBUTE_UNUSED = {
 
 /* Each non-simple macro entry points to an array of expansion possibilities.  */
 
+#if defined (__STDC__) || defined (ALMOST_STDC) || defined (HAVE_STRINGIZE)
 #define A(a) (1 << CGEN_INSN_##a)
+#else
+#define A(a) (1 << CGEN_INSN_/**/a)
+#endif
+#if defined (__STDC__) || defined (ALMOST_STDC) || defined (HAVE_STRINGIZE)
 #define OPERAND(op) FRV_OPERAND_##op
+#else
+#define OPERAND(op) FRV_OPERAND_/**/op
+#endif
 #define MNEM CGEN_SYNTAX_MNEMONIC /* syntax value for mnemonic */
 #define OP(field) CGEN_SYNTAX_MAKE_FIELD (OPERAND (field))
 
@@ -6126,13 +6145,15 @@ static const CGEN_OPCODE frv_cgen_macro_insn_opcode_table[] =
    Targets are free to override CGEN_{ASM,DIS}_HASH_P in the .opc file.  */
 
 static int
-asm_hash_insn_p (const CGEN_INSN *insn ATTRIBUTE_UNUSED)
+asm_hash_insn_p (insn)
+     const CGEN_INSN *insn ATTRIBUTE_UNUSED;
 {
   return CGEN_ASM_HASH_P (insn);
 }
 
 static int
-dis_hash_insn_p (const CGEN_INSN *insn)
+dis_hash_insn_p (insn)
+     const CGEN_INSN *insn;
 {
   /* If building the hash table and the NO-DIS attribute is present,
      ignore.  */
@@ -6164,7 +6185,8 @@ dis_hash_insn_p (const CGEN_INSN *insn)
    Targets are free to override CGEN_{ASM,DIS}_HASH in the .opc file.  */
 
 static unsigned int
-asm_hash_insn (const char *mnem)
+asm_hash_insn (mnem)
+     const char * mnem;
 {
   return CGEN_ASM_HASH (mnem);
 }
@@ -6173,8 +6195,9 @@ asm_hash_insn (const char *mnem)
    VALUE is the first base_insn_bitsize bits as an int in host order.  */
 
 static unsigned int
-dis_hash_insn (const char *buf ATTRIBUTE_UNUSED,
-		     CGEN_INSN_INT value ATTRIBUTE_UNUSED)
+dis_hash_insn (buf, value)
+     const char * buf ATTRIBUTE_UNUSED;
+     CGEN_INSN_INT value ATTRIBUTE_UNUSED;
 {
   return CGEN_DIS_HASH (buf, value);
 }
@@ -6200,10 +6223,7 @@ frv_cgen_init_opcode_table (CGEN_CPU_DESC cd)
   const CGEN_OPCODE *oc = & frv_cgen_macro_insn_opcode_table[0];
   CGEN_INSN *insns = xmalloc (num_macros * sizeof (CGEN_INSN));
 
-  /* This test has been added to avoid a warning generated
-     if memset is called with a third argument of value zero.  */
-  if (num_macros >= 1)
-    memset (insns, 0, num_macros * sizeof (CGEN_INSN));
+  memset (insns, 0, num_macros * sizeof (CGEN_INSN));
   for (i = 0; i < num_macros; ++i)
     {
       insns[i].base = &ib[i];

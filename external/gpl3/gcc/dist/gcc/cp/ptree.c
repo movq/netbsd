@@ -1,5 +1,7 @@
 /* Prints out trees in human readable form.
-   Copyright (C) 1992-2019 Free Software Foundation, Inc.
+   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1998,
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
+   Free Software Foundation, Inc.
    Hacked by Michael Tiemann (tiemann@cygnus.com)
 
 This file is part of GCC.
@@ -22,8 +24,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
+#include "tm.h"
+#include "tree.h"
 #include "cp-tree.h"
-#include "print-tree.h"
 
 void
 cxx_print_decl (FILE *file, tree node, int indent)
@@ -50,7 +53,6 @@ cxx_print_decl (FILE *file, tree node, int indent)
     }
   else if (TREE_CODE (node) == TEMPLATE_DECL)
     {
-      print_node (file, "parms", DECL_TEMPLATE_PARMS (node), indent + 4);
       indent_to (file, indent + 3);
       fprintf (file, " full-name \"%s\"",
 	       decl_as_string (node, TFF_TEMPLATE_HEADER));
@@ -63,7 +65,7 @@ cxx_print_decl (FILE *file, tree node, int indent)
       && DECL_PENDING_INLINE_INFO (node))
     fprintf (file, " pending-inline-info %p",
 	     (void *) DECL_PENDING_INLINE_INFO (node));
-  if (VAR_OR_FUNCTION_DECL_P (node)
+  if ((TREE_CODE (node) == FUNCTION_DECL || TREE_CODE (node) == VAR_DECL)
       && DECL_TEMPLATE_INFO (node))
     fprintf (file, " template-info %p",
 	     (void *) DECL_TEMPLATE_INFO (node));
@@ -74,12 +76,9 @@ cxx_print_type (FILE *file, tree node, int indent)
 {
   switch (TREE_CODE (node))
     {
-    case BOUND_TEMPLATE_TEMPLATE_PARM:
-      print_node (file, "args", TYPE_TI_ARGS (node), indent + 4);
-      gcc_fallthrough ();
-
     case TEMPLATE_TYPE_PARM:
     case TEMPLATE_TEMPLATE_PARM:
+    case BOUND_TEMPLATE_TEMPLATE_PARM:
       indent_to (file, indent + 3);
       fprintf (file, "index %d level %d orig_level %d",
 	       TEMPLATE_TYPE_IDX (node), TEMPLATE_TYPE_LEVEL (node),
@@ -98,15 +97,6 @@ cxx_print_type (FILE *file, tree node, int indent)
 
     case DECLTYPE_TYPE:
       print_node (file, "expr", DECLTYPE_TYPE_EXPR (node), indent + 4);
-      return;
-
-    case TYPENAME_TYPE:
-      print_node (file, "fullname", TYPENAME_TYPE_FULLNAME (node),
-		  indent + 4);
-      return;
-
-    case TYPE_PACK_EXPANSION:
-      print_node (file, "args", PACK_EXPANSION_EXTRA_ARGS (node), indent + 4);
       return;
 
     default:
@@ -134,9 +124,9 @@ cxx_print_type (FILE *file, tree node, int indent)
     fputs (" X()", file);
   if (TYPE_HAS_CONVERSION (node))
     fputs (" has-type-conversion", file);
-  if (TYPE_HAS_COPY_CTOR (node))
+  if (TYPE_HAS_INIT_REF (node))
     {
-      if (TYPE_HAS_CONST_COPY_CTOR (node))
+      if (TYPE_HAS_CONST_INIT_REF (node))
 	fputs (" X(constX&)", file);
       else
 	fputs (" X(X&)", file);
@@ -149,8 +139,11 @@ cxx_print_type (FILE *file, tree node, int indent)
     fputs (" delete", file);
   if (TYPE_GETS_DELETE (node) & 2)
     fputs (" delete[]", file);
-  if (TYPE_HAS_COPY_ASSIGN (node))
+  if (TYPE_HAS_ASSIGN_REF (node))
     fputs (" this=(X&)", file);
+  if (CLASSTYPE_SORTED_FIELDS (node))
+    fprintf (file, " sorted-fields %p",
+	     (void *) CLASSTYPE_SORTED_FIELDS (node));
 
   if (TREE_CODE (node) == RECORD_TYPE)
     {
@@ -168,41 +161,29 @@ cxx_print_type (FILE *file, tree node, int indent)
     }
 }
 
+
+static void
+cxx_print_binding (FILE *stream, cxx_binding *binding, const char *prefix)
+{
+  fprintf (stream, "%s <%p>",
+	   prefix, (void *) binding);
+}
+
 void
 cxx_print_identifier (FILE *file, tree node, int indent)
 {
   if (indent == 0)
     fprintf (file, " ");
   else
-    indent_to (file, indent + 4);
-  fprintf (file, "%s local bindings <%p>", get_identifier_kind_name (node),
-	   (void *) IDENTIFIER_BINDING (node));
-}
-
-void
-cxx_print_lambda_node (FILE *file, tree node, int indent)
-{
-  if (LAMBDA_EXPR_MUTABLE_P (node))
-    fprintf (file, " /mutable");
-  fprintf (file, " default_capture_mode=[");
-  switch (LAMBDA_EXPR_DEFAULT_CAPTURE_MODE (node))
-    {
-    case CPLD_NONE:
-      fprintf (file, "NONE");
-      break;
-    case CPLD_COPY:
-      fprintf (file, "COPY");
-      break;
-    case CPLD_REFERENCE:
-      fprintf (file, "CPLD_REFERENCE");
-      break;
-    default:
-      fprintf (file, "??");
-      break;
-    }
-  fprintf (file, "] ");
-  print_node (file, "capture_list", LAMBDA_EXPR_CAPTURE_LIST (node), indent + 4);
-  print_node (file, "this_capture", LAMBDA_EXPR_THIS_CAPTURE (node), indent + 4);
+    indent_to (file, indent);
+  cxx_print_binding (file, IDENTIFIER_NAMESPACE_BINDINGS (node), "bindings");
+  if (indent == 0)
+    fprintf (file, " ");
+  else
+    indent_to (file, indent);
+  cxx_print_binding (file, IDENTIFIER_BINDING (node), "local bindings");
+  print_node (file, "label", IDENTIFIER_LABEL_VALUE (node), indent + 4);
+  print_node (file, "template", IDENTIFIER_TEMPLATE (node), indent + 4);
 }
 
 void
@@ -215,69 +196,18 @@ cxx_print_xnode (FILE *file, tree node, int indent)
       print_node (file, "binfo", BASELINK_BINFO (node), indent + 4);
       print_node (file, "access_binfo", BASELINK_ACCESS_BINFO (node),
 		  indent + 4);
-      print_node (file, "optype", BASELINK_OPTYPE (node), indent + 4);
       break;
     case OVERLOAD:
       print_node (file, "function", OVL_FUNCTION (node), indent+4);
-      print_node (file, "next", OVL_CHAIN (node), indent+4);
+      print_node (file, "chain", TREE_CHAIN (node), indent+4);
       break;
     case TEMPLATE_PARM_INDEX:
-      print_node (file, "decl", TEMPLATE_PARM_DECL (node), indent+4);
       indent_to (file, indent + 3);
       fprintf (file, "index %d level %d orig_level %d",
 	       TEMPLATE_PARM_IDX (node), TEMPLATE_PARM_LEVEL (node),
 	       TEMPLATE_PARM_ORIG_LEVEL (node));
       break;
-    case TEMPLATE_INFO:
-      print_node (file, "template", TI_TEMPLATE (node), indent+4);
-      print_node (file, "args", TI_ARGS (node), indent+4);
-      if (TI_PENDING_TEMPLATE_FLAG (node))
-	{
-	  indent_to (file, indent + 3);
-	  fprintf (file, "pending_template");
-	}
-      break;
-    case CONSTRAINT_INFO:
-      {
-        tree_constraint_info *cinfo = (tree_constraint_info *)node;
-        if (cinfo->template_reqs)
-          print_node (file, "template_reqs", cinfo->template_reqs, indent+4);
-        if (cinfo->declarator_reqs)
-          print_node (file, "declarator_reqs", cinfo->declarator_reqs,
-		      indent+4);
-        print_node (file, "associated_constr",
-                          cinfo->associated_constr, indent+4);
-        break;
-      }
-    case ARGUMENT_PACK_SELECT:
-      print_node (file, "pack", ARGUMENT_PACK_SELECT_FROM_PACK (node),
-		  indent+4);
-      indent_to (file, indent + 3);
-      fprintf (file, "index %d", ARGUMENT_PACK_SELECT_INDEX (node));
-      break;
-    case DEFERRED_NOEXCEPT:
-      print_node (file, "pattern", DEFERRED_NOEXCEPT_PATTERN (node), indent+4);
-      print_node (file, "args", DEFERRED_NOEXCEPT_ARGS (node), indent+4);
-      break;
-    case TRAIT_EXPR:
-      indent_to (file, indent+4);
-      fprintf (file, "kind %d", TRAIT_EXPR_KIND (node));
-      print_node (file, "type 1", TRAIT_EXPR_TYPE1 (node), indent+4);
-      if (TRAIT_EXPR_TYPE2 (node))
-	print_node (file, "type 2", TRAIT_EXPR_TYPE2 (node), indent+4);
-      break;
-    case LAMBDA_EXPR:
-      cxx_print_lambda_node (file, node, indent);
-      break;
     default:
       break;
     }
-}
-
-/* Print the node NODE on standard error, for debugging.  */
-
-DEBUG_FUNCTION void
-debug_tree (cp_expr node)
-{
-  debug_tree (node.get_value());
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: position.h,v 1.1.1.1 2016/01/13 18:41:48 christos Exp $	*/
+/*	$NetBSD: position.h,v 1.1 2016/01/13 18:41:48 christos Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 1989, 1990, 1991, 1992 Free Software Foundation, Inc.

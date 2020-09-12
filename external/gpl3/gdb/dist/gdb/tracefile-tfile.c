@@ -1,6 +1,6 @@
 /* Trace file TFILE format support in GDB.
 
-   Copyright (C) 1997-2019 Free Software Foundation, Inc.
+   Copyright (C) 1997-2015 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,55 +20,18 @@
 #include "defs.h"
 #include "tracefile.h"
 #include "readline/tilde.h"
-#include "common/filestuff.h"
-#include "common/rsp-low.h" /* bin2hex */
+#include "filestuff.h"
+#include "rsp-low.h" /* bin2hex */
 #include "regcache.h"
 #include "inferior.h"
 #include "gdbthread.h"
 #include "exec.h" /* exec_bfd */
 #include "completer.h"
 #include "filenames.h"
-#include "remote.h"
-#include "xml-tdesc.h"
-#include "target-descriptions.h"
-#include "common/buffer.h"
-#include <algorithm>
 
 #ifndef O_LARGEFILE
 #define O_LARGEFILE 0
 #endif
-
-/* The tfile target.  */
-
-static const target_info tfile_target_info = {
-  "tfile",
-  N_("Local trace dump file"),
-  N_("Use a trace file as a target.  Specify the filename of the trace file.")
-};
-
-class tfile_target final : public tracefile_target
-{
- public:
-  const target_info &info () const override
-  { return tfile_target_info; }
-
-  void close () override;
-  void fetch_registers (struct regcache *, int) override;
-  enum target_xfer_status xfer_partial (enum target_object object,
-						const char *annex,
-						gdb_byte *readbuf,
-						const gdb_byte *writebuf,
-						ULONGEST offset, ULONGEST len,
-						ULONGEST *xfered_len) override;
-  void files_info () override;
-  int trace_find (enum trace_find_type type, int num,
-			  CORE_ADDR addr1, CORE_ADDR addr2, int *tpp) override;
-  bool get_trace_state_variable_value (int tsv, LONGEST *val) override;
-  traceframe_info_up traceframe_info () override;
-
-  void get_tracepoint_status (struct breakpoint *tp,
-			      struct uploaded_tp *utp) override;
-};
 
 /* TFILE trace writer.  */
 
@@ -121,7 +84,7 @@ tfile_start (struct trace_file_writer *self, const char *filename)
     = (struct tfile_trace_file_writer *) self;
 
   writer->pathname = tilde_expand (filename);
-  writer->fp = gdb_fopen_cloexec (writer->pathname, "wb").release ();
+  writer->fp = gdb_fopen_cloexec (writer->pathname, "wb");
   if (writer->fp == NULL)
     error (_("Unable to open file '%s' for saving trace data (%s)"),
 	   writer->pathname, safe_strerror (errno));
@@ -170,7 +133,7 @@ tfile_write_status (struct trace_file_writer *self,
   fprintf (writer->fp, "status %c;%s",
 	   (ts->running ? '1' : '0'), stop_reason_names[ts->stop_reason]);
   if (ts->stop_reason == tracepoint_error
-      || ts->stop_reason == trace_stop_command)
+      || ts->stop_reason == tstop_command)
     {
       char *buf = (char *) alloca (strlen (ts->stop_desc) * 2 + 1);
 
@@ -224,7 +187,7 @@ static void
 tfile_write_uploaded_tsv (struct trace_file_writer *self,
 			  struct uploaded_tsv *utsv)
 {
-  char *buf = NULL;
+  char *buf = "";
   struct tfile_trace_file_writer *writer
     = (struct tfile_trace_file_writer *) self;
 
@@ -236,7 +199,7 @@ tfile_write_uploaded_tsv (struct trace_file_writer *self,
 
   fprintf (writer->fp, "tsv %x:%s:%x:%s\n",
 	   utsv->number, phex_nz (utsv->initial_value, 8),
-	   utsv->builtin, buf != NULL ? buf : "");
+	   utsv->builtin, buf);
 
   if (utsv->name)
     xfree (buf);
@@ -253,6 +216,8 @@ tfile_write_uploaded_tp (struct trace_file_writer *self,
 {
   struct tfile_trace_file_writer *writer
     = (struct tfile_trace_file_writer *) self;
+  int a;
+  char *act;
   char buf[MAX_TRACE_UPLOAD];
 
   fprintf (writer->fp, "tp T%x:%s:%c:%x:%x",
@@ -262,32 +227,31 @@ tfile_write_uploaded_tp (struct trace_file_writer *self,
     fprintf (writer->fp, ":F%x", utp->orig_size);
   if (utp->cond)
     fprintf (writer->fp,
-	     ":X%x,%s", (unsigned int) strlen (utp->cond.get ()) / 2,
-	     utp->cond.get ());
+	     ":X%x,%s", (unsigned int) strlen (utp->cond) / 2,
+	     utp->cond);
   fprintf (writer->fp, "\n");
-  for (const auto &act : utp->actions)
+  for (a = 0; VEC_iterate (char_ptr, utp->actions, a, act); ++a)
     fprintf (writer->fp, "tp A%x:%s:%s\n",
-	     utp->number, phex_nz (utp->addr, sizeof (utp->addr)), act.get ());
-  for (const auto &act : utp->step_actions)
+	     utp->number, phex_nz (utp->addr, sizeof (utp->addr)), act);
+  for (a = 0; VEC_iterate (char_ptr, utp->step_actions, a, act); ++a)
     fprintf (writer->fp, "tp S%x:%s:%s\n",
-	     utp->number, phex_nz (utp->addr, sizeof (utp->addr)), act.get ());
+	     utp->number, phex_nz (utp->addr, sizeof (utp->addr)), act);
   if (utp->at_string)
     {
       encode_source_string (utp->number, utp->addr,
-			    "at", utp->at_string.get (),
-			    buf, MAX_TRACE_UPLOAD);
+			    "at", utp->at_string, buf, MAX_TRACE_UPLOAD);
       fprintf (writer->fp, "tp Z%s\n", buf);
     }
   if (utp->cond_string)
     {
       encode_source_string (utp->number, utp->addr,
-			    "cond", utp->cond_string.get (),
+			    "cond", utp->cond_string,
 			    buf, MAX_TRACE_UPLOAD);
       fprintf (writer->fp, "tp Z%s\n", buf);
     }
-  for (const auto &act : utp->cmd_strings)
+  for (a = 0; VEC_iterate (char_ptr, utp->cmd_strings, a, act); ++a)
     {
-      encode_source_string (utp->number, utp->addr, "cmd", act.get (),
+      encode_source_string (utp->number, utp->addr, "cmd", act,
 			    buf, MAX_TRACE_UPLOAD);
       fprintf (writer->fp, "tp Z%s\n", buf);
     }
@@ -296,42 +260,6 @@ tfile_write_uploaded_tp (struct trace_file_writer *self,
 	   utp->hit_count,
 	   phex_nz (utp->traceframe_usage,
 		    sizeof (utp->traceframe_usage)));
-}
-
-/* This is the implementation of trace_file_write_ops method
-   write_tdesc.  */
-
-static void
-tfile_write_tdesc (struct trace_file_writer *self)
-{
-  struct tfile_trace_file_writer *writer
-    = (struct tfile_trace_file_writer *) self;
-
-  gdb::optional<std::string> tdesc
-    = target_fetch_description_xml (current_top_target ());
-
-  if (!tdesc)
-    return;
-
-  const char *ptr = tdesc->c_str ();
-
-  /* Write tdesc line by line, prefixing each line with "tdesc ".  */
-  while (ptr != NULL)
-    {
-      const char *next = strchr (ptr, '\n');
-      if (next != NULL)
-	{
-	  fprintf (writer->fp, "tdesc %.*s\n", (int) (next - ptr), ptr);
-	  /* Skip the \n.  */
-	  next++;
-	}
-      else if (*ptr != '\0')
-	{
-	  /* Last line, doesn't have a newline.  */
-	  fprintf (writer->fp, "tdesc %s\n", ptr);
-	}
-      ptr = next;
-    }
 }
 
 /* This is the implementation of trace_file_write_ops method
@@ -387,7 +315,6 @@ static const struct trace_file_write_ops tfile_write_ops =
   tfile_write_status,
   tfile_write_uploaded_tsv,
   tfile_write_uploaded_tp,
-  tfile_write_tdesc,
   tfile_write_definition_end,
   tfile_write_raw_data,
   NULL,
@@ -400,7 +327,7 @@ struct trace_file_writer *
 tfile_trace_file_writer_new (void)
 {
   struct tfile_trace_file_writer *writer
-    = XNEW (struct tfile_trace_file_writer);
+    = xmalloc (sizeof (struct tfile_trace_file_writer));
 
   writer->base.ops = &tfile_write_ops;
   writer->fp = NULL;
@@ -411,7 +338,9 @@ tfile_trace_file_writer_new (void)
 
 /* target tfile command */
 
-static tfile_target tfile_ops;
+static struct target_ops tfile_ops;
+
+/* Fill in tfile_ops with its defined operations and properties.  */
 
 #define TRACE_HEADER_SIZE 8
 
@@ -423,9 +352,7 @@ static off_t trace_frames_offset;
 static off_t cur_offset;
 static int cur_data_size;
 int trace_regblock_size;
-static struct buffer trace_tdesc;
 
-static void tfile_append_tdesc_line (const char *line);
 static void tfile_interp_line (char *line,
 			       struct uploaded_tp **utpp,
 			       struct uploaded_tsv **utsvp);
@@ -448,11 +375,12 @@ tfile_read (gdb_byte *readbuf, int size)
     error (_("Premature end of file while reading trace file"));
 }
 
-/* Open the tfile target.  */
-
 static void
-tfile_target_open (const char *arg, int from_tty)
+tfile_open (const char *arg, int from_tty)
 {
+  volatile struct gdb_exception ex;
+  char *temp;
+  struct cleanup *old_chain;
   int flags;
   int scratch_chan;
   char header[TRACE_HEADER_SIZE];
@@ -462,31 +390,35 @@ tfile_target_open (const char *arg, int from_tty)
   struct trace_status *ts;
   struct uploaded_tp *uploaded_tps = NULL;
   struct uploaded_tsv *uploaded_tsvs = NULL;
+  char *filename;
 
   target_preopen (from_tty);
   if (!arg)
     error (_("No trace file specified."));
 
-  gdb::unique_xmalloc_ptr<char> filename (tilde_expand (arg));
-  if (!IS_ABSOLUTE_PATH (filename.get ()))
-    filename.reset (concat (current_directory, "/", filename.get (),
-			    (char *) NULL));
+  filename = tilde_expand (arg);
+  if (!IS_ABSOLUTE_PATH(filename))
+    {
+      temp = concat (current_directory, "/", filename, (char *) NULL);
+      xfree (filename);
+      filename = temp;
+    }
+
+  old_chain = make_cleanup (xfree, filename);
 
   flags = O_BINARY | O_LARGEFILE;
   flags |= O_RDONLY;
-  scratch_chan = gdb_open_cloexec (filename.get (), flags, 0);
+  scratch_chan = gdb_open_cloexec (filename, flags, 0);
   if (scratch_chan < 0)
-    perror_with_name (filename.get ());
+    perror_with_name (filename);
 
   /* Looks semi-reasonable.  Toss the old trace file and work on the new.  */
 
+  discard_cleanups (old_chain);	/* Don't free filename any more.  */
   unpush_target (&tfile_ops);
 
-  trace_filename = filename.release ();
+  trace_filename = xstrdup (filename);
   trace_fd = scratch_chan;
-
-  /* Make sure this is clear.  */
-  buffer_free (&trace_tdesc);
 
   bytes = 0;
   /* Read the file header and test for validity.  */
@@ -494,7 +426,7 @@ tfile_target_open (const char *arg, int from_tty)
 
   bytes += TRACE_HEADER_SIZE;
   if (!(header[0] == 0x7f
-	&& (startswith (header + 1, "TRACE0\n"))))
+	&& (strncmp (header + 1, "TRACE0\n", 7) == 0)))
     error (_("File is not a valid trace file."));
 
   push_target (&tfile_ops);
@@ -511,7 +443,7 @@ tfile_target_open (const char *arg, int from_tty)
   ts->disconnected_tracing = 0;
   ts->circular_buffer = 0;
 
-  TRY
+  TRY_CATCH (ex, RETURN_MASK_ALL)
     {
       /* Read through a section of newline-terminated lines that
 	 define things like tracepoints.  */
@@ -536,9 +468,6 @@ tfile_target_open (const char *arg, int from_tty)
 	    error (_("Excessively long lines in trace file"));
 	}
 
-      /* By now, tdesc lines have been read from tfile - let's parse them.  */
-      target_find_description ();
-
       /* Record the starting offset of the binary trace data.  */
       trace_frames_offset = bytes;
 
@@ -547,16 +476,15 @@ tfile_target_open (const char *arg, int from_tty)
       if (trace_regblock_size == 0)
 	error (_("No register block size recorded in trace file"));
     }
-  CATCH (ex, RETURN_MASK_ALL)
+  if (ex.reason < 0)
     {
       /* Remove the partially set up target.  */
       unpush_target (&tfile_ops);
       throw_exception (ex);
     }
-  END_CATCH
 
   inferior_appeared (current_inferior (), TFILE_PID);
-  inferior_ptid = ptid_t (TFILE_PID);
+  inferior_ptid = pid_to_ptid (TFILE_PID);
   add_thread_silent (inferior_ptid);
 
   if (ts->traceframe_count <= 0)
@@ -582,30 +510,25 @@ tfile_interp_line (char *line, struct uploaded_tp **utpp,
 {
   char *p = line;
 
-  if (startswith (p, "R "))
+  if (strncmp (p, "R ", strlen ("R ")) == 0)
     {
       p += strlen ("R ");
       trace_regblock_size = strtol (p, &p, 16);
     }
-  else if (startswith (p, "status "))
+  else if (strncmp (p, "status ", strlen ("status ")) == 0)
     {
       p += strlen ("status ");
       parse_trace_status (p, current_trace_status ());
     }
-  else if (startswith (p, "tp "))
+  else if (strncmp (p, "tp ", strlen ("tp ")) == 0)
     {
       p += strlen ("tp ");
       parse_tracepoint_definition (p, utpp);
     }
-  else if (startswith (p, "tsv "))
+  else if (strncmp (p, "tsv ", strlen ("tsv ")) == 0)
     {
       p += strlen ("tsv ");
       parse_tsv_definition (p, utsvp);
-    }
-  else if (startswith (p, "tdesc "))
-    {
-      p += strlen ("tdesc ");
-      tfile_append_tdesc_line (p);
     }
   else
     warning (_("Ignoring trace file definition \"%s\""), line);
@@ -613,32 +536,35 @@ tfile_interp_line (char *line, struct uploaded_tp **utpp,
 
 /* Close the trace file and generally clean up.  */
 
-void
-tfile_target::close ()
+static void
+tfile_close (struct target_ops *self)
 {
+  int pid;
+
   if (trace_fd < 0)
     return;
 
+  pid = ptid_get_pid (inferior_ptid);
   inferior_ptid = null_ptid;	/* Avoid confusion from thread stuff.  */
-  exit_inferior_silent (current_inferior ());
+  exit_inferior_silent (pid);
 
-  ::close (trace_fd);
+  close (trace_fd);
   trace_fd = -1;
   xfree (trace_filename);
   trace_filename = NULL;
-  buffer_free (&trace_tdesc);
 
   trace_reset_local_state ();
 }
 
-void
-tfile_target::files_info ()
+static void
+tfile_files_info (struct target_ops *t)
 {
   printf_filtered ("\t`%s'\n", trace_filename);
 }
 
-void
-tfile_target::get_tracepoint_status (struct breakpoint *tp, struct uploaded_tp *utp)
+static void
+tfile_get_tracepoint_status (struct target_ops *self,
+			     struct breakpoint *tp, struct uploaded_tp *utp)
 {
   /* Other bits of trace status were collected as part of opening the
      trace files, so nothing to do here.  */
@@ -668,8 +594,8 @@ tfile_get_traceframe_address (off_t tframe_offset)
 
   tp = get_tracepoint_by_number_on_target (tpnum);
   /* FIXME this is a poor heuristic if multiple locations.  */
-  if (tp && tp->loc)
-    addr = tp->loc->address;
+  if (tp && tp->base.loc)
+    addr = tp->base.loc->address;
 
   /* Restore our seek position.  */
   cur_offset = saved_offset;
@@ -682,9 +608,9 @@ tfile_get_traceframe_address (off_t tframe_offset)
    both the traceframe and tracepoint number, otherwise -1 for
    each.  */
 
-int
-tfile_target::trace_find (enum trace_find_type type, int num,
-			  CORE_ADDR addr1, CORE_ADDR addr2, int *tpp)
+static int
+tfile_trace_find (struct target_ops *self, enum trace_find_type type, int num,
+		  CORE_ADDR addr1, CORE_ADDR addr2, int *tpp)
 {
   short tpnum;
   int tfnum = 0, found = 0;
@@ -787,7 +713,7 @@ typedef int (*walk_blocks_callback_func) (char blocktype, void *data);
 static int
 match_blocktype (char blocktype, void *data)
 {
-  char *wantedp = (char *) data;
+  char *wantedp = data;
 
   if (*wantedp == blocktype)
     return 1;
@@ -865,11 +791,12 @@ traceframe_find_block_type (char type_wanted, int pos)
 /* Look for a block of saved registers in the traceframe, and get the
    requested register from it.  */
 
-void
-tfile_target::fetch_registers (struct regcache *regcache, int regno)
+static void
+tfile_fetch_registers (struct target_ops *ops,
+		       struct regcache *regcache, int regno)
 {
-  struct gdbarch *gdbarch = regcache->arch ();
-  int offset, regn, regsize, dummy;
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  int offset, regn, regsize;
 
   /* An uninitialized reg size says we're not going to be
      successful at getting register blocks.  */
@@ -878,32 +805,32 @@ tfile_target::fetch_registers (struct regcache *regcache, int regno)
 
   if (traceframe_find_block_type ('R', 0) >= 0)
     {
-      gdb_byte *regs = (gdb_byte *) alloca (trace_regblock_size);
+      gdb_byte *regs = alloca (trace_regblock_size);
 
       tfile_read (regs, trace_regblock_size);
 
+      /* Assume the block is laid out in GDB register number order,
+	 each register with the size that it has in GDB.  */
+      offset = 0;
       for (regn = 0; regn < gdbarch_num_regs (gdbarch); regn++)
 	{
-	  if (!remote_register_number_and_offset (regcache->arch (),
-						  regn, &dummy, &offset))
-	    continue;
-
 	  regsize = register_size (gdbarch, regn);
 	  /* Make sure we stay within block bounds.  */
-	  if (offset + regsize > trace_regblock_size)
+	  if (offset + regsize >= trace_regblock_size)
 	    break;
-	  if (regcache->get_register_status (regn) == REG_UNKNOWN)
+	  if (regcache_register_status (regcache, regn) == REG_UNKNOWN)
 	    {
 	      if (regno == regn)
 		{
-		  regcache->raw_supply (regno, regs + offset);
+		  regcache_raw_supply (regcache, regno, regs + offset);
 		  break;
 		}
 	      else if (regno == -1)
 		{
-		  regcache->raw_supply (regn, regs + offset);
+		  regcache_raw_supply (regcache, regn, regs + offset);
 		}
 	    }
+	  offset += regsize;
 	}
     }
   else
@@ -911,42 +838,12 @@ tfile_target::fetch_registers (struct regcache *regcache, int regno)
 }
 
 static enum target_xfer_status
-tfile_xfer_partial_features (const char *annex,
-			     gdb_byte *readbuf, const gdb_byte *writebuf,
-			     ULONGEST offset, ULONGEST len,
-			     ULONGEST *xfered_len)
+tfile_xfer_partial (struct target_ops *ops, enum target_object object,
+		    const char *annex, gdb_byte *readbuf,
+		    const gdb_byte *writebuf, ULONGEST offset, ULONGEST len,
+		    ULONGEST *xfered_len)
 {
-  if (strcmp (annex, "target.xml"))
-    return TARGET_XFER_E_IO;
-
-  if (readbuf == NULL)
-    error (_("tfile_xfer_partial: tdesc is read-only"));
-
-  if (trace_tdesc.used_size == 0)
-    return TARGET_XFER_E_IO;
-
-  if (offset >= trace_tdesc.used_size)
-    return TARGET_XFER_EOF;
-
-  if (len > trace_tdesc.used_size - offset)
-    len = trace_tdesc.used_size - offset;
-
-  memcpy (readbuf, trace_tdesc.buffer + offset, len);
-  *xfered_len = len;
-
-  return TARGET_XFER_OK;
-}
-
-enum target_xfer_status
-tfile_target::xfer_partial (enum target_object object,
-			    const char *annex, gdb_byte *readbuf,
-			    const gdb_byte *writebuf, ULONGEST offset, ULONGEST len,
-			    ULONGEST *xfered_len)
-{
-  /* We're only doing regular memory and tdesc for now.  */
-  if (object == TARGET_OBJECT_AVAILABLE_FEATURES)
-    return tfile_xfer_partial_features (annex, readbuf, writebuf,
-					offset, len, xfered_len);
+  /* We're only doing regular memory for now.  */
   if (object != TARGET_OBJECT_MEMORY)
     return TARGET_XFER_E_IO;
 
@@ -1005,7 +902,7 @@ tfile_target::xfer_partial (enum target_object object,
 	 and this address falls within a read-only section, fallback
 	 to reading from executable, up to LOW_ADDR_AVAILABLE.  */
       if (offset < low_addr_available)
-	len = std::min (len, low_addr_available - offset);
+	len = min (len, low_addr_available - offset);
       res = exec_read_partial_read_only (readbuf, offset, len, xfered_len);
 
       if (res == TARGET_XFER_OK)
@@ -1029,11 +926,12 @@ tfile_target::xfer_partial (enum target_object object,
 /* Iterate through the blocks of a trace frame, looking for a 'V'
    block with a matching tsv number.  */
 
-bool
-tfile_target::get_trace_state_variable_value (int tsvnum, LONGEST *val)
+static int
+tfile_get_trace_state_variable_value (struct target_ops *self,
+				      int tsvnum, LONGEST *val)
 {
   int pos;
-  bool found = false;
+  int found = 0;
 
   /* Iterate over blocks in current frame and find the last 'V'
      block in which tsv number is TSVNUM.  In one trace frame, there
@@ -1054,7 +952,7 @@ tfile_target::get_trace_state_variable_value (int tsvnum, LONGEST *val)
 	  *val = extract_signed_integer ((gdb_byte *) val, 8,
 					 gdbarch_byte_order
 					 (target_gdbarch ()));
-	  found = true;
+	  found = 1;
 	}
       pos += (4 + 8);
     }
@@ -1068,12 +966,13 @@ tfile_target::get_trace_state_variable_value (int tsvnum, LONGEST *val)
 static int
 build_traceframe_info (char blocktype, void *data)
 {
-  struct traceframe_info *info = (struct traceframe_info *) data;
+  struct traceframe_info *info = data;
 
   switch (blocktype)
     {
     case 'M':
       {
+	struct mem_range *r;
 	ULONGEST maddr;
 	unsigned short mlen;
 
@@ -1087,7 +986,10 @@ build_traceframe_info (char blocktype, void *data)
 					  2, gdbarch_byte_order
 					  (target_gdbarch ()));
 
-	info->memory.emplace_back (maddr, mlen);
+	r = VEC_safe_push (mem_range_s, info->memory, NULL);
+
+	r->start = maddr;
+	r->length = mlen;
 	break;
       }
     case 'V':
@@ -1095,7 +997,7 @@ build_traceframe_info (char blocktype, void *data)
 	int vnum;
 
 	tfile_read ((gdb_byte *) &vnum, 4);
-	info->tvars.push_back (vnum);
+	VEC_safe_push (int, info->tvars, vnum);
       }
     case 'R':
     case 'S':
@@ -1112,28 +1014,42 @@ build_traceframe_info (char blocktype, void *data)
   return 0;
 }
 
-traceframe_info_up
-tfile_target::traceframe_info ()
+static struct traceframe_info *
+tfile_traceframe_info (struct target_ops *self)
 {
-  traceframe_info_up info (new struct traceframe_info);
+  struct traceframe_info *info = XCNEW (struct traceframe_info);
 
-  traceframe_walk_blocks (build_traceframe_info, 0, info.get ());
-
+  traceframe_walk_blocks (build_traceframe_info, 0, info);
   return info;
 }
 
-/* Handles tdesc lines from tfile by appending the payload to
-   a global trace_tdesc variable.  */
-
 static void
-tfile_append_tdesc_line (const char *line)
+init_tfile_ops (void)
 {
-  buffer_grow_str (&trace_tdesc, line);
-  buffer_grow_str (&trace_tdesc, "\n");
+  init_tracefile_ops (&tfile_ops);
+
+  tfile_ops.to_shortname = "tfile";
+  tfile_ops.to_longname = "Local trace dump file";
+  tfile_ops.to_doc
+    = "Use a trace file as a target.  Specify the filename of the trace file.";
+  tfile_ops.to_open = tfile_open;
+  tfile_ops.to_close = tfile_close;
+  tfile_ops.to_fetch_registers = tfile_fetch_registers;
+  tfile_ops.to_xfer_partial = tfile_xfer_partial;
+  tfile_ops.to_files_info = tfile_files_info;
+  tfile_ops.to_get_tracepoint_status = tfile_get_tracepoint_status;
+  tfile_ops.to_trace_find = tfile_trace_find;
+  tfile_ops.to_get_trace_state_variable_value
+    = tfile_get_trace_state_variable_value;
+  tfile_ops.to_traceframe_info = tfile_traceframe_info;
 }
+
+extern initialize_file_ftype _initialize_tracefile_tfile;
 
 void
 _initialize_tracefile_tfile (void)
 {
-  add_target (tfile_target_info, tfile_target_open, filename_completer);
+  init_tfile_ops ();
+
+  add_target_with_completer (&tfile_ops, filename_completer);
 }

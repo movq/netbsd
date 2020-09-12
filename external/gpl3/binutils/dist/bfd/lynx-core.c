@@ -1,5 +1,6 @@
 /* BFD back end for Lynx core files
-   Copyright (C) 1993-2020 Free Software Foundation, Inc.
+   Copyright 1993, 1994, 1995, 2001, 2002, 2004, 2006, 2007
+   Free Software Foundation, Inc.
    Written by Stu Grossman of Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -52,17 +53,17 @@ struct lynx_core_struct
 #define core_command(bfd) (core_hdr(bfd)->cmd)
 
 #define lynx_core_file_matches_executable_p generic_core_file_matches_executable_p
-#define lynx_core_file_pid _bfd_nocore_core_file_pid
 
 /* Handle Lynx core dump file.  */
 
 static asection *
-make_bfd_asection (bfd *abfd,
-		   const char *name,
-		   flagword flags,
-		   bfd_size_type size,
-		   bfd_vma vma,
-		   file_ptr filepos)
+make_bfd_asection (abfd, name, flags, size, vma, filepos)
+     bfd *abfd;
+     const char *name;
+     flagword flags;
+     bfd_size_type size;
+     bfd_vma vma;
+     file_ptr filepos;
 {
   asection *asect;
   char *newname;
@@ -86,7 +87,8 @@ make_bfd_asection (bfd *abfd,
 }
 
 const bfd_target *
-lynx_core_file_p (bfd *abfd)
+lynx_core_file_p (abfd)
+     bfd *abfd;
 {
   int secnum;
   struct pssentry pss;
@@ -162,11 +164,11 @@ lynx_core_file_p (bfd *abfd)
 			       pagesize + tcontext_size + pss.ssize
 #if defined (SPARC) || defined (__SPARC__)
 			       /* SPARC Lynx seems to start dumping
-				  the .data section at a page
-				  boundary.  It's OK to check a
-				  #define like SPARC here because this
-				  file can only be compiled on a Lynx
-				  host.  */
+                                  the .data section at a page
+                                  boundary.  It's OK to check a
+                                  #define like SPARC here because this
+                                  file can only be compiled on a Lynx
+                                  host.  */
 			       + pss.data_start % pagesize
 #endif
 			       );
@@ -212,13 +214,15 @@ lynx_core_file_p (bfd *abfd)
 }
 
 char *
-lynx_core_file_failing_command (bfd *abfd)
+lynx_core_file_failing_command (abfd)
+     bfd *abfd;
 {
   return core_command (abfd);
 }
 
 int
-lynx_core_file_failing_signal (bfd *abfd)
+lynx_core_file_failing_signal (abfd)
+     bfd *abfd;
 {
   return core_signal (abfd);
 }

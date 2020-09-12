@@ -1,4 +1,4 @@
-# Copyright (C) 2011-2019 Free Software Foundation, Inc.
+# Copyright (C) 2011-2013 Free Software Foundation, Inc.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,20 +21,18 @@ set testfile dmsym_main
 # This is why we use gdb_compile instead of relying on the usual
 # call to prepare_for_testing.
 
-set dmsym_o [standard_output_file dmsym.o]
-
 if {[gdb_compile "${srcdir}/${subdir}/dmsym.c" \
-                 $dmsym_o \
+                 ${objdir}/${subdir}/dmsym.o \
                  object {}] != ""} {
-  untested "failed to compile object file"
+  untested dmsym.exp
   return -1
 }
 
 if {[gdb_compile \
-      [list ${srcdir}/${subdir}/dmsym_main.c $dmsym_o] \
-      [standard_output_file ${testfile}] \
+      [list ${srcdir}/${subdir}/dmsym_main.c ${objdir}/${subdir}/dmsym.o] \
+      ${objdir}/${subdir}/${testfile} \
       executable {debug}] != ""} {
-    untested "failed to compile"
+    untested dmsym.exp
     return -1
 }
 
@@ -44,32 +42,43 @@ clean_restart ${testfile}
 set num "\[0-9\]+"
 set addr "0x\[0-9a-zA-Z\]+"
 
-# Verify that setting a breakpoint on `test_minsym' only results in
-# one location found.  A mistake would be to also insert a breakpoint
-# in the test_minsym data symbol in dmsym.c.  Despite the fact that
-# there is no debugging info available, this is a data symbol and thus
-# should not be used for breakpoint purposes.
+# Although the test program is written in C, the original problem
+# occurs only when the language is Ada. The use of a C program is
+# only a convenience to be able to exercise the original problem
+# without requiring an Ada compiler. In the meantime, temporarily
+# force the language to Ada.
 
-gdb_test "break test_minsym" \
+gdb_test_no_output "set lang ada"
+
+# Verify that setting a breakpoint on `pck__foo__bar__minsym' only
+# results in one location found (function pck__foo__bar__minsym__2).
+# A mistake would be to also insert a breakpoint where
+# pck__foo__bar__minsym is defined.  Despite the fact that there is
+# no debugging info available, this is a data symbol and thus should
+# not be used for breakpoint purposes.
+
+gdb_test "break pck__foo__bar__minsym" \
          "Breakpoint $num at $addr.: file .*dmsym_main\\.c, line $num\\."
 
 # However, verify that the `info line' command, on the other hand,
 # finds both locations.
 
-gdb_test "info line test_minsym" \
-         "Line $num of \".*dmsym_main\\.c\" .*\r\nNo line number information available for address $addr <test_minsym>"
+gdb_test "info line pck__foo__bar__minsym" \
+         "Line $num of \".*dmsym_main\\.c\" .*\r\nNo line number information available for address $addr <pck__foo__bar__minsym>"
 
-# Now, run the program until we get past the call to test_minsym.
-# Except when using hardware breakpoints, inferior behavior is going
-# to be affected if a breakpoint was incorrectly inserted at
-# test_minsym.
+gdb_test_no_output "set lang auto"
+
+# Now, run the program until we get past the call to
+# pck__foo__bar__minsym__2. Except when using hardware breakpoints,
+# inferior behavior is going to be affected if a breakpoint was
+# incorrectly inserted at pck__foo__bar__minsym.
 
 gdb_breakpoint dmsym_main.c:[gdb_get_line_number "BREAK" dmsym_main.c]
 
 gdb_run_cmd
 gdb_test "" \
-         "Breakpoint $num, test_minsym \\(\\) at.*" \
-         "run until breakpoint at BREAK"
+         "Breakpoint $num, pck__foo__bar__minsym__2 \\(\\) at.*" \
+         "Run until breakpoint at BREAK"
 
 gdb_test "continue" \
          "Breakpoint $num, main \\(\\) at.*"

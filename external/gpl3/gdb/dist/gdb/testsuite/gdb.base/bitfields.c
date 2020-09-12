@@ -23,22 +23,6 @@ struct fields
   signed char	sc    ;
 } flags;
 
-struct internalvartest
-{
-  unsigned int a : 1;
-  struct
-    {
-      unsigned int b : 1;
-      struct
-	{
-	  unsigned int c : 1;
-	  signed int   d : 1;
-	} deep;
-      signed int   e : 1;
-    } inner;
-  signed int   f : 1;
-} dummy_internalvartest;
-
 void break1 ()
 {
 }
@@ -94,6 +78,10 @@ int main ()
   /* For each member, set that member to 1, allow gdb to verify that the
      member (and only that member) is 1, and then reset it back to 0. */
 
+#ifdef usestubs
+  set_debug_traps();
+  breakpoint();
+#endif
   flags.uc = 1;
   break1 ();
   flags.uc = 0;

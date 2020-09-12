@@ -1,5 +1,6 @@
 /* Definitions of target machine for GNU compiler, for MIPS NetBSD systems.
-   Copyright (C) 1993-2019 Free Software Foundation, Inc.
+   Copyright (C) 1993, 1995, 1996, 1997, 1999, 2000, 2001, 2002, 2003, 2004,
+   2007 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,6 +21,13 @@ along with GCC; see the file COPYING3.  If not see
 
 /* Define default target values.  */
 
+#undef MACHINE_TYPE
+#if TARGET_ENDIAN_DEFAULT != 0
+#define MACHINE_TYPE "NetBSD/mipseb ELF"
+#else
+#define MACHINE_TYPE "NetBSD/mipsel ELF"
+#endif
+
 #define TARGET_OS_CPP_BUILTINS()			\
   do							\
     {							\
@@ -30,61 +38,18 @@ along with GCC; see the file COPYING3.  If not see
 	builtin_define ("__LONG64");			\
 							\
       if (TARGET_ABICALLS)				\
-	builtin_define ("__mips_abicalls");		\
+	builtin_define ("__ABICALLS__");		\
 							\
-    if (mips_abi == ABI_N32)				\
-      {							\
-	builtin_define ("__mips_n32");			\
-        builtin_define ("_ABIN32=2");			\
-        builtin_define ("_MIPS_SIM=_ABIN32");		\
-        builtin_define ("_MIPS_SZLONG=32");		\
-        builtin_define ("_MIPS_SZPTR=32");		\
-      }							\
-      else if (mips_abi == ABI_64)			\
-      {							\
-	builtin_define ("__mips_n64");			\
-        builtin_define ("_ABI64=3");			\
-        builtin_define ("_MIPS_SIM=_ABI64");		\
-        builtin_define ("_MIPS_SZLONG=64");		\
-        builtin_define ("_MIPS_SZPTR=64");		\
-      }							\
-      else if (mips_abi == ABI_O64)			\
-      {							\
-	builtin_define ("__mips_o64");			\
-        builtin_define ("_ABIO64=4");			\
-        builtin_define ("_MIPS_SIM=_ABIO64");		\
-        builtin_define ("_MIPS_SZLONG=64");		\
-        builtin_define ("_MIPS_SZPTR=64");		\
-    }							\
-    else if (mips_abi == ABI_EABI)			\
-      {							\
+      if (mips_abi == ABI_EABI)				\
 	builtin_define ("__mips_eabi");			\
-        builtin_define ("_ABIEMB=5");			\
-        builtin_define ("_MIPS_SIM=_ABIEMB");		\
-	if (TARGET_LONG64)				\
-          builtin_define ("_MIPS_SZLONG=64");		\
-	else						\
-          builtin_define ("_MIPS_SZLONG=32");		\
-	if (TARGET_64BIT)				\
-          builtin_define ("_MIPS_SZPTR=64");		\
-	else						\
-          builtin_define ("_MIPS_SZPTR=32");		\
-      }							\
-    else						\
-      {							\
-	builtin_define ("__mips_o32");			\
-	builtin_define ("_ABIO32=1");			\
-	builtin_define ("_MIPS_SIM=_ABIO32");		\
-        builtin_define ("_MIPS_SZLONG=32");		\
-        builtin_define ("_MIPS_SZPTR=32");		\
-      }							\
-    if (TARGET_FLOAT64)					\
-      builtin_define ("_MIPS_FPSET=32");		\
-    else						\
-      builtin_define ("_MIPS_FPSET=16");		\
-    							\
-    builtin_define ("_MIPS_SZINT=32");			\
-  } while (0)
+      else if (mips_abi == ABI_N32)			\
+	builtin_define ("__mips_n32");			\
+      else if (mips_abi == ABI_64)			\
+	builtin_define ("__mips_n64");			\
+      else if (mips_abi == ABI_O64)			\
+	builtin_define ("__mips_o64");			\
+    }							\
+  while (0)
 
 /* The generic MIPS TARGET_CPU_CPP_BUILTINS are incorrect for NetBSD.
    Specifically, they define too many namespace-invasive macros.  Override
@@ -125,13 +90,21 @@ along with GCC; see the file COPYING3.  If not see
 	builtin_define ("__mips=3");				\
       else if (ISA_MIPS4)					\
 	builtin_define ("__mips=4");				\
-      else if (mips_isa >= 32 && mips_isa < 64)			\
-	builtin_define ("__mips=32");				\
-      else if (mips_isa >= 64)					\
-	builtin_define ("__mips=64");				\
-      if (mips_isa_rev > 0)					\
-        builtin_define_with_int_value ("__mips_isa_rev",	\
-                                       mips_isa_rev);		\
+      else if (ISA_MIPS32)					\
+	{							\
+	  builtin_define ("__mips=32");				\
+	  builtin_define ("__mips_isa_rev=1");			\
+	}							\
+      else if (ISA_MIPS32R2)					\
+	{							\
+	  builtin_define ("__mips=32");				\
+	  builtin_define ("__mips_isa_rev=2");			\
+	}							\
+      else if (ISA_MIPS64)					\
+	{							\
+	  builtin_define ("__mips=64");				\
+	  builtin_define ("__mips_isa_rev=1");			\
+	}							\
 								\
       if (TARGET_HARD_FLOAT)					\
 	builtin_define ("__mips_hard_float");			\
@@ -146,17 +119,23 @@ along with GCC; see the file COPYING3.  If not see
       else							\
 	builtin_define ("__MIPSEL__");				\
 								\
-      if (TARGET_OCTEON)					\
-	builtin_define ("__OCTEON__");				\
-								\
-      if (ISA_HAS_POP)						\
-	builtin_define ("__mips_popcount");			\
       /* No language dialect defines.  */			\
 								\
       /* ABIs handled in TARGET_OS_CPP_BUILTINS.  */		\
     }								\
   while (0)
 
+
+/* Clean up after the generic MIPS/ELF configuration.  */
+#undef MD_EXEC_PREFIX
+#undef MD_STARTFILE_PREFIX
+
+/* Extra specs we need.  */
+#undef SUBTARGET_EXTRA_SPECS
+#define SUBTARGET_EXTRA_SPECS						\
+  { "netbsd_cpp_spec",		NETBSD_CPP_SPEC },			\
+  { "netbsd_link_spec",		NETBSD_LINK_SPEC_ELF },			\
+  { "netbsd_entry_point",	NETBSD_ENTRY_POINT },
 
 /* Provide a SUBTARGET_CPP_SPEC appropriate for NetBSD.  */
 
@@ -169,11 +148,10 @@ along with GCC; see the file COPYING3.  If not see
 
 #undef LINK_SPEC
 #define LINK_SPEC \
-  "%{EL:-m elf32ltsmip} \
-   %{EB:-m elf32btsmip} \
+  "%{EL:-m elf32lmip} \
+   %{EB:-m elf32bmip} \
    %(endian_spec) \
-   %{G*} %{mips1} %{mips2} %{mips3} %{mips4} %{mips32} %{mips32r2} \
-   %{mips32r6} %{mips64} %{mips64r2} %{mips64r6} \
+   %{G*} %{mips1} %{mips2} %{mips3} %{mips4} %{mips32} %{mips32r2} %{mips64} \
    %{bestGnum} %{call_shared} %{no_archive} %{exact_version} \
    %(netbsd_link_spec)"
 
@@ -192,6 +170,16 @@ along with GCC; see the file COPYING3.  If not see
 #define MIPS_DEFAULT_GVALUE 0
 
 
+/* This defines which switch letters take arguments.  -G is a MIPS
+   special.  */
+
+#undef SWITCH_TAKES_ARG
+#define SWITCH_TAKES_ARG(CHAR)						\
+  (DEFAULT_SWITCH_TAKES_ARG (CHAR)					\
+   || (CHAR) == 'R'							\
+   || (CHAR) == 'G')
+
+
 #undef ASM_FINAL_SPEC
 #undef SET_ASM_OP
 
@@ -204,20 +192,6 @@ along with GCC; see the file COPYING3.  If not see
 
 /* Make gcc agree with <machine/ansi.h> */
 
-#undef SIZE_TYPE
-#define SIZE_TYPE ((POINTER_SIZE == 64 || TARGET_NEWABI) \
-		   ? "long unsigned int" : "unsigned int")
-
-#undef PTRDIFF_TYPE
-#define PTRDIFF_TYPE ((POINTER_SIZE == 64 || TARGET_NEWABI) \
-		      ? "long int" : "int")
-
-#undef INTPTR_TYPE
-#define INTPTR_TYPE PTRDIFF_TYPE
-
-#undef UINTPTR_TYPE
-#define UINTPTR_TYPE SIZE_TYPE
-
 #undef WCHAR_TYPE
 #define WCHAR_TYPE "int"
 
@@ -226,6 +200,3 @@ along with GCC; see the file COPYING3.  If not see
 
 #undef WINT_TYPE
 #define WINT_TYPE "int"
-
-#undef TARGET_WRITABLE_EH_FRAME
-#define TARGET_WRITABLE_EH_FRAME 0

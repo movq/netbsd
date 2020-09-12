@@ -2,7 +2,7 @@
 
 THIS FILE IS MACHINE GENERATED WITH CGEN.
 
-Copyright 1996-2019 Free Software Foundation, Inc.
+Copyright 1996-2010 Free Software Foundation, Inc.
 
 This file is part of the GNU simulators.
 
@@ -17,7 +17,8 @@ This file is part of the GNU simulators.
    License for more details.
 
    You should have received a copy of the GNU General Public License along
-   with this program; if not, see <http://www.gnu.org/licenses/>.
+   with this program; if not, write to the Free Software Foundation, Inc.,
+   51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.
 
 */
 
@@ -242,7 +243,7 @@ iq2000bf_init_idesc_table (SIM_CPU *cpu)
     init_idesc (cpu, id, t);
 
   /* Now fill in the values for the chosen cpu.  */
-  for (t = iq2000bf_insn_sem, tend = t + ARRAY_SIZE (iq2000bf_insn_sem);
+  for (t = iq2000bf_insn_sem, tend = t + sizeof (iq2000bf_insn_sem) / sizeof (*t);
        t != tend; ++t)
     {
       init_idesc (cpu, & table[t->index], t);
@@ -883,7 +884,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
 
 
   /* Record the fields for the semantic handler.  */
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_empty", (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_empty", (char *) 0));
 
 #undef FLD
     return idesc;
@@ -906,7 +907,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
   FLD (f_rs) = f_rs;
   FLD (f_rt) = f_rt;
   FLD (f_rd) = f_rd;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_add", "f_rs 0x%x", 'x', f_rs, "f_rt 0x%x", 'x', f_rt, "f_rd 0x%x", 'x', f_rd, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_add", "f_rs 0x%x", 'x', f_rs, "f_rt 0x%x", 'x', f_rt, "f_rd 0x%x", 'x', f_rd, (char *) 0));
 
 #undef FLD
     return idesc;
@@ -929,7 +930,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
   FLD (f_imm) = f_imm;
   FLD (f_rs) = f_rs;
   FLD (f_rt) = f_rt;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_addi", "f_imm 0x%x", 'x', f_imm, "f_rs 0x%x", 'x', f_rs, "f_rt 0x%x", 'x', f_rt, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_addi", "f_imm 0x%x", 'x', f_imm, "f_rs 0x%x", 'x', f_rs, "f_rt 0x%x", 'x', f_rt, (char *) 0));
 
 #undef FLD
     return idesc;
@@ -958,7 +959,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
   FLD (f_rd) = f_rd;
   FLD (f_rt) = f_rt;
   FLD (f_shamt) = f_shamt;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ram", "f_maskl 0x%x", 'x', f_maskl, "f_rs 0x%x", 'x', f_rs, "f_rd 0x%x", 'x', f_rd, "f_rt 0x%x", 'x', f_rt, "f_shamt 0x%x", 'x', f_shamt, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ram", "f_maskl 0x%x", 'x', f_maskl, "f_rs 0x%x", 'x', f_rs, "f_rd 0x%x", 'x', f_rd, "f_rt 0x%x", 'x', f_rt, "f_shamt 0x%x", 'x', f_shamt, (char *) 0));
 
 #undef FLD
     return idesc;
@@ -981,7 +982,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
   FLD (f_rt) = f_rt;
   FLD (f_shamt) = f_shamt;
   FLD (f_rd) = f_rd;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_sll", "f_rt 0x%x", 'x', f_rt, "f_shamt 0x%x", 'x', f_shamt, "f_rd 0x%x", 'x', f_rd, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_sll", "f_rt 0x%x", 'x', f_rt, "f_shamt 0x%x", 'x', f_shamt, "f_rd 0x%x", 'x', f_rd, (char *) 0));
 
 #undef FLD
     return idesc;
@@ -1007,7 +1008,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
   FLD (f_rt) = f_rt;
   FLD (f_shamt) = f_shamt;
   FLD (f_rd) = f_rd;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_slmv", "f_rs 0x%x", 'x', f_rs, "f_rt 0x%x", 'x', f_rt, "f_shamt 0x%x", 'x', f_shamt, "f_rd 0x%x", 'x', f_rd, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_slmv", "f_rs 0x%x", 'x', f_rs, "f_rt 0x%x", 'x', f_rt, "f_shamt 0x%x", 'x', f_shamt, "f_rd 0x%x", 'x', f_rd, (char *) 0));
 
 #undef FLD
     return idesc;
@@ -1030,7 +1031,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
   FLD (f_rs) = f_rs;
   FLD (f_rt) = f_rt;
   FLD (f_rd) = f_rd;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_slt", "f_rs 0x%x", 'x', f_rs, "f_rt 0x%x", 'x', f_rt, "f_rd 0x%x", 'x', f_rd, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_slt", "f_rs 0x%x", 'x', f_rs, "f_rt 0x%x", 'x', f_rt, "f_rd 0x%x", 'x', f_rd, (char *) 0));
 
 #undef FLD
     return idesc;
@@ -1053,7 +1054,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
   FLD (f_imm) = f_imm;
   FLD (f_rs) = f_rs;
   FLD (f_rt) = f_rt;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_slti", "f_imm 0x%x", 'x', f_imm, "f_rs 0x%x", 'x', f_rs, "f_rt 0x%x", 'x', f_rt, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_slti", "f_imm 0x%x", 'x', f_imm, "f_rs 0x%x", 'x', f_rs, "f_rt 0x%x", 'x', f_rt, (char *) 0));
 
 #undef FLD
     return idesc;
@@ -1076,7 +1077,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
   FLD (f_rt) = f_rt;
   FLD (f_rs) = f_rs;
   FLD (i_offset) = f_offset;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bbi", "f_rt 0x%x", 'x', f_rt, "f_rs 0x%x", 'x', f_rs, "offset 0x%x", 'x', f_offset, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bbi", "f_rt 0x%x", 'x', f_rt, "f_rs 0x%x", 'x', f_rs, "offset 0x%x", 'x', f_offset, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1105,7 +1106,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
   FLD (f_rs) = f_rs;
   FLD (f_rt) = f_rt;
   FLD (i_offset) = f_offset;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bbv", "f_rs 0x%x", 'x', f_rs, "f_rt 0x%x", 'x', f_rt, "offset 0x%x", 'x', f_offset, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bbv", "f_rs 0x%x", 'x', f_rs, "f_rt 0x%x", 'x', f_rt, "offset 0x%x", 'x', f_offset, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1131,7 +1132,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rs) = f_rs;
   FLD (i_offset) = f_offset;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bgez", "f_rs 0x%x", 'x', f_rs, "offset 0x%x", 'x', f_offset, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bgez", "f_rs 0x%x", 'x', f_rs, "offset 0x%x", 'x', f_offset, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1157,7 +1158,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rs) = f_rs;
   FLD (i_offset) = f_offset;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bgezal", "f_rs 0x%x", 'x', f_rs, "offset 0x%x", 'x', f_offset, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bgezal", "f_rs 0x%x", 'x', f_rs, "offset 0x%x", 'x', f_offset, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1183,7 +1184,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_rs) = f_rs;
   FLD (f_rd) = f_rd;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_jalr", "f_rs 0x%x", 'x', f_rs, "f_rd 0x%x", 'x', f_rd, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_jalr", "f_rs 0x%x", 'x', f_rs, "f_rd 0x%x", 'x', f_rd, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1206,7 +1207,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (f_rs) = f_rs;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_jr", "f_rs 0x%x", 'x', f_rs, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_jr", "f_rs 0x%x", 'x', f_rs, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1235,7 +1236,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
   FLD (f_rs) = f_rs;
   FLD (f_imm) = f_imm;
   FLD (f_rt) = f_rt;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_lb", "f_rs 0x%x", 'x', f_rs, "f_imm 0x%x", 'x', f_imm, "f_rt 0x%x", 'x', f_rt, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_lb", "f_rs 0x%x", 'x', f_rs, "f_imm 0x%x", 'x', f_imm, "f_rt 0x%x", 'x', f_rt, (char *) 0));
 
 #undef FLD
     return idesc;
@@ -1258,7 +1259,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
   FLD (f_rs) = f_rs;
   FLD (f_imm) = f_imm;
   FLD (f_rt) = f_rt;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_lh", "f_rs 0x%x", 'x', f_rs, "f_imm 0x%x", 'x', f_imm, "f_rt 0x%x", 'x', f_rt, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_lh", "f_rs 0x%x", 'x', f_rs, "f_imm 0x%x", 'x', f_imm, "f_rt 0x%x", 'x', f_rt, (char *) 0));
 
 #undef FLD
     return idesc;
@@ -1278,7 +1279,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
   /* Record the fields for the semantic handler.  */
   FLD (f_imm) = f_imm;
   FLD (f_rt) = f_rt;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_lui", "f_imm 0x%x", 'x', f_imm, "f_rt 0x%x", 'x', f_rt, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_lui", "f_imm 0x%x", 'x', f_imm, "f_rt 0x%x", 'x', f_rt, (char *) 0));
 
 #undef FLD
     return idesc;
@@ -1301,7 +1302,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
   FLD (f_rs) = f_rs;
   FLD (f_imm) = f_imm;
   FLD (f_rt) = f_rt;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_lw", "f_rs 0x%x", 'x', f_rs, "f_imm 0x%x", 'x', f_imm, "f_rt 0x%x", 'x', f_rt, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_lw", "f_rs 0x%x", 'x', f_rs, "f_imm 0x%x", 'x', f_imm, "f_rt 0x%x", 'x', f_rt, (char *) 0));
 
 #undef FLD
     return idesc;
@@ -1324,7 +1325,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
   FLD (f_rs) = f_rs;
   FLD (f_imm) = f_imm;
   FLD (f_rt) = f_rt;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_sb", "f_rs 0x%x", 'x', f_rs, "f_imm 0x%x", 'x', f_imm, "f_rt 0x%x", 'x', f_rt, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_sb", "f_rs 0x%x", 'x', f_rs, "f_imm 0x%x", 'x', f_imm, "f_rt 0x%x", 'x', f_rt, (char *) 0));
 
 #undef FLD
     return idesc;
@@ -1347,7 +1348,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
   FLD (f_rs) = f_rs;
   FLD (f_imm) = f_imm;
   FLD (f_rt) = f_rt;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_sh", "f_rs 0x%x", 'x', f_rs, "f_imm 0x%x", 'x', f_imm, "f_rt 0x%x", 'x', f_rt, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_sh", "f_rs 0x%x", 'x', f_rs, "f_imm 0x%x", 'x', f_imm, "f_rt 0x%x", 'x', f_rt, (char *) 0));
 
 #undef FLD
     return idesc;
@@ -1370,7 +1371,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
   FLD (f_rs) = f_rs;
   FLD (f_imm) = f_imm;
   FLD (f_rt) = f_rt;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_sw", "f_rs 0x%x", 'x', f_rs, "f_imm 0x%x", 'x', f_imm, "f_rt 0x%x", 'x', f_rt, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_sw", "f_rs 0x%x", 'x', f_rs, "f_imm 0x%x", 'x', f_imm, "f_rt 0x%x", 'x', f_rt, (char *) 0));
 
 #undef FLD
     return idesc;
@@ -1383,7 +1384,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
 
 
   /* Record the fields for the semantic handler.  */
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_break", (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_break", (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1402,7 +1403,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
 
 
   /* Record the fields for the semantic handler.  */
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_syscall", (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_syscall", (char *) 0));
 
 #undef FLD
     return idesc;
@@ -1425,7 +1426,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
   FLD (f_imm) = f_imm;
   FLD (f_rs) = f_rs;
   FLD (f_rt) = f_rt;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_andoui", "f_imm 0x%x", 'x', f_imm, "f_rs 0x%x", 'x', f_rs, "f_rt 0x%x", 'x', f_rt, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_andoui", "f_imm 0x%x", 'x', f_imm, "f_rs 0x%x", 'x', f_rs, "f_rt 0x%x", 'x', f_rt, (char *) 0));
 
 #undef FLD
     return idesc;
@@ -1451,7 +1452,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
   FLD (f_rs) = f_rs;
   FLD (f_rt) = f_rt;
   FLD (f_rd) = f_rd;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mrgb", "f_mask 0x%x", 'x', f_mask, "f_rs 0x%x", 'x', f_rs, "f_rt 0x%x", 'x', f_rt, "f_rd 0x%x", 'x', f_rd, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_mrgb", "f_mask 0x%x", 'x', f_mask, "f_rs 0x%x", 'x', f_rs, "f_rt 0x%x", 'x', f_rt, "f_rd 0x%x", 'x', f_rd, (char *) 0));
 
 #undef FLD
     return idesc;
@@ -1464,7 +1465,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
 
 
   /* Record the fields for the semantic handler.  */
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bctxt", (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_bctxt", (char *) 0));
 
 #undef FLD
     return idesc;
@@ -1487,7 +1488,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
   FLD (f_rs) = f_rs;
   FLD (f_rt) = f_rt;
   FLD (f_imm) = f_imm;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldw", "f_rs 0x%x", 'x', f_rs, "f_rt 0x%x", 'x', f_rt, "f_imm 0x%x", 'x', f_imm, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_ldw", "f_rs 0x%x", 'x', f_rs, "f_rt 0x%x", 'x', f_rt, "f_imm 0x%x", 'x', f_imm, (char *) 0));
 
 #undef FLD
     return idesc;
@@ -1510,7 +1511,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
   FLD (f_rs) = f_rs;
   FLD (f_rt) = f_rt;
   FLD (f_imm) = f_imm;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_sdw", "f_rs 0x%x", 'x', f_rs, "f_rt 0x%x", 'x', f_rt, "f_imm 0x%x", 'x', f_imm, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_sdw", "f_rs 0x%x", 'x', f_rs, "f_rt 0x%x", 'x', f_rt, "f_imm 0x%x", 'x', f_imm, (char *) 0));
 
 #undef FLD
     return idesc;
@@ -1527,7 +1528,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (i_jmptarg) = f_jtarg;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_j", "jmptarg 0x%x", 'x', f_jtarg, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_j", "jmptarg 0x%x", 'x', f_jtarg, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */
@@ -1550,7 +1551,7 @@ iq2000bf_decode (SIM_CPU *current_cpu, IADDR pc,
 
   /* Record the fields for the semantic handler.  */
   FLD (i_jmptarg) = f_jtarg;
-  CGEN_TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_jal", "jmptarg 0x%x", 'x', f_jtarg, (char *) 0));
+  TRACE_EXTRACT (current_cpu, abuf, (current_cpu, pc, "sfmt_jal", "jmptarg 0x%x", 'x', f_jtarg, (char *) 0));
 
 #if WITH_PROFILE_MODEL_P
   /* Record the fields for profiling.  */

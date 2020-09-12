@@ -1,5 +1,7 @@
 /* Target definitions for GNU compiler for SPARC running System V.4
-   Copyright (C) 1991-2019 Free Software Foundation, Inc.
+   Copyright (C) 1991, 1992, 1995, 1996, 1997, 1998, 2000, 2002, 2007, 2009,
+   2010
+   Free Software Foundation, Inc.
    Contributed by Ron Guilmette (rfg@monkeys.com).
 
 This file is part of GCC.
@@ -18,15 +20,23 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+#ifndef TARGET_VERSION
+#define TARGET_VERSION fprintf (stderr, " (sparc ELF)"); 
+#endif
+
+/* ??? Put back the SIZE_TYPE/PTRDIFF_TYPE definitions set by sparc.h.
+   Why, exactly, is svr4.h messing with this?  Seems like the chip 
+   would know best.  */
+
 #undef SIZE_TYPE
 #define SIZE_TYPE (TARGET_ARCH64 ? "long unsigned int" : "unsigned int")
 
 #undef PTRDIFF_TYPE
 #define PTRDIFF_TYPE (TARGET_ARCH64 ? "long int" : "int")
 
-/* Undefined some symbols which are appropriate only for typical svr4
-   systems, but not for the specific case of svr4 running on a
-   SPARC.  */
+/* Undefined some symbols which are defined in "svr4.h" but which are
+   appropriate only for typical svr4 systems, but not for the specific
+   case of svr4 running on a SPARC.  */
 
 #undef INIT_SECTION_ASM_OP
 #undef FINI_SECTION_ASM_OP
@@ -40,8 +50,8 @@ along with GCC; see the file COPYING3.  If not see
 /* Pass -K to the assembler when PIC.  */
 #undef ASM_SPEC
 #define ASM_SPEC \
-  "%{v:-V} %{Qy:} %{!Qn:-Qy} %{Ym,*} \
-   %{" FPIE_OR_FPIC_SPEC ":-K PIC} %(asm_cpu)"
+  "%{v:-V} %{Qy:} %{!Qn:-Qy} %{n} %{T} %{Ym,*} %{Yd,*} %{Wa,*:%*} \
+   %{fpic|fPIC|fpie|fPIE:-K PIC} %(asm_cpu)"
 
 /* Define the names of various pseudo-op used by the SPARC/svr4 assembler.
    Note that many of these are different from the typical pseudo-ops used

@@ -1,6 +1,6 @@
 /* This file is part of GDB, the GNU debugger.
 
-   Copyright 2008-2019 Free Software Foundation, Inc.
+   Copyright 2008-2015 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -26,18 +26,12 @@ main (void)
   void *addr;
     
   addr = &buf0[0];
-  __asm __volatile ("ldr %x0, [%1]\n\t"
-		    "ldr q0, [%x0]"
-		    : "=r" (val)
-		    : "r" (&addr)
-		    : "q0" );
-
+  __asm __volatile ("ldr %x0, [%1]" : "=r" (val) : "r" (&addr));
+  __asm __volatile ("ldr q0, [x0]");
+   
   addr = &buf1[0];
-  __asm __volatile ("ldr %x0, [%1]\n\t"
-		    "ldr q1, [%x0]"
-		    : "=r" (val)
-		    : "r" (&addr)
-		    : "q1" );
+  __asm __volatile ("ldr %x0, [%1]" : "=r" (val) : "r" (&addr));
+  __asm __volatile ("ldr q1, [x0]");
   
   return 1;
 }

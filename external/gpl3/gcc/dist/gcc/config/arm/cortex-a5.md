@@ -1,5 +1,5 @@
 ;; ARM Cortex-A5 pipeline description
-;; Copyright (C) 2010-2019 Free Software Foundation, Inc.
+;; Copyright (C) 2010-2013 Free Software Foundation, Inc.
 ;; Contributed by CodeSourcery.
 ;;
 ;; This file is part of GCC.
@@ -58,24 +58,12 @@
 
 (define_insn_reservation "cortex_a5_alu" 2
   (and (eq_attr "tune" "cortexa5")
-       (eq_attr "type" "alu_imm,alus_imm,logic_imm,logics_imm,\
-                        alu_sreg,alus_sreg,logic_reg,logics_reg,\
-                        adc_imm,adcs_imm,adc_reg,adcs_reg,\
-                        adr,bfm,clz,rbit,rev,alu_dsp_reg,\
-                        shift_imm,shift_reg,\
-                        mov_imm,mov_reg,mvn_imm,mvn_reg,\
-                        mrs,multiple,no_insn"))
+       (eq_attr "type" "alu_reg,simple_alu_imm"))
   "cortex_a5_ex1")
 
 (define_insn_reservation "cortex_a5_alu_shift" 2
   (and (eq_attr "tune" "cortexa5")
-       (eq_attr "type" "extend,\
-                        alu_shift_imm,alus_shift_imm,\
-                        logic_shift_imm,logics_shift_imm,\
-                        alu_shift_reg,alus_shift_reg,\
-                        logic_shift_reg,logics_shift_reg,\
-                        mov_shift,mov_shift_reg,\
-                        mvn_shift,mvn_shift_reg"))
+       (eq_attr "type" "simple_alu_shift,alu_shift,alu_shift_reg"))
   "cortex_a5_ex1")
 
 ;; Forwarding path for unshifted operands.
@@ -92,8 +80,7 @@
 
 (define_insn_reservation "cortex_a5_mul" 2
   (and (eq_attr "tune" "cortexa5")
-       (ior (eq_attr "mul32" "yes")
-	    (eq_attr "widen_mul64" "yes")))
+       (eq_attr "type" "mult"))
   "cortex_a5_ex1")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -106,45 +93,45 @@
 
 (define_insn_reservation "cortex_a5_load1" 2
   (and (eq_attr "tune" "cortexa5")
-       (eq_attr "type" "load_byte,load_4"))
+       (eq_attr "type" "load_byte,load1"))
   "cortex_a5_ex1")
 
 (define_insn_reservation "cortex_a5_store1" 0
   (and (eq_attr "tune" "cortexa5")
-       (eq_attr "type" "store_4"))
+       (eq_attr "type" "store1"))
   "cortex_a5_ex1")
 
 (define_insn_reservation "cortex_a5_load2" 3
   (and (eq_attr "tune" "cortexa5")
-       (eq_attr "type" "load_8"))
+       (eq_attr "type" "load2"))
   "cortex_a5_ex1+cortex_a5_branch, cortex_a5_ex1")
 
 (define_insn_reservation "cortex_a5_store2" 0
   (and (eq_attr "tune" "cortexa5")
-       (eq_attr "type" "store_8"))
+       (eq_attr "type" "store2"))
   "cortex_a5_ex1+cortex_a5_branch, cortex_a5_ex1")
 
 (define_insn_reservation "cortex_a5_load3" 4
   (and (eq_attr "tune" "cortexa5")
-       (eq_attr "type" "load_12"))
+       (eq_attr "type" "load3"))
   "cortex_a5_ex1+cortex_a5_branch, cortex_a5_ex1+cortex_a5_branch,\
    cortex_a5_ex1")
 
 (define_insn_reservation "cortex_a5_store3" 0
   (and (eq_attr "tune" "cortexa5")
-       (eq_attr "type" "store_12"))
+       (eq_attr "type" "store3"))
   "cortex_a5_ex1+cortex_a5_branch, cortex_a5_ex1+cortex_a5_branch,\
    cortex_a5_ex1")
 
 (define_insn_reservation "cortex_a5_load4" 5
   (and (eq_attr "tune" "cortexa5")
-       (eq_attr "type" "load_12"))
+       (eq_attr "type" "load3"))
   "cortex_a5_ex1+cortex_a5_branch, cortex_a5_ex1+cortex_a5_branch,\
    cortex_a5_ex1+cortex_a5_branch, cortex_a5_ex1")
 
 (define_insn_reservation "cortex_a5_store4" 0
   (and (eq_attr "tune" "cortexa5")
-       (eq_attr "type" "store_12"))
+       (eq_attr "type" "store3"))
   "cortex_a5_ex1+cortex_a5_branch, cortex_a5_ex1+cortex_a5_branch,\
    cortex_a5_ex1+cortex_a5_branch, cortex_a5_ex1")
 
@@ -168,8 +155,7 @@
 
 (define_insn_reservation "cortex_a5_fpalu" 4
   (and (eq_attr "tune" "cortexa5")
-       (eq_attr "type" "ffariths, fadds, ffarithd, faddd, fmov, fmuls,\
-                        f_cvt,f_cvtf2i,f_cvti2f,\
+       (eq_attr "type" "ffariths, fadds, ffarithd, faddd, fcpys, fmuls, f_cvt,\
 			fcmps, fcmpd"))
   "cortex_a5_ex1+cortex_a5_fpadd_pipe")
 
@@ -233,14 +219,14 @@
 
 (define_insn_reservation "cortex_a5_fdivs" 14
   (and (eq_attr "tune" "cortexa5")
-       (eq_attr "type" "fdivs, fsqrts"))
+       (eq_attr "type" "fdivs"))
   "cortex_a5_ex1, cortex_a5_fp_div_sqrt * 13")
 
 ;; ??? Similarly for fdivd.
 
 (define_insn_reservation "cortex_a5_fdivd" 29
   (and (eq_attr "tune" "cortexa5")
-       (eq_attr "type" "fdivd, fsqrtd"))
+       (eq_attr "type" "fdivd"))
   "cortex_a5_ex1, cortex_a5_fp_div_sqrt * 28")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -253,12 +239,12 @@
 
 (define_insn_reservation "cortex_a5_r2f" 4
   (and (eq_attr "tune" "cortexa5")
-       (eq_attr "type" "f_mcr,f_mcrr"))
+       (eq_attr "type" "r_2_f"))
   "cortex_a5_ex1")
 
 (define_insn_reservation "cortex_a5_f2r" 2
   (and (eq_attr "tune" "cortexa5")
-       (eq_attr "type" "f_mrc,f_mrrc"))
+       (eq_attr "type" "f_2_r"))
   "cortex_a5_ex1")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

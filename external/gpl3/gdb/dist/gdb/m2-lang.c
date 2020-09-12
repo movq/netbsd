@@ -1,6 +1,7 @@
 /* Modula 2 language support routines for GDB, the GNU debugger.
 
-   Copyright (C) 1992-2019 Free Software Foundation, Inc.
+   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1998, 2000, 2002, 2003, 2004,
+   2005, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,11 +24,11 @@
 #include "expression.h"
 #include "parser-defs.h"
 #include "language.h"
-#include "varobj.h"
 #include "m2-lang.h"
 #include "c-lang.h"
 #include "valprint.h"
 
+extern void _initialize_m2_language (void);
 static void m2_printchar (int, struct type *, struct ui_file *);
 static void m2_emit_char (int, struct type *, struct ui_file *, int);
 
@@ -145,7 +146,10 @@ m2_printstr (struct ui_file *stream, struct type *type, const gdb_byte *string,
 	{
 	  if (in_quotes)
 	    {
-	      fputs_filtered ("\", ", stream);
+	      if (options->inspect_it)
+		fputs_filtered ("\\\", ", stream);
+	      else
+		fputs_filtered ("\", ", stream);
 	      in_quotes = 0;
 	    }
 	  m2_printchar (string[i], type, stream);
@@ -158,7 +162,10 @@ m2_printstr (struct ui_file *stream, struct type *type, const gdb_byte *string,
 	{
 	  if (!in_quotes)
 	    {
-	      fputs_filtered ("\"", stream);
+	      if (options->inspect_it)
+		fputs_filtered ("\\\"", stream);
+	      else
+		fputs_filtered ("\"", stream);
 	      in_quotes = 1;
 	    }
 	  LA_EMIT_CHAR (string[i], type, stream, '"');
@@ -168,7 +175,12 @@ m2_printstr (struct ui_file *stream, struct type *type, const gdb_byte *string,
 
   /* Terminate the quotes if necessary.  */
   if (in_quotes)
-    fputs_filtered ("\"", stream);
+    {
+      if (options->inspect_it)
+	fputs_filtered ("\\\"", stream);
+      else
+	fputs_filtered ("\"", stream);
+    }
 
   if (force_ellipses || i < length)
     fputs_filtered ("...", stream);
@@ -303,7 +315,7 @@ static const struct op_print m2_op_print_tab[] =
   {"MIN", UNOP_MIN, PREC_BUILTIN_FUNCTION, 0},
   {"ODD", UNOP_ODD, PREC_BUILTIN_FUNCTION, 0},
   {"TRUNC", UNOP_TRUNC, PREC_BUILTIN_FUNCTION, 0},
-  {NULL, OP_NULL, PREC_BUILTIN_FUNCTION, 0}
+  {NULL, 0, 0, 0}
 };
 
 /* The built-in types of Modula-2.  */
@@ -353,18 +365,18 @@ const struct exp_descriptor exp_descriptor_modula2 =
   evaluate_subexp_modula2
 };
 
-extern const struct language_defn m2_language_defn =
+const struct language_defn m2_language_defn =
 {
   "modula-2",
-  "Modula-2",
   language_m2,
   range_check_on,
+  type_check_on,
   case_sensitive_on,
   array_row_major,
   macro_expansion_no,
-  NULL,
   &exp_descriptor_modula2,
   m2_parse,			/* parser */
+  m2_error,			/* parser error function */
   null_post_parser,
   m2_printchar,			/* Print character constant */
   m2_printstr,			/* function to print string constant */
@@ -373,32 +385,22 @@ extern const struct language_defn m2_language_defn =
   m2_print_typedef,		/* Print a typedef using appropriate syntax */
   m2_val_print,			/* Print a value using appropriate syntax */
   c_value_print,		/* Print a top-level value */
-  default_read_var_value,	/* la_read_var_value */
   NULL,				/* Language specific skip_trampoline */
   NULL,		                /* name_of_this */
-  false,			/* la_store_sym_names_in_linkage_form_p */
   basic_lookup_symbol_nonlocal,	/* lookup_symbol_nonlocal */
   basic_lookup_transparent_type,/* lookup_transparent_type */
   NULL,				/* Language specific symbol demangler */
-  NULL,
   NULL,				/* Language specific
 				   class_name_from_physname */
   m2_op_print_tab,		/* expression operators for printing */
   0,				/* arrays are first-class (not c-style) */
   0,				/* String lower bound */
   default_word_break_characters,
-  default_collect_symbol_completion_matches,
+  default_make_symbol_completion_list,
   m2_language_arch_info,
   default_print_array_index,
   default_pass_by_reference,
   default_get_string,
-  c_watch_location_expression,
-  NULL,				/* la_get_symbol_name_matcher */
-  iterate_over_symbols,
-  default_search_name_hash,
-  &default_varobj_ops,
-  NULL,
-  NULL,
   LANG_MAGIC
 };
 
@@ -414,8 +416,7 @@ build_m2_types (struct gdbarch *gdbarch)
   builtin_m2_type->builtin_card
     = arch_integer_type (gdbarch, gdbarch_int_bit (gdbarch), 1, "CARDINAL");
   builtin_m2_type->builtin_real
-    = arch_float_type (gdbarch, gdbarch_float_bit (gdbarch), "REAL",
-		       gdbarch_float_format (gdbarch));
+    = arch_float_type (gdbarch, gdbarch_float_bit (gdbarch), "REAL", NULL);
   builtin_m2_type->builtin_char
     = arch_character_type (gdbarch, TARGET_CHAR_BIT, 1, "CHAR");
   builtin_m2_type->builtin_bool
@@ -429,7 +430,7 @@ static struct gdbarch_data *m2_type_data;
 const struct builtin_m2_type *
 builtin_m2_type (struct gdbarch *gdbarch)
 {
-  return (const struct builtin_m2_type *) gdbarch_data (gdbarch, m2_type_data);
+  return gdbarch_data (gdbarch, m2_type_data);
 }
 
 
@@ -439,4 +440,6 @@ void
 _initialize_m2_language (void)
 {
   m2_type_data = gdbarch_data_register_post_init (build_m2_types);
+
+  add_language (&m2_language_defn);
 }

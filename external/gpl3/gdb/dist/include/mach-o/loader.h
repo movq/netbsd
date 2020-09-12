@@ -1,5 +1,6 @@
 /* Mach-O support for BFD.
-   Copyright (C) 2011-2019 Free Software Foundation, Inc.
+   Copyright 2011, 2012
+   Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -32,10 +33,7 @@ typedef enum bfd_mach_o_mach_header_magic
 }
 bfd_mach_o_mach_header_magic;
 
-/* Capability bits in cpu type.  */
-#define BFD_MACH_O_CPU_ARCH_MASK  0xff000000
-#define BFD_MACH_O_CPU_ARCH_ABI64 0x01000000
-#define BFD_MACH_O_CPU_IS64BIT    0x01000000
+#define BFD_MACH_O_CPU_IS64BIT 0x1000000
 
 typedef enum bfd_mach_o_cpu_type
 {
@@ -51,18 +49,10 @@ typedef enum bfd_mach_o_cpu_type
   BFD_MACH_O_CPU_TYPE_I860 = 15,
   BFD_MACH_O_CPU_TYPE_ALPHA = 16,
   BFD_MACH_O_CPU_TYPE_POWERPC = 18,
-  BFD_MACH_O_CPU_TYPE_POWERPC_64 =
-    (BFD_MACH_O_CPU_TYPE_POWERPC | BFD_MACH_O_CPU_IS64BIT),
-  BFD_MACH_O_CPU_TYPE_X86_64 =
-    (BFD_MACH_O_CPU_TYPE_I386 | BFD_MACH_O_CPU_IS64BIT),
-  BFD_MACH_O_CPU_TYPE_ARM64 =
-    (BFD_MACH_O_CPU_TYPE_ARM | BFD_MACH_O_CPU_IS64BIT)
+  BFD_MACH_O_CPU_TYPE_POWERPC_64 = (BFD_MACH_O_CPU_TYPE_POWERPC | BFD_MACH_O_CPU_IS64BIT),
+  BFD_MACH_O_CPU_TYPE_X86_64 = (BFD_MACH_O_CPU_TYPE_I386 | BFD_MACH_O_CPU_IS64BIT)
 }
 bfd_mach_o_cpu_type;
-
-/* Capability bits in cpu subtype.  */
-#define BFD_MACH_O_CPU_SUBTYPE_MASK  0xff000000
-#define BFD_MACH_O_CPU_SUBTYPE_LIB64 0x80000000
 
 typedef enum bfd_mach_o_cpu_subtype
 {
@@ -75,11 +65,7 @@ typedef enum bfd_mach_o_cpu_subtype
   BFD_MACH_O_CPU_SUBTYPE_ARM_V6 = 6,
   BFD_MACH_O_CPU_SUBTYPE_ARM_V5TEJ = 7,
   BFD_MACH_O_CPU_SUBTYPE_ARM_XSCALE = 8,
-  BFD_MACH_O_CPU_SUBTYPE_ARM_V7 = 9,
-
-  /* arm64.  */
-  BFD_MACH_O_CPU_SUBTYPE_ARM64_ALL = 0,
-  BFD_MACH_O_CPU_SUBTYPE_ARM64_V8 = 1
+  BFD_MACH_O_CPU_SUBTYPE_ARM_V7 = 9
 }
 bfd_mach_o_cpu_subtype;
 
@@ -125,8 +111,7 @@ typedef enum bfd_mach_o_header_flags
   BFD_MACH_O_MH_PIE			= 0x0200000,
   BFD_MACH_O_MH_DEAD_STRIPPABLE_DYLIB   = 0x0400000,
   BFD_MACH_O_MH_HAS_TLV_DESCRIPTORS     = 0x0800000,
-  BFD_MACH_O_MH_NO_HEAP_EXECUTION       = 0x1000000,
-  BFD_MACH_O_MH_APP_EXTENSION_SAFE      = 0x2000000
+  BFD_MACH_O_MH_NO_HEAP_EXECUTION       = 0x1000000
 }
 bfd_mach_o_header_flags;
 
@@ -161,34 +146,27 @@ typedef enum bfd_mach_o_load_command_type
   /* Load a dynamically linked shared library that is allowed to be
        missing (weak).  */
   BFD_MACH_O_LC_LOAD_WEAK_DYLIB = 0x18,
-  BFD_MACH_O_LC_SEGMENT_64 = 0x19,		/* 64-bit segment of this file to be
-						   mapped.  */
-  BFD_MACH_O_LC_ROUTINES_64 = 0x1a,     	/* Address of the dyld init routine
-						   in a dylib.  */
-  BFD_MACH_O_LC_UUID = 0x1b,            	/* 128-bit UUID of the executable.  */
-  BFD_MACH_O_LC_RPATH = 0x1c,			/* Run path addiions.  */
-  BFD_MACH_O_LC_CODE_SIGNATURE = 0x1d,		/* Local of code signature.  */
-  BFD_MACH_O_LC_SEGMENT_SPLIT_INFO = 0x1e,	/* Local of info to split seg.  */
-  BFD_MACH_O_LC_REEXPORT_DYLIB = 0x1f,		/* Load and re-export lib.  */
-  BFD_MACH_O_LC_LAZY_LOAD_DYLIB = 0x20,		/* Delay load of lib until use.  */
-  BFD_MACH_O_LC_ENCRYPTION_INFO = 0x21,		/* Encrypted segment info.  */
-  BFD_MACH_O_LC_DYLD_INFO = 0x22,		/* Compressed dyld information.  */
-  BFD_MACH_O_LC_LOAD_UPWARD_DYLIB = 0x23,	/* Load upward dylib.  */
-  BFD_MACH_O_LC_VERSION_MIN_MACOSX = 0x24,	/* Minimal macOS version.  */
-  BFD_MACH_O_LC_VERSION_MIN_IPHONEOS = 0x25,	/* Minimal iOS version.  */
-  BFD_MACH_O_LC_FUNCTION_STARTS = 0x26,  	/* Compressed table of func start.  */
-  BFD_MACH_O_LC_DYLD_ENVIRONMENT = 0x27, 	/* Env variable string for dyld.  */
-  BFD_MACH_O_LC_MAIN = 0x28,             	/* Entry point.  */
-  BFD_MACH_O_LC_DATA_IN_CODE = 0x29,     	/* Table of non-instructions.  */
-  BFD_MACH_O_LC_SOURCE_VERSION = 0x2a,   	/* Source version.  */
-  BFD_MACH_O_LC_DYLIB_CODE_SIGN_DRS = 0x2b,	/* DRs from dylibs.  */
-  BFD_MACH_O_LC_ENCRYPTION_INFO_64 = 0x2c,	/* Encrypted 64 bit seg info.  */
-  BFD_MACH_O_LC_LINKER_OPTIONS = 0x2d,		/* Linker options.  */
-  BFD_MACH_O_LC_LINKER_OPTIMIZATION_HINT = 0x2e,/* Optimization hints.  */
-  BFD_MACH_O_LC_VERSION_MIN_TVOS = 0x2f,	/* Minimal tvOS version.  */
-  BFD_MACH_O_LC_VERSION_MIN_WATCHOS = 0x30,	/* Minimal watchOS version.  */
-  BFD_MACH_O_LC_NOTE = 0x31,			/* Region of arbitrary data.  */
-  BFD_MACH_O_LC_BUILD_VERSION = 0x32,		/* Generic build version.  */
+  BFD_MACH_O_LC_SEGMENT_64 = 0x19,	/* 64-bit segment of this file to be
+                                           mapped.  */
+  BFD_MACH_O_LC_ROUTINES_64 = 0x1a,     /* Address of the dyld init routine
+                                           in a dylib.  */
+  BFD_MACH_O_LC_UUID = 0x1b,            /* 128-bit UUID of the executable.  */
+  BFD_MACH_O_LC_RPATH = 0x1c,		/* Run path addiions.  */
+  BFD_MACH_O_LC_CODE_SIGNATURE = 0x1d,	/* Local of code signature.  */
+  BFD_MACH_O_LC_SEGMENT_SPLIT_INFO = 0x1e, /* Local of info to split seg.  */
+  BFD_MACH_O_LC_REEXPORT_DYLIB = 0x1f,  /* Load and re-export lib.  */
+  BFD_MACH_O_LC_LAZY_LOAD_DYLIB = 0x20, /* Delay load of lib until use.  */
+  BFD_MACH_O_LC_ENCRYPTION_INFO = 0x21, /* Encrypted segment info.  */
+  BFD_MACH_O_LC_DYLD_INFO = 0x22,	/* Compressed dyld information.  */
+  BFD_MACH_O_LC_LOAD_UPWARD_DYLIB = 0x23, /* Load upward dylib.  */
+  BFD_MACH_O_LC_VERSION_MIN_MACOSX = 0x24,   /* Minimal MacOSX version.  */
+  BFD_MACH_O_LC_VERSION_MIN_IPHONEOS = 0x25, /* Minimal IOS version.  */
+  BFD_MACH_O_LC_FUNCTION_STARTS = 0x26,  /* Compressed table of func start.  */
+  BFD_MACH_O_LC_DYLD_ENVIRONMENT = 0x27, /* Env variable string for dyld.  */
+  BFD_MACH_O_LC_MAIN = 0x28,             /* Entry point.  */
+  BFD_MACH_O_LC_DATA_IN_CODE = 0x29,     /* Table of non-instructions.  */
+  BFD_MACH_O_LC_SOURCE_VERSION = 0x2a,   /* Source version.  */
+  BFD_MACH_O_LC_DYLIB_CODE_SIGN_DRS = 0x2b /* DRs from dylibs.  */
 }
 bfd_mach_o_load_command_type;
 
@@ -354,63 +332,6 @@ bfd_mach_o_section_attribute;
 #define BFD_MACH_O_INDIRECT_SYM_LOCAL			0x80000000
 #define BFD_MACH_O_INDIRECT_SYM_ABS			0x40000000
 
-/* Constants for dyld info rebase.  */
-#define BFD_MACH_O_REBASE_OPCODE_MASK     0xf0
-#define BFD_MACH_O_REBASE_IMMEDIATE_MASK  0x0f
-
-/* The rebase opcodes.  */
-#define BFD_MACH_O_REBASE_OPCODE_DONE                               0x00
-#define BFD_MACH_O_REBASE_OPCODE_SET_TYPE_IMM                       0x10
-#define BFD_MACH_O_REBASE_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB        0x20
-#define BFD_MACH_O_REBASE_OPCODE_ADD_ADDR_ULEB                      0x30
-#define BFD_MACH_O_REBASE_OPCODE_ADD_ADDR_IMM_SCALED                0x40
-#define BFD_MACH_O_REBASE_OPCODE_DO_REBASE_IMM_TIMES                0x50
-#define BFD_MACH_O_REBASE_OPCODE_DO_REBASE_ULEB_TIMES               0x60
-#define BFD_MACH_O_REBASE_OPCODE_DO_REBASE_ADD_ADDR_ULEB            0x70
-#define BFD_MACH_O_REBASE_OPCODE_DO_REBASE_ULEB_TIMES_SKIPPING_ULEB 0x80
-
-/* The rebase type.  */
-#define BFD_MACH_O_REBASE_TYPE_POINTER            1
-#define BFD_MACH_O_REBASE_TYPE_TEXT_ABSOLUTE32    2
-#define BFD_MACH_O_REBASE_TYPE_TEXT_PCREL32       3
-
-/* Constants for dyld info bind.  */
-#define BFD_MACH_O_BIND_OPCODE_MASK    0xf0
-#define BFD_MACH_O_BIND_IMMEDIATE_MASK 0x0f
-
-/* The bind opcodes.  */
-#define BFD_MACH_O_BIND_OPCODE_DONE                   	      	 0x00
-#define BFD_MACH_O_BIND_OPCODE_SET_DYLIB_ORDINAL_IMM  	      	 0x10
-#define BFD_MACH_O_BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB 	      	 0x20
-#define BFD_MACH_O_BIND_OPCODE_SET_DYLIB_SPECIAL_IMM  	      	 0x30
-#define BFD_MACH_O_BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM 	 0x40
-#define BFD_MACH_O_BIND_OPCODE_SET_TYPE_IMM                  	 0x50
-#define BFD_MACH_O_BIND_OPCODE_SET_ADDEND_SLEB               	 0x60
-#define BFD_MACH_O_BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB   	 0x70
-#define BFD_MACH_O_BIND_OPCODE_ADD_ADDR_ULEB                 	 0x80
-#define BFD_MACH_O_BIND_OPCODE_DO_BIND                       	 0x90
-#define BFD_MACH_O_BIND_OPCODE_DO_BIND_ADD_ADDR_ULEB         	 0xa0
-#define BFD_MACH_O_BIND_OPCODE_DO_BIND_ADD_ADDR_IMM_SCALED   	 0xb0
-#define BFD_MACH_O_BIND_OPCODE_DO_BIND_ULEB_TIMES_SKIPPING_ULEB 0xc0
-
-/* The bind types.  */
-#define BFD_MACH_O_BIND_TYPE_POINTER            1
-#define BFD_MACH_O_BIND_TYPE_TEXT_ABSOLUTE32    2
-#define BFD_MACH_O_BIND_TYPE_TEXT_PCREL32       3
-
-/* The special dylib.  */
-#define BFD_MACH_O_BIND_SPECIAL_DYLIB_SELF             0
-#define BFD_MACH_O_BIND_SPECIAL_DYLIB_MAIN_EXECUTABLE -1
-#define BFD_MACH_O_BIND_SPECIAL_DYLIB_FLAT_LOOKUP     -2
-
-/* Constants for dyld info export.  */
-#define BFD_MACH_O_EXPORT_SYMBOL_FLAGS_KIND_MASK            0x03
-#define BFD_MACH_O_EXPORT_SYMBOL_FLAGS_KIND_REGULAR         0x00
-#define BFD_MACH_O_EXPORT_SYMBOL_FLAGS_KIND_THREAD_LOCAL    0x01
-#define BFD_MACH_O_EXPORT_SYMBOL_FLAGS_WEAK_DEFINITION      0x04
-#define BFD_MACH_O_EXPORT_SYMBOL_FLAGS_REEXPORT             0x08
-#define BFD_MACH_O_EXPORT_SYMBOL_FLAGS_STUB_AND_RESOLVER    0x10
-
 /* Constants for DATA_IN_CODE entries.  */
 typedef enum bfd_mach_o_data_in_code_entry_kind
 {

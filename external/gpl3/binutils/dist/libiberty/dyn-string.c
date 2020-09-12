@@ -1,5 +1,5 @@
 /* An abstract string datatype.
-   Copyright (C) 1998-2020 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2002, 2004 Free Software Foundation, Inc.
    Contributed by Mark Mitchell (mark@markmitchell.com).
 
 This file is part of GNU CC.
@@ -336,7 +336,7 @@ dyn_string_append_cstr (dyn_string_t dest, const char *s)
   return 1;
 }
 
-/* Appends C to the end of DEST.  Returns 1 on success.  On failure,
+/* Appends C to the end of DEST.  Returns 1 on success.  On failiure,
    if RETURN_ON_ALLOCATION_FAILURE, deletes DEST and returns 0.  */
 
 int

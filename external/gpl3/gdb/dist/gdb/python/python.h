@@ -1,6 +1,6 @@
 /* Python/gdb header for generic use in gdb
 
-   Copyright (C) 2008-2019 Free Software Foundation, Inc.
+   Copyright (C) 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,15 +17,34 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef PYTHON_PYTHON_H
-#define PYTHON_PYTHON_H
+#ifndef GDB_PYTHON_H
+#define GDB_PYTHON_H
 
-#include "extension.h"
+#include "value.h"
 
-/* This is all that python exports to gdb.  */
-extern const struct extension_language_defn extension_language_python;
+struct breakpoint_object;
 
-/* Command element for the 'python' command.  */
-extern cmd_list_element *python_cmd_element;
+extern int gdbpy_global_auto_load;
 
-#endif /* PYTHON_PYTHON_H */
+extern void finish_python_initialization (void);
+
+void eval_python_from_control_command (struct command_line *);
+
+void source_python_script (FILE *stream, const char *file);
+
+int apply_val_pretty_printer (struct type *type, const gdb_byte *valaddr,
+			      int embedded_offset, CORE_ADDR address,
+			      struct ui_file *stream, int recurse,
+			      const struct value *val,
+			      const struct value_print_options *options,
+			      const struct language_defn *language);
+
+void preserve_python_values (struct objfile *objfile, htab_t copied_types);
+
+void load_auto_scripts_for_objfile (struct objfile *objfile);
+
+int gdbpy_should_stop (struct breakpoint_object *bp_obj);
+
+int gdbpy_breakpoint_has_py_cond (struct breakpoint_object *bp_obj);
+
+#endif /* GDB_PYTHON_H */

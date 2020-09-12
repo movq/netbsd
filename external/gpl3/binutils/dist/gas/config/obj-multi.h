@@ -1,5 +1,6 @@
 /* Multiple object format emulation.
-   Copyright (C) 1995-2020 Free Software Foundation, Inc.
+   Copyright 1995, 1996, 1997, 1999, 2000, 2002, 2004, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -80,20 +81,10 @@
 	 ? (*this_format->symbol_new_hook) (S)		\
 	 : (void) 0)
 
-#define obj_symbol_clone_hook(N, O)			\
-	(this_format->symbol_clone_hook			\
-	 ? (*this_format->symbol_clone_hook) (N, O)	\
-	 : (void) 0)
-
 #define obj_sec_sym_ok_for_reloc(A)			\
 	(this_format->sec_sym_ok_for_reloc		\
 	 ? (*this_format->sec_sym_ok_for_reloc) (A)	\
 	 : 0)
-
-#define obj_adjust_symtab()				\
-	(this_format->adjust_symtab			\
-	 ? (*this_format->adjust_symtab) ()		\
-	 : (void) 0)
 
 #define S_GET_SIZE					\
 	(*this_format->s_get_size)
@@ -155,10 +146,7 @@
 
 #define EMIT_SECTION_SYMBOLS (this_format->emit_section_symbols)
 
-#ifndef INITIALIZING_EMULS
-/* We want to use the default FAKE_LABEL_NAME in as.c.  */
 #define FAKE_LABEL_NAME (this_emulation->fake_label_name)
-#endif
 
 #ifdef OBJ_MAYBE_ELF
 /* We need OBJ_SYMFIELD_TYPE so that symbol_get_obj is defined in symbol.c

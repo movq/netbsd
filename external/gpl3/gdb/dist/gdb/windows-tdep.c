@@ -1,4 +1,4 @@
-/* Copyright (C) 2008-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -26,14 +26,6 @@
 #include "command.h"
 #include "gdbcmd.h"
 #include "gdbthread.h"
-#include "objfiles.h"
-#include "symfile.h"
-#include "coff-pe-read.h"
-#include "gdb_bfd.h"
-#include "complaints.h"
-#include "solib.h"
-#include "solib-target.h"
-#include "gdbcore.h"
 
 struct cmd_list_element *info_w32_cmdlist;
 
@@ -111,7 +103,7 @@ windows_get_tlb_type (struct gdbarch *gdbarch)
   static struct type *last_tlb_type = NULL;
   struct type *dword_ptr_type, *dword32_type, *void_ptr_type;
   struct type *peb_ldr_type, *peb_ldr_ptr_type;
-  struct type *peb_type, *peb_ptr_type, *list_type;
+  struct type *peb_type, *peb_ptr_type, *list_type, *list_ptr_type;
   struct type *module_list_ptr_type;
   struct type *tib_type, *seh_type, *tib_ptr_type, *seh_ptr_type;
 
@@ -130,6 +122,9 @@ windows_get_tlb_type (struct gdbarch *gdbarch)
   list_type = arch_composite_type (gdbarch, NULL, TYPE_CODE_STRUCT);
   TYPE_NAME (list_type) = xstrdup ("list");
 
+  list_ptr_type = arch_type (gdbarch, TYPE_CODE_PTR,
+			    TYPE_LENGTH (void_ptr_type), NULL);
+
   module_list_ptr_type = void_ptr_type;
 
   append_composite_type_field (list_type, "forward_list",
@@ -143,8 +138,7 @@ windows_get_tlb_type (struct gdbarch *gdbarch)
   TYPE_NAME (seh_type) = xstrdup ("seh");
 
   seh_ptr_type = arch_type (gdbarch, TYPE_CODE_PTR,
-			    TYPE_LENGTH (void_ptr_type) * TARGET_CHAR_BIT,
-			    NULL);
+			    TYPE_LENGTH (void_ptr_type), NULL);
   TYPE_TARGET_TYPE (seh_ptr_type) = seh_type;
 
   append_composite_type_field (seh_type, "next_seh", seh_ptr_type);
@@ -164,8 +158,7 @@ windows_get_tlb_type (struct gdbarch *gdbarch)
   append_composite_type_field (peb_ldr_type, "entry_in_progress",
 			       void_ptr_type);
   peb_ldr_ptr_type = arch_type (gdbarch, TYPE_CODE_PTR,
-				TYPE_LENGTH (void_ptr_type) * TARGET_CHAR_BIT,
-				NULL);
+			    TYPE_LENGTH (void_ptr_type), NULL);
   TYPE_TARGET_TYPE (peb_ldr_ptr_type) = peb_ldr_type;
 
 
@@ -183,8 +176,7 @@ windows_get_tlb_type (struct gdbarch *gdbarch)
   append_composite_type_field (peb_type, "process_heap", void_ptr_type);
   append_composite_type_field (peb_type, "fast_peb_lock", void_ptr_type);
   peb_ptr_type = arch_type (gdbarch, TYPE_CODE_PTR,
-			    TYPE_LENGTH (void_ptr_type) * TARGET_CHAR_BIT,
-			    NULL);
+			    TYPE_LENGTH (void_ptr_type), NULL);
   TYPE_TARGET_TYPE (peb_ptr_type) = peb_type;
 
 
@@ -227,8 +219,7 @@ windows_get_tlb_type (struct gdbarch *gdbarch)
   append_composite_type_field (tib_type, "last_error_number", dword_ptr_type);
 
   tib_ptr_type = arch_type (gdbarch, TYPE_CODE_PTR,
-			    TYPE_LENGTH (void_ptr_type) * TARGET_CHAR_BIT,
-			    NULL);
+			    TYPE_LENGTH (void_ptr_type), NULL);
   TYPE_TARGET_TYPE (tib_ptr_type) = tib_type;
 
   last_tlb_type = tib_ptr_type;
@@ -265,7 +256,7 @@ tlb_value_write (struct value *v, struct value *fromval)
   error (_("Impossible to change the Thread Local Base"));
 }
 
-static const struct lval_funcs tlb_value_funcs =
+static struct lval_funcs tlb_value_funcs =
   {
     tlb_value_read,
     tlb_value_write
@@ -277,9 +268,9 @@ static const struct lval_funcs tlb_value_funcs =
    if there's no object available.  */
 
 static struct value *
-tlb_make_value (struct gdbarch *gdbarch, struct internalvar *var, void *ignore)
+tlb_make_value (struct gdbarch *gdbarch, struct internalvar *var)
 {
-  if (target_has_stack && inferior_ptid != null_ptid)
+  if (target_has_stack && !ptid_equal (inferior_ptid, null_ptid))
     {
       struct type *type = windows_get_tlb_type (gdbarch);
       return allocate_computed_value (type, &tlb_value_funcs, NULL);
@@ -298,8 +289,8 @@ display_one_tib (ptid_t ptid)
   gdb_byte *index;
   CORE_ADDR thread_local_base;
   ULONGEST i, val, max, max_name, size, tib_size;
-  ULONGEST sizeof_ptr = gdbarch_ptr_bit (target_gdbarch ());
-  enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
+  ULONGEST sizeof_ptr = gdbarch_ptr_bit (target_gdbarch);
+  enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch);
 
   if (sizeof_ptr == 64)
     {
@@ -322,7 +313,7 @@ display_one_tib (ptid_t ptid)
       max = tib_size / size;
     }
   
-  tib = (gdb_byte *) alloca (tib_size);
+  tib = alloca (tib_size);
 
   if (target_get_tib_address (ptid, &thread_local_base) == 0)
     {
@@ -331,19 +322,19 @@ display_one_tib (ptid_t ptid)
       return -1;
     }
 
-  if (target_read (current_top_target (), TARGET_OBJECT_MEMORY,
+  if (target_read (&current_target, TARGET_OBJECT_MEMORY,
 		   NULL, tib, thread_local_base, tib_size) != tib_size)
     {
       printf_filtered (_("Unable to read thread information "
 			 "block for %s at address %s\n"),
 	target_pid_to_str (ptid), 
-	paddress (target_gdbarch (), thread_local_base));
+	paddress (target_gdbarch, thread_local_base));
       return -1;
     }
 
   printf_filtered (_("Thread Information Block %s at %s\n"),
 		   target_pid_to_str (ptid),
-		   paddress (target_gdbarch (), thread_local_base));
+		   paddress (target_gdbarch, thread_local_base));
 
   index = (gdb_byte *) tib;
 
@@ -362,12 +353,31 @@ display_one_tib (ptid_t ptid)
   return 1;  
 }
 
-/* Display thread information block of the current thread.  */
+/* Display thread information block of a thread specified by ARGS.
+   If ARGS is empty, display thread information block of current_thread
+   if current_thread is non NULL.
+   Otherwise ARGS is parsed and converted to a integer that should
+   be the windows ThreadID (not the internal GDB thread ID).  */
 
 static void
-display_tib (const char * args, int from_tty)
+display_tib (char * args, int from_tty)
 {
-  if (inferior_ptid != null_ptid)
+  if (args)
+    {
+      struct thread_info *tp;
+      int gdb_id = value_as_long (parse_and_eval (args));
+
+      tp = find_thread_id (gdb_id);
+
+      if (!tp)
+	error (_("Thread ID %d not known."), gdb_id);
+
+      if (!target_thread_alive (tp->ptid))
+	error (_("Thread ID %d has terminated."), gdb_id);
+
+      display_one_tib (tp->ptid);
+    }
+  else if (!ptid_equal (inferior_ptid, null_ptid))
     display_one_tib (inferior_ptid);
 }
 
@@ -375,63 +385,17 @@ void
 windows_xfer_shared_library (const char* so_name, CORE_ADDR load_addr,
 			     struct gdbarch *gdbarch, struct obstack *obstack)
 {
-  CORE_ADDR text_offset;
-
+  char *p;
   obstack_grow_str (obstack, "<library name=\"");
-  std::string p = xml_escape_text (so_name);
-  obstack_grow_str (obstack, p.c_str ());
+  p = xml_escape_text (so_name);
+  obstack_grow_str (obstack, p);
+  xfree (p);
   obstack_grow_str (obstack, "\"><segment address=\"");
-  gdb_bfd_ref_ptr dll (gdb_bfd_open (so_name, gnutarget, -1));
-  /* The following calls are OK even if dll is NULL.
-     The default value 0x1000 is returned by pe_text_section_offset
-     in that case.  */
-  text_offset = pe_text_section_offset (dll.get ());
-  obstack_grow_str (obstack, paddress (gdbarch, load_addr + text_offset));
+  /* The symbols in a dll are offset by 0x1000, which is the the
+     offset from 0 of the first byte in an image - because of the file
+     header and the section alignment.  */
+  obstack_grow_str (obstack, paddress (gdbarch, load_addr + 0x1000));
   obstack_grow_str (obstack, "\"/></library>");
-}
-
-/* Implement the "iterate_over_objfiles_in_search_order" gdbarch
-   method.  It searches all objfiles, starting with CURRENT_OBJFILE
-   first (if not NULL).
-
-   On Windows, the system behaves a little differently when two
-   objfiles each define a global symbol using the same name, compared
-   to other platforms such as GNU/Linux for instance.  On GNU/Linux,
-   all instances of the symbol effectively get merged into a single
-   one, but on Windows, they remain distinct.
-
-   As a result, it usually makes sense to start global symbol searches
-   with the current objfile before expanding it to all other objfiles.
-   This helps for instance when a user debugs some code in a DLL that
-   refers to a global variable defined inside that DLL.  When trying
-   to print the value of that global variable, it would be unhelpful
-   to print the value of another global variable defined with the same
-   name, but in a different DLL.  */
-
-static void
-windows_iterate_over_objfiles_in_search_order
-  (struct gdbarch *gdbarch,
-   iterate_over_objfiles_in_search_order_cb_ftype *cb,
-   void *cb_data, struct objfile *current_objfile)
-{
-  int stop;
-
-  if (current_objfile)
-    {
-      stop = cb (current_objfile, cb_data);
-      if (stop)
-	return;
-    }
-
-  for (objfile *objfile : current_program_space->objfiles ())
-    {
-      if (objfile != current_objfile)
-	{
-	  stop = cb (objfile, cb_data);
-	  if (stop)
-	    return;
-	}
-    }
 }
 
 static void
@@ -443,7 +407,7 @@ show_maint_show_all_tib (struct ui_file *file, int from_tty,
 }
 
 static void
-info_w32_command (const char *args, int from_tty)
+info_w32_command (char *args, int from_tty)
 {
   help_list (info_w32_cmdlist, "info w32 ", class_info, gdb_stdout);
 }
@@ -460,34 +424,6 @@ init_w32_command_list (void)
       w32_prefix_command_valid = 1;
     }
 }
-
-/* To be called from the various GDB_OSABI_CYGWIN handlers for the
-   various Windows architectures and machine types.  */
-
-void
-windows_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
-{
-  set_gdbarch_wchar_bit (gdbarch, 16);
-  set_gdbarch_wchar_signed (gdbarch, 0);
-
-  /* Canonical paths on this target look like
-     `c:\Program Files\Foo App\mydll.dll', for example.  */
-  set_gdbarch_has_dos_based_file_system (gdbarch, 1);
-
-  set_gdbarch_iterate_over_objfiles_in_search_order
-    (gdbarch, windows_iterate_over_objfiles_in_search_order);
-
-  set_solib_ops (gdbarch, &solib_target_so_ops);
-}
-
-/* Implementation of `tlb' variable.  */
-
-static const struct internalvar_funcs tlb_funcs =
-{
-  tlb_make_value,
-  NULL,
-  NULL
-};
 
 void
 _initialize_windows_tdep (void)
@@ -515,5 +451,5 @@ even if their meaning is unknown."),
      value with a void typed value, and when we get here, gdbarch
      isn't initialized yet.  At this point, we're quite sure there
      isn't another convenience variable of the same name.  */
-  create_internalvar_type_lazy ("_tlb", &tlb_funcs, NULL);
+  create_internalvar_type_lazy ("_tlb", tlb_make_value);
 }

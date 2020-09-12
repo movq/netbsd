@@ -1,4 +1,5 @@
-#   Copyright 1999-2019 Free Software Foundation, Inc.
+#   Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008, 2009, 2010, 2011
+#   Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,6 +16,10 @@
 
 # This file was written by Elena Zannoni (ezannoni@cygnus.com)
 
+if $tracelevel then {
+    strace $tracelevel
+}
+
 
 #
 # test running programs
@@ -22,22 +27,33 @@
 
 if { [skip_cplus_tests] } { continue }
 
-standard_testfile .cc
+set testfile "annota2"
+set srcfile ${testfile}.cc
+set binfile ${objdir}/${subdir}/${testfile}
 
-if {[prepare_for_testing "failed to prepare" $testfile $srcfile \
-	 {debug c++ nowarnings}]} {
+if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug c++ nowarnings}] != "" } {
+    untested annota2.exp
     return -1
 }
 
-# This testcase cannot use runto_main because of the different prompt
-# we get when using annotation level 2.
+# are we on a target board? If so, don't run these tests.
+# note: this is necessary because we cannot use runto_main (which would
+# work for remote targets too) because of the different prompt we get
+# when using annotation level 2.
 #
-if ![target_can_use_run_cmd] {
+if [is_remote target] then {
     return 0
 }
 
-set breakpoints_invalid "\r\n\032\032breakpoints-invalid\r\n"
-set frames_invalid "\r\n\032\032frames-invalid\r\n"
+
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
+
+if [target_info exists gdb_stub] {
+    gdb_step_for_stub;
+}
 
 #
 # line number where we need to stop in main
@@ -87,36 +103,8 @@ gdb_test_multiple "run" "run until main breakpoint" {
 # annotate-field-value
 # annotate-field-end
 #
-
-set pat [multi_line "" \
-	     "\032\032post-prompt" \
-	     "" \
-	     "\032\032value-history-begin 1 -" \
-	     ".*= " \
-	     "\032\032value-history-value" \
-	     "\\{" \
-	     "\032\032field-begin -" \
-	     "x" \
-	     "\032\032field-name-end" \
-	     " = " \
-	     "\032\032field-value" \
-	     "1" \
-	     "\032\032field-end" \
-	     ", " \
-	     "\032\032field-begin -" \
-	     "y" \
-	     "\032\032field-name-end" \
-	     " = " \
-	     "\032\032field-value" \
-	     "2" \
-	     "\032\032field-end" \
-	     "\\}" \
-	     "" \
-	     "\032\032value-history-end" \
-	     $gdb_prompt$]
-
 gdb_test_multiple "print a" "print class" {
-    -re "$pat" {
+    -re "\r\n\032\032post-prompt\r\n\r\n\032\032value-history-begin 1 -\r\n.*= \r\n\032\032value-history-value\r\n\\{\r\n\032\032field-begin -\r\nx\r\n\032\032field-name-end\r\n = \r\n\032\032field-value\r\n1\r\n\032\032field-end\r\n, \r\n\032\032field-begin -\r\ny\r\n\032\032field-name-end\r\n = \r\n\032\032field-value\r\n2\r\n\032\032field-end\r\n\\}\r\n\r\n\032\032value-history-end\r\n$gdb_prompt$" {
 	pass "print class"
     }
 }
@@ -127,21 +115,8 @@ gdb_test_multiple "print a" "print class" {
 # annotate-exited
 # `a.x is 1' is asynchronous regarding to `frames-invalid'.
 #
-
-set pat [multi_line "" \
-	     "\032\032post-prompt" \
-	     "Continuing." \
-	     "" \
-	     "\032\032starting" \
-	     "\(${frames_invalid}\)*a.x is 1" \
-	     "\(${frames_invalid}\)*"\
-	     "\032\032exited 0" \
-	     "$inferior_exited_re normally." \
-	     "" \
-	     "\032\032stopped" \
-	     $gdb_prompt$]
 gdb_test_multiple "continue" "continue until exit" {
-    -re "$pat" {
+    -re "\r\n\032\032post-prompt\r\nContinuing.\r\n\r\n\032\032starting\(\r\n\r\n\032\032frames-invalid\)*\r\na.x is 1\r\n\(\r\n\032\032frames-invalid\r\n\)*\r\n\032\032exited 0\r\n$inferior_exited_re normally.\r\n\r\n\032\032stopped\r\n$gdb_prompt$" {
 	pass "continue until exit"
     }
 }
@@ -154,7 +129,7 @@ gdb_expect {
   -re ".*Delete all breakpoints. \\(y or n\\) \r\n\032\032query.*$" {
            send_gdb "y\n"
            gdb_expect {
-	     -re "\r\n\032\032post-query\r\n${breakpoints_invalid}$gdb_prompt$" { pass "delete bps" }
+	     -re "\r\n\032\032post-query\r\n$gdb_prompt$" { pass "delete bps" }
 	     -re ".*$gdb_prompt$" { fail "delete bps" }
 	     timeout  { fail "delete bps (timeout)" }
 	 }
@@ -166,14 +141,8 @@ gdb_expect {
 #
 # break at first line of main. 
 #
-set pat [multi_line "" \
-	     "\032\032post-prompt" \
-	     "Breakpoint.*at $hex: file.*$srcfile, line.*" \
-	     "\032\032breakpoints-invalid.*" \
-	     $gdb_prompt$]
-
 gdb_test_multiple "break 22" "break at main" {
-    -re  "$pat" {
+    -re  "\r\n\032\032post-prompt\r\n\r\n\032\032breakpoints-invalid\r\nBreakpoint.*at $hex: file.*$srcfile, line.*\r\n$gdb_prompt$" {
 	pass "breakpoint at main"
     }
 }
@@ -196,14 +165,8 @@ gdb_test_multiple "run" "run until main breakpoint" {
 #
 # set up a watch point on a.x 
 #
-set pat [multi_line "" \
-	     "\032\032post-prompt" \
-	     ".*atchpoint 3: a.x" \
-	     "" \
-	     "\032\032breakpoints-invalid" \
-	     $gdb_prompt$]
 gdb_test_multiple "watch a.x" "set watch on a.x" {
-    -re "$pat" {
+    -re "\r\n\032\032post-prompt\r\n\r\n\032\032breakpoints-invalid\r\n.*atchpoint 3: a.x\r\n$gdb_prompt$" {
 	pass "set watch on a.x"
     }
 }
@@ -212,44 +175,12 @@ gdb_test_multiple "watch a.x" "set watch on a.x" {
 # do a next, so that the watchpoint triggers. This will test:
 # annotate-watchpoint
 #
-set pat [multi_line "" \
-	     "\032\032post-prompt" \
-	     "" \
-	     "\032\032starting" \
-	     "\(${frames_invalid}\)*${breakpoints_invalid}" \
-	     "\032\032watchpoint 3" \
-	     ".*atchpoint 3: a.x" \
-	     "" \
-	     "Old value = 0" \
-	     "New value = 1" \
-	     "" \
-	     "\032\032frame-begin 0 $hex" \
-	     "" \
-	     "\032\032frame-function-name" \
-	     "main" \
-	     "\032\032frame-args" \
-	     " \\(\\)" \
-	     "\032\032frame-source-begin" \
-	     " at " \
-	     "\032\032frame-source-file" \
-	     ".*$srcfile" \
-	     "\032\032frame-source-file-end" \
-	     ":" \
-	     "\032\032frame-source-line" \
-	     "$decimal" \
-	     "\032\032frame-source-end" \
-	     "" \
-	     "" \
-	     "\032\032source .*$srcfile.*beg:$hex" \
-	     "" \
-	     "\032\032frame-end" \
-	     "" \
-	     "\032\032stopped" \
-	     $gdb_prompt$]
-
 gdb_test_multiple "next" "watch triggered on a.x" {
-    -re "$pat" {
+    -re "\r\n\032\032post-prompt\r\n\r\n(\032\032breakpoints-invalid\r\n\r\n)*\032\032starting\r\n\r\n(\032\032frames-invalid\r\n\r\n)*\032\032watchpoint 3\r\n.*atchpoint 3: a.x\r\n\r\nOld value = 0\r\nNew value = 1\r\n\r\n\032\032frame-begin 0 $hex\r\n\r\n\032\032frame-function-name\r\nmain\r\n\032\032frame-args\r\n \\(\\)\r\n\032\032frame-source-begin\r\n at \r\n\032\032frame-source-file\r\n.*$srcfile\r\n\032\032frame-source-file-end\r\n:\r\n\032\032frame-source-line\r\n$decimal\r\n\032\032frame-source-end\r\n\r\n\r\n\032\032source .*$srcfile.*beg:$hex\r\n\r\n\032\032frame-end\r\n\r\n\032\032stopped\r\n.*$gdb_prompt$" {
 	pass "watch triggered on a.x"
+    }
+    -re "\r\n\032\032post-prompt\r\n\r\n(\032\032breakpoints-invalid\r\n\r\n)*\032\032starting\r\n\r\n(\032\032frames-invalid\r\n\r\n)*\032\032source .*$srcfile.*beg:$hex\r\n\r\n\032\032frame-end\r\n\r\n\032\032stopped\r\n$gdb_prompt$" {
+	kfail "gdb/38" "watch triggered on a.x"
     }
 }
 
@@ -260,14 +191,12 @@ gdb_test_multiple "next" "watch triggered on a.x" {
 # test:
 # annotate-quit
 #
-if ![target_info exists gdb,nointerrupts] {
-    send_gdb "\003"
-    gdb_expect {
-	-re "\r\n\032\032error-begin\r\nQuit\r\n\r\n\032\032quit\r\n$gdb_prompt$" \
+send_gdb "\003"
+gdb_expect {
+    -re "\r\n\032\032error-begin\r\nQuit\r\n\r\n\032\032quit\r\n$gdb_prompt$" \
 	    { pass "annotate-quit" }
-	-re ".*$gdb_prompt$" { fail "annotate-quit" }
-	timeout { fail "annotate-quit (timeout)" }
-    }
+    -re ".*$gdb_prompt$" { fail "annotate-quit" }
+    timeout { fail "annotate-quit (timeout)" }
 }
 
 #

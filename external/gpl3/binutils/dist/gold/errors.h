@@ -1,6 +1,6 @@
 // errors.h -- handle errors for gold  -*- C++ -*-
 
-// Copyright (C) 2006-2020 Free Software Foundation, Inc.
+// Copyright 2006, 2007, 2008 Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -24,7 +24,6 @@
 #define GOLD_ERRORS_H
 
 #include <cstdarg>
-#include <string>
 
 #include "gold-threads.h"
 
@@ -49,12 +48,6 @@ class Errors
   // Report a fatal error.  After printing the error, this must exit.
   void
   fatal(const char* format, va_list) ATTRIBUTE_NORETURN;
-
-  // Report a fallback error.  After printing the error, this must exit
-  // with a special status code indicating that fallback to
-  // --incremental-full is required.
-  void
-  fallback(const char* format, va_list) ATTRIBUTE_NORETURN;
 
   // Report an error and continue.
   void
@@ -82,10 +75,14 @@ class Errors
 		      size_t relnum, off_t reloffset,
 		      const char* format, va_list);
 
-  // Issue an undefined symbol error.  LOCATION is the location of
-  // the error (typically an object file name or relocation info).
+  // Issue an undefined symbol error.  SYM is the undefined symbol.
+  // RELINFO is the general relocation info.  RELNUM is the number of
+  // the reloc, and RELOFFSET is the reloc's offset.
+  template<int size, bool big_endian>
   void
-  undefined_symbol(const Symbol* sym, const std::string& location);
+  undefined_symbol(const Symbol* sym,
+		   const Relocate_info<size, big_endian>* relinfo,
+		   size_t relnum, off_t reloffset);
 
   // Report a debugging message.
   void
@@ -123,8 +120,6 @@ class Errors
   // This class can be accessed from multiple threads.  This lock is
   // used to control access to the data structures.
   Lock* lock_;
-  // Used to initialize the lock_ field exactly once.
-  Initialize_lock initialize_lock_;
   // Numbers of errors reported.
   int error_count_;
   // Number of warnings reported.

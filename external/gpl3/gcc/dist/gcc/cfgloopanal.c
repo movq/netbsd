@@ -1,5 +1,6 @@
 /* Natural loop analysis code for GNU compiler.
-   Copyright (C) 2002-2019 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,23 +21,16 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "backend.h"
+#include "tm.h"
 #include "rtl.h"
-#include "tree.h"
-#include "predict.h"
-#include "memmodel.h"
-#include "emit-rtl.h"
+#include "hard-reg-set.h"
+#include "obstack.h"
+#include "basic-block.h"
 #include "cfgloop.h"
-#include "explow.h"
 #include "expr.h"
+#include "output.h"
 #include "graphds.h"
 #include "params.h"
-#include "sreal.h"
-
-struct target_cfgloop default_target_cfgloop;
-#if SWITCHABLE_TARGET
-struct target_cfgloop *this_target_cfgloop = &default_target_cfgloop;
-#endif
 
 /* Checks whether BB is executed exactly once in each LOOP iteration.  */
 
@@ -67,7 +61,7 @@ just_once_each_iteration_p (const struct loop *loop, const_basic_block bb)
 
    LOOPS is the loop tree.  */
 
-#define LOOP_REPR(LOOP) ((LOOP)->num + last_basic_block_for_fn (cfun))
+#define LOOP_REPR(LOOP) ((LOOP)->num + last_basic_block)
 #define BB_REPR(BB) ((BB)->index + 1)
 
 bool
@@ -80,7 +74,7 @@ mark_irreducible_loops (void)
   int src, dest;
   unsigned depth;
   struct graph *g;
-  int num = number_of_loops (cfun);
+  int num = number_of_loops ();
   struct loop *cloop;
   bool irred_loop_found = false;
   int i;
@@ -88,8 +82,7 @@ mark_irreducible_loops (void)
   gcc_assert (current_loops != NULL);
 
   /* Reset the flags.  */
-  FOR_BB_BETWEEN (act, ENTRY_BLOCK_PTR_FOR_FN (cfun),
-		  EXIT_BLOCK_PTR_FOR_FN (cfun), next_bb)
+  FOR_BB_BETWEEN (act, ENTRY_BLOCK_PTR, EXIT_BLOCK_PTR, next_bb)
     {
       act->flags &= ~BB_IRREDUCIBLE_LOOP;
       FOR_EACH_EDGE (e, ei, act->succs)
@@ -97,14 +90,13 @@ mark_irreducible_loops (void)
     }
 
   /* Create the edge lists.  */
-  g = new_graph (last_basic_block_for_fn (cfun) + num);
+  g = new_graph (last_basic_block + num);
 
-  FOR_BB_BETWEEN (act, ENTRY_BLOCK_PTR_FOR_FN (cfun),
-		  EXIT_BLOCK_PTR_FOR_FN (cfun), next_bb)
+  FOR_BB_BETWEEN (act, ENTRY_BLOCK_PTR, EXIT_BLOCK_PTR, next_bb)
     FOR_EACH_EDGE (e, ei, act->succs)
       {
 	/* Ignore edges to exit.  */
-	if (e->dest == EXIT_BLOCK_PTR_FOR_FN (cfun))
+	if (e->dest == EXIT_BLOCK_PTR)
 	  continue;
 
 	src = BB_REPR (act);
@@ -133,7 +125,7 @@ mark_irreducible_loops (void)
 	    if (depth == loop_depth (act->loop_father))
 	      cloop = act->loop_father;
 	    else
-	      cloop = (*act->loop_father->superloops)[depth];
+	      cloop = VEC_index (loop_p, act->loop_father->superloops, depth);
 
 	    src = LOOP_REPR (cloop);
 	  }
@@ -177,7 +169,7 @@ num_loop_insns (const struct loop *loop)
 {
   basic_block *bbs, bb;
   unsigned i, ninsns = 0;
-  rtx_insn *insn;
+  rtx insn;
 
   bbs = get_loop_body (loop);
   for (i = 0; i < loop->num_nodes; i++)
@@ -200,9 +192,8 @@ int
 average_num_loop_insns (const struct loop *loop)
 {
   basic_block *bbs, bb;
-  unsigned i, binsns;
-  sreal ninsns;
-  rtx_insn *insn;
+  unsigned i, binsns, ninsns, ratio;
+  rtx insn;
 
   ninsns = 0;
   bbs = get_loop_body (loop);
@@ -215,102 +206,75 @@ average_num_loop_insns (const struct loop *loop)
 	if (NONDEBUG_INSN_P (insn))
 	  binsns++;
 
-      ninsns += (sreal)binsns * bb->count.to_sreal_scale (loop->header->count);
-      /* Avoid overflows.   */
-      if (ninsns > 1000000)
-	return 100000;
+      ratio = loop->header->frequency == 0
+	      ? BB_FREQ_MAX
+	      : (bb->frequency * BB_FREQ_MAX) / loop->header->frequency;
+      ninsns += binsns * ratio;
     }
   free (bbs);
 
-  int64_t ret = ninsns.to_int ();
-  if (!ret)
-    ret = 1; /* To avoid division by zero.  */
+  ninsns /= BB_FREQ_MAX;
+  if (!ninsns)
+    ninsns = 1; /* To avoid division by zero.  */
 
-  return ret;
+  return ninsns;
 }
 
 /* Returns expected number of iterations of LOOP, according to
-   measured or guessed profile.
-
-   This functions attempts to return "sane" value even if profile
-   information is not good enough to derive osmething.
-   If BY_PROFILE_ONLY is set, this logic is bypassed and function
-   return -1 in those scenarios.  */
+   measured or guessed profile.  No bounding is done on the
+   value.  */
 
 gcov_type
-expected_loop_iterations_unbounded (const struct loop *loop,
-				    bool *read_profile_p,
-				    bool by_profile_only)
+expected_loop_iterations_unbounded (const struct loop *loop)
 {
   edge e;
   edge_iterator ei;
-  gcov_type expected = -1;
-  
-  if (read_profile_p)
-    *read_profile_p = false;
 
-  /* If we have no profile at all, use AVG_LOOP_NITER.  */
-  if (profile_status_for_fn (cfun) == PROFILE_ABSENT)
+  if (loop->latch->count || loop->header->count)
     {
-      if (by_profile_only)
-	return -1;
-      expected = PARAM_VALUE (PARAM_AVG_LOOP_NITER);
-    }
-  else if (loop->latch && (loop->latch->count.initialized_p ()
-			   || loop->header->count.initialized_p ()))
-    {
-      profile_count count_in = profile_count::zero (),
-		    count_latch = profile_count::zero ();
+      gcov_type count_in, count_latch, expected;
+
+      count_in = 0;
+      count_latch = 0;
 
       FOR_EACH_EDGE (e, ei, loop->header->preds)
 	if (e->src == loop->latch)
-	  count_latch = e->count ();
+	  count_latch = e->count;
 	else
-	  count_in += e->count ();
+	  count_in += e->count;
 
-      if (!count_latch.initialized_p ())
-	{
-          if (by_profile_only)
-	    return -1;
-	  expected = PARAM_VALUE (PARAM_AVG_LOOP_NITER);
-	}
-      else if (!count_in.nonzero_p ())
-	{
-          if (by_profile_only)
-	    return -1;
-	  expected = count_latch.to_gcov_type () * 2;
-	}
+      if (count_in == 0)
+	expected = count_latch * 2;
       else
-	{
-	  expected = (count_latch.to_gcov_type () + count_in.to_gcov_type ()
-		      - 1) / count_in.to_gcov_type ();
-	  if (read_profile_p
-	      && count_latch.reliable_p () && count_in.reliable_p ())
-	    *read_profile_p = true;
-	}
+	expected = (count_latch + count_in - 1) / count_in;
+
+      return expected;
     }
   else
     {
-      if (by_profile_only)
-	return -1;
-      expected = PARAM_VALUE (PARAM_AVG_LOOP_NITER);
-    }
+      int freq_in, freq_latch;
 
-  if (!by_profile_only)
-    {
-      HOST_WIDE_INT max = get_max_loop_iterations_int (loop);
-      if (max != -1 && max < expected)
-        return max;
+      freq_in = 0;
+      freq_latch = 0;
+
+      FOR_EACH_EDGE (e, ei, loop->header->preds)
+	if (e->src == loop->latch)
+	  freq_latch = EDGE_FREQUENCY (e);
+	else
+	  freq_in += EDGE_FREQUENCY (e);
+
+      if (freq_in == 0)
+	return freq_latch * 2;
+
+      return (freq_latch + freq_in - 1) / freq_in;
     }
- 
-  return expected;
 }
 
 /* Returns expected number of LOOP iterations.  The returned value is bounded
    by REG_BR_PROB_BASE.  */
 
 unsigned
-expected_loop_iterations (struct loop *loop)
+expected_loop_iterations (const struct loop *loop)
 {
   gcov_type expected = expected_loop_iterations_unbounded (loop);
   return (expected > REG_BR_PROB_BASE ? REG_BR_PROB_BASE : expected);
@@ -333,29 +297,55 @@ get_loop_level (const struct loop *loop)
   return mx;
 }
 
+/* Returns estimate on cost of computing SEQ.  */
+
+static unsigned
+seq_cost (const_rtx seq, bool speed)
+{
+  unsigned cost = 0;
+  rtx set;
+
+  for (; seq; seq = NEXT_INSN (seq))
+    {
+      set = single_set (seq);
+      if (set)
+	cost += rtx_cost (set, SET, speed);
+      else
+	cost++;
+    }
+
+  return cost;
+}
+
+/* The properties of the target.  */
+
+unsigned target_avail_regs;	/* Number of available registers.  */
+unsigned target_res_regs;	/* Number of registers reserved for temporary
+				   expressions.  */
+unsigned target_reg_cost[2];	/* The cost for register when there still
+				   is some reserve, but we are approaching
+				   the number of available registers.  */
+unsigned target_spill_cost[2];	/* The cost for register when we need
+				   to spill.  */
+
 /* Initialize the constants for computing set costs.  */
 
 void
 init_set_costs (void)
 {
   int speed;
-  rtx_insn *seq;
-  rtx reg1 = gen_raw_REG (SImode, LAST_VIRTUAL_REGISTER + 1);
-  rtx reg2 = gen_raw_REG (SImode, LAST_VIRTUAL_REGISTER + 2);
-  rtx addr = gen_raw_REG (Pmode, LAST_VIRTUAL_REGISTER + 3);
+  rtx seq;
+  rtx reg1 = gen_raw_REG (SImode, FIRST_PSEUDO_REGISTER);
+  rtx reg2 = gen_raw_REG (SImode, FIRST_PSEUDO_REGISTER + 1);
+  rtx addr = gen_raw_REG (Pmode, FIRST_PSEUDO_REGISTER + 2);
   rtx mem = validize_mem (gen_rtx_MEM (SImode, addr));
   unsigned i;
 
   target_avail_regs = 0;
-  target_clobbered_regs = 0;
   for (i = 0; i < FIRST_PSEUDO_REGISTER; i++)
     if (TEST_HARD_REG_BIT (reg_class_contents[GENERAL_REGS], i)
 	&& !fixed_regs[i])
-      {
-	target_avail_regs++;
-	if (call_used_regs[i])
-	  target_clobbered_regs++;
-      }
+      target_avail_regs++;
 
   target_res_regs = 3;
 
@@ -389,29 +379,20 @@ init_set_costs (void)
 
 /* Estimates cost of increased register pressure caused by making N_NEW new
    registers live around the loop.  N_OLD is the number of registers live
-   around the loop.  If CALL_P is true, also take into account that
-   call-used registers may be clobbered in the loop body, reducing the
-   number of available registers before we spill.  */
+   around the loop.  */
 
 unsigned
-estimate_reg_pressure_cost (unsigned n_new, unsigned n_old, bool speed,
-			    bool call_p)
+estimate_reg_pressure_cost (unsigned n_new, unsigned n_old, bool speed)
 {
   unsigned cost;
   unsigned regs_needed = n_new + n_old;
-  unsigned available_regs = target_avail_regs;
-
-  /* If there is a call in the loop body, the call-clobbered registers
-     are not available for loop invariants.  */
-  if (call_p)
-    available_regs = available_regs - target_clobbered_regs;
 
   /* If we have enough registers, we should use them and not restrict
      the transformations unnecessarily.  */
-  if (regs_needed + target_res_regs <= available_regs)
+  if (regs_needed + target_res_regs <= target_avail_regs)
     return 0;
 
-  if (regs_needed <= available_regs)
+  if (regs_needed <= target_avail_regs)
     /* If we are close to running out of registers, try to preserve
        them.  */
     cost = target_reg_cost [speed] * n_new;
@@ -422,7 +403,7 @@ estimate_reg_pressure_cost (unsigned n_new, unsigned n_old, bool speed,
 
   if (optimize && (flag_ira_region == IRA_REGION_ALL
 		   || flag_ira_region == IRA_REGION_MIXED)
-      && number_of_loops (cfun) <= (unsigned) IRA_MAX_LOOPS_NUM)
+      && number_of_loops () <= (unsigned) IRA_MAX_LOOPS_NUM)
     /* IRA regional allocation deals with high register pressure
        better.  So decrease the cost (to do more accurate the cost
        calculation for IRA, we need to know how many registers lives
@@ -440,10 +421,10 @@ mark_loop_exit_edges (void)
   basic_block bb;
   edge e;
 
-  if (number_of_loops (cfun) <= 1)
+  if (number_of_loops () <= 1)
     return;
 
-  FOR_EACH_BB_FN (bb, cfun)
+  FOR_EACH_BB (bb)
     {
       edge_iterator ei;
 
@@ -458,71 +439,3 @@ mark_loop_exit_edges (void)
     }
 }
 
-/* Return exit edge if loop has only one exit that is likely
-   to be executed on runtime (i.e. it is not EH or leading
-   to noreturn call.  */
-
-edge
-single_likely_exit (struct loop *loop)
-{
-  edge found = single_exit (loop);
-  vec<edge> exits;
-  unsigned i;
-  edge ex;
-
-  if (found)
-    return found;
-  exits = get_loop_exit_edges (loop);
-  FOR_EACH_VEC_ELT (exits, i, ex)
-    {
-      if (probably_never_executed_edge_p (cfun, ex)
-	  /* We want to rule out paths to noreturns but not low probabilities
-	     resulting from adjustments or combining.
-	     FIXME: once we have better quality tracking, make this more
-	     robust.  */
-	  || ex->probability <= profile_probability::very_unlikely ())
-	continue;
-      if (!found)
-	found = ex;
-      else
-	{
-	  exits.release ();
-	  return NULL;
-	}
-    }
-  exits.release ();
-  return found;
-}
-
-
-/* Gets basic blocks of a LOOP.  Header is the 0-th block, rest is in dfs
-   order against direction of edges from latch.  Specially, if
-   header != latch, latch is the 1-st block.  */
-
-vec<basic_block>
-get_loop_hot_path (const struct loop *loop)
-{
-  basic_block bb = loop->header;
-  vec<basic_block> path = vNULL;
-  bitmap visited = BITMAP_ALLOC (NULL);
-
-  while (true)
-    {
-      edge_iterator ei;
-      edge e;
-      edge best = NULL;
-
-      path.safe_push (bb);
-      bitmap_set_bit (visited, bb->index);
-      FOR_EACH_EDGE (e, ei, bb->succs)
-        if ((!best || e->probability > best->probability)
-	    && !loop_exit_edge_p (loop, e)
-	    && !bitmap_bit_p (visited, e->dest->index))
-	  best = e;
-      if (!best || best->dest == loop->header)
-	break;
-      bb = best->dest;
-    }
-  BITMAP_FREE (visited);
-  return path;
-}

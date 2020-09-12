@@ -1,5 +1,5 @@
 /* Specific flags and argument handling of the C preprocessor.
-   Copyright (C) 1999-2019 Free Software Foundation, Inc.
+   Copyright (C) 1999-2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -21,7 +21,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
-#include "opt-suggestions.h"
 #include "gcc.h"
 #include "opts.h"
 
@@ -90,8 +89,7 @@ lang_specific_driver (struct cl_decoded_option **in_decoded_options,
 
 	case OPT_S:
 	case OPT_c:
-	  fatal_error (input_location,
-		       "%qs is not a valid option to the preprocessor",
+	  fatal_error ("%qs is not a valid option to the preprocessor",
 		       decoded_options[i].orig_option_with_args_text);
 	  return;
 
@@ -110,7 +108,7 @@ lang_specific_driver (struct cl_decoded_option **in_decoded_options,
 		seen_input++;
 		if (seen_input == 3)
 		  {
-		    fatal_error (input_location, "too many input files");
+		    fatal_error ("too many input files");
 		    return;
 		  }
 		else if (seen_input == 2)

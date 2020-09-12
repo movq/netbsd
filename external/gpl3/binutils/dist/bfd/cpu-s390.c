@@ -1,5 +1,5 @@
 /* BFD support for the s390 processor.
-   Copyright (C) 2000-2020 Free Software Foundation, Inc.
+   Copyright 2000, 2001, 2002, 2007 Free Software Foundation, Inc.
    Contributed by Carl B. Pedersen and Martin Schwidefsky.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -23,32 +23,34 @@
 #include "bfd.h"
 #include "libbfd.h"
 
-#define N(bits, number, print, is_default, next)	\
-  {							\
-    bits,	       /* Bits in a word.  */		\
-    bits,	       /* Bits in an address.  */	\
-    8,		       /* Bits in a byte.  */		\
-    bfd_arch_s390,					\
-    number,						\
-    "s390",						\
-    print,						\
-    3,		       /* Section alignment power */	\
-    is_default,						\
-    bfd_default_compatible,				\
-    bfd_default_scan,					\
-    bfd_arch_default_fill,				\
-    next,						\
-    0 /* Maximum offset of a reloc from the start of an insn.  */ \
-  }
+const bfd_arch_info_type bfd_s390_64_arch =
+{
+    64,        /* bits in a word */
+    64,        /* bits in an address */
+    8, /* bits in a byte */
+    bfd_arch_s390,
+    bfd_mach_s390_64,
+    "s390",
+    "s390:64-bit",
+    3, /* section alignment power */
+    TRUE, /* the default */
+    bfd_default_compatible,
+    bfd_default_scan,
+    NULL
+};
 
-#if BFD_DEFAULT_TARGET_SIZE == 64
-static const bfd_arch_info_type bfd_s390_31_arch =
-  N (32, bfd_mach_s390_31, "s390:31-bit", FALSE, NULL);
 const bfd_arch_info_type bfd_s390_arch =
-  N (64, bfd_mach_s390_64, "s390:64-bit", TRUE, &bfd_s390_31_arch);
-#else
-static const bfd_arch_info_type bfd_s390_64_arch =
-  N (64, bfd_mach_s390_64, "s390:64-bit", FALSE, NULL);
-const bfd_arch_info_type bfd_s390_arch =
-  N (32, bfd_mach_s390_31, "s390:31-bit", TRUE, &bfd_s390_64_arch);
-#endif
+{
+    32,	/* bits in a word */
+    32,	/* bits in an address */
+    8,	/* bits in a byte */
+    bfd_arch_s390,
+    bfd_mach_s390_31,
+    "s390",
+    "s390:31-bit",
+    3, /* section alignment power */
+    TRUE, /* the default */
+    bfd_default_compatible,
+    bfd_default_scan,
+    &bfd_s390_64_arch
+};

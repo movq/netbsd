@@ -1,6 +1,7 @@
 // Stack implementation -*- C++ -*-
 
-// Copyright (C) 2001-2019 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -48,9 +49,9 @@
  * purpose.  It is provided "as is" without express or implied warranty.
  */
 
-/** @file bits/stl_stack.h
+/** @file stl_stack.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{stack}
+ *  You should not attempt to use it directly.
  */
 
 #ifndef _STL_STACK_H
@@ -58,21 +59,13 @@
 
 #include <bits/concept_check.h>
 #include <debug/debug.h>
-#if __cplusplus >= 201103L
-# include <bits/uses_allocator.h>
-#endif
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   /**
    *  @brief  A standard container giving FILO behavior.
    *
    *  @ingroup sequences
-   *
-   *  @tparam _Tp  Type of element.
-   *  @tparam _Sequence  Type of underlying sequence, defaults to deque<_Tp>.
    *
    *  Meets many of the requirements of a
    *  <a href="tables.html#65">container</a>,
@@ -86,7 +79,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    *
    *  The second template parameter defines the type of the underlying
    *  sequence/container.  It defaults to std::deque, but it can be
-   *  any type that supports @c back, @c push_back, and @c pop_back,
+   *  any type that supports @c back, @c push_back, and @c pop_front,
    *  such as std::list, std::vector, or an appropriate user-defined
    *  type.
    *
@@ -98,44 +91,26 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Tp, typename _Sequence = deque<_Tp> >
     class stack
     {
-#ifdef _GLIBCXX_CONCEPT_CHECKS
       // concept requirements
       typedef typename _Sequence::value_type _Sequence_value_type;
-# if __cplusplus < 201103L
       __glibcxx_class_requires(_Tp, _SGIAssignableConcept)
       __glibcxx_class_requires(_Sequence, _BackInsertionSequenceConcept)
-# endif
       __glibcxx_class_requires2(_Tp, _Sequence_value_type, _SameTypeConcept)
-#endif
 
       template<typename _Tp1, typename _Seq1>
-	friend bool
-	operator==(const stack<_Tp1, _Seq1>&, const stack<_Tp1, _Seq1>&);
+        friend bool
+        operator==(const stack<_Tp1, _Seq1>&, const stack<_Tp1, _Seq1>&);
 
       template<typename _Tp1, typename _Seq1>
-	friend bool
-	operator<(const stack<_Tp1, _Seq1>&, const stack<_Tp1, _Seq1>&);
-
-#if __cplusplus >= 201103L
-      template<typename _Alloc>
-	using _Uses = typename
-	  enable_if<uses_allocator<_Sequence, _Alloc>::value>::type;
-
-#if __cplusplus >= 201703L
-      // _GLIBCXX_RESOLVE_LIB_DEFECTS
-      // 2566. Requirements on the first template parameter of container
-      // adaptors
-      static_assert(is_same<_Tp, typename _Sequence::value_type>::value,
-	  "value_type must be the same as the underlying container");
-#endif // C++17
-#endif // C++11
+        friend bool
+        operator<(const stack<_Tp1, _Seq1>&, const stack<_Tp1, _Seq1>&);
 
     public:
-      typedef typename _Sequence::value_type		value_type;
-      typedef typename _Sequence::reference		reference;
-      typedef typename _Sequence::const_reference	const_reference;
-      typedef typename _Sequence::size_type		size_type;
-      typedef	       _Sequence			container_type;
+      typedef typename _Sequence::value_type                value_type;
+      typedef typename _Sequence::reference                 reference;
+      typedef typename _Sequence::const_reference           const_reference;
+      typedef typename _Sequence::size_type                 size_type;
+      typedef          _Sequence                            container_type;
 
     protected:
       //  See queue::c for notes on this name.
@@ -146,50 +121,24 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       /**
        *  @brief  Default constructor creates no elements.
        */
-#if __cplusplus < 201103L
+#ifndef __GXX_EXPERIMENTAL_CXX0X__
       explicit
       stack(const _Sequence& __c = _Sequence())
       : c(__c) { }
 #else
-      template<typename _Seq = _Sequence, typename _Requires = typename
-	       enable_if<is_default_constructible<_Seq>::value>::type>
-	stack()
-	: c() { }
-
       explicit
       stack(const _Sequence& __c)
       : c(__c) { }
 
       explicit
-      stack(_Sequence&& __c)
+      stack(_Sequence&& __c = _Sequence())
       : c(std::move(__c)) { }
-
-      template<typename _Alloc, typename _Requires = _Uses<_Alloc>>
-	explicit
-	stack(const _Alloc& __a)
-	: c(__a) { }
-
-      template<typename _Alloc, typename _Requires = _Uses<_Alloc>>
-	stack(const _Sequence& __c, const _Alloc& __a)
-	: c(__c, __a) { }
-
-      template<typename _Alloc, typename _Requires = _Uses<_Alloc>>
-	stack(_Sequence&& __c, const _Alloc& __a)
-	: c(std::move(__c), __a) { }
-
-      template<typename _Alloc, typename _Requires = _Uses<_Alloc>>
-	stack(const stack& __q, const _Alloc& __a)
-	: c(__q.c, __a) { }
-
-      template<typename _Alloc, typename _Requires = _Uses<_Alloc>>
-	stack(stack&& __q, const _Alloc& __a)
-	: c(std::move(__q.c), __a) { }
 #endif
 
       /**
        *  Returns true if the %stack is empty.
        */
-      _GLIBCXX_NODISCARD bool
+      bool
       empty() const
       { return c.empty(); }
 
@@ -222,7 +171,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       /**
        *  @brief  Add data to the top of the %stack.
-       *  @param  __x  Data to be added.
+       *  @param  x  Data to be added.
        *
        *  This is a typical %stack operation.  The function creates an
        *  element at the top of the %stack and assigns the given data
@@ -233,22 +182,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       push(const value_type& __x)
       { c.push_back(__x); }
 
-#if __cplusplus >= 201103L
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
       void
       push(value_type&& __x)
       { c.push_back(std::move(__x)); }
 
-#if __cplusplus > 201402L
       template<typename... _Args>
-	decltype(auto)
-	emplace(_Args&&... __args)
-	{ return c.emplace_back(std::forward<_Args>(__args)...); }
-#else
-      template<typename... _Args>
-	void
-	emplace(_Args&&... __args)
+        void
+        emplace(_Args&&... __args)
 	{ c.emplace_back(std::forward<_Args>(__args)...); }
-#endif
 #endif
 
       /**
@@ -269,37 +211,17 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	c.pop_back();
       }
 
-#if __cplusplus >= 201103L
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
       void
       swap(stack& __s)
-#if __cplusplus > 201402L || !defined(__STRICT_ANSI__) // c++1z or gnu++11
-      noexcept(__is_nothrow_swappable<_Sequence>::value)
-#else
-      noexcept(__is_nothrow_swappable<_Tp>::value)
+      { c.swap(__s.c); }
 #endif
-      {
-	using std::swap;
-	swap(c, __s.c);
-      }
-#endif // __cplusplus >= 201103L
     };
-
-#if __cpp_deduction_guides >= 201606
-  template<typename _Container,
-	   typename = _RequireNotAllocator<_Container>>
-    stack(_Container) -> stack<typename _Container::value_type, _Container>;
-
-  template<typename _Container, typename _Allocator,
-	   typename = _RequireNotAllocator<_Container>,
-	   typename = _RequireAllocator<_Allocator>>
-    stack(_Container, _Allocator)
-    -> stack<typename _Container::value_type, _Container>;
-#endif
 
   /**
    *  @brief  Stack equality comparison.
-   *  @param  __x  A %stack.
-   *  @param  __y  A %stack of the same type as @a __x.
+   *  @param  x  A %stack.
+   *  @param  y  A %stack of the same type as @a x.
    *  @return  True iff the size and elements of the stacks are equal.
    *
    *  This is an equivalence relation.  Complexity and semantics
@@ -315,9 +237,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   /**
    *  @brief  Stack ordering relation.
-   *  @param  __x  A %stack.
-   *  @param  __y  A %stack of the same type as @a x.
-   *  @return  True iff @a x is lexicographically less than @a __y.
+   *  @param  x  A %stack.
+   *  @param  y  A %stack of the same type as @a x.
+   *  @return  True iff @a x is lexicographically less than @a y.
    *
    *  This is an total ordering relation.  Complexity and semantics
    *  depend on the underlying sequence type, but the expected rules
@@ -355,25 +277,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     operator>=(const stack<_Tp, _Seq>& __x, const stack<_Tp, _Seq>& __y)
     { return !(__x < __y); }
 
-#if __cplusplus >= 201103L
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
   template<typename _Tp, typename _Seq>
-    inline
-#if __cplusplus > 201402L || !defined(__STRICT_ANSI__) // c++1z or gnu++11
-    // Constrained free swap overload, see p0185r1
-    typename enable_if<__is_swappable<_Seq>::value>::type
-#else
-    void
-#endif
+    inline void
     swap(stack<_Tp, _Seq>& __x, stack<_Tp, _Seq>& __y)
-    noexcept(noexcept(__x.swap(__y)))
     { __x.swap(__y); }
+#endif
 
-  template<typename _Tp, typename _Seq, typename _Alloc>
-    struct uses_allocator<stack<_Tp, _Seq>, _Alloc>
-    : public uses_allocator<_Seq, _Alloc>::type { };
-#endif // __cplusplus >= 201103L
-
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 #endif /* _STL_STACK_H */

@@ -28,7 +28,7 @@
 # this routine controls the whole mess; each test suite sets up a few
 # variables and then calls &toplevel, which does all the real work.
 
-# $Id: test_driver.pl,v 1.1.1.1 2014/08/18 06:47:57 christos Exp $
+# $Id: test_driver.pl,v 1.1 2014/08/18 06:47:57 christos Exp $
 
 
 # The number of test categories we've run

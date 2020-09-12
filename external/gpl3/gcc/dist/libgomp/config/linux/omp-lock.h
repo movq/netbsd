@@ -3,8 +3,8 @@
    structures without polluting the namespace.
 
    When using the Linux futex primitive, non-recursive locks require
-   one int.  Recursive locks require we identify the owning task
-   and so require in addition one int and a pointer.  */
+   only one int.  Recursive locks require we identify the owning task
+   and so require one int and a pointer.  */
 
 typedef int omp_lock_t;
 typedef struct { int lock, count; void *owner; } omp_nest_lock_t;

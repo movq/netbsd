@@ -1,5 +1,6 @@
 /* DWARF 1 find nearest line (_bfd_dwarf1_find_nearest_line).
-   Copyright (C) 1998-2020 Free Software Foundation, Inc.
+   Copyright 1998, 1999, 2000, 2001, 2002, 2004, 2005, 2007
+   Free Software Foundation, Inc.
 
    Written by Gavin Romig-Koch of Cygnus Solutions (gavin@cygnus.com).
 
@@ -142,7 +143,7 @@ alloc_dwarf1_unit (struct dwarf1_debug* stash)
 {
   bfd_size_type amt = sizeof (struct dwarf1_unit);
 
-  struct dwarf1_unit* x = (struct dwarf1_unit *) bfd_zalloc (stash->abfd, amt);
+  struct dwarf1_unit* x = bfd_zalloc (stash->abfd, amt);
   if (x)
     {
       x->prev = stash->lastUnit;
@@ -160,7 +161,7 @@ alloc_dwarf1_func (struct dwarf1_debug* stash, struct dwarf1_unit* aUnit)
 {
   bfd_size_type amt = sizeof (struct dwarf1_func);
 
-  struct dwarf1_func* x = (struct dwarf1_func *) bfd_zalloc (stash->abfd, amt);
+  struct dwarf1_func* x = bfd_zalloc (stash->abfd, amt);
   if (x)
     {
       x->prev = aUnit->func_list;
@@ -178,10 +179,10 @@ alloc_dwarf1_func (struct dwarf1_debug* stash, struct dwarf1_unit* aUnit)
    Return FALSE if the die is invalidly formatted; TRUE otherwise.  */
 
 static bfd_boolean
-parse_die (bfd *	     abfd,
+parse_die (bfd *             abfd,
 	   struct die_info * aDieInfo,
-	   bfd_byte *	     aDiePtr,
-	   bfd_byte *	     aDiePtrEnd)
+	   bfd_byte *        aDiePtr,
+	   bfd_byte *        aDiePtrEnd)
 {
   bfd_byte *this_die = aDiePtr;
   bfd_byte *xptr = this_die;
@@ -189,14 +190,11 @@ parse_die (bfd *	     abfd,
   memset (aDieInfo, 0, sizeof (* aDieInfo));
 
   /* First comes the length.  */
-  if (xptr + 4 > aDiePtrEnd)
-    return FALSE;
-  aDieInfo->length = bfd_get_32 (abfd, xptr);
+  aDieInfo->length = bfd_get_32 (abfd, (bfd_byte *) xptr);
   xptr += 4;
   if (aDieInfo->length == 0
-      || this_die + aDieInfo->length > aDiePtrEnd)
+      || (this_die + aDieInfo->length) >= aDiePtrEnd)
     return FALSE;
-  aDiePtrEnd = this_die + aDieInfo->length;
   if (aDieInfo->length < 6)
     {
       /* Just padding bytes.  */
@@ -205,21 +203,18 @@ parse_die (bfd *	     abfd,
     }
 
   /* Then the tag.  */
-  if (xptr + 2 > aDiePtrEnd)
-    return FALSE;
-  aDieInfo->tag = bfd_get_16 (abfd, xptr);
+  aDieInfo->tag = bfd_get_16 (abfd, (bfd_byte *) xptr);
   xptr += 2;
 
   /* Then the attributes.  */
-  while (xptr + 2 <= aDiePtrEnd)
+  while (xptr < (this_die + aDieInfo->length))
     {
-      unsigned int   block_len;
       unsigned short attr;
 
       /* Parse the attribute based on its form.  This section
-	 must handle all dwarf1 forms, but need only handle the
+         must handle all dwarf1 forms, but need only handle the
 	 actual attributes that we care about.  */
-      attr = bfd_get_16 (abfd, xptr);
+      attr = bfd_get_16 (abfd, (bfd_byte *) xptr);
       xptr += 2;
 
       switch (FORM_FROM_ATTR (attr))
@@ -229,15 +224,12 @@ parse_die (bfd *	     abfd,
 	  break;
 	case FORM_DATA4:
 	case FORM_REF:
-	  if (xptr + 4 <= aDiePtrEnd)
+	  if (attr == AT_sibling)
+	    aDieInfo->sibling = bfd_get_32 (abfd, (bfd_byte *) xptr);
+	  else if (attr == AT_stmt_list)
 	    {
-	      if (attr == AT_sibling)
-		aDieInfo->sibling = bfd_get_32 (abfd, xptr);
-	      else if (attr == AT_stmt_list)
-		{
-		  aDieInfo->stmt_list_offset = bfd_get_32 (abfd, xptr);
-		  aDieInfo->has_stmt_list = 1;
-		}
+	      aDieInfo->stmt_list_offset = bfd_get_32 (abfd, (bfd_byte *) xptr);
+	      aDieInfo->has_stmt_list = 1;
 	    }
 	  xptr += 4;
 	  break;
@@ -245,41 +237,22 @@ parse_die (bfd *	     abfd,
 	  xptr += 8;
 	  break;
 	case FORM_ADDR:
-	  if (xptr + 4 <= aDiePtrEnd)
-	    {
-	      if (attr == AT_low_pc)
-		aDieInfo->low_pc = bfd_get_32 (abfd, xptr);
-	      else if (attr == AT_high_pc)
-		aDieInfo->high_pc = bfd_get_32 (abfd, xptr);
-	    }
+	  if (attr == AT_low_pc)
+	    aDieInfo->low_pc = bfd_get_32 (abfd, (bfd_byte *) xptr);
+	  else if (attr == AT_high_pc)
+	    aDieInfo->high_pc = bfd_get_32 (abfd, (bfd_byte *) xptr);
 	  xptr += 4;
 	  break;
 	case FORM_BLOCK2:
-	  if (xptr + 2 <= aDiePtrEnd)
-	    {
-	      block_len = bfd_get_16 (abfd, xptr);
-	      if (xptr + block_len > aDiePtrEnd
-		  || xptr + block_len < xptr)
-		return FALSE;
-	      xptr += block_len;
-	    }
-	  xptr += 2;
+	  xptr += 2 + bfd_get_16 (abfd, (bfd_byte *) xptr);
 	  break;
 	case FORM_BLOCK4:
-	  if (xptr + 4 <= aDiePtrEnd)
-	    {
-	      block_len = bfd_get_32 (abfd, xptr);
-	      if (xptr + block_len > aDiePtrEnd
-		  || xptr + block_len < xptr)
-		return FALSE;
-	      xptr += block_len;
-	    }
-	  xptr += 4;
+	  xptr += 4 + bfd_get_32 (abfd, (bfd_byte *) xptr);
 	  break;
 	case FORM_STRING:
 	  if (attr == AT_name)
-	    aDieInfo->name = (char *) xptr;
-	  xptr += strnlen ((char *) xptr, aDiePtrEnd - xptr) + 1;
+	    aDieInfo->name = (char *)xptr;
+	  xptr += strlen (aDieInfo->name) + 1;
 	  break;
 	}
     }
@@ -318,7 +291,7 @@ parse_line_table (struct dwarf1_debug* stash, struct dwarf1_unit* aUnit)
     }
 
   xptr = stash->line_section + aUnit->stmt_list_offset;
-  if (xptr + 8 <= stash->line_section_end)
+  if (xptr < stash->line_section_end)
     {
       unsigned long eachLine;
       bfd_byte *tblend;
@@ -339,18 +312,12 @@ parse_line_table (struct dwarf1_debug* stash, struct dwarf1_unit* aUnit)
 
       /* Allocate an array for the entries.  */
       amt = sizeof (struct linenumber) * aUnit->line_count;
-      aUnit->linenumber_table = (struct linenumber *) bfd_alloc (stash->abfd,
-								 amt);
+      aUnit->linenumber_table = bfd_alloc (stash->abfd, amt);
       if (!aUnit->linenumber_table)
 	return FALSE;
 
       for (eachLine = 0; eachLine < aUnit->line_count; eachLine++)
 	{
-	  if (xptr + 10 > stash->line_section_end)
-	    {
-	      aUnit->line_count = eachLine;
-	      break;
-	    }
 	  /* A line number.  */
 	  aUnit->linenumber_table[eachLine].linenumber
 	    = bfd_get_32 (stash->abfd, (bfd_byte *) xptr);
@@ -381,7 +348,7 @@ parse_functions_in_unit (struct dwarf1_debug* stash, struct dwarf1_unit* aUnit)
 
   if (aUnit->first_child)
     for (eachDie = aUnit->first_child;
-	 eachDie < stash->debug_section_end;
+ 	 eachDie < stash->debug_section_end;
 	 )
       {
 	struct die_info eachDieInfo;
@@ -482,8 +449,8 @@ dwarf1_unit_find_nearest_line (struct dwarf1_debug* stash,
 
 bfd_boolean
 _bfd_dwarf1_find_nearest_line (bfd *abfd,
-			       asymbol **symbols,
 			       asection *section,
+			       asymbol **symbols,
 			       bfd_vma offset,
 			       const char **filename_ptr,
 			       const char **functionname_ptr,
@@ -506,7 +473,7 @@ _bfd_dwarf1_find_nearest_line (bfd *abfd,
       bfd_size_type size = sizeof (struct dwarf1_debug);
 
       stash = elf_tdata (abfd)->dwarf1_find_line_info
-	= (struct dwarf1_debug *) bfd_zalloc (abfd, size);
+	= bfd_zalloc (abfd, size);
 
       if (! stash)
 	return FALSE;
@@ -572,9 +539,9 @@ _bfd_dwarf1_find_nearest_line (bfd *abfd,
 	     not it's sibling.  */
 	  if (aDieInfo.sibling
 	      && stash->currentDie + aDieInfo.length
-		    < stash->debug_section_end
+                    < stash->debug_section_end
 	      && stash->currentDie + aDieInfo.length
-		    != stash->debug_section + aDieInfo.sibling)
+	            != stash->debug_section + aDieInfo.sibling)
 	    aUnit->first_child = stash->currentDie + aDieInfo.length;
 	  else
 	    aUnit->first_child = 0;

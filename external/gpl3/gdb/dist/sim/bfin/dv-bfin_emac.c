@@ -1,6 +1,6 @@
 /* Blackfin Ethernet Media Access Controller (EMAC) model.
 
-   Copyright (C) 2010-2019 Free Software Foundation, Inc.
+   Copyright (C) 2010-2011 Free Software Foundation, Inc.
    Contributed by Analog Devices, Inc.
 
    This file is part of simulators.
@@ -177,10 +177,8 @@ bfin_emac_io_write_buffer (struct hw *me, const void *source,
   bu32 value;
   bu32 *valuep;
 
-  /* Invalid access mode is higher priority than missing register.  */
   /* XXX: 16bit accesses are allowed ...  */
-  if (!dv_bfin_mmr_require_32 (me, addr, nr_bytes, true))
-    return 0;
+  dv_bfin_mmr_require_32 (me, addr, nr_bytes, true);
   value = dv_load_4 (source);
 
   mmr_off = addr - emac->base;
@@ -265,7 +263,7 @@ bfin_emac_io_write_buffer (struct hw *me, const void *source,
       break;
     default:
       dv_bfin_mmr_invalid (me, addr, nr_bytes, true);
-      return 0;
+      break;
     }
 
   return nr_bytes;
@@ -279,10 +277,8 @@ bfin_emac_io_read_buffer (struct hw *me, void *dest,
   bu32 mmr_off;
   bu32 *valuep;
 
-  /* Invalid access mode is higher priority than missing register.  */
   /* XXX: 16bit accesses are allowed ...  */
-  if (!dv_bfin_mmr_require_32 (me, addr, nr_bytes, false))
-    return 0;
+  dv_bfin_mmr_require_32 (me, addr, nr_bytes, false);
 
   mmr_off = addr - emac->base;
   valuep = (void *)((unsigned long)emac + mmr_base() + mmr_off);
@@ -332,7 +328,7 @@ bfin_emac_io_read_buffer (struct hw *me, void *dest,
       break;
     default:
       dv_bfin_mmr_invalid (me, addr, nr_bytes, false);
-      return 0;
+      break;
     }
 
   return nr_bytes;
@@ -413,7 +409,7 @@ bfin_emac_dma_read_buffer (struct hw *me, void *dest, int space,
       if (ret < 0)
 	return 0;
       ret += 4; /* include crc */
-      pad_ret = max (ret + 4, 64);
+      pad_ret = MAX (ret + 4, 64);
       len = pad_ret;
       memcpy (dest, &len, 2);
 

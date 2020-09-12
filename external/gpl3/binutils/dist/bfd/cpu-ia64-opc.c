@@ -1,4 +1,5 @@
-/* Copyright (C) 1998-2020 Free Software Foundation, Inc.
+/* Copyright 1998, 1999, 2000, 2001, 2002, 2003, 2005, 2006, 2007
+   Free Software Foundation, Inc.
    Contributed by David Mosberger-Tang <davidm@hpl.hp.com>
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -80,19 +81,19 @@ ext_reg (const struct ia64_operand *self, ia64_insn code, ia64_insn *valuep)
 static const char*
 ins_immu (const struct ia64_operand *self, ia64_insn value, ia64_insn *code)
 {
-  ia64_insn new_insn = 0;
+  ia64_insn new = 0;
   int i;
 
   for (i = 0; i < NELEMS (self->field) && self->field[i].bits; ++i)
     {
-      new_insn |= ((value & ((((ia64_insn) 1) << self->field[i].bits) - 1))
-		 << self->field[i].shift);
+      new |= ((value & ((((ia64_insn) 1) << self->field[i].bits) - 1))
+	      << self->field[i].shift);
       value >>= self->field[i].bits;
     }
   if (value)
     return "integer operand out of range";
 
-  *code |= new_insn;
+  *code |= new;
   return 0;
 }
 
@@ -162,22 +163,22 @@ ins_imms_scaled (const struct ia64_operand *self, ia64_insn value,
 		 ia64_insn *code, int scale)
 {
   BFD_HOST_64_BIT svalue = value, sign_bit = 0;
-  ia64_insn new_insn = 0;
+  ia64_insn new = 0;
   int i;
 
   svalue >>= scale;
 
   for (i = 0; i < NELEMS (self->field) && self->field[i].bits; ++i)
     {
-      new_insn |= ((svalue & ((((ia64_insn) 1) << self->field[i].bits) - 1))
-		 << self->field[i].shift);
+      new |= ((svalue & ((((ia64_insn) 1) << self->field[i].bits) - 1))
+	      << self->field[i].shift);
       sign_bit = (svalue >> (self->field[i].bits - 1)) & 1;
       svalue >>= self->field[i].bits;
     }
   if ((!sign_bit && svalue != 0) || (sign_bit && svalue != -1))
     return "integer operand out of range";
 
-  *code |= new_insn;
+  *code |= new;
   return 0;
 }
 
@@ -186,7 +187,7 @@ ext_imms_scaled (const struct ia64_operand *self, ia64_insn code,
 		 ia64_insn *valuep, int scale)
 {
   int i, bits = 0, total = 0;
-  BFD_HOST_U_64_BIT val = 0, sign;
+  BFD_HOST_64_BIT val = 0, sign;
 
   for (i = 0; i < NELEMS (self->field) && self->field[i].bits; ++i)
     {
@@ -196,10 +197,10 @@ ext_imms_scaled (const struct ia64_operand *self, ia64_insn code,
       total += bits;
     }
   /* sign extend: */
-  sign = (BFD_HOST_U_64_BIT) 1 << (total - 1);
+  sign = (BFD_HOST_64_BIT) 1 << (total - 1);
   val = (val ^ sign) - sign;
 
-  *valuep = val << scale;
+  *valuep = (val << scale);
   return 0;
 }
 
@@ -379,46 +380,6 @@ ext_cnt2c (const struct ia64_operand *self, ia64_insn code, ia64_insn *valuep)
 }
 
 static const char*
-ins_cnt6a (const struct ia64_operand *self, ia64_insn value,
-	    ia64_insn *code)
-{
-  if (value < 1 || value > 64)
-    return "value must be between 1 and 64";
-  return ins_immu (self, value - 1, code);
-}
-
-static const char*
-ext_cnt6a (const struct ia64_operand *self, ia64_insn code,
-	    ia64_insn *valuep)
-{
-  const char *result;
-
-  result = ext_immu (self, code, valuep);
-  if (result)
-    return result;
-
-  *valuep = *valuep + 1;
-  return 0;
-}
-
-static const char*
-ins_strd5b (const struct ia64_operand *self, ia64_insn value,
-	    ia64_insn *code)
-{
-  if (  value & 0x3f )
-    return "value must be a multiple of 64";
-  return ins_imms_scaled (self, value, code, 6);
-}
-
-static const char*
-ext_strd5b (const struct ia64_operand *self, ia64_insn code,
-	    ia64_insn *valuep)
-{
-  return ext_imms_scaled (self, code, valuep, 6);
-}
-
-
-static const char*
 ins_inc3 (const struct ia64_operand *self, ia64_insn value, ia64_insn *code)
 {
   BFD_HOST_64_BIT val = value;
@@ -519,8 +480,6 @@ const struct ia64_operand elf64_ia64_operands[IA64_OPND_COUNT] =
       "a general register" },
     { REG, ins_reg,   ext_reg,	 "r", {{ 2, 20}}, 0,		/* R3_2 */
       "a general register r0-r3" },
-    { REG, ins_reg,   ext_reg,	 "dahr", {{ 3, 23}}, 0,		/* DAHR */
-      "a dahr register dahr0-7" },
 
     /* memory operands: */
     { IND, ins_reg,   ext_reg,	"",      {{7, 20}}, 0,		/* MR3 */
@@ -545,8 +504,6 @@ const struct ia64_operand elf64_ia64_operands[IA64_OPND_COUNT] =
       "a pmc register" },
     { IND, ins_reg,   ext_reg,	"pmd",   {{7, 20}}, 0,		/* PMD_R3 */
       "a pmd register" },
-    { IND, ins_reg,   ext_reg,	"dahr",  {{7, 20}}, 0,		/* DAHR_R3 */
-      "a dahr register" },
     { IND, ins_reg,   ext_reg,	"rr",    {{7, 20}}, 0,		/* RR_R3 */
       "an rr register" },
 
@@ -611,15 +568,9 @@ const struct ia64_operand elf64_ia64_operands[IA64_OPND_COUNT] =
     { ABS, ins_imms,  ext_imms, 0,				/* IMM14 */
       {{ 7, 13}, { 6, 27}, { 1, 36}}, SDEC,
       "a 14-bit integer (-8192-8191)" },
-    { ABS, ins_immu,  ext_immu,  0,				/* IMMU16 */
-      {{4,  6}, {11, 12}, { 1, 36}}, UDEC,
-      "a 16-bit unsigned" },
     { ABS, ins_imms1, ext_imms1, 0,				/* IMM17 */
       {{ 7,  6}, { 8, 24}, { 1, 36}}, 0,
       "a 17-bit integer (-65536-65535)" },
-    { ABS, ins_immu,  ext_immu,  0,				/* IMMU19 */
-      {{4,  6}, {14, 12}, { 1, 36}}, UDEC,
-      "a 19-bit unsigned" },
     { ABS, ins_immu,  ext_immu,  0, {{20,  6}, { 1, 36}}, 0,	/* IMMU21 */
       "a 21-bit unsigned" },
     { ABS, ins_imms,  ext_imms,  0,				/* IMM22 */
@@ -657,13 +608,9 @@ const struct ia64_operand elf64_ia64_operands[IA64_OPND_COUNT] =
       "a branch target" },
     { REL, ins_imms4, ext_imms4, 0, {{20, 13}, { 1, 36}}, 0,	/* TGT25c */
       "a branch target" },
-    { REL, ins_rsvd, ext_rsvd, 0, {{0, 0}}, 0,			/* TGT64  */
+    { REL, ins_rsvd, ext_rsvd, 0, {{0, 0}}, 0,                  /* TGT64  */
       "a branch target" },
 
     { ABS, ins_const, ext_const, 0, {{0, 0}}, 0,		/* LDXMOV */
       "ldxmov target" },
-    { ABS, ins_cnt6a, ext_cnt6a, 0, {{6, 6}}, UDEC,		/* CNT6a */
-      "lfetch count" },
-    { ABS, ins_strd5b, ext_strd5b, 0, {{5, 13}}, SDEC,		/* STRD5b*/
-      "lfetch stride" },
   };

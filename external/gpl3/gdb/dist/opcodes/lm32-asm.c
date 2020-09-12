@@ -1,11 +1,11 @@
-/* DO NOT EDIT!  -*- buffer-read-only: t -*- vi:set ro:  */
 /* Assembler interface for targets using CGEN. -*- C -*-
    CGEN: Cpu tools GENerator
 
    THIS FILE IS MACHINE GENERATED WITH CGEN.
    - the resultant file is machine generated, cgen-asm.in isn't
 
-   Copyright (C) 1996-2019 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2005, 2007, 2008, 2010
+   Free Software Foundation, Inc.
 
    This file is part of libopcodes.
 
@@ -346,16 +346,14 @@ lm32_cgen_parse_operand (CGEN_CPU_DESC cd,
 
     default :
       /* xgettext:c-format */
-      opcodes_error_handler
-	(_("internal error: unrecognized field %d while parsing"),
-	 opindex);
+      fprintf (stderr, _("Unrecognized field %d while parsing.\n"), opindex);
       abort ();
   }
 
   return errmsg;
 }
 
-cgen_parse_fn * const lm32_cgen_parse_handlers[] =
+cgen_parse_fn * const lm32_cgen_parse_handlers[] = 
 {
   parse_insn_normal,
 };
@@ -385,9 +383,9 @@ CGEN_ASM_INIT_HOOK
 
    Returns NULL for success, an error message for failure.  */
 
-char *
+char * 
 lm32_cgen_build_insn_regex (CGEN_INSN *insn)
-{
+{  
   CGEN_OPCODE *opc = (CGEN_OPCODE *) CGEN_INSN_OPCODE (insn);
   const char *mnem = CGEN_INSN_MNEMONIC (insn);
   char rxbuf[CGEN_MAX_RX_ELEMENTS];
@@ -426,18 +424,18 @@ lm32_cgen_build_insn_regex (CGEN_INSN *insn)
   /* Copy any remaining literals from the syntax string into the rx.  */
   for(; * syn != 0 && rx <= rxbuf + (CGEN_MAX_RX_ELEMENTS - 7 - 4); ++syn)
     {
-      if (CGEN_SYNTAX_CHAR_P (* syn))
+      if (CGEN_SYNTAX_CHAR_P (* syn)) 
 	{
 	  char c = CGEN_SYNTAX_CHAR (* syn);
 
-	  switch (c)
+	  switch (c) 
 	    {
 	      /* Escape any regex metacharacters in the syntax.  */
-	    case '.': case '[': case '\\':
-	    case '*': case '^': case '$':
+	    case '.': case '[': case '\\': 
+	    case '*': case '^': case '$': 
 
 #ifdef CGEN_ESCAPE_EXTENDED_REGEX
-	    case '?': case '{': case '}':
+	    case '?': case '{': case '}': 
 	    case '(': case ')': case '*':
 	    case '|': case '+': case ']':
 #endif
@@ -467,20 +465,20 @@ lm32_cgen_build_insn_regex (CGEN_INSN *insn)
     }
 
   /* Trailing whitespace ok.  */
-  * rx++ = '[';
-  * rx++ = ' ';
-  * rx++ = '\t';
-  * rx++ = ']';
-  * rx++ = '*';
+  * rx++ = '['; 
+  * rx++ = ' '; 
+  * rx++ = '\t'; 
+  * rx++ = ']'; 
+  * rx++ = '*'; 
 
   /* But anchor it after that.  */
-  * rx++ = '$';
+  * rx++ = '$'; 
   * rx = '\0';
 
   CGEN_INSN_RX (insn) = xmalloc (sizeof (regex_t));
   reg_err = regcomp ((regex_t *) CGEN_INSN_RX (insn), rxbuf, REG_NOSUB);
 
-  if (reg_err == 0)
+  if (reg_err == 0) 
     return NULL;
   else
     {
@@ -679,7 +677,7 @@ lm32_cgen_assemble_insn (CGEN_CPU_DESC cd,
       const CGEN_INSN *insn = ilist->insn;
       recognized_mnemonic = 1;
 
-#ifdef CGEN_VALIDATE_INSN_SUPPORTED
+#ifdef CGEN_VALIDATE_INSN_SUPPORTED 
       /* Not usually needed as unsupported opcodes
 	 shouldn't be in the hash lists.  */
       /* Is this insn supported by the selected cpu?  */
@@ -739,7 +737,7 @@ lm32_cgen_assemble_insn (CGEN_CPU_DESC cd,
 	if (strlen (start) > 50)
 	  /* xgettext:c-format */
 	  sprintf (errbuf, "%s `%.50s...'", tmp_errmsg, start);
-	else
+	else 
 	  /* xgettext:c-format */
 	  sprintf (errbuf, "%s `%.50s'", tmp_errmsg, start);
       }
@@ -748,11 +746,11 @@ lm32_cgen_assemble_insn (CGEN_CPU_DESC cd,
 	if (strlen (start) > 50)
 	  /* xgettext:c-format */
 	  sprintf (errbuf, _("bad instruction `%.50s...'"), start);
-	else
+	else 
 	  /* xgettext:c-format */
 	  sprintf (errbuf, _("bad instruction `%.50s'"), start);
       }
-
+      
     *errmsg = errbuf;
     return NULL;
   }

@@ -1,4 +1,4 @@
-/*	$NetBSD: DviP.h,v 1.1.1.1 2016/01/13 18:41:49 christos Exp $	*/
+/*	$NetBSD: DviP.h,v 1.1 2016/01/13 18:41:49 christos Exp $	*/
 
 /*
  * $XConsortium: DviP.h,v 1.5 89/07/22 19:44:08 keith Exp $

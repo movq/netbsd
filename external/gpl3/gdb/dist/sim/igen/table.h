@@ -1,6 +1,6 @@
 /* The IGEN simulator generator for GDB, the GNU Debugger.
 
-   Copyright 2002-2019 Free Software Foundation, Inc.
+   Copyright 2002, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    Contributed by Andrew Cagney.
 
@@ -91,7 +91,7 @@ struct _table_include
 
 
 /* Open/read a table file.  Since the file is read once during open
-   (and then closed immediately) there is no close method. */
+   (and then closed immediatly) there is no close method. */
 
 extern table *table_open (const char *file_name);
 

@@ -1,5 +1,5 @@
 /* IA32 VxWorks AE target definitions for GNU compiler.
-   Copyright (C) 2005-2019 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2007 Free Software Foundation, Inc.
    Contributed by CodeSourcery, LLC.
 
 This file is part of GCC.
@@ -18,7 +18,9 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-/* This platform supports the probing method of stack checking and
-   requires 4K of space for executing a possible last chance handler.  */
-#undef STACK_CHECK_PROTECT
-#define STACK_CHECK_PROTECT 4096
+/* On VxWorks AE, we only want SIMNT.  */
+#undef VXWORKS_CPU_DEFINE
+#define VXWORKS_CPU_DEFINE()			\
+  do						\
+    builtin_define ("CPU=SIMNT");		\
+  while (0)

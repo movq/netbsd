@@ -1,4 +1,5 @@
-# Copyright 1998-2019 Free Software Foundation, Inc.
+# Copyright 1998, 1999, 2003, 2004, 2006, 2007, 2008, 2009, 2010, 2011
+# Free Software Foundation, Inc.
 
 # This file is part of the gdb testsuite
 
@@ -21,18 +22,30 @@
 
 set vhn "\\$\[0-9\]+"
 
+if $tracelevel then {
+    strace $tracelevel
+}
+
 if { [skip_cplus_tests] } { continue }
 
 
-standard_testfile .cc
+set testfile "member-ptr"
+set srcfile ${testfile}.cc
+set binfile ${objdir}/${subdir}/${testfile}
 
-if [get_compiler_info "c++"] {
+if [get_compiler_info ${binfile} "c++"] {
     return -1
 }
 
-if {[prepare_for_testing "failed to prepare" $testfile $srcfile {debug c++}]} {
-    return -1
+if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug c++}] != "" } {
+     untested member-ptr.exp
+     return -1
 }
+
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
 
 if ![runto_main] then {
     perror "couldn't run to breakpoint"
@@ -76,6 +89,12 @@ gdb_test_multiple "print pmi" $name {
     -re "$vhn = not implemented: member type in c_val_print\r\n$gdb_prompt $" {
 	# gcc HEAD 2004-01-11 05:33:21 -gdwarf-2
 	# gcc HEAD 2004-01-11 05:33:21 -gstabs+
+	kfail "gdb/NNNN" $name
+    }
+    -re "$vhn = \\(int ?\\( A::\\*\\)\\) 536870920\r\n$gdb_prompt $" {
+	# the value is 0x20000008 hex.   0x20000000 is an internal flag.
+	# Use '|' to add in more values as needed.
+	# hpacc A.03.45
 	kfail "gdb/NNNN" $name
     }
 }
@@ -149,6 +168,12 @@ gdb_test_multiple "print pmi" $name {
     -re "$vhn = not implemented: member type in c_val_print\r\n$gdb_prompt $" {
 	# gcc HEAD 2004-01-11 05:33:21 -gdwarf-2
 	# gcc HEAD 2004-01-11 05:33:21 -gstabs+
+	kfail "gdb/NNNN" $name
+    }
+    -re "$vhn = \\(int ?\\( A::\\*\\)\\) 536870924\r\n$gdb_prompt $" {
+	# the value is 0x20000008 hex.   0x20000000 is an internal flag.
+	# Use '|' to add in more values as needed.
+	# hpacc A.03.45
 	kfail "gdb/NNNN" $name
     }
 }
@@ -236,7 +261,7 @@ gdb_test_multiple "print a" $name {
     -re "$vhn = \{c = 120 'x', j = 33, jj = 1331, (static|static int) s = 10, Virtual table at $hex\}\r\n$gdb_prompt $" {
 	pass $name
     }
-    -re "$vhn = \{(_vptr.A|_vptr\\$) = ${hex}( <vtable for A.*>)?, c = 120 'x', j = 33, jj = 1331, (static|static int) s = 10\}\r\n$gdb_prompt $" {
+    -re "$vhn = \{(_vptr.A|_vptr\\$) = $hex, c = 120 'x', j = 33, jj = 1331, (static|static int) s = 10\}\r\n$gdb_prompt $" {
 	pass $name
     }
     -re "$vhn = \{(_vptr.A|_vptr\\$) = $hex, c = 120 'x', j = 121, jj = 1331, (static|static int) s = 10\}\r\n$gdb_prompt $" {
@@ -284,7 +309,7 @@ gdb_test_multiple "print a" $name {
     -re "$vhn = \{c = 120 'x', j = 44, jj = 1331, (static|static int) s = 10, Virtual table at $hex\}\r\n$gdb_prompt $" {
 	pass $name
     }
-    -re "$vhn = \{(_vptr.A|_vptr\\$) = ${hex}( <vtable for A.*>), c = 120 'x', j = 44, jj = 1331, (static|static int) s = 10\}\r\n$gdb_prompt $" {
+    -re "$vhn = \{(_vptr.A|_vptr\\$) = $hex, c = 120 'x', j = 44, jj = 1331, (static|static int) s = 10\}\r\n$gdb_prompt $" {
 	pass $name
     }
     -re "$vhn = \{(_vptr.A|_vptr\\$) = $hex, c = 120 'x', j = 121, jj = 1331, (static|static int) s = 10\}\r\n$gdb_prompt $" {
@@ -363,33 +388,6 @@ gdb_test_multiple "print ((int) pmi) == ((char *) &a.j - (char *) & a)" $name {
     }
 }
 
-# Check pointers to data members, which are themselves pointers to
-# functions.  These behave like data members, not like pointers to
-# member functions.
-
-gdb_test "ptype diamond_pfunc_ptr" \
-    "type = int \\(\\*Diamond::\\*\\)\\(int\\)"
-
-gdb_test "ptype diamond.*diamond_pfunc_ptr" \
-    "type = int \\(\\*\\)\\(int\\)"
-
-# This one is invalid; () binds more tightly than .*, so it tries to
-# call the member pointer as a normal pointer-to-function.
-
-gdb_test "print diamond.*diamond_pfunc_ptr (20)" \
-    "Invalid data type for function to be called."
-
-# With parentheses, it is valid.
-
-gdb_test "print (diamond.*diamond_pfunc_ptr) (20)" \
-    "$vhn = 39"
-
-# Make sure that we do not interpret this as either a member pointer
-# call or a member function call.
-
-gdb_test "print diamond.func_ptr (20)" \
-    "$vhn = 39"
-
 # ==========================
 # pointer to member function
 # ==========================
@@ -400,6 +398,10 @@ set name "ptype pmf"
 gdb_test_multiple "ptype pmf" $name {
     -re "type = int \\( ?A::\\*\\)\\(A \\*( const)?, int\\)\r\n$gdb_prompt $" {
 	pass $name
+    }
+    -re "type = int \\( ?A::\\*\\)\\(void\\)\r\n$gdb_prompt $" {
+	# hpacc A.03.45
+	kfail "gdb/NNNN" $name
     }
     -re "type = struct \{.*\}\r\n$gdb_prompt $" {
 	# gcc 2.95.3 -gdwarf-2
@@ -419,6 +421,10 @@ gdb_test_multiple "print pmf" $name {
     -re "$vhn = \\(int \\(A::\\*\\)\\(A \\*( const)?, int\\)\\) $hex <A::bar\\(int\\)>\r\n$gdb_prompt $" {
 	pass $name
     }
+    -re "$vhn = .*not supported with HP aCC.*\r\n$gdb_prompt $" {
+	# hpacc A.03.45
+	kfail "gdb/NNNN" $name
+    }
     -re "$vhn = \{.*\}\r\n$gdb_prompt $" {
 	# gcc 2.95.3 -gdwarf-2
 	# gcc 2.95.3 -gstabs+
@@ -436,6 +442,10 @@ set name "ptype pmf_p"
 gdb_test_multiple "ptype pmf_p" $name {
     -re "type = int \\( ?A::\\*\\*\\)\\(A \\*( const)?, int\\)\r\n$gdb_prompt $" {
 	pass $name
+    }
+    -re "type = int \\( ?A::\\*\\*\\)\\(void\\)\r\n$gdb_prompt $" {
+	# hpacc A.03.45
+	kfail "gdb/NNNN" $name
     }
     -re "type = struct \{.*\} \\*\r\n$gdb_prompt $" {
 	# gcc 2.95.3 -gdwarf-2
@@ -458,6 +468,10 @@ gdb_test_multiple "print pmf_p" $name {
     -re "$vhn = \\(PMF \\*\\) $hex\r\n$gdb_prompt $" {
 	pass "gdb/NNNN"
     }
+    -re "$vhn = \\(int \\( ?A::\\*\\*\\)\\(void\\)\\) $hex\r\n$gdb_prompt $" {
+	# hpacc A.03.45
+	kfail "gdb/NNNN" $name
+    }
     -re "$vhn = \\(struct \{.*\} \\*\\) $hex\r\n$gdb_prompt $" {
 	# gcc 2.95.3 -gdwarf-2
 	kfail "gdb/NNNN" $name
@@ -470,6 +484,10 @@ set name "print a.*pmf"
 gdb_test_multiple "print a.*pmf" $name {
     -re "$vhn = {int \\(A \\*( const)?, int\\)} $hex <A::bar\\(int\\)>\r\n$gdb_prompt $" {
 	pass $name
+    }
+    -re "Pointers to methods not supported with HP aCC\r\n$gdb_prompt $" {
+	# hpacc A.03.45
+	kfail "gdb/NNNN" $name
     }
     -re "Value can't be converted to integer.\r\n$gdb_prompt $" {
 	# gcc 2.95.3 -gdwarf-2
@@ -488,6 +506,10 @@ set name "print a_p->*pmf"
 gdb_test_multiple "print a_p->*pmf" $name {
     -re "$vhn = {int \\(A \\*( const)?, int\\)} $hex <A::bar\\(int\\)>\r\n$gdb_prompt $" {
 	pass $name
+    }
+    -re "Pointers to methods not supported with HP aCC\r\n$gdb_prompt $" {
+	# hpacc A.03.45
+	kfail "gdb/NNNN" $name
     }
     -re "Value can't be converted to integer.\r\n$gdb_prompt $" {
 	# gcc 2.95.3 -gdwarf-2
@@ -517,6 +539,9 @@ gdb_test_multiple "set var pmf = &A::foo" $name {
 	# gcc 3.2.2 -gstabs+
 	# gcc HEAD 2004-01-10 -gdwarf-2
 	# gcc HEAD 2004-01-10 -gstabs+
+	kfail "gdb/NNNN" $name
+    }
+    -re "Assignment to pointers to methods not implemented with HP aCC\r\n$gdb_prompt $" {
 	kfail "gdb/NNNN" $name
     }
 }
@@ -566,6 +591,10 @@ gdb_test_multiple "print (a.*pmf)(3)" $name {
     -re "$vhn = 50\r\n$gdb_prompt $" {
 	pass $name
     }
+    -re "Not implemented: function invocation through pointer to method with HP aCC\r\n$gdb_prompt $" {
+	# hpacc A.03.45
+	kfail "gdb/NNNN" $name
+    }
     -re "Value can't be converted to integer.\r\n$gdb_prompt $" {
 	# gcc 2.95.3 -gdwarf-2
 	# gcc 2.95.3 -gstabs+
@@ -578,7 +607,6 @@ gdb_test_multiple "print (a.*pmf)(3)" $name {
 }
 
 gdb_test "ptype a.*pmf" "type = int \\(A \\*( const)?, int\\)"
-gdb_test "ptype (a.*pmf)(3)" "type = int"
 
 # Print out a pointer to data member which requires looking into
 # a base class.

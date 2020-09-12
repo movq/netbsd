@@ -1,6 +1,7 @@
 /* Handle lists of commands, their decoding and documentation, for GDB.
 
-   Copyright (C) 1986-2019 Free Software Foundation, Inc.
+   Copyright (c) 1986, 1989, 1990, 1991, 1998, 2000, 2001, 2002, 2004, 2007,
+   2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -19,24 +20,31 @@
 #include "symtab.h"
 #include <ctype.h>
 #include "gdb_regex.h"
+#include "gdb_string.h"
 #include "completer.h"
 #include "ui-out.h"
+
 #include "cli/cli-cmds.h"
 #include "cli/cli-decode.h"
-#include "common/gdb_optional.h"
+
+#ifdef TUI
+#include "tui/tui.h"		/* For tui_active et al.  */
+#endif
+
+#include "gdb_assert.h"
 
 /* Prototypes for local functions.  */
 
-static void undef_cmd_error (const char *, const char *);
+static void undef_cmd_error (char *, char *);
 
-static struct cmd_list_element *delete_cmd (const char *name,
+static struct cmd_list_element *delete_cmd (char *name,
 					    struct cmd_list_element **list,
 					    struct cmd_list_element **prehook,
 					    struct cmd_list_element **prehookee,
 					    struct cmd_list_element **posthook,
 					    struct cmd_list_element **posthookee);
 
-static struct cmd_list_element *find_cmd (const char *command,
+static struct cmd_list_element *find_cmd (char *command,
 					  int len,
 					  struct cmd_list_element *clist,
 					  int ignore_help_classes,
@@ -44,56 +52,9 @@ static struct cmd_list_element *find_cmd (const char *command,
 
 static void help_all (struct ui_file *stream);
 
-/* Look up a command whose 'prefixlist' is KEY.  Return the command if found,
-   otherwise return NULL.  */
-
-static struct cmd_list_element *
-lookup_cmd_for_prefixlist (struct cmd_list_element **key,
-			   struct cmd_list_element *list)
-{
-  struct cmd_list_element *p = NULL;
-
-  for (p = list; p != NULL; p = p->next)
-    {
-      struct cmd_list_element *q;
-
-      if (p->prefixlist == NULL)
-	continue;
-      else if (p->prefixlist == key)
-	return p;
-
-      q = lookup_cmd_for_prefixlist (key, *(p->prefixlist));
-      if (q != NULL)
-	return q;
-    }
-
-  return NULL;
-}
-
 static void
-set_cmd_prefix (struct cmd_list_element *c, struct cmd_list_element **list)
-{
-  struct cmd_list_element *p;
-
-  /* Check to see if *LIST contains any element other than C.  */
-  for (p = *list; p != NULL; p = p->next)
-    if (p != c)
-      break;
-
-  if (p == NULL)
-    {
-      /* *SET_LIST only contains SET.  */
-      p = lookup_cmd_for_prefixlist (list, setlist);
-
-      c->prefix = p ? (p->cmd_pointer ? p->cmd_pointer : p) : p;
-    }
-  else
-    c->prefix = p->prefix;
-}
-
-static void
-print_help_for_command (struct cmd_list_element *c, const char *prefix,
-			int recurse, struct ui_file *stream);
+print_help_for_command (struct cmd_list_element *c, char *prefix, int recurse,
+			struct ui_file *stream);
 
 
 /* Set the callback function for the specified command.  For each both
@@ -101,41 +62,42 @@ print_help_for_command (struct cmd_list_element *c, const char *prefix,
    bounce function (unless cfunc / sfunc is NULL that is).  */
 
 static void
-do_const_cfunc (struct cmd_list_element *c, const char *args, int from_tty)
+do_cfunc (struct cmd_list_element *c, char *args, int from_tty)
 {
-  c->function.const_cfunc (args, from_tty);
+  c->function.cfunc (args, from_tty); /* Ok.  */
 }
 
-static void
-set_cmd_cfunc (struct cmd_list_element *cmd, cmd_const_cfunc_ftype *cfunc)
+void
+set_cmd_cfunc (struct cmd_list_element *cmd, cmd_cfunc_ftype *cfunc)
 {
   if (cfunc == NULL)
     cmd->func = NULL;
   else
-    cmd->func = do_const_cfunc;
-  cmd->function.const_cfunc = cfunc;
+    cmd->func = do_cfunc;
+  cmd->function.cfunc = cfunc; /* Ok.  */
 }
 
 static void
-do_sfunc (struct cmd_list_element *c, const char *args, int from_tty)
+do_sfunc (struct cmd_list_element *c, char *args, int from_tty)
 {
-  c->function.sfunc (args, from_tty, c);
+  c->function.sfunc (args, from_tty, c); /* Ok.  */
 }
 
 void
-set_cmd_sfunc (struct cmd_list_element *cmd, cmd_const_sfunc_ftype *sfunc)
+set_cmd_sfunc (struct cmd_list_element *cmd, cmd_sfunc_ftype *sfunc)
 {
   if (sfunc == NULL)
     cmd->func = NULL;
   else
     cmd->func = do_sfunc;
-  cmd->function.sfunc = sfunc;
+  cmd->function.sfunc = sfunc; /* Ok.  */
 }
 
 int
-cmd_cfunc_eq (struct cmd_list_element *cmd, cmd_const_cfunc_ftype *cfunc)
+cmd_cfunc_eq (struct cmd_list_element *cmd,
+	      void (*cfunc) (char *args, int from_tty))
 {
-  return cmd->func == do_const_cfunc && cmd->function.const_cfunc == cfunc;
+  return cmd->func == do_cfunc && cmd->function.cfunc == cfunc;
 }
 
 void
@@ -157,22 +119,15 @@ cmd_type (struct cmd_list_element *cmd)
 }
 
 void
-set_cmd_completer (struct cmd_list_element *cmd, completer_ftype *completer)
+set_cmd_completer (struct cmd_list_element *cmd,
+		   char **(*completer) (struct cmd_list_element *self,
+					char *text, char *word))
 {
   cmd->completer = completer; /* Ok.  */
 }
 
-/* See definition in commands.h.  */
-
-void
-set_cmd_completer_handle_brkchars (struct cmd_list_element *cmd,
-				   completer_handle_brkchars_ftype *func)
-{
-  cmd->completer_handle_brkchars = func;
-}
 
 /* Add element named NAME.
-   Space for NAME and DOC must be allocated by the caller.
    CLASS is the top level category into which commands are broken down
    for "help" purposes.
    FUN should be the function to execute the command;
@@ -189,12 +144,12 @@ set_cmd_completer_handle_brkchars (struct cmd_list_element *cmd,
    Returns a pointer to the added command (not necessarily the head 
    of *LIST).  */
 
-static struct cmd_list_element *
-do_add_cmd (const char *name, enum command_class theclass,
-	    const char *doc, struct cmd_list_element **list)
+struct cmd_list_element *
+add_cmd (char *name, enum command_class class, void (*fun) (char *, int),
+	 char *doc, struct cmd_list_element **list)
 {
-  struct cmd_list_element *c = new struct cmd_list_element (name, theclass,
-							    doc);
+  struct cmd_list_element *c
+    = (struct cmd_list_element *) xmalloc (sizeof (struct cmd_list_element));
   struct cmd_list_element *p, *iter;
 
   /* Turn each alias of the old command into an alias of the new
@@ -228,45 +183,31 @@ do_add_cmd (const char *name, enum command_class theclass,
       p->next = c;
     }
 
+  c->name = name;
+  c->class = class;
+  set_cmd_cfunc (c, fun);
+  set_cmd_context (c, NULL);
+  c->doc = doc;
+  c->flags = 0;
+  c->replacement = NULL;
+  c->pre_show_hook = NULL;
+  c->hook_in = 0;
+  c->prefixlist = NULL;
+  c->prefixname = NULL;
+  c->allow_unknown = 0;
+  c->abbrev_flag = 0;
+  set_cmd_completer (c, make_symbol_completion_list_fn);
+  c->destroyer = NULL;
+  c->type = not_set_cmd;
+  c->var = NULL;
+  c->var_type = var_boolean;
+  c->enums = NULL;
+  c->user_commands = NULL;
+  c->cmd_pointer = NULL;
+  c->alias_chain = NULL;
+
   return c;
 }
-
-struct cmd_list_element *
-add_cmd (const char *name, enum command_class theclass,
-	 const char *doc, struct cmd_list_element **list)
-{
-  cmd_list_element *result = do_add_cmd (name, theclass, doc, list);
-  result->func = NULL;
-  result->function.const_cfunc = NULL;
-  return result;
-}
-
-struct cmd_list_element *
-add_cmd (const char *name, enum command_class theclass,
-	 cmd_const_cfunc_ftype *fun,
-	 const char *doc, struct cmd_list_element **list)
-{
-  cmd_list_element *result = do_add_cmd (name, theclass, doc, list);
-  set_cmd_cfunc (result, fun);
-  return result;
-}
-
-/* Add an element with a suppress notification to the LIST of commands.  */
-
-struct cmd_list_element *
-add_cmd_suppress_notification (const char *name, enum command_class theclass,
-			       cmd_const_cfunc_ftype *fun, const char *doc,
-			       struct cmd_list_element **list,
-			       int *suppress_notification)
-{
-  struct cmd_list_element *element;
-
-  element = add_cmd (name, theclass, fun, doc, list);
-  element->suppress_notification = suppress_notification;
-
-  return element;
-}
-
 
 /* Deprecates a command CMD.
    REPLACEMENT is the name of the command which should be used in
@@ -279,10 +220,9 @@ add_cmd_suppress_notification (const char *name, enum command_class theclass,
    Returns a pointer to the deprecated command.  */
 
 struct cmd_list_element *
-deprecate_cmd (struct cmd_list_element *cmd, const char *replacement)
+deprecate_cmd (struct cmd_list_element *cmd, char *replacement)
 {
-  cmd->cmd_deprecated = 1;
-  cmd->deprecated_warn_user = 1;
+  cmd->flags |= (CMD_DEPRECATED | DEPRECATED_WARN_USER);
 
   if (replacement != NULL)
     cmd->replacement = replacement;
@@ -293,10 +233,19 @@ deprecate_cmd (struct cmd_list_element *cmd, const char *replacement)
 }
 
 struct cmd_list_element *
-add_alias_cmd (const char *name, cmd_list_element *old,
-	       enum command_class theclass, int abbrev_flag,
-	       struct cmd_list_element **list)
+add_alias_cmd (char *name, char *oldname, enum command_class class,
+	       int abbrev_flag, struct cmd_list_element **list)
 {
+  /* Must do this since lookup_cmd tries to side-effect its first
+     arg.  */
+  char *copied_name;
+  struct cmd_list_element *old;
+  struct cmd_list_element *c;
+
+  copied_name = (char *) alloca (strlen (oldname) + 1);
+  strcpy (copied_name, oldname);
+  old = lookup_cmd (&copied_name, *list, "", 1, 1);
+
   if (old == 0)
     {
       struct cmd_list_element *prehook, *prehookee, *posthook, *posthookee;
@@ -310,14 +259,7 @@ add_alias_cmd (const char *name, cmd_list_element *old,
       return 0;
     }
 
-  struct cmd_list_element *c = add_cmd (name, theclass, old->doc, list);
-
-  /* If OLD->DOC can be freed, we should make another copy.  */
-  if (old->doc_allocated)
-    {
-      c->doc = xstrdup (old->doc);
-      c->doc_allocated = 1;
-    }
+  c = add_cmd (name, class, NULL, old->doc, list);
   /* NOTE: Both FUNC and all the FUNCTIONs need to be copied.  */
   c->func = old->func;
   c->function = old->function;
@@ -328,25 +270,8 @@ add_alias_cmd (const char *name, cmd_list_element *old,
   c->cmd_pointer = old;
   c->alias_chain = old->aliases;
   old->aliases = c;
-
-  set_cmd_prefix (c, list);
   return c;
 }
-
-struct cmd_list_element *
-add_alias_cmd (const char *name, const char *oldname,
-	       enum command_class theclass, int abbrev_flag,
-	       struct cmd_list_element **list)
-{
-  const char *tmp;
-  struct cmd_list_element *old;
-
-  tmp = oldname;
-  old = lookup_cmd (&tmp, *list, "", 1, 1);
-
-  return add_alias_cmd (name, old, theclass, abbrev_flag, list);
-}
-
 
 /* Like add_cmd but adds an element for a command prefix: a name that
    should be followed by a subcommand to be looked up in another
@@ -354,60 +279,29 @@ add_alias_cmd (const char *name, const char *oldname,
    containing that list.  */
 
 struct cmd_list_element *
-add_prefix_cmd (const char *name, enum command_class theclass,
-		cmd_const_cfunc_ftype *fun,
-		const char *doc, struct cmd_list_element **prefixlist,
-		const char *prefixname, int allow_unknown,
+add_prefix_cmd (char *name, enum command_class class,
+		void (*fun) (char *, int),
+		char *doc, struct cmd_list_element **prefixlist,
+		char *prefixname, int allow_unknown,
 		struct cmd_list_element **list)
 {
-  struct cmd_list_element *c = add_cmd (name, theclass, fun, doc, list);
-  struct cmd_list_element *p;
+  struct cmd_list_element *c = add_cmd (name, class, fun, doc, list);
 
   c->prefixlist = prefixlist;
   c->prefixname = prefixname;
   c->allow_unknown = allow_unknown;
-
-  if (list == &cmdlist)
-    c->prefix = NULL;
-  else
-    set_cmd_prefix (c, list);
-
-  /* Update the field 'prefix' of each cmd_list_element in *PREFIXLIST.  */
-  for (p = *prefixlist; p != NULL; p = p->next)
-    p->prefix = c;
-
   return c;
-}
-
-/* Like ADD_PREFIX_CMD but sets the suppress_notification pointer on the
-   new command list element.  */
-
-struct cmd_list_element *
-add_prefix_cmd_suppress_notification
-               (const char *name, enum command_class theclass,
-		cmd_const_cfunc_ftype *fun,
-		const char *doc, struct cmd_list_element **prefixlist,
-		const char *prefixname, int allow_unknown,
-		struct cmd_list_element **list,
-		int *suppress_notification)
-{
-  struct cmd_list_element *element
-    = add_prefix_cmd (name, theclass, fun, doc, prefixlist,
-		      prefixname, allow_unknown, list);
-  element->suppress_notification = suppress_notification;
-  return element;
 }
 
 /* Like add_prefix_cmd but sets the abbrev_flag on the new command.  */
 
 struct cmd_list_element *
-add_abbrev_prefix_cmd (const char *name, enum command_class theclass,
-		       cmd_const_cfunc_ftype *fun, const char *doc,
-		       struct cmd_list_element **prefixlist,
-		       const char *prefixname,
+add_abbrev_prefix_cmd (char *name, enum command_class class,
+		       void (*fun) (char *, int), char *doc,
+		       struct cmd_list_element **prefixlist, char *prefixname,
 		       int allow_unknown, struct cmd_list_element **list)
 {
-  struct cmd_list_element *c = add_cmd (name, theclass, fun, doc, list);
+  struct cmd_list_element *c = add_cmd (name, class, fun, doc, list);
 
   c->prefixlist = prefixlist;
   c->prefixname = prefixname;
@@ -418,14 +312,15 @@ add_abbrev_prefix_cmd (const char *name, enum command_class theclass,
 
 /* This is an empty "cfunc".  */
 void
-not_just_help_class_command (const char *args, int from_tty)
+not_just_help_class_command (char *args, int from_tty)
 {
 }
 
 /* This is an empty "sfunc".  */
+static void empty_sfunc (char *, int, struct cmd_list_element *);
 
 static void
-empty_sfunc (const char *args, int from_tty, struct cmd_list_element *c)
+empty_sfunc (char *args, int from_tty, struct cmd_list_element *c)
 {
 }
 
@@ -438,15 +333,15 @@ empty_sfunc (const char *args, int from_tty, struct cmd_list_element *c)
    DOC is the documentation string.  */
 
 static struct cmd_list_element *
-add_set_or_show_cmd (const char *name,
+add_set_or_show_cmd (char *name,
 		     enum cmd_types type,
-		     enum command_class theclass,
+		     enum command_class class,
 		     var_types var_type,
 		     void *var,
-		     const char *doc,
+		     char *doc,
 		     struct cmd_list_element **list)
 {
-  struct cmd_list_element *c = add_cmd (name, theclass, doc, list);
+  struct cmd_list_element *c = add_cmd (name, class, NULL, doc, list);
 
   gdb_assert (type == set_cmd || type == show_cmd);
   c->type = type;
@@ -468,12 +363,12 @@ add_set_or_show_cmd (const char *name,
    structures.  */
 
 static void
-add_setshow_cmd_full (const char *name,
-		      enum command_class theclass,
+add_setshow_cmd_full (char *name,
+		      enum command_class class,
 		      var_types var_type, void *var,
 		      const char *set_doc, const char *show_doc,
 		      const char *help_doc,
-		      cmd_const_sfunc_ftype *set_func,
+		      cmd_sfunc_ftype *set_func,
 		      show_value_ftype *show_func,
 		      struct cmd_list_element **set_list,
 		      struct cmd_list_element **show_list,
@@ -495,18 +390,12 @@ add_setshow_cmd_full (const char *name,
       full_set_doc = xstrdup (set_doc);
       full_show_doc = xstrdup (show_doc);
     }
-  set = add_set_or_show_cmd (name, set_cmd, theclass, var_type, var,
+  set = add_set_or_show_cmd (name, set_cmd, class, var_type, var,
 			     full_set_doc, set_list);
-  set->doc_allocated = 1;
-
   if (set_func != NULL)
     set_cmd_sfunc (set, set_func);
-
-  set_cmd_prefix (set, set_list);
-
-  show = add_set_or_show_cmd (name, show_cmd, theclass, var_type, var,
+  show = add_set_or_show_cmd (name, show_cmd, class, var_type, var,
 			      full_show_doc, show_list);
-  show->doc_allocated = 1;
   show->show_value_func = show_func;
 
   if (set_result != NULL)
@@ -521,52 +410,47 @@ add_setshow_cmd_full (const char *name,
    which will contain the matching string (from ENUMLIST).  */
 
 void
-add_setshow_enum_cmd (const char *name,
-		      enum command_class theclass,
-		      const char *const *enumlist,
+add_setshow_enum_cmd (char *name,
+		      enum command_class class,
+		      const char *enumlist[],
 		      const char **var,
 		      const char *set_doc,
 		      const char *show_doc,
 		      const char *help_doc,
-		      cmd_const_sfunc_ftype *set_func,
+		      cmd_sfunc_ftype *set_func,
 		      show_value_ftype *show_func,
 		      struct cmd_list_element **set_list,
-		      struct cmd_list_element **show_list,
-		      void *context)
+		      struct cmd_list_element **show_list)
 {
-  struct cmd_list_element *c, *show;
+  struct cmd_list_element *c;
 
-  add_setshow_cmd_full (name, theclass, var_enum, var,
+  add_setshow_cmd_full (name, class, var_enum, var,
 			set_doc, show_doc, help_doc,
 			set_func, show_func,
 			set_list, show_list,
-			&c, &show);
+			&c, NULL);
   c->enums = enumlist;
-
-  set_cmd_context (c, context);
-  set_cmd_context (show, context);
 }
-
-const char * const auto_boolean_enums[] = { "on", "off", "auto", NULL };
 
 /* Add an auto-boolean command named NAME to both the set and show
    command list lists.  CLASS is as in add_cmd.  VAR is address of the
    variable which will contain the value.  DOC is the documentation
    string.  FUNC is the corresponding callback.  */
 void
-add_setshow_auto_boolean_cmd (const char *name,
-			      enum command_class theclass,
+add_setshow_auto_boolean_cmd (char *name,
+			      enum command_class class,
 			      enum auto_boolean *var,
 			      const char *set_doc, const char *show_doc,
 			      const char *help_doc,
-			      cmd_const_sfunc_ftype *set_func,
+			      cmd_sfunc_ftype *set_func,
 			      show_value_ftype *show_func,
 			      struct cmd_list_element **set_list,
 			      struct cmd_list_element **show_list)
 {
+  static const char *auto_boolean_enums[] = { "on", "off", "auto", NULL };
   struct cmd_list_element *c;
 
-  add_setshow_cmd_full (name, theclass, var_auto_boolean, var,
+  add_setshow_cmd_full (name, class, var_auto_boolean, var,
 			set_doc, show_doc, help_doc,
 			set_func, show_func,
 			set_list, show_list,
@@ -579,10 +463,10 @@ add_setshow_auto_boolean_cmd (const char *name,
    add_cmd.  VAR is address of the variable which will contain the
    value.  SET_DOC and SHOW_DOC are the documentation strings.  */
 void
-add_setshow_boolean_cmd (const char *name, enum command_class theclass, int *var,
+add_setshow_boolean_cmd (char *name, enum command_class class, int *var,
 			 const char *set_doc, const char *show_doc,
 			 const char *help_doc,
-			 cmd_const_sfunc_ftype *set_func,
+			 cmd_sfunc_ftype *set_func,
 			 show_value_ftype *show_func,
 			 struct cmd_list_element **set_list,
 			 struct cmd_list_element **show_list)
@@ -590,7 +474,7 @@ add_setshow_boolean_cmd (const char *name, enum command_class theclass, int *var
   static const char *boolean_enums[] = { "on", "off", NULL };
   struct cmd_list_element *c;
 
-  add_setshow_cmd_full (name, theclass, var_boolean, var,
+  add_setshow_cmd_full (name, class, var_boolean, var,
 			set_doc, show_doc, help_doc,
 			set_func, show_func,
 			set_list, show_list,
@@ -601,18 +485,18 @@ add_setshow_boolean_cmd (const char *name, enum command_class theclass, int *var
 /* Add element named NAME to both the set and show command LISTs (the
    list for set/show or some sublist thereof).  */
 void
-add_setshow_filename_cmd (const char *name, enum command_class theclass,
+add_setshow_filename_cmd (char *name, enum command_class class,
 			  char **var,
 			  const char *set_doc, const char *show_doc,
 			  const char *help_doc,
-			  cmd_const_sfunc_ftype *set_func,
+			  cmd_sfunc_ftype *set_func,
 			  show_value_ftype *show_func,
 			  struct cmd_list_element **set_list,
 			  struct cmd_list_element **show_list)
 {
   struct cmd_list_element *set_result;
 
-  add_setshow_cmd_full (name, theclass, var_filename, var,
+  add_setshow_cmd_full (name, class, var_filename, var,
 			set_doc, show_doc, help_doc,
 			set_func, show_func,
 			set_list, show_list,
@@ -623,16 +507,16 @@ add_setshow_filename_cmd (const char *name, enum command_class theclass,
 /* Add element named NAME to both the set and show command LISTs (the
    list for set/show or some sublist thereof).  */
 void
-add_setshow_string_cmd (const char *name, enum command_class theclass,
+add_setshow_string_cmd (char *name, enum command_class class,
 			char **var,
 			const char *set_doc, const char *show_doc,
 			const char *help_doc,
-			cmd_const_sfunc_ftype *set_func,
+			cmd_sfunc_ftype *set_func,
 			show_value_ftype *show_func,
 			struct cmd_list_element **set_list,
 			struct cmd_list_element **show_list)
 {
-  add_setshow_cmd_full (name, theclass, var_string, var,
+  add_setshow_cmd_full (name, class, var_string, var,
 			set_doc, show_doc, help_doc,
 			set_func, show_func,
 			set_list, show_list,
@@ -641,41 +525,38 @@ add_setshow_string_cmd (const char *name, enum command_class theclass,
 
 /* Add element named NAME to both the set and show command LISTs (the
    list for set/show or some sublist thereof).  */
-struct cmd_list_element *
-add_setshow_string_noescape_cmd (const char *name, enum command_class theclass,
+void
+add_setshow_string_noescape_cmd (char *name, enum command_class class,
 				 char **var,
 				 const char *set_doc, const char *show_doc,
 				 const char *help_doc,
-				 cmd_const_sfunc_ftype *set_func,
+				 cmd_sfunc_ftype *set_func,
 				 show_value_ftype *show_func,
 				 struct cmd_list_element **set_list,
 				 struct cmd_list_element **show_list)
 {
-  struct cmd_list_element *set_cmd;
-
-  add_setshow_cmd_full (name, theclass, var_string_noescape, var,
+  add_setshow_cmd_full (name, class, var_string_noescape, var,
 			set_doc, show_doc, help_doc,
 			set_func, show_func,
 			set_list, show_list,
-			&set_cmd, NULL);
-  return set_cmd;
+			NULL, NULL);
 }
 
 /* Add element named NAME to both the set and show command LISTs (the
    list for set/show or some sublist thereof).  */
 void
-add_setshow_optional_filename_cmd (const char *name, enum command_class theclass,
+add_setshow_optional_filename_cmd (char *name, enum command_class class,
 				   char **var,
 				   const char *set_doc, const char *show_doc,
 				   const char *help_doc,
-				   cmd_const_sfunc_ftype *set_func,
+				   cmd_sfunc_ftype *set_func,
 				   show_value_ftype *show_func,
 				   struct cmd_list_element **set_list,
 				   struct cmd_list_element **show_list)
 {
   struct cmd_list_element *set_result;
  
-  add_setshow_cmd_full (name, theclass, var_optional_filename, var,
+  add_setshow_cmd_full (name, class, var_optional_filename, var,
 			set_doc, show_doc, help_doc,
 			set_func, show_func,
 			set_list, show_list,
@@ -685,116 +566,46 @@ add_setshow_optional_filename_cmd (const char *name, enum command_class theclass
 
 }
 
-/* Completes on literal "unlimited".  Used by integer commands that
-   support a special "unlimited" value.  */
-
-static void
-integer_unlimited_completer (struct cmd_list_element *ignore,
-			     completion_tracker &tracker,
-			     const char *text, const char *word)
-{
-  static const char * const keywords[] =
-    {
-      "unlimited",
-      NULL,
-    };
-
-  complete_on_enum (tracker, keywords, text, word);
-}
-
 /* Add element named NAME to both the set and show command LISTs (the
    list for set/show or some sublist thereof).  CLASS is as in
    add_cmd.  VAR is address of the variable which will contain the
-   value.  SET_DOC and SHOW_DOC are the documentation strings.  This
-   function is only used in Python API.  Please don't use it elsewhere.  */
+   value.  SET_DOC and SHOW_DOC are the documentation strings.  */
 void
-add_setshow_integer_cmd (const char *name, enum command_class theclass,
+add_setshow_integer_cmd (char *name, enum command_class class,
 			 int *var,
 			 const char *set_doc, const char *show_doc,
 			 const char *help_doc,
-			 cmd_const_sfunc_ftype *set_func,
+			 cmd_sfunc_ftype *set_func,
 			 show_value_ftype *show_func,
 			 struct cmd_list_element **set_list,
 			 struct cmd_list_element **show_list)
 {
-  struct cmd_list_element *set;
-
-  add_setshow_cmd_full (name, theclass, var_integer, var,
-			set_doc, show_doc, help_doc,
-			set_func, show_func,
-			set_list, show_list,
-			&set, NULL);
-
-  set_cmd_completer (set, integer_unlimited_completer);
-}
-
-/* Add element named NAME to both the set and show command LISTs (the
-   list for set/show or some sublist thereof).  CLASS is as in
-   add_cmd.  VAR is address of the variable which will contain the
-   value.  SET_DOC and SHOW_DOC are the documentation strings.  */
-void
-add_setshow_uinteger_cmd (const char *name, enum command_class theclass,
-			  unsigned int *var,
-			  const char *set_doc, const char *show_doc,
-			  const char *help_doc,
-			  cmd_const_sfunc_ftype *set_func,
-			  show_value_ftype *show_func,
-			  struct cmd_list_element **set_list,
-			  struct cmd_list_element **show_list)
-{
-  struct cmd_list_element *set;
-
-  add_setshow_cmd_full (name, theclass, var_uinteger, var,
-			set_doc, show_doc, help_doc,
-			set_func, show_func,
-			set_list, show_list,
-			&set, NULL);
-
-  set_cmd_completer (set, integer_unlimited_completer);
-}
-
-/* Add element named NAME to both the set and show command LISTs (the
-   list for set/show or some sublist thereof).  CLASS is as in
-   add_cmd.  VAR is address of the variable which will contain the
-   value.  SET_DOC and SHOW_DOC are the documentation strings.  */
-void
-add_setshow_zinteger_cmd (const char *name, enum command_class theclass,
-			  int *var,
-			  const char *set_doc, const char *show_doc,
-			  const char *help_doc,
-			  cmd_const_sfunc_ftype *set_func,
-			  show_value_ftype *show_func,
-			  struct cmd_list_element **set_list,
-			  struct cmd_list_element **show_list)
-{
-  add_setshow_cmd_full (name, theclass, var_zinteger, var,
+  add_setshow_cmd_full (name, class, var_integer, var,
 			set_doc, show_doc, help_doc,
 			set_func, show_func,
 			set_list, show_list,
 			NULL, NULL);
 }
 
+/* Add element named NAME to both the set and show command LISTs (the
+   list for set/show or some sublist thereof).  CLASS is as in
+   add_cmd.  VAR is address of the variable which will contain the
+   value.  SET_DOC and SHOW_DOC are the documentation strings.  */
 void
-add_setshow_zuinteger_unlimited_cmd (const char *name,
-				     enum command_class theclass,
-				     int *var,
-				     const char *set_doc,
-				     const char *show_doc,
-				     const char *help_doc,
-				     cmd_const_sfunc_ftype *set_func,
-				     show_value_ftype *show_func,
-				     struct cmd_list_element **set_list,
-				     struct cmd_list_element **show_list)
+add_setshow_uinteger_cmd (char *name, enum command_class class,
+			  unsigned int *var,
+			  const char *set_doc, const char *show_doc,
+			  const char *help_doc,
+			  cmd_sfunc_ftype *set_func,
+			  show_value_ftype *show_func,
+			  struct cmd_list_element **set_list,
+			  struct cmd_list_element **show_list)
 {
-  struct cmd_list_element *set;
-
-  add_setshow_cmd_full (name, theclass, var_zuinteger_unlimited, var,
+  add_setshow_cmd_full (name, class, var_uinteger, var,
 			set_doc, show_doc, help_doc,
 			set_func, show_func,
 			set_list, show_list,
-			&set, NULL);
-
-  set_cmd_completer (set, integer_unlimited_completer);
+			NULL, NULL);
 }
 
 /* Add element named NAME to both the set and show command LISTs (the
@@ -802,16 +613,37 @@ add_setshow_zuinteger_unlimited_cmd (const char *name,
    add_cmd.  VAR is address of the variable which will contain the
    value.  SET_DOC and SHOW_DOC are the documentation strings.  */
 void
-add_setshow_zuinteger_cmd (const char *name, enum command_class theclass,
+add_setshow_zinteger_cmd (char *name, enum command_class class,
+			  int *var,
+			  const char *set_doc, const char *show_doc,
+			  const char *help_doc,
+			  cmd_sfunc_ftype *set_func,
+			  show_value_ftype *show_func,
+			  struct cmd_list_element **set_list,
+			  struct cmd_list_element **show_list)
+{
+  add_setshow_cmd_full (name, class, var_zinteger, var,
+			set_doc, show_doc, help_doc,
+			set_func, show_func,
+			set_list, show_list,
+			NULL, NULL);
+}
+
+/* Add element named NAME to both the set and show command LISTs (the
+   list for set/show or some sublist thereof).  CLASS is as in
+   add_cmd.  VAR is address of the variable which will contain the
+   value.  SET_DOC and SHOW_DOC are the documentation strings.  */
+void
+add_setshow_zuinteger_cmd (char *name, enum command_class class,
 			   unsigned int *var,
 			   const char *set_doc, const char *show_doc,
 			   const char *help_doc,
-			   cmd_const_sfunc_ftype *set_func,
+			   cmd_sfunc_ftype *set_func,
 			   show_value_ftype *show_func,
 			   struct cmd_list_element **set_list,
 			   struct cmd_list_element **show_list)
 {
-  add_setshow_cmd_full (name, theclass, var_zuinteger, var,
+  add_setshow_cmd_full (name, class, var_zuinteger, var,
 			set_doc, show_doc, help_doc,
 			set_func, show_func,
 			set_list, show_list,
@@ -826,7 +658,7 @@ add_setshow_zuinteger_cmd (const char *name, enum command_class theclass,
    set to NULL.  */
 
 static struct cmd_list_element *
-delete_cmd (const char *name, struct cmd_list_element **list,
+delete_cmd (char *name, struct cmd_list_element **list,
 	    struct cmd_list_element **prehook,
 	    struct cmd_list_element **prehookee,
 	    struct cmd_list_element **posthook,
@@ -877,7 +709,7 @@ delete_cmd (const char *name, struct cmd_list_element **list,
 	      *prevp = iter->alias_chain;
 	    }
 
-	  delete iter;
+	  xfree (iter);
 
 	  /* We won't see another command with the same name.  */
 	  break;
@@ -894,49 +726,37 @@ delete_cmd (const char *name, struct cmd_list_element **list,
 /* Add an element to the list of info subcommands.  */
 
 struct cmd_list_element *
-add_info (const char *name, cmd_const_cfunc_ftype *fun, const char *doc)
+add_info (char *name, void (*fun) (char *, int), char *doc)
 {
-  return add_cmd (name, class_info, fun, doc, &infolist);
+  return add_cmd (name, no_class, fun, doc, &infolist);
 }
 
 /* Add an alias to the list of info subcommands.  */
 
 struct cmd_list_element *
-add_info_alias (const char *name, const char *oldname, int abbrev_flag)
+add_info_alias (char *name, char *oldname, int abbrev_flag)
 {
-  return add_alias_cmd (name, oldname, class_run, abbrev_flag, &infolist);
+  return add_alias_cmd (name, oldname, 0, abbrev_flag, &infolist);
 }
 
 /* Add an element to the list of commands.  */
 
 struct cmd_list_element *
-add_com (const char *name, enum command_class theclass,
-	 cmd_const_cfunc_ftype *fun,
-	 const char *doc)
+add_com (char *name, enum command_class class, void (*fun) (char *, int),
+	 char *doc)
 {
-  return add_cmd (name, theclass, fun, doc, &cmdlist);
+  return add_cmd (name, class, fun, doc, &cmdlist);
 }
 
 /* Add an alias or abbreviation command to the list of commands.  */
 
 struct cmd_list_element *
-add_com_alias (const char *name, const char *oldname, enum command_class theclass,
+add_com_alias (char *name, char *oldname, enum command_class class,
 	       int abbrev_flag)
 {
-  return add_alias_cmd (name, oldname, theclass, abbrev_flag, &cmdlist);
+  return add_alias_cmd (name, oldname, class, abbrev_flag, &cmdlist);
 }
-
-/* Add an element with a suppress notification to the list of commands.  */
-
-struct cmd_list_element *
-add_com_suppress_notification (const char *name, enum command_class theclass,
-			       cmd_const_cfunc_ftype *fun, const char *doc,
-			       int *suppress_notification)
-{
-  return add_cmd_suppress_notification (name, theclass, fun, doc,
-					&cmdlist, suppress_notification);
-}
-
+
 /* Recursively walk the commandlist structures, and print out the
    documentation of commands that match our regex in either their
    name, or their documentation.
@@ -944,7 +764,7 @@ add_com_suppress_notification (const char *name, enum command_class theclass,
 void 
 apropos_cmd (struct ui_file *stream, 
 	     struct cmd_list_element *commandlist,
-	     compiled_regex &regex, const char *prefix)
+	     struct re_pattern_buffer *regex, char *prefix)
 {
   struct cmd_list_element *c;
   int returnvalue;
@@ -955,10 +775,9 @@ apropos_cmd (struct ui_file *stream,
       returnvalue = -1; /* Needed to avoid double printing.  */
       if (c->name != NULL)
 	{
-	  size_t name_len = strlen (c->name);
-
 	  /* Try to match against the name.  */
-	  returnvalue = regex.search (c->name, name_len, 0, name_len, NULL);
+	  returnvalue = re_search (regex, c->name, strlen(c->name),
+				   0, strlen (c->name), NULL);
 	  if (returnvalue >= 0)
 	    {
 	      print_help_for_command (c, prefix, 
@@ -967,10 +786,8 @@ apropos_cmd (struct ui_file *stream,
 	}
       if (c->doc != NULL && returnvalue < 0)
 	{
-	  size_t doc_len = strlen (c->doc);
-
 	  /* Try to match against documentation.  */
-	  if (regex.search (c->doc, doc_len, 0, doc_len, NULL) >= 0)
+	  if (re_search(regex,c->doc,strlen(c->doc),0,strlen(c->doc),NULL) >=0)
 	    {
 	      print_help_for_command (c, prefix, 
 				      0 /* don't recurse */, stream);
@@ -1000,9 +817,10 @@ apropos_cmd (struct ui_file *stream,
    help_list.  */
 
 void
-help_cmd (const char *command, struct ui_file *stream)
+help_cmd (char *command, struct ui_file *stream)
 {
   struct cmd_list_element *c;
+  extern struct cmd_list_element *cmdlist;
 
   if (!command)
     {
@@ -1046,7 +864,7 @@ help_cmd (const char *command, struct ui_file *stream)
 
   /* If this is a class name, print all of the commands in the class.  */
   if (c->func == NULL)
-    help_list (cmdlist, "", c->theclass, stream);
+    help_list (cmdlist, "", c->class, stream);
 
   if (c->hook_pre || c->hook_post)
     fprintf_filtered (stream,
@@ -1075,8 +893,8 @@ help_cmd (const char *command, struct ui_file *stream)
  * If you call this routine with a class >= 0, it recurses.
  */
 void
-help_list (struct cmd_list_element *list, const char *cmdtype,
-	   enum command_class theclass, struct ui_file *stream)
+help_list (struct cmd_list_element *list, char *cmdtype,
+	   enum command_class class, struct ui_file *stream)
 {
   int len;
   char *cmdtype1, *cmdtype2;
@@ -1091,20 +909,20 @@ help_list (struct cmd_list_element *list, const char *cmdtype,
   if (len)
     {
       cmdtype1[0] = ' ';
-      memcpy (cmdtype1 + 1, cmdtype, len - 1);
+      strncpy (cmdtype1 + 1, cmdtype, len - 1);
       cmdtype1[len] = 0;
-      memcpy (cmdtype2, cmdtype, len - 1);
+      strncpy (cmdtype2, cmdtype, len - 1);
       strcpy (cmdtype2 + len - 1, " sub");
     }
 
-  if (theclass == all_classes)
+  if (class == all_classes)
     fprintf_filtered (stream, "List of classes of %scommands:\n\n", cmdtype2);
   else
     fprintf_filtered (stream, "List of %scommands:\n\n", cmdtype2);
 
-  help_cmd_list (list, theclass, cmdtype, (int) theclass >= 0, stream);
+  help_cmd_list (list, class, cmdtype, (int) class >= 0, stream);
 
-  if (theclass == all_classes)
+  if (class == all_classes)
     {
       fprintf_filtered (stream, "\n\
 Type \"help%s\" followed by a class name for a list of commands in ",
@@ -1134,6 +952,7 @@ static void
 help_all (struct ui_file *stream)
 {
   struct cmd_list_element *c;
+  extern struct cmd_list_element *cmdlist;
   int seen_unclassified = 0;
 
   for (c = cmdlist; c; c = c->next)
@@ -1146,7 +965,7 @@ help_all (struct ui_file *stream)
       if (c->func == NULL)
 	{
 	  fprintf_filtered (stream, "\nCommand class: %s\n\n", c->name);
-	  help_cmd_list (cmdlist, c->theclass, "", 1, stream);
+	  help_cmd_list (cmdlist, c->class, "", 1, stream);
 	}
     }
 
@@ -1159,7 +978,7 @@ help_all (struct ui_file *stream)
       if (c->abbrev_flag)
         continue;
 
-      if (c->theclass == no_class)
+      if (c->class == no_class)
 	{
 	  if (!seen_unclassified)
 	    {
@@ -1174,11 +993,11 @@ help_all (struct ui_file *stream)
 
 /* Print only the first line of STR on STREAM.  */
 void
-print_doc_line (struct ui_file *stream, const char *str)
+print_doc_line (struct ui_file *stream, char *str)
 {
   static char *line_buffer = 0;
   static int line_size;
-  const char *p;
+  char *p;
 
   if (!line_buffer)
     {
@@ -1186,11 +1005,8 @@ print_doc_line (struct ui_file *stream, const char *str)
       line_buffer = (char *) xmalloc (line_size);
     }
 
-  /* Keep printing '.' or ',' not followed by a whitespace for embedded strings
-     like '.gdbinit'.  */
   p = str;
-  while (*p && *p != '\n'
-	 && ((*p != '.' && *p != ',') || (p[1] && !isspace (p[1]))))
+  while (*p && *p != '\n' && *p != '.' && *p != ',')
     p++;
   if (p - str > line_size - 1)
     {
@@ -1202,15 +1018,15 @@ print_doc_line (struct ui_file *stream, const char *str)
   line_buffer[p - str] = '\0';
   if (islower (line_buffer[0]))
     line_buffer[0] = toupper (line_buffer[0]);
-  fputs_filtered (line_buffer, stream);
+  ui_out_text (uiout, line_buffer);
 }
 
 /* Print one-line help for command C.
    If RECURSE is non-zero, also print one-line descriptions
    of all prefixed subcommands.  */
 static void
-print_help_for_command (struct cmd_list_element *c, const char *prefix,
-			int recurse, struct ui_file *stream)
+print_help_for_command (struct cmd_list_element *c, char *prefix, int recurse,
+			struct ui_file *stream)
 {
   fprintf_filtered (stream, "%s%s -- ", prefix, c->name);
   print_doc_line (stream, c->doc);
@@ -1231,7 +1047,7 @@ print_help_for_command (struct cmd_list_element *c, const char *prefix,
  * all sublists of LIST.
  * PREFIX is the prefix to print before each command name.
  * STREAM is the stream upon which the output should be written.
- * THECLASS should be:
+ * CLASS should be:
  *      A non-negative class number to list only commands in that
  * class.
  *      ALL_COMMANDS to list all commands in list.
@@ -1242,27 +1058,24 @@ print_help_for_command (struct cmd_list_element *c, const char *prefix,
  * is at the low level, not the high-level).
  */
 void
-help_cmd_list (struct cmd_list_element *list, enum command_class theclass,
-	       const char *prefix, int recurse, struct ui_file *stream)
+help_cmd_list (struct cmd_list_element *list, enum command_class class,
+	       char *prefix, int recurse, struct ui_file *stream)
 {
   struct cmd_list_element *c;
 
   for (c = list; c; c = c->next)
-    {
+    {      
       if (c->abbrev_flag == 0
-	  && !c->cmd_deprecated
-	  && (theclass == all_commands
-	      || (theclass == all_classes && c->func == NULL)
-	      || (theclass == c->theclass && c->func != NULL)))
+	  && (class == all_commands
+	      || (class == all_classes && c->func == NULL)
+	      || (class == c->class && c->func != NULL)))
 	{
 	  print_help_for_command (c, prefix, recurse, stream);
 	}
-      else if (c->abbrev_flag == 0
-	       && recurse
-	       && !c->cmd_deprecated
-	       && theclass == class_user && c->prefixlist != NULL)
+      else if (c->abbrev_flag == 0 && recurse
+	       && class == class_user && c->prefixlist != NULL)
 	/* User-defined commands may be subcommands.  */
-	help_cmd_list (*c->prefixlist, theclass, c->prefixname,
+	help_cmd_list (*c->prefixlist, class, c->prefixname, 
 		       recurse, stream);
     }
 }
@@ -1273,12 +1086,12 @@ help_cmd_list (struct cmd_list_element *list, enum command_class theclass,
    found in nfound.  */
 
 static struct cmd_list_element *
-find_cmd (const char *command, int len, struct cmd_list_element *clist,
+find_cmd (char *command, int len, struct cmd_list_element *clist,
 	  int ignore_help_classes, int *nfound)
 {
   struct cmd_list_element *found, *c;
 
-  found = NULL;
+  found = (struct cmd_list_element *) NULL;
   *nfound = 0;
   for (c = clist; c; c = c->next)
     if (!strncmp (command, c->name, len)
@@ -1295,9 +1108,7 @@ find_cmd (const char *command, int len, struct cmd_list_element *clist,
   return found;
 }
 
-/* Return the length of command name in TEXT.  */
-
-int
+static int
 find_command_name_length (const char *text)
 {
   const char *p = text;
@@ -1308,48 +1119,22 @@ find_command_name_length (const char *text)
   /* Some characters are only used for TUI specific commands.
      However, they are always allowed for the sake of consistency.
 
+     The XDB compatibility characters are only allowed when using the
+     right mode because they clash with other GDB commands -
+     specifically '/' is used as a suffix for print, examine and
+     display.
+
      Note that this is larger than the character set allowed when
      creating user-defined commands.  */
 
-  /* Recognize '!' as a single character command so that, e.g., "!ls"
-     works as expected.  */
-  if (*p == '!')
-    return 1;
-
   while (isalnum (*p) || *p == '-' || *p == '_'
 	 /* Characters used by TUI specific commands.  */
-	 || *p == '+' || *p == '<' || *p == '>' || *p == '$')
+	 || *p == '+' || *p == '<' || *p == '>' || *p == '$'
+	 /* Characters used for XDB compatibility.  */
+	 || (xdb_commands && (*p == '!' || *p == '/' || *p == '?')))
     p++;
 
   return p - text;
-}
-
-/* Return TRUE if NAME is a valid user-defined command name.
-   This is a stricter subset of all gdb commands,
-   see find_command_name_length.  */
-
-int
-valid_user_defined_cmd_name_p (const char *name)
-{
-  const char *p;
-
-  if (*name == '\0')
-    return FALSE;
-
-  /* Alas "42" is a legitimate user-defined command.
-     In the interests of not breaking anything we preserve that.  */
-
-  for (p = name; *p != '\0'; ++p)
-    {
-      if (isalnum (*p)
-	  || *p == '-'
-	  || *p == '_')
-	; /* Ok.  */
-      else
-	return FALSE;
-    }
-
-  return TRUE;
 }
 
 /* This routine takes a line of TEXT and a CLIST in which to start the
@@ -1373,7 +1158,7 @@ valid_user_defined_cmd_name_p (const char *name)
    if no prefix command was ever found.  For example, in the case of "info a",
    "info" matches without ambiguity, but "a" could be "args" or "address", so
    *RESULT_LIST is set to the cmd_list_element for "info".  So in this case
-   RESULT_LIST should not be interpreted as a pointer to the beginning of a
+   RESULT_LIST should not be interpeted as a pointer to the beginning of a
    list; it simply points to a specific command.  In the case of an ambiguous
    return *TEXT is advanced past the last non-ambiguous prefix (e.g.
    "info t" can be "info types" or "info target"; upon return *TEXT has been
@@ -1389,13 +1174,13 @@ valid_user_defined_cmd_name_p (const char *name)
    the struct cmd_list_element is NULL).  */
 
 struct cmd_list_element *
-lookup_cmd_1 (const char **text, struct cmd_list_element *clist,
+lookup_cmd_1 (char **text, struct cmd_list_element *clist,
 	      struct cmd_list_element **result_list, int ignore_help_classes)
 {
   char *command;
-  int len, nfound;
+  int len, tmp, nfound;
   struct cmd_list_element *found, *c;
-  const char *line = *text;
+  char *line = *text;
 
   while (**text == ' ' || **text == '\t')
     (*text)++;
@@ -1419,6 +1204,19 @@ lookup_cmd_1 (const char **text, struct cmd_list_element *clist,
   found = 0;
   nfound = 0;
   found = find_cmd (command, len, clist, ignore_help_classes, &nfound);
+
+  /* We didn't find the command in the entered case, so lower case it
+     and search again.  */
+  if (!found || nfound == 0)
+    {
+      for (tmp = 0; tmp < len; tmp++)
+	{
+	  char x = command[tmp];
+
+	  command[tmp] = isupper (x) ? tolower (x) : x;
+	}
+      found = find_cmd (command, len, clist, ignore_help_classes, &nfound);
+    }
 
   /* If nothing matches, we have a simple failure.  */
   if (nfound == 0)
@@ -1446,8 +1244,8 @@ lookup_cmd_1 (const char **text, struct cmd_list_element *clist,
        itself and we will adjust the appropriate DEPRECATED_WARN_USER
        flags.  */
       
-      if (found->deprecated_warn_user)
-	deprecated_cmd_warning (line);
+      if (found->flags & DEPRECATED_WARN_USER)
+	deprecated_cmd_warning (&line);
       found = found->cmd_pointer;
     }
   /* If we found a prefix command, keep looking.  */
@@ -1494,7 +1292,7 @@ lookup_cmd_1 (const char **text, struct cmd_list_element *clist,
 /* All this hair to move the space to the front of cmdtype */
 
 static void
-undef_cmd_error (const char *cmdtype, const char *q)
+undef_cmd_error (char *cmdtype, char *q)
 {
   error (_("Undefined %scommand: \"%s\".  Try \"help%s%.*s\"."),
 	 cmdtype,
@@ -1519,8 +1317,7 @@ undef_cmd_error (const char *cmdtype, const char *q)
    the function field of the struct cmd_list_element is 0).  */
 
 struct cmd_list_element *
-lookup_cmd (const char **line, struct cmd_list_element *list,
-	    const char *cmdtype,
+lookup_cmd (char **line, struct cmd_list_element *list, char *cmdtype,
 	    int allow_unknown, int ignore_help_classes)
 {
   struct cmd_list_element *last_list = 0;
@@ -1555,7 +1352,7 @@ lookup_cmd (const char **line, struct cmd_list_element *list,
          values.  */
       int local_allow_unknown = (last_list ? last_list->allow_unknown :
 				 allow_unknown);
-      const char *local_cmdtype = last_list ? last_list->prefixname : cmdtype;
+      char *local_cmdtype = last_list ? last_list->prefixname : cmdtype;
       struct cmd_list_element *local_list =
 	(last_list ? *(last_list->prefixlist) : list);
 
@@ -1597,13 +1394,11 @@ lookup_cmd (const char **line, struct cmd_list_element *list,
 	      }
 	  error (_("Ambiguous %scommand \"%s\": %s."), local_cmdtype,
 		 *line, ambbuf);
+	  return 0;		/* lint */
 	}
     }
   else
     {
-      if (c->type == set_cmd && **line != '\0' && !isspace (**line))
-        error (_("Argument must be preceded by space."));
-
       /* We've got something.  It may still not be what the caller
          wants (if this command *needs* a subcommand).  */
       while (**line == ' ' || **line == '\t')
@@ -1618,14 +1413,14 @@ lookup_cmd (const char **line, struct cmd_list_element *list,
   return 0;
 }
 
-/* We are here presumably because an alias or command in TEXT is
+/* We are here presumably because an alias or command in *TEXT is
    deprecated and a warning message should be generated.  This
-   function decodes TEXT and potentially generates a warning message
+   function decodes *TEXT and potentially generates a warning message
    as outlined below.
    
    Example for 'set endian big' which has a fictitious alias 'seb'.
    
-   If alias wasn't used in TEXT, and the command is deprecated:
+   If alias wasn't used in *TEXT, and the command is deprecated:
    "warning: 'set endian big' is deprecated." 
    
    If alias was used, and only the alias is deprecated:
@@ -1641,24 +1436,24 @@ lookup_cmd (const char **line, struct cmd_list_element *list,
    
 */
 void
-deprecated_cmd_warning (const char *text)
+deprecated_cmd_warning (char **text)
 {
   struct cmd_list_element *alias = NULL;
   struct cmd_list_element *prefix_cmd = NULL;
   struct cmd_list_element *cmd = NULL;
 
-  if (!lookup_cmd_composition (text, &alias, &prefix_cmd, &cmd))
+  if (!lookup_cmd_composition (*text, &alias, &prefix_cmd, &cmd))
     /* Return if text doesn't evaluate to a command.  */
     return;
 
-  if (!((alias ? alias->deprecated_warn_user : 0)
-      || cmd->deprecated_warn_user) ) 
+  if (!((alias ? (alias->flags & DEPRECATED_WARN_USER) : 0)
+      || (cmd->flags & DEPRECATED_WARN_USER) ) ) 
     /* Return if nothing is deprecated.  */
     return;
   
   printf_filtered ("Warning:");
   
-  if (alias && !cmd->cmd_deprecated)
+  if (alias && !(cmd->flags & CMD_DEPRECATED))
     printf_filtered (" '%s', an alias for the", alias->name);
     
   printf_filtered (" command '");
@@ -1668,7 +1463,7 @@ deprecated_cmd_warning (const char *text)
   
   printf_filtered ("%s", cmd->name);
 
-  if (alias && cmd->cmd_deprecated)
+  if (alias && (cmd->flags & CMD_DEPRECATED))
     printf_filtered ("' (%s) is deprecated.\n", alias->name);
   else
     printf_filtered ("' is deprecated.\n"); 
@@ -1677,7 +1472,7 @@ deprecated_cmd_warning (const char *text)
   /* If it is only the alias that is deprecated, we want to indicate
      the new alias, otherwise we'll indicate the new command.  */
 
-  if (alias && !cmd->cmd_deprecated)
+  if (alias && !(cmd->flags & CMD_DEPRECATED))
     {
       if (alias->replacement)
 	printf_filtered ("Use '%s'.\n\n", alias->replacement);
@@ -1694,9 +1489,9 @@ deprecated_cmd_warning (const char *text)
 
   /* We've warned you, now we'll keep quiet.  */
   if (alias)
-    alias->deprecated_warn_user = 0;
+    alias->flags &= ~DEPRECATED_WARN_USER;
   
-  cmd->deprecated_warn_user = 0;
+  cmd->flags &= ~DEPRECATED_WARN_USER;
 }
 
 
@@ -1705,7 +1500,7 @@ deprecated_cmd_warning (const char *text)
    
    If LINE refers to an alias, *alias will point to that alias.
    
-   If LINE is a postfix command (i.e. one that is preceded by a prefix
+   If LINE is a postfix command (i.e. one that is preceeded by a prefix
    command) set *prefix_cmd.
    
    Set *cmd to point to the command LINE indicates.
@@ -1715,13 +1510,13 @@ deprecated_cmd_warning (const char *text)
    
 */
 int
-lookup_cmd_composition (const char *text,
+lookup_cmd_composition (char *text,
                       struct cmd_list_element **alias,
                       struct cmd_list_element **prefix_cmd, 
                       struct cmd_list_element **cmd)
 {
   char *command;
-  int len, nfound;
+  int len, tmp, nfound;
   struct cmd_list_element *cur_list;
   struct cmd_list_element *prev_cmd;
 
@@ -1733,7 +1528,7 @@ lookup_cmd_composition (const char *text,
   
   while (1)
     { 
-      /* Go through as many command lists as we need to,
+      /* Go through as many command lists as we need to 
 	 to find the command TEXT refers to.  */
       
       prev_cmd = *cmd;
@@ -1759,6 +1554,20 @@ lookup_cmd_composition (const char *text,
       *cmd = 0;
       nfound = 0;
       *cmd = find_cmd (command, len, cur_list, 1, &nfound);
+      
+      /* We didn't find the command in the entered case, so lower case
+	 it and search again.
+      */
+      if (!*cmd || nfound == 0)
+	{
+	  for (tmp = 0; tmp < len; tmp++)
+	    {
+	      char x = command[tmp];
+
+	      command[tmp] = isupper (x) ? tolower (x) : x;
+	    }
+	  *cmd = find_cmd (command, len, cur_list, 1, &nfound);
+	}
       
       if (*cmd == CMD_LIST_AMBIGUOUS)
 	{
@@ -1797,76 +1606,158 @@ lookup_cmd_composition (const char *text,
    "foo" and we want to complete to "foobar".  If WORD is "oo", return
    "oobar"; if WORD is "baz/foo", return "baz/foobar".  */
 
-void
-complete_on_cmdlist (struct cmd_list_element *list,
-		     completion_tracker &tracker,
-		     const char *text, const char *word,
-		     int ignore_help_classes)
+char **
+complete_on_cmdlist (struct cmd_list_element *list, char *text, char *word)
 {
   struct cmd_list_element *ptr;
+  char **matchlist;
+  int sizeof_matchlist;
+  int matches;
   int textlen = strlen (text);
   int pass;
   int saw_deprecated_match = 0;
+
+  sizeof_matchlist = 10;
+  matchlist = (char **) xmalloc (sizeof_matchlist * sizeof (char *));
+  matches = 0;
 
   /* We do one or two passes.  In the first pass, we skip deprecated
      commands.  If we see no matching commands in the first pass, and
      if we did happen to see a matching deprecated command, we do
      another loop to collect those.  */
-  for (pass = 0; pass < 2; ++pass)
+  for (pass = 0; matches == 0 && pass < 2; ++pass)
     {
-      bool got_matches = false;
-
       for (ptr = list; ptr; ptr = ptr->next)
 	if (!strncmp (ptr->name, text, textlen)
 	    && !ptr->abbrev_flag
-	    && (!ignore_help_classes || ptr->func
+	    && (ptr->func
 		|| ptr->prefixlist))
 	  {
 	    if (pass == 0)
 	      {
-		if (ptr->cmd_deprecated)
+		if ((ptr->flags & CMD_DEPRECATED) != 0)
 		  {
 		    saw_deprecated_match = 1;
 		    continue;
 		  }
 	      }
 
-	    tracker.add_completion
-	      (make_completion_match_str (ptr->name, text, word));
-	    got_matches = true;
+	    if (matches == sizeof_matchlist)
+	      {
+		sizeof_matchlist *= 2;
+		matchlist = (char **) xrealloc ((char *) matchlist,
+						(sizeof_matchlist
+						 * sizeof (char *)));
+	      }
+
+	    matchlist[matches] = (char *)
+	      xmalloc (strlen (word) + strlen (ptr->name) + 1);
+	    if (word == text)
+	      strcpy (matchlist[matches], ptr->name);
+	    else if (word > text)
+	      {
+		/* Return some portion of ptr->name.  */
+		strcpy (matchlist[matches], ptr->name + (word - text));
+	      }
+	    else
+	      {
+		/* Return some of text plus ptr->name.  */
+		strncpy (matchlist[matches], word, text - word);
+		matchlist[matches][text - word] = '\0';
+		strcat (matchlist[matches], ptr->name);
+	      }
+	    ++matches;
 	  }
-
-      if (got_matches)
-	break;
-
       /* If we saw no matching deprecated commands in the first pass,
 	 just bail out.  */
       if (!saw_deprecated_match)
 	break;
     }
+
+  if (matches == 0)
+    {
+      xfree (matchlist);
+      matchlist = 0;
+    }
+  else
+    {
+      matchlist = (char **) xrealloc ((char *) matchlist, ((matches + 1)
+							* sizeof (char *)));
+      matchlist[matches] = (char *) 0;
+    }
+
+  return matchlist;
 }
 
 /* Helper function for SYMBOL_COMPLETION_FUNCTION.  */
 
-/* Add the different possible completions in ENUMLIST of TEXT.
+/* Return a vector of char pointers which point to the different
+   possible completions in CMD of TEXT.
 
    WORD points in the same buffer as TEXT, and completions should be
    returned relative to this position.  For example, suppose TEXT is "foo"
    and we want to complete to "foobar".  If WORD is "oo", return
    "oobar"; if WORD is "baz/foo", return "baz/foobar".  */
 
-void
-complete_on_enum (completion_tracker &tracker,
-		  const char *const *enumlist,
-		  const char *text, const char *word)
+char **
+complete_on_enum (const char *enumlist[],
+		  char *text,
+		  char *word)
 {
+  char **matchlist;
+  int sizeof_matchlist;
+  int matches;
   int textlen = strlen (text);
   int i;
   const char *name;
 
+  sizeof_matchlist = 10;
+  matchlist = (char **) xmalloc (sizeof_matchlist * sizeof (char *));
+  matches = 0;
+
   for (i = 0; (name = enumlist[i]) != NULL; i++)
     if (strncmp (name, text, textlen) == 0)
-      tracker.add_completion (make_completion_match_str (name, text, word));
+      {
+	if (matches == sizeof_matchlist)
+	  {
+	    sizeof_matchlist *= 2;
+	    matchlist = (char **) xrealloc ((char *) matchlist,
+					    (sizeof_matchlist
+					     * sizeof (char *)));
+	  }
+
+	matchlist[matches] = (char *)
+	  xmalloc (strlen (word) + strlen (name) + 1);
+	if (word == text)
+	  strcpy (matchlist[matches], name);
+	else if (word > text)
+	  {
+	    /* Return some portion of name.  */
+	    strcpy (matchlist[matches], name + (word - text));
+	  }
+	else
+	  {
+	    /* Return some of text plus name.  */
+	    strncpy (matchlist[matches], word, text - word);
+	    matchlist[matches][text - word] = '\0';
+	    strcat (matchlist[matches], name);
+	  }
+	++matches;
+      }
+
+  if (matches == 0)
+    {
+      xfree (matchlist);
+      matchlist = 0;
+    }
+  else
+    {
+      matchlist = (char **) xrealloc ((char *) matchlist, ((matches + 1)
+							   * sizeof (char *)));
+      matchlist[matches] = (char *) 0;
+    }
+
+  return matchlist;
 }
 
 
@@ -1880,24 +1771,10 @@ cmd_func_p (struct cmd_list_element *cmd)
 
 /* Call the command function.  */
 void
-cmd_func (struct cmd_list_element *cmd, const char *args, int from_tty)
+cmd_func (struct cmd_list_element *cmd, char *args, int from_tty)
 {
   if (cmd_func_p (cmd))
-    {
-      gdb::optional<scoped_restore_tmpl<int>> restore_suppress;
-
-      if (cmd->suppress_notification != NULL)
-	restore_suppress.emplace (cmd->suppress_notification, 1);
-
-      (*cmd->func) (cmd, args, from_tty);
-    }
+    (*cmd->func) (cmd, args, from_tty);
   else
     error (_("Invalid command"));
-}
-
-int
-cli_user_command_p (struct cmd_list_element *cmd)
-{
-  return (cmd->theclass == class_user
-	  && (cmd->func == do_const_cfunc || cmd->func == do_sfunc));
 }

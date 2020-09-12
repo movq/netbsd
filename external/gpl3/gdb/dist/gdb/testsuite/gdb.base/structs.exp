@@ -1,6 +1,7 @@
 # This testcase is part of GDB, the GNU debugger.
 
-# Copyright 1996-2019 Free Software Foundation, Inc.
+# Copyright 1996, 1997, 1999, 2003, 2004, 2007, 2008, 2009, 2010, 2011
+# Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,16 +16,23 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+if $tracelevel then {
+	strace $tracelevel
+}
+
 
 # Some targets can't call functions, so don't even bother with this
 # test.
 
 if [target_info exists gdb,cannot_call_functions] {
-    unsupported "this target can not call functions"
+    setup_xfail "*-*-*"
+    fail "This target can not call functions"
     continue
 }
 
-standard_testfile .c
+set testfile "structs"
+set srcfile ${testfile}.c
+set binfile ${objdir}/${subdir}/${testfile}
 
 # Regex matching any value of `char' type like: a = 65 'A'
 set anychar_re {-?[0-9]{1,3} '(.|\\([0-7]{3}|[a-z]|\\|'))'}
@@ -32,11 +40,9 @@ set anychar_re {-?[0-9]{1,3} '(.|\\([0-7]{3}|[a-z]|\\|'))'}
 # Create and source the file that provides information about the
 # compiler used to compile the test case.
 
-if [get_compiler_info] {
-    return -1
+if [get_compiler_info ${binfile}] {
+    return -1;
 }
-
-set skip_float_test [gdb_skip_float_test]
 
 # Compile a variant of structs.c using TYPES to specify the type of
 # the first N struct elements (the remaining elements take the type of
@@ -48,6 +54,7 @@ proc start_structs_test { types } {
     global testfile
     global srcfile
     global binfile
+    global objdir
     global subdir
     global srcdir
     global gdb_prompt
@@ -65,12 +72,12 @@ proc start_structs_test { types } {
 	append testfile "-" "$t"
     }
 
-    set binfile [standard_output_file ${testfile}]
+    set binfile ${objdir}/${subdir}/${testfile}
     if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable "${flags}"] != "" } {
 	# built the second test case since we can't use prototypes
 	warning "Prototypes not supported, rebuilding with -DNO_PROTOTYPES"
 	if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable "${flags} additional_flags=-DNO_PROTOTYPES"] != "" } {
-	    untested "failed to compile"
+	    untested structs.exp
 	    return -1
 	}
     }
@@ -89,7 +96,7 @@ proc start_structs_test { types } {
 
     # Advance to main
     if { ![runto_main] } then {
-	gdb_suppress_tests
+	gdb_suppress_tests;
     }
 
     # Get the debug format
@@ -293,7 +300,7 @@ proc test_struct_returns { n } {
 
     # The relevant code looks like "L{n} = fun{n}()".  The test forces
     # "fun{n}" to "return" with an explicit value.  Since that code
-    # snippet will store the returned value in "L{n}" the return
+    # snippet will store the the returned value in "L{n}" the return
     # is tested by examining "L{n}".  This assumes that the
     # compiler implemented this as fun{n}(&L{n}) and hence that when
     # the value isn't stored "L{n}" remains unchanged.  Also check for
@@ -429,7 +436,7 @@ proc test_struct_returns { n } {
 	-re "Value returned is .*${gdb_prompt} $" {
 	    pass "${test}"
 	}
-	-re "Value returned has type: struct struct$n. Cannot determine contents.*${gdb_prompt} $" {
+	-re "Cannot determine contents.*${gdb_prompt} $" {
 	    # Expected bad value.  For the moment this is ok.
 	    set finish_value_known 0
 	    pass "${test}"
@@ -486,6 +493,9 @@ proc test_struct_returns { n } {
 
 # NetBSD/PPC returns "unnatural" (3, 5, 6, 7) sized structs in memory.
 
+# d10v is weird. 5/6 byte structs go in memory.  2 or more char
+# structs go in memory.  Everything else is in a register!
+
 # Test every single char struct from 1..17 in size.  This is what the
 # original "structs" test was doing.
 
@@ -529,7 +539,9 @@ test_struct_returns 8
 
 # The approx size of each structure it is computed assumed that tc=1,
 # ts=2, ti=4, tl=4, tll=8, tf=4, td=8, tld=16, and that all fields are
-# naturally aligned.  Padding being added where needed.
+# naturally aligned.  Padding being added where needed.  Note that
+# these numbers are just approx, the d10v has ti=2, a 64-bit has has
+# tl=8.
 
 # Approx size: 2, 4, ...
 start_structs_test { ts }
@@ -565,27 +577,25 @@ test_struct_calls 1
 test_struct_calls 2
 test_struct_returns 1
 
-if { !$skip_float_test } {
-    # Approx size: 4, 8, ...
-    start_structs_test { tf }
-    test_struct_calls 1
-    test_struct_calls 2
-    test_struct_calls 3
-    test_struct_returns 1
-    test_struct_returns 2
+# Approx size: 4, 8, ...
+start_structs_test { tf }
+test_struct_calls 1
+test_struct_calls 2
+test_struct_calls 3
+test_struct_returns 1
+test_struct_returns 2
 
-    # Approx size: 8, 16, ...
-    start_structs_test { td }
-    test_struct_calls 1
-    test_struct_calls 2
-    test_struct_returns 1
+# Approx size: 8, 16, ...
+start_structs_test { td }
+test_struct_calls 1
+test_struct_calls 2
+test_struct_returns 1
 
-    # Approx size: 16, 32, ...
-    start_structs_test { tld }
-    test_struct_calls 1
-    test_struct_calls 2
-    test_struct_returns 1
-}
+# Approx size: 16, 32, ...
+start_structs_test { tld }
+test_struct_calls 1
+test_struct_calls 2
+test_struct_returns 1
 
 # Approx size: 2+1=3, 4, ...
 start_structs_test { ts tc }
@@ -620,24 +630,22 @@ test_struct_returns 2
 start_structs_test { tll tc }
 test_struct_calls 2
 
-if { !$skip_float_test } {
-    # Approx size: 4+1=5, 6, ...
-    start_structs_test { tf tc }
-    test_struct_calls 2
-    test_struct_calls 3
-    test_struct_calls 4
-    test_struct_calls 5
-    test_struct_calls 6
-    test_struct_returns 2
+# Approx size: 4+1=5, 6, ...
+start_structs_test { tf tc }
+test_struct_calls 2
+test_struct_calls 3
+test_struct_calls 4
+test_struct_calls 5
+test_struct_calls 6
+test_struct_returns 2
 
-    # Approx size: 8+1=9, 10, ...
-    start_structs_test { td tc }
-    test_struct_calls 2
+# Approx size: 8+1=9, 10, ...
+start_structs_test { td tc }
+test_struct_calls 2
 
-    # Approx size: 16+1=17, 18, ...
-    start_structs_test { tld tc }
-    test_struct_calls 2
-}
+# Approx size: 16+1=17, 18, ...
+start_structs_test { tld tc }
+test_struct_calls 2
 
 # Approx size: (1+1)+2=4, 6, ...
 start_structs_test { tc ts }
@@ -666,31 +674,32 @@ test_struct_returns 2
 start_structs_test { tc tll }
 test_struct_calls 2
 
-if { !$skip_float_test } {
-    # Approx size: (1+3)+4=8, 12, ...
-    start_structs_test { tc tf }
-    test_struct_calls 2
-    test_struct_calls 3
-    test_struct_calls 4
+# Approx size: (1+3)+4=8, 12, ...
+start_structs_test { tc tf }
+test_struct_calls 2
+test_struct_calls 3
+test_struct_calls 4
 
-    # Approx size: (1+7)+8=16, 24, ...
-    start_structs_test { tc td }
-    test_struct_calls 2
+# Approx size: (1+7)+8=16, 24, ...
+start_structs_test { tc td }
+test_struct_calls 2
 
-    # Approx size: (1+15)+16=32, 48, ...
-    start_structs_test { tc tld }
-    test_struct_calls 2
+# Approx size: (1+15)+16=32, 48, ...
+start_structs_test { tc tld }
+test_struct_calls 2
 
-    # Some float combinations
+# Some float combinations
 
-    # Approx size: 8+4=12, 16, ...
-    start_structs_test { td tf }
-    test_struct_calls 2
-    test_struct_returns 2
+# Approx size: 8+4=12, 16, ...
+# d10v: 4+4=8, 12, ...
+start_structs_test { td tf }
+test_struct_calls 2
+test_struct_returns 2
 
-    # Approx size: (4+4)+8=16, 32, ...
-    start_structs_test { tf td }
-    test_struct_calls 2
-    test_struct_returns 2
-}
+# Approx size: (4+4)+8=16, 32, ...
+# d10v: 4+4=8, 12, ...
+start_structs_test { tf td }
+test_struct_calls 2
+test_struct_returns 2
+
 return 0

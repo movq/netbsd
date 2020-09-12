@@ -1,5 +1,6 @@
 /* RTL dead store elimination.
-   Copyright (C) 2005-2019 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2006, 2007, 2008, 2009, 2010
+   Free Software Foundation, Inc.
 
    Contributed by Richard Sandiford <rsandifor@codesourcery.com>
    and Kenneth Zadeck <zadeck@naturalbridge.com>
@@ -25,31 +26,27 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "backend.h"
-#include "target.h"
+#include "hashtab.h"
+#include "tm.h"
 #include "rtl.h"
 #include "tree.h"
-#include "gimple.h"
-#include "predict.h"
-#include "df.h"
-#include "memmodel.h"
 #include "tm_p.h"
-#include "gimple-ssa.h"
-#include "expmed.h"
-#include "optabs.h"
-#include "emit-rtl.h"
-#include "recog.h"
-#include "alias.h"
-#include "stor-layout.h"
-#include "cfgrtl.h"
+#include "regs.h"
+#include "hard-reg-set.h"
+#include "flags.h"
+#include "df.h"
 #include "cselib.h"
+#include "timevar.h"
 #include "tree-pass.h"
-#include "explow.h"
+#include "alloc-pool.h"
+#include "alias.h"
+#include "insn-config.h"
 #include "expr.h"
+#include "recog.h"
+#include "dse.h"
+#include "optabs.h"
 #include "dbgcnt.h"
-#include "params.h"
-#include "rtl-iter.h"
-#include "cfgcleanup.h"
+#include "target.h"
 
 /* This file contains three techniques for performing Dead Store
    Elimination (dse).
@@ -64,7 +61,7 @@ along with GCC; see the file COPYING3.  If not see
    frame_pointer.
 
    * The third technique, (which is only done after register allocation)
-   processes the spill slots.  This differs from the second
+   processes the spill spill slots.  This differs from the second
    technique because it takes advantage of the fact that spilling is
    completely free from the effects of aliasing.
 
@@ -96,7 +93,7 @@ along with GCC; see the file COPYING3.  If not see
    5) Delete the insns that the global analysis has indicated are
    unnecessary.
 
-   6) Delete insns that store the same value as preceding store
+   6) Delete insns that store the same value as preceeding store
    where the earlier store couldn't be eliminated.
 
    7) Cleanup.
@@ -107,7 +104,7 @@ along with GCC; see the file COPYING3.  If not see
    the first pass could examine a block in either direction.  The
    forwards ordering is to accommodate cselib.
 
-   We make a simplifying assumption: addresses fall into four broad
+   We a simplifying assumption: addresses fall into four broad
    categories:
 
    1) base has rtx_varies_p == false, offset is constant.
@@ -116,18 +113,18 @@ along with GCC; see the file COPYING3.  If not see
    4) base has rtx_varies_p == true, offset variable.
 
    The local passes are able to process all 4 kinds of addresses.  The
-   global pass only handles 1).
+   global pass only handles (1).
 
    The global problem is formulated as follows:
 
      A store, S1, to address A, where A is not relative to the stack
      frame, can be eliminated if all paths from S1 to the end of the
-     function contain another store to A before a read to A.
+     of the function contain another store to A before a read to A.
 
      If the address A is relative to the stack frame, a store S2 to A
-     can be eliminated if there are no paths from S2 that reach the
+     can be eliminated if there are no paths from S1 that reach the
      end of the function that read A before another store to A.  In
-     this case S2 can be deleted if there are paths from S2 to the
+     this case S2 can be deleted if there are paths to from S2 to the
      end of the function that have no reads or writes to A.  This
      second case allows stores to the stack frame to be deleted that
      would otherwise die when the function returns.  This cannot be
@@ -138,7 +135,7 @@ along with GCC; see the file COPYING3.  If not see
      dataflow problem where the stores are the gens and reads are the
      kills.  Set union problems are rare and require some special
      handling given our representation of bitmaps.  A straightforward
-     implementation requires a lot of bitmaps filled with 1s.
+     implementation of requires a lot of bitmaps filled with 1s.
      These are expensive and cumbersome in our bitmap formulation so
      care has been taken to avoid large vectors filled with 1s.  See
      the comments in bb_info and in the dataflow confluence functions
@@ -202,22 +199,9 @@ along with GCC; see the file COPYING3.  If not see
    that really have constant offsets this size.  */
 #define MAX_OFFSET (64 * 1024)
 
-/* Obstack for the DSE dataflow bitmaps.  We don't want to put these
-   on the default obstack because these bitmaps can grow quite large
-   (~2GB for the small (!) test case of PR54146) and we'll hold on to
-   all that memory until the end of the compiler run.
-   As a bonus, delete_tree_live_info can destroy all the bitmaps by just
-   releasing the whole obstack.  */
-static bitmap_obstack dse_bitmap_obstack;
 
-/* Obstack for other data.  As for above: Kinda nice to be able to
-   throw it all away at the end in one big sweep.  */
-static struct obstack dse_obstack;
-
-/* Scratch bitmap for cselib's cselib_expand_value_rtx.  */
 static bitmap scratch = NULL;
-
-struct insn_info_type;
+struct insn_info;
 
 /* This structure holds information about a candidate store.  */
 struct store_info
@@ -243,12 +227,12 @@ struct store_info
   /* Canonized MEM address for use by canon_true_dependence.  */
   rtx mem_addr;
 
-  /* The offset of the first byte associated with the operation.  */
-  poly_int64 offset;
+  /* If this is non-zero, it is the alias set of a spill location.  */
+  alias_set_type alias_set;
 
-  /* The number of bytes covered by the operation.  This is always exact
-     and known (rather than -1).  */
-  poly_int64 width;
+  /* The offset of the first and byte before the last byte associated
+     with the operation.  */
+  HOST_WIDE_INT begin, end;
 
   union
     {
@@ -259,19 +243,12 @@ struct store_info
 
       struct
 	{
-	  /* A bitmap with one bit per byte, or null if the number of
-	     bytes isn't known at compile time.  A cleared bit means
-	     the position is needed.  Used if IS_LARGE is true.  */
+	  /* A bitmap with one bit per byte.  Cleared bit means the position
+	     is needed.  Used if IS_LARGE is false.  */
 	  bitmap bmap;
 
-	  /* When BITMAP is nonnull, this counts the number of set bits
-	     (i.e. unneeded bytes) in the bitmap.  If it is equal to
-	     WIDTH, the whole store is unused.
-
-	     When BITMAP is null:
-	     - the store is definitely not needed when COUNT == 1
-	     - all the store is needed when COUNT == 0 and RHS is nonnull
-	     - otherwise we don't know which parts of the store are needed.  */
+	  /* Number of set bits (i.e. unneeded bytes) in BITMAP.  If it is
+	     equal to END - BEGIN, the whole store is unused.  */
 	  int count;
 	} large;
     } positions_needed;
@@ -291,7 +268,7 @@ struct store_info
   /* Set if this store stores the same constant value as REDUNDANT_REASON
      insn stored.  These aren't eliminated early, because doing that
      might prevent the earlier larger store to be eliminated.  */
-  struct insn_info_type *redundant_reason;
+  struct insn_info *redundant_reason;
 };
 
 /* Return a bitmask with the first N low bits set.  */
@@ -299,45 +276,42 @@ struct store_info
 static unsigned HOST_WIDE_INT
 lowpart_bitmask (int n)
 {
-  unsigned HOST_WIDE_INT mask = HOST_WIDE_INT_M1U;
-#if 1 // XXXMRG
-  gcc_assert(n >= 0 && n <= HOST_BITS_PER_WIDE_INT);
-  if (n == 0)
-    return 0;
-#endif
+  unsigned HOST_WIDE_INT mask = ~(unsigned HOST_WIDE_INT) 0;
   return mask >> (HOST_BITS_PER_WIDE_INT - n);
 }
 
-static object_allocator<store_info> cse_store_info_pool ("cse_store_info_pool");
-
-static object_allocator<store_info> rtx_store_info_pool ("rtx_store_info_pool");
+typedef struct store_info *store_info_t;
+static alloc_pool cse_store_info_pool;
+static alloc_pool rtx_store_info_pool;
 
 /* This structure holds information about a load.  These are only
    built for rtx bases.  */
-struct read_info_type
+struct read_info
 {
   /* The id of the mem group of the base address.  */
   int group_id;
 
-  /* The offset of the first byte associated with the operation.  */
-  poly_int64 offset;
+  /* If this is non-zero, it is the alias set of a spill location.  */
+  alias_set_type alias_set;
 
-  /* The number of bytes covered by the operation, or -1 if not known.  */
-  poly_int64 width;
+  /* The offset of the first and byte after the last byte associated
+     with the operation.  If begin == end == 0, the read did not have
+     a constant offset.  */
+  int begin, end;
 
   /* The mem being read.  */
   rtx mem;
 
   /* The next read_info for this insn.  */
-  struct read_info_type *next;
+  struct read_info *next;
 };
-typedef struct read_info_type *read_info_t;
+typedef struct read_info *read_info_t;
+static alloc_pool read_info_pool;
 
-static object_allocator<read_info_type> read_info_type_pool ("read_info_pool");
 
 /* One of these records is created for each insn.  */
 
-struct insn_info_type
+struct insn_info
 {
   /* Set true if the insn contains a store but the insn itself cannot
      be deleted.  This is set if the insn is a parallel and there is
@@ -350,11 +324,6 @@ struct insn_info_type
      also set if the insn is a call or has a clobber mem.  If the insn
      contains a wild read, the use_rec will be null.  */
   bool wild_read;
-
-  /* This is true only for CALL instructions which could potentially read
-     any non-frame memory location. This field is used by the global
-     algorithm.  */
-  bool non_frame_wild_read;
 
   /* This field is only used for the processing of const functions.
      These functions cannot read memory, but they can read the stack
@@ -371,11 +340,9 @@ struct insn_info_type
 	either stack pointer or hard frame pointer based.  This means
 	that we have no other choice than also killing all the frame
 	pointer based stores upon encountering a const function call.
-     This field is set after reload for const function calls and before
-     reload for const tail function calls on targets where arg pointer
-     is the frame pointer.  Having this set is less severe than a wild
-     read, it just means that all the frame related stores are killed
-     rather than all the stores.  */
+     This field is set after reload for const function calls.  Having
+     this set is less severe than a wild read, it just means that all
+     the frame related stores are killed rather than all the stores.  */
   bool frame_read;
 
   /* This field is only used for the processing of const functions.
@@ -388,14 +355,14 @@ struct insn_info_type
   bool contains_cselib_groups;
 
   /* The insn. */
-  rtx_insn *insn;
+  rtx insn;
 
   /* The list of mem sets or mem clobbers that are contained in this
      insn.  If the insn is deletable, it contains only one mem set.
      But it could also contain clobbers.  Insns that contain more than
      one mem set are not deletable, but each of those mems are here in
      order to provide info to delete other insns.  */
-  store_info *store_rec;
+  store_info_t store_rec;
 
   /* The linked list of mem uses in this insn.  Only the reads from
      rtx bases are listed here.  The reads to cselib bases are
@@ -403,34 +370,27 @@ struct insn_info_type
      created.  */
   read_info_t read_rec;
 
-  /* The live fixed registers.  We assume only fixed registers can
-     cause trouble by being clobbered from an expanded pattern;
-     storing only the live fixed registers (rather than all registers)
-     means less memory needs to be allocated / copied for the individual
-     stores.  */
-  regset fixed_regs_live;
-
   /* The prev insn in the basic block.  */
-  struct insn_info_type * prev_insn;
+  struct insn_info * prev_insn;
 
   /* The linked list of insns that are in consideration for removal in
-     the forwards pass through the basic block.  This pointer may be
+     the forwards pass thru the basic block.  This pointer may be
      trash as it is not cleared when a wild read occurs.  The only
      time it is guaranteed to be correct is when the traversal starts
      at active_local_stores.  */
-  struct insn_info_type * next_local_store;
+  struct insn_info * next_local_store;
 };
-typedef struct insn_info_type *insn_info_t;
 
-static object_allocator<insn_info_type> insn_info_type_pool ("insn_info_pool");
+typedef struct insn_info *insn_info_t;
+static alloc_pool insn_info_pool;
 
 /* The linked list of stores that are under consideration in this
    basic block.  */
 static insn_info_t active_local_stores;
-static int active_local_stores_len;
 
-struct dse_bb_info_type
+struct bb_info
 {
+
   /* Pointer to the insn info for the last insn in the block.  These
      are linked so this is how all of the insns are reached.  During
      scanning this is the current insn being scanned.  */
@@ -480,16 +440,14 @@ struct dse_bb_info_type
   /* The following bitvector is indexed by the reg number.  It
      contains the set of regs that are live at the current instruction
      being processed.  While it contains info for all of the
-     registers, only the hard registers are actually examined.  It is used
-     to assure that shift and/or add sequences that are inserted do not
-     accidentally clobber live hard regs.  */
+     registers, only the pseudos are actually examined.  It is used to
+     assure that shift sequences that are inserted do not accidently
+     clobber live hard regs.  */
   bitmap regs_live;
 };
 
-typedef struct dse_bb_info_type *bb_info_t;
-
-static object_allocator<dse_bb_info_type> dse_bb_info_type_pool
-  ("bb_info_pool");
+typedef struct bb_info *bb_info_t;
+static alloc_pool bb_info_pool;
 
 /* Table to hold all bb_infos.  */
 static bb_info_t *bb_table;
@@ -515,9 +473,8 @@ struct group_info
      hard_frame_pointer.  */
   bool frame_related;
 
-  /* A mem wrapped around the base pointer for the group in order to do
-     read dependency.  It must be given BLKmode in order to encompass all
-     the possible offsets from the base.  */
+  /* A mem wrapped around the base pointer for the group in order to
+     do read dependency.  */
   rtx base_mem;
 
   /* Canonized version of base_mem's address.  */
@@ -541,11 +498,6 @@ struct group_info
      deleted.  */
   bitmap store1_n, store1_p, store2_n, store2_p;
 
-  /* These bitmaps keep track of offsets in this group escape this function.
-     An offset escapes if it corresponds to a named variable whose
-     addressable flag is set.  */
-  bitmap escaped_n, escaped_p;
-
   /* The positions in this bitmap have the same assignments as the in,
      out, gen and kill bitmaps.  This bitmap is all zeros except for
      the positions that are occupied by stores for this group.  */
@@ -558,14 +510,20 @@ struct group_info
   int *offset_map_n, *offset_map_p;
   int offset_map_size_n, offset_map_size_p;
 };
+typedef struct group_info *group_info_t;
+typedef const struct group_info *const_group_info_t;
+static alloc_pool rtx_group_info_pool;
 
-static object_allocator<group_info> group_info_pool ("rtx_group_info_pool");
+/* Tables of group_info structures, hashed by base value.  */
+static htab_t rtx_group_table;
 
 /* Index into the rtx_group_vec.  */
 static int rtx_group_next_id;
 
+DEF_VEC_P(group_info_t);
+DEF_VEC_ALLOC_P(group_info_t,heap);
 
-static vec<group_info *> rtx_group_vec;
+static VEC(group_info_t,heap) *rtx_group_vec;
 
 
 /* This structure holds the set of changes that are being deferred
@@ -582,10 +540,39 @@ struct deferred_change
   struct deferred_change *next;
 };
 
-static object_allocator<deferred_change> deferred_change_pool
-  ("deferred_change_pool");
+typedef struct deferred_change *deferred_change_t;
+static alloc_pool deferred_change_pool;
 
-static deferred_change *deferred_change_list = NULL;
+static deferred_change_t deferred_change_list = NULL;
+
+/* This are used to hold the alias sets of spill variables.  Since
+   these are never aliased and there may be a lot of them, it makes
+   sense to treat them specially.  This bitvector is only allocated in
+   calls from dse_record_singleton_alias_set which currently is only
+   made during reload1.  So when dse is called before reload this
+   mechanism does nothing.  */
+
+static bitmap clear_alias_sets = NULL;
+
+/* The set of clear_alias_sets that have been disqualified because
+   there are loads or stores using a different mode than the alias set
+   was registered with.  */
+static bitmap disqualified_clear_alias_sets = NULL;
+
+/* The group that holds all of the clear_alias_sets.  */
+static group_info_t clear_alias_group;
+
+/* The modes of the clear_alias_sets.  */
+static htab_t clear_alias_mode_table;
+
+/* Hash table element to look up the mode for an alias set.  */
+struct clear_alias_mode_holder
+{
+  alias_set_type alias_set;
+  enum machine_mode mode;
+};
+
+static alloc_pool clear_alias_mode_pool;
 
 /* This is true except if cfun->stdarg -- i.e. we cannot do
    this for vararg functions because they play games with the frame.  */
@@ -594,26 +581,18 @@ static bool stores_off_frame_dead_at_return;
 /* Counter for stats.  */
 static int globally_deleted;
 static int locally_deleted;
+static int spill_deleted;
 
 static bitmap all_blocks;
-
-/* Locations that are killed by calls in the global phase.  */
-static bitmap kill_on_calls;
 
 /* The number of bits used in the global bitmaps.  */
 static unsigned int current_position;
 
-/* Print offset range [OFFSET, OFFSET + WIDTH) to FILE.  */
 
-static void
-print_range (FILE *file, poly_int64 offset, poly_int64 width)
-{
-  fprintf (file, "[");
-  print_dec (offset, file, SIGNED);
-  fprintf (file, "..");
-  print_dec (offset + width, file, SIGNED);
-  fprintf (file, ")");
-}
+static bool gate_dse (void);
+static bool gate_dse1 (void);
+static bool gate_dse2 (void);
+
 
 /*----------------------------------------------------------------------------
    Zeroth step.
@@ -621,65 +600,118 @@ print_range (FILE *file, poly_int64 offset, poly_int64 width)
    Initialization.
 ----------------------------------------------------------------------------*/
 
+/* Hashtable callbacks for maintaining the "bases" field of
+   store_group_info, given that the addresses are function invariants.  */
+
+static int
+clear_alias_mode_eq (const void *p1, const void *p2)
+{
+  const struct clear_alias_mode_holder * h1
+    = (const struct clear_alias_mode_holder *) p1;
+  const struct clear_alias_mode_holder * h2
+    = (const struct clear_alias_mode_holder *) p2;
+  return h1->alias_set == h2->alias_set;
+}
+
+
+static hashval_t
+clear_alias_mode_hash (const void *p)
+{
+  const struct clear_alias_mode_holder *holder
+    = (const struct clear_alias_mode_holder *) p;
+  return holder->alias_set;
+}
+
+
+/* Find the entry associated with ALIAS_SET.  */
+
+static struct clear_alias_mode_holder *
+clear_alias_set_lookup (alias_set_type alias_set)
+{
+  struct clear_alias_mode_holder tmp_holder;
+  void **slot;
+
+  tmp_holder.alias_set = alias_set;
+  slot = htab_find_slot (clear_alias_mode_table, &tmp_holder, NO_INSERT);
+  gcc_assert (*slot);
+
+  return (struct clear_alias_mode_holder *) *slot;
+}
+
 
 /* Hashtable callbacks for maintaining the "bases" field of
    store_group_info, given that the addresses are function invariants.  */
 
-struct invariant_group_base_hasher : nofree_ptr_hash <group_info>
+static int
+invariant_group_base_eq (const void *p1, const void *p2)
 {
-  static inline hashval_t hash (const group_info *);
-  static inline bool equal (const group_info *, const group_info *);
-};
-
-inline bool
-invariant_group_base_hasher::equal (const group_info *gi1,
-				    const group_info *gi2)
-{
+  const_group_info_t gi1 = (const_group_info_t) p1;
+  const_group_info_t gi2 = (const_group_info_t) p2;
   return rtx_equal_p (gi1->rtx_base, gi2->rtx_base);
 }
 
-inline hashval_t
-invariant_group_base_hasher::hash (const group_info *gi)
+
+static hashval_t
+invariant_group_base_hash (const void *p)
 {
+  const_group_info_t gi = (const_group_info_t) p;
   int do_not_record;
   return hash_rtx (gi->rtx_base, Pmode, &do_not_record, NULL, false);
 }
 
-/* Tables of group_info structures, hashed by base value.  */
-static hash_table<invariant_group_base_hasher> *rtx_group_table;
-
 
 /* Get the GROUP for BASE.  Add a new group if it is not there.  */
 
-static group_info *
+static group_info_t
 get_group_info (rtx base)
 {
   struct group_info tmp_gi;
-  group_info *gi;
-  group_info **slot;
+  group_info_t gi;
+  void **slot;
 
-  gcc_assert (base != NULL_RTX);
-
-  /* Find the store_base_info structure for BASE, creating a new one
-     if necessary.  */
-  tmp_gi.rtx_base = base;
-  slot = rtx_group_table->find_slot (&tmp_gi, INSERT);
-  gi = *slot;
+  if (base)
+    {
+      /* Find the store_base_info structure for BASE, creating a new one
+	 if necessary.  */
+      tmp_gi.rtx_base = base;
+      slot = htab_find_slot (rtx_group_table, &tmp_gi, INSERT);
+      gi = (group_info_t) *slot;
+    }
+  else
+    {
+      if (!clear_alias_group)
+	{
+	  clear_alias_group = gi =
+	    (group_info_t) pool_alloc (rtx_group_info_pool);
+	  memset (gi, 0, sizeof (struct group_info));
+	  gi->id = rtx_group_next_id++;
+	  gi->store1_n = BITMAP_ALLOC (NULL);
+	  gi->store1_p = BITMAP_ALLOC (NULL);
+	  gi->store2_n = BITMAP_ALLOC (NULL);
+	  gi->store2_p = BITMAP_ALLOC (NULL);
+	  gi->group_kill = BITMAP_ALLOC (NULL);
+	  gi->process_globally = false;
+	  gi->offset_map_size_n = 0;
+	  gi->offset_map_size_p = 0;
+	  gi->offset_map_n = NULL;
+	  gi->offset_map_p = NULL;
+	  VEC_safe_push (group_info_t, heap, rtx_group_vec, gi);
+	}
+      return clear_alias_group;
+    }
 
   if (gi == NULL)
     {
-      *slot = gi = group_info_pool.allocate ();
+      *slot = gi = (group_info_t) pool_alloc (rtx_group_info_pool);
       gi->rtx_base = base;
       gi->id = rtx_group_next_id++;
-      gi->base_mem = gen_rtx_MEM (BLKmode, base);
+      gi->base_mem = gen_rtx_MEM (QImode, base);
       gi->canon_base_addr = canon_rtx (base);
-      gi->store1_n = BITMAP_ALLOC (&dse_bitmap_obstack);
-      gi->store1_p = BITMAP_ALLOC (&dse_bitmap_obstack);
-      gi->store2_n = BITMAP_ALLOC (&dse_bitmap_obstack);
-      gi->store2_p = BITMAP_ALLOC (&dse_bitmap_obstack);
-      gi->escaped_p = BITMAP_ALLOC (&dse_bitmap_obstack);
-      gi->escaped_n = BITMAP_ALLOC (&dse_bitmap_obstack);
-      gi->group_kill = BITMAP_ALLOC (&dse_bitmap_obstack);
+      gi->store1_n = BITMAP_ALLOC (NULL);
+      gi->store1_p = BITMAP_ALLOC (NULL);
+      gi->store2_n = BITMAP_ALLOC (NULL);
+      gi->store2_p = BITMAP_ALLOC (NULL);
+      gi->group_kill = BITMAP_ALLOC (NULL);
       gi->process_globally = false;
       gi->frame_related =
 	(base == frame_pointer_rtx) || (base == hard_frame_pointer_rtx);
@@ -687,7 +719,7 @@ get_group_info (rtx base)
       gi->offset_map_size_p = 0;
       gi->offset_map_n = NULL;
       gi->offset_map_p = NULL;
-      rtx_group_vec.safe_push (gi);
+      VEC_safe_push (group_info_t, heap, rtx_group_vec, gi);
     }
 
   return gi;
@@ -701,22 +733,43 @@ dse_step0 (void)
 {
   locally_deleted = 0;
   globally_deleted = 0;
+  spill_deleted = 0;
 
-  bitmap_obstack_initialize (&dse_bitmap_obstack);
-  gcc_obstack_init (&dse_obstack);
+  scratch = BITMAP_ALLOC (NULL);
 
-  scratch = BITMAP_ALLOC (&reg_obstack);
-  kill_on_calls = BITMAP_ALLOC (&dse_bitmap_obstack);
+  rtx_store_info_pool
+    = create_alloc_pool ("rtx_store_info_pool",
+			 sizeof (struct store_info), 100);
+  read_info_pool
+    = create_alloc_pool ("read_info_pool",
+			 sizeof (struct read_info), 100);
+  insn_info_pool
+    = create_alloc_pool ("insn_info_pool",
+			 sizeof (struct insn_info), 100);
+  bb_info_pool
+    = create_alloc_pool ("bb_info_pool",
+			 sizeof (struct bb_info), 100);
+  rtx_group_info_pool
+    = create_alloc_pool ("rtx_group_info_pool",
+			 sizeof (struct group_info), 100);
+  deferred_change_pool
+    = create_alloc_pool ("deferred_change_pool",
+			 sizeof (struct deferred_change), 10);
 
+  rtx_group_table = htab_create (11, invariant_group_base_hash,
+				 invariant_group_base_eq, NULL);
 
-  rtx_group_table = new hash_table<invariant_group_base_hasher> (11);
-
-  bb_table = XNEWVEC (bb_info_t, last_basic_block_for_fn (cfun));
+  bb_table = XCNEWVEC (bb_info_t, last_basic_block);
   rtx_group_next_id = 0;
 
   stores_off_frame_dead_at_return = !cfun->stdarg;
 
   init_alias_analysis ();
+
+  if (clear_alias_sets)
+    clear_alias_group = get_group_info (NULL);
+  else
+    clear_alias_group = NULL;
 }
 
 
@@ -734,17 +787,17 @@ dse_step0 (void)
 static void
 free_store_info (insn_info_t insn_info)
 {
-  store_info *cur = insn_info->store_rec;
-  while (cur)
+  store_info_t store_info = insn_info->store_rec;
+  while (store_info)
     {
-      store_info *next = cur->next;
-      if (cur->is_large)
-	BITMAP_FREE (cur->positions_needed.large.bmap);
-      if (cur->cse_base)
-	cse_store_info_pool.remove (cur);
+      store_info_t next = store_info->next;
+      if (store_info->is_large)
+	BITMAP_FREE (store_info->positions_needed.large.bmap);
+      if (store_info->cse_base)
+	pool_free (cse_store_info_pool, store_info);
       else
-	rtx_store_info_pool.remove (cur);
-      cur = next;
+	pool_free (rtx_store_info_pool, store_info);
+      store_info = next;
     }
 
   insn_info->cannot_delete = true;
@@ -752,125 +805,95 @@ free_store_info (insn_info_t insn_info)
   insn_info->store_rec = NULL;
 }
 
-struct note_add_store_info
-{
-  rtx_insn *first, *current;
-  regset fixed_regs_live;
-  bool failure;
+
+struct insn_size {
+  int size;
+  rtx insn;
 };
 
-/* Callback for emit_inc_dec_insn_before via note_stores.
-   Check if a register is clobbered which is live afterwards.  */
 
-static void
-note_add_store (rtx loc, const_rtx expr ATTRIBUTE_UNUSED, void *data)
-{
-  rtx_insn *insn;
-  note_add_store_info *info = (note_add_store_info *) data;
-
-  if (!REG_P (loc))
-    return;
-
-  /* If this register is referenced by the current or an earlier insn,
-     that's OK.  E.g. this applies to the register that is being incremented
-     with this addition.  */
-  for (insn = info->first;
-       insn != NEXT_INSN (info->current);
-       insn = NEXT_INSN (insn))
-    if (reg_referenced_p (loc, PATTERN (insn)))
-      return;
-
-  /* If we come here, we have a clobber of a register that's only OK
-     if that register is not live.  If we don't have liveness information
-     available, fail now.  */
-  if (!info->fixed_regs_live)
-    {
-      info->failure = true;
-      return;
-    }
-  /* Now check if this is a live fixed register.  */
-  unsigned int end_regno = END_REGNO (loc);
-  for (unsigned int regno = REGNO (loc); regno < end_regno; ++regno)
-    if (REGNO_REG_SET_P (info->fixed_regs_live, regno))
-      info->failure = true;
-}
-
-/* Callback for for_each_inc_dec that emits an INSN that sets DEST to
-   SRC + SRCOFF before insn ARG.  */
+/* Add an insn to do the add inside a x if it is a
+   PRE/POST-INC/DEC/MODIFY.  D is an structure containing the insn and
+   the size of the mode of the MEM that this is inside of.  */
 
 static int
-emit_inc_dec_insn_before (rtx mem ATTRIBUTE_UNUSED,
-			  rtx op ATTRIBUTE_UNUSED,
-			  rtx dest, rtx src, rtx srcoff, void *arg)
+replace_inc_dec (rtx *r, void *d)
 {
-  insn_info_t insn_info = (insn_info_t) arg;
-  rtx_insn *insn = insn_info->insn, *new_insn, *cur;
-  note_add_store_info info;
-
-  /* We can reuse all operands without copying, because we are about
-     to delete the insn that contained it.  */
-  if (srcoff)
+  rtx x = *r;
+  struct insn_size *data = (struct insn_size *)d;
+  switch (GET_CODE (x))
     {
-      start_sequence ();
-      emit_insn (gen_add3_insn (dest, src, srcoff));
-      new_insn = get_insns ();
-      end_sequence ();
+    case PRE_INC:
+    case POST_INC:
+      {
+	rtx r1 = XEXP (x, 0);
+	rtx c = gen_int_mode (data->size, GET_MODE (r1));
+	emit_insn_before (gen_rtx_SET (VOIDmode, r1,
+				       gen_rtx_PLUS (GET_MODE (r1), r1, c)),
+			  data->insn);
+	return -1;
+      }
+
+    case PRE_DEC:
+    case POST_DEC:
+      {
+	rtx r1 = XEXP (x, 0);
+	rtx c = gen_int_mode (-data->size, GET_MODE (r1));
+	emit_insn_before (gen_rtx_SET (VOIDmode, r1,
+				       gen_rtx_PLUS (GET_MODE (r1), r1, c)),
+			  data->insn);
+	return -1;
+      }
+
+    case PRE_MODIFY:
+    case POST_MODIFY:
+      {
+	/* We can reuse the add because we are about to delete the
+	   insn that contained it.  */
+	rtx add = XEXP (x, 0);
+	rtx r1 = XEXP (add, 0);
+	emit_insn_before (gen_rtx_SET (VOIDmode, r1, add), data->insn);
+	return -1;
+      }
+
+    default:
+      return 0;
     }
-  else
-    new_insn = gen_move_insn (dest, src);
-  info.first = new_insn;
-  info.fixed_regs_live = insn_info->fixed_regs_live;
-  info.failure = false;
-  for (cur = new_insn; cur; cur = NEXT_INSN (cur))
+}
+
+
+/* If X is a MEM, check the address to see if it is PRE/POST-INC/DEC/MODIFY
+   and generate an add to replace that.  */
+
+static int
+replace_inc_dec_mem (rtx *r, void *d)
+{
+  rtx x = *r;
+  if (x != NULL_RTX && MEM_P (x))
     {
-      info.current = cur;
-      note_stores (PATTERN (cur), note_add_store, &info);
+      struct insn_size data;
+
+      data.size = GET_MODE_SIZE (GET_MODE (x));
+      data.insn = (rtx) d;
+
+      for_each_rtx (&XEXP (x, 0), replace_inc_dec, &data);
+
+      return -1;
     }
-
-  /* If a failure was flagged above, return 1 so that for_each_inc_dec will
-     return it immediately, communicating the failure to its caller.  */
-  if (info.failure)
-    return 1;
-
-  emit_insn_before (new_insn, insn);
-
   return 0;
 }
 
-/* Before we delete INSN_INFO->INSN, make sure that the auto inc/dec, if it
-   is there, is split into a separate insn.
-   Return true on success (or if there was nothing to do), false on failure.  */
+/* Before we delete INSN, make sure that the auto inc/dec, if it is
+   there, is split into a separate insn.  */
 
-static bool
-check_for_inc_dec_1 (insn_info_t insn_info)
+static void
+check_for_inc_dec (rtx insn)
 {
-  rtx_insn *insn = insn_info->insn;
   rtx note = find_reg_note (insn, REG_INC, NULL_RTX);
   if (note)
-    return for_each_inc_dec (PATTERN (insn), emit_inc_dec_insn_before,
-			     insn_info) == 0;
-  return true;
+    for_each_rtx (&insn, replace_inc_dec_mem, insn);
 }
 
-
-/* Entry point for postreload.  If you work on reload_cse, or you need this
-   anywhere else, consider if you can provide register liveness information
-   and add a parameter to this function so that it can be passed down in
-   insn_info.fixed_regs_live.  */
-bool
-check_for_inc_dec (rtx_insn *insn)
-{
-  insn_info_type insn_info;
-  rtx note;
-
-  insn_info.insn = insn;
-  insn_info.fixed_regs_live = NULL;
-  note = find_reg_note (insn, REG_INC, NULL_RTX);
-  if (note)
-    return for_each_inc_dec (PATTERN (insn), emit_inc_dec_insn_before,
-			     &insn_info) == 0;
-  return true;
-}
 
 /* Delete the insn and free all of the fields inside INSN_INFO.  */
 
@@ -882,11 +905,17 @@ delete_dead_store_insn (insn_info_t insn_info)
   if (!dbg_cnt (dse))
     return;
 
-  if (!check_for_inc_dec_1 (insn_info))
-    return;
-  if (dump_file && (dump_flags & TDF_DETAILS))
-    fprintf (dump_file, "Locally deleting insn %d\n",
-	     INSN_UID (insn_info->insn));
+  check_for_inc_dec (insn_info->insn);
+  if (dump_file)
+    {
+      fprintf (dump_file, "Locally deleting insn %d ",
+	       INSN_UID (insn_info->insn));
+      if (insn_info->store_rec->alias_set)
+	fprintf (dump_file, "alias set %d\n",
+		 (int) insn_info->store_rec->alias_set);
+      else
+	fprintf (dump_file, "\n");
+    }
 
   free_store_info (insn_info);
   read_info = insn_info->read_rec;
@@ -894,7 +923,7 @@ delete_dead_store_insn (insn_info_t insn_info)
   while (read_info)
     {
       read_info_t next = read_info->next;
-      read_info_type_pool.remove (read_info);
+      pool_free (read_info_pool, read_info);
       read_info = next;
     }
   insn_info->read_rec = NULL;
@@ -906,88 +935,39 @@ delete_dead_store_insn (insn_info_t insn_info)
   insn_info->wild_read = false;
 }
 
-/* Return whether DECL, a local variable, can possibly escape the current
-   function scope.  */
-
-static bool
-local_variable_can_escape (tree decl)
-{
-  if (TREE_ADDRESSABLE (decl))
-    return true;
-
-  /* If this is a partitioned variable, we need to consider all the variables
-     in the partition.  This is necessary because a store into one of them can
-     be replaced with a store into another and this may not change the outcome
-     of the escape analysis.  */
-  if (cfun->gimple_df->decls_to_pointers != NULL)
-    {
-      tree *namep = cfun->gimple_df->decls_to_pointers->get (decl);
-      if (namep)
-	return TREE_ADDRESSABLE (*namep);
-    }
-
-  return false;
-}
-
-/* Return whether EXPR can possibly escape the current function scope.  */
-
-static bool
-can_escape (tree expr)
-{
-  tree base;
-  if (!expr)
-    return true;
-  base = get_base_address (expr);
-  if (DECL_P (base)
-      && !may_be_aliased (base)
-      && !(VAR_P (base)
-	   && !DECL_EXTERNAL (base)
-	   && !TREE_STATIC (base)
-	   && local_variable_can_escape (base)))
-    return false;
-  return true;
-}
 
 /* Set the store* bitmaps offset_map_size* fields in GROUP based on
    OFFSET and WIDTH.  */
 
 static void
-set_usage_bits (group_info *group, poly_int64 offset, poly_int64 width,
-                tree expr)
+set_usage_bits (group_info_t group, HOST_WIDE_INT offset, HOST_WIDE_INT width)
 {
-  /* Non-constant offsets and widths act as global kills, so there's no point
-     trying to use them to derive global DSE candidates.  */
-  HOST_WIDE_INT i, const_offset, const_width;
-  bool expr_escapes = can_escape (expr);
-  if (offset.is_constant (&const_offset)
-      && width.is_constant (&const_width)
-      && const_offset > -MAX_OFFSET
-      && const_offset + const_width < MAX_OFFSET)
-    for (i = const_offset; i < const_offset + const_width; ++i)
+  HOST_WIDE_INT i;
+
+  if (offset > -MAX_OFFSET && offset + width < MAX_OFFSET)
+    for (i=offset; i<offset+width; i++)
       {
 	bitmap store1;
 	bitmap store2;
-        bitmap escaped;
 	int ai;
 	if (i < 0)
 	  {
 	    store1 = group->store1_n;
 	    store2 = group->store2_n;
-	    escaped = group->escaped_n;
 	    ai = -i;
 	  }
 	else
 	  {
 	    store1 = group->store1_p;
 	    store2 = group->store2_p;
-	    escaped = group->escaped_p;
 	    ai = i;
 	  }
 
-	if (!bitmap_set_bit (store1, ai))
+	if (bitmap_bit_p (store1, ai))
 	  bitmap_set_bit (store2, ai);
 	else
 	  {
+	    bitmap_set_bit (store1, ai);
 	    if (i < 0)
 	      {
 		if (group->offset_map_size_n < ai)
@@ -999,32 +979,9 @@ set_usage_bits (group_info *group, poly_int64 offset, poly_int64 width,
 		  group->offset_map_size_p = ai;
 	      }
 	  }
-        if (expr_escapes)
-          bitmap_set_bit (escaped, ai);
       }
 }
 
-static void
-reset_active_stores (void)
-{
-  active_local_stores = NULL;
-  active_local_stores_len = 0;
-}
-
-/* Free all READ_REC of the LAST_INSN of BB_INFO.  */
-
-static void
-free_read_records (bb_info_t bb_info)
-{
-  insn_info_t insn_info = bb_info->last_insn;
-  read_info_t *ptr = &insn_info->read_rec;
-  while (*ptr)
-    {
-      read_info_t next = (*ptr)->next;
-      read_info_type_pool.remove (*ptr);
-      *ptr = next;
-    }
-}
 
 /* Set the BB_INFO so that the last insn is marked as a wild read.  */
 
@@ -1032,22 +989,23 @@ static void
 add_wild_read (bb_info_t bb_info)
 {
   insn_info_t insn_info = bb_info->last_insn;
+  read_info_t *ptr = &insn_info->read_rec;
+
+  while (*ptr)
+    {
+      read_info_t next = (*ptr)->next;
+      if ((*ptr)->alias_set == 0)
+        {
+          pool_free (read_info_pool, *ptr);
+          *ptr = next;
+	}
+      else
+	ptr = &(*ptr)->next;
+    }
   insn_info->wild_read = true;
-  free_read_records (bb_info);
-  reset_active_stores ();
+  active_local_stores = NULL;
 }
 
-/* Set the BB_INFO so that the last insn is marked as a wild read of
-   non-frame locations.  */
-
-static void
-add_non_frame_wild_read (bb_info_t bb_info)
-{
-  insn_info_t insn_info = bb_info->last_insn;
-  insn_info->non_frame_wild_read = true;
-  free_read_records (bb_info);
-  reset_active_stores ();
-}
 
 /* Return true if X is a constant or one of the registers that behave
    as a constant over the life of a function.  This is equivalent to
@@ -1056,11 +1014,17 @@ add_non_frame_wild_read (bb_info_t bb_info)
 static bool
 const_or_frame_p (rtx x)
 {
-  if (CONSTANT_P (x))
-    return true;
-
-  if (GET_CODE (x) == REG)
+  switch (GET_CODE (x))
     {
+    case CONST:
+    case CONST_INT:
+    case CONST_DOUBLE:
+    case CONST_VECTOR:
+    case SYMBOL_REF:
+    case LABEL_REF:
+      return true;
+
+    case REG:
       /* Note that we have to test for the actual rtx used for the frame
 	 and arg pointers and not just the register number in case we have
 	 eliminated the frame and/or arg pointer and are using it
@@ -1071,9 +1035,10 @@ const_or_frame_p (rtx x)
 	  || x == pic_offset_table_rtx)
 	return true;
       return false;
-    }
 
-  return false;
+    default:
+      return false;
+    }
 }
 
 /* Take all reasonable action to put the address of MEM into the form
@@ -1096,18 +1061,55 @@ const_or_frame_p (rtx x)
 
 static bool
 canon_address (rtx mem,
+	       alias_set_type *alias_set_out,
 	       int *group_id,
-	       poly_int64 *offset,
+	       HOST_WIDE_INT *offset,
 	       cselib_val **base)
 {
-  machine_mode address_mode = get_address_mode (mem);
+  enum machine_mode address_mode
+    = targetm.addr_space.address_mode (MEM_ADDR_SPACE (mem));
   rtx mem_address = XEXP (mem, 0);
   rtx expanded_address, address;
   int expanded;
 
-  cselib_lookup (mem_address, address_mode, 1, GET_MODE (mem));
+  /* Make sure that cselib is has initialized all of the operands of
+     the address before asking it to do the subst.  */
 
-  if (dump_file && (dump_flags & TDF_DETAILS))
+  if (clear_alias_sets)
+    {
+      /* If this is a spill, do not do any further processing.  */
+      alias_set_type alias_set = MEM_ALIAS_SET (mem);
+      if (dump_file)
+	fprintf (dump_file, "found alias set %d\n", (int) alias_set);
+      if (bitmap_bit_p (clear_alias_sets, alias_set))
+	{
+	  struct clear_alias_mode_holder *entry
+	    = clear_alias_set_lookup (alias_set);
+
+	  /* If the modes do not match, we cannot process this set.  */
+	  if (entry->mode != GET_MODE (mem))
+	    {
+	      if (dump_file)
+		fprintf (dump_file,
+			 "disqualifying alias set %d, (%s) != (%s)\n",
+			 (int) alias_set, GET_MODE_NAME (entry->mode),
+			 GET_MODE_NAME (GET_MODE (mem)));
+
+	      bitmap_set_bit (disqualified_clear_alias_sets, alias_set);
+	      return false;
+	    }
+
+	  *alias_set_out = alias_set;
+	  *group_id = clear_alias_group->id;
+	  return true;
+	}
+    }
+
+  *alias_set_out = 0;
+
+  cselib_lookup (mem_address, address_mode, 1);
+
+  if (dump_file)
     {
       fprintf (dump_file, "  mem: ");
       print_inline_rtx (dump_file, mem_address, 0);
@@ -1147,7 +1149,7 @@ canon_address (rtx mem,
 
       *offset = 0;
 
-      if (dump_file && (dump_flags & TDF_DETAILS))
+      if (dump_file)
 	{
 	  if (expanded)
 	    {
@@ -1164,41 +1166,39 @@ canon_address (rtx mem,
       if (GET_CODE (address) == CONST)
 	address = XEXP (address, 0);
 
-      address = strip_offset_and_add (address, offset);
+      if (GET_CODE (address) == PLUS
+	  && CONST_INT_P (XEXP (address, 1)))
+	{
+	  *offset = INTVAL (XEXP (address, 1));
+	  address = XEXP (address, 0);
+	}
 
       if (ADDR_SPACE_GENERIC_P (MEM_ADDR_SPACE (mem))
 	  && const_or_frame_p (address))
 	{
-	  group_info *group = get_group_info (address);
+	  group_info_t group = get_group_info (address);
 
-	  if (dump_file && (dump_flags & TDF_DETAILS))
-	    {
-	      fprintf (dump_file, "  gid=%d offset=", group->id);
-	      print_dec (*offset, dump_file);
-	      fprintf (dump_file, "\n");
-	    }
+	  if (dump_file)
+	    fprintf (dump_file, "  gid=%d offset=%d \n",
+		     group->id, (int)*offset);
 	  *base = NULL;
 	  *group_id = group->id;
 	  return true;
 	}
     }
 
-  *base = cselib_lookup (address, address_mode, true, GET_MODE (mem));
+  *base = cselib_lookup (address, address_mode, true);
   *group_id = -1;
 
   if (*base == NULL)
     {
-      if (dump_file && (dump_flags & TDF_DETAILS))
+      if (dump_file)
 	fprintf (dump_file, " no cselib val - should be a wild read.\n");
       return false;
     }
-  if (dump_file && (dump_flags & TDF_DETAILS))
-    {
-      fprintf (dump_file, "  varying cselib base=%u:%u offset = ",
-	       (*base)->uid, (*base)->hash);
-      print_dec (*offset, dump_file);
-      fprintf (dump_file, "\n");
-    }
+  if (dump_file)
+    fprintf (dump_file, "  varying cselib base=%u:%u offset = %d\n",
+	     (*base)->uid, (*base)->hash, (int)*offset);
   return true;
 }
 
@@ -1212,7 +1212,7 @@ clear_rhs_from_active_local_stores (void)
 
   while (ptr)
     {
-      store_info *store_info = ptr->store_rec;
+      store_info_t store_info = ptr->store_rec;
       /* Skip the clobbers.  */
       while (!store_info->is_set)
 	store_info = store_info->next;
@@ -1228,105 +1228,74 @@ clear_rhs_from_active_local_stores (void)
 /* Mark byte POS bytes from the beginning of store S_INFO as unneeded.  */
 
 static inline void
-set_position_unneeded (store_info *s_info, int pos)
+set_position_unneeded (store_info_t s_info, int pos)
 {
   if (__builtin_expect (s_info->is_large, false))
     {
-      if (bitmap_set_bit (s_info->positions_needed.large.bmap, pos))
-	s_info->positions_needed.large.count++;
+      if (!bitmap_bit_p (s_info->positions_needed.large.bmap, pos))
+	{
+	  s_info->positions_needed.large.count++;
+	  bitmap_set_bit (s_info->positions_needed.large.bmap, pos);
+	}
     }
   else
     s_info->positions_needed.small_bitmask
-      &= ~(HOST_WIDE_INT_1U << pos);
+      &= ~(((unsigned HOST_WIDE_INT) 1) << pos);
 }
 
 /* Mark the whole store S_INFO as unneeded.  */
 
 static inline void
-set_all_positions_unneeded (store_info *s_info)
+set_all_positions_unneeded (store_info_t s_info)
 {
   if (__builtin_expect (s_info->is_large, false))
     {
-      HOST_WIDE_INT width;
-      if (s_info->width.is_constant (&width))
-	{
-	  bitmap_set_range (s_info->positions_needed.large.bmap, 0, width);
-	  s_info->positions_needed.large.count = width;
-	}
-      else
-	{
-	  gcc_checking_assert (!s_info->positions_needed.large.bmap);
-	  s_info->positions_needed.large.count = 1;
-	}
+      int pos, end = s_info->end - s_info->begin;
+      for (pos = 0; pos < end; pos++)
+	bitmap_set_bit (s_info->positions_needed.large.bmap, pos);
+      s_info->positions_needed.large.count = end;
     }
   else
-    s_info->positions_needed.small_bitmask = HOST_WIDE_INT_0U;
+    s_info->positions_needed.small_bitmask = (unsigned HOST_WIDE_INT) 0;
 }
 
 /* Return TRUE if any bytes from S_INFO store are needed.  */
 
 static inline bool
-any_positions_needed_p (store_info *s_info)
+any_positions_needed_p (store_info_t s_info)
 {
   if (__builtin_expect (s_info->is_large, false))
-    {
-      HOST_WIDE_INT width;
-      if (s_info->width.is_constant (&width))
-	{
-	  gcc_checking_assert (s_info->positions_needed.large.bmap);
-	  return s_info->positions_needed.large.count < width;
-	}
-      else
-	{
-	  gcc_checking_assert (!s_info->positions_needed.large.bmap);
-	  return s_info->positions_needed.large.count == 0;
-	}
-    }
+    return (s_info->positions_needed.large.count
+	    < s_info->end - s_info->begin);
   else
-    return (s_info->positions_needed.small_bitmask != HOST_WIDE_INT_0U);
+    return (s_info->positions_needed.small_bitmask
+	    != (unsigned HOST_WIDE_INT) 0);
 }
 
 /* Return TRUE if all bytes START through START+WIDTH-1 from S_INFO
-   store are known to be needed.  */
+   store are needed.  */
 
 static inline bool
-all_positions_needed_p (store_info *s_info, poly_int64 start,
-			poly_int64 width)
+all_positions_needed_p (store_info_t s_info, int start, int width)
 {
-  gcc_assert (s_info->rhs);
-  if (!s_info->width.is_constant ())
-    {
-      gcc_assert (s_info->is_large
-		  && !s_info->positions_needed.large.bmap);
-      return s_info->positions_needed.large.count == 0;
-    }
-
-  /* Otherwise, if START and WIDTH are non-constant, we're asking about
-     a non-constant region of a constant-sized store.  We can't say for
-     sure that all positions are needed.  */
-  HOST_WIDE_INT const_start, const_width;
-  if (!start.is_constant (&const_start)
-      || !width.is_constant (&const_width))
-    return false;
-
   if (__builtin_expect (s_info->is_large, false))
     {
-      for (HOST_WIDE_INT i = const_start; i < const_start + const_width; ++i)
-	if (bitmap_bit_p (s_info->positions_needed.large.bmap, i))
+      int end = start + width;
+      while (start < end)
+	if (bitmap_bit_p (s_info->positions_needed.large.bmap, start++))
 	  return false;
       return true;
     }
   else
     {
-      unsigned HOST_WIDE_INT mask
-	= lowpart_bitmask (const_width) << const_start;
+      unsigned HOST_WIDE_INT mask = lowpart_bitmask (width) << start;
       return (s_info->positions_needed.small_bitmask & mask) == mask;
     }
 }
 
 
-static rtx get_stored_val (store_info *, machine_mode, poly_int64,
-			   poly_int64, basic_block, bool);
+static rtx get_stored_val (store_info_t, enum machine_mode, HOST_WIDE_INT,
+			   HOST_WIDE_INT, basic_block, bool);
 
 
 /* BODY is an instruction pattern that belongs to INSN.  Return 1 if
@@ -1337,10 +1306,11 @@ static int
 record_store (rtx body, bb_info_t bb_info)
 {
   rtx mem, rhs, const_rhs, mem_addr;
-  poly_int64 offset = 0;
-  poly_int64 width = 0;
+  HOST_WIDE_INT offset = 0;
+  HOST_WIDE_INT width = 0;
+  alias_set_type spill_alias_set;
   insn_info_t insn_info = bb_info->last_insn;
-  store_info *store_info = NULL;
+  store_info_t store_info = NULL;
   int group_id;
   cselib_val *base = NULL;
   insn_info_t ptr, last, redundant_reason;
@@ -1370,10 +1340,9 @@ record_store (rtx body, bb_info_t bb_info)
   /* At this point we know mem is a mem. */
   if (GET_MODE (mem) == BLKmode)
     {
-      HOST_WIDE_INT const_size;
       if (GET_CODE (XEXP (mem, 0)) == SCRATCH)
 	{
-	  if (dump_file && (dump_flags & TDF_DETAILS))
+	  if (dump_file)
 	    fprintf (dump_file, " adding wild read for (clobber (mem:BLK (scratch))\n");
 	  add_wild_read (bb_info);
 	  insn_info->cannot_delete = true;
@@ -1381,13 +1350,11 @@ record_store (rtx body, bb_info_t bb_info)
 	}
       /* Handle (set (mem:BLK (addr) [... S36 ...]) (const_int 0))
 	 as memset (addr, 0, 36);  */
-      else if (!MEM_SIZE_KNOWN_P (mem)
-	       || maybe_le (MEM_SIZE (mem), 0)
-	       /* This is a limit on the bitmap size, which is only relevant
-		  for constant-sized MEMs.  */
-	       || (MEM_SIZE (mem).is_constant (&const_size)
-		   && const_size > MAX_OFFSET)
+      else if (!MEM_SIZE (mem)
+	       || !CONST_INT_P (MEM_SIZE (mem))
 	       || GET_CODE (body) != SET
+	       || INTVAL (MEM_SIZE (mem)) <= 0
+	       || INTVAL (MEM_SIZE (mem)) > MAX_OFFSET
 	       || !CONST_INT_P (SET_SRC (body)))
 	{
 	  if (!store_is_unused)
@@ -1405,61 +1372,72 @@ record_store (rtx body, bb_info_t bb_info)
   if (MEM_VOLATILE_P (mem))
     insn_info->cannot_delete = true;
 
-  if (!canon_address (mem, &group_id, &offset, &base))
+  if (!canon_address (mem, &spill_alias_set, &group_id, &offset, &base))
     {
       clear_rhs_from_active_local_stores ();
       return 0;
     }
 
   if (GET_MODE (mem) == BLKmode)
-    width = MEM_SIZE (mem);
+    width = INTVAL (MEM_SIZE (mem));
   else
-    width = GET_MODE_SIZE (GET_MODE (mem));
-
-  if (!endpoint_representable_p (offset, width))
     {
-      clear_rhs_from_active_local_stores ();
-      return 0;
+      width = GET_MODE_SIZE (GET_MODE (mem));
+      gcc_assert ((unsigned) width <= HOST_BITS_PER_WIDE_INT);
     }
 
-  if (known_eq (width, 0))
-    return 0;
+  if (spill_alias_set)
+    {
+      bitmap store1 = clear_alias_group->store1_p;
+      bitmap store2 = clear_alias_group->store2_p;
 
-  if (group_id >= 0)
+      gcc_assert (GET_MODE (mem) != BLKmode);
+
+      if (bitmap_bit_p (store1, spill_alias_set))
+	bitmap_set_bit (store2, spill_alias_set);
+      else
+	bitmap_set_bit (store1, spill_alias_set);
+
+      if (clear_alias_group->offset_map_size_p < spill_alias_set)
+	clear_alias_group->offset_map_size_p = spill_alias_set;
+
+      store_info = (store_info_t) pool_alloc (rtx_store_info_pool);
+
+      if (dump_file)
+	fprintf (dump_file, " processing spill store %d(%s)\n",
+		 (int) spill_alias_set, GET_MODE_NAME (GET_MODE (mem)));
+    }
+  else if (group_id >= 0)
     {
       /* In the restrictive case where the base is a constant or the
 	 frame pointer we can do global analysis.  */
 
-      group_info *group
-	= rtx_group_vec[group_id];
-      tree expr = MEM_EXPR (mem);
+      group_info_t group
+	= VEC_index (group_info_t, rtx_group_vec, group_id);
 
-      store_info = rtx_store_info_pool.allocate ();
-      set_usage_bits (group, offset, width, expr);
+      store_info = (store_info_t) pool_alloc (rtx_store_info_pool);
+      set_usage_bits (group, offset, width);
 
-      if (dump_file && (dump_flags & TDF_DETAILS))
-	{
-	  fprintf (dump_file, " processing const base store gid=%d",
-		   group_id);
-	  print_range (dump_file, offset, width);
-	  fprintf (dump_file, "\n");
-	}
+      if (dump_file)
+	fprintf (dump_file, " processing const base store gid=%d[%d..%d)\n",
+		 group_id, (int)offset, (int)(offset+width));
     }
   else
     {
-      if (may_be_sp_based_p (XEXP (mem, 0)))
+      rtx base_term = find_base_term (XEXP (mem, 0));
+      if (!base_term
+	  || (GET_CODE (base_term) == ADDRESS
+	      && GET_MODE (base_term) == Pmode
+	      && XEXP (base_term, 0) == stack_pointer_rtx))
 	insn_info->stack_pointer_based = true;
       insn_info->contains_cselib_groups = true;
 
-      store_info = cse_store_info_pool.allocate ();
+      store_info = (store_info_t) pool_alloc (cse_store_info_pool);
       group_id = -1;
 
-      if (dump_file && (dump_flags & TDF_DETAILS))
-	{
-	  fprintf (dump_file, " processing cselib store ");
-	  print_range (dump_file, offset, width);
-	  fprintf (dump_file, "\n");
-	}
+      if (dump_file)
+	fprintf (dump_file, " processing cselib store [%d..%d)\n",
+		 (int)offset, (int)(offset+width));
     }
 
   const_rhs = rhs = NULL_RTX;
@@ -1498,21 +1476,27 @@ record_store (rtx body, bb_info_t bb_info)
   last = NULL;
   redundant_reason = NULL;
   mem = canon_rtx (mem);
-
-  if (group_id < 0)
-    mem_addr = base->val_rtx;
+  /* For alias_set != 0 canon_true_dependence should be never called.  */
+  if (spill_alias_set)
+    mem_addr = NULL_RTX;
   else
     {
-      group_info *group = rtx_group_vec[group_id];
-      mem_addr = group->canon_base_addr;
+      if (group_id < 0)
+	mem_addr = base->val_rtx;
+      else
+	{
+	  group_info_t group
+	    = VEC_index (group_info_t, rtx_group_vec, group_id);
+	  mem_addr = group->canon_base_addr;
+	}
+      if (offset)
+	mem_addr = plus_constant (mem_addr, offset);
     }
-  if (maybe_ne (offset, 0))
-    mem_addr = plus_constant (get_address_mode (mem), mem_addr, offset);
 
   while (ptr)
     {
       insn_info_t next = ptr->next_local_store;
-      struct store_info *s_info = ptr->store_rec;
+      store_info_t s_info = ptr->store_rec;
       bool del = true;
 
       /* Skip the clobbers. We delete the active insn if this insn
@@ -1521,31 +1505,45 @@ record_store (rtx body, bb_info_t bb_info)
       while (!s_info->is_set)
 	s_info = s_info->next;
 
-      if (s_info->group_id == group_id && s_info->cse_base == base)
+      if (s_info->alias_set != spill_alias_set)
+	del = false;
+      else if (s_info->alias_set)
+	{
+	  struct clear_alias_mode_holder *entry
+	    = clear_alias_set_lookup (s_info->alias_set);
+	  /* Generally, spills cannot be processed if and of the
+	     references to the slot have a different mode.  But if
+	     we are in the same block and mode is exactly the same
+	     between this store and one before in the same block,
+	     we can still delete it.  */
+	  if ((GET_MODE (mem) == GET_MODE (s_info->mem))
+	      && (GET_MODE (mem) == entry->mode))
+	    {
+	      del = true;
+	      set_all_positions_unneeded (s_info);
+	    }
+	  if (dump_file)
+	    fprintf (dump_file, "    trying spill store in insn=%d alias_set=%d\n",
+		     INSN_UID (ptr->insn), (int) s_info->alias_set);
+	}
+      else if ((s_info->group_id == group_id)
+	       && (s_info->cse_base == base))
 	{
 	  HOST_WIDE_INT i;
-	  if (dump_file && (dump_flags & TDF_DETAILS))
-	    {
-	      fprintf (dump_file, "    trying store in insn=%d gid=%d",
-		       INSN_UID (ptr->insn), s_info->group_id);
-	      print_range (dump_file, s_info->offset, s_info->width);
-	      fprintf (dump_file, "\n");
-	    }
+	  if (dump_file)
+	    fprintf (dump_file, "    trying store in insn=%d gid=%d[%d..%d)\n",
+		     INSN_UID (ptr->insn), s_info->group_id,
+		     (int)s_info->begin, (int)s_info->end);
 
 	  /* Even if PTR won't be eliminated as unneeded, if both
 	     PTR and this insn store the same constant value, we might
 	     eliminate this insn instead.  */
 	  if (s_info->const_rhs
 	      && const_rhs
-	      && known_subrange_p (offset, width,
-				   s_info->offset, s_info->width)
-	      && all_positions_needed_p (s_info, offset - s_info->offset,
-					 width)
-	      /* We can only remove the later store if the earlier aliases
-		 at least all accesses the later one.  */
-	      && (MEM_ALIAS_SET (mem) == MEM_ALIAS_SET (s_info->mem)
-		  || alias_set_subset_of (MEM_ALIAS_SET (mem),
-					  MEM_ALIAS_SET (s_info->mem))))
+	      && offset >= s_info->begin
+	      && offset + width <= s_info->end
+	      && all_positions_needed_p (s_info, offset - s_info->begin,
+					 width))
 	    {
 	      if (GET_MODE (mem) == BLKmode)
 		{
@@ -1560,7 +1558,8 @@ record_store (rtx body, bb_info_t bb_info)
 		{
 		  rtx val;
 		  start_sequence ();
-		  val = get_stored_val (s_info, GET_MODE (mem), offset, width,
+		  val = get_stored_val (s_info, GET_MODE (mem),
+					offset, offset + width,
 					BLOCK_FOR_INSN (insn_info->insn),
 					true);
 		  if (get_insns () != NULL)
@@ -1571,36 +1570,20 @@ record_store (rtx body, bb_info_t bb_info)
 		}
 	    }
 
-	  HOST_WIDE_INT begin_unneeded, const_s_width, const_width;
-	  if (known_subrange_p (s_info->offset, s_info->width, offset, width))
-	    /* The new store touches every byte that S_INFO does.  */
-	    set_all_positions_unneeded (s_info);
-	  else if ((offset - s_info->offset).is_constant (&begin_unneeded)
-		   && s_info->width.is_constant (&const_s_width)
-		   && width.is_constant (&const_width))
-	    {
-	      HOST_WIDE_INT end_unneeded = begin_unneeded + const_width;
-	      begin_unneeded = MAX (begin_unneeded, 0);
-	      end_unneeded = MIN (end_unneeded, const_s_width);
-	      for (i = begin_unneeded; i < end_unneeded; ++i)
-		set_position_unneeded (s_info, i);
-	    }
-	  else
-	    {
-	      /* We don't know which parts of S_INFO are needed and
-		 which aren't, so invalidate the RHS.  */
-	      s_info->rhs = NULL;
-	      s_info->const_rhs = NULL;
-	    }
+	  for (i = MAX (offset, s_info->begin);
+	       i < offset + width && i < s_info->end;
+	       i++)
+	    set_position_unneeded (s_info, i - s_info->begin);
 	}
       else if (s_info->rhs)
 	/* Need to see if it is possible for this store to overwrite
 	   the value of store_info.  If it is, set the rhs to NULL to
 	   keep it from being used to remove a load.  */
 	{
-	  if (canon_output_dependence (s_info->mem, true,
-				       mem, GET_MODE (mem),
-				       mem_addr))
+	  if (canon_true_dependence (s_info->mem,
+				     GET_MODE (s_info->mem),
+				     s_info->mem_addr,
+				     mem, mem_addr, rtx_varies_p))
 	    {
 	      s_info->rhs = NULL;
 	      s_info->const_rhs = NULL;
@@ -1616,7 +1599,6 @@ record_store (rtx body, bb_info_t bb_info)
 	{
 	  insn_info_t insn_to_delete = ptr;
 
-	  active_local_stores_len--;
 	  if (last)
 	    last->next_local_store = ptr->next_local_store;
 	  else
@@ -1635,30 +1617,23 @@ record_store (rtx body, bb_info_t bb_info)
   store_info->next = insn_info->store_rec;
   insn_info->store_rec = store_info;
   store_info->mem = mem;
+  store_info->alias_set = spill_alias_set;
   store_info->mem_addr = mem_addr;
   store_info->cse_base = base;
-  HOST_WIDE_INT const_width;
-  if (!width.is_constant (&const_width))
+  if (width > HOST_BITS_PER_WIDE_INT)
     {
       store_info->is_large = true;
       store_info->positions_needed.large.count = 0;
-      store_info->positions_needed.large.bmap = NULL;
-    }
-  else if (const_width > HOST_BITS_PER_WIDE_INT)
-    {
-      store_info->is_large = true;
-      store_info->positions_needed.large.count = 0;
-      store_info->positions_needed.large.bmap = BITMAP_ALLOC (&dse_bitmap_obstack);
+      store_info->positions_needed.large.bmap = BITMAP_ALLOC (NULL);
     }
   else
     {
       store_info->is_large = false;
-      store_info->positions_needed.small_bitmask
-	= lowpart_bitmask (const_width);
+      store_info->positions_needed.small_bitmask = lowpart_bitmask (width);
     }
   store_info->group_id = group_id;
-  store_info->offset = offset;
-  store_info->width = width;
+  store_info->begin = offset;
+  store_info->end = offset + width;
   store_info->is_set = GET_CODE (body) == SET;
   store_info->rhs = rhs;
   store_info->const_rhs = const_rhs;
@@ -1689,13 +1664,13 @@ dump_insn_info (const char * start, insn_info_t insn_info)
    shift.  */
 
 static rtx
-find_shift_sequence (poly_int64 access_size,
-		     store_info *store_info,
-		     machine_mode read_mode,
-		     poly_int64 shift, bool speed, bool require_cst)
+find_shift_sequence (int access_size,
+		     store_info_t store_info,
+		     enum machine_mode read_mode,
+		     int shift, bool speed, bool require_cst)
 {
-  machine_mode store_mode = GET_MODE (store_info->mem);
-  scalar_int_mode new_mode;
+  enum machine_mode store_mode = GET_MODE (store_info->mem);
+  enum machine_mode new_mode;
   rtx read_reg = NULL;
 
   /* Some machines like the x86 have shift insns for each size of
@@ -1705,38 +1680,32 @@ find_shift_sequence (poly_int64 access_size,
      justify the value we want to read but is available in one insn on
      the machine.  */
 
-  opt_scalar_int_mode new_mode_iter;
-  FOR_EACH_MODE_FROM (new_mode_iter,
-		      smallest_int_mode_for_size (access_size * BITS_PER_UNIT))
+  for (new_mode = smallest_mode_for_size (access_size * BITS_PER_UNIT,
+					  MODE_INT);
+       GET_MODE_BITSIZE (new_mode) <= BITS_PER_WORD;
+       new_mode = GET_MODE_WIDER_MODE (new_mode))
     {
-      rtx target, new_reg, new_lhs;
-      rtx_insn *shift_seq, *insn;
+      rtx target, new_reg, shift_seq, insn, new_lhs;
       int cost;
-
-      new_mode = new_mode_iter.require ();
-      if (GET_MODE_BITSIZE (new_mode) > BITS_PER_WORD)
-	break;
 
       /* If a constant was stored into memory, try to simplify it here,
 	 otherwise the cost of the shift might preclude this optimization
 	 e.g. at -Os, even when no actual shift will be needed.  */
       if (store_info->const_rhs)
 	{
-	  poly_uint64 byte = subreg_lowpart_offset (new_mode, store_mode);
+	  unsigned int byte = subreg_lowpart_offset (new_mode, store_mode);
 	  rtx ret = simplify_subreg (new_mode, store_info->const_rhs,
 				     store_mode, byte);
 	  if (ret && CONSTANT_P (ret))
 	    {
-	      rtx shift_rtx = gen_int_shift_amount (new_mode, shift);
 	      ret = simplify_const_binary_operation (LSHIFTRT, new_mode,
-						     ret, shift_rtx);
+						     ret, GEN_INT (shift));
 	      if (ret && CONSTANT_P (ret))
 		{
 		  byte = subreg_lowpart_offset (read_mode, new_mode);
 		  ret = simplify_subreg (read_mode, ret, new_mode, byte);
 		  if (ret && CONSTANT_P (ret)
-		      && (set_src_cost (ret, read_mode, speed)
-			  <= COSTS_N_INSNS (1)))
+		      && rtx_cost (ret, SET, speed) <= COSTS_N_INSNS (1))
 		    return ret;
 		}
 	    }
@@ -1747,14 +1716,15 @@ find_shift_sequence (poly_int64 access_size,
 
       /* Try a wider mode if truncating the store mode to NEW_MODE
 	 requires a real instruction.  */
-      if (maybe_lt (GET_MODE_SIZE (new_mode), GET_MODE_SIZE (store_mode))
-	  && !TRULY_NOOP_TRUNCATION_MODES_P (new_mode, store_mode))
+      if (GET_MODE_BITSIZE (new_mode) < GET_MODE_BITSIZE (store_mode)
+	  && !TRULY_NOOP_TRUNCATION (GET_MODE_BITSIZE (new_mode),
+				     GET_MODE_BITSIZE (store_mode)))
 	continue;
 
       /* Also try a wider mode if the necessary punning is either not
 	 desirable or not possible.  */
       if (!CONSTANT_P (store_info->rhs)
-	  && !targetm.modes_tieable_p (new_mode, store_mode))
+	  && !MODES_TIEABLE_P (new_mode, store_mode))
 	continue;
 
       new_reg = gen_reg_rtx (new_mode);
@@ -1765,8 +1735,7 @@ find_shift_sequence (poly_int64 access_size,
 	 of one dsp where the cost of these two was not the same.  But
 	 this really is a rare case anyway.  */
       target = expand_binop (new_mode, lshr_optab, new_reg,
-			     gen_int_shift_amount (new_mode, shift),
-			     new_reg, 1, OPTAB_DIRECT);
+			     GEN_INT (shift), new_reg, 1, OPTAB_DIRECT);
 
       shift_seq = get_insns ();
       end_sequence ();
@@ -1777,7 +1746,7 @@ find_shift_sequence (poly_int64 access_size,
       cost = 0;
       for (insn = shift_seq; insn != NULL_RTX; insn = NEXT_INSN (insn))
 	if (INSN_P (insn))
-	  cost += insn_cost (insn, speed);
+	  cost += insn_rtx_cost (PATTERN (insn), speed);
 
       /* The computation up to here is essentially independent
 	 of the arguments and could be precomputed.  It may
@@ -1817,68 +1786,74 @@ look_for_hardregs (rtx x, const_rtx pat ATTRIBUTE_UNUSED, void *data)
   bitmap regs_set = (bitmap) data;
 
   if (REG_P (x)
-      && HARD_REGISTER_P (x))
-    bitmap_set_range (regs_set, REGNO (x), REG_NREGS (x));
+      && REGNO (x) < FIRST_PSEUDO_REGISTER)
+    {
+      int regno = REGNO (x);
+      int n = hard_regno_nregs[regno][GET_MODE (x)];
+      while (--n >= 0)
+	bitmap_set_bit (regs_set, regno + n);
+    }
 }
 
 /* Helper function for replace_read and record_store.
-   Attempt to return a value of mode READ_MODE stored in STORE_INFO,
-   consisting of READ_WIDTH bytes starting from READ_OFFSET.  Return NULL
+   Attempt to return a value stored in STORE_INFO, from READ_BEGIN
+   to one before READ_END bytes read in READ_MODE.  Return NULL
    if not successful.  If REQUIRE_CST is true, return always constant.  */
 
 static rtx
-get_stored_val (store_info *store_info, machine_mode read_mode,
-		poly_int64 read_offset, poly_int64 read_width,
+get_stored_val (store_info_t store_info, enum machine_mode read_mode,
+		HOST_WIDE_INT read_begin, HOST_WIDE_INT read_end,
 		basic_block bb, bool require_cst)
 {
-  machine_mode store_mode = GET_MODE (store_info->mem);
-  poly_int64 gap;
+  enum machine_mode store_mode = GET_MODE (store_info->mem);
+  int shift;
+  int access_size; /* In bytes.  */
   rtx read_reg;
 
   /* To get here the read is within the boundaries of the write so
      shift will never be negative.  Start out with the shift being in
      bytes.  */
   if (store_mode == BLKmode)
-    gap = 0;
+    shift = 0;
   else if (BYTES_BIG_ENDIAN)
-    gap = ((store_info->offset + store_info->width)
-	   - (read_offset + read_width));
+    shift = store_info->end - read_end;
   else
-    gap = read_offset - store_info->offset;
+    shift = read_begin - store_info->begin;
 
-  if (gap.is_constant () && maybe_ne (gap, 0))
-    {
-      poly_int64 shift = gap * BITS_PER_UNIT;
-      poly_int64 access_size = GET_MODE_SIZE (read_mode) + gap;
-      read_reg = find_shift_sequence (access_size, store_info, read_mode,
-				      shift, optimize_bb_for_speed_p (bb),
-				      require_cst);
-    }
+  access_size = shift + GET_MODE_SIZE (read_mode);
+
+  /* From now on it is bits.  */
+  shift *= BITS_PER_UNIT;
+
+  if (shift)
+    read_reg = find_shift_sequence (access_size, store_info, read_mode, shift,
+    				    optimize_bb_for_speed_p (bb),
+				    require_cst);
   else if (store_mode == BLKmode)
     {
       /* The store is a memset (addr, const_val, const_size).  */
       gcc_assert (CONST_INT_P (store_info->rhs));
-      scalar_int_mode int_store_mode;
-      if (!int_mode_for_mode (read_mode).exists (&int_store_mode))
+      store_mode = int_mode_for_mode (read_mode);
+      if (store_mode == BLKmode)
 	read_reg = NULL_RTX;
       else if (store_info->rhs == const0_rtx)
-	read_reg = extract_low_bits (read_mode, int_store_mode, const0_rtx);
-      else if (GET_MODE_BITSIZE (int_store_mode) > HOST_BITS_PER_WIDE_INT
+	read_reg = extract_low_bits (read_mode, store_mode, const0_rtx);
+      else if (GET_MODE_BITSIZE (store_mode) > HOST_BITS_PER_WIDE_INT
 	       || BITS_PER_UNIT >= HOST_BITS_PER_WIDE_INT)
 	read_reg = NULL_RTX;
       else
 	{
 	  unsigned HOST_WIDE_INT c
 	    = INTVAL (store_info->rhs)
-	      & ((HOST_WIDE_INT_1 << BITS_PER_UNIT) - 1);
+	      & (((HOST_WIDE_INT) 1 << BITS_PER_UNIT) - 1);
 	  int shift = BITS_PER_UNIT;
 	  while (shift < HOST_BITS_PER_WIDE_INT)
 	    {
 	      c |= (c << shift);
 	      shift <<= 1;
 	    }
-	  read_reg = gen_int_mode (c, int_store_mode);
-	  read_reg = extract_low_bits (read_mode, int_store_mode, read_reg);
+	  read_reg = GEN_INT (trunc_int_for_mode (c, store_mode));
+	  read_reg = extract_low_bits (read_mode, store_mode, read_reg);
 	}
     }
   else if (store_info->const_rhs
@@ -1926,14 +1901,13 @@ get_stored_val (store_info *store_info, machine_mode read_mode,
    went ok.  */
 
 static bool
-replace_read (store_info *store_info, insn_info_t store_insn,
+replace_read (store_info_t store_info, insn_info_t store_insn,
 	      read_info_t read_info, insn_info_t read_insn, rtx *loc,
 	      bitmap regs_live)
 {
-  machine_mode store_mode = GET_MODE (store_info->mem);
-  machine_mode read_mode = GET_MODE (read_info->mem);
-  rtx_insn *insns, *this_insn;
-  rtx read_reg;
+  enum machine_mode store_mode = GET_MODE (store_info->mem);
+  enum machine_mode read_mode = GET_MODE (read_info->mem);
+  rtx insns, this_insn, read_reg;
   basic_block bb;
 
   if (!dbg_cnt (dse))
@@ -1948,7 +1922,7 @@ replace_read (store_info *store_info, insn_info_t store_insn,
      in cache, so it is not going to be an expensive one.  Thus, we
      are not willing to do a multi insn shift or worse a subroutine
      call to get rid of the read.  */
-  if (dump_file && (dump_flags & TDF_DETAILS))
+  if (dump_file)
     fprintf (dump_file, "trying to replace %smode load in insn %d"
 	     " from %smode store in insn %d\n",
 	     GET_MODE_NAME (read_mode), INSN_UID (read_insn->insn),
@@ -1956,12 +1930,12 @@ replace_read (store_info *store_info, insn_info_t store_insn,
   start_sequence ();
   bb = BLOCK_FOR_INSN (read_insn->insn);
   read_reg = get_stored_val (store_info,
-			     read_mode, read_info->offset, read_info->width,
+			     read_mode, read_info->begin, read_info->end,
 			     bb, false);
   if (read_reg == NULL_RTX)
     {
       end_sequence ();
-      if (dump_file && (dump_flags & TDF_DETAILS))
+      if (dump_file)
 	fprintf (dump_file, " -- could not extract bits of stored value\n");
       return false;
     }
@@ -1978,7 +1952,7 @@ replace_read (store_info *store_info, insn_info_t store_insn,
 	 live at this point.  For instance, this can happen if one of
 	 the insns sets the CC and the CC happened to be live at that
 	 point.  This does occasionally happen, see PR 37922.  */
-      bitmap regs_set = BITMAP_ALLOC (&reg_obstack);
+      bitmap regs_set = BITMAP_ALLOC (NULL);
 
       for (this_insn = insns; this_insn != NULL_RTX; this_insn = NEXT_INSN (this_insn))
 	note_stores (PATTERN (this_insn), look_for_hardregs, regs_set);
@@ -1986,7 +1960,7 @@ replace_read (store_info *store_info, insn_info_t store_insn,
       bitmap_and_into (regs_set, regs_live);
       if (!bitmap_empty_p (regs_set))
 	{
-	  if (dump_file && (dump_flags & TDF_DETAILS))
+	  if (dump_file)
 	    {
 	      fprintf (dump_file,
 		       "abandoning replacement because sequence clobbers live hardregs:");
@@ -2001,7 +1975,8 @@ replace_read (store_info *store_info, insn_info_t store_insn,
 
   if (validate_change (read_insn->insn, loc, read_reg, 0))
     {
-      deferred_change *change = deferred_change_pool.allocate ();
+      deferred_change_t deferred_change =
+	(deferred_change_t) pool_alloc (deferred_change_pool);
 
       /* Insert this right before the store insn where it will be safe
 	 from later insns that might change it before the read.  */
@@ -2031,16 +2006,16 @@ replace_read (store_info *store_info, insn_info_t store_insn,
 	 block we can put them back.  */
 
       *loc = read_info->mem;
-      change->next = deferred_change_list;
-      deferred_change_list = change;
-      change->loc = loc;
-      change->reg = read_reg;
+      deferred_change->next = deferred_change_list;
+      deferred_change_list = deferred_change;
+      deferred_change->loc = loc;
+      deferred_change->reg = read_reg;
 
       /* Get rid of the read_info, from the point of view of the
 	 rest of dse, play like this read never happened.  */
       read_insn->read_rec = read_info->next;
-      read_info_type_pool.remove (read_info);
-      if (dump_file && (dump_flags & TDF_DETAILS))
+      pool_free (read_info_pool, read_info);
+      if (dump_file)
 	{
 	  fprintf (dump_file, " -- replaced the loaded MEM with ");
 	  print_simple_rtl (dump_file, read_reg);
@@ -2050,7 +2025,7 @@ replace_read (store_info *store_info, insn_info_t store_insn,
     }
   else
     {
-      if (dump_file && (dump_flags & TDF_DETAILS))
+      if (dump_file)
 	{
 	  fprintf (dump_file, " -- replacing the loaded MEM with ");
 	  print_simple_rtl (dump_file, read_reg);
@@ -2060,64 +2035,50 @@ replace_read (store_info *store_info, insn_info_t store_insn,
     }
 }
 
-/* Check the address of MEM *LOC and kill any appropriate stores that may
-   be active.  */
+/* A for_each_rtx callback in which DATA is the bb_info.  Check to see
+   if LOC is a mem and if it is look at the address and kill any
+   appropriate stores that may be active.  */
 
-static void
-check_mem_read_rtx (rtx *loc, bb_info_t bb_info)
+static int
+check_mem_read_rtx (rtx *loc, void *data)
 {
   rtx mem = *loc, mem_addr;
+  bb_info_t bb_info;
   insn_info_t insn_info;
-  poly_int64 offset = 0;
-  poly_int64 width = 0;
+  HOST_WIDE_INT offset = 0;
+  HOST_WIDE_INT width = 0;
+  alias_set_type spill_alias_set = 0;
   cselib_val *base = NULL;
   int group_id;
   read_info_t read_info;
 
+  if (!mem || !MEM_P (mem))
+    return 0;
+
+  bb_info = (bb_info_t) data;
   insn_info = bb_info->last_insn;
 
   if ((MEM_ALIAS_SET (mem) == ALIAS_SET_MEMORY_BARRIER)
-      || MEM_VOLATILE_P (mem))
+      || (MEM_VOLATILE_P (mem)))
     {
-      if (crtl->stack_protect_guard
-	  && (MEM_EXPR (mem) == crtl->stack_protect_guard
-	      || (crtl->stack_protect_guard_decl
-		  && MEM_EXPR (mem) == crtl->stack_protect_guard_decl))
-	  && MEM_VOLATILE_P (mem))
-	{
-	  /* This is either the stack protector canary on the stack,
-	     which ought to be written by a MEM_VOLATILE_P store and
-	     thus shouldn't be deleted and is read at the very end of
-	     function, but shouldn't conflict with any other store.
-	     Or it is __stack_chk_guard variable or TLS or whatever else
-	     MEM holding the canary value, which really shouldn't be
-	     ever modified in -fstack-protector* protected functions,
-	     otherwise the prologue store wouldn't match the epilogue
-	     check.  */
-	  if (dump_file && (dump_flags & TDF_DETAILS))
-	    fprintf (dump_file, " stack protector canary read ignored.\n");
-	  insn_info->cannot_delete = true;
-	  return;
-	}
-
-      if (dump_file && (dump_flags & TDF_DETAILS))
+      if (dump_file)
 	fprintf (dump_file, " adding wild read, volatile or barrier.\n");
       add_wild_read (bb_info);
       insn_info->cannot_delete = true;
-      return;
+      return 0;
     }
 
   /* If it is reading readonly mem, then there can be no conflict with
      another write. */
   if (MEM_READONLY_P (mem))
-    return;
+    return 0;
 
-  if (!canon_address (mem, &group_id, &offset, &base))
+  if (!canon_address (mem, &spill_alias_set, &group_id, &offset, &base))
     {
-      if (dump_file && (dump_flags & TDF_DETAILS))
+      if (dump_file)
 	fprintf (dump_file, " adding wild read, canon_address failure.\n");
       add_wild_read (bb_info);
-      return;
+      return 0;
     }
 
   if (GET_MODE (mem) == BLKmode)
@@ -2125,55 +2086,87 @@ check_mem_read_rtx (rtx *loc, bb_info_t bb_info)
   else
     width = GET_MODE_SIZE (GET_MODE (mem));
 
-  if (!endpoint_representable_p (offset, known_eq (width, -1) ? 1 : width))
-    {
-      if (dump_file && (dump_flags & TDF_DETAILS))
-	fprintf (dump_file, " adding wild read, due to overflow.\n");
-      add_wild_read (bb_info);
-      return;
-    }
-
-  read_info = read_info_type_pool.allocate ();
+  read_info = (read_info_t) pool_alloc (read_info_pool);
   read_info->group_id = group_id;
   read_info->mem = mem;
-  read_info->offset = offset;
-  read_info->width = width;
+  read_info->alias_set = spill_alias_set;
+  read_info->begin = offset;
+  read_info->end = offset + width;
   read_info->next = insn_info->read_rec;
   insn_info->read_rec = read_info;
-  if (group_id < 0)
-    mem_addr = base->val_rtx;
+  /* For alias_set != 0 canon_true_dependence should be never called.  */
+  if (spill_alias_set)
+    mem_addr = NULL_RTX;
   else
     {
-      group_info *group = rtx_group_vec[group_id];
-      mem_addr = group->canon_base_addr;
+      if (group_id < 0)
+	mem_addr = base->val_rtx;
+      else
+	{
+	  group_info_t group
+	    = VEC_index (group_info_t, rtx_group_vec, group_id);
+	  mem_addr = group->canon_base_addr;
+	}
+      if (offset)
+	mem_addr = plus_constant (mem_addr, offset);
     }
-  if (maybe_ne (offset, 0))
-    mem_addr = plus_constant (get_address_mode (mem), mem_addr, offset);
 
-  if (group_id >= 0)
+  /* We ignore the clobbers in store_info.  The is mildly aggressive,
+     but there really should not be a clobber followed by a read.  */
+
+  if (spill_alias_set)
+    {
+      insn_info_t i_ptr = active_local_stores;
+      insn_info_t last = NULL;
+
+      if (dump_file)
+	fprintf (dump_file, " processing spill load %d\n",
+		 (int) spill_alias_set);
+
+      while (i_ptr)
+	{
+	  store_info_t store_info = i_ptr->store_rec;
+
+	  /* Skip the clobbers.  */
+	  while (!store_info->is_set)
+	    store_info = store_info->next;
+
+	  if (store_info->alias_set == spill_alias_set)
+	    {
+	      if (dump_file)
+		dump_insn_info ("removing from active", i_ptr);
+
+	      if (last)
+		last->next_local_store = i_ptr->next_local_store;
+	      else
+		active_local_stores = i_ptr->next_local_store;
+	    }
+	  else
+	    last = i_ptr;
+	  i_ptr = i_ptr->next_local_store;
+	}
+    }
+  else if (group_id >= 0)
     {
       /* This is the restricted case where the base is a constant or
 	 the frame pointer and offset is a constant.  */
       insn_info_t i_ptr = active_local_stores;
       insn_info_t last = NULL;
 
-      if (dump_file && (dump_flags & TDF_DETAILS))
+      if (dump_file)
 	{
-	  if (!known_size_p (width))
+	  if (width == -1)
 	    fprintf (dump_file, " processing const load gid=%d[BLK]\n",
 		     group_id);
 	  else
-	    {
-	      fprintf (dump_file, " processing const load gid=%d", group_id);
-	      print_range (dump_file, offset, width);
-	      fprintf (dump_file, "\n");
-	    }
+	    fprintf (dump_file, " processing const load gid=%d[%d..%d)\n",
+		     group_id, (int)offset, (int)(offset+width));
 	}
 
       while (i_ptr)
 	{
 	  bool remove = false;
-	  store_info *store_info = i_ptr->store_rec;
+	  store_info_t store_info = i_ptr->store_rec;
 
 	  /* Skip the clobbers.  */
 	  while (!store_info->is_set)
@@ -2187,38 +2180,37 @@ check_mem_read_rtx (rtx *loc, bb_info_t bb_info)
 	      = canon_true_dependence (store_info->mem,
 				       GET_MODE (store_info->mem),
 				       store_info->mem_addr,
-				       mem, mem_addr);
+				       mem, mem_addr, rtx_varies_p);
 
 	  else if (group_id == store_info->group_id)
 	    {
 	      /* This is a block mode load.  We may get lucky and
 		 canon_true_dependence may save the day.  */
-	      if (!known_size_p (width))
+	      if (width == -1)
 		remove
 		  = canon_true_dependence (store_info->mem,
 					   GET_MODE (store_info->mem),
 					   store_info->mem_addr,
-					   mem, mem_addr);
+					   mem, mem_addr, rtx_varies_p);
 
 	      /* If this read is just reading back something that we just
 		 stored, rewrite the read.  */
 	      else
 		{
 		  if (store_info->rhs
-		      && known_subrange_p (offset, width, store_info->offset,
-					   store_info->width)
+		      && offset >= store_info->begin
+		      && offset + width <= store_info->end
 		      && all_positions_needed_p (store_info,
-						 offset - store_info->offset,
+						 offset - store_info->begin,
 						 width)
 		      && replace_read (store_info, i_ptr, read_info,
 				       insn_info, loc, bb_info->regs_live))
-		    return;
+		    return 0;
 
 		  /* The bases are the same, just see if the offsets
-		     could overlap.  */
-		  if (ranges_maybe_overlap_p (offset, width,
-					      store_info->offset,
-					      store_info->width))
+		     overlap.  */
+		  if ((offset < store_info->end)
+		      && (offset + width > store_info->begin))
 		    remove = true;
 		}
 	    }
@@ -2230,10 +2222,9 @@ check_mem_read_rtx (rtx *loc, bb_info_t bb_info)
 
 	  if (remove)
 	    {
-	      if (dump_file && (dump_flags & TDF_DETAILS))
+	      if (dump_file)
 		dump_insn_info ("removing from active", i_ptr);
 
-	      active_local_stores_len--;
 	      if (last)
 		last->next_local_store = i_ptr->next_local_store;
 	      else
@@ -2248,7 +2239,7 @@ check_mem_read_rtx (rtx *loc, bb_info_t bb_info)
     {
       insn_info_t i_ptr = active_local_stores;
       insn_info_t last = NULL;
-      if (dump_file && (dump_flags & TDF_DETAILS))
+      if (dump_file)
 	{
 	  fprintf (dump_file, " processing cselib load mem:");
 	  print_inline_rtx (dump_file, mem, 0);
@@ -2258,9 +2249,9 @@ check_mem_read_rtx (rtx *loc, bb_info_t bb_info)
       while (i_ptr)
 	{
 	  bool remove = false;
-	  store_info *store_info = i_ptr->store_rec;
+	  store_info_t store_info = i_ptr->store_rec;
 
-	  if (dump_file && (dump_flags & TDF_DETAILS))
+	  if (dump_file)
 	    fprintf (dump_file, " processing cselib load against insn %d\n",
 		     INSN_UID (i_ptr->insn));
 
@@ -2273,25 +2264,26 @@ check_mem_read_rtx (rtx *loc, bb_info_t bb_info)
 	  if (store_info->rhs
 	      && store_info->group_id == -1
 	      && store_info->cse_base == base
-	      && known_subrange_p (offset, width, store_info->offset,
-				   store_info->width)
+	      && width != -1
+	      && offset >= store_info->begin
+	      && offset + width <= store_info->end
 	      && all_positions_needed_p (store_info,
-					 offset - store_info->offset, width)
+					 offset - store_info->begin, width)
 	      && replace_read (store_info, i_ptr,  read_info, insn_info, loc,
 			       bb_info->regs_live))
-	    return;
+	    return 0;
 
-	  remove = canon_true_dependence (store_info->mem,
-					  GET_MODE (store_info->mem),
-					  store_info->mem_addr,
-					  mem, mem_addr);
+	  if (!store_info->alias_set)
+	    remove = canon_true_dependence (store_info->mem,
+					    GET_MODE (store_info->mem),
+					    store_info->mem_addr,
+					    mem, mem_addr, rtx_varies_p);
 
 	  if (remove)
 	    {
-	      if (dump_file && (dump_flags & TDF_DETAILS))
+	      if (dump_file)
 		dump_insn_info ("removing from active", i_ptr);
 
-	      active_local_stores_len--;
 	      if (last)
 		last->next_local_store = i_ptr->next_local_store;
 	      else
@@ -2302,22 +2294,17 @@ check_mem_read_rtx (rtx *loc, bb_info_t bb_info)
 	  i_ptr = i_ptr->next_local_store;
 	}
     }
+  return 0;
 }
 
-/* A note_uses callback in which DATA points the INSN_INFO for
+/* A for_each_rtx callback in which DATA points the INSN_INFO for
    as check_mem_read_rtx.  Nullify the pointer if i_m_r_m_r returns
    true for any part of *LOC.  */
 
 static void
 check_mem_read_use (rtx *loc, void *data)
 {
-  subrtx_ptr_iterator::array_type array;
-  FOR_EACH_SUBRTX_PTR (iter, array, loc, NONCONST)
-    {
-      rtx *loc = *iter;
-      if (MEM_P (*loc))
-	check_mem_read_rtx (loc, (bb_info_t) data);
-    }
+  for_each_rtx (loc, check_mem_read_rtx, data);
 }
 
 
@@ -2327,27 +2314,21 @@ check_mem_read_use (rtx *loc, void *data)
 static bool
 get_call_args (rtx call_insn, tree fn, rtx *args, int nargs)
 {
-  CUMULATIVE_ARGS args_so_far_v;
-  cumulative_args_t args_so_far;
+  CUMULATIVE_ARGS args_so_far;
   tree arg;
   int idx;
 
-  INIT_CUMULATIVE_ARGS (args_so_far_v, TREE_TYPE (fn), NULL_RTX, 0, 3);
-  args_so_far = pack_cumulative_args (&args_so_far_v);
+  INIT_CUMULATIVE_ARGS (args_so_far, TREE_TYPE (fn), NULL_RTX, 0, 3);
 
   arg = TYPE_ARG_TYPES (TREE_TYPE (fn));
   for (idx = 0;
        arg != void_list_node && idx < nargs;
        arg = TREE_CHAIN (arg), idx++)
     {
-      scalar_int_mode mode;
-      rtx reg, link, tmp;
-
-      if (!is_int_mode (TYPE_MODE (TREE_VALUE (arg)), &mode))
-	return false;
-
-      reg = targetm.calls.function_arg (args_so_far, mode, NULL_TREE, true);
-      if (!reg || !REG_P (reg) || GET_MODE (reg) != mode)
+      enum machine_mode mode = TYPE_MODE (TREE_VALUE (arg));
+      rtx reg = FUNCTION_ARG (args_so_far, mode, NULL_TREE, 1), link, tmp;
+      if (!reg || !REG_P (reg) || GET_MODE (reg) != mode
+	  || GET_MODE_CLASS (mode) != MODE_INT)
 	return false;
 
       for (link = CALL_INSN_FUNCTION_USAGE (call_insn);
@@ -2355,14 +2336,15 @@ get_call_args (rtx call_insn, tree fn, rtx *args, int nargs)
 	   link = XEXP (link, 1))
 	if (GET_CODE (XEXP (link, 0)) == USE)
 	  {
-	    scalar_int_mode arg_mode;
 	    args[idx] = XEXP (XEXP (link, 0), 0);
 	    if (REG_P (args[idx])
 		&& REGNO (args[idx]) == REGNO (reg)
 		&& (GET_MODE (args[idx]) == mode
-		    || (is_int_mode (GET_MODE (args[idx]), &arg_mode)
-			&& (GET_MODE_SIZE (arg_mode) <= UNITS_PER_WORD)
-			&& (GET_MODE_SIZE (arg_mode) > GET_MODE_SIZE (mode)))))
+		    || (GET_MODE_CLASS (GET_MODE (args[idx])) == MODE_INT
+			&& (GET_MODE_SIZE (GET_MODE (args[idx]))
+			    <= UNITS_PER_WORD)
+			&& (GET_MODE_SIZE (GET_MODE (args[idx]))
+			    > GET_MODE_SIZE (mode)))))
 	      break;
 	  }
       if (!link)
@@ -2373,43 +2355,32 @@ get_call_args (rtx call_insn, tree fn, rtx *args, int nargs)
 	{
 	  if (!tmp || !CONST_INT_P (tmp))
 	    return false;
-	  tmp = gen_int_mode (INTVAL (tmp), mode);
+	  tmp = GEN_INT (trunc_int_for_mode (INTVAL (tmp), mode));
 	}
       if (tmp)
 	args[idx] = tmp;
 
-      targetm.calls.function_arg_advance (args_so_far, mode, NULL_TREE, true);
+      FUNCTION_ARG_ADVANCE (args_so_far, mode, NULL_TREE, 1);
     }
   if (arg != void_list_node || idx != nargs)
     return false;
   return true;
 }
 
-/* Return a bitmap of the fixed registers contained in IN.  */
-
-static bitmap
-copy_fixed_regs (const_bitmap in)
-{
-  bitmap ret;
-
-  ret = ALLOC_REG_SET (NULL);
-  bitmap_and (ret, in, fixed_reg_set_regset);
-  return ret;
-}
 
 /* Apply record_store to all candidate stores in INSN.  Mark INSN
    if some part of it is not a candidate store and assigns to a
    non-register target.  */
 
 static void
-scan_insn (bb_info_t bb_info, rtx_insn *insn)
+scan_insn (bb_info_t bb_info, rtx insn)
 {
   rtx body;
-  insn_info_type *insn_info = insn_info_type_pool.allocate ();
+  insn_info_t insn_info = (insn_info_t) pool_alloc (insn_info_pool);
   int mems_found = 0;
-  memset (insn_info, 0, sizeof (struct insn_info_type));
+  memset (insn_info, 0, sizeof (struct insn_info));
 
-  if (dump_file && (dump_flags & TDF_DETAILS))
+  if (dump_file)
     fprintf (dump_file, "\n**scanning insn=%d\n",
 	     INSN_UID (insn));
 
@@ -2423,13 +2394,23 @@ scan_insn (bb_info_t bb_info, rtx_insn *insn)
       return;
     }
 
+  /* Cselib clears the table for this case, so we have to essentially
+     do the same.  */
+  if (NONJUMP_INSN_P (insn)
+      && GET_CODE (PATTERN (insn)) == ASM_OPERANDS
+      && MEM_VOLATILE_P (PATTERN (insn)))
+    {
+      add_wild_read (bb_info);
+      insn_info->cannot_delete = true;
+      return;
+    }
+
   /* Look at all of the uses in the insn.  */
   note_uses (&PATTERN (insn), check_mem_read_use, bb_info);
 
   if (CALL_P (insn))
     {
       bool const_call;
-      rtx call, sym;
       tree memset_call = NULL_TREE;
 
       insn_info->cannot_delete = true;
@@ -2439,32 +2420,41 @@ scan_insn (bb_info_t bb_info, rtx_insn *insn)
 	 been pushed onto the stack.
 	 memset and bzero don't read memory either.  */
       const_call = RTL_CONST_CALL_P (insn);
-      if (!const_call
-	  && (call = get_call_rtx_from (insn))
-	  && (sym = XEXP (XEXP (call, 0), 0))
-	  && GET_CODE (sym) == SYMBOL_REF
-	  && SYMBOL_REF_DECL (sym)
-	  && TREE_CODE (SYMBOL_REF_DECL (sym)) == FUNCTION_DECL
-	  && fndecl_built_in_p (SYMBOL_REF_DECL (sym), BUILT_IN_MEMSET))
-	memset_call = SYMBOL_REF_DECL (sym);
-
+      if (!const_call)
+	{
+	  rtx call = PATTERN (insn);
+	  if (GET_CODE (call) == PARALLEL)
+	    call = XVECEXP (call, 0, 0);
+	  if (GET_CODE (call) == SET)
+	    call = SET_SRC (call);
+	  if (GET_CODE (call) == CALL
+	      && MEM_P (XEXP (call, 0))
+	      && GET_CODE (XEXP (XEXP (call, 0), 0)) == SYMBOL_REF)
+	    {
+	      rtx symbol = XEXP (XEXP (call, 0), 0);
+	      if (SYMBOL_REF_DECL (symbol)
+		  && TREE_CODE (SYMBOL_REF_DECL (symbol)) == FUNCTION_DECL)
+		{
+		  if ((DECL_BUILT_IN_CLASS (SYMBOL_REF_DECL (symbol))
+		       == BUILT_IN_NORMAL
+		       && (DECL_FUNCTION_CODE (SYMBOL_REF_DECL (symbol))
+			   == BUILT_IN_MEMSET))
+		      || SYMBOL_REF_DECL (symbol) == block_clear_fn)
+		    memset_call = SYMBOL_REF_DECL (symbol);
+		}
+	    }
+	}
       if (const_call || memset_call)
 	{
 	  insn_info_t i_ptr = active_local_stores;
 	  insn_info_t last = NULL;
 
-	  if (dump_file && (dump_flags & TDF_DETAILS))
+	  if (dump_file)
 	    fprintf (dump_file, "%s call %d\n",
 		     const_call ? "const" : "memset", INSN_UID (insn));
 
 	  /* See the head comment of the frame_read field.  */
-	  if (reload_completed
-	      /* Tail calls are storing their arguments using
-		 arg pointer.  If it is a frame pointer on the target,
-		 even before reload we need to kill frame pointer based
-		 stores.  */
-	      || (SIBLING_CALL_P (insn)
-		  && HARD_FRAME_POINTER_IS_ARG_POINTER))
+	  if (reload_completed)
 	    insn_info->frame_read = true;
 
 	  /* Loop over the active stores and remove those which are
@@ -2480,23 +2470,23 @@ scan_insn (bb_info_t bb_info, rtx_insn *insn)
 	      /* If the frame is read, the frame related stores are killed.  */
 	      else if (insn_info->frame_read)
 		{
-		  store_info *store_info = i_ptr->store_rec;
+		  store_info_t store_info = i_ptr->store_rec;
 
 		  /* Skip the clobbers.  */
 		  while (!store_info->is_set)
 		    store_info = store_info->next;
 
 		  if (store_info->group_id >= 0
-		      && rtx_group_vec[store_info->group_id]->frame_related)
+		      && VEC_index (group_info_t, rtx_group_vec,
+				    store_info->group_id)->frame_related)
 		    remove_store = true;
 		}
 
 	      if (remove_store)
 		{
-		  if (dump_file && (dump_flags & TDF_DETAILS))
+		  if (dump_file)
 		    dump_insn_info ("removing from active", i_ptr);
 
-		  active_local_stores_len--;
 		  if (last)
 		    last->next_local_store = i_ptr->next_local_store;
 		  else
@@ -2517,41 +2507,23 @@ scan_insn (bb_info_t bb_info, rtx_insn *insn)
 		  && INTVAL (args[2]) > 0)
 		{
 		  rtx mem = gen_rtx_MEM (BLKmode, args[0]);
-		  set_mem_size (mem, INTVAL (args[2]));
-		  body = gen_rtx_SET (mem, args[1]);
+		  set_mem_size (mem, args[2]);
+		  body = gen_rtx_SET (VOIDmode, mem, args[1]);
 		  mems_found += record_store (body, bb_info);
-		  if (dump_file && (dump_flags & TDF_DETAILS))
+		  if (dump_file)
 		    fprintf (dump_file, "handling memset as BLKmode store\n");
 		  if (mems_found == 1)
 		    {
-		      if (active_local_stores_len++
-			  >= PARAM_VALUE (PARAM_MAX_DSE_ACTIVE_LOCAL_STORES))
-			{
-			  active_local_stores_len = 1;
-			  active_local_stores = NULL;
-			}
-		      insn_info->fixed_regs_live
-			= copy_fixed_regs (bb_info->regs_live);
 		      insn_info->next_local_store = active_local_stores;
 		      active_local_stores = insn_info;
 		    }
 		}
-	      else
-		clear_rhs_from_active_local_stores ();
 	    }
 	}
-      else if (SIBLING_CALL_P (insn)
-	       && (reload_completed || HARD_FRAME_POINTER_IS_ARG_POINTER))
-	/* Arguments for a sibling call that are pushed to memory are passed
-	   using the incoming argument pointer of the current function.  After
-	   reload that might be (and likely is) frame pointer based.  And, if
-	   it is a frame pointer on the target, even before reload we need to
-	   kill frame pointer based stores.  */
-	add_wild_read (bb_info);
+
       else
-	/* Every other call, including pure functions, may read any memory
-           that is not relative to the frame.  */
-        add_non_frame_wild_read (bb_info);
+	/* Every other call, including pure functions, may read memory.  */
+	add_wild_read (bb_info);
 
       return;
     }
@@ -2560,7 +2532,7 @@ scan_insn (bb_info_t bb_info, rtx_insn *insn)
      them.  */
   if ((GET_CODE (PATTERN (insn)) == CLOBBER)
       || volatile_refs_p (PATTERN (insn))
-      || (!cfun->can_delete_dead_exceptions && !insn_nothrow_p (insn))
+      || insn_could_throw_p (insn)
       || (RTX_FRAME_RELATED_P (insn))
       || find_reg_note (insn, REG_FRAME_RELATED_EXPR, NULL_RTX))
     insn_info->cannot_delete = true;
@@ -2575,7 +2547,7 @@ scan_insn (bb_info_t bb_info, rtx_insn *insn)
   else
     mems_found += record_store (body, bb_info);
 
-  if (dump_file && (dump_flags & TDF_DETAILS))
+  if (dump_file)
     fprintf (dump_file, "mems_found = %d, cannot_delete = %s\n",
 	     mems_found, insn_info->cannot_delete ? "true" : "false");
 
@@ -2585,13 +2557,6 @@ scan_insn (bb_info_t bb_info, rtx_insn *insn)
      it as cannot delete.  This simplifies the processing later.  */
   if (mems_found == 1)
     {
-      if (active_local_stores_len++
-	  >= PARAM_VALUE (PARAM_MAX_DSE_ACTIVE_LOCAL_STORES))
-	{
-	  active_local_stores_len = 1;
-	  active_local_stores = NULL;
-	}
-      insn_info->fixed_regs_live = copy_fixed_regs (bb_info->regs_live);
       insn_info->next_local_store = active_local_stores;
       active_local_stores = insn_info;
     }
@@ -2612,11 +2577,11 @@ remove_useless_values (cselib_val *base)
 
   while (insn_info)
     {
-      store_info *store_info = insn_info->store_rec;
+      store_info_t store_info = insn_info->store_rec;
       bool del = false;
 
       /* If ANY of the store_infos match the cselib group that is
-	 being deleted, then the insn cannot be deleted.  */
+	 being deleted, then the insn can not be deleted.  */
       while (store_info)
 	{
 	  if ((store_info->group_id == -1)
@@ -2630,7 +2595,6 @@ remove_useless_values (cselib_val *base)
 
       if (del)
 	{
-	  active_local_stores_len--;
 	  if (last)
 	    last->next_local_store = insn_info->next_local_store;
 	  else
@@ -2651,19 +2615,19 @@ static void
 dse_step1 (void)
 {
   basic_block bb;
-  bitmap regs_live = BITMAP_ALLOC (&reg_obstack);
+  bitmap regs_live = BITMAP_ALLOC (NULL);
 
   cselib_init (0);
   all_blocks = BITMAP_ALLOC (NULL);
   bitmap_set_bit (all_blocks, ENTRY_BLOCK);
   bitmap_set_bit (all_blocks, EXIT_BLOCK);
 
-  FOR_ALL_BB_FN (bb, cfun)
+  FOR_ALL_BB (bb)
     {
       insn_info_t ptr;
-      bb_info_t bb_info = dse_bb_info_type_pool.allocate ();
+      bb_info_t bb_info = (bb_info_t) pool_alloc (bb_info_pool);
 
-      memset (bb_info, 0, sizeof (dse_bb_info_type));
+      memset (bb_info, 0, sizeof (struct bb_info));
       bitmap_set_bit (all_blocks, bb->index);
       bb_info->regs_live = regs_live;
 
@@ -2675,10 +2639,12 @@ dse_step1 (void)
 
       if (bb->index >= NUM_FIXED_BLOCKS)
 	{
-	  rtx_insn *insn;
+	  rtx insn;
 
+	  cse_store_info_pool
+	    = create_alloc_pool ("cse_store_info_pool",
+				 sizeof (struct store_info), 100);
 	  active_local_stores = NULL;
-	  active_local_stores_len = 0;
 	  cselib_clear_table ();
 
 	  /* Scan the insns.  */
@@ -2703,23 +2669,27 @@ dse_step1 (void)
 	  if (stores_off_frame_dead_at_return
 	      && (EDGE_COUNT (bb->succs) == 0
 		  || (single_succ_p (bb)
-		      && single_succ (bb) == EXIT_BLOCK_PTR_FOR_FN (cfun)
+		      && single_succ (bb) == EXIT_BLOCK_PTR
 		      && ! crtl->calls_eh_return)))
 	    {
 	      insn_info_t i_ptr = active_local_stores;
 	      while (i_ptr)
 		{
-		  store_info *store_info = i_ptr->store_rec;
+		  store_info_t store_info = i_ptr->store_rec;
 
 		  /* Skip the clobbers.  */
 		  while (!store_info->is_set)
 		    store_info = store_info->next;
-		  if (store_info->group_id >= 0)
-		    {
-		      group_info *group = rtx_group_vec[store_info->group_id];
-		      if (group->frame_related && !i_ptr->cannot_delete)
-			delete_dead_store_insn (i_ptr);
-		    }
+		  if (store_info->alias_set && !i_ptr->cannot_delete)
+		    delete_dead_store_insn (i_ptr);
+		  else
+		    if (store_info->group_id >= 0)
+		      {
+			group_info_t group
+			  = VEC_index (group_info_t, rtx_group_vec, store_info->group_id);
+			if (group->frame_related && !i_ptr->cannot_delete)
+			  delete_dead_store_insn (i_ptr);
+		      }
 
 		  i_ptr = i_ptr->next_local_store;
 		}
@@ -2729,12 +2699,12 @@ dse_step1 (void)
 	     replace_read.  Cselib is finished with this block.  */
 	  while (deferred_change_list)
 	    {
-	      deferred_change *next = deferred_change_list->next;
+	      deferred_change_t next = deferred_change_list->next;
 
 	      /* There is no reason to validate this change.  That was
 		 done earlier.  */
 	      *deferred_change_list->loc = deferred_change_list->reg;
-	      deferred_change_pool.remove (deferred_change_list);
+	      pool_free (deferred_change_pool, deferred_change_list);
 	      deferred_change_list = next;
 	    }
 
@@ -2746,7 +2716,7 @@ dse_step1 (void)
 	    {
 	      if (ptr->contains_cselib_groups)
 		{
-		  store_info *s_info = ptr->store_rec;
+		  store_info_t s_info = ptr->store_rec;
 		  while (s_info && !s_info->is_set)
 		    s_info = s_info->next;
 		  if (s_info
@@ -2754,7 +2724,7 @@ dse_step1 (void)
 		      && s_info->redundant_reason->insn
 		      && !ptr->cannot_delete)
 		    {
-		      if (dump_file && (dump_flags & TDF_DETAILS))
+		      if (dump_file)
 			fprintf (dump_file, "Locally deleting insn %d "
 					    "because insn %d stores the "
 					    "same value and couldn't be "
@@ -2763,11 +2733,13 @@ dse_step1 (void)
 				 INSN_UID (s_info->redundant_reason->insn));
 		      delete_dead_store_insn (ptr);
 		    }
+		  if (s_info)
+		    s_info->redundant_reason = NULL;
 		  free_store_info (ptr);
 		}
 	      else
 		{
-		  store_info *s_info;
+		  store_info_t s_info;
 
 		  /* Free at least positions_needed bitmaps.  */
 		  for (s_info = ptr->store_rec; s_info; s_info = s_info->next)
@@ -2780,14 +2752,14 @@ dse_step1 (void)
 	      ptr = ptr->prev_insn;
 	    }
 
-	  cse_store_info_pool.release ();
+	  free_alloc_pool (cse_store_info_pool);
 	}
       bb_info->regs_live = NULL;
     }
 
   BITMAP_FREE (regs_live);
   cselib_finish ();
-  rtx_group_table->empty ();
+  htab_empty (rtx_group_table);
 }
 
 
@@ -2803,9 +2775,9 @@ static void
 dse_step2_init (void)
 {
   unsigned int i;
-  group_info *group;
+  group_info_t group;
 
-  FOR_EACH_VEC_ELT (rtx_group_vec, i, group)
+  for (i = 0; VEC_iterate (group_info_t, rtx_group_vec, i, group); i++)
     {
       /* For all non stack related bases, we only consider a store to
 	 be deletable if there are two or more stores for that
@@ -2825,18 +2797,16 @@ dse_step2_init (void)
 	{
 	  bitmap_ior_into (group->store2_n, group->store1_n);
 	  bitmap_ior_into (group->store2_p, group->store1_p);
-	  if (dump_file && (dump_flags & TDF_DETAILS))
+	  if (dump_file)
 	    fprintf (dump_file, "group %d is frame related ", i);
 	}
 
       group->offset_map_size_n++;
-      group->offset_map_n = XOBNEWVEC (&dse_obstack, int,
-				       group->offset_map_size_n);
+      group->offset_map_n = XNEWVEC (int, group->offset_map_size_n);
       group->offset_map_size_p++;
-      group->offset_map_p = XOBNEWVEC (&dse_obstack, int,
-				       group->offset_map_size_p);
+      group->offset_map_p = XNEWVEC (int, group->offset_map_size_p);
       group->process_globally = false;
-      if (dump_file && (dump_flags & TDF_DETAILS))
+      if (dump_file)
 	{
 	  fprintf (dump_file, "group %d(%d+%d): ", i,
 		   (int)bitmap_count_bits (group->store2_n),
@@ -2848,42 +2818,83 @@ dse_step2_init (void)
 }
 
 
-/* Init the offset tables.  */
+/* Init the offset tables for the normal case.  */
 
 static bool
-dse_step2 (void)
+dse_step2_nospill (void)
 {
   unsigned int i;
-  group_info *group;
+  group_info_t group;
   /* Position 0 is unused because 0 is used in the maps to mean
      unused.  */
   current_position = 1;
-  FOR_EACH_VEC_ELT (rtx_group_vec, i, group)
+
+  for (i = 0; VEC_iterate (group_info_t, rtx_group_vec, i, group); i++)
     {
       bitmap_iterator bi;
       unsigned int j;
 
-      memset (group->offset_map_n, 0, sizeof (int) * group->offset_map_size_n);
-      memset (group->offset_map_p, 0, sizeof (int) * group->offset_map_size_p);
+      if (group == clear_alias_group)
+	continue;
+
+      memset (group->offset_map_n, 0, sizeof(int) * group->offset_map_size_n);
+      memset (group->offset_map_p, 0, sizeof(int) * group->offset_map_size_p);
       bitmap_clear (group->group_kill);
 
       EXECUTE_IF_SET_IN_BITMAP (group->store2_n, 0, j, bi)
 	{
 	  bitmap_set_bit (group->group_kill, current_position);
-          if (bitmap_bit_p (group->escaped_n, j))
-	    bitmap_set_bit (kill_on_calls, current_position);
 	  group->offset_map_n[j] = current_position++;
 	  group->process_globally = true;
 	}
       EXECUTE_IF_SET_IN_BITMAP (group->store2_p, 0, j, bi)
 	{
 	  bitmap_set_bit (group->group_kill, current_position);
-          if (bitmap_bit_p (group->escaped_p, j))
-	    bitmap_set_bit (kill_on_calls, current_position);
 	  group->offset_map_p[j] = current_position++;
 	  group->process_globally = true;
 	}
     }
+  return current_position != 1;
+}
+
+
+/* Init the offset tables for the spill case.  */
+
+static bool
+dse_step2_spill (void)
+{
+  unsigned int j;
+  group_info_t group = clear_alias_group;
+  bitmap_iterator bi;
+
+  /* Position 0 is unused because 0 is used in the maps to mean
+     unused.  */
+  current_position = 1;
+
+  if (dump_file)
+    {
+      bitmap_print (dump_file, clear_alias_sets,
+		    "clear alias sets              ", "\n");
+      bitmap_print (dump_file, disqualified_clear_alias_sets,
+		    "disqualified clear alias sets ", "\n");
+    }
+
+  memset (group->offset_map_n, 0, sizeof(int) * group->offset_map_size_n);
+  memset (group->offset_map_p, 0, sizeof(int) * group->offset_map_size_p);
+  bitmap_clear (group->group_kill);
+
+  /* Remove the disqualified positions from the store2_p set.  */
+  bitmap_and_compl_into (group->store2_p, disqualified_clear_alias_sets);
+
+  /* We do not need to process the store2_n set because
+     alias_sets are always positive.  */
+  EXECUTE_IF_SET_IN_BITMAP (group->store2_p, 0, j, bi)
+    {
+      bitmap_set_bit (group->group_kill, current_position);
+      group->offset_map_p[j] = current_position++;
+      group->process_globally = true;
+    }
+
   return current_position != 1;
 }
 
@@ -2896,11 +2907,90 @@ dse_step2 (void)
 ----------------------------------------------------------------------------*/
 
 
+/* Note that this is NOT a general purpose function.  Any mem that has
+   an alias set registered here expected to be COMPLETELY unaliased:
+   i.e it's addresses are not and need not be examined.
+
+   It is known that all references to this address will have this
+   alias set and there are NO other references to this address in the
+   function.
+
+   Currently the only place that is known to be clean enough to use
+   this interface is the code that assigns the spill locations.
+
+   All of the mems that have alias_sets registered are subjected to a
+   very powerful form of dse where function calls, volatile reads and
+   writes, and reads from random location are not taken into account.
+
+   It is also assumed that these locations go dead when the function
+   returns.  This assumption could be relaxed if there were found to
+   be places that this assumption was not correct.
+
+   The MODE is passed in and saved.  The mode of each load or store to
+   a mem with ALIAS_SET is checked against MEM.  If the size of that
+   load or store is different from MODE, processing is halted on this
+   alias set.  For the vast majority of aliases sets, all of the loads
+   and stores will use the same mode.  But vectors are treated
+   differently: the alias set is established for the entire vector,
+   but reload will insert loads and stores for individual elements and
+   we do not necessarily have the information to track those separate
+   elements.  So when we see a mode mismatch, we just bail.  */
+
+
+void
+dse_record_singleton_alias_set (alias_set_type alias_set,
+				enum machine_mode mode)
+{
+  struct clear_alias_mode_holder tmp_holder;
+  struct clear_alias_mode_holder *entry;
+  void **slot;
+
+  /* If we are not going to run dse, we need to return now or there
+     will be problems with allocating the bitmaps.  */
+  if ((!gate_dse()) || !alias_set)
+    return;
+
+  if (!clear_alias_sets)
+    {
+      clear_alias_sets = BITMAP_ALLOC (NULL);
+      disqualified_clear_alias_sets = BITMAP_ALLOC (NULL);
+      clear_alias_mode_table = htab_create (11, clear_alias_mode_hash,
+					    clear_alias_mode_eq, NULL);
+      clear_alias_mode_pool = create_alloc_pool ("clear_alias_mode_pool",
+						 sizeof (struct clear_alias_mode_holder), 100);
+    }
+
+  bitmap_set_bit (clear_alias_sets, alias_set);
+
+  tmp_holder.alias_set = alias_set;
+
+  slot = htab_find_slot (clear_alias_mode_table, &tmp_holder, INSERT);
+  gcc_assert (*slot == NULL);
+
+  *slot = entry =
+    (struct clear_alias_mode_holder *) pool_alloc (clear_alias_mode_pool);
+  entry->alias_set = alias_set;
+  entry->mode = mode;
+}
+
+
+/* Remove ALIAS_SET from the sets of stack slots being considered.  */
+
+void
+dse_invalidate_singleton_alias_set (alias_set_type alias_set)
+{
+  if ((!gate_dse()) || !alias_set)
+    return;
+
+  bitmap_clear_bit (clear_alias_sets, alias_set);
+}
+
+
 /* Look up the bitmap index for OFFSET in GROUP_INFO.  If it is not
    there, return 0.  */
 
 static int
-get_bitmap_index (group_info *group_info, HOST_WIDE_INT offset)
+get_bitmap_index (group_info_t group_info, HOST_WIDE_INT offset)
 {
   if (offset < 0)
     {
@@ -2922,29 +3012,46 @@ get_bitmap_index (group_info *group_info, HOST_WIDE_INT offset)
    may be NULL. */
 
 static void
-scan_stores (store_info *store_info, bitmap gen, bitmap kill)
+scan_stores_nospill (store_info_t store_info, bitmap gen, bitmap kill)
 {
   while (store_info)
     {
-      HOST_WIDE_INT i, offset, width;
-      group_info *group_info
-	= rtx_group_vec[store_info->group_id];
-      /* We can (conservatively) ignore stores whose bounds aren't known;
-	 they simply don't generate new global dse opportunities.  */
-      if (group_info->process_globally
-	  && store_info->offset.is_constant (&offset)
-	  && store_info->width.is_constant (&width))
+      HOST_WIDE_INT i;
+      group_info_t group_info
+	= VEC_index (group_info_t, rtx_group_vec, store_info->group_id);
+      if (group_info->process_globally)
+	for (i = store_info->begin; i < store_info->end; i++)
+	  {
+	    int index = get_bitmap_index (group_info, i);
+	    if (index != 0)
+	      {
+		bitmap_set_bit (gen, index);
+		if (kill)
+		  bitmap_clear_bit (kill, index);
+	      }
+	  }
+      store_info = store_info->next;
+    }
+}
+
+
+/* Process the STORE_INFOs into the bitmaps into GEN and KILL.  KILL
+   may be NULL. */
+
+static void
+scan_stores_spill (store_info_t store_info, bitmap gen, bitmap kill)
+{
+  while (store_info)
+    {
+      if (store_info->alias_set)
 	{
-	  HOST_WIDE_INT end = offset + width;
-	  for (i = offset; i < end; i++)
+	  int index = get_bitmap_index (clear_alias_group,
+					store_info->alias_set);
+	  if (index != 0)
 	    {
-	      int index = get_bitmap_index (group_info, i);
-	      if (index != 0)
-		{
-		  bitmap_set_bit (gen, index);
-		  if (kill)
-		    bitmap_clear_bit (kill, index);
-		}
+	      bitmap_set_bit (gen, index);
+	      if (kill)
+		bitmap_clear_bit (kill, index);
 	    }
 	}
       store_info = store_info->next;
@@ -2956,16 +3063,16 @@ scan_stores (store_info *store_info, bitmap gen, bitmap kill)
    may be NULL.  */
 
 static void
-scan_reads (insn_info_t insn_info, bitmap gen, bitmap kill)
+scan_reads_nospill (insn_info_t insn_info, bitmap gen, bitmap kill)
 {
   read_info_t read_info = insn_info->read_rec;
   int i;
-  group_info *group;
+  group_info_t group;
 
   /* If this insn reads the frame, kill all the frame related stores.  */
   if (insn_info->frame_read)
     {
-      FOR_EACH_VEC_ELT (rtx_group_vec, i, group)
+      for (i = 0; VEC_iterate (group_info_t, rtx_group_vec, i, group); i++)
 	if (group->process_globally && group->frame_related)
 	  {
 	    if (kill)
@@ -2973,37 +3080,18 @@ scan_reads (insn_info_t insn_info, bitmap gen, bitmap kill)
 	    bitmap_and_compl_into (gen, group->group_kill);
 	  }
     }
-  if (insn_info->non_frame_wild_read)
-    {
-      /* Kill all non-frame related stores.  Kill all stores of variables that
-         escape.  */
-      if (kill)
-        bitmap_ior_into (kill, kill_on_calls);
-      bitmap_and_compl_into (gen, kill_on_calls);
-      FOR_EACH_VEC_ELT (rtx_group_vec, i, group)
-	if (group->process_globally && !group->frame_related)
-	  {
-	    if (kill)
-	      bitmap_ior_into (kill, group->group_kill);
-	    bitmap_and_compl_into (gen, group->group_kill);
-	  }
-    }
+
   while (read_info)
     {
-      FOR_EACH_VEC_ELT (rtx_group_vec, i, group)
+      for (i = 0; VEC_iterate (group_info_t, rtx_group_vec, i, group); i++)
 	{
 	  if (group->process_globally)
 	    {
 	      if (i == read_info->group_id)
 		{
-		  HOST_WIDE_INT offset, width;
-		  /* Reads with non-constant size kill all DSE opportunities
-		     in the group.  */
-		  if (!read_info->offset.is_constant (&offset)
-		      || !read_info->width.is_constant (&width)
-		      || !known_size_p (width))
+		  if (read_info->begin > read_info->end)
 		    {
-		      /* Handle block mode reads.  */
+		      /* Begin > end for block mode reads.  */
 		      if (kill)
 			bitmap_ior_into (kill, group->group_kill);
 		      bitmap_and_compl_into (gen, group->group_kill);
@@ -3013,8 +3101,7 @@ scan_reads (insn_info_t insn_info, bitmap gen, bitmap kill)
 		      /* The groups are the same, just process the
 			 offsets.  */
 		      HOST_WIDE_INT j;
-		      HOST_WIDE_INT end = offset + width;
-		      for (j = offset; j < end; j++)
+		      for (j = read_info->begin; j < read_info->end; j++)
 			{
 			  int index = get_bitmap_index (group, j);
 			  if (index != 0)
@@ -3036,15 +3123,40 @@ scan_reads (insn_info_t insn_info, bitmap gen, bitmap kill)
 		     base.  */
 		  if ((read_info->group_id < 0)
 		      && canon_true_dependence (group->base_mem,
-						GET_MODE (group->base_mem),
+						QImode,
 						group->canon_base_addr,
-						read_info->mem, NULL_RTX))
+						read_info->mem, NULL_RTX,
+						rtx_varies_p))
 		    {
 		      if (kill)
 			bitmap_ior_into (kill, group->group_kill);
 		      bitmap_and_compl_into (gen, group->group_kill);
 		    }
 		}
+	    }
+	}
+
+      read_info = read_info->next;
+    }
+}
+
+/* Process the READ_INFOs into the bitmaps into GEN and KILL.  KILL
+   may be NULL.  */
+
+static void
+scan_reads_spill (read_info_t read_info, bitmap gen, bitmap kill)
+{
+  while (read_info)
+    {
+      if (read_info->alias_set)
+	{
+	  int index = get_bitmap_index (clear_alias_group,
+					read_info->alias_set);
+	  if (index != 0)
+	    {
+	      if (kill)
+		bitmap_set_bit (kill, index);
+	      bitmap_clear_bit (gen, index);
 	    }
 	}
 
@@ -3090,12 +3202,16 @@ find_insn_before_first_wild_read (bb_info_t bb_info)
    anything that happens is hidden by the wild read.  */
 
 static void
-dse_step3_scan (basic_block bb)
+dse_step3_scan (bool for_spills, basic_block bb)
 {
   bb_info_t bb_info = bb_table[bb->index];
   insn_info_t insn_info;
 
-  insn_info = find_insn_before_first_wild_read (bb_info);
+  if (for_spills)
+    /* There are no wild reads in the spill case.  */
+    insn_info = bb_info->last_insn;
+  else
+    insn_info = find_insn_before_first_wild_read (bb_info);
 
   /* In the spill case or in the no_spill case if there is no wild
      read in the block, we will need a kill set.  */
@@ -3104,7 +3220,7 @@ dse_step3_scan (basic_block bb)
       if (bb_info->kill)
 	bitmap_clear (bb_info->kill);
       else
-	bb_info->kill = BITMAP_ALLOC (&dse_bitmap_obstack);
+	bb_info->kill = BITMAP_ALLOC (NULL);
     }
   else
     if (bb_info->kill)
@@ -3116,8 +3232,17 @@ dse_step3_scan (basic_block bb)
 	 this phase.  */
       if (insn_info->insn && INSN_P (insn_info->insn))
 	{
-	  scan_stores (insn_info->store_rec, bb_info->gen, bb_info->kill);
-	  scan_reads (insn_info, bb_info->gen, bb_info->kill);
+	  /* Process the read(s) last.  */
+	  if (for_spills)
+	    {
+	      scan_stores_spill (insn_info->store_rec, bb_info->gen, bb_info->kill);
+	      scan_reads_spill (insn_info->read_rec, bb_info->gen, bb_info->kill);
+	    }
+	  else
+	    {
+	      scan_stores_nospill (insn_info->store_rec, bb_info->gen, bb_info->kill);
+	      scan_reads_nospill (insn_info, bb_info->gen, bb_info->kill);
+	    }
 	}
 
       insn_info = insn_info->prev_insn;
@@ -3137,9 +3262,9 @@ dse_step3_exit_block_scan (bb_info_t bb_info)
   if (stores_off_frame_dead_at_return)
     {
       unsigned int i;
-      group_info *group;
+      group_info_t group;
 
-      FOR_EACH_VEC_ELT (rtx_group_vec, i, group)
+      for (i = 0; VEC_iterate (group_info_t, rtx_group_vec, i, group); i++)
 	{
 	  if (group->process_globally && group->frame_related)
 	    bitmap_ior_into (bb_info->gen, group->group_kill);
@@ -3159,9 +3284,9 @@ mark_reachable_blocks (sbitmap unreachable_blocks, basic_block bb)
   edge e;
   edge_iterator ei;
 
-  if (bitmap_bit_p (unreachable_blocks, bb->index))
+  if (TEST_BIT (unreachable_blocks, bb->index))
     {
-      bitmap_clear_bit (unreachable_blocks, bb->index);
+      RESET_BIT (unreachable_blocks, bb->index);
       FOR_EACH_EDGE (e, ei, bb->preds)
 	{
 	  mark_reachable_blocks (unreachable_blocks, e->src);
@@ -3172,30 +3297,30 @@ mark_reachable_blocks (sbitmap unreachable_blocks, basic_block bb)
 /* Build the transfer functions for the function.  */
 
 static void
-dse_step3 ()
+dse_step3 (bool for_spills)
 {
   basic_block bb;
+  sbitmap unreachable_blocks = sbitmap_alloc (last_basic_block);
   sbitmap_iterator sbi;
   bitmap all_ones = NULL;
   unsigned int i;
 
-  auto_sbitmap unreachable_blocks (last_basic_block_for_fn (cfun));
-  bitmap_ones (unreachable_blocks);
+  sbitmap_ones (unreachable_blocks);
 
-  FOR_ALL_BB_FN (bb, cfun)
+  FOR_ALL_BB (bb)
     {
       bb_info_t bb_info = bb_table[bb->index];
       if (bb_info->gen)
 	bitmap_clear (bb_info->gen);
       else
-	bb_info->gen = BITMAP_ALLOC (&dse_bitmap_obstack);
+	bb_info->gen = BITMAP_ALLOC (NULL);
 
       if (bb->index == ENTRY_BLOCK)
 	;
       else if (bb->index == EXIT_BLOCK)
 	dse_step3_exit_block_scan (bb_info);
       else
-	dse_step3_scan (bb);
+	dse_step3_scan (for_spills, bb);
       if (EDGE_COUNT (bb->succs) == 0)
 	mark_reachable_blocks (unreachable_blocks, bb);
 
@@ -3210,7 +3335,7 @@ dse_step3 ()
   /* For any block in an infinite loop, we must initialize the out set
      to all ones.  This could be expensive, but almost never occurs in
      practice. However, it is common in regression tests.  */
-  EXECUTE_IF_SET_IN_BITMAP (unreachable_blocks, 0, i, sbi)
+  EXECUTE_IF_SET_IN_SBITMAP (unreachable_blocks, 0, i, sbi)
     {
       if (bitmap_bit_p (all_blocks, i))
 	{
@@ -3218,15 +3343,15 @@ dse_step3 ()
 	  if (!all_ones)
 	    {
 	      unsigned int j;
-	      group_info *group;
+	      group_info_t group;
 
-	      all_ones = BITMAP_ALLOC (&dse_bitmap_obstack);
-	      FOR_EACH_VEC_ELT (rtx_group_vec, j, group)
+	      all_ones = BITMAP_ALLOC (NULL);
+	      for (j = 0; VEC_iterate (group_info_t, rtx_group_vec, j, group); j++)
 		bitmap_ior_into (all_ones, group->group_kill);
 	    }
 	  if (!bb_info->out)
 	    {
-	      bb_info->out = BITMAP_ALLOC (&dse_bitmap_obstack);
+	      bb_info->out = BITMAP_ALLOC (NULL);
 	      bitmap_copy (bb_info->out, all_ones);
 	    }
 	}
@@ -3234,6 +3359,7 @@ dse_step3 ()
 
   if (all_ones)
     BITMAP_FREE (all_ones);
+  sbitmap_free (unreachable_blocks);
 }
 
 
@@ -3261,7 +3387,7 @@ dse_confluence_0 (basic_block bb)
 
   if (!bb_info->out)
     {
-      bb_info->out = BITMAP_ALLOC (&dse_bitmap_obstack);
+      bb_info->out = BITMAP_ALLOC (NULL);
       bitmap_copy (bb_info->out, bb_table[EXIT_BLOCK]->gen);
     }
 }
@@ -3270,7 +3396,7 @@ dse_confluence_0 (basic_block bb)
    out set of the src of E.  If the various in or out sets are not
    there, that means they are all ones.  */
 
-static bool
+static void
 dse_confluence_n (edge e)
 {
   bb_info_t src_info = bb_table[e->src->index];
@@ -3282,11 +3408,10 @@ dse_confluence_n (edge e)
 	bitmap_and_into (src_info->out, dest_info->in);
       else
 	{
-	  src_info->out = BITMAP_ALLOC (&dse_bitmap_obstack);
+	  src_info->out = BITMAP_ALLOC (NULL);
 	  bitmap_copy (src_info->out, dest_info->in);
 	}
     }
-  return true;
 }
 
 
@@ -3321,7 +3446,7 @@ dse_transfer_function (int bb_index)
 					 bb_info->out, bb_info->kill);
 	  else
 	    {
-	      bb_info->in = BITMAP_ALLOC (&dse_bitmap_obstack);
+	      bb_info->in = BITMAP_ALLOC (NULL);
 	      bitmap_ior_and_compl (bb_info->in, bb_info->gen,
 				    bb_info->out, bb_info->kill);
 	      return true;
@@ -3339,7 +3464,7 @@ dse_transfer_function (int bb_index)
 	return false;
       else
 	{
-	  bb_info->in = BITMAP_ALLOC (&dse_bitmap_obstack);
+	  bb_info->in = BITMAP_ALLOC (NULL);
 	  bitmap_copy (bb_info->in, bb_info->gen);
 	  return true;
 	}
@@ -3355,12 +3480,12 @@ dse_step4 (void)
 		      dse_confluence_n, dse_transfer_function,
 	   	      all_blocks, df_get_postorder (DF_BACKWARD),
 		      df_get_n_blocks (DF_BACKWARD));
-  if (dump_file && (dump_flags & TDF_DETAILS))
+  if (dump_file)
     {
       basic_block bb;
 
       fprintf (dump_file, "\n\n*** Global dataflow info after analysis.\n");
-      FOR_ALL_BB_FN (bb, cfun)
+      FOR_ALL_BB (bb)
 	{
 	  bb_info_t bb_info = bb_table[bb->index];
 
@@ -3395,10 +3520,10 @@ dse_step4 (void)
 
 
 static void
-dse_step5 (void)
+dse_step5_nospill (void)
 {
   basic_block bb;
-  FOR_EACH_BB_FN (bb, cfun)
+  FOR_EACH_BB (bb)
     {
       bb_info_t bb_info = bb_table[bb->index];
       insn_info_t insn_info = bb_info->last_insn;
@@ -3421,7 +3546,7 @@ dse_step5 (void)
 	      && (!insn_info->cannot_delete)
 	      && (!bitmap_empty_p (v)))
 	    {
-	      store_info *store_info = insn_info->store_rec;
+	      store_info_t store_info = insn_info->store_rec;
 
 	      /* Try to delete the current insn.  */
 	      deleted = true;
@@ -3430,27 +3555,24 @@ dse_step5 (void)
 	      while (!store_info->is_set)
 		store_info = store_info->next;
 
-	      HOST_WIDE_INT i, offset, width;
-	      group_info *group_info = rtx_group_vec[store_info->group_id];
-
-	      if (!store_info->offset.is_constant (&offset)
-		  || !store_info->width.is_constant (&width))
+	      if (store_info->alias_set)
 		deleted = false;
 	      else
 		{
-		  HOST_WIDE_INT end = offset + width;
-		  for (i = offset; i < end; i++)
+		  HOST_WIDE_INT i;
+		  group_info_t group_info
+		    = VEC_index (group_info_t, rtx_group_vec, store_info->group_id);
+
+		  for (i = store_info->begin; i < store_info->end; i++)
 		    {
 		      int index = get_bitmap_index (group_info, i);
 
-		      if (dump_file && (dump_flags & TDF_DETAILS))
-			fprintf (dump_file, "i = %d, index = %d\n",
-				 (int) i, index);
+		      if (dump_file)
+			fprintf (dump_file, "i = %d, index = %d\n", (int)i, index);
 		      if (index == 0 || !bitmap_bit_p (v, index))
 			{
-			  if (dump_file && (dump_flags & TDF_DETAILS))
-			    fprintf (dump_file, "failing at i = %d\n",
-				     (int) i);
+			  if (dump_file)
+			    fprintf (dump_file, "failing at i = %d\n", (int)i);
 			  deleted = false;
 			  break;
 			}
@@ -3458,9 +3580,9 @@ dse_step5 (void)
 		}
 	      if (deleted)
 		{
-		  if (dbg_cnt (dse)
-		      && check_for_inc_dec_1 (insn_info))
+		  if (dbg_cnt (dse))
 		    {
+		      check_for_inc_dec (insn_info->insn);
 		      delete_insn (insn_info->insn);
 		      insn_info->insn = NULL;
 		      globally_deleted++;
@@ -3474,29 +3596,85 @@ dse_step5 (void)
 	      && INSN_P (insn_info->insn)
 	      && (!deleted))
 	    {
-	      scan_stores (insn_info->store_rec, v, NULL);
+	      scan_stores_nospill (insn_info->store_rec, v, NULL);
 	      if (insn_info->wild_read)
 		{
-		  if (dump_file && (dump_flags & TDF_DETAILS))
+		  if (dump_file)
 		    fprintf (dump_file, "wild read\n");
 		  bitmap_clear (v);
 		}
-	      else if (insn_info->read_rec
-		       || insn_info->non_frame_wild_read
-		       || insn_info->frame_read)
+	      else if (insn_info->read_rec)
 		{
-		  if (dump_file && (dump_flags & TDF_DETAILS))
-		    {
-		      if (!insn_info->non_frame_wild_read
-			  && !insn_info->frame_read)
-			fprintf (dump_file, "regular read\n");
-		      if (insn_info->non_frame_wild_read)
-			fprintf (dump_file, "non-frame wild read\n");
-		      if (insn_info->frame_read)
-			fprintf (dump_file, "frame read\n");
-		    }
-		  scan_reads (insn_info, v, NULL);
+		  if (dump_file)
+		    fprintf (dump_file, "regular read\n");
+		  scan_reads_nospill (insn_info, v, NULL);
 		}
+	    }
+
+	  insn_info = insn_info->prev_insn;
+	}
+    }
+}
+
+
+static void
+dse_step5_spill (void)
+{
+  basic_block bb;
+  FOR_EACH_BB (bb)
+    {
+      bb_info_t bb_info = bb_table[bb->index];
+      insn_info_t insn_info = bb_info->last_insn;
+      bitmap v = bb_info->out;
+
+      while (insn_info)
+	{
+	  bool deleted = false;
+	  /* There may have been code deleted by the dce pass run before
+	     this phase.  */
+	  if (insn_info->insn
+	      && INSN_P (insn_info->insn)
+	      && (!insn_info->cannot_delete)
+	      && (!bitmap_empty_p (v)))
+	    {
+	      /* Try to delete the current insn.  */
+	      store_info_t store_info = insn_info->store_rec;
+	      deleted = true;
+
+	      while (store_info)
+		{
+		  if (store_info->alias_set)
+		    {
+		      int index = get_bitmap_index (clear_alias_group,
+						    store_info->alias_set);
+		      if (index == 0 || !bitmap_bit_p (v, index))
+			{
+			  deleted = false;
+			  break;
+			}
+		    }
+		  else
+		    deleted = false;
+		  store_info = store_info->next;
+		}
+	      if (deleted && dbg_cnt (dse))
+		{
+		  if (dump_file)
+		    fprintf (dump_file, "Spill deleting insn %d\n",
+			     INSN_UID (insn_info->insn));
+		  check_for_inc_dec (insn_info->insn);
+		  delete_insn (insn_info->insn);
+		  spill_deleted++;
+		  insn_info->insn = NULL;
+		}
+	    }
+
+	  if (insn_info->insn
+	      && INSN_P (insn_info->insn)
+	      && (!deleted))
+	    {
+	      scan_stores_spill (insn_info->store_rec, v, NULL);
+	      scan_reads_spill (insn_info->read_rec, v, NULL);
 	    }
 
 	  insn_info = insn_info->prev_insn;
@@ -3518,7 +3696,7 @@ dse_step6 (void)
 {
   basic_block bb;
 
-  FOR_ALL_BB_FN (bb, cfun)
+  FOR_ALL_BB (bb)
     {
       bb_info_t bb_info = bb_table[bb->index];
       insn_info_t insn_info = bb_info->last_insn;
@@ -3531,7 +3709,7 @@ dse_step6 (void)
 	      && INSN_P (insn_info->insn)
 	      && !insn_info->cannot_delete)
 	    {
-	      store_info *s_info = insn_info->store_rec;
+	      store_info_t s_info = insn_info->store_rec;
 
 	      while (s_info && !s_info->is_set)
 		s_info = s_info->next;
@@ -3540,8 +3718,8 @@ dse_step6 (void)
 		  && s_info->redundant_reason->insn
 		  && INSN_P (s_info->redundant_reason->insn))
 		{
-		  rtx_insn *rinsn = s_info->redundant_reason->insn;
-		  if (dump_file && (dump_flags & TDF_DETAILS))
+		  rtx rinsn = s_info->redundant_reason->insn;
+		  if (dump_file)
 		    fprintf (dump_file, "Locally deleting insn %d "
 					"because insn %d stores the "
 					"same value and couldn't be "
@@ -3563,25 +3741,57 @@ dse_step6 (void)
 ----------------------------------------------------------------------------*/
 
 static void
-dse_step7 (void)
+dse_step7 (bool global_done)
 {
-  bitmap_obstack_release (&dse_bitmap_obstack);
-  obstack_free (&dse_obstack, NULL);
+  unsigned int i;
+  group_info_t group;
+  basic_block bb;
+
+  for (i = 0; VEC_iterate (group_info_t, rtx_group_vec, i, group); i++)
+    {
+      free (group->offset_map_n);
+      free (group->offset_map_p);
+      BITMAP_FREE (group->store1_n);
+      BITMAP_FREE (group->store1_p);
+      BITMAP_FREE (group->store2_n);
+      BITMAP_FREE (group->store2_p);
+      BITMAP_FREE (group->group_kill);
+    }
+
+  if (global_done)
+    FOR_ALL_BB (bb)
+      {
+	bb_info_t bb_info = bb_table[bb->index];
+	BITMAP_FREE (bb_info->gen);
+	if (bb_info->kill)
+	  BITMAP_FREE (bb_info->kill);
+	if (bb_info->in)
+	  BITMAP_FREE (bb_info->in);
+	if (bb_info->out)
+	  BITMAP_FREE (bb_info->out);
+      }
+
+  if (clear_alias_sets)
+    {
+      BITMAP_FREE (clear_alias_sets);
+      BITMAP_FREE (disqualified_clear_alias_sets);
+      free_alloc_pool (clear_alias_mode_pool);
+      htab_delete (clear_alias_mode_table);
+    }
 
   end_alias_analysis ();
   free (bb_table);
-  delete rtx_group_table;
-  rtx_group_table = NULL;
-  rtx_group_vec.release ();
+  htab_delete (rtx_group_table);
+  VEC_free (group_info_t, heap, rtx_group_vec);
   BITMAP_FREE (all_blocks);
   BITMAP_FREE (scratch);
 
-  rtx_store_info_pool.release ();
-  read_info_type_pool.release ();
-  insn_info_type_pool.release ();
-  dse_bb_info_type_pool.release ();
-  group_info_pool.release ();
-  deferred_change_pool.release ();
+  free_alloc_pool (rtx_store_info_pool);
+  free_alloc_pool (read_info_pool);
+  free_alloc_pool (insn_info_pool);
+  free_alloc_pool (bb_info_pool);
+  free_alloc_pool (rtx_group_info_pool);
+  free_alloc_pool (deferred_change_pool);
 }
 
 
@@ -3594,6 +3804,8 @@ dse_step7 (void)
 static unsigned int
 rest_of_handle_dse (void)
 {
+  bool did_global = false;
+
   df_set_flags (DF_DEFER_INSN_RESCAN);
 
   /* Need the notes since we must track live hardregs in the forwards
@@ -3604,110 +3816,105 @@ rest_of_handle_dse (void)
   dse_step0 ();
   dse_step1 ();
   dse_step2_init ();
-  if (dse_step2 ())
+  if (dse_step2_nospill ())
     {
       df_set_flags (DF_LR_RUN_DCE);
       df_analyze ();
-      if (dump_file && (dump_flags & TDF_DETAILS))
+      did_global = true;
+      if (dump_file)
 	fprintf (dump_file, "doing global processing\n");
-      dse_step3 ();
+      dse_step3 (false);
       dse_step4 ();
-      dse_step5 ();
+      dse_step5_nospill ();
+    }
+
+  /* For the instance of dse that runs after reload, we make a special
+     pass to process the spills.  These are special in that they are
+     totally transparent, i.e, there is no aliasing issues that need
+     to be considered.  This means that the wild reads that kill
+     everything else do not apply here.  */
+  if (clear_alias_sets && dse_step2_spill ())
+    {
+      if (!did_global)
+	{
+	  df_set_flags (DF_LR_RUN_DCE);
+	  df_analyze ();
+	}
+      did_global = true;
+      if (dump_file)
+	fprintf (dump_file, "doing global spill processing\n");
+      dse_step3 (true);
+      dse_step4 ();
+      dse_step5_spill ();
     }
 
   dse_step6 ();
-  dse_step7 ();
+  dse_step7 (did_global);
 
   if (dump_file)
-    fprintf (dump_file, "dse: local deletions = %d, global deletions = %d\n",
-	     locally_deleted, globally_deleted);
-
-  /* DSE can eliminate potentially-trapping MEMs.
-     Remove any EH edges associated with them.  */
-  if ((locally_deleted || globally_deleted)
-      && cfun->can_throw_non_call_exceptions
-      && purge_all_dead_edges ())
-    cleanup_cfg (0);
-
+    fprintf (dump_file, "dse: local deletions = %d, global deletions = %d, spill deletions = %d\n",
+	     locally_deleted, globally_deleted, spill_deleted);
   return 0;
 }
 
-namespace {
-
-const pass_data pass_data_rtl_dse1 =
+static bool
+gate_dse (void)
 {
-  RTL_PASS, /* type */
-  "dse1", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
-  TV_DSE1, /* tv_id */
-  0, /* properties_required */
-  0, /* properties_provided */
-  0, /* properties_destroyed */
-  0, /* todo_flags_start */
-  TODO_df_finish, /* todo_flags_finish */
-};
-
-class pass_rtl_dse1 : public rtl_opt_pass
-{
-public:
-  pass_rtl_dse1 (gcc::context *ctxt)
-    : rtl_opt_pass (pass_data_rtl_dse1, ctxt)
-  {}
-
-  /* opt_pass methods: */
-  virtual bool gate (function *)
-    {
-      return optimize > 0 && flag_dse && dbg_cnt (dse1);
-    }
-
-  virtual unsigned int execute (function *) { return rest_of_handle_dse (); }
-
-}; // class pass_rtl_dse1
-
-} // anon namespace
-
-rtl_opt_pass *
-make_pass_rtl_dse1 (gcc::context *ctxt)
-{
-  return new pass_rtl_dse1 (ctxt);
+  return gate_dse1 () || gate_dse2 ();
 }
 
-namespace {
-
-const pass_data pass_data_rtl_dse2 =
+static bool
+gate_dse1 (void)
 {
-  RTL_PASS, /* type */
-  "dse2", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
-  TV_DSE2, /* tv_id */
-  0, /* properties_required */
-  0, /* properties_provided */
-  0, /* properties_destroyed */
-  0, /* todo_flags_start */
-  TODO_df_finish, /* todo_flags_finish */
+  return optimize > 0 && flag_dse
+    && dbg_cnt (dse1);
+}
+
+static bool
+gate_dse2 (void)
+{
+  return optimize > 0 && flag_dse
+    && dbg_cnt (dse2);
+}
+
+struct rtl_opt_pass pass_rtl_dse1 =
+{
+ {
+  RTL_PASS,
+  "dse1",                               /* name */
+  gate_dse1,                            /* gate */
+  rest_of_handle_dse,                   /* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  TV_DSE1,                              /* tv_id */
+  0,                                    /* properties_required */
+  0,                                    /* properties_provided */
+  0,                                    /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_dump_func |
+  TODO_df_finish | TODO_verify_rtl_sharing |
+  TODO_ggc_collect                      /* todo_flags_finish */
+ }
 };
 
-class pass_rtl_dse2 : public rtl_opt_pass
+struct rtl_opt_pass pass_rtl_dse2 =
 {
-public:
-  pass_rtl_dse2 (gcc::context *ctxt)
-    : rtl_opt_pass (pass_data_rtl_dse2, ctxt)
-  {}
-
-  /* opt_pass methods: */
-  virtual bool gate (function *)
-    {
-      return optimize > 0 && flag_dse && dbg_cnt (dse2);
-    }
-
-  virtual unsigned int execute (function *) { return rest_of_handle_dse (); }
-
-}; // class pass_rtl_dse2
-
-} // anon namespace
-
-rtl_opt_pass *
-make_pass_rtl_dse2 (gcc::context *ctxt)
-{
-  return new pass_rtl_dse2 (ctxt);
-}
+ {
+  RTL_PASS,
+  "dse2",                               /* name */
+  gate_dse2,                            /* gate */
+  rest_of_handle_dse,                   /* execute */
+  NULL,                                 /* sub */
+  NULL,                                 /* next */
+  0,                                    /* static_pass_number */
+  TV_DSE2,                              /* tv_id */
+  0,                                    /* properties_required */
+  0,                                    /* properties_provided */
+  0,                                    /* properties_destroyed */
+  0,                                    /* todo_flags_start */
+  TODO_dump_func |
+  TODO_df_finish | TODO_verify_rtl_sharing |
+  TODO_ggc_collect                      /* todo_flags_finish */
+ }
+};

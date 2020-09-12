@@ -1,5 +1,5 @@
 /* AIX cross support for collect2.
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright (C) 2009 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -17,8 +17,6 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-#ifndef GCC_COLLECT2_AIX_H
-#define GCC_COLLECT2_AIX_H
 /* collect2-aix.c requires mmap support.  It should otherwise be
    fairly portable.  */
 #if defined(CROSS_DIRECTORY_STRUCTURE) \
@@ -31,7 +29,7 @@ along with GCC; see the file COPYING3.  If not see
    Definitions adapted from bfd.  (Fairly heavily adapted in some cases.)
    ------------------------------------------------------------------------- */
 
-/* Compatibility types for bfd.  */
+/* Compatiblity types for bfd.  */
 typedef unsigned HOST_WIDE_INT bfd_vma;
 
 /* The size of an archive's fl_magic field.  */
@@ -137,7 +135,7 @@ struct external_filehdr_32
   /* The number of entries in the symbol table.  */
   char f_nsyms[4];
 
-  /* The size of the auxiliary header.  */
+  /* The size of the auxillary header.  */
   char f_opthdr[2];
 
   /* Flags.  */
@@ -159,7 +157,7 @@ struct external_filehdr_64
   /* The offset of the symbol table from the start of the file.  */
   char f_symptr[8];
 
-  /* The size of the auxiliary header.  */
+  /* The size of the auxillary header.  */
   char f_opthdr[2];
 
   /* Flags.  */
@@ -224,15 +222,14 @@ struct external_syment
   /* The class of symbol (a C_* value).  */
   char n_sclass[1];
 
-  /* The number of auxiliary symbols attached to this entry.  */
+  /* The number of auxillary symbols attached to this entry.  */
   char n_numaux[1];
 };
 
 /* Definitions required by collect2.  */
 #define C_EXT 2
 
-#define F_SHROBJ    0x2000
-#define F_LOADONLY  0x4000
+#define F_SHROBJ 0x2000
 
 #define N_UNDEF ((short) 0)
 #define N_TMASK 060
@@ -302,5 +299,3 @@ extern int ldtbread (LDFILE *, long, SYMENT *);
 extern int ldclose (LDFILE *);
 
 #endif
-
-#endif /* GCC_COLLECT2_AIX_H */

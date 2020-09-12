@@ -1,6 +1,6 @@
 // binary.cc -- binary input files for gold
 
-// Copyright (C) 2008-2020 Free Software Foundation, Inc.
+// Copyright 2008 Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -24,6 +24,7 @@
 
 #include <cerrno>
 #include <cstring>
+#include "safe-ctype.h"
 
 #include "elfcpp.h"
 #include "stringpool.h"
@@ -31,17 +32,10 @@
 #include "output.h"
 #include "binary.h"
 
-// safe-ctype.h interferes with macros defined by the system <ctype.h>.
-// Some C++ system headers might include <ctype.h> and rely on its macro
-// definitions being intact.  So make sure that safe-ctype.h is included
-// only after any C++ system headers, whether directly here (above) or via
-// other local header files (e.g. #include <string> in "binary.h").
-#include "safe-ctype.h"
-
 // Support for reading binary files as input.  These become blobs in
 // the final output.  These files are treated as though they have a
 // single .data section and define three symbols:
-// _binary_FILENAME_start, _binary_FILENAME_end, _binary_FILENAME_size.
+// _binary_FILENAME_start, _binary_FILENAME_end, _binary_FILENAME_end.
 // The FILENAME is the name of the input file, with any
 // non-alphanumeric character changed to an underscore.
 
@@ -138,11 +132,7 @@ Binary_to_elf::sized_convert(const Task* task)
     }
 
   section_size_type filesize = convert_to_section_size_type(f.filesize());
-  const unsigned char* fileview;
-  if (filesize == 0)
-    fileview = NULL;
-  else
-    fileview = f.get_view(0, 0, filesize, false, false);
+  const unsigned char* fileview = f.get_view(0, 0, filesize, false, false);
 
   unsigned int align;
   if (size == 32)
@@ -233,20 +223,17 @@ Binary_to_elf::sized_convert(const Task* task)
 					       shstrtab.get_strtab_size(),
 					       0, 0, 1, 0, &pout);
 
-  if (filesize > 0)
-    {
-      memcpy(pout, fileview, filesize);
-      pout += filesize;
-      memset(pout, 0, aligned_filesize - filesize);
-      pout += aligned_filesize - filesize;
-    }
+  memcpy(pout, fileview, filesize);
+  pout += filesize;
+  memset(pout, 0, aligned_filesize - filesize);
+  pout += aligned_filesize - filesize;
 
-  this->write_symbol<size, big_endian>("", &strtab, 0, 0, 0, &pout);
-  this->write_symbol<size, big_endian>(start_symbol_name, &strtab, 0, filesize,
-				       1, &pout);
-  this->write_symbol<size, big_endian>(end_symbol_name, &strtab, filesize, 0,
-				       1, &pout);
-  this->write_symbol<size, big_endian>(size_symbol_name, &strtab, filesize, 0,
+  this->write_symbol<size, big_endian>("", &strtab, 0, 0, &pout);
+  this->write_symbol<size, big_endian>(start_symbol_name, &strtab, 0, 1,
+				       &pout);
+  this->write_symbol<size, big_endian>(end_symbol_name, &strtab, filesize, 1,
+				       &pout);
+  this->write_symbol<size, big_endian>(size_symbol_name, &strtab, filesize,
 				       elfcpp::SHN_ABS, &pout);
 
   strtab.write_to_buffer(pout, strtab.get_strtab_size());
@@ -349,7 +336,6 @@ Binary_to_elf::write_symbol(
     const std::string& name,
     const Stringpool* strtab,
     section_size_type value,
-    typename elfcpp::Elf_types<32>::Elf_WXword st_size,
     unsigned int shndx,
     unsigned char** ppout)
 {
@@ -358,7 +344,7 @@ Binary_to_elf::write_symbol(
   elfcpp::Sym_write<size, big_endian> osym(pout);
   osym.put_st_name(name.empty() ? 0 : strtab->get_offset(name.c_str()));
   osym.put_st_value(value);
-  osym.put_st_size(st_size);
+  osym.put_st_size(0);
   osym.put_st_info(name.empty() ? elfcpp::STB_LOCAL : elfcpp::STB_GLOBAL,
 		   elfcpp::STT_NOTYPE);
   osym.put_st_other(elfcpp::STV_DEFAULT, 0);

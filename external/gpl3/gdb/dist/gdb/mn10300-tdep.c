@@ -1,6 +1,7 @@
 /* Target-dependent code for the Matsushita MN10300 for GDB, the GNU debugger.
 
-   Copyright (C) 1996-2019 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+   2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,8 +23,11 @@
 #include "dis-asm.h"
 #include "gdbtypes.h"
 #include "regcache.h"
+#include "gdb_string.h"
+#include "gdb_assert.h"
 #include "gdbcore.h"	/* For write_memory_unsigned_integer.  */
 #include "value.h"
+#include "gdbtypes.h"
 #include "frame.h"
 #include "frame-unwind.h"
 #include "frame-base.h"
@@ -39,9 +43,6 @@
 
 /* The am33-2 has 64 registers.  */
 #define MN10300_MAX_NUM_REGS 64
-
-/* Big enough to hold the size of the largest register in bytes.  */
-#define MN10300_MAX_REGISTER_SIZE      64
 
 /* This structure holds the results of a prologue analysis.  */
 struct mn10300_prologue
@@ -99,7 +100,6 @@ mn10300_type_align (struct type *type)
     case TYPE_CODE_FLT:
     case TYPE_CODE_PTR:
     case TYPE_CODE_REF:
-    case TYPE_CODE_RVALUE_REF:
       return TYPE_LENGTH (type);
 
     case TYPE_CODE_COMPLEX:
@@ -169,7 +169,7 @@ mn10300_use_struct_convention (struct type *type)
 
 static void
 mn10300_store_return_value (struct gdbarch *gdbarch, struct type *type,
-			    struct regcache *regcache, const gdb_byte *valbuf)
+			    struct regcache *regcache, const void *valbuf)
 {
   int len = TYPE_LENGTH (type);
   int reg, regsz;
@@ -182,12 +182,13 @@ mn10300_store_return_value (struct gdbarch *gdbarch, struct type *type,
   regsz = register_size (gdbarch, reg);
 
   if (len <= regsz)
-    regcache->raw_write_part (reg, 0, len, valbuf);
+    regcache_raw_write_part (regcache, reg, 0, len, valbuf);
   else if (len <= 2 * regsz)
     {
-      regcache->raw_write (reg, valbuf);
+      regcache_raw_write (regcache, reg, valbuf);
       gdb_assert (regsz == register_size (gdbarch, reg + 1));
-      regcache->raw_write_part (reg + 1, 0, len - regsz, valbuf + regsz);
+      regcache_raw_write_part (regcache, reg+1, 0,
+			       len - regsz, (char *) valbuf + regsz);
     }
   else
     internal_error (__FILE__, __LINE__,
@@ -198,7 +199,7 @@ static void
 mn10300_extract_return_value (struct gdbarch *gdbarch, struct type *type,
 			      struct regcache *regcache, void *valbuf)
 {
-  gdb_byte buf[MN10300_MAX_REGISTER_SIZE];
+  char buf[MAX_REGISTER_SIZE];
   int len = TYPE_LENGTH (type);
   int reg, regsz;
 
@@ -208,18 +209,17 @@ mn10300_extract_return_value (struct gdbarch *gdbarch, struct type *type,
     reg = 0;
 
   regsz = register_size (gdbarch, reg);
-  gdb_assert (regsz <= MN10300_MAX_REGISTER_SIZE);
   if (len <= regsz)
     {
-      regcache->raw_read (reg, buf);
+      regcache_raw_read (regcache, reg, buf);
       memcpy (valbuf, buf, len);
     }
   else if (len <= 2 * regsz)
     {
-      regcache->raw_read (reg, buf);
+      regcache_raw_read (regcache, reg, buf);
       memcpy (valbuf, buf, regsz);
       gdb_assert (regsz == register_size (gdbarch, reg + 1));
-      regcache->raw_read (reg + 1, buf);
+      regcache_raw_read (regcache, reg + 1, buf);
       memcpy ((char *) valbuf + regsz, buf, len - regsz);
     }
   else
@@ -234,7 +234,7 @@ mn10300_extract_return_value (struct gdbarch *gdbarch, struct type *type,
    from WRITEBUF into REGCACHE.  */
 
 static enum return_value_convention
-mn10300_return_value (struct gdbarch *gdbarch, struct value *function,
+mn10300_return_value (struct gdbarch *gdbarch, struct type *func_type,
 		      struct type *type, struct regcache *regcache,
 		      gdb_byte *readbuf, const gdb_byte *writebuf)
 {
@@ -249,8 +249,8 @@ mn10300_return_value (struct gdbarch *gdbarch, struct value *function,
   return RETURN_VALUE_REGISTER_CONVENTION;
 }
 
-static const char *
-register_name (int reg, const char **regs, long sizeof_regs)
+static char *
+register_name (int reg, char **regs, long sizeof_regs)
 {
   if (reg < 0 || reg >= sizeof_regs / sizeof (regs[0]))
     return NULL;
@@ -261,7 +261,7 @@ register_name (int reg, const char **regs, long sizeof_regs)
 static const char *
 mn10300_generic_register_name (struct gdbarch *gdbarch, int reg)
 {
-  static const char *regs[] =
+  static char *regs[] =
   { "d0", "d1", "d2", "d3", "a0", "a1", "a2", "a3",
     "sp", "pc", "mdr", "psw", "lir", "lar", "", "",
     "", "", "", "", "", "", "", "",
@@ -274,7 +274,7 @@ mn10300_generic_register_name (struct gdbarch *gdbarch, int reg)
 static const char *
 am33_register_name (struct gdbarch *gdbarch, int reg)
 {
-  static const char *regs[] =
+  static char *regs[] =
   { "d0", "d1", "d2", "d3", "a0", "a1", "a2", "a3",
     "sp", "pc", "mdr", "psw", "lir", "lar", "",
     "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
@@ -286,7 +286,7 @@ am33_register_name (struct gdbarch *gdbarch, int reg)
 static const char *
 am33_2_register_name (struct gdbarch *gdbarch, int reg)
 {
-  static const char *regs[] =
+  static char *regs[] =
   {
     "d0", "d1", "d2", "d3", "a0", "a1", "a2", "a3",
     "sp", "pc", "mdr", "psw", "lir", "lar", "mdrq", "r0",
@@ -306,15 +306,35 @@ mn10300_register_type (struct gdbarch *gdbarch, int reg)
   return builtin_type (gdbarch)->builtin_int;
 }
 
+static CORE_ADDR
+mn10300_read_pc (struct regcache *regcache)
+{
+  ULONGEST val;
+  regcache_cooked_read_unsigned (regcache, E_PC_REGNUM, &val);
+  return val;
+}
+
+static void
+mn10300_write_pc (struct regcache *regcache, CORE_ADDR val)
+{
+  regcache_cooked_write_unsigned (regcache, E_PC_REGNUM, val);
+}
+
 /* The breakpoint instruction must be the same size as the smallest
    instruction in the instruction set.
 
    The Matsushita mn10x00 processors have single byte instructions
    so we need a single byte breakpoint.  Matsushita hasn't defined
    one, so we defined it ourselves.  */
-constexpr gdb_byte mn10300_break_insn[] = {0xff};
 
-typedef BP_MANIPULATION (mn10300_break_insn) mn10300_breakpoint;
+const static unsigned char *
+mn10300_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *bp_addr,
+			    int *bp_size)
+{
+  static char breakpoint[] = {0xff};
+  *bp_size = 1;
+  return breakpoint;
+}
 
 /* Model the semantics of pushing a register onto the stack.  This
    is a helper function for mn10300_analyze_prologue, below.  */
@@ -322,7 +342,7 @@ static void
 push_reg (pv_t *regs, struct pv_area *stack, int regnum)
 {
   regs[E_SP_REGNUM] = pv_add_constant (regs[E_SP_REGNUM], -4);
-  stack->store (regs[E_SP_REGNUM], 4, regs[regnum]);
+  pv_area_store (stack, regs[E_SP_REGNUM], 4, regs[regnum]);
 }
 
 /* Translate an "r" register number extracted from an instruction encoding
@@ -341,7 +361,7 @@ translate_rreg (int rreg)
     return E_E0_REGNUM + rreg;
 }
 
-/* Find saved registers in a 'struct pv_area'; we pass this to pv_area::scan.
+/* Find saved registers in a 'struct pv_area'; we pass this to pv_area_scan.
 
    If VALUE is a saved register, ADDR says it was saved at a constant
    offset from the frame base, and SIZE indicates that the whole
@@ -368,9 +388,11 @@ mn10300_analyze_prologue (struct gdbarch *gdbarch,
                           struct mn10300_prologue *result)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
-  CORE_ADDR pc;
+  CORE_ADDR pc, next_pc;
   int rn;
   pv_t regs[MN10300_MAX_NUM_REGS];
+  struct pv_area *stack;
+  struct cleanup *back_to;
   CORE_ADDR after_last_frame_setup_insn = start_pc;
   int am33_mode = AM33_MODE (gdbarch);
 
@@ -382,15 +404,16 @@ mn10300_analyze_prologue (struct gdbarch *gdbarch,
       regs[rn] = pv_register (rn, 0);
       result->reg_offset[rn] = 1;
     }
-  pv_area stack (E_SP_REGNUM, gdbarch_addr_bit (gdbarch));
+  stack = make_pv_area (E_SP_REGNUM, gdbarch_addr_bit (gdbarch));
+  back_to = make_cleanup_free_pv_area (stack);
 
-  /* The typical call instruction will have saved the return address on the
-     stack.  Space for the return address has already been preallocated in
-     the caller's frame.  It's possible, such as when using -mrelax with gcc
-     that other registers were saved as well.  If this happens, we really
-     have no chance of deciphering the frame.  DWARF info can save the day
-     when this happens.  */
-  stack.store (regs[E_SP_REGNUM], 4, regs[E_PC_REGNUM]);
+ /* The typical call instruction will have saved the return address on the
+    stack.  Space for the return address has already been preallocated in
+    the caller's frame.  It's possible, such as when using -mrelax with gcc
+    that other registers were saved as well.  If this happens, we really
+    have no chance of deciphering the frame.  DWARF info can save the day
+    when this happens.  */
+  pv_area_store (stack, regs[E_SP_REGNUM], 4, regs[E_PC_REGNUM]);
 
   pc = start_pc;
   while (pc < limit_pc)
@@ -414,42 +437,42 @@ mn10300_analyze_prologue (struct gdbarch *gdbarch,
 
 	  if ((save_mask & movm_exreg0_bit) && am33_mode)
 	    {
-	      push_reg (regs, &stack, E_E2_REGNUM);
-	      push_reg (regs, &stack, E_E3_REGNUM);
+	      push_reg (regs, stack, E_E2_REGNUM);
+	      push_reg (regs, stack, E_E3_REGNUM);
 	    }
 	  if ((save_mask & movm_exreg1_bit) && am33_mode)
 	    {
-	      push_reg (regs, &stack, E_E4_REGNUM);
-	      push_reg (regs, &stack, E_E5_REGNUM);
-	      push_reg (regs, &stack, E_E6_REGNUM);
-	      push_reg (regs, &stack, E_E7_REGNUM);
+	      push_reg (regs, stack, E_E4_REGNUM);
+	      push_reg (regs, stack, E_E5_REGNUM);
+	      push_reg (regs, stack, E_E6_REGNUM);
+	      push_reg (regs, stack, E_E7_REGNUM);
 	    }
 	  if ((save_mask & movm_exother_bit) && am33_mode)
 	    {
-	      push_reg (regs, &stack, E_E0_REGNUM);
-	      push_reg (regs, &stack, E_E1_REGNUM);
-	      push_reg (regs, &stack, E_MDRQ_REGNUM);
-	      push_reg (regs, &stack, E_MCRH_REGNUM);
-	      push_reg (regs, &stack, E_MCRL_REGNUM);
-	      push_reg (regs, &stack, E_MCVF_REGNUM);
+	      push_reg (regs, stack, E_E0_REGNUM);
+	      push_reg (regs, stack, E_E1_REGNUM);
+	      push_reg (regs, stack, E_MDRQ_REGNUM);
+	      push_reg (regs, stack, E_MCRH_REGNUM);
+	      push_reg (regs, stack, E_MCRL_REGNUM);
+	      push_reg (regs, stack, E_MCVF_REGNUM);
 	    }
 	  if (save_mask & movm_d2_bit)
-	    push_reg (regs, &stack, E_D2_REGNUM);
+	    push_reg (regs, stack, E_D2_REGNUM);
 	  if (save_mask & movm_d3_bit)
-	    push_reg (regs, &stack, E_D3_REGNUM);
+	    push_reg (regs, stack, E_D3_REGNUM);
 	  if (save_mask & movm_a2_bit)
-	    push_reg (regs, &stack, E_A2_REGNUM);
+	    push_reg (regs, stack, E_A2_REGNUM);
 	  if (save_mask & movm_a3_bit)
-	    push_reg (regs, &stack, E_A3_REGNUM);
+	    push_reg (regs, stack, E_A3_REGNUM);
 	  if (save_mask & movm_other_bit)
 	    {
-	      push_reg (regs, &stack, E_D0_REGNUM);
-	      push_reg (regs, &stack, E_D1_REGNUM);
-	      push_reg (regs, &stack, E_A0_REGNUM);
-	      push_reg (regs, &stack, E_A1_REGNUM);
-	      push_reg (regs, &stack, E_MDR_REGNUM);
-	      push_reg (regs, &stack, E_LIR_REGNUM);
-	      push_reg (regs, &stack, E_LAR_REGNUM);
+	      push_reg (regs, stack, E_D0_REGNUM);
+	      push_reg (regs, stack, E_D1_REGNUM);
+	      push_reg (regs, stack, E_A0_REGNUM);
+	      push_reg (regs, stack, E_A1_REGNUM);
+	      push_reg (regs, stack, E_MDR_REGNUM);
+	      push_reg (regs, stack, E_LIR_REGNUM);
+	      push_reg (regs, stack, E_LAR_REGNUM);
 	      /* The `other' bit leaves a blank area of four bytes at
 		 the beginning of its block of saved registers, making
 		 it 32 bytes long in total.  */
@@ -635,8 +658,8 @@ mn10300_analyze_prologue (struct gdbarch *gdbarch,
 	  rN = buf[0] & 0x0f;
 	  fsM = (Y << 4) | sM;
 
-	  stack.store (regs[translate_rreg (rN)], 4,
-		       regs[E_FS0_REGNUM + fsM]);
+	  pv_area_store (stack, regs[translate_rreg (rN)], 4,
+	                 regs[E_FS0_REGNUM + fsM]);
 
 	  pc += 3;
 	}
@@ -655,8 +678,8 @@ mn10300_analyze_prologue (struct gdbarch *gdbarch,
 	  sM = (buf[0] & 0xf0) >> 4;
 	  fsM = (Y << 4) | sM;
 
-	  stack.store (regs[E_SP_REGNUM], 4,
-		       regs[E_FS0_REGNUM + fsM]);
+	  pv_area_store (stack, regs[E_SP_REGNUM], 4,
+	                 regs[E_FS0_REGNUM + fsM]);
 
 	  pc += 3;
 	}
@@ -677,9 +700,10 @@ mn10300_analyze_prologue (struct gdbarch *gdbarch,
 	  Z = (buf[1] & 0x02) >> 1;
 	  fsM = (Z << 4) | sM;
 
-	  stack.store (pv_add (regs[translate_rreg (rN)],
-			       regs[translate_rreg (rI)]),
-		       4, regs[E_FS0_REGNUM + fsM]);
+	  pv_area_store (stack,
+	                 pv_add (regs[translate_rreg (rN)],
+			         regs[translate_rreg (rI)]),
+			 4, regs[E_FS0_REGNUM + fsM]);
 
 	  pc += 4;
 	}
@@ -701,8 +725,9 @@ mn10300_analyze_prologue (struct gdbarch *gdbarch,
 	  fsM = (Y << 4) | sM;
 	  d8 = extract_signed_integer (&buf[1], 1, byte_order);
 
-	  stack.store (pv_add_constant (regs[translate_rreg (rN)], d8),
-		       4, regs[E_FS0_REGNUM + fsM]);
+	  pv_area_store (stack,
+	                 pv_add_constant (regs[translate_rreg (rN)], d8),
+	                 4, regs[E_FS0_REGNUM + fsM]);
 
 	  pc += 4;
 	}
@@ -724,8 +749,9 @@ mn10300_analyze_prologue (struct gdbarch *gdbarch,
 	  fsM = (Y << 4) | sM;
 	  d24 = extract_signed_integer (&buf[1], 3, byte_order);
 
-	  stack.store (pv_add_constant (regs[translate_rreg (rN)], d24),
-		       4, regs[E_FS0_REGNUM + fsM]);
+	  pv_area_store (stack,
+	                 pv_add_constant (regs[translate_rreg (rN)], d24),
+	                 4, regs[E_FS0_REGNUM + fsM]);
 
 	  pc += 6;
 	}
@@ -747,8 +773,9 @@ mn10300_analyze_prologue (struct gdbarch *gdbarch,
 	  fsM = (Y << 4) | sM;
 	  d32 = extract_signed_integer (&buf[1], 4, byte_order);
 
-	  stack.store (pv_add_constant (regs[translate_rreg (rN)], d32),
-		       4, regs[E_FS0_REGNUM + fsM]);
+	  pv_area_store (stack,
+	                 pv_add_constant (regs[translate_rreg (rN)], d32),
+	                 4, regs[E_FS0_REGNUM + fsM]);
 
 	  pc += 7;
 	}
@@ -769,8 +796,9 @@ mn10300_analyze_prologue (struct gdbarch *gdbarch,
 	  fsM = (Y << 4) | sM;
 	  d8 = extract_signed_integer (&buf[1], 1, byte_order);
 
-	  stack.store (pv_add_constant (regs[E_SP_REGNUM], d8),
-		       4, regs[E_FS0_REGNUM + fsM]);
+	  pv_area_store (stack,
+	                 pv_add_constant (regs[E_SP_REGNUM], d8),
+	                 4, regs[E_FS0_REGNUM + fsM]);
 
 	  pc += 4;
 	}
@@ -791,8 +819,9 @@ mn10300_analyze_prologue (struct gdbarch *gdbarch,
 	  fsM = (Y << 4) | sM;
 	  d24 = extract_signed_integer (&buf[1], 3, byte_order);
 
-	  stack.store (pv_add_constant (regs[E_SP_REGNUM], d24),
-		       4, regs[E_FS0_REGNUM + fsM]);
+	  pv_area_store (stack,
+	                 pv_add_constant (regs[E_SP_REGNUM], d24),
+	                 4, regs[E_FS0_REGNUM + fsM]);
 
 	  pc += 6;
 	}
@@ -813,8 +842,9 @@ mn10300_analyze_prologue (struct gdbarch *gdbarch,
 	  fsM = (Y << 4) | sM;
 	  d32 = extract_signed_integer (&buf[1], 4, byte_order);
 
-	  stack.store (pv_add_constant (regs[E_SP_REGNUM], d32),
-		       4, regs[E_FS0_REGNUM + fsM]);
+	  pv_area_store (stack,
+	                 pv_add_constant (regs[E_SP_REGNUM], d32),
+	                 4, regs[E_FS0_REGNUM + fsM]);
 
 	  pc += 7;
 	}
@@ -836,8 +866,8 @@ mn10300_analyze_prologue (struct gdbarch *gdbarch,
 
 	  rN_regnum = translate_rreg (rN);
 
-	  stack.store (regs[rN_regnum], 4,
-		       regs[E_FS0_REGNUM + fsM]);
+	  pv_area_store (stack, regs[rN_regnum], 4,
+	                 regs[E_FS0_REGNUM + fsM]);
 	  regs[rN_regnum] = pv_add_constant (regs[rN_regnum], 4);
 
 	  pc += 3;
@@ -862,7 +892,7 @@ mn10300_analyze_prologue (struct gdbarch *gdbarch,
 
 	  rN_regnum = translate_rreg (rN);
 
-	  stack.store (regs[rN_regnum], 4, regs[E_FS0_REGNUM + fsM]);
+	  pv_area_store (stack, regs[rN_regnum], 4, regs[E_FS0_REGNUM + fsM]);
 	  regs[rN_regnum] = pv_add_constant (regs[rN_regnum], imm8);
 
 	  pc += 4;
@@ -887,7 +917,7 @@ mn10300_analyze_prologue (struct gdbarch *gdbarch,
 
 	  rN_regnum = translate_rreg (rN);
 
-	  stack.store (regs[rN_regnum], 4, regs[E_FS0_REGNUM + fsM]);
+	  pv_area_store (stack, regs[rN_regnum], 4, regs[E_FS0_REGNUM + fsM]);
 	  regs[rN_regnum] = pv_add_constant (regs[rN_regnum], imm24);
 
 	  pc += 6;
@@ -912,7 +942,7 @@ mn10300_analyze_prologue (struct gdbarch *gdbarch,
 
 	  rN_regnum = translate_rreg (rN);
 
-	  stack.store (regs[rN_regnum], 4, regs[E_FS0_REGNUM + fsM]);
+	  pv_area_store (stack, regs[rN_regnum], 4, regs[E_FS0_REGNUM + fsM]);
 	  regs[rN_regnum] = pv_add_constant (regs[rN_regnum], imm32);
 
 	  pc += 7;
@@ -1019,9 +1049,11 @@ mn10300_analyze_prologue (struct gdbarch *gdbarch,
     }
 
   /* Record where all the registers were saved.  */
-  stack.scan (check_for_saved, (void *) result);
+  pv_area_scan (stack, check_for_saved, (void *) result);
 
   result->prologue_end = after_last_frame_setup_insn;
+
+  do_cleanups (back_to);
 }
 
 /* Function: skip_prologue
@@ -1030,7 +1062,7 @@ mn10300_analyze_prologue (struct gdbarch *gdbarch,
 static CORE_ADDR
 mn10300_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
-  const char *name;
+  char *name;
   CORE_ADDR func_addr, func_end;
   struct mn10300_prologue p;
 
@@ -1064,12 +1096,10 @@ mn10300_analyze_frame_prologue (struct frame_info *this_frame,
         stop_addr = func_start;
 
       mn10300_analyze_prologue (get_frame_arch (this_frame),
-				func_start, stop_addr,
-				((struct mn10300_prologue *)
-				 *this_prologue_cache));
+                                func_start, stop_addr, *this_prologue_cache);
     }
 
-  return (struct mn10300_prologue *) *this_prologue_cache;
+  return *this_prologue_cache;
 }
 
 /* Given the next frame and a prologue cache, return this frame's
@@ -1122,9 +1152,11 @@ static struct value *
 mn10300_frame_prev_register (struct frame_info *this_frame,
 		             void **this_prologue_cache, int regnum)
 {
+  struct gdbarch_tdep *tdep = gdbarch_tdep (get_frame_arch (this_frame));
   struct mn10300_prologue *p
     = mn10300_analyze_frame_prologue (this_frame, this_prologue_cache);
   CORE_ADDR frame_base = mn10300_frame_base (this_frame, this_prologue_cache);
+  int reg_size = register_size (get_frame_arch (this_frame), regnum);
 
   if (regnum == E_SP_REGNUM)
     return frame_unwind_got_constant (this_frame, regnum, frame_base);
@@ -1191,7 +1223,7 @@ mn10300_push_dummy_call (struct gdbarch *gdbarch,
 			 CORE_ADDR bp_addr, 
 			 int nargs, struct value **args,
 			 CORE_ADDR sp, 
-			 function_call_return_method return_method,
+			 int struct_return,
 			 CORE_ADDR struct_addr)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
@@ -1200,8 +1232,7 @@ mn10300_push_dummy_call (struct gdbarch *gdbarch,
   int len, arg_len; 
   int stack_offset = 0;
   int argnum;
-  const gdb_byte *val;
-  gdb_byte valbuf[MN10300_MAX_REGISTER_SIZE];
+  char *val, valbuf[MAX_REGISTER_SIZE];
 
   /* This should be a nop, but align the stack just in case something
      went wrong.  Stacks are four byte aligned on the mn10300.  */
@@ -1211,7 +1242,7 @@ mn10300_push_dummy_call (struct gdbarch *gdbarch,
 
      XXX This doesn't appear to handle pass-by-invisible reference
      arguments.  */
-  regs_used = (return_method == return_method_struct) ? 1 : 0;
+  regs_used = struct_return ? 1 : 0;
   for (len = 0, argnum = 0; argnum < nargs; argnum++)
     {
       arg_len = (TYPE_LENGTH (value_type (args[argnum])) + 3) & ~3;
@@ -1226,7 +1257,7 @@ mn10300_push_dummy_call (struct gdbarch *gdbarch,
   /* Allocate stack space.  */
   sp -= len;
 
-  if (return_method == return_method_struct)
+  if (struct_return)
     {
       regs_used = 1;
       regcache_cooked_write_unsigned (regcache, E_D0_REGNUM, struct_addr);
@@ -1243,7 +1274,6 @@ mn10300_push_dummy_call (struct gdbarch *gdbarch,
 	{
 	  /* Change to pointer-to-type.  */
 	  arg_len = push_size;
-	  gdb_assert (push_size <= MN10300_MAX_REGISTER_SIZE);
 	  store_unsigned_integer (valbuf, push_size, byte_order,
 				  value_address (*args));
 	  val = &valbuf[0];
@@ -1251,7 +1281,7 @@ mn10300_push_dummy_call (struct gdbarch *gdbarch,
       else
 	{
 	  arg_len = TYPE_LENGTH (value_type (*args));
-	  val = value_contents (*args);
+	  val = (char *) value_contents (*args);
 	}
 
       while (regs_used < 2 && arg_len > 0)
@@ -1332,31 +1362,21 @@ mn10300_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int dwarf2)
      appear in GCC's numbering, but have no counterpart in GDB's
      world, are marked with a -1.  */
   static int dwarf2_to_gdb[] = {
-    E_D0_REGNUM, E_D1_REGNUM, E_D2_REGNUM, E_D3_REGNUM,
-    E_A0_REGNUM, E_A1_REGNUM, E_A2_REGNUM, E_A3_REGNUM,
-    -1, E_SP_REGNUM,
-
-    E_E0_REGNUM, E_E1_REGNUM, E_E2_REGNUM, E_E3_REGNUM,
-    E_E4_REGNUM, E_E5_REGNUM, E_E6_REGNUM, E_E7_REGNUM,
-
-    E_FS0_REGNUM + 0, E_FS0_REGNUM + 1, E_FS0_REGNUM + 2, E_FS0_REGNUM + 3,
-    E_FS0_REGNUM + 4, E_FS0_REGNUM + 5, E_FS0_REGNUM + 6, E_FS0_REGNUM + 7,
-
-    E_FS0_REGNUM + 8, E_FS0_REGNUM + 9, E_FS0_REGNUM + 10, E_FS0_REGNUM + 11,
-    E_FS0_REGNUM + 12, E_FS0_REGNUM + 13, E_FS0_REGNUM + 14, E_FS0_REGNUM + 15,
-
-    E_FS0_REGNUM + 16, E_FS0_REGNUM + 17, E_FS0_REGNUM + 18, E_FS0_REGNUM + 19,
-    E_FS0_REGNUM + 20, E_FS0_REGNUM + 21, E_FS0_REGNUM + 22, E_FS0_REGNUM + 23,
-
-    E_FS0_REGNUM + 24, E_FS0_REGNUM + 25, E_FS0_REGNUM + 26, E_FS0_REGNUM + 27,
-    E_FS0_REGNUM + 28, E_FS0_REGNUM + 29, E_FS0_REGNUM + 30, E_FS0_REGNUM + 31,
-
-    E_MDR_REGNUM, E_PSW_REGNUM, E_PC_REGNUM
+    0,  1,  2,  3,  4,  5,  6,  7, -1, 8,
+    15, 16, 17, 18, 19, 20, 21, 22,
+    32, 33, 34, 35, 36, 37, 38, 39,
+    40, 41, 42, 43, 44, 45, 46, 47,
+    48, 49, 50, 51, 52, 53, 54, 55,
+    56, 57, 58, 59, 60, 61, 62, 63,
+    9, 11
   };
 
   if (dwarf2 < 0
       || dwarf2 >= ARRAY_SIZE (dwarf2_to_gdb))
-    return -1;
+    {
+      warning (_("Bogus register number in debug info: %d"), dwarf2);
+      return -1;
+    }
 
   return dwarf2_to_gdb[dwarf2];
 }
@@ -1373,7 +1393,7 @@ mn10300_gdbarch_init (struct gdbarch_info info,
   if (arches != NULL)
     return arches->gdbarch;
 
-  tdep = XCNEW (struct gdbarch_tdep);
+  tdep = xmalloc (sizeof (struct gdbarch_tdep));
   gdbarch = gdbarch_alloc (&info, tdep);
 
   switch (info.bfd_arch_info->mach)
@@ -1408,6 +1428,8 @@ mn10300_gdbarch_init (struct gdbarch_info info,
   set_gdbarch_num_regs (gdbarch, num_regs);
   set_gdbarch_register_type (gdbarch, mn10300_register_type);
   set_gdbarch_skip_prologue (gdbarch, mn10300_skip_prologue);
+  set_gdbarch_read_pc (gdbarch, mn10300_read_pc);
+  set_gdbarch_write_pc (gdbarch, mn10300_write_pc);
   set_gdbarch_pc_regnum (gdbarch, E_PC_REGNUM);
   set_gdbarch_sp_regnum (gdbarch, E_SP_REGNUM);
   set_gdbarch_dwarf2_reg_to_regnum (gdbarch, mn10300_dwarf2_reg_to_regnum);
@@ -1415,11 +1437,10 @@ mn10300_gdbarch_init (struct gdbarch_info info,
   /* Stack unwinding.  */
   set_gdbarch_inner_than (gdbarch, core_addr_lessthan);
   /* Breakpoints.  */
-  set_gdbarch_breakpoint_kind_from_pc (gdbarch,
-				       mn10300_breakpoint::kind_from_pc);
-  set_gdbarch_sw_breakpoint_from_kind (gdbarch,
-				       mn10300_breakpoint::bp_from_kind);
+  set_gdbarch_breakpoint_from_pc (gdbarch, mn10300_breakpoint_from_pc);
   /* decr_pc_after_break?  */
+  /* Disassembly.  */
+  set_gdbarch_print_insn (gdbarch, print_insn_mn10300);
 
   /* Stage 2 */
   set_gdbarch_return_value (gdbarch, mn10300_return_value);
@@ -1446,6 +1467,9 @@ mn10300_dump_tdep (struct gdbarch *gdbarch, struct ui_file *file)
   fprintf_unfiltered (file, "mn10300_dump_tdep: am33_mode = %d\n",
 		      tdep->am33_mode);
 }
+
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+extern initialize_file_ftype _initialize_mn10300_tdep;
 
 void
 _initialize_mn10300_tdep (void)

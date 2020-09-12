@@ -1,5 +1,6 @@
 /* Remote serial interface for local (hardwired) serial ports for GO32.
-   Copyright (C) 1992-2019 Free Software Foundation, Inc.
+   Copyright (C) 1992, 1993, 2000, 2001, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    Contributed by Nigel Stephens, Algorithmics Ltd. (nigel@algor.co.uk).
 
@@ -24,6 +25,9 @@
 #include "defs.h"
 #include "gdbcmd.h"
 #include "serial.h"
+#include "gdb_string.h"
+
+
 /*
  * NS16550 UART registers
  */
@@ -145,7 +149,7 @@ typedef unsigned long u_long;
 #define NCNT		20
 
 static int intrcnt;
-static size_t cnts[NCNT];
+static int cnts[NCNT];
 static char *cntnames[NCNT] =
 {
   /* h/w interrupt counts.  */
@@ -227,7 +231,7 @@ static int dos_open (struct serial *scb, const char *name);
 static void dos_raw (struct serial *scb);
 static int dos_readchar (struct serial *scb, int timeout);
 static int dos_setbaudrate (struct serial *scb, int rate);
-static int dos_write (struct serial *scb, const void *buf, size_t count);
+static int dos_write (struct serial *scb, const char *str, int len);
 static void dos_close (struct serial *scb);
 static serial_ttystate dos_get_tty_state (struct serial *scb);
 static int dos_set_tty_state (struct serial *scb, serial_ttystate state);
@@ -593,26 +597,9 @@ dos_close (struct serial *scb)
 }
 
 
-/* Implementation of the serial_ops flush_output method.  */
 
 static int
-dos_flush_output (struct serial *scb)
-{
-  return 0;
-}
-
-/* Implementation of the serial_ops setparity method.  */
-
-static int
-dos_setparity (struct serial *scb, int parity)
-{
-  return 0;
-}
-
-/* Implementation of the serial_ops drain_output method.  */
-
-static int
-dos_drain_output (struct serial *scb)
+dos_noop (struct serial *scb)
 {
   return 0;
 }
@@ -633,8 +620,6 @@ dos_readchar (struct serial *scb, int timeout)
   then = rawclock () + (timeout * RAWHZ);
   while ((c = dos_getc (port)) < 0)
     {
-      QUIT;
-
       if (timeout >= 0 && (rawclock () - then) >= 0)
 	return SERIAL_TIMEOUT;
     }
@@ -662,7 +647,7 @@ dos_get_tty_state (struct serial *scb)
 	return NULL;
     }
 
-  state = XNEW (struct dos_ttystate);
+  state = (struct dos_ttystate *) xmalloc (sizeof *state);
   *state = *port;
   return (serial_ttystate) state;
 }
@@ -672,7 +657,7 @@ dos_copy_tty_state (struct serial *scb, serial_ttystate ttystate)
 {
   struct dos_ttystate *state;
 
-  state = XNEW (struct dos_ttystate);
+  state = (struct dos_ttystate *) xmalloc (sizeof *state);
   *state = *(struct dos_ttystate *) ttystate;
 
   return (serial_ttystate) state;
@@ -684,6 +669,17 @@ dos_set_tty_state (struct serial *scb, serial_ttystate ttystate)
   struct dos_ttystate *state;
 
   state = (struct dos_ttystate *) ttystate;
+  dos_setbaudrate (scb, state->baudrate);
+  return 0;
+}
+
+static int
+dos_noflush_set_tty_state (struct serial *scb, serial_ttystate new_ttystate,
+			   serial_ttystate old_ttystate)
+{
+  struct dos_ttystate *state;
+
+  state = (struct dos_ttystate *) new_ttystate;
   dos_setbaudrate (scb, state->baudrate);
   return 0;
 }
@@ -792,29 +788,26 @@ dos_setstopbits (struct serial *scb, int num)
 }
 
 static int
-dos_write (struct serial *scb, const void *buf, size_t count)
+dos_write (struct serial *scb, const char *str, int len)
 {
   volatile struct dos_ttystate *port = &ports[scb->fd];
-  size_t fifosize = port->fifo ? 16 : 1;
+  int fifosize = port->fifo ? 16 : 1;
   long then;
-  size_t cnt;
-  const char *str = (const char *) buf;
+  int cnt;
 
-  while (count > 0)
+  while (len > 0)
     {
-      QUIT;
-
       /* Send the data, fifosize bytes at a time.  */
-      cnt = fifosize > count ? count : fifosize;
+      cnt = fifosize > len ? len : fifosize;
       port->txbusy = 1;
       /* Francisco Pastor <fpastor.etra-id@etra.es> says OUTSB messes
 	 up the communications with UARTs with FIFOs.  */
 #ifdef UART_FIFO_WORKS
       outportsb (port->base + com_data, str, cnt);
       str += cnt;
-      count -= cnt;
+      len -= cnt;
 #else
-      for ( ; cnt > 0; cnt--, count--)
+      for ( ; cnt > 0; cnt--, len--)
 	outportb (port->base + com_data, *str++);
 #endif
 #ifdef DOS_STATS
@@ -855,15 +848,16 @@ dos_sendbreak (struct serial *scb)
 }
 
 
-static const struct serial_ops dos_ops =
+static struct serial_ops dos_ops =
 {
   "hardwire",
+  0,
   dos_open,
   dos_close,
   NULL,				/* fdopen, not implemented */
   dos_readchar,
   dos_write,
-  dos_flush_output,
+  dos_noop,			/* flush output */
   dos_flush_input,
   dos_sendbreak,
   dos_raw,
@@ -871,10 +865,10 @@ static const struct serial_ops dos_ops =
   dos_copy_tty_state,
   dos_set_tty_state,
   dos_print_tty_state,
+  dos_noflush_set_tty_state,
   dos_setbaudrate,
   dos_setstopbits,
-  dos_setparity,
-  dos_drain_output,
+  dos_noop,			/* Wait for output to drain.  */
   (void (*)(struct serial *, int))NULL	/* Change into async mode.  */
 };
 
@@ -887,7 +881,7 @@ gdb_pipe (int pdes[2])
 }
 
 static void
-info_serial_command (const char *arg, int from_tty)
+dos_info (char *arg, int from_tty)
 {
   struct dos_ttystate *port;
 #ifdef DOS_STATS
@@ -911,9 +905,10 @@ info_serial_command (const char *arg, int from_tty)
   printf_filtered ("\nTotal interrupts: %d\n", intrcnt);
   for (i = 0; i < NCNT; i++)
     if (cnts[i])
-      printf_filtered ("%s:\t%lu\n", cntnames[i], (unsigned long) cnts[i]);
+      printf_filtered ("%s:\t%d\n", cntnames[i], cnts[i]);
 #endif
 }
+
 
 void
 _initialize_ser_dos (void)
@@ -984,6 +979,6 @@ Show COM4 interrupt request."), NULL,
 			    NULL, /* FIXME: i18n: */
 			    &setlist, &showlist);
 
-  add_info ("serial", info_serial_command,
+  add_info ("serial", dos_info,
 	    _("Print DOS serial port status."));
 }

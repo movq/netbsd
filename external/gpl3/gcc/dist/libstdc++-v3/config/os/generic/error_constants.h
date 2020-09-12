@@ -1,6 +1,6 @@
 // Specific definitions for generic platforms  -*- C++ -*-
 
-// Copyright (C) 2007-2019 Free Software Foundation, Inc.
+// Copyright (C) 2007, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,9 +22,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file bits/error_constants.h
+/** @file error_constants.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{system_error}
+ *  You should not attempt to use it directly.
  */
 
 #ifndef _GLIBCXX_ERROR_CONSTANTS
@@ -33,9 +33,7 @@
 #include <bits/c++config.h>
 #include <cerrno>
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   enum class errc
     {
@@ -93,10 +91,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       no_lock_available = 			ENOLCK,
 
 #ifdef _GLIBCXX_HAVE_ENODATA
-      no_message_available = 			ENODATA,
+      no_message_available = 			ENODATA, 
 #endif
 
-      no_message = 				ENOMSG,
+      no_message = 				ENOMSG, 
       no_protocol_option = 			ENOPROTOOPT,
       no_space_on_device = 			ENOSPC,
 
@@ -172,7 +170,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       wrong_protocol_type = 			EPROTOTYPE
     };
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 #endif

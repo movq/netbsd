@@ -1,6 +1,7 @@
 /* Support for GDB maintenance commands.
 
-   Copyright (C) 1992-2019 Free Software Foundation, Inc.
+   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1999, 2000, 2001, 2002,
+   2003, 2004, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    Written by Fred Fish at Cygnus Support.
 
@@ -27,7 +28,6 @@
 #include "command.h"
 #include "gdbcmd.h"
 #include "symtab.h"
-#include "block.h"
 #include "gdbtypes.h"
 #include "demangle.h"
 #include "gdbcore.h"
@@ -36,15 +36,29 @@
 #include "symfile.h"
 #include "objfiles.h"
 #include "value.h"
-#include "top.h"
-#include "maint.h"
-#include "common/selftest.h"
+#include "gdb_assert.h"
 
 #include "cli/cli-decode.h"
-#include "cli/cli-utils.h"
-#include "cli/cli-setshow.h"
 
-static void maintenance_do_deprecate (const char *, int);
+extern void _initialize_maint_cmds (void);
+
+static void maintenance_command (char *, int);
+
+static void maintenance_internal_error (char *args, int from_tty);
+
+static void maintenance_demangle (char *, int);
+
+static void maintenance_time_display (char *, int);
+
+static void maintenance_space_display (char *, int);
+
+static void maintenance_info_command (char *, int);
+
+static void maintenance_info_sections (char *, int);
+
+static void maintenance_print_command (char *, int);
+
+static void maintenance_do_deprecate (char *, int);
 
 /* Set this to the maximum number of seconds to wait instead of waiting forever
    in target_wait().  If this timer times out, then it generates an error and
@@ -60,19 +74,31 @@ show_watchdog (struct ui_file *file, int from_tty,
   fprintf_filtered (file, _("Watchdog timer is %s.\n"), value);
 }
 
-/* Access the maintenance subcommands.  */
+/*
+
+   LOCAL FUNCTION
+
+   maintenance_command -- access the maintenance subcommands
+
+   SYNOPSIS
+
+   void maintenance_command (char *args, int from_tty)
+
+   DESCRIPTION
+
+ */
 
 static void
-maintenance_command (const char *args, int from_tty)
+maintenance_command (char *args, int from_tty)
 {
   printf_unfiltered (_("\"maintenance\" must be followed by "
 		       "the name of a maintenance command.\n"));
-  help_list (maintenancelist, "maintenance ", all_commands, gdb_stdout);
+  help_list (maintenancelist, "maintenance ", -1, gdb_stdout);
 }
 
 #ifndef _WIN32
 static void
-maintenance_dump_me (const char *args, int from_tty)
+maintenance_dump_me (char *args, int from_tty)
 {
   if (query (_("Should GDB dump core? ")))
     {
@@ -94,7 +120,7 @@ maintenance_dump_me (const char *args, int from_tty)
    GDB.  */
 
 static void
-maintenance_internal_error (const char *args, int from_tty)
+maintenance_internal_error (char *args, int from_tty)
 {
   internal_error (__FILE__, __LINE__, "%s", (args == NULL ? "" : args));
 }
@@ -105,46 +131,61 @@ maintenance_internal_error (const char *args, int from_tty)
    GDB.  */
 
 static void
-maintenance_internal_warning (const char *args, int from_tty)
+maintenance_internal_warning (char *args, int from_tty)
 {
   internal_warning (__FILE__, __LINE__, "%s", (args == NULL ? "" : args));
 }
 
-/* Stimulate the internal error mechanism that GDB uses when an
-   demangler problem is detected.  Allows testing of the mechanism.  */
+/* Someday we should allow demangling for things other than just
+   explicit strings.  For example, we might want to be able to specify
+   the address of a string in either GDB's process space or the
+   debuggee's process space, and have gdb fetch and demangle that
+   string.  If we have a char* pointer "ptr" that points to a string,
+   we might want to be able to given just the name and have GDB
+   demangle and print what it points to, etc.  (FIXME)  */
 
 static void
-maintenance_demangler_warning (const char *args, int from_tty)
+maintenance_demangle (char *args, int from_tty)
 {
-  demangler_warning (__FILE__, __LINE__, "%s", (args == NULL ? "" : args));
+  char *demangled;
+
+  if (args == NULL || *args == '\0')
+    {
+      printf_unfiltered (_("\"maintenance demangle\" takes "
+			   "an argument to demangle.\n"));
+    }
+  else
+    {
+      demangled = language_demangle (current_language, args, 
+				     DMGL_ANSI | DMGL_PARAMS);
+      if (demangled != NULL)
+	{
+	  printf_unfiltered ("%s\n", demangled);
+	  xfree (demangled);
+	}
+      else
+	{
+	  printf_unfiltered (_("Can't demangle \"%s\"\n"), args);
+	}
+    }
 }
 
-/* Old command to demangle a string.  The command has been moved to "demangle".
-   It is kept for now because otherwise "mt demangle" gets interpreted as
-   "mt demangler-warning" which artificially creates an internal gdb error.  */
-
 static void
-maintenance_demangle (const char *args, int from_tty)
-{
-  printf_filtered (_("This command has been moved to \"demangle\".\n"));
-}
-
-static void
-maintenance_time_display (const char *args, int from_tty)
+maintenance_time_display (char *args, int from_tty)
 {
   if (args == NULL || *args == '\0')
     printf_unfiltered (_("\"maintenance time\" takes a numeric argument.\n"));
   else
-    set_per_command_time (strtol (args, NULL, 10));
+    set_display_time (strtol (args, NULL, 10));
 }
 
 static void
-maintenance_space_display (const char *args, int from_tty)
+maintenance_space_display (char *args, int from_tty)
 {
   if (args == NULL || *args == '\0')
     printf_unfiltered ("\"maintenance space\" takes a numeric argument.\n");
   else
-    set_per_command_space (strtol (args, NULL, 10));
+    set_display_space (strtol (args, NULL, 10));
 }
 
 /* The "maintenance info" command is defined as a prefix, with
@@ -152,25 +193,11 @@ maintenance_space_display (const char *args, int from_tty)
    "maintenance info" with no args.  */
 
 static void
-maintenance_info_command (const char *arg, int from_tty)
+maintenance_info_command (char *arg, int from_tty)
 {
   printf_unfiltered (_("\"maintenance info\" must be followed "
 		       "by the name of an info command.\n"));
-  help_list (maintenanceinfolist, "maintenance info ", all_commands,
-	     gdb_stdout);
-}
-
-/* The "maintenance check" command is defined as a prefix, with
-   allow_unknown 0.  Therefore, its own definition is called only for
-   "maintenance check" with no args.  */
-
-static void
-maintenance_check_command (const char *arg, int from_tty)
-{
-  printf_unfiltered (_("\"maintenance check\" must be followed "
-		       "by the name of a check command.\n"));
-  help_list (maintenancechecklist, "maintenance check ", all_commands,
-	     gdb_stdout);
+  help_list (maintenanceinfolist, "maintenance info ", -1, gdb_stdout);
 }
 
 /* Mini tokenizing lexer for 'maint info sections' command.  */
@@ -204,7 +231,7 @@ match_substring (const char *string, const char *substr)
 }
 
 static int 
-match_bfd_flags (const char *string, flagword flags)
+match_bfd_flags (char *string, flagword flags)
 {
   if (flags & SEC_ALLOC)
     if (match_substring (string, "ALLOC"))
@@ -292,15 +319,14 @@ maint_print_section_info (const char *name, flagword flags,
 static void
 print_bfd_section_info (bfd *abfd, 
 			asection *asect, 
-			void *datum)
+			void *arg)
 {
   flagword flags = bfd_get_section_flags (abfd, asect);
   const char *name = bfd_section_name (abfd, asect);
-  const char *arg = (const char *) datum;
 
-  if (arg == NULL || *arg == '\0'
-      || match_substring (arg, name)
-      || match_bfd_flags (arg, flags))
+  if (arg == NULL || *((char *) arg) == '\0'
+      || match_substring ((char *) arg, name)
+      || match_bfd_flags ((char *) arg, flags))
     {
       struct gdbarch *gdbarch = gdbarch_from_bfd (abfd);
       int addr_size = gdbarch_addr_bit (gdbarch) / 8;
@@ -308,7 +334,6 @@ print_bfd_section_info (bfd *abfd,
 
       addr = bfd_section_vma (abfd, asect);
       endaddr = addr + bfd_section_size (abfd, asect);
-      printf_filtered (" [%d] ", gdb_bfd_section_index (abfd, asect));
       maint_print_section_info (name, flags, addr, endaddr,
 				asect->filepos, addr_size);
     }
@@ -317,7 +342,7 @@ print_bfd_section_info (bfd *abfd,
 static void
 print_objfile_section_info (bfd *abfd, 
 			    struct obj_section *asect, 
-			    const char *string)
+			    char *string)
 {
   flagword flags = bfd_get_section_flags (abfd, asect->the_bfd_section);
   const char *name = bfd_section_name (abfd, asect->the_bfd_section);
@@ -338,7 +363,7 @@ print_objfile_section_info (bfd *abfd,
 }
 
 static void
-maintenance_info_sections (const char *arg, int from_tty)
+maintenance_info_sections (char *arg, int from_tty)
 {
   if (exec_bfd)
     {
@@ -348,6 +373,7 @@ maintenance_info_sections (const char *arg, int from_tty)
       printf_filtered (_("file type %s.\n"), bfd_get_target (exec_bfd));
       if (arg && *arg && match_substring (arg, "ALLOBJ"))
 	{
+	  struct objfile *ofile;
 	  struct obj_section *osect;
 
 	  /* Only this function cares about the 'ALLOBJ' argument; 
@@ -357,7 +383,7 @@ maintenance_info_sections (const char *arg, int from_tty)
 	  if (strcmp (arg, "ALLOBJ") == 0)
 	    arg = NULL;
 
-	  for (objfile *ofile : current_program_space->objfiles ())
+	  ALL_OBJFILES (ofile)
 	    {
 	      printf_filtered (_("  Object file: %s\n"), 
 			       bfd_get_filename (ofile->obfd));
@@ -368,7 +394,7 @@ maintenance_info_sections (const char *arg, int from_tty)
 	    }
 	}
       else 
-	bfd_map_over_sections (exec_bfd, print_bfd_section_info, (void *) arg);
+	bfd_map_over_sections (exec_bfd, print_bfd_section_info, arg);
     }
 
   if (core_bfd)
@@ -377,19 +403,19 @@ maintenance_info_sections (const char *arg, int from_tty)
       printf_filtered ("    `%s', ", bfd_get_filename (core_bfd));
       wrap_here ("        ");
       printf_filtered (_("file type %s.\n"), bfd_get_target (core_bfd));
-      bfd_map_over_sections (core_bfd, print_bfd_section_info, (void *) arg);
+      bfd_map_over_sections (core_bfd, print_bfd_section_info, arg);
     }
 }
 
-static void
-maintenance_print_statistics (const char *args, int from_tty)
+void
+maintenance_print_statistics (char *args, int from_tty)
 {
   print_objfile_statistics ();
   print_symbol_bcache_statistics ();
 }
 
 static void
-maintenance_print_architecture (const char *args, int from_tty)
+maintenance_print_architecture (char *args, int from_tty)
 {
   struct gdbarch *gdbarch = get_current_arch ();
 
@@ -397,11 +423,14 @@ maintenance_print_architecture (const char *args, int from_tty)
     gdbarch_dump (gdbarch, gdb_stdout);
   else
     {
-      stdio_file file;
+      struct cleanup *cleanups;
+      struct ui_file *file = gdb_fopen (args, "w");
 
-      if (!file.open (args, "w"))
+      if (file == NULL)
 	perror_with_name (_("maintenance print architecture"));
-      gdbarch_dump (gdbarch, &file);
+      cleanups = make_cleanup_ui_file_delete (file);
+      gdbarch_dump (gdbarch, file);
+      do_cleanups (cleanups);
     }
 }
 
@@ -410,12 +439,11 @@ maintenance_print_architecture (const char *args, int from_tty)
    "maintenance print" with no args.  */
 
 static void
-maintenance_print_command (const char *arg, int from_tty)
+maintenance_print_command (char *arg, int from_tty)
 {
   printf_unfiltered (_("\"maintenance print\" must be followed "
 		       "by the name of a print command.\n"));
-  help_list (maintenanceprintlist, "maintenance print ", all_commands,
-	     gdb_stdout);
+  help_list (maintenanceprintlist, "maintenance print ", -1, gdb_stdout);
 }
 
 /* The "maintenance translate-address" command converts a section and address
@@ -424,12 +452,13 @@ maintenance_print_command (const char *arg, int from_tty)
    or   maintenance translate-address <addr>.  */
 
 static void
-maintenance_translate_address (const char *arg, int from_tty)
+maintenance_translate_address (char *arg, int from_tty)
 {
   CORE_ADDR address;
   struct obj_section *sect;
-  const char *p;
-  struct bound_minimal_symbol sym;
+  char *p;
+  struct minimal_symbol *sym;
+  struct objfile *objfile;
 
   if (arg == NULL || *arg == 0)
     error (_("requires argument (address or section + address)"));
@@ -442,20 +471,19 @@ maintenance_translate_address (const char *arg, int from_tty)
       while (*p && !isspace (*p))	/* Find end of section name.  */
 	p++;
       if (*p == '\000')		/* End of command?  */
-	error (_("Need to specify section name and address"));
+	error (_("Need to specify <section-name> and <address>"));
+      *p++ = '\000';
+      while (isspace (*p))
+	p++;			/* Skip whitespace.  */
 
-      int arg_len = p - arg;
-      p = skip_spaces (p + 1);
+      ALL_OBJSECTIONS (objfile, sect)
+      {
+	if (strcmp (sect->the_bfd_section->name, arg) == 0)
+	  break;
+      }
 
-      for (objfile *objfile : current_program_space->objfiles ())
-	ALL_OBJFILE_OSECTIONS (objfile, sect)
-	  {
-	    if (strncmp (sect->the_bfd_section->name, arg, arg_len) == 0)
-	      goto found;
-	  }
-
-      error (_("Unknown section %s."), arg);
-    found: ;
+      if (!objfile)
+	error (_("Unknown section %s."), arg);
     }
 
   address = parse_and_eval_address (p);
@@ -465,13 +493,13 @@ maintenance_translate_address (const char *arg, int from_tty)
   else
     sym = lookup_minimal_symbol_by_pc (address);
 
-  if (sym.minsym)
+  if (sym)
     {
-      const char *symbol_name = MSYMBOL_PRINT_NAME (sym.minsym);
+      const char *symbol_name = SYMBOL_PRINT_NAME (sym);
       const char *symbol_offset
-	= pulongest (address - BMSYMBOL_VALUE_ADDRESS (sym));
+	= pulongest (address - SYMBOL_VALUE_ADDRESS (sym));
 
-      sect = MSYMBOL_OBJ_SECTION(sym.objfile, sym.minsym);
+      sect = SYMBOL_OBJ_SECTION(sym);
       if (sect != NULL)
 	{
 	  const char *section_name;
@@ -480,8 +508,8 @@ maintenance_translate_address (const char *arg, int from_tty)
 	  gdb_assert (sect->the_bfd_section && sect->the_bfd_section->name);
 	  section_name = sect->the_bfd_section->name;
 
-	  gdb_assert (sect->objfile && objfile_name (sect->objfile));
-	  obj_name = objfile_name (sect->objfile);
+	  gdb_assert (sect->objfile && sect->objfile->name);
+	  obj_name = sect->objfile->name;
 
 	  if (MULTI_OBJFILE_P ())
 	    printf_filtered (_("%s + %s in section %s of %s\n"),
@@ -509,7 +537,7 @@ maintenance_translate_address (const char *arg, int from_tty)
    offered.  */
 
 static void
-maintenance_deprecate (const char *args, int from_tty)
+maintenance_deprecate (char *args, int from_tty)
 {
   if (args == NULL || *args == '\0')
     {
@@ -519,11 +547,12 @@ enclosed in quotes.\n"));
     }
 
   maintenance_do_deprecate (args, 1);
+
 }
 
 
 static void
-maintenance_undeprecate (const char *args, int from_tty)
+maintenance_undeprecate (char *args, int from_tty)
 {
   if (args == NULL || *args == '\0')
     {
@@ -532,6 +561,7 @@ the command you want to undeprecate.\n"));
     }
 
   maintenance_do_deprecate (args, 0);
+
 }
 
 /* You really shouldn't be using this.  It is just for the testsuite.
@@ -542,14 +572,14 @@ the command you want to undeprecate.\n"));
    replacement.  */
 
 static void
-maintenance_do_deprecate (const char *text, int deprecate)
+maintenance_do_deprecate (char *text, int deprecate)
 {
   struct cmd_list_element *alias = NULL;
   struct cmd_list_element *prefix_cmd = NULL;
   struct cmd_list_element *cmd = NULL;
 
-  const char *start_ptr = NULL;
-  const char *end_ptr = NULL;
+  char *start_ptr = NULL;
+  char *end_ptr = NULL;
   int len;
   char *replacement = NULL;
 
@@ -573,7 +603,8 @@ maintenance_do_deprecate (const char *text, int deprecate)
 	  if (end_ptr != NULL)
 	    {
 	      len = end_ptr - start_ptr;
-	      replacement = savestring (start_ptr, len);
+	      start_ptr[len] = '\0';
+	      replacement = xstrdup (start_ptr);
 	    }
 	}
     }
@@ -589,40 +620,28 @@ maintenance_do_deprecate (const char *text, int deprecate)
      memory.  */
   if (alias)
     {
-      if (alias->malloced_replacement)
-	xfree ((char *) alias->replacement);
+      if (alias->flags & MALLOCED_REPLACEMENT)
+	xfree (alias->replacement);
 
       if (deprecate)
-	{
-	  alias->deprecated_warn_user = 1;
-	  alias->cmd_deprecated = 1;
-	}
+	alias->flags |= (DEPRECATED_WARN_USER | CMD_DEPRECATED);
       else
-	{
-	  alias->deprecated_warn_user = 0;
-	  alias->cmd_deprecated = 0;
-	}
+	alias->flags &= ~(DEPRECATED_WARN_USER | CMD_DEPRECATED);
       alias->replacement = replacement;
-      alias->malloced_replacement = 1;
+      alias->flags |= MALLOCED_REPLACEMENT;
       return;
     }
   else if (cmd)
     {
-      if (cmd->malloced_replacement)
-	xfree ((char *) cmd->replacement);
+      if (cmd->flags & MALLOCED_REPLACEMENT)
+	xfree (cmd->replacement);
 
       if (deprecate)
-	{
-	  cmd->deprecated_warn_user = 1;
-	  cmd->cmd_deprecated = 1;
-	}
+	cmd->flags |= (DEPRECATED_WARN_USER | CMD_DEPRECATED);
       else
-	{
-	  cmd->deprecated_warn_user = 0;
-	  cmd->cmd_deprecated = 0;
-	}
+	cmd->flags &= ~(DEPRECATED_WARN_USER | CMD_DEPRECATED);
       cmd->replacement = replacement;
-      cmd->malloced_replacement = 1;
+      cmd->flags |= MALLOCED_REPLACEMENT;
       return;
     }
   xfree (replacement);
@@ -634,16 +653,15 @@ struct cmd_list_element *maintenance_set_cmdlist;
 struct cmd_list_element *maintenance_show_cmdlist;
 
 static void
-maintenance_set_cmd (const char *args, int from_tty)
+maintenance_set_cmd (char *args, int from_tty)
 {
   printf_unfiltered (_("\"maintenance set\" must be followed "
 		       "by the name of a set command.\n"));
-  help_list (maintenance_set_cmdlist, "maintenance set ", all_commands,
-	     gdb_stdout);
+  help_list (maintenance_set_cmdlist, "maintenance set ", -1, gdb_stdout);
 }
 
 static void
-maintenance_show_cmd (const char *args, int from_tty)
+maintenance_show_cmd (char *args, int from_tty)
 {
   cmd_show_list (maintenance_show_cmdlist, from_tty, "");
 }
@@ -670,20 +688,17 @@ extern char etext;
 
 static int profiling_state;
 
-EXTERN_C void _mcleanup (void);
-
 static void
 mcleanup_wrapper (void)
 {
+  extern void _mcleanup (void);
+
   if (profiling_state)
     _mcleanup ();
 }
 
-EXTERN_C void monstartup (unsigned long, unsigned long);
-extern int main ();
-
 static void
-maintenance_set_profile_cmd (const char *args, int from_tty,
+maintenance_set_profile_cmd (char *args, int from_tty,
 			     struct cmd_list_element *c)
 {
   if (maintenance_profile_p == profiling_state)
@@ -694,6 +709,9 @@ maintenance_set_profile_cmd (const char *args, int from_tty,
   if (maintenance_profile_p)
     {
       static int profiling_initialized;
+
+      extern void monstartup (unsigned long, unsigned long);
+      extern int main();
 
       if (!profiling_initialized)
 	{
@@ -714,262 +732,21 @@ maintenance_set_profile_cmd (const char *args, int from_tty,
 }
 #else
 static void
-maintenance_set_profile_cmd (const char *args, int from_tty,
+maintenance_set_profile_cmd (char *args, int from_tty,
 			     struct cmd_list_element *c)
 {
   error (_("Profiling support is not available on this system."));
 }
 #endif
-
-/* If nonzero, display time usage both at startup and for each command.  */
 
-static int per_command_time;
-
-/* If nonzero, display space usage both at startup and for each command.  */
-
-static int per_command_space;
-
-/* If nonzero, display basic symtab stats for each command.  */
-
-static int per_command_symtab;
-
-/* mt per-command commands.  */
-
-static struct cmd_list_element *per_command_setlist;
-static struct cmd_list_element *per_command_showlist;
-
-/* Set whether to display time statistics to NEW_VALUE
-   (non-zero means true).  */
-
-void
-set_per_command_time (int new_value)
-{
-  per_command_time = new_value;
-}
-
-/* Set whether to display space statistics to NEW_VALUE
-   (non-zero means true).  */
-
-void
-set_per_command_space (int new_value)
-{
-  per_command_space = new_value;
-}
-
-/* Count the number of symtabs and blocks.  */
-
-static void
-count_symtabs_and_blocks (int *nr_symtabs_ptr, int *nr_compunit_symtabs_ptr,
-			  int *nr_blocks_ptr)
-{
-  int nr_symtabs = 0;
-  int nr_compunit_symtabs = 0;
-  int nr_blocks = 0;
-
-  /* When collecting statistics during startup, this is called before
-     pretty much anything in gdb has been initialized, and thus
-     current_program_space may be NULL.  */
-  if (current_program_space != NULL)
-    {
-      for (objfile *o : current_program_space->objfiles ())
-	{
-	  for (compunit_symtab *cu : o->compunits ())
-	    {
-	      ++nr_compunit_symtabs;
-	      nr_blocks += BLOCKVECTOR_NBLOCKS (COMPUNIT_BLOCKVECTOR (cu));
-	      nr_symtabs += std::distance (compunit_filetabs (cu).begin (),
-					   compunit_filetabs (cu).end ());
-	    }
-	}
-    }
-
-  *nr_symtabs_ptr = nr_symtabs;
-  *nr_compunit_symtabs_ptr = nr_compunit_symtabs;
-  *nr_blocks_ptr = nr_blocks;
-}
-
-/* As indicated by display_time and display_space, report GDB's
-   elapsed time and space usage from the base time and space recorded
-   in this object.  */
-
-scoped_command_stats::~scoped_command_stats ()
-{
-  /* Early exit if we're not reporting any stats.  It can be expensive to
-     compute the pre-command values so don't collect them at all if we're
-     not reporting stats.  Alas this doesn't work in the startup case because
-     we don't know yet whether we will be reporting the stats.  For the
-     startup case collect the data anyway (it should be cheap at this point),
-     and leave it to the reporter to decide whether to print them.  */
-  if (m_msg_type
-      && !per_command_time
-      && !per_command_space
-      && !per_command_symtab)
-    return;
-
-  if (m_time_enabled && per_command_time)
-    {
-      using namespace std::chrono;
-
-      run_time_clock::duration cmd_time
-	= run_time_clock::now () - m_start_cpu_time;
-
-      steady_clock::duration wall_time
-	= steady_clock::now () - m_start_wall_time;
-      /* Subtract time spend in prompt_for_continue from walltime.  */
-      wall_time -= get_prompt_for_continue_wait_time ();
-
-      printf_unfiltered (!m_msg_type
-			 ? _("Startup time: %.6f (cpu), %.6f (wall)\n")
-			 : _("Command execution time: %.6f (cpu), %.6f (wall)\n"),
-			 duration<double> (cmd_time).count (),
-			 duration<double> (wall_time).count ());
-    }
-
-  if (m_space_enabled && per_command_space)
-    {
-#ifdef HAVE_USEFUL_SBRK
-      char *lim = (char *) sbrk (0);
-
-      long space_now = lim - lim_at_start;
-      long space_diff = space_now - m_start_space;
-
-      printf_unfiltered (!m_msg_type
-			 ? _("Space used: %ld (%s%ld during startup)\n")
-			 : _("Space used: %ld (%s%ld for this command)\n"),
-			 space_now,
-			 (space_diff >= 0 ? "+" : ""),
-			 space_diff);
-#endif
-    }
-
-  if (m_symtab_enabled && per_command_symtab)
-    {
-      int nr_symtabs, nr_compunit_symtabs, nr_blocks;
-
-      count_symtabs_and_blocks (&nr_symtabs, &nr_compunit_symtabs, &nr_blocks);
-      printf_unfiltered (_("#symtabs: %d (+%d),"
-			   " #compunits: %d (+%d),"
-			   " #blocks: %d (+%d)\n"),
-			 nr_symtabs,
-			 nr_symtabs - m_start_nr_symtabs,
-			 nr_compunit_symtabs,
-			 (nr_compunit_symtabs
-			  - m_start_nr_compunit_symtabs),
-			 nr_blocks,
-			 nr_blocks - m_start_nr_blocks);
-    }
-}
-
-scoped_command_stats::scoped_command_stats (bool msg_type)
-: m_msg_type (msg_type)
-{
-  if (!m_msg_type || per_command_space)
-    {
-#ifdef HAVE_USEFUL_SBRK
-      char *lim = (char *) sbrk (0);
-      m_start_space = lim - lim_at_start;
-      m_space_enabled = 1;
-#endif
-    }
-  else
-    m_space_enabled = 0;
-
-  if (msg_type == 0 || per_command_time)
-    {
-      using namespace std::chrono;
-
-      m_start_cpu_time = run_time_clock::now ();
-      m_start_wall_time = steady_clock::now ();
-      m_time_enabled = 1;
-    }
-  else
-    m_time_enabled = 0;
-
-  if (msg_type == 0 || per_command_symtab)
-    {
-      int nr_symtabs, nr_compunit_symtabs, nr_blocks;
-
-      count_symtabs_and_blocks (&nr_symtabs, &nr_compunit_symtabs, &nr_blocks);
-      m_start_nr_symtabs = nr_symtabs;
-      m_start_nr_compunit_symtabs = nr_compunit_symtabs;
-      m_start_nr_blocks = nr_blocks;
-      m_symtab_enabled = 1;
-    }
-  else
-    m_symtab_enabled = 0;
-
-  /* Initialize timer to keep track of how long we waited for the user.  */
-  reset_prompt_for_continue_wait_time ();
-}
-
-/* Handle unknown "mt set per-command" arguments.
-   In this case have "mt set per-command on|off" affect every setting.  */
-
-static void
-set_per_command_cmd (const char *args, int from_tty)
-{
-  struct cmd_list_element *list;
-  int val;
-
-  val = parse_cli_boolean_value (args);
-  if (val < 0)
-    error (_("Bad value for 'mt set per-command no'."));
-
-  for (list = per_command_setlist; list != NULL; list = list->next)
-    if (list->var_type == var_boolean)
-      {
-	gdb_assert (list->type == set_cmd);
-	do_set_command (args, from_tty, list);
-      }
-}
-
-/* Command "show per-command" displays summary of all the current
-   "show per-command " settings.  */
-
-static void
-show_per_command_cmd (const char *args, int from_tty)
-{
-  cmd_show_list (per_command_showlist, from_tty, "");
-}
-
-
-/* The "maintenance selftest" command.  */
-
-static void
-maintenance_selftest (const char *args, int from_tty)
-{
-#if GDB_SELF_TEST
-  selftests::run_tests (args);
-#else
-  printf_filtered (_("\
-Selftests have been disabled for this build.\n"));
-#endif
-}
-
-static void
-maintenance_info_selftests (const char *arg, int from_tty)
-{
-#if GDB_SELF_TEST
-  printf_filtered ("Registered selftests:\n");
-  selftests::for_each_selftest ([] (const std::string &name) {
-    printf_filtered (" - %s\n", name.c_str ());
-  });
-#else
-  printf_filtered (_("\
-Selftests have been disabled for this build.\n"));
-#endif
-}
-
-
 void
 _initialize_maint_cmds (void)
 {
-  struct cmd_list_element *cmd;
-
   add_prefix_cmd ("maintenance", class_maintenance, maintenance_command, _("\
 Commands for use by GDB maintainers.\n\
 Includes commands to dump specific internal GDB structures in\n\
-a human readable form, to cause GDB to deliberately dump core, etc."),
+a human readable form, to cause GDB to deliberately dump core,\n\
+to test internal functions such as the C++/ObjC demangler, etc."),
 		  &maintenancelist, "maintenance ", 0,
 		  &cmdlist);
 
@@ -1032,67 +809,18 @@ Give GDB an internal warning.\n\
 Cause GDB to behave as if an internal warning was reported."),
 	   &maintenancelist);
 
-  add_cmd ("demangler-warning", class_maintenance,
-	   maintenance_demangler_warning, _("\
-Give GDB a demangler warning.\n\
-Cause GDB to behave as if a demangler warning was reported."),
+  add_cmd ("demangle", class_maintenance, maintenance_demangle, _("\
+Demangle a C++/ObjC mangled name.\n\
+Call internal GDB demangler routine to demangle a C++ link name\n\
+and prints the result."),
 	   &maintenancelist);
 
-  cmd = add_cmd ("demangle", class_maintenance, maintenance_demangle, _("\
-This command has been moved to \"demangle\"."),
-		 &maintenancelist);
-  deprecate_cmd (cmd, "demangle");
-
-  add_prefix_cmd ("per-command", class_maintenance, set_per_command_cmd, _("\
-Per-command statistics settings."),
-		    &per_command_setlist, "maintenance set per-command ",
-		    1/*allow-unknown*/, &maintenance_set_cmdlist);
-
-  add_prefix_cmd ("per-command", class_maintenance, show_per_command_cmd, _("\
-Show per-command statistics settings."),
-		    &per_command_showlist, "maintenance show per-command ",
-		    0/*allow-unknown*/, &maintenance_show_cmdlist);
-
-  add_setshow_boolean_cmd ("time", class_maintenance,
-			   &per_command_time, _("\
-Set whether to display per-command execution time."), _("\
-Show whether to display per-command execution time."),
-			   _("\
-If enabled, the execution time for each command will be\n\
-displayed following the command's output."),
-			   NULL, NULL,
-			   &per_command_setlist, &per_command_showlist);
-
-  add_setshow_boolean_cmd ("space", class_maintenance,
-			   &per_command_space, _("\
-Set whether to display per-command space usage."), _("\
-Show whether to display per-command space usage."),
-			   _("\
-If enabled, the space usage for each command will be\n\
-displayed following the command's output."),
-			   NULL, NULL,
-			   &per_command_setlist, &per_command_showlist);
-
-  add_setshow_boolean_cmd ("symtab", class_maintenance,
-			   &per_command_symtab, _("\
-Set whether to display per-command symtab statistics."), _("\
-Show whether to display per-command symtab statistics."),
-			   _("\
-If enabled, the basic symtab statistics for each command will be\n\
-displayed following the command's output."),
-			   NULL, NULL,
-			   &per_command_setlist, &per_command_showlist);
-
-  /* This is equivalent to "mt set per-command time on".
-     Kept because some people are used to typing "mt time 1".  */
   add_cmd ("time", class_maintenance, maintenance_time_display, _("\
 Set the display of time usage.\n\
 If nonzero, will cause the execution time for each command to be\n\
 displayed, following the command's output."),
 	   &maintenancelist);
 
-  /* This is equivalent to "mt set per-command space on".
-     Kept because some people are used to typing "mt space 1".  */
   add_cmd ("space", class_maintenance, maintenance_space_display, _("\
 Set the display of space usage.\n\
 If nonzero, will cause the execution space for each command to be\n\
@@ -1105,6 +833,41 @@ For each node in a type chain, print the raw data for each member of\n\
 the type structure, and the interpretation of the data."),
 	   &maintenanceprintlist);
 
+  add_cmd ("symbols", class_maintenance, maintenance_print_symbols, _("\
+Print dump of current symbol definitions.\n\
+Entries in the full symbol table are dumped to file OUTFILE.\n\
+If a SOURCE file is specified, dump only that file's symbols."),
+	   &maintenanceprintlist);
+
+  add_cmd ("msymbols", class_maintenance, maintenance_print_msymbols, _("\
+Print dump of current minimal symbol definitions.\n\
+Entries in the minimal symbol table are dumped to file OUTFILE.\n\
+If a SOURCE file is specified, dump only that file's minimal symbols."),
+	   &maintenanceprintlist);
+
+  add_cmd ("psymbols", class_maintenance, maintenance_print_psymbols, _("\
+Print dump of current partial symbol definitions.\n\
+Entries in the partial symbol table are dumped to file OUTFILE.\n\
+If a SOURCE file is specified, dump only that file's partial symbols."),
+	   &maintenanceprintlist);
+
+  add_cmd ("objfiles", class_maintenance, maintenance_print_objfiles,
+	   _("Print dump of current object file definitions."),
+	   &maintenanceprintlist);
+
+  add_cmd ("symtabs", class_maintenance, maintenance_info_symtabs, _("\
+List the full symbol tables for all object files.\n\
+This does not include information about individual symbols, blocks, or\n\
+linetables --- just the symbol table structures themselves.\n\
+With an argument REGEXP, list the symbol tables whose names that match that."),
+	   &maintenanceinfolist);
+
+  add_cmd ("psymtabs", class_maintenance, maintenance_info_psymtabs, _("\
+List the partial symbol tables for all object files.\n\
+This does not include information about individual partial symbols,\n\
+just the symbol table structures themselves."),
+	   &maintenanceinfolist);
+
   add_cmd ("statistics", class_maintenance, maintenance_print_statistics,
 	   _("Print statistics about internal gdb state."),
 	   &maintenanceprintlist);
@@ -1115,10 +878,9 @@ Print the internal architecture configuration.\n\
 Takes an optional file parameter."),
 	   &maintenanceprintlist);
 
-  add_prefix_cmd ("check", class_maintenance, maintenance_check_command, _("\
-Commands for checking internal gdb state."),
-		  &maintenancechecklist, "maintenance check ", 0,
-		  &maintenancelist);
+  add_cmd ("check-symtabs", class_maintenance, maintenance_check_symtabs,
+	   _("Check consistency of psymtabs and symtabs."),
+	   &maintenancelist);
 
   add_cmd ("translate-address", class_maintenance,
 	   maintenance_translate_address,
@@ -1137,16 +899,6 @@ Undeprecate a command.  Note that this is just in here so the \n\
 testsuite can check the command deprecator. You probably shouldn't use this,\n\
 If you decide you want to use it: maintenance undeprecate 'commandname'"),
 	   &maintenancelist);
-
-  add_cmd ("selftest", class_maintenance, maintenance_selftest, _("\
-Run gdb's unit tests.\n\
-Usage: maintenance selftest [filter]\n\
-This will run any unit tests that were built in to gdb.\n\
-If a filter is given, only the tests with that value in their name will ran."),
-	   &maintenancelist);
-
-  add_cmd ("selftests", class_maintenance, maintenance_info_selftests,
-	 _("List the registered selftests."), &maintenanceinfolist);
 
   add_setshow_zinteger_cmd ("watchdog", class_maintenance, &watchdog, _("\
 Set watchdog timer."), _("\

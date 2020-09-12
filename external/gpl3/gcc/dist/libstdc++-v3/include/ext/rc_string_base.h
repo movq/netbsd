@@ -1,6 +1,7 @@
 // Reference-counted versatile string base -*- C++ -*-
 
-// Copyright (C) 2005-2019 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2007, 2008, 2009, 2010
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -23,8 +24,9 @@
 // <http://www.gnu.org/licenses/>.
 
 /** @file ext/rc_string_base.h
+ *  This file is a GNU extension to the Standard C++ Library.
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{ext/vstring.h}
+ *  You should not attempt to use it directly.
  */
 
 #ifndef _RC_STRING_BASE_H
@@ -33,9 +35,7 @@
 #include <ext/atomicity.h>
 #include <bits/stl_iterator_base_funcs.h>
 
-namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
 
   /**
    *  Documentation?  What's that?
@@ -115,7 +115,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    size_type	    _M_capacity;
 	    _Atomic_word    _M_refcount;
 	  }                 _M_info;
-
+	  
 	  // Only for alignment purposes.
 	  _CharT            _M_align;
 	};
@@ -132,10 +132,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  __atomic_add_dispatch(&_M_info._M_refcount, 1);
 	  return _M_refdata();
 	}  // XXX MT
-
+	
 	void
 	_M_set_length(size_type __n)
-	{
+	{ 
 	  _M_info._M_refcount = 0;  // One reference.
 	  _M_info._M_length = __n;
 	  // grrr. (per 21.3.4)
@@ -193,22 +193,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _M_grab(const _Alloc& __alloc) const
       {
 	return (!_M_is_leaked() && _M_get_allocator() == __alloc)
-		? _M_rep()->_M_refcopy() : _M_rep()->_M_clone(__alloc);
+	        ? _M_rep()->_M_refcopy() : _M_rep()->_M_clone(__alloc);
       }
 
       void
       _M_dispose()
       {
-	// Be race-detector-friendly.  For more info see bits/c++config.
-	_GLIBCXX_SYNCHRONIZATION_HAPPENS_BEFORE(&_M_rep()->_M_info.
-						_M_refcount);
 	if (__exchange_and_add_dispatch(&_M_rep()->_M_info._M_refcount,
 					-1) <= 0)
-	  {
-	    _GLIBCXX_SYNCHRONIZATION_HAPPENS_AFTER(&_M_rep()->_M_info.
-						   _M_refcount);
-	    _M_rep()->_M_destroy(_M_get_allocator());
-	  }
+	  _M_rep()->_M_destroy(_M_get_allocator());
       }  // XXX MT
 
       bool
@@ -225,19 +218,19 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       // _S_construct_aux is used to implement the 21.3.1 para 15 which
       // requires special behaviour if _InIterator is an integral type
       template<typename _InIterator>
-	static _CharT*
-	_S_construct_aux(_InIterator __beg, _InIterator __end,
+        static _CharT*
+        _S_construct_aux(_InIterator __beg, _InIterator __end,
 			 const _Alloc& __a, std::__false_type)
 	{
-	  typedef typename iterator_traits<_InIterator>::iterator_category _Tag;
-	  return _S_construct(__beg, __end, __a, _Tag());
+          typedef typename iterator_traits<_InIterator>::iterator_category _Tag;
+          return _S_construct(__beg, __end, __a, _Tag());
 	}
 
       // _GLIBCXX_RESOLVE_LIB_DEFECTS
       // 438. Ambiguity in the "do the right thing" clause
       template<typename _Integer>
-	static _CharT*
-	_S_construct_aux(_Integer __beg, _Integer __end,
+        static _CharT*
+        _S_construct_aux(_Integer __beg, _Integer __end,
 			 const _Alloc& __a, std::__true_type)
 	{ return _S_construct_aux_2(static_cast<size_type>(__beg),
 				    __end, __a); }
@@ -247,24 +240,24 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       { return _S_construct(__req, __c, __a); }
 
       template<typename _InIterator>
-	static _CharT*
-	_S_construct(_InIterator __beg, _InIterator __end, const _Alloc& __a)
+        static _CharT*
+        _S_construct(_InIterator __beg, _InIterator __end, const _Alloc& __a)
 	{
 	  typedef typename std::__is_integer<_InIterator>::__type _Integral;
 	  return _S_construct_aux(__beg, __end, __a, _Integral());
-	}
+        }
 
       // For Input Iterators, used in istreambuf_iterators, etc.
       template<typename _InIterator>
-	static _CharT*
-	 _S_construct(_InIterator __beg, _InIterator __end, const _Alloc& __a,
+        static _CharT*
+         _S_construct(_InIterator __beg, _InIterator __end, const _Alloc& __a,
 		      std::input_iterator_tag);
-
+      
       // For forward_iterators up to random_access_iterators, used for
       // string::iterator, _CharT*, etc.
       template<typename _FwdIterator>
-	static _CharT*
-	_S_construct(_FwdIterator __beg, _FwdIterator __end, const _Alloc& __a,
+        static _CharT*
+        _S_construct(_FwdIterator __beg, _FwdIterator __end, const _Alloc& __a,
 		     std::forward_iterator_tag);
 
       static _CharT*
@@ -313,7 +306,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
       __rc_string_base(const __rc_string_base& __rcs);
 
-#if __cplusplus >= 201103L
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
       __rc_string_base(__rc_string_base&& __rcs)
       : _M_dataplus(__rcs._M_dataplus)
       { __rcs._M_data(_S_empty_rep._M_refcopy()); }
@@ -322,11 +315,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       __rc_string_base(size_type __n, _CharT __c, const _Alloc& __a);
 
       template<typename _InputIterator>
-	__rc_string_base(_InputIterator __beg, _InputIterator __end,
+        __rc_string_base(_InputIterator __beg, _InputIterator __end,
 			 const _Alloc& __a);
 
       ~__rc_string_base()
-      { _M_dispose(); }
+      { _M_dispose(); }      
 
       allocator_type&
       _M_get_allocator()
@@ -348,16 +341,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       void
       _M_mutate(size_type __pos, size_type __len1, const _CharT* __s,
 		size_type __len2);
-
+      
       void
       _M_erase(size_type __pos, size_type __n);
 
       void
       _M_clear()
-      {
-	_M_dispose();
-	_M_data(_S_empty_rep._M_refcopy());
-      }
+      { _M_erase(size_type(0), _M_length()); }
 
       bool
       _M_compare(const __rc_string_base&) const
@@ -463,7 +453,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 				  __alloc);
 
       if (_M_info._M_length)
-	__rc_string_base::_S_copy(__r->_M_refdata(), _M_refdata(), _M_info._M_length);
+	_S_copy(__r->_M_refdata(), _M_refdata(), _M_info._M_length);
 
       __r->_M_set_length(_M_info._M_length);
       return __r->_M_refdata();
@@ -564,14 +554,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	// NB: Not required, but considered best practice.
 	if (__is_null_pointer(__beg) && __beg != __end)
 	  std::__throw_logic_error(__N("__rc_string_base::"
-				       "_S_construct null not valid"));
+				       "_S_construct NULL not valid"));
 
 	const size_type __dnew = static_cast<size_type>(std::distance(__beg,
 								      __end));
 	// Check for out_of_range and length_error exceptions.
 	_Rep* __r = _Rep::_S_create(__dnew, size_type(0), __a);
 	__try
-	  { __rc_string_base::_S_copy_chars(__r->_M_refdata(), __beg, __end); }
+	  { _S_copy_chars(__r->_M_refdata(), __beg, __end); }
 	__catch(...)
 	  {
 	    __r->_M_destroy(__a);
@@ -592,7 +582,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       // Check for out_of_range and length_error exceptions.
       _Rep* __r = _Rep::_S_create(__n, size_type(0), __a);
       if (__n)
-	__rc_string_base::_S_assign(__r->_M_refdata(), __n, __c);
+	_S_assign(__r->_M_refdata(), __n, __c);
 
       __r->_M_set_length(__n);
       return __r->_M_refdata();
@@ -607,7 +597,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	_M_set_sharable();
       if (__rcs._M_is_leaked())
 	__rcs._M_set_sharable();
-
+      
       _CharT* __tmp = _M_data();
       _M_data(__rcs._M_data());
       __rcs._M_data(__tmp);
@@ -616,7 +606,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       // 431. Swapping containers with unequal allocators.
       std::__alloc_swap<allocator_type>::_S_do_it(_M_get_allocator(),
 						  __rcs._M_get_allocator());
-    }
+    } 
 
   template<typename _CharT, typename _Traits, typename _Alloc>
     void
@@ -639,7 +629,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       // Make sure we don't shrink below the current size.
       if (__res < _M_length())
 	__res = _M_length();
-
+      
       if (__res != _M_capacity() || _M_is_shared())
 	{
 	  _CharT* __tmp = _M_rep()->_M_clone(_M_get_allocator(),
@@ -656,18 +646,18 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	      size_type __len2)
     {
       const size_type __how_much = _M_length() - __pos - __len1;
-
+      
       _Rep* __r = _Rep::_S_create(_M_length() + __len2 - __len1,
 				  _M_capacity(), _M_get_allocator());
-
+      
       if (__pos)
-	this->_S_copy(__r->_M_refdata(), _M_data(), __pos);
+	_S_copy(__r->_M_refdata(), _M_data(), __pos);
       if (__s && __len2)
-	this->_S_copy(__r->_M_refdata() + __pos, __s, __len2);
+	_S_copy(__r->_M_refdata() + __pos, __s, __len2);
       if (__how_much)
-	this->_S_copy(__r->_M_refdata() + __pos + __len2,
+	_S_copy(__r->_M_refdata() + __pos + __len2,
 		_M_data() + __pos + __len1, __how_much);
-
+      
       _M_dispose();
       _M_data(__r->_M_refdata());
     }
@@ -679,7 +669,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     {
       const size_type __new_size = _M_length() - __n;
       const size_type __how_much = _M_length() - __pos - __n;
-
+      
       if (_M_is_shared())
 	{
 	  // Must reallocate.
@@ -687,9 +677,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 				      _M_get_allocator());
 
 	  if (__pos)
-	    this->_S_copy(__r->_M_refdata(), _M_data(), __pos);
+	    _S_copy(__r->_M_refdata(), _M_data(), __pos);
 	  if (__how_much)
-	    this->_S_copy(__r->_M_refdata() + __pos,
+	    _S_copy(__r->_M_refdata() + __pos,
 		    _M_data() + __pos + __n, __how_much);
 
 	  _M_dispose();
@@ -698,11 +688,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       else if (__how_much && __n)
 	{
 	  // Work in-place.
-	  this->_S_move(_M_data() + __pos,
+	  _S_move(_M_data() + __pos,
 		  _M_data() + __pos + __n, __how_much);
 	}
 
-      _M_rep()->_M_set_length(__new_size);
+      _M_rep()->_M_set_length(__new_size);      
     }
 
   template<>
@@ -729,7 +719,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     }
 #endif
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 #endif /* _RC_STRING_BASE_H */

@@ -1,5 +1,6 @@
 /* Utility to load a file into the simulator.
-   Copyright (C) 1997-2019 Free Software Foundation, Inc.
+   Copyright (C) 1997, 1998, 2001, 2002, 2004, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -19,7 +20,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
    to suggest that they shouldn't :-)].  */
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+#include "cconfig.h"
 #endif
 #include "ansidecl.h"
 #include <stdio.h> /* for NULL */
@@ -36,11 +37,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #include "gdb/callback.h"
 #include "gdb/remote-sim.h"
 
-static void eprintf (host_callback *, const char *, ...);
-static void xprintf (host_callback *, const char *, ...);
+static void eprintf PARAMS ((host_callback *, const char *, ...));
+static void xprintf PARAMS ((host_callback *, const char *, ...));
 static void report_transfer_performance
-  (host_callback *, unsigned long, time_t, time_t);
-static void xprintf_bfd_vma (host_callback *, bfd_vma);
+  PARAMS ((host_callback *, unsigned long, time_t, time_t));
+static void xprintf_bfd_vma PARAMS ((host_callback *, bfd_vma));
 
 /* Load program PROG into the simulator using the function DO_LOAD.
    If PROG_BFD is non-NULL, the file has already been opened.
@@ -56,9 +57,15 @@ static void xprintf_bfd_vma (host_callback *, bfd_vma);
 
 
 bfd *
-sim_load_file (SIM_DESC sd, const char *myname, host_callback *callback,
-	       const char *prog, bfd *prog_bfd, int verbose_p, int lma_p,
-	       sim_write_fn do_write)
+sim_load_file (sd, myname, callback, prog, prog_bfd, verbose_p, lma_p, do_write)
+     SIM_DESC sd;
+     const char *myname;
+     host_callback *callback;
+     char *prog;
+     bfd *prog_bfd;
+     int verbose_p;
+     int lma_p;
+     sim_write_fn do_write;
 {
   asection *s;
   /* Record separately as we don't want to close PROG_BFD if it was passed.  */
@@ -163,11 +170,11 @@ sim_load_file (SIM_DESC sd, const char *myname, host_callback *callback,
 }
 
 static void
-xprintf (host_callback *callback, const char *fmt, ...)
+xprintf VPARAMS ((host_callback *callback, const char *fmt, ...))
 {
   va_list ap;
 
-  va_start (ap, fmt);
+  VA_START (ap, fmt);
 
   (*callback->vprintf_filtered) (callback, fmt, ap);
 
@@ -175,11 +182,11 @@ xprintf (host_callback *callback, const char *fmt, ...)
 }
 
 static void
-eprintf (host_callback *callback, const char *fmt, ...)
+eprintf VPARAMS ((host_callback *callback, const char *fmt, ...))
 {
   va_list ap;
 
-  va_start (ap, fmt);
+  VA_START (ap, fmt);
 
   (*callback->evprintf_filtered) (callback, fmt, ap);
 
@@ -189,8 +196,10 @@ eprintf (host_callback *callback, const char *fmt, ...)
 /* Report how fast the transfer went. */
 
 static void
-report_transfer_performance (host_callback *callback, unsigned long data_count,
-			     time_t start_time, time_t end_time)
+report_transfer_performance (callback, data_count, start_time, end_time)
+     host_callback *callback;
+     unsigned long data_count;
+     time_t start_time, end_time;
 {
   xprintf (callback, "Transfer rate: ");
   if (end_time != start_time)
@@ -205,7 +214,9 @@ report_transfer_performance (host_callback *callback, unsigned long data_count,
    This is intended to handle the vagaries of 32 vs 64 bits, etc.  */
 
 static void
-xprintf_bfd_vma (host_callback *callback, bfd_vma vma)
+xprintf_bfd_vma (callback, vma)
+     host_callback *callback;
+     bfd_vma vma;
 {
   /* FIXME: for now */
   xprintf (callback, "0x%lx", (unsigned long) vma);

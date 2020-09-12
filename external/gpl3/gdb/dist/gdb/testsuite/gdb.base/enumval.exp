@@ -1,6 +1,6 @@
 # This testcase is part of GDB, the GNU debugger.
 
-# Copyright 2012-2019 Free Software Foundation, Inc.
+# Copyright 2012-2013 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,9 +15,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-standard_testfile
+set testfile "enumval"
+set srcfile ${testfile}.c
+set binfile ${objdir}/${subdir}/${testfile}
 
-if {[prepare_for_testing "failed to prepare" $testfile $srcfile debug]} {
+if { [prepare_for_testing enumval.exp "enumval" "" {debug}] } {
     return -1
 }
 
@@ -69,9 +71,3 @@ gdb_test_multiple $test $test {
 	}
     }
 }
-
-# gold/15021
-# With -fdebug-types-section, Gold's .gdb_index entry for ZERO refers to the
-# CU, but the CU doesn't use the TU (type unit) that defines ZERO.
-# Thus gdb has to read in every TU for the CU.
-gdb_test "p ZERO" "ZERO"

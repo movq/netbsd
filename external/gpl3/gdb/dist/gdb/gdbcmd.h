@@ -6,7 +6,8 @@
    fnasser@redhat.com    */
 
 /* Header file for GDB-specific command-line stuff.
-   Copyright (C) 1986-2019 Free Software Foundation, Inc.
+   Copyright (C) 1986, 1989, 1990, 1991, 1992, 1993, 1994, 1998, 1999, 2000,
+   2002, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -26,7 +27,6 @@
 
 #include "command.h"
 #include "ui-out.h"
-#include "cli/cli-script.h"
 
 /* Chain containing all defined commands.  */
 
@@ -56,9 +56,17 @@ extern struct cmd_list_element *detachlist;
 
 extern struct cmd_list_element *killlist;
 
+/* Chain containing all defined toggle subcommands.  */
+
+extern struct cmd_list_element *togglelist;
+
 /* Chain containing all defined stop subcommands.  */
 
 extern struct cmd_list_element *stoplist;
+
+/* Chain containing all defined "enable breakpoint" subcommands.  */
+
+extern struct cmd_list_element *enablebreaklist;
 
 /* Chain containing all defined set subcommands.  */
 
@@ -96,10 +104,6 @@ extern struct cmd_list_element *maintenanceinfolist;
 
 extern struct cmd_list_element *maintenanceprintlist;
 
-/* Chain containing all defined "maintenance check" subcommands.  */
-
-extern struct cmd_list_element *maintenancechecklist;
-
 /* Chain containing all defined "maintenance set" subcommands.  */
 
 extern struct cmd_list_element *maintenance_set_cmdlist;
@@ -111,14 +115,6 @@ extern struct cmd_list_element *maintenance_show_cmdlist;
 extern struct cmd_list_element *setprintlist;
 
 extern struct cmd_list_element *showprintlist;
-
-extern struct cmd_list_element *setprintrawlist;
-
-extern struct cmd_list_element *showprintrawlist;
-
-extern struct cmd_list_element *setprinttypelist;
-
-extern struct cmd_list_element *showprinttypelist;
 
 extern struct cmd_list_element *setdebuglist;
 
@@ -132,8 +128,10 @@ extern struct cmd_list_element *showchecklist;
 
 extern struct cmd_list_element *save_cmdlist;
 
-extern void execute_command (const char *, int);
-extern std::string execute_command_to_string (const char *p, int from_tty);
+extern void execute_command (char *, int);
+extern char *execute_command_to_string (char *p, int from_tty);
+
+enum command_control_type execute_control_command (struct command_line *);
 
 extern void print_command_line (struct command_line *, unsigned int,
 				struct ui_file *);

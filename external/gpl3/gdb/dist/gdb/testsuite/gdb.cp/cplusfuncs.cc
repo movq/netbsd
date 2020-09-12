@@ -58,7 +58,18 @@ public:
   const char *ccpfoo;
 };
 
+#ifdef usestubs
+extern "C" { 
+   void set_debug_traps();
+   void breakpoint();
+};
+#endif
+
 int main () {
+#ifdef usestubs
+   set_debug_traps();
+   breakpoint();
+#endif
    int z=3;
 }
 

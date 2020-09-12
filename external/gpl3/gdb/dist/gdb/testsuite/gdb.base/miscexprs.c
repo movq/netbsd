@@ -39,6 +39,11 @@ main ()
   sbig.s[90] = 255;
   lbig.l[333] = 999999999;
     
+#ifdef usestubs
+  set_debug_traps ();
+  breakpoint ();
+#endif
+
   marker1 ();
   return 0;
 }

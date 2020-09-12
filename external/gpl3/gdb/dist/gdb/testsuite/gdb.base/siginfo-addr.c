@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2004-2019 Free Software Foundation, Inc.
+   Copyright 2004, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -26,16 +26,13 @@
 
 static void *p;
 
-void
-pass (void)
-{
-}
-
 static void
 handler (int sig, siginfo_t *info, void *context)
 {
   if (info->si_addr == p)
-    pass ();
+    printf ("Correct si_addr value.\n");
+  else
+    printf ("Got si_addr = %p, expected %p.\n", info->si_addr, p);
   _exit (0);
 }
 

@@ -1,6 +1,7 @@
 // Wrapper for underlying C-language localization -*- C++ -*-
 
-// Copyright (C) 2001-2019 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -35,24 +36,13 @@
 #include <cstdio>
 #include <locale>
 #include <limits>
+#include <cstddef>
 
 #ifdef _GLIBCXX_HAVE_IEEEFP_H
 #include <ieeefp.h>
 #endif
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
-
-  namespace
-  {
-    struct _Save_errno
-    {
-      _Save_errno() : _M_errno(errno) { errno = 0; }
-      ~_Save_errno() { if (errno == 0) errno = _M_errno; }
-      int _M_errno;
-    };
-  }
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   template<>
     void
@@ -60,7 +50,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		   const __c_locale&) throw()
     {
       // Assumes __s formatted for "C" locale.
-      char* __old = setlocale(LC_ALL, 0);
+      char* __old = setlocale(LC_ALL, NULL);
       const size_t __len = strlen(__old) + 1;
       char* __sav = new char[__len];
       memcpy(__sav, __old, __len);
@@ -69,7 +59,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       bool __overflow = false;
 
 #if !__FLT_HAS_INFINITY__
-      const _Save_errno __save_errno;
+      errno = 0;
 #endif
 
 #ifdef _GLIBCXX_HAVE_STRTOF
@@ -125,7 +115,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		   const __c_locale&) throw()
     {
       // Assumes __s formatted for "C" locale.
-      char* __old = setlocale(LC_ALL, 0);
+      char* __old = setlocale(LC_ALL, NULL);
       const size_t __len = strlen(__old) + 1;
       char* __sav = new char[__len];
       memcpy(__sav, __old, __len);
@@ -133,7 +123,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       char* __sanity;
 
 #if !__DBL_HAS_INFINITY__
-      const _Save_errno __save_errno;
+      errno = 0;
 #endif
 
       __v = strtod(__s, &__sanity);
@@ -170,14 +160,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		   ios_base::iostate& __err, const __c_locale&) throw()
     {
       // Assumes __s formatted for "C" locale.
-      char* __old = setlocale(LC_ALL, 0);
+      char* __old = setlocale(LC_ALL, NULL);
       const size_t __len = strlen(__old) + 1;
       char* __sav = new char[__len];
       memcpy(__sav, __old, __len);
       setlocale(LC_ALL, "C");
 
 #if !__LDBL_HAS_INFINITY__
-      const _Save_errno __save_errno;
+      errno = 0;
 #endif
 
 #if defined(_GLIBCXX_HAVE_STRTOLD) && !defined(_GLIBCXX_HAVE_BROKEN_STRTOLD)
@@ -222,7 +212,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   {
     // Currently, the generic model only supports the "C" locale.
     // See http://gcc.gnu.org/ml/libstdc++/2003-02/msg00345.html
-    __cloc = 0;
+    __cloc = NULL;
     if (strcmp(__s, "C"))
       __throw_runtime_error(__N("locale::facet::_S_create_c_locale "
 			    "name not valid"));
@@ -230,7 +220,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   void
   locale::facet::_S_destroy_c_locale(__c_locale& __cloc)
-  { __cloc = 0; }
+  { __cloc = NULL; }
 
   __c_locale
   locale::facet::_S_clone_c_locale(__c_locale&) throw()
@@ -240,12 +230,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   locale::facet::_S_lc_ctype_c_locale(__c_locale, const char*)
   { return __c_locale(); }
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
-namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
 
   const char* const category_names[6 + _GLIBCXX_NUM_CATEGORIES] =
     {
@@ -257,17 +244,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       "LC_MESSAGES"
     };
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   const char* const* const locale::_S_categories = __gnu_cxx::category_names;
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 // XXX GLIBCXX_ABI Deprecated
 #ifdef _GLIBCXX_LONG_DOUBLE_COMPAT

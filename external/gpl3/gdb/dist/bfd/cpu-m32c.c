@@ -1,5 +1,5 @@
 /* BFD support for the M16C/M32C processors.
-   Copyright (C) 2004-2019 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -49,7 +49,6 @@ static const bfd_arch_info_type arch_info_struct[] =
     FALSE,			/* the default ? */
     bfd_default_compatible,	/* architecture comparison fn */
     m32c_scan,			/* string to architecture convert fn */
-    bfd_arch_default_fill,	/* Default fill.  */
     NULL			/* next in list */
   },
 };
@@ -67,6 +66,5 @@ const bfd_arch_info_type bfd_m32c_arch =
   TRUE,				/* The default ?  */
   bfd_default_compatible,	/* Architecture comparison fn.  */
   m32c_scan,			/* String to architecture convert fn.  */
-  bfd_arch_default_fill,	/* Default fill.  */
   &arch_info_struct[0],		/* Next in list.  */
 };

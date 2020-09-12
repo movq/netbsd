@@ -1,5 +1,6 @@
 /* Darwin support for GDB, the GNU debugger.
-   Copyright (C) 1997-2019 Free Software Foundation, Inc.
+   Copyright 1997, 1998, 1999, 2000, 2001, 2002, 2005, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    Contributed by Apple Computer, Inc.
 
@@ -23,19 +24,23 @@
 #include "inferior.h"
 #include "gdbcore.h"
 #include "target.h"
+#include "floatformat.h"
 #include "symtab.h"
 #include "regcache.h"
+#include "libbfd.h"
 #include "objfiles.h"
 
 #include "i387-tdep.h"
 #include "i386-tdep.h"
 #include "osabi.h"
 #include "ui-out.h"
+#include "symtab.h"
+#include "frame.h"
+#include "gdb_assert.h"
 #include "i386-darwin-tdep.h"
 #include "solib.h"
 #include "solib-darwin.h"
 #include "dwarf2-frame.h"
-#include <algorithm>
 
 /* Offsets into the struct i386_thread_state where we'll find the saved regs.
    From <mach/i386/thread_status.h> and i386-tdep.h.  */
@@ -52,7 +57,7 @@ int i386_darwin_thread_state_reg_offset[] =
   10 * 4,   /* EIP */
    9 * 4,   /* EFLAGS */
   11 * 4,   /* CS */
-   8 * 4,   /* SS */
+   8,       /* SS */
   12 * 4,   /* DS */
   13 * 4,   /* ES */
   14 * 4,   /* FS */
@@ -137,12 +142,8 @@ i386_darwin_arg_type_alignment (struct type *type)
       int i;
       int res = 4;
       for (i = 0; i < TYPE_NFIELDS (type); i++)
-	{
-	  int align
-	    = i386_darwin_arg_type_alignment (TYPE_FIELD_TYPE (type, i));
-
-	  res = std::max (res, align);
-	}
+        res = max (res,
+                   i386_darwin_arg_type_alignment (TYPE_FIELD_TYPE (type, i)));
       return res;
     }
   /* 2.  The caller aligns nonvector arguments to 4-byte boundaries.  */
@@ -153,8 +154,7 @@ static CORE_ADDR
 i386_darwin_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 			     struct regcache *regcache, CORE_ADDR bp_addr,
 			     int nargs, struct value **args, CORE_ADDR sp,
-			     function_call_return_method return_method,
-			     CORE_ADDR struct_addr)
+			     int struct_return, CORE_ADDR struct_addr)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
@@ -170,7 +170,7 @@ i386_darwin_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       int args_space = 0;
       int num_m128 = 0;
 
-      if (return_method == return_method_struct)
+      if (struct_return)
 	{
 	  if (write_pass)
 	    {
@@ -190,18 +190,20 @@ i386_darwin_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
               if (write_pass)
                 {
                   const gdb_byte *val = value_contents_all (args[i]);
-                  regcache->raw_write (I387_MM0_REGNUM(tdep) + num_m128, val);
+                  regcache_raw_write
+                    (regcache, I387_MM0_REGNUM(tdep) + num_m128, val);
                 }
               num_m128++;
             }
           else
             {
-              args_space = align_up (args_space,
-				     i386_darwin_arg_type_alignment (arg_type));
+              int len = TYPE_LENGTH (arg_type);
+              int align = i386_darwin_arg_type_alignment (arg_type);
+
+              args_space = align_up (args_space, align);
               if (write_pass)
                 write_memory (sp + args_space,
-                              value_contents_all (args[i]),
-			      TYPE_LENGTH (arg_type));
+                              value_contents_all (args[i]), len);
 
               /* The System V ABI says that:
                  
@@ -210,7 +212,7 @@ i386_darwin_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
                  depending on the size of the argument."
                  
                  This makes sure the stack stays word-aligned.  */
-              args_space += align_up (TYPE_LENGTH (arg_type), 4);
+              args_space += align_up (len, 4);
             }
         }
 
@@ -228,10 +230,10 @@ i386_darwin_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
   /* Finally, update the stack pointer...  */
   store_unsigned_integer (buf, 4, byte_order, sp);
-  regcache->cooked_write (I386_ESP_REGNUM, buf);
+  regcache_cooked_write (regcache, I386_ESP_REGNUM, buf);
 
   /* ...and fake a frame pointer.  */
-  regcache->cooked_write (I386_EBP_REGNUM, buf);
+  regcache_cooked_write (regcache, I386_EBP_REGNUM, buf);
 
   /* MarkK wrote: This "+ 8" is all over the place:
      (i386_frame_this_id, i386_sigtramp_frame_this_id,

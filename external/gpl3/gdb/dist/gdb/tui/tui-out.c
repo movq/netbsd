@@ -1,6 +1,7 @@
 /* Output generating routines for GDB CLI.
 
-   Copyright (C) 1999-2019 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2005, 2007, 2008, 2009, 2010,
+   2011 Free Software Foundation, Inc.
 
    Contributed by Cygnus Solutions.
    Written by Fernando Nasser for Cygnus.
@@ -22,100 +23,159 @@
 
 #include "defs.h"
 #include "ui-out.h"
-#include "tui-out.h"
+#include "cli-out.h"
 #include "tui.h"
+#include "gdb_string.h"
+#include "gdb_assert.h"
+
+struct tui_ui_out_data
+  {
+    struct cli_ui_out_data base;
+
+    int line;
+    int start_of_line;
+  };
+typedef struct tui_ui_out_data tui_out_data;
+
+/* This is the TUI ui-out implementation functions vector.  It is
+   initialized below in _initialize_tui_out, inheriting the CLI
+   version, and overriding a few methods.  */
+
+static struct ui_out_impl tui_ui_out_impl;
 
 /* Output an int field.  */
 
-void
-tui_ui_out::do_field_int (int fldno, int width, ui_align alignment,
-			  const char *fldname, int value)
+static void
+tui_field_int (struct ui_out *uiout, 
+	       int fldno, int width,
+	       enum ui_align alignment,
+	       const char *fldname, 
+	       int value)
 {
-  if (suppress_output ())
+  tui_out_data *data = ui_out_data (uiout);
+
+  if (data->base.suppress_output)
     return;
 
   /* Don't print line number, keep it for later.  */
-  if (m_start_of_line == 0 && strcmp (fldname, "line") == 0)
+  if (data->start_of_line == 0 && strcmp (fldname, "line") == 0)
     {
-      m_start_of_line++;
-      m_line = value;
+      data->start_of_line ++;
+      data->line = value;
       return;
     }
-  m_start_of_line++;
+  data->start_of_line ++;
 
-  cli_ui_out::do_field_int (fldno, width, alignment, fldname, value);
+  (*cli_ui_out_impl.field_int) (uiout, fldno,
+				width, alignment, fldname, value);
 }
 
 /* Other cli_field_* end up here so alignment and field separators are
    both handled by tui_field_string.  */
 
-void
-tui_ui_out::do_field_string (int fldno, int width, ui_align align,
-			     const char *fldname, const char *string,
-			     ui_out_style_kind style)
+static void
+tui_field_string (struct ui_out *uiout,
+		  int fldno, int width,
+		  enum ui_align align,
+		  const char *fldname,
+		  const char *string)
 {
-  if (suppress_output ())
+  tui_out_data *data = ui_out_data (uiout);
+
+  if (data->base.suppress_output)
     return;
 
-  if (fldname && m_line > 0 && strcmp (fldname, "fullname") == 0)
+  if (fldname && data->line > 0 && strcmp (fldname, "file") == 0)
     {
-      m_start_of_line++;
-      if (m_line > 0)
+      data->start_of_line ++;
+      if (data->line > 0)
         {
-          tui_show_source (string, m_line);
+          tui_show_source (string, data->line);
         }
       return;
     }
   
-  m_start_of_line++;
+  data->start_of_line++;
 
-  cli_ui_out::do_field_string (fldno, width, align, fldname, string, style);
+  (*cli_ui_out_impl.field_string) (uiout, fldno,
+				   width, align,
+				   fldname, string);
 }
 
-void
-tui_ui_out::do_field_fmt (int fldno, int width, ui_align align,
-			  const char *fldname, const char *format,
-			  va_list args)
+/* This is the only field function that does not align.  */
+
+static void
+tui_field_fmt (struct ui_out *uiout, int fldno,
+	       int width, enum ui_align align,
+	       const char *fldname,
+	       const char *format,
+	       va_list args)
 {
-  if (suppress_output ())
+  tui_out_data *data = ui_out_data (uiout);
+
+  if (data->base.suppress_output)
     return;
 
-  m_start_of_line++;
+  data->start_of_line++;
 
-  cli_ui_out::do_field_fmt (fldno, width, align, fldname, format, args);
+  (*cli_ui_out_impl.field_fmt) (uiout, fldno,
+				width, align,
+				fldname, format, args);
 }
 
-void
-tui_ui_out::do_text (const char *string)
+static void
+tui_text (struct ui_out *uiout, const char *string)
 {
-  if (suppress_output ())
-    return;
+  tui_out_data *data = ui_out_data (uiout);
 
-  m_start_of_line++;
-  if (m_line > 0)
+  if (data->base.suppress_output)
+    return;
+  data->start_of_line ++;
+  if (data->line > 0)
     {
       if (strchr (string, '\n') != 0)
         {
-          m_line = -1;
-          m_start_of_line = 0;
+          data->line = -1;
+          data->start_of_line = 0;
         }
       return;
     }
   if (strchr (string, '\n'))
-    m_start_of_line = 0;
+    data->start_of_line = 0;
 
-  cli_ui_out::do_text (string);
+  (*cli_ui_out_impl.text) (uiout, string);
 }
 
-tui_ui_out::tui_ui_out (ui_file *stream)
-: cli_ui_out (stream, 0),
-  m_line (-1),
-  m_start_of_line (0)
-{
-}
-
-tui_ui_out *
+struct ui_out *
 tui_out_new (struct ui_file *stream)
 {
-  return new tui_ui_out (stream);
+  int flags = 0;
+
+  tui_out_data *data = XMALLOC (tui_out_data);
+
+  /* Initialize base "class".  */
+  cli_out_data_ctor (&data->base, stream);
+
+  /* Initialize our fields.  */
+  data->line = -1;
+  data->start_of_line = 0;
+
+  return ui_out_new (&tui_ui_out_impl, data, flags);
+}
+
+/* Standard gdb initialization hook.  */
+
+extern void _initialize_tui_out (void);
+
+void
+_initialize_tui_out (void)
+{
+  /* Inherit the CLI version.  */
+  tui_ui_out_impl = cli_ui_out_impl;
+
+  /* Override a few methods.  */
+  tui_ui_out_impl.field_int = tui_field_int;
+  tui_ui_out_impl.field_string = tui_field_string;
+  tui_ui_out_impl.field_fmt = tui_field_fmt;
+  tui_ui_out_impl.text = tui_text;
 }

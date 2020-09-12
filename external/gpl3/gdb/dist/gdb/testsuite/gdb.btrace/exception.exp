@@ -1,6 +1,6 @@
 # This testcase is part of GDB, the GNU debugger.
 #
-# Copyright 2013-2019 Free Software Foundation, Inc.
+# Copyright 2013-2015 Free Software Foundation, Inc.
 #
 # Contributed by Intel Corp. <markus.t.metzger@intel.com>
 #
@@ -17,18 +17,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-if { [skip_btrace_tests] } {
-    unsupported "target does not support record-btrace"
-    return -1
-}
+# check for btrace support
+if { [skip_btrace_tests] } { return -1 }
 
+# start inferior
 standard_testfile exception.cc
-if [prepare_for_testing "failed to prepare" $testfile $srcfile {c++ debug}] {
+if [prepare_for_testing $testfile.exp $testfile $srcfile {c++ debug}] {
     return -1
 }
-
 if ![runto_main] {
-    untested "failed to run to main"
     return -1
 }
 
@@ -43,33 +40,31 @@ gdb_breakpoint $bp_2
 
 # trace the code between the two breakpoints
 gdb_continue_to_breakpoint "cont to bp.1" ".*$srcfile:$bp_1\r\n.*"
-# increase the BTS buffer size - the trace can be quite big
-gdb_test_no_output "set record btrace bts buffer-size 128000"
 gdb_test_no_output "record btrace"
 gdb_continue_to_breakpoint "cont to bp.2" ".*$srcfile:$bp_2\r\n.*"
 
 # show the flat branch trace
 send_gdb "record function-call-history 1\n"
 gdb_expect_list "flat" "\r\n$gdb_prompt $" [list \
-  [multi_line \
+  [join [list \
     "1\tmain\\(\\)" \
     "2\ttest\\(\\)" \
     "3\tfoo\\(\\)" \
     "4\tbar\\(\\)" \
     "5\tbad\\(\\)\r" \
-  ] \
+  ] "\r\n"] \
   "" \
   "\[0-9\]*\ttest\\(\\)"]
 
 # show the branch trace with calls indented
 send_gdb "record function-call-history /c 1\n"
 gdb_expect_list "indented" "\r\n$gdb_prompt $" [list \
-  [multi_line \
+  [join [list \
     "1\tmain\\(\\)" \
   "2\t  test\\(\\)" \
   "3\t    foo\\(\\)" \
   "4\t      bar\\(\\)" \
   "5\t        bad\\(\\)\r" \
-  ] \
+  ] "\r\n"] \
   "" \
   "\[0-9\]*\t  test\\(\\)"]

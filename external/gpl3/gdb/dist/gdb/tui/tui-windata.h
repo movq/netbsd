@@ -1,6 +1,7 @@
 /* Data/register window display.
 
-   Copyright (C) 1998-2019 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2001, 2004, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
 
@@ -19,12 +20,12 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef TUI_TUI_WINDATA_H
-#define TUI_TUI_WINDATA_H
+#ifndef TUI_WINDATA_H
+#define TUI_WINDATA_H
 
 #include "tui/tui-data.h"
 
-extern void tui_erase_data_content (const char *);
+extern void tui_erase_data_content (char *);
 extern void tui_display_all_data (void);
 extern void tui_check_data_values (struct frame_info *);
 extern void tui_display_data_from_line (int);
@@ -36,4 +37,4 @@ extern void tui_display_data_from (int, int);
 extern void tui_vertical_data_scroll (enum tui_scroll_direction, 
 				      int);
 
-#endif /* TUI_TUI_WINDATA_H */
+#endif

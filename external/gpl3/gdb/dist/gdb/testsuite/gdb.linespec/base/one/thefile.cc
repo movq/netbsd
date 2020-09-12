@@ -23,8 +23,3 @@ int NameSpace::overload(int x)
 {
   return x + 23;
 }
-
-int z1 ()
-{
-  return 0;
-}

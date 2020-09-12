@@ -1,4 +1,4 @@
-# Copyright 2007-2019 Free Software Foundation, Inc.
+# Copyright 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
 # This file is part of the GDB testsuite.
 
@@ -20,11 +20,13 @@ if { ![istarget "i?86-*-*"] && ![istarget "x86_64-*-*"] } then {
     return
 }
 
-standard_testfile
+set testfile "i386-signal"
+set srcfile ${testfile}.c
+set binfile ${objdir}/${subdir}/${testfile}
 
 if { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" \
-	  executable { debug nopie }] != "" } {
-    untested "failed to compile"
+	  executable { debug }] != "" } {
+    untested i386-sigframe.exp
     return -1
 }
 
@@ -35,6 +37,6 @@ gdb_load ${binfile}
 
 runto func
 gdb_test "backtrace 10" \
-    "#0  ($hex in )?func.*\r\n#1  <signal handler called>\r\n#2  ($hex in )?main.*"
+    "#0  ($hex in )?func.*\r\n#1  <signal handler called>\r\n#2  ($hex in)?main.*"
 
 gdb_test "finish" "Run till exit from \#0  func.*<signal handler called>"

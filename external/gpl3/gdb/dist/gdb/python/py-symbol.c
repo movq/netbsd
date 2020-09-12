@@ -1,6 +1,6 @@
 /* Python interface to symbols.
 
-   Copyright (C) 2008-2019 Free Software Foundation, Inc.
+   Copyright (C) 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,6 +19,7 @@
 
 #include "defs.h"
 #include "block.h"
+#include "exceptions.h"
 #include "frame.h"
 #include "symtab.h"
 #include "python-internal.h"
@@ -65,32 +66,13 @@ sympy_str (PyObject *self)
 }
 
 static PyObject *
-sympy_get_type (PyObject *self, void *closure)
-{
-  struct symbol *symbol = NULL;
-
-  SYMPY_REQUIRE_VALID (self, symbol);
-
-  if (SYMBOL_TYPE (symbol) == NULL)
-    {
-      Py_INCREF (Py_None);
-      return Py_None;
-    }
-
-  return type_to_type_object (SYMBOL_TYPE (symbol));
-}
-
-static PyObject *
 sympy_get_symtab (PyObject *self, void *closure)
 {
   struct symbol *symbol = NULL;
 
   SYMPY_REQUIRE_VALID (self, symbol);
 
-  if (!SYMBOL_OBJFILE_OWNED (symbol))
-    Py_RETURN_NONE;
-
-  return symtab_to_symtab_object (symbol_symtab (symbol));
+  return symtab_to_symtab_object (SYMBOL_SYMTAB (symbol));
 }
 
 static PyObject *
@@ -147,81 +129,42 @@ static PyObject *
 sympy_is_constant (PyObject *self, void *closure)
 {
   struct symbol *symbol = NULL;
-  enum address_class theclass;
+  enum address_class class;
 
   SYMPY_REQUIRE_VALID (self, symbol);
 
-  theclass = SYMBOL_CLASS (symbol);
+  class = SYMBOL_CLASS (symbol);
 
-  return PyBool_FromLong (theclass == LOC_CONST || theclass == LOC_CONST_BYTES);
+  return PyBool_FromLong (class == LOC_CONST || class == LOC_CONST_BYTES);
 }
 
 static PyObject *
 sympy_is_function (PyObject *self, void *closure)
 {
   struct symbol *symbol = NULL;
-  enum address_class theclass;
+  enum address_class class;
 
   SYMPY_REQUIRE_VALID (self, symbol);
 
-  theclass = SYMBOL_CLASS (symbol);
+  class = SYMBOL_CLASS (symbol);
 
-  return PyBool_FromLong (theclass == LOC_BLOCK);
+  return PyBool_FromLong (class == LOC_BLOCK);
 }
 
 static PyObject *
 sympy_is_variable (PyObject *self, void *closure)
 {
   struct symbol *symbol = NULL;
-  enum address_class theclass;
+  enum address_class class;
 
   SYMPY_REQUIRE_VALID (self, symbol);
 
-  theclass = SYMBOL_CLASS (symbol);
+  class = SYMBOL_CLASS (symbol);
 
   return PyBool_FromLong (!SYMBOL_IS_ARGUMENT (symbol)
-			  && (theclass == LOC_LOCAL || theclass == LOC_REGISTER
-			      || theclass == LOC_STATIC || theclass == LOC_COMPUTED
-			      || theclass == LOC_OPTIMIZED_OUT));
-}
-
-/* Implementation of gdb.Symbol.needs_frame -> Boolean.
-   Returns true iff the symbol needs a frame for evaluation.  */
-
-static PyObject *
-sympy_needs_frame (PyObject *self, void *closure)
-{
-  struct symbol *symbol = NULL;
-  int result = 0;
-
-  SYMPY_REQUIRE_VALID (self, symbol);
-
-  TRY
-    {
-      result = symbol_read_needs_frame (symbol);
-    }
-  CATCH (except, RETURN_MASK_ALL)
-    {
-      GDB_PY_HANDLE_EXCEPTION (except);
-    }
-  END_CATCH
-
-  if (result)
-    Py_RETURN_TRUE;
-  Py_RETURN_FALSE;
-}
-
-/* Implementation of gdb.Symbol.line -> int.
-   Returns the line number at which the symbol was defined.  */
-
-static PyObject *
-sympy_line (PyObject *self, void *closure)
-{
-  struct symbol *symbol = NULL;
-
-  SYMPY_REQUIRE_VALID (self, symbol);
-
-  return PyInt_FromLong (SYMBOL_LINE (symbol));
+			  && (class == LOC_LOCAL || class == LOC_REGISTER
+			      || class == LOC_STATIC || class == LOC_COMPUTED
+			      || class == LOC_OPTIMIZED_OUT));
 }
 
 /* Implementation of gdb.Symbol.is_valid (self) -> Boolean.
@@ -239,60 +182,6 @@ sympy_is_valid (PyObject *self, PyObject *args)
   Py_RETURN_TRUE;
 }
 
-/* Implementation of gdb.Symbol.value (self[, frame]) -> gdb.Value.  Returns
-   the value of the symbol, or an error in various circumstances.  */
-
-static PyObject *
-sympy_value (PyObject *self, PyObject *args)
-{
-  struct symbol *symbol = NULL;
-  struct frame_info *frame_info = NULL;
-  PyObject *frame_obj = NULL;
-  struct value *value = NULL;
-
-  if (!PyArg_ParseTuple (args, "|O", &frame_obj))
-    return NULL;
-
-  if (frame_obj != NULL && !PyObject_TypeCheck (frame_obj, &frame_object_type))
-    {
-      PyErr_SetString (PyExc_TypeError, "argument is not a frame");
-      return NULL;
-    }
-
-  SYMPY_REQUIRE_VALID (self, symbol);
-  if (SYMBOL_CLASS (symbol) == LOC_TYPEDEF)
-    {
-      PyErr_SetString (PyExc_TypeError, "cannot get the value of a typedef");
-      return NULL;
-    }
-
-  TRY
-    {
-      if (frame_obj != NULL)
-	{
-	  frame_info = frame_object_to_frame_info (frame_obj);
-	  if (frame_info == NULL)
-	    error (_("invalid frame"));
-	}
-
-      if (symbol_read_needs_frame (symbol) && frame_info == NULL)
-	error (_("symbol requires a frame to compute its value"));
-
-      /* TODO: currently, we have no way to recover the block in which SYMBOL
-	 was found, so we have no block to pass to read_var_value.  This will
-	 yield an incorrect value when symbol is not local to FRAME_INFO (this
-	 can happen with nested functions).  */
-      value = read_var_value (symbol, NULL, frame_info);
-    }
-  CATCH (except, RETURN_MASK_ALL)
-    {
-      GDB_PY_HANDLE_EXCEPTION (except);
-    }
-  END_CATCH
-
-  return value_to_value_object (value);
-}
-
 /* Given a symbol, and a symbol_object that has previously been
    allocated and initialized, populate the symbol_object with the
    struct symbol data.  Also, register the symbol_object life-cycle
@@ -303,16 +192,15 @@ set_symbol (symbol_object *obj, struct symbol *symbol)
 {
   obj->symbol = symbol;
   obj->prev = NULL;
-  if (SYMBOL_OBJFILE_OWNED (symbol)
-      && symbol_symtab (symbol) != NULL)
+  if (SYMBOL_SYMTAB (symbol))
     {
-      struct objfile *objfile = symbol_objfile (symbol);
+      obj->next = objfile_data (SYMBOL_SYMTAB (symbol)->objfile,
+				sympy_objfile_data_key);
 
-      obj->next = ((struct sympy_symbol_object *)
-		   objfile_data (objfile, sympy_objfile_data_key));
       if (obj->next)
 	obj->next->prev = obj;
-      set_objfile_data (objfile, sympy_objfile_data_key, obj);
+      set_objfile_data (SYMBOL_SYMTAB (symbol)->objfile,
+			sympy_objfile_data_key, obj);
     }
   else
     obj->next = NULL;
@@ -348,11 +236,9 @@ sympy_dealloc (PyObject *obj)
 
   if (sym_obj->prev)
     sym_obj->prev->next = sym_obj->next;
-  else if (sym_obj->symbol != NULL
-	   && SYMBOL_OBJFILE_OWNED (sym_obj->symbol)
-	   && symbol_symtab (sym_obj->symbol) != NULL)
+  else if (SYMBOL_SYMTAB (sym_obj->symbol))
     {
-      set_objfile_data (symbol_objfile (sym_obj->symbol),
+      set_objfile_data (SYMBOL_SYMTAB (sym_obj->symbol)->objfile,
 			sympy_objfile_data_key, sym_obj->next);
     }
   if (sym_obj->next)
@@ -369,17 +255,15 @@ sympy_dealloc (PyObject *obj)
 PyObject *
 gdbpy_lookup_symbol (PyObject *self, PyObject *args, PyObject *kw)
 {
-  int domain = VAR_DOMAIN;
-  struct field_of_this_result is_a_field_of_this;
+  int domain = VAR_DOMAIN, is_a_field_of_this = 0;
   const char *name;
-  static const char *keywords[] = { "name", "block", "domain", NULL };
-  struct symbol *symbol = NULL;
-  PyObject *block_obj = NULL, *sym_obj, *bool_obj;
-  const struct block *block = NULL;
+  static char *keywords[] = { "name", "block", "domain", NULL };
+  struct symbol *symbol;
+  PyObject *block_obj = NULL, *ret_tuple, *sym_obj, *bool_obj;
+  struct block *block = NULL;
 
-  if (!gdb_PyArg_ParseTupleAndKeywords (args, kw, "s|O!i", keywords, &name,
-					&block_object_type, &block_obj,
-					&domain))
+  if (! PyArg_ParseTupleAndKeywords (args, kw, "s|O!i", keywords, &name,
+				     &block_object_type, &block_obj, &domain))
     return NULL;
 
   if (block_obj)
@@ -387,52 +271,43 @@ gdbpy_lookup_symbol (PyObject *self, PyObject *args, PyObject *kw)
   else
     {
       struct frame_info *selected_frame;
+      volatile struct gdb_exception except;
 
-      TRY
+      TRY_CATCH (except, RETURN_MASK_ALL)
 	{
 	  selected_frame = get_selected_frame (_("No frame selected."));
 	  block = get_frame_block (selected_frame, NULL);
 	}
-      CATCH (except, RETURN_MASK_ALL)
-	{
-	  GDB_PY_HANDLE_EXCEPTION (except);
-	}
-      END_CATCH
-    }
-
-  TRY
-    {
-      symbol = lookup_symbol (name, block, (domain_enum) domain,
-			      &is_a_field_of_this).symbol;
-    }
-  CATCH (except, RETURN_MASK_ALL)
-    {
       GDB_PY_HANDLE_EXCEPTION (except);
     }
-  END_CATCH
 
-  gdbpy_ref<> ret_tuple (PyTuple_New (2));
-  if (ret_tuple == NULL)
+  symbol = lookup_symbol (name, block, domain, &is_a_field_of_this);
+
+  ret_tuple = PyTuple_New (2);
+  if (!ret_tuple)
     return NULL;
 
   if (symbol)
     {
       sym_obj = symbol_to_symbol_object (symbol);
       if (!sym_obj)
-	return NULL;
+	{
+	  Py_DECREF (ret_tuple);
+	  return NULL;
+	}
     }
   else
     {
       sym_obj = Py_None;
       Py_INCREF (Py_None);
     }
-  PyTuple_SET_ITEM (ret_tuple.get (), 0, sym_obj);
+  PyTuple_SET_ITEM (ret_tuple, 0, sym_obj);
 
-  bool_obj = (is_a_field_of_this.type != NULL) ? Py_True : Py_False;
+  bool_obj = is_a_field_of_this? Py_True : Py_False;
   Py_INCREF (bool_obj);
-  PyTuple_SET_ITEM (ret_tuple.get (), 1, bool_obj);
+  PyTuple_SET_ITEM (ret_tuple, 1, bool_obj);
 
-  return ret_tuple.release ();
+  return ret_tuple;
 }
 
 /* Implementation of
@@ -443,23 +318,15 @@ gdbpy_lookup_global_symbol (PyObject *self, PyObject *args, PyObject *kw)
 {
   int domain = VAR_DOMAIN;
   const char *name;
-  static const char *keywords[] = { "name", "domain", NULL };
-  struct symbol *symbol = NULL;
+  static char *keywords[] = { "name", "domain", NULL };
+  struct symbol *symbol;
   PyObject *sym_obj;
 
-  if (!gdb_PyArg_ParseTupleAndKeywords (args, kw, "s|i", keywords, &name,
-					&domain))
+  if (! PyArg_ParseTupleAndKeywords (args, kw, "s|i", keywords, &name,
+				     &domain))
     return NULL;
 
-  TRY
-    {
-      symbol = lookup_global_symbol (name, NULL, (domain_enum) domain).symbol;
-    }
-  CATCH (except, RETURN_MASK_ALL)
-    {
-      GDB_PY_HANDLE_EXCEPTION (except);
-    }
-  END_CATCH
+  symbol = lookup_symbol_global (name, NULL, domain);
 
   if (symbol)
     {
@@ -484,7 +351,7 @@ gdbpy_lookup_global_symbol (PyObject *self, PyObject *args, PyObject *kw)
 static void
 del_objfile_symbols (struct objfile *objfile, void *datum)
 {
-  symbol_object *obj = (symbol_object *) datum;
+  symbol_object *obj = datum;
   while (obj)
     {
       symbol_object *next = obj->next;
@@ -497,11 +364,11 @@ del_objfile_symbols (struct objfile *objfile, void *datum)
     }
 }
 
-int
+void
 gdbpy_initialize_symbols (void)
 {
   if (PyType_Ready (&symbol_object_type) < 0)
-    return -1;
+    return;
 
   /* Register an objfile "free" callback so we can properly
      invalidate symbol when an object file that is about to be
@@ -509,72 +376,42 @@ gdbpy_initialize_symbols (void)
   sympy_objfile_data_key
     = register_objfile_data_with_cleanup (NULL, del_objfile_symbols);
 
-  if (PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_UNDEF", LOC_UNDEF) < 0
-      || PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_CONST",
-				  LOC_CONST) < 0
-      || PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_STATIC",
-				  LOC_STATIC) < 0
-      || PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_REGISTER",
-				  LOC_REGISTER) < 0
-      || PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_ARG",
-				  LOC_ARG) < 0
-      || PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_REF_ARG",
-				  LOC_REF_ARG) < 0
-      || PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_LOCAL",
-				  LOC_LOCAL) < 0
-      || PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_TYPEDEF",
-				  LOC_TYPEDEF) < 0
-      || PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_LABEL",
-				  LOC_LABEL) < 0
-      || PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_BLOCK",
-				  LOC_BLOCK) < 0
-      || PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_CONST_BYTES",
-				  LOC_CONST_BYTES) < 0
-      || PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_UNRESOLVED",
-				  LOC_UNRESOLVED) < 0
-      || PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_OPTIMIZED_OUT",
-				  LOC_OPTIMIZED_OUT) < 0
-      || PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_COMPUTED",
-				  LOC_COMPUTED) < 0
-      || PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_COMMON_BLOCK",
-				  LOC_COMMON_BLOCK) < 0
-      || PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_REGPARM_ADDR",
-				  LOC_REGPARM_ADDR) < 0
-      || PyModule_AddIntConstant (gdb_module, "SYMBOL_UNDEF_DOMAIN",
-				  UNDEF_DOMAIN) < 0
-      || PyModule_AddIntConstant (gdb_module, "SYMBOL_VAR_DOMAIN",
-				  VAR_DOMAIN) < 0
-      || PyModule_AddIntConstant (gdb_module, "SYMBOL_STRUCT_DOMAIN",
-				  STRUCT_DOMAIN) < 0
-      || PyModule_AddIntConstant (gdb_module, "SYMBOL_MODULE_DOMAIN",
-				  MODULE_DOMAIN) < 0
-      || PyModule_AddIntConstant (gdb_module, "SYMBOL_COMMON_BLOCK_DOMAIN",
-				  COMMON_BLOCK_DOMAIN) < 0)
-    return -1;
+  PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_UNDEF", LOC_UNDEF);
+  PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_CONST", LOC_CONST);
+  PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_STATIC", LOC_STATIC);
+  PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_REGISTER", LOC_REGISTER);
+  PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_ARG", LOC_ARG);
+  PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_REF_ARG", LOC_REF_ARG);
+  PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_LOCAL", LOC_LOCAL);
+  PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_TYPEDEF", LOC_TYPEDEF);
+  PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_LABEL", LOC_LABEL);
+  PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_BLOCK", LOC_BLOCK);
+  PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_CONST_BYTES",
+			   LOC_CONST_BYTES);
+  PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_UNRESOLVED",
+			   LOC_UNRESOLVED);
+  PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_OPTIMIZED_OUT",
+			   LOC_OPTIMIZED_OUT);
+  PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_COMPUTED", LOC_COMPUTED);
+  PyModule_AddIntConstant (gdb_module, "SYMBOL_LOC_REGPARM_ADDR",
+			   LOC_REGPARM_ADDR);
+  PyModule_AddIntConstant (gdb_module, "SYMBOL_UNDEF_DOMAIN", UNDEF_DOMAIN);
+  PyModule_AddIntConstant (gdb_module, "SYMBOL_VAR_DOMAIN", VAR_DOMAIN);
+  PyModule_AddIntConstant (gdb_module, "SYMBOL_STRUCT_DOMAIN", STRUCT_DOMAIN);
+  PyModule_AddIntConstant (gdb_module, "SYMBOL_LABEL_DOMAIN", LABEL_DOMAIN);
+  PyModule_AddIntConstant (gdb_module, "SYMBOL_VARIABLES_DOMAIN",
+			   VARIABLES_DOMAIN);
+  PyModule_AddIntConstant (gdb_module, "SYMBOL_FUNCTIONS_DOMAIN",
+			   FUNCTIONS_DOMAIN);
+  PyModule_AddIntConstant (gdb_module, "SYMBOL_TYPES_DOMAIN", TYPES_DOMAIN);
 
-  /* These remain defined for compatibility, but as they were never
-     correct, they are no longer documented.  Eventually we can remove
-     them.  These exist because at one time, enum search_domain and
-     enum domain_enum_tag were combined -- but different values were
-     used differently.  Here we try to give them values that will make
-     sense if they are passed to gdb.lookup_symbol.  */
-  if (PyModule_AddIntConstant (gdb_module, "SYMBOL_VARIABLES_DOMAIN",
-			       VAR_DOMAIN) < 0
-      || PyModule_AddIntConstant (gdb_module, "SYMBOL_FUNCTIONS_DOMAIN",
-				  VAR_DOMAIN) < 0
-      || PyModule_AddIntConstant (gdb_module, "SYMBOL_TYPES_DOMAIN",
-				  VAR_DOMAIN) < 0)
-    return -1;
-
-  return gdb_pymodule_addobject (gdb_module, "Symbol",
-				 (PyObject *) &symbol_object_type);
+  Py_INCREF (&symbol_object_type);
+  PyModule_AddObject (gdb_module, "Symbol", (PyObject *) &symbol_object_type);
 }
 
 
 
-static gdb_PyGetSetDef symbol_object_getset[] = {
-  { "type", sympy_get_type, NULL,
-    "Type of the symbol.", NULL },
+static PyGetSetDef symbol_object_getset[] = {
   { "symtab", sympy_get_symtab, NULL,
     "Symbol table in which the symbol appears.", NULL },
   { "name", sympy_get_name, NULL,
@@ -595,10 +432,6 @@ to display demangled or mangled names.", NULL },
     "True if the symbol is a function or method." },
   { "is_variable", sympy_is_variable, NULL,
     "True if the symbol is a variable." },
-  { "needs_frame", sympy_needs_frame, NULL,
-    "True if the symbol requires a frame for evaluation." },
-  { "line", sympy_line, NULL,
-    "The source line number at which the symbol was defined." },
   { NULL }  /* Sentinel */
 };
 
@@ -606,14 +439,12 @@ static PyMethodDef symbol_object_methods[] = {
   { "is_valid", sympy_is_valid, METH_NOARGS,
     "is_valid () -> Boolean.\n\
 Return true if this symbol is valid, false if not." },
-  { "value", sympy_value, METH_VARARGS,
-    "value ([frame]) -> gdb.Value\n\
-Return the value of the symbol." },
   {NULL}  /* Sentinel */
 };
 
 PyTypeObject symbol_object_type = {
-  PyVarObject_HEAD_INIT (NULL, 0)
+  PyObject_HEAD_INIT (NULL)
+  0,				  /*ob_size*/
   "gdb.Symbol",			  /*tp_name*/
   sizeof (symbol_object),	  /*tp_basicsize*/
   0,				  /*tp_itemsize*/

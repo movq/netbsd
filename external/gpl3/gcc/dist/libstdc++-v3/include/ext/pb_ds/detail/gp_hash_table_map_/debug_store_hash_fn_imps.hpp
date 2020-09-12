@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2005-2019 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
@@ -34,7 +34,7 @@
 // warranty.
 
 /**
- * @file gp_hash_table_map_/debug_store_hash_fn_imps.hpp
+ * @file debug_store_hash_fn_imps.hpp
  * Contains implementations of gp_ht_map_'s debug-mode functions.
  */
 
@@ -43,8 +43,7 @@
 PB_DS_CLASS_T_DEC
 void
 PB_DS_CLASS_C_DEC::
-assert_entry_array_valid(const entry_array a_entries, true_type,
-			 const char* __file, int __line) const
+assert_entry_array_valid(const entry_array a_entries, true_type) const
 {
   size_type iterated_num_used_e = 0;
 
@@ -58,21 +57,21 @@ assert_entry_array_valid(const entry_array a_entries, true_type,
 	  break;
         case valid_entry_status:
 	  {
-	    key_const_reference r_key = PB_DS_V2F(p_e->m_value);
-	    debug_base::check_key_exists(r_key, __file, __line);
+	    const_key_reference r_key = PB_DS_V2F(p_e->m_value);
+	    debug_base::check_key_exists(r_key);
 
 	    const comp_hash pos_hash_pair = ranged_probe_fn_base::operator()(r_key);
 
-	    PB_DS_DEBUG_VERIFY(p_e->m_hash == pos_hash_pair.second);
+	    _GLIBCXX_DEBUG_ASSERT(p_e->m_hash == pos_hash_pair.second);
 	    ++iterated_num_used_e;
 	    break;
 	  }
         default:
-	  PB_DS_DEBUG_VERIFY(0);
+	  _GLIBCXX_DEBUG_ASSERT(0);
         };
     }
 
-  PB_DS_DEBUG_VERIFY(iterated_num_used_e == m_num_used_e);
+  _GLIBCXX_DEBUG_ASSERT(iterated_num_used_e == m_num_used_e);
 }
 
 #endif 

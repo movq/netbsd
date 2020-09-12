@@ -1,5 +1,6 @@
 /* Definitions of target machine for GNU compiler, for the pdp-11
-   Copyright (C) 1994-2019 Free Software Foundation, Inc.
+   Copyright (C) 1994, 1995, 1996, 1998, 1999, 2000, 2001, 2002, 2004, 2005,
+   2006, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Michael K. Gschwind (mike@vlsivie.tuwien.ac.at).
 
 This file is part of GCC.
@@ -21,10 +22,10 @@ along with GCC; see the file COPYING3.  If not see
 #define CONSTANT_POOL_BEFORE_FUNCTION	0
 
 /* check whether load_fpu_reg or not */
-#define LOAD_FPU_REG_P(x) ((x) >= AC0_REGNUM && (x) <= AC3_REGNUM)
-#define NO_LOAD_FPU_REG_P(x) ((x) == AC4_REGNUM || (x) == AC5_REGNUM)
+#define LOAD_FPU_REG_P(x) ((x)>=8 && (x)<=11)
+#define NO_LOAD_FPU_REG_P(x) ((x)==12 || (x)==13)
 #define FPU_REG_P(x)	(LOAD_FPU_REG_P(x) || NO_LOAD_FPU_REG_P(x))
-#define CPU_REG_P(x)	((x) <= PC_REGNUM)
+#define CPU_REG_P(x)	((x)<8)
 
 /* Names to predefine in the preprocessor for this target machine.  */
 
@@ -32,37 +33,22 @@ along with GCC; see the file COPYING3.  If not see
   do						\
     {						\
       builtin_define_std ("pdp11");		\
-      if (TARGET_INT16) 					\
-	builtin_define_with_int_value ("__pdp11_int", 16);	\
-      else							\
-	builtin_define_with_int_value ("__pdp11_int", 32);	\
-      if (TARGET_40)						\
-	builtin_define_with_int_value ("__pdp11_model", 40);	\
-      else if (TARGET_45)					\
-	builtin_define_with_int_value ("__pdp11_model", 45);	\
-      else							\
-	builtin_define_with_int_value ("__pdp11_model", 10);	\
-      if (TARGET_FPU)						\
-	builtin_define ("__pdp11_fpu");				\
-      if (TARGET_AC0)						\
-	builtin_define ("__pdp11_ac0");				\
     }						\
   while (0)
+
+/* Print subsidiary information on the compiler version in use.  */
+#define TARGET_VERSION fprintf (stderr, " (pdp11)");
 
 
 /* Generate DBX debugging information.  */
 
-#define DBX_DEBUGGING_INFO
+/* #define DBX_DEBUGGING_INFO */
 
 #define TARGET_40_PLUS		(TARGET_40 || TARGET_45)
 #define TARGET_10		(! TARGET_40_PLUS)
 
 #define TARGET_UNIX_ASM_DEFAULT	0
 
-/* "Dialect" just distinguishes between standard DEC mnemonics, which
-   are also used by the GNU assembler, vs. Unix mnemonics and float
-   register names.  So it is tied to the -munit-asm option, and treats
-   -mgnu-asm and -mdec-asm as equivalent (both are dialect zero).  */
 #define ASSEMBLER_DIALECT	(TARGET_UNIX_ASM ? 1 : 0)
 
 
@@ -73,23 +59,21 @@ along with GCC; see the file COPYING3.  If not see
 #define LONG_TYPE_SIZE		32
 #define LONG_LONG_TYPE_SIZE	64     
 
-/* In earlier versions, FLOAT_TYPE_SIZE was selectable as 32 or 64,
-   but that conflicts with Fortran language rules.  Since there is no
-   obvious reason why we should have that feature -- other targets
-   generally don't have float and double the same size -- I've removed
-   it.  Note that it continues to be true (for now) that arithmetic is
-   always done with 64-bit values, i.e., the FPU is always in "double"
-   mode.  */
-#define FLOAT_TYPE_SIZE		32
+/* if we set FLOAT_TYPE_SIZE to 32, we could have the benefit 
+   of saving core for huge arrays - the definitions are 
+   already in md - but floats can never reside in 
+   an FPU register - we keep the FPU in double float mode 
+   all the time !! */
+#define FLOAT_TYPE_SIZE		(TARGET_FLOAT32 ? 32 : 64)
 #define DOUBLE_TYPE_SIZE	64
 #define LONG_DOUBLE_TYPE_SIZE	64
 
 /* machine types from ansi */
-#define SIZE_TYPE "short unsigned int" 	/* definition of size_t */
-#define WCHAR_TYPE "short int" 		/* or long int???? */
+#define SIZE_TYPE "unsigned int" 	/* definition of size_t */
+#define WCHAR_TYPE "int" 		/* or long int???? */
 #define WCHAR_TYPE_SIZE 16
 
-#define PTRDIFF_TYPE "short int"
+#define PTRDIFF_TYPE "int"
 
 /* target machine storage layout */
 
@@ -119,7 +103,8 @@ along with GCC; see the file COPYING3.  If not see
 extern const struct real_format pdp11_f_format;
 extern const struct real_format pdp11_d_format;
 
-/* Maximum sized of reasonable data type -- DImode ...*/
+/* Maximum sized of reasonable data type 
+   DImode or Dfmode ...*/
 #define MAX_FIXED_MODE_SIZE 64	
 
 /* Allocation boundary (in *bits*) for storing pointers in memory.  */
@@ -143,11 +128,6 @@ extern const struct real_format pdp11_d_format;
 /* Define this if move instructions will actually fail to work
    when given unaligned data.  */
 #define STRICT_ALIGNMENT 1
-
-/* "HW_DIVIDE" actually means 64 by 32 bit divide.  While some PDP11
-   models have hardware divide, it is for 32 by 16 bits only, so we
-   call this platform "no hardware divide".  */
-#define TARGET_HAS_NO_HW_DIVIDE 1
 
 /* Standard register usage.  */
 
@@ -160,6 +140,8 @@ extern const struct real_format pdp11_d_format;
    we have 8 integer registers, plus 6 float 
    (don't use scratch float !) */
 
+#define FIRST_PSEUDO_REGISTER 14
+
 /* 1 for registers that have pervasive standard uses
    and are not available for the register allocator.
 
@@ -169,10 +151,11 @@ extern const struct real_format pdp11_d_format;
    reg 5	= fp;  not necessarily! 
 */
 
+/* don't let them touch fp regs for the time being !*/
+
 #define FIXED_REGISTERS  \
 {0, 0, 0, 0, 0, 0, 1, 1, \
- 0, 0, 0, 0, 0, 0, 1, 1, \
- 1 }
+ 0, 0, 0, 0, 0, 0     }
 
 
 
@@ -186,12 +169,85 @@ extern const struct real_format pdp11_d_format;
 /* don't know about fp */
 #define CALL_USED_REGISTERS  \
 {1, 1, 0, 0, 0, 0, 1, 1, \
- 0, 0, 0, 0, 0, 0, 1, 1, \
- 1 }
+ 0, 0, 0, 0, 0, 0 }
 
+
+/* Make sure everything's fine if we *don't* have an FPU.
+   This assumes that putting a register in fixed_regs will keep the
+   compiler's mitts completely off it.  We don't bother to zero it out
+   of register classes.  Also fix incompatible register naming with
+   the UNIX assembler.
+*/
+#define CONDITIONAL_REGISTER_USAGE \
+{ 						\
+  int i; 					\
+  HARD_REG_SET x; 				\
+  if (!TARGET_FPU)				\
+    { 						\
+      COPY_HARD_REG_SET (x, reg_class_contents[(int)FPU_REGS]); \
+      for (i = 0; i < FIRST_PSEUDO_REGISTER; i++ ) \
+       if (TEST_HARD_REG_BIT (x, i)) 		\
+	fixed_regs[i] = call_used_regs[i] = 1; 	\
+    } 						\
+						\
+  if (TARGET_AC0)				\
+      call_used_regs[8] = 1;			\
+  if (TARGET_UNIX_ASM)				\
+    {						\
+      /* Change names of FPU registers for the UNIX assembler.  */ \
+      reg_names[8] = "fr0";			\
+      reg_names[9] = "fr1";			\
+      reg_names[10] = "fr2";			\
+      reg_names[11] = "fr3";			\
+      reg_names[12] = "fr4";			\
+      reg_names[13] = "fr5";			\
+    }						\
+}
+
+/* Return number of consecutive hard regs needed starting at reg REGNO
+   to hold something of mode MODE.
+   This is ordinarily the length in words of a value of mode MODE
+   but can be less for certain modes in special long registers.
+*/
+
+#define HARD_REGNO_NREGS(REGNO, MODE)   \
+((REGNO < 8)?								\
+    ((GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD)	\
+    :1)
+    
+
+/* Value is 1 if hard register REGNO can hold a value of machine-mode MODE.
+   On the pdp, the cpu registers can hold any mode - check alignment
+
+   FPU can only hold DF - simplifies life!
+*/
+#define HARD_REGNO_MODE_OK(REGNO, MODE) \
+(((REGNO) < 8)?						\
+  ((GET_MODE_BITSIZE(MODE) <= 16) 			\
+   || (GET_MODE_BITSIZE(MODE) == 32 && !((REGNO) & 1)))	\
+  :(MODE) == DFmode)
+    
+
+/* Value is 1 if it is a good idea to tie two pseudo registers
+   when one has mode MODE1 and one has mode MODE2.
+   If HARD_REGNO_MODE_OK could produce different values for MODE1 and MODE2,
+   for any hard reg, then this must be 0 for correct output.  */
+#define MODES_TIEABLE_P(MODE1, MODE2) 0
 
 /* Specify the registers used for certain standard purposes.
    The values of these macros are register numbers.  */
+
+/* the pdp11 pc overloaded on a register that the compiler knows about.  */
+#define PC_REGNUM  7
+
+/* Register to use for pushing function arguments.  */
+#define STACK_POINTER_REGNUM 6
+
+/* Base register for access to local variables of the function.  */
+#define FRAME_POINTER_REGNUM 5
+
+/* Base register for access to arguments of the function.  */
+#define ARG_POINTER_REGNUM 5
 
 /* Register in which static-chain is passed to a function.  */
 /* ??? - i don't want to give up a reg for this! */
@@ -221,104 +277,132 @@ extern const struct real_format pdp11_d_format;
 
 MUL_REGS are used for odd numbered regs, to use in 16-bit multiplication
          (even numbered do 32-bit multiply)
+LMUL_REGS long multiply registers (even numbered regs )
+	  (don't need them, all 32-bit regs are even numbered!)
 GENERAL_REGS is all cpu
 LOAD_FPU_REGS is the first four cpu regs, they are easier to load
 NO_LOAD_FPU_REGS is ac4 and ac5, currently - difficult to load them
 FPU_REGS is all fpu regs 
-CC_REGS is the condition codes (CPU and FPU)
 */
 
-enum reg_class
-  { NO_REGS,
-    NOTR0_REG,
-    NOTR1_REG,
-    NOTR2_REG,
-    NOTR3_REG,
-    NOTR4_REG,
-    NOTR5_REG,
-    NOTSP_REG,
-    MUL_REGS,
-    GENERAL_REGS,
-    LOAD_FPU_REGS,
-    NO_LOAD_FPU_REGS,
-    FPU_REGS,
-    CC_REGS,
-    ALL_REGS,
-    LIM_REG_CLASSES };
+enum reg_class { NO_REGS, MUL_REGS, GENERAL_REGS, LOAD_FPU_REGS, NO_LOAD_FPU_REGS, FPU_REGS, ALL_REGS, LIM_REG_CLASSES };
 
-#define N_REG_CLASSES ((int) LIM_REG_CLASSES)
+#define N_REG_CLASSES (int) LIM_REG_CLASSES
 
 /* have to allow this till cmpsi/tstsi are fixed in a better way !! */
-#define TARGET_SMALL_REGISTER_CLASSES_FOR_MODE_P hook_bool_mode_true
+#define SMALL_REGISTER_CLASSES 1
+
+/* Since GENERAL_REGS is the same class as ALL_REGS,
+   don't give it a different class number; just make it an alias.  */
+
+/* #define GENERAL_REGS ALL_REGS */
 
 /* Give names of register classes as strings for dump file.  */
 
-#define REG_CLASS_NAMES  \
-  { "NO_REGS",		 \
-    "NOTR0_REG",	 \
-    "NOTR1_REG",	 \
-    "NOTR2_REG",	 \
-    "NOTR3_REG",	 \
-    "NOTR4_REG",	 \
-    "NOTR5_REG",	 \
-    "SP_REG",		 \
-    "MUL_REGS", 	 \
-    "GENERAL_REGS",	 \
-    "LOAD_FPU_REGS",	 \
-    "NO_LOAD_FPU_REGS",	 \
-    "FPU_REGS",		 \
-    "CC_REGS",		 \
-    "ALL_REGS" }
+#define REG_CLASS_NAMES {"NO_REGS", "MUL_REGS", "GENERAL_REGS", "LOAD_FPU_REGS", "NO_LOAD_FPU_REGS", "FPU_REGS", "ALL_REGS" }
 
 /* Define which registers fit in which classes.
    This is an initializer for a vector of HARD_REG_SET
    of length N_REG_CLASSES.  */
 
-#define REG_CLASS_CONTENTS \
-  { {0x00000},	/* NO_REGS */		\
-    {0x000fe},	/* NOTR0_REG */		\
-    {0x000fd},	/* NOTR1_REG */		\
-    {0x000fb},	/* NOTR2_REG */		\
-    {0x000f7},	/* NOTR3_REG */		\
-    {0x000ef},	/* NOTR4_REG */		\
-    {0x000df},	/* NOTR5_REG */		\
-    {0x000bf},	/* NOTSP_REG */		\
-    {0x0002a},	/* MUL_REGS */		\
-    {0x040ff},	/* GENERAL_REGS */	\
-    {0x00f00},	/* LOAD_FPU_REGS */	\
-    {0x03000},	/* NO_LOAD_FPU_REGS */ 	\
-    {0x03f00},	/* FPU_REGS */		\
-    {0x18000},	/* CC_REGS */		\
-    {0x1ffff}}	/* ALL_REGS */
+#define REG_CLASS_CONTENTS {{0}, {0x00aa}, {0x00ff}, {0x0f00}, {0x3000}, {0x3f00}, {0x3fff}}
 
 /* The same information, inverted:
    Return the class number of the smallest class containing
    reg number REGNO.  This could be a conditional expression
    or could index an array.  */
 
-#define REGNO_REG_CLASS(REGNO) pdp11_regno_reg_class (REGNO)
+#define REGNO_REG_CLASS(REGNO) 		\
+((REGNO)>=8?((REGNO)<=11?LOAD_FPU_REGS:NO_LOAD_FPU_REGS):(((REGNO)&1)?MUL_REGS:GENERAL_REGS))
+
 
 /* The class value for index registers, and the one for base regs.  */
 #define INDEX_REG_CLASS GENERAL_REGS
 #define BASE_REG_CLASS GENERAL_REGS
 
-/* Return TRUE if the class is a CPU register.  */
-#define CPU_REG_CLASS(CLASS) \
-  (CLASS >= NOTR0_REG && CLASS <= GENERAL_REGS)
-  
+/* Get reg_class from a letter such as appears in the machine description.  */
+
+#define REG_CLASS_FROM_LETTER(C)	\
+((C) == 'f' ? FPU_REGS :			\
+  ((C) == 'd' ? MUL_REGS : 			\
+   ((C) == 'a' ? LOAD_FPU_REGS : NO_REGS)))
+    
+
+/* The letters I, J, K, L and M in a register constraint string
+   can be used to stand for particular ranges of immediate operands.
+   This macro defines what the ranges are.
+   C is the letter, and VALUE is a constant value.
+   Return 1 if VALUE is in the range specified by C.
+
+   I		bits 31-16 0000
+   J		bits 15-00 0000
+   K		completely random 32 bit
+   L,M,N	-1,1,0 respectively
+   O 		where doing shifts in sequence is faster than 
+                one big shift 
+*/
+
+#define CONST_OK_FOR_LETTER_P(VALUE, C)  \
+  ((C) == 'I' ? ((VALUE) & 0xffff0000) == 0		\
+   : (C) == 'J' ? ((VALUE) & 0x0000ffff) == 0  	       	\
+   : (C) == 'K' ? (((VALUE) & 0xffff0000) != 0		\
+		   && ((VALUE) & 0x0000ffff) != 0)	\
+   : (C) == 'L' ? ((VALUE) == 1)			\
+   : (C) == 'M' ? ((VALUE) == -1)			\
+   : (C) == 'N' ? ((VALUE) == 0)			\
+   : (C) == 'O' ? (abs(VALUE) >1 && abs(VALUE) <= 4)		\
+   : 0)
+
+/* Similar, but for floating constants, and defining letters G and H.
+   Here VALUE is the CONST_DOUBLE rtx itself.  */
+
+#define CONST_DOUBLE_OK_FOR_LETTER_P(VALUE, C)  \
+  ((C) == 'G' && XINT (VALUE, 0) == 0 && XINT (VALUE, 1) == 0)
+
+
+/* Letters in the range `Q' through `U' may be defined in a
+   machine-dependent fashion to stand for arbitrary operand types. 
+   The machine description macro `EXTRA_CONSTRAINT' is passed the
+   operand as its first argument and the constraint letter as its
+   second operand.
+
+   `Q'	is for memory references that require an extra word after the opcode.
+   `R'	is for memory references which are encoded within the opcode.  */
+
+#define EXTRA_CONSTRAINT(OP,CODE)					\
+  ((GET_CODE (OP) != MEM) ? 0						\
+   : !memory_address_p (GET_MODE (OP), XEXP (OP, 0)) ? 0		\
+   : ((CODE) == 'Q')	  ? !simple_memory_operand (OP, GET_MODE (OP))	\
+   : ((CODE) == 'R')	  ? simple_memory_operand (OP, GET_MODE (OP))	\
+   : 0)
+
+/* Given an rtx X being reloaded into a reg required to be
+   in class CLASS, return the class of reg to actually use.
+   In general this is just CLASS; but on some machines
+   in some cases it is preferable to use a more restrictive class.  
+
+loading is easier into LOAD_FPU_REGS than FPU_REGS! */
+
+#define PREFERRED_RELOAD_CLASS(X,CLASS) 	\
+(((CLASS) != FPU_REGS)?(CLASS):LOAD_FPU_REGS)
+
+#define SECONDARY_RELOAD_CLASS(CLASS,MODE,x)	\
+(((CLASS) == NO_LOAD_FPU_REGS && !(REG_P(x) && LOAD_FPU_REG_P(REGNO(x))))?LOAD_FPU_REGS:NO_REGS)
+
 /* Return the maximum number of consecutive registers
    needed to represent mode MODE in a register of class CLASS.  */
 #define CLASS_MAX_NREGS(CLASS, MODE)	\
-  (CPU_REG_CLASS (CLASS) ?	\
-   ((GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD):	\
-   1									\
-  )
+((CLASS == GENERAL_REGS || CLASS == MUL_REGS)?				\
+  ((GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD):	\
+  1									\
+)
+
 
 /* Stack layout; function entry, exit and calling.  */
 
 /* Define this if pushing a word on the stack
    makes the stack pointer a smaller address.  */
-#define STACK_GROWS_DOWNWARD 1
+#define STACK_GROWS_DOWNWARD
 
 /* Define this to nonzero if the nominal address of the stack frame
    is at the high-address end of the local variables;
@@ -327,21 +411,69 @@ enum reg_class
 */
 #define FRAME_GROWS_DOWNWARD 1
 
-#define PUSH_ROUNDING(BYTES) pdp11_push_rounding (BYTES)
+/* Offset within stack frame to start allocating local variables at.
+   If FRAME_GROWS_DOWNWARD, this is the offset to the END of the
+   first local allocated.  Otherwise, it is the offset to the BEGINNING
+   of the first local allocated.  */
+#define STARTING_FRAME_OFFSET 0
+
+/* If we generate an insn to push BYTES bytes,
+   this says how many the stack pointer really advances by.
+   On the pdp11, the stack is on an even boundary */
+#define PUSH_ROUNDING(BYTES) ((BYTES + 1) & ~1)
 
 /* current_first_parm_offset stores the # of registers pushed on the 
    stack */
 extern int current_first_parm_offset;
 
-/* Offset of first parameter from the argument pointer register value.  */
-#define FIRST_PARM_OFFSET(FNDECL) 0
+/* Offset of first parameter from the argument pointer register value.  
+   For the pdp11, this is nonzero to account for the return address.
+	1 - return address
+	2 - frame pointer (always saved, even when not used!!!!)
+		-- change some day !!!:q!
+
+*/
+#define FIRST_PARM_OFFSET(FNDECL) 4
+
+/* Value is 1 if returning from a function call automatically
+   pops the arguments described by the number-of-args field in the call.
+   FUNDECL is the declaration node of the function (as a tree),
+   FUNTYPE is the data type of the function (as a tree),
+   or for a library call it is an identifier node for the subroutine name.  */
+
+#define RETURN_POPS_ARGS(FUNDECL,FUNTYPE,SIZE) 0
 
 /* Define how to find the value returned by a function.
    VALTYPE is the data type of the value (as a tree).
    If the precise function being called is known, FUNC is its FUNCTION_DECL;
    otherwise, FUNC is 0.  */
 #define BASE_RETURN_VALUE_REG(MODE) \
- (FLOAT_MODE_P (MODE) ? AC0_REGNUM : RETVAL_REGNUM) 
+ ((MODE) == DFmode ? 8 : 0) 
+
+/* On the pdp11 the value is found in R0 (or ac0??? 
+not without FPU!!!! ) */
+
+#define FUNCTION_VALUE(VALTYPE, FUNC)  \
+  gen_rtx_REG (TYPE_MODE (VALTYPE), BASE_RETURN_VALUE_REG(TYPE_MODE(VALTYPE)))
+
+/* and the called function leaves it in the first register.
+   Difference only on machines with register windows.  */
+
+#define FUNCTION_OUTGOING_VALUE(VALTYPE, FUNC)  \
+  gen_rtx_REG (TYPE_MODE (VALTYPE), BASE_RETURN_VALUE_REG(TYPE_MODE(VALTYPE)))
+
+/* Define how to find the value returned by a library function
+   assuming the value has mode MODE.  */
+
+#define LIBCALL_VALUE(MODE)  gen_rtx_REG (MODE, BASE_RETURN_VALUE_REG(MODE))
+
+/* 1 if N is a possible register number for a function value
+   as seen by the caller.
+   On the pdp, the first "output" reg is the only register thus used. 
+
+maybe ac0 ? - as option someday! */
+
+#define FUNCTION_VALUE_REGNO_P(N) (((N) == 0) || (TARGET_AC0 && (N) == 8))
 
 /* 1 if N is a possible register number for function argument passing.
    - not used on pdp */
@@ -369,37 +501,69 @@ extern int current_first_parm_offset;
 #define INIT_CUMULATIVE_ARGS(CUM, FNTYPE, LIBNAME, INDIRECT, N_NAMED_ARGS) \
  ((CUM) = 0)
 
+/* Update the data in CUM to advance over an argument
+   of mode MODE and data type TYPE.
+   (TYPE is null for libcalls where that information may not be available.)  
+
+*/
+
+
+#define FUNCTION_ARG_ADVANCE(CUM, MODE, TYPE, NAMED)	\
+ ((CUM) += ((MODE) != BLKmode			\
+	    ? (GET_MODE_SIZE (MODE))		\
+	    : (int_size_in_bytes (TYPE))))	
+
+/* Determine where to put an argument to a function.
+   Value is zero to push the argument on the stack,
+   or a hard register in which to store the argument.
+
+   MODE is the argument's machine mode.
+   TYPE is the data type of the argument (as a tree).
+    This is null for libcalls where that information may
+    not be available.
+   CUM is a variable of type CUMULATIVE_ARGS which gives info about
+    the preceding args and about the function being called.
+   NAMED is nonzero if this argument is a named parameter
+    (otherwise it is an extra parameter matching an ellipsis).  */
+
+#define FUNCTION_ARG(CUM, MODE, TYPE, NAMED)  0
+
+/* Define where a function finds its arguments.
+   This would be different from FUNCTION_ARG if we had register windows.  */
+/*
+#define FUNCTION_INCOMING_ARG(CUM, MODE, TYPE, NAMED)	\
+  FUNCTION_ARG (CUM, MODE, TYPE, NAMED)
+*/
+
 /* Output assembler code to FILE to increment profiler label # LABELNO
    for profiling a function entry.  */
 
-#define FUNCTION_PROFILER(FILE, LABELNO)
+#define FUNCTION_PROFILER(FILE, LABELNO)  \
+   gcc_unreachable ();
 
 /* EXIT_IGNORE_STACK should be nonzero if, when returning from a function,
    the stack pointer does not matter.  The value is tested only in
    functions that have frame pointers.
    No definition is equivalent to always zero.  */
 
+extern int may_call_alloca;
+
 #define EXIT_IGNORE_STACK	1
 
-/* Definitions for register eliminations.
-
-   This is an array of structures.  Each structure initializes one pair
-   of eliminable registers.  The "from" register number is given first,
-   followed by "to".  Eliminations of the same "from" register are listed
-   in order of preference.
-
-   There are two registers that can be eliminated on the pdp11.  The
-   arg pointer can be replaced by the frame pointer; the frame pointer
-   can often be replaced by the stack pointer.  */
-
-#define ELIMINABLE_REGS					\
-{{ ARG_POINTER_REGNUM, STACK_POINTER_REGNUM},		\
- { ARG_POINTER_REGNUM, FRAME_POINTER_REGNUM},		\
- { FRAME_POINTER_REGNUM, STACK_POINTER_REGNUM}}
-
-#define INITIAL_ELIMINATION_OFFSET(FROM, TO, OFFSET) \
-  ((OFFSET) = pdp11_initial_elimination_offset ((FROM), (TO)))
-
+#define INITIAL_FRAME_POINTER_OFFSET(DEPTH_VAR)	\
+{								\
+  int offset, regno;		      				\
+  offset = get_frame_size();					\
+  for (regno = 0; regno < 8; regno++)				\
+    if (df_regs_ever_live_p (regno) && ! call_used_regs[regno])	\
+      offset += 2;						\
+  for (regno = 8; regno < 14; regno++)				\
+    if (df_regs_ever_live_p (regno) && ! call_used_regs[regno])	\
+      offset += 8;						\
+  /* offset -= 2;   no fp on stack frame */			\
+  (DEPTH_VAR) = offset;						\
+}   
+    
 
 /* Addressing modes, and classification of registers for them.  */
 
@@ -413,14 +577,12 @@ extern int current_first_parm_offset;
    They give nonzero only if REGNO is a hard reg of the suitable class
    or a pseudo reg currently allocated to a suitable hard reg.
    Since they use reg_renumber, they are safe only once reg_renumber
-   has been allocated, which happens in reginfo.c during register
-   allocation.  */
+   has been allocated, which happens in local-alloc.c.  */
 
+#define REGNO_OK_FOR_INDEX_P(REGNO) \
+  ((REGNO) < 8 || (unsigned) reg_renumber[REGNO] < 8)
 #define REGNO_OK_FOR_BASE_P(REGNO)  \
-  ((REGNO) <= PC_REGNUM || (unsigned) reg_renumber[REGNO] <= PC_REGNUM || \
-   (REGNO) == ARG_POINTER_REGNUM || (REGNO) == FRAME_POINTER_REGNUM)
-
-#define REGNO_OK_FOR_INDEX_P(REGNO) REGNO_OK_FOR_BASE_P (REGNO)
+  ((REGNO) < 8 || (unsigned) reg_renumber[REGNO] < 8)
 
 /* Now macros that check whether X is a register and also,
    strictly, whether it is in a specified class.
@@ -431,6 +593,12 @@ extern int current_first_parm_offset;
 /* Maximum number of registers that can appear in a valid memory address.  */
 
 #define MAX_REGS_PER_ADDRESS 1
+
+/* Nonzero if the constant value X is a legitimate general operand.
+   It is given that X satisfies CONSTANT_P or is a CONST_DOUBLE.  */
+
+#define LEGITIMATE_CONSTANT_P(X)                                        \
+  (GET_CODE (X) != CONST_DOUBLE || legitimate_const_double_p (X))
 
 /* The macros REG_OK_FOR..._P assume that the arg is a REG rtx
    and check its validity for a certain class.
@@ -463,6 +631,118 @@ extern int current_first_parm_offset;
 
 #endif
 
+/* GO_IF_LEGITIMATE_ADDRESS recognizes an RTL expression
+   that is a valid memory address for an instruction.
+   The MODE argument is the machine mode for the MEM expression
+   that wants to use this address.
+
+*/
+
+#define GO_IF_LEGITIMATE_ADDRESS(mode, operand, ADDR) \
+{						      \
+    rtx xfoob;								\
+									\
+    /* accept (R0) */							\
+    if (GET_CODE (operand) == REG					\
+	&& REG_OK_FOR_BASE_P(operand))					\
+      goto ADDR;							\
+									\
+    /* accept @#address */						\
+    if (CONSTANT_ADDRESS_P (operand))					\
+      goto ADDR;							\
+    									\
+    /* accept X(R0) */							\
+    if (GET_CODE (operand) == PLUS       				\
+	&& GET_CODE (XEXP (operand, 0)) == REG				\
+	&& REG_OK_FOR_BASE_P (XEXP (operand, 0))			\
+	&& CONSTANT_ADDRESS_P (XEXP (operand, 1)))			\
+      goto ADDR;							\
+    									\
+    /* accept -(R0) */							\
+    if (GET_CODE (operand) == PRE_DEC					\
+	&& GET_CODE (XEXP (operand, 0)) == REG				\
+	&& REG_OK_FOR_BASE_P (XEXP (operand, 0)))			\
+      goto ADDR;							\
+									\
+    /* accept (R0)+ */							\
+    if (GET_CODE (operand) == POST_INC					\
+	&& GET_CODE (XEXP (operand, 0)) == REG				\
+	&& REG_OK_FOR_BASE_P (XEXP (operand, 0)))			\
+      goto ADDR;							\
+									\
+    /* accept -(SP) -- which uses PRE_MODIFY for byte mode */		\
+    if (GET_CODE (operand) == PRE_MODIFY				\
+	&& GET_CODE (XEXP (operand, 0)) == REG				\
+	&& REGNO (XEXP (operand, 0)) == 6        	        	\
+	&& GET_CODE ((xfoob = XEXP (operand, 1))) == PLUS		\
+	&& GET_CODE (XEXP (xfoob, 0)) == REG				\
+	&& REGNO (XEXP (xfoob, 0)) == 6	        	        	\
+	&& CONSTANT_P (XEXP (xfoob, 1))                                 \
+	&& INTVAL (XEXP (xfoob,1)) == -2)      	               		\
+      goto ADDR;							\
+									\
+    /* accept (SP)+ -- which uses POST_MODIFY for byte mode */		\
+    if (GET_CODE (operand) == POST_MODIFY				\
+	&& GET_CODE (XEXP (operand, 0)) == REG				\
+	&& REGNO (XEXP (operand, 0)) == 6        	        	\
+	&& GET_CODE ((xfoob = XEXP (operand, 1))) == PLUS		\
+	&& GET_CODE (XEXP (xfoob, 0)) == REG				\
+	&& REGNO (XEXP (xfoob, 0)) == 6	        	        	\
+	&& CONSTANT_P (XEXP (xfoob, 1))                                 \
+	&& INTVAL (XEXP (xfoob,1)) == 2)      	               		\
+      goto ADDR;							\
+									\
+    									\
+    /* handle another level of indirection ! */				\
+    if (GET_CODE(operand) != MEM)					\
+      goto fail;							\
+									\
+    xfoob = XEXP (operand, 0);						\
+									\
+    /* (MEM:xx (MEM:xx ())) is not valid for SI, DI and currently */    \
+    /* also forbidden for float, because we have to handle this */  	\
+    /* in output_move_double and/or output_move_quad() - we could */   	\
+    /* do it, but currently it's not worth it!!! */			\
+    /* now that DFmode cannot go into CPU register file, */		\
+    /* maybe I should allow float ... */				\
+    /*  but then I have to handle memory-to-memory moves in movdf ?? */ \
+									\
+    if (GET_MODE_BITSIZE(mode) > 16)					\
+      goto fail;							\
+									\
+    /* accept @(R0) - which is @0(R0) */				\
+    if (GET_CODE (xfoob) == REG						\
+	&& REG_OK_FOR_BASE_P(xfoob))					\
+      goto ADDR;							\
+									\
+    /* accept @address */						\
+    if (CONSTANT_ADDRESS_P (xfoob))					\
+      goto ADDR;							\
+    									\
+    /* accept @X(R0) */							\
+    if (GET_CODE (xfoob) == PLUS       					\
+	&& GET_CODE (XEXP (xfoob, 0)) == REG				\
+	&& REG_OK_FOR_BASE_P (XEXP (xfoob, 0))				\
+	&& CONSTANT_ADDRESS_P (XEXP (xfoob, 1)))			\
+      goto ADDR;							\
+									\
+    /* accept @-(R0) */							\
+    if (GET_CODE (xfoob) == PRE_DEC					\
+	&& GET_CODE (XEXP (xfoob, 0)) == REG				\
+	&& REG_OK_FOR_BASE_P (XEXP (xfoob, 0)))				\
+      goto ADDR;							\
+									\
+    /* accept @(R0)+ */							\
+    if (GET_CODE (xfoob) == POST_INC					\
+	&& GET_CODE (XEXP (xfoob, 0)) == REG				\
+	&& REG_OK_FOR_BASE_P (XEXP (xfoob, 0)))				\
+      goto ADDR;							\
+									\
+  /* anything else is invalid */					\
+  fail: ;								\
+}
+
+
 /* Specify the machine mode that this machine uses
    for the index in the tablejump instruction.  */
 #define CASE_VECTOR_MODE HImode
@@ -477,30 +757,26 @@ extern int current_first_parm_offset;
 /* Max number of bytes we can move from memory to memory
    in one reasonably fast instruction.  
 */
+
 #define MOVE_MAX 2
 
-/* Max number of insns to use for inline move rather than library
-   call.  */
-#define MOVE_RATIO(speed) 6
-
-/* Nonzero if access to memory by byte is no faster than by word.  */
-#define SLOW_BYTE_ACCESS 1
+/* Nonzero if access to memory by byte is slow and undesirable. -
+*/
+#define SLOW_BYTE_ACCESS 0
 
 /* Do not break .stabs pseudos into continuations.  */
 #define DBX_CONTIN_LENGTH 0
 
+/* Value is 1 if truncating an integer of INPREC bits to OUTPREC bits
+   is done just by pretending it is already truncated.  */
+#define TRULY_NOOP_TRUNCATION(OUTPREC, INPREC) 1
+
 /* Give a comparison code (EQ, NE etc) and the first operand of a COMPARE,
-   return the mode to be used for the comparison.  */
+   return the mode to be used for the comparison.  For floating-point, CCFPmode
+   should be used.  */
 
-#define SELECT_CC_MODE(OP,X,Y) pdp11_cc_mode (OP, X, Y)
-
-/* Enable compare elimination pass.  */
-#undef TARGET_FLAGS_REGNUM
-#define TARGET_FLAGS_REGNUM CC_REGNUM
-
-/* Specify the CC registers.  TODO: is this for "type 1" CC handling only?  */
-#undef TARGET_FIXED_CONDITION_CODE_REGS
-#define TARGET_FIXED_CONDITION_CODE_REGS pdp11_fixed_cc_regs
+#define SELECT_CC_MODE(OP,X,Y)	\
+(GET_MODE_CLASS(GET_MODE(X)) == MODE_FLOAT? CCFPmode : CCmode)
 
 /* Specify the machine mode that pointers have.
    After generation of rtl, the compiler makes no further distinction
@@ -519,6 +795,59 @@ extern int current_first_parm_offset;
 /* #define NO_FUNCTION_CSE */
 
 
+/* cost of moving one register class to another */
+#define REGISTER_MOVE_COST(MODE, CLASS1, CLASS2) \
+  register_move_cost (CLASS1, CLASS2)
+
+/* Tell emit-rtl.c how to initialize special values on a per-function base.  */
+extern int optimize;
+extern struct rtx_def *cc0_reg_rtx;
+
+#define CC_STATUS_MDEP rtx
+
+#define CC_STATUS_MDEP_INIT (cc_status.mdep = 0)
+
+/* Tell final.c how to eliminate redundant test instructions.  */
+
+/* Here we define machine-dependent flags and fields in cc_status
+   (see `conditions.h').  */
+
+#define CC_IN_FPU 04000 
+
+/* Do UPDATE_CC if EXP is a set, used in
+   NOTICE_UPDATE_CC 
+
+   floats only do compare correctly, else nullify ...
+
+   get cc0 out soon ...
+*/
+
+/* Store in cc_status the expressions
+   that the condition codes will describe
+   after execution of an instruction whose pattern is EXP.
+   Do not alter them if the instruction would not alter the cc's.  */
+
+#define NOTICE_UPDATE_CC(EXP, INSN) \
+{ if (GET_CODE (EXP) == SET)					\
+    {								\
+      notice_update_cc_on_set(EXP, INSN);			\
+    }								\
+  else if (GET_CODE (EXP) == PARALLEL				\
+	   && GET_CODE (XVECEXP (EXP, 0, 0)) == SET)		\
+    {								\
+      notice_update_cc_on_set(XVECEXP (EXP, 0, 0), INSN);	\
+    }								\
+  else if (GET_CODE (EXP) == CALL)				\
+    { /* all bets are off */ CC_STATUS_INIT; }			\
+  if (cc_status.value1 && GET_CODE (cc_status.value1) == REG	\
+      && cc_status.value2					\
+      && reg_overlap_mentioned_p (cc_status.value1, cc_status.value2)) \
+    { 								\
+      printf ("here!\n");					\
+      cc_status.value2 = 0;					\
+    }								\
+}
+
 /* Control the assembler format that we output.  */
 
 /* Output to assembler file text saying following lines
@@ -533,129 +862,152 @@ extern int current_first_parm_offset;
 
 /* Output before read-only data.  */
 
-#define TEXT_SECTION_ASM_OP \
-  ((TARGET_DEC_ASM) ? "\t.psect\tcode,i,ro,con" : "\t.text")
+#define TEXT_SECTION_ASM_OP "\t.text\n"
 
 /* Output before writable data.  */
 
-#define DATA_SECTION_ASM_OP \
-  ((TARGET_DEC_ASM) ? "\t.psect\tdata,d,rw,con" : "\t.data")
-
-/* Output before read-only data.  Same as read-write data for non-DEC
-   assemblers because they don't know about .rodata.  */
-
-#define READONLY_DATA_SECTION_ASM_OP \
-  ((TARGET_DEC_ASM) ? "\t.psect\trodata,d,ro,con" : "\t.data")
+#define DATA_SECTION_ASM_OP "\t.data\n"
 
 /* How to refer to registers in assembler output.
    This sequence is indexed by compiler's hard-register-number (see above).  */
 
 #define REGISTER_NAMES \
 {"r0", "r1", "r2", "r3", "r4", "r5", "sp", "pc",     \
- "ac0", "ac1", "ac2", "ac3", "ac4", "ac5", "ap", "cc", \
- "fcc" }
+ "ac0", "ac1", "ac2", "ac3", "ac4", "ac5" }
 
 /* Globalizing directive for a label.  */
-#define GLOBAL_ASM_OP "\t.globl\t"
+#define GLOBAL_ASM_OP "\t.globl "
 
-/* The prefix to add to user-visible assembler symbols.  For the DEC
-   assembler case, this is not used.  */
+/* The prefix to add to user-visible assembler symbols.  */
 
 #define USER_LABEL_PREFIX "_"
-
-/* Line separators.  */
-
-#define IS_ASM_LOGICAL_LINE_SEPARATOR(C, STR) \
-  ((C) == '\n' || (!TARGET_DEC_ASM && (C) == ';'))
 
 /* This is how to store into the string LABEL
    the symbol_ref name of an internal numbered label where
    PREFIX is the class of label and NUM is the number within the class.
    This is suitable for output with `assemble_name'.  */
 
-#define ASM_GENERATE_INTERNAL_LABEL(LABEL,PREFIX,NUM) \
-  pdp11_gen_int_label ((LABEL), (PREFIX), (NUM))
-
-/* Emit a string.  */
+#define ASM_GENERATE_INTERNAL_LABEL(LABEL,PREFIX,NUM)	\
+  sprintf (LABEL, "*%s_%lu", PREFIX, (unsigned long)(NUM))
 
 #define ASM_OUTPUT_ASCII(FILE, P, SIZE)  \
   output_ascii (FILE, P, SIZE)
 
-/* Print a label reference, with _ prefix if not DEC.  */
-
-#define ASM_OUTPUT_LABELREF(STREAM, NAME) \
-  pdp11_output_labelref ((STREAM), (NAME))
-
-/* Equate a symbol to an expression.  */
-
-#define ASM_OUTPUT_DEF(STREAM, NAME, VALUE) \
-  pdp11_output_def (STREAM, NAME, VALUE)
-
-/* Mark a reference to an external symbol.  Needed for DEC assembler.  */
-
-#define ASM_OUTPUT_EXTERNAL(STREAM, DECL, NAME) \
-  if (TARGET_DEC_ASM) \
-    fprintf ((STREAM), "\t.globl\t%s\n", (NAME))
-
-#define ASM_OUTPUT_SOURCE_FILENAME(STREAM, NAME) \
-  if (TARGET_DEC_ASM) \
-    fprintf ((STREAM), ".title\t%s\n", (NAME))
-
 /* This is how to output an element of a case-vector that is absolute.  */
 
 #define ASM_OUTPUT_ADDR_VEC_ELT(FILE, VALUE)  \
-  pdp11_output_addr_vec_elt (FILE, VALUE)
+  fprintf (FILE, "\t%sL_%d\n", TARGET_UNIX_ASM ? "" : ".word ", VALUE)
 
-/* This is how to output an assembler line that says to advance the
-   location counter to a multiple of 2**LOG bytes.  Only values 0 and
-   1 should appear, but due to PR87795 larger values (which are not
-   supported) can also appear.  So we treat all alignment of LOG >= 1
-   as word (2 byte) alignment.
+/* This is how to output an element of a case-vector that is relative.
+   Don't define this if it is not supported.  */
+
+/* #define ASM_OUTPUT_ADDR_DIFF_ELT(FILE, VALUE, REL) */
+
+/* This is how to output an assembler line
+   that says to advance the location counter
+   to a multiple of 2**LOG bytes. 
+
+   who needs this????
 */
 
 #define ASM_OUTPUT_ALIGN(FILE,LOG)	\
-  if (LOG != 0)				\
-    fprintf (FILE, "\t.even\n")
+  switch (LOG)				\
+    {					\
+      case 0:				\
+	break;				\
+      case 1:				\
+	fprintf (FILE, "\t.even\n");	\
+	break;				\
+      default:				\
+	gcc_unreachable ();		\
+    }
 
 #define ASM_OUTPUT_SKIP(FILE,SIZE)  \
-  if (TARGET_DEC_ASM) \
-    fprintf (FILE, "\t.blkb\t%o\n", (SIZE) & 0xffff);	\
-  else							\
-    fprintf (FILE, "\t.=.+ %#o\n", (SIZE) & 0xffff);
+  fprintf (FILE, "\t.=.+ %#ho\n", (unsigned short)(SIZE))
 
 /* This says how to output an assembler line
    to define a global common symbol.  */
 
-#define ASM_OUTPUT_ALIGNED_COMMON(FILE, NAME, SIZE, ALIGN)  \
-  pdp11_asm_output_var (FILE, NAME, SIZE, ALIGN, true)
+#define ASM_OUTPUT_COMMON(FILE, NAME, SIZE, ROUNDED)  \
+( fprintf ((FILE), ".globl "),			\
+  assemble_name ((FILE), (NAME)),		\
+  fprintf ((FILE), "\n"),			\
+  assemble_name ((FILE), (NAME)),		\
+  fprintf ((FILE), ": .=.+ %#ho\n", (unsigned short)(ROUNDED))		\
+)
 
 /* This says how to output an assembler line
    to define a local common symbol.  */
 
-#define ASM_OUTPUT_ALIGNED_LOCAL(FILE, NAME, SIZE, ALIGN) \
-  pdp11_asm_output_var (FILE, NAME, SIZE, ALIGN, false)
+#define ASM_OUTPUT_LOCAL(FILE, NAME, SIZE, ROUNDED)  \
+( assemble_name ((FILE), (NAME)),				\
+  fprintf ((FILE), ":\t.=.+ %#ho\n", (unsigned short)(ROUNDED)))
 
+/* Print operand X (an rtx) in assembler syntax to file FILE.
+   CODE is a letter or dot (`z' in `%z0') or 0 if no letter was specified.
+   For `%' followed by punctuation, CODE is the punctuation and X is null.
+
+*/
+
+
+#define PRINT_OPERAND(FILE, X, CODE)  \
+{ if (CODE == '#') fprintf (FILE, "#");					\
+  else if (GET_CODE (X) == REG)						\
+    fprintf (FILE, "%s", reg_names[REGNO (X)]);				\
+  else if (GET_CODE (X) == MEM)						\
+    output_address (XEXP (X, 0));					\
+  else if (GET_CODE (X) == CONST_DOUBLE && GET_MODE (X) != SImode)	\
+    { REAL_VALUE_TYPE r;						\
+      long sval[2];							\
+      REAL_VALUE_FROM_CONST_DOUBLE (r, X);				\
+      REAL_VALUE_TO_TARGET_DOUBLE (r, sval);				\
+      fprintf (FILE, "$%#lo", sval[0] >> 16); }				\
+  else { putc ('$', FILE); output_addr_const_pdp11 (FILE, X); }}
+
 /* Print a memory address as an operand to reference that memory location.  */
 
 #define PRINT_OPERAND_ADDRESS(FILE, ADDR)  \
-  print_operand_address (FILE, ADDR)
+ print_operand_address (FILE, ADDR)
 
-#define ASM_OUTPUT_REG_PUSH(FILE,REGNO)	\
-  fprintf (FILE, "\tmov\t%s,-(sp)\n", reg_names[REGNO])
+#define ASM_OUTPUT_REG_PUSH(FILE,REGNO)			\
+(							\
+  fprintf (FILE, "\tmov %s, -(sp)\n", reg_names[REGNO])	\
+)
 
-#define ASM_OUTPUT_REG_POP(FILE,REGNO)	\
-  fprintf (FILE, "\tmov\t(sp)+,%s\n", reg_names[REGNO])
+#define ASM_OUTPUT_REG_POP(FILE,REGNO)                 		\
+(                                                       	\
+  fprintf (FILE, "\tmov (sp)+, %s\n", reg_names[REGNO])     	\
+)
 
 #define TRAMPOLINE_SIZE 8
 #define TRAMPOLINE_ALIGNMENT 16
 
-#define BRANCH_COST(speed_p, predictable_p) 1
+/* Some machines may desire to change what optimizations are
+   performed for various optimization levels.   This macro, if
+   defined, is executed once just after the optimization level is
+   determined and before the remainder of the command options have
+   been parsed.  Values set in this macro are used as the default
+   values for the other command line options.
+
+   LEVEL is the optimization level specified; 2 if -O2 is
+   specified, 1 if -O is specified, and 0 if neither is specified.  */
+
+#define OPTIMIZATION_OPTIONS(LEVEL,SIZE)				\
+{									\
+  flag_finite_math_only		= 0;					\
+  flag_trapping_math		= 0;					\
+  flag_signaling_nans		= 0;					\
+  if (LEVEL >= 3)							\
+    {									\
+      flag_omit_frame_pointer		= 1;				\
+      /* flag_unroll_loops			= 1; */			\
+    }									\
+}
+
+/* there is no point in avoiding branches on a pdp, 
+   since branches are really cheap - I just want to find out
+   how much difference the BRANCH_COST macro makes in code */
+#define BRANCH_COST(speed_p, predictable_p) (TARGET_BRANCH_CHEAP ? 0 : 1)
+
 
 #define COMPARE_FLAG_MODE HImode
-
-/* May be overridden by command option processing.  */
-#define TARGET_HAVE_NAMED_SECTIONS false
-
-/* pdp11-unknown-aout target has no support of C99 runtime */
-#undef TARGET_LIBC_HAS_FUNCTION
-#define TARGET_LIBC_HAS_FUNCTION no_c99_libc_has_function

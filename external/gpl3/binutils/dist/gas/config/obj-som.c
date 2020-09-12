@@ -1,5 +1,6 @@
 /* SOM object file format.
-   Copyright (C) 1993-2020 Free Software Foundation, Inc.
+   Copyright 1993, 1994, 1998, 2000, 2002, 2003, 2004, 2005, 2006,
+   2007, 2008  Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -24,6 +25,7 @@
 #include "as.h"
 #include "subsegs.h"
 #include "aout/stab_gnu.h"
+#include "obstack.h"
 
 static int version_seen = 0;
 static int copyright_seen = 0;
@@ -210,8 +212,7 @@ obj_som_init_stab_section (segT seg)
   segT saved_seg = now_seg;
   segT space;
   subsegT saved_subseg = now_subseg;
-  char *p;
- const char * file;
+  char *p, *file;
   unsigned int stroff;
 
   /* Make the space which will contain the debug subspaces.  */
@@ -224,14 +225,14 @@ obj_som_init_stab_section (segT seg)
      of the various stabs spaces/subspaces need to be "small".  We
      reserve range 72/73 which appear to work well.  */
   obj_set_section_attributes (space, 1, 1, 72, 2);
-  bfd_set_section_alignment (space, 2);
+  bfd_set_section_alignment (stdoutput, space, 2);
 
   /* Set the containing space for both stab sections to be $GDB_DEBUG$
      (just created above).  Also set some attributes which BFD does
      not understand.  In particular, access bits, sort keys, and load
      quadrant.  */
   obj_set_subsection_attributes (seg, space, 0x1f, 73, 0, 0, 0, 0);
-  bfd_set_section_alignment (seg, 2);
+  bfd_set_section_alignment (stdoutput, seg, 2);
 
   /* Make some space for the first special stab entry and zero the memory.
      It contains information about the length of this file's
@@ -242,8 +243,8 @@ obj_som_init_stab_section (segT seg)
      the call to get_stab_string_offset.  */
   p = frag_more (12);
   memset (p, 0, 12);
-  file = as_where ((unsigned int *) NULL);
-  stroff = get_stab_string_offset (file, "$GDB_STRINGS$", FALSE);
+  as_where (&file, (unsigned int *) NULL);
+  stroff = get_stab_string_offset (file, "$GDB_STRINGS$");
   know (stroff == 1);
   md_number_to_chars (p, stroff, 4);
   seg_info (seg)->stabu.p = p;
@@ -254,7 +255,7 @@ obj_som_init_stab_section (segT seg)
      quadrant.  */
   seg = bfd_get_section_by_name (stdoutput, "$GDB_STRINGS$");
   obj_set_subsection_attributes (seg, space, 0x1f, 72, 0, 0, 0, 0);
-  bfd_set_section_alignment (seg, 2);
+  bfd_set_section_alignment (stdoutput, seg, 2);
 
   subseg_set (saved_seg, saved_subseg);
 }
@@ -273,13 +274,13 @@ adjust_stab_sections (bfd *abfd, asection *sec, void *xxx ATTRIBUTE_UNUSED)
 
   strsec = bfd_get_section_by_name (abfd, "$GDB_STRINGS$");
   if (strsec)
-    strsz = bfd_section_size (strsec);
+    strsz = bfd_section_size (abfd, strsec);
   else
     strsz = 0;
-  nsyms = bfd_section_size (sec) / 12 - 1;
+  nsyms = bfd_section_size (abfd, sec) / 12 - 1;
 
   p = seg_info (sec)->stabu.p;
-  gas_assert (p != 0);
+  assert (p != 0);
 
   bfd_h_put_16 (abfd, (bfd_vma) nsyms, (bfd_byte *) p + 6);
   bfd_h_put_32 (abfd, (bfd_vma) strsz, (bfd_byte *) p + 8);
@@ -303,10 +304,11 @@ obj_som_weak (int ignore ATTRIBUTE_UNUSED)
 
   do
     {
-      c = get_symbol_name (&name);
+      name = input_line_pointer;
+      c = get_symbol_end ();
       symbolP = symbol_find_or_make (name);
       *input_line_pointer = c;
-      SKIP_WHITESPACE_AFTER_NAME ();
+      SKIP_WHITESPACE ();
       S_SET_WEAK (symbolP);
       if (c == ',')
 	{

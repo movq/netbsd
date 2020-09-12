@@ -1,5 +1,6 @@
 /* BFD library support routines for the Renesas H8/300 architecture.
-   Copyright (C) 1990-2019 Free Software Foundation, Inc.
+   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 2000, 2001, 2002,
+   2003, 2004, 2005, 2007 Free Software Foundation, Inc.
    Hacked by Steve Chamberlain of Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -82,7 +83,7 @@ h8300_scan (const struct bfd_arch_info *info, const char *string)
 
 	  return (info->mach == bfd_mach_h8300sx);
 	}
-
+      
       return (info->mach == bfd_mach_h8300s);
     }
   else
@@ -126,7 +127,6 @@ static const bfd_arch_info_type h8300sxn_info_struct =
   FALSE,			/* the default machine */
   compatible,
   h8300_scan,
-  bfd_arch_default_fill,
   0
 };
 
@@ -143,7 +143,6 @@ static const bfd_arch_info_type h8300sx_info_struct =
   FALSE,			/* the default machine */
   compatible,
   h8300_scan,
-  bfd_arch_default_fill,
   &h8300sxn_info_struct
 };
 
@@ -160,7 +159,6 @@ static const bfd_arch_info_type h8300sn_info_struct =
   FALSE,			/* The default machine.  */
   compatible,
   h8300_scan,
-  bfd_arch_default_fill,
   &h8300sx_info_struct
 };
 
@@ -177,7 +175,6 @@ static const bfd_arch_info_type h8300hn_info_struct =
   FALSE,			/* The default machine.  */
   compatible,
   h8300_scan,
-  bfd_arch_default_fill,
   &h8300sn_info_struct
 };
 
@@ -194,7 +191,6 @@ static const bfd_arch_info_type h8300s_info_struct =
   FALSE,			/* The default machine.  */
   compatible,
   h8300_scan,
-  bfd_arch_default_fill,
   & h8300hn_info_struct
 };
 
@@ -211,7 +207,6 @@ static const bfd_arch_info_type h8300h_info_struct =
   FALSE,			/* The default machine.  */
   compatible,
   h8300_scan,
-  bfd_arch_default_fill,
   &h8300s_info_struct
 };
 
@@ -228,7 +223,6 @@ const bfd_arch_info_type bfd_h8300_arch =
   TRUE,				/* The default machine.  */
   compatible,
   h8300_scan,
-  bfd_arch_default_fill,
   &h8300h_info_struct
 };
 

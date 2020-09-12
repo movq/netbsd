@@ -1,5 +1,5 @@
 ;; Faraday FA726TE Pipeline Description
-;; Copyright (C) 2010-2019 Free Software Foundation, Inc.
+;; Copyright (C) 2010-2013 Free Software Foundation, Inc.
 ;; Written by I-Jui Sung, based on ARM926EJ-S Pipeline Description.
 ;;
 ;; This file is part of GCC.
@@ -70,7 +70,7 @@
 
 ;; ALU instructions require three cycles to execute, and use the ALU
 ;; pipeline in each of the three stages.  The results are available
-;; after the execute stage has finished.
+;; after the execute stage stage has finished.
 ;;
 ;; If the destination register is the PC, the pipelines are stalled
 ;; for several cycles.  That case is not modeled here.
@@ -78,20 +78,15 @@
 ;; Move instructions.
 (define_insn_reservation "726te_shift_op" 1
   (and (eq_attr "tune" "fa726te")
-       (eq_attr "type" "mov_imm,mov_reg,mov_shift,mov_shift_reg,\
-                        mvn_imm,mvn_reg,mvn_shift,mvn_shift_reg"))
+       (eq_attr "insn" "mov,mvn"))
   "fa726te_issue+(fa726te_alu0_pipe|fa726te_alu1_pipe)")
 
 ;; ALU operations with no shifted operand will finished in 1 cycle
 ;; Other ALU instructions 2 cycles.
 (define_insn_reservation "726te_alu_op" 1
  (and (eq_attr "tune" "fa726te")
-      (eq_attr "type" "alu_imm,alus_imm,logic_imm,logics_imm,\
-                       alu_sreg,alus_sreg,logic_reg,logics_reg,\
-                       adc_imm,adcs_imm,adc_reg,adcs_reg,\
-                       adr,bfm,rev,\
-                       shift_imm,shift_reg,\
-                       mrs,multiple,no_insn"))
+      (and (eq_attr "type" "alu_reg,simple_alu_imm")
+           (not (eq_attr "insn" "mov,mvn"))))
   "fa726te_issue+(fa726te_alu0_pipe|fa726te_alu1_pipe)")
 
 ;; ALU operations with a shift-by-register operand.
@@ -100,14 +95,14 @@
 ;; it takes 3 cycles.
 (define_insn_reservation "726te_alu_shift_op" 3
  (and (eq_attr "tune" "fa726te")
-      (eq_attr "type" "extend,alu_shift_imm,alus_shift_imm,\
-                       logic_shift_imm,logics_shift_imm"))
+      (and (eq_attr "type" "simple_alu_shift,alu_shift")
+           (not (eq_attr "insn" "mov,mvn"))))
   "fa726te_issue+(fa726te_alu0_pipe|fa726te_alu1_pipe)")
 
 (define_insn_reservation "726te_alu_shift_reg_op" 3
  (and (eq_attr "tune" "fa726te")
-      (eq_attr "type" "alu_shift_reg,alus_shift_reg,\
-                       logic_shift_reg,logics_shift_reg"))
+      (and (eq_attr "type" "alu_shift_reg")
+           (not (eq_attr "insn" "mov,mvn"))))
   "fa726te_issue+(fa726te_alu0_pipe|fa726te_alu1_pipe)")
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Multiplication Instructions
@@ -120,7 +115,7 @@
 
 (define_insn_reservation "726te_mult_op" 3
  (and (eq_attr "tune" "fa726te")
-      (eq_attr "type" "smlalxy,mul,mla,muls,mlas,umull,umlal,smull,smlal,\
+      (eq_attr "insn" "smlalxy,mul,mla,muls,mlas,umull,umlal,smull,smlal,\
                        umulls,umlals,smulls,smlals,smlawx,smulxy,smlaxy"))
  "fa726te_issue+fa726te_mac_pipe")
 
@@ -144,13 +139,13 @@
 
 (define_insn_reservation "726te_load1_op" 3
  (and (eq_attr "tune" "fa726te")
-      (eq_attr "type" "load_4,load_byte"))
+      (eq_attr "type" "load1,load_byte"))
  "(fa726te_issue+fa726te_lsu_pipe_e+fa726te_lsu_pipe_w)\
   | (fa726te_issue+fa726te_lsu1_pipe_e+fa726te_lsu1_pipe_w,fa726te_blockage)")
 
 (define_insn_reservation "726te_store1_op" 1
  (and (eq_attr "tune" "fa726te")
-      (eq_attr "type" "store_4"))
+      (eq_attr "type" "store1"))
  "fa726te_blockage*2")
 
 ;; Load/Store Multiple blocks all pipelines in EX stages until WB.
@@ -161,22 +156,22 @@
 ;; the pipe 1 is stalled.
 (define_insn_reservation "726te_ldm2_op" 4
  (and (eq_attr "tune" "fa726te")
-      (eq_attr "type" "load_8,load_12"))
+      (eq_attr "type" "load2,load3"))
  "fa726te_blockage*4")
 
 (define_insn_reservation "726te_ldm3_op" 5
  (and (eq_attr "tune" "fa726te")
-      (eq_attr "type" "load_16"))
+      (eq_attr "type" "load4"))
  "fa726te_blockage*5")
 
 (define_insn_reservation "726te_stm2_op" 2
  (and (eq_attr "tune" "fa726te")
-      (eq_attr "type" "store_8,store_12"))
+      (eq_attr "type" "store2,store3"))
  "fa726te_blockage*3")
 
 (define_insn_reservation "726te_stm3_op" 3
  (and (eq_attr "tune" "fa726te")
-      (eq_attr "type" "store_16"))
+      (eq_attr "type" "store4"))
  "fa726te_blockage*4")
 
 (define_bypass 1 "726te_load1_op,726te_ldm2_op,726te_ldm3_op" "726te_store1_op,\

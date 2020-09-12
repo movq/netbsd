@@ -1,10 +1,10 @@
 /* BFD back-end for Zilog Z80 COFF binaries.
-   Copyright (C) 2005-2019 Free Software Foundation, Inc.
+   Copyright 2005, 2006, 2007, 2008  Free Software Foundation, Inc.
    Contributed by Arnold Metselaar <arnold_m@operamail.com>
 
    This file is part of BFD, the Binary File Descriptor library.
 
-   This program is free software; you can redistribute it and/or modify
+   This program is free software; you can redistribute it and/or modify 
    it under the terms of the GNU General Public License as published by
    the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
@@ -50,12 +50,12 @@ HOWTO (R_IMM8, 0, 0, 8, FALSE, 0,
        FALSE);
 
 static reloc_howto_type r_jr =
-HOWTO (R_JR, 0, 0, 8, TRUE, 0,
+HOWTO (R_JR, 0, 0, 8, TRUE, 0, 
        complain_overflow_signed, 0, "r_jr", FALSE, 0, 0xFF,
        FALSE);
 
 static reloc_howto_type r_off8 =
-HOWTO (R_OFF8, 0, 0, 8, FALSE, 0,
+HOWTO (R_OFF8, 0, 0, 8, FALSE, 0, 
        complain_overflow_signed, 0,"r_off8", FALSE, 0, 0xff,
        FALSE);
 
@@ -81,7 +81,7 @@ rtype2howto (arelent *internal, struct internal_reloc *dst)
   switch (dst->r_type)
     {
     default:
-      internal->howto = NULL;
+      abort ();
       break;
     case R_IMM8:
       internal->howto = &r_imm8;
@@ -153,10 +153,10 @@ coff_z80_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
 
 static void
 reloc_processing (arelent *relent,
-		  struct internal_reloc *reloc,
-		  asymbol **symbols,
-		  bfd *abfd,
-		  asection *section)
+                  struct internal_reloc *reloc,
+                  asymbol **symbols,
+                  bfd *abfd,
+                  asection *section)
 {
   relent->address = reloc->r_vaddr;
   rtype2howto (relent, reloc);
@@ -172,12 +172,12 @@ reloc_processing (arelent *relent,
 
 static void
 extra_case (bfd *in_abfd,
-	    struct bfd_link_info *link_info,
-	    struct bfd_link_order *link_order,
-	    arelent *reloc,
-	    bfd_byte *data,
-	    unsigned int *src_ptr,
-	    unsigned int *dst_ptr)
+            struct bfd_link_info *link_info,
+            struct bfd_link_order *link_order,
+            arelent *reloc,
+            bfd_byte *data,
+            unsigned int *src_ptr,
+            unsigned int *dst_ptr)
 {
   asection * input_section = link_order->u.indirect.section;
   int val;
@@ -188,11 +188,14 @@ extra_case (bfd *in_abfd,
 	val = bfd_coff_reloc16_get_value (reloc, link_info,
 					   input_section);
 	if (val>127 || val<-128) /* Test for overflow.  */
-	  (*link_info->callbacks->reloc_overflow)
-	    (link_info, NULL, bfd_asymbol_name (*reloc->sym_ptr_ptr),
-	     reloc->howto->name, reloc->addend, input_section->owner,
-	     input_section, reloc->address);
-
+	  {
+	    if (! ((*link_info->callbacks->reloc_overflow)
+		   (link_info, NULL,
+		    bfd_asymbol_name (*reloc->sym_ptr_ptr),
+		    reloc->howto->name, reloc->addend, input_section->owner,
+		    input_section, reloc->address)))
+	      abort ();
+	  }
 	bfd_put_8 (in_abfd, val, data + *dst_ptr);
 	(*dst_ptr) += 1;
 	(*src_ptr) += 1;
@@ -244,11 +247,14 @@ extra_case (bfd *in_abfd,
 				     the offset.  */
 
 	if (gap >= 128 || gap < -128)
-	  (*link_info->callbacks->reloc_overflow)
-	    (link_info, NULL, bfd_asymbol_name (*reloc->sym_ptr_ptr),
-	     reloc->howto->name, reloc->addend, input_section->owner,
-	     input_section, reloc->address);
-
+	  {
+	    if (! ((*link_info->callbacks->reloc_overflow)
+		   (link_info, NULL,
+		    bfd_asymbol_name (*reloc->sym_ptr_ptr),
+		    reloc->howto->name, reloc->addend, input_section->owner,
+		    input_section, reloc->address)))
+	      abort ();
+	  }
 	bfd_put_8 (in_abfd, gap, data + *dst_ptr);
 	(*dst_ptr)++;
 	(*src_ptr)++;
@@ -277,7 +283,7 @@ extra_case (bfd *in_abfd,
 #undef  coff_bfd_relax_section
 #define coff_bfd_relax_section bfd_coff_reloc16_relax_section
 
-CREATE_LITTLE_COFF_TARGET_VEC (z80_coff_vec, "coff-z80", 0,
-			       SEC_CODE | SEC_DATA, '\0', NULL,
+CREATE_LITTLE_COFF_TARGET_VEC (z80coff_vec, "coff-z80", 0,
+			       SEC_CODE | SEC_DATA, '\0', NULL, 
 			       COFF_SWAP_TABLE)
 

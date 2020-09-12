@@ -1,5 +1,6 @@
 /* rx-parse.y  Renesas RX parser
-   Copyright (C) 2008-2020 Free Software Foundation, Inc.
+   Copyright 2008, 2009
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -33,7 +34,6 @@ static int rx_lex (void);
 #define BSIZE 0
 #define WSIZE 1
 #define LSIZE 2
-#define DSIZE 3
 
 /*                       .sb    .sw    .l     .uw   */
 static int sizemap[] = { BSIZE, WSIZE, LSIZE, WSIZE };
@@ -72,14 +72,14 @@ static int sizemap[] = { BSIZE, WSIZE, LSIZE, WSIZE };
 #define F(val,pos,sz)      rx_field (val, pos, sz)
 #define FE(exp,pos,sz)	   rx_field (exp_val (exp), pos, sz);
 
-#define O1(v)              rx_op (v, 1, RXREL_SIGNED); rx_range (v, -128, 255)
-#define O2(v)              rx_op (v, 2, RXREL_SIGNED); rx_range (v, -32768, 65536)
-#define O3(v)              rx_op (v, 3, RXREL_SIGNED); rx_range (v, -8388608, 16777216)
+#define O1(v)              rx_op (v, 1, RXREL_SIGNED)
+#define O2(v)              rx_op (v, 2, RXREL_SIGNED)
+#define O3(v)              rx_op (v, 3, RXREL_SIGNED)
 #define O4(v)              rx_op (v, 4, RXREL_SIGNED)
 
-#define UO1(v)             rx_op (v, 1, RXREL_UNSIGNED); rx_range (v, 0, 255)
-#define UO2(v)             rx_op (v, 2, RXREL_UNSIGNED); rx_range (v, 0, 65536)
-#define UO3(v)             rx_op (v, 3, RXREL_UNSIGNED); rx_range (v, 0, 16777216)
+#define UO1(v)             rx_op (v, 1, RXREL_UNSIGNED)
+#define UO2(v)             rx_op (v, 2, RXREL_UNSIGNED)
+#define UO3(v)             rx_op (v, 3, RXREL_UNSIGNED)
 #define UO4(v)             rx_op (v, 4, RXREL_UNSIGNED)
 
 #define NO1(v)             rx_op (v, 1, RXREL_NEGATIVE)
@@ -91,36 +91,26 @@ static int sizemap[] = { BSIZE, WSIZE, LSIZE, WSIZE };
 #define PC2(v)             rx_op (v, 2, RXREL_PCREL)
 #define PC3(v)             rx_op (v, 3, RXREL_PCREL)
 
-#define POST(v)            rx_post (v)
-
-#define IMM_(v,pos,size)   F (immediate (v, RXREL_SIGNED, pos, size), pos, 2); \
+#define IMM(v,pos)	   F (immediate (v, RXREL_SIGNED, pos), pos, 2); \
 			   if (v.X_op != O_constant && v.X_op != O_big) rx_linkrelax_imm (pos)
-#define IMM(v,pos)	   IMM_ (v, pos, 32)
-#define IMMW(v,pos)	   IMM_ (v, pos, 16); rx_range (v, -32768, 65536)
-#define IMMB(v,pos)	   IMM_ (v, pos, 8); rx_range (v, -128, 255)
-#define NIMM(v,pos)	   F (immediate (v, RXREL_NEGATIVE, pos, 32), pos, 2)
-#define NBIMM(v,pos)	   F (immediate (v, RXREL_NEGATIVE_BORROW, pos, 32), pos, 2)
+#define NIMM(v,pos)	   F (immediate (v, RXREL_NEGATIVE, pos), pos, 2)
+#define NBIMM(v,pos)	   F (immediate (v, RXREL_NEGATIVE_BORROW, pos), pos, 2)
 #define DSP(v,pos,msz)	   if (!v.X_md) rx_relax (RX_RELAX_DISP, pos); \
 			   else rx_linkrelax_dsp (pos); \
 			   F (displacement (v, msz), pos, 2)
 
-#define id24(a,b2,b3)	   B3 (0xfb + a, b2, b3)
+#define id24(a,b2,b3)	   B3 (0xfb+a, b2, b3)
 
-static void	   rx_check_float_support (void);
-static int         rx_intop (expressionS, int, int);
+static int         rx_intop (expressionS, int);
 static int         rx_uintop (expressionS, int);
 static int         rx_disp3op (expressionS);
 static int         rx_disp5op (expressionS *, int);
 static int         rx_disp5op0 (expressionS *, int);
 static int         exp_val (expressionS exp);
 static expressionS zero_expr (void);
-static int         immediate (expressionS, int, int, int);
+static int         immediate (expressionS, int, int);
 static int         displacement (expressionS, int);
 static void        rtsd_immediate (expressionS);
-static void	   rx_range (expressionS, int, int);
-static void        rx_check_v2 (void);
-static void        rx_check_v3 (void);
-static void        rx_check_dfpu (void);
 
 static int    need_flag = 0;
 static int    rx_in_brackets = 0;
@@ -142,37 +132,33 @@ static int    sub_op2;
   expressionS exp;
 }
 
-%type <regno> REG FLAG CREG BCND BMCND SCCND ACC DREG DREGH DREGL DCREG DCMP
+%type <regno> REG FLAG CREG BCND BMCND SCCND
 %type <regno> flag bwl bw memex
 %type <exp> EXPR disp
 
-%token REG FLAG CREG ACC DREG DREGH DREGL DCREG
+%token REG FLAG CREG
 
 %token EXPR UNKNOWN_OPCODE IS_OPCODE
 
-%token DOT_S DOT_B DOT_W DOT_L DOT_A DOT_UB DOT_UW DOT_D
+%token DOT_S DOT_B DOT_W DOT_L DOT_A DOT_UB DOT_UW
 
 %token ABS ADC ADD AND_
-%token BCLR BCND BFMOV BFMOVZ BMCND BNOT BRA BRK BSET BSR BTST
+%token BCLR BCND BMCND BNOT BRA BRK BSET BSR BTST
 %token CLRPSW CMP
-%token DABS DADD DBT DCMP DDIV DIV DIVU DMOV DMUL DNEG
-%token   DPOPM DPUSHM DROUND DSQRT DSUB DTOF DTOI DTOU
-%token EDIV EDIVU EMACA EMSBA EMUL EMULA EMULU
-%token FADD FCMP FDIV FMUL FREIT FSUB FSQRT FTOD FTOI FTOU
-%token INT ITOD ITOF
+%token DBT DIV DIVU
+%token EDIV EDIVU EMUL EMULU
+%token FADD FCMP FDIV FMUL FREIT FSUB FTOI
+%token INT ITOF
 %token JMP JSR
-%token MACHI MACLH MACLO MAX MIN MOV MOVCO MOVLI MOVU MSBHI MSBLH MSBLO MUL
-%token   MULHI MULLH MULLO MULU MVFACHI MVFACGU MVFACMI MVFACLO MVFC MVFDC
-%token     MVFDR MVTACGU MVTACHI MVTACLO MVTC MVTDC MVTIPL
+%token MACHI MACLO MAX MIN MOV MOVU MUL MULHI MULLO MULU MVFACHI MVFACMI MVFACLO
+%token   MVFC MVTACHI MVTACLO MVTC MVTIPL
 %token NEG NOP NOT
 %token OR
 %token POP POPC POPM PUSH PUSHA PUSHC PUSHM
-%token RACL RACW RDACL RDACW REIT REVL REVW RMPA ROLC RORC ROTL ROTR ROUND
-%token   RSTR RTE RTFI RTS RTSD
-%token SAT SATR SAVE SBB SCCND SCMPU SETPSW SHAR SHLL SHLR SMOVB SMOVF
+%token RACW REIT REVL REVW RMPA ROLC RORC ROTL ROTR ROUND RTE RTFI RTS RTSD
+%token SAT SATR SBB SCCND SCMPU SETPSW SHAR SHLL SHLR SMOVB SMOVF
 %token   SMOVU SSTR STNZ STOP STZ SUB SUNTIL SWHILE
 %token TST
-%token UTOD UTOF
 %token WAIT
 %token XCHG XOR
 
@@ -203,11 +189,11 @@ statement :
 	| BRA EXPR
 	  { if (rx_disp3op ($2))
 	      { B1 (0x08); rx_disp3 ($2, 5); }
-	    else if (rx_intop ($2, 8, 8))
+	    else if (rx_intop ($2, 8))
 	      { B1 (0x2e); PC1 ($2); }
-	    else if (rx_intop ($2, 16, 16))
+	    else if (rx_intop ($2, 16))
 	      { B1 (0x38); PC2 ($2); }
-	    else if (rx_intop ($2, 24, 24))
+	    else if (rx_intop ($2, 24))
 	      { B1 (0x04); PC3 ($2); }
 	    else
 	      { rx_relax (RX_RELAX_BRANCH, 0);
@@ -224,9 +210,9 @@ statement :
 /* ---------------------------------------------------------------------- */
 
 	| BSR EXPR
-	  { if (rx_intop ($2, 16, 16))
+	  { if (rx_intop ($2, 16))
 	      { B1 (0x39); PC2 ($2); }
-	    else if (rx_intop ($2, 24, 24))
+	    else if (rx_intop ($2, 24))
 	      { B1 (0x05); PC3 ($2); }
 	    else
 	      { rx_relax (RX_RELAX_BRANCH, 0);
@@ -280,15 +266,6 @@ statement :
 
 /* ---------------------------------------------------------------------- */
 
-	| MOV DOT_B '#' EXPR ',' '[' REG ']'
-	  { B2 (0xf8, 0x04); F ($7, 8, 4); IMMB ($4, 12);}
-
-	| MOV DOT_W '#' EXPR ',' '[' REG ']'
-          { B2 (0xf8, 0x01); F ($7, 8, 4); IMMW ($4, 12);}
-
-	| MOV DOT_L '#' EXPR ',' '[' REG ']'
-	  { B2 (0xf8, 0x02); F ($7, 8, 4); IMM ($4, 12);}
-
 	| MOV DOT_B '#' EXPR ',' disp '[' REG ']'
 	  /* rx_disp5op changes the value if it succeeds, so keep it last.  */
 	  { if ($8 <= 7 && rx_uintop ($4, 8) && rx_disp5op0 (&$6, BSIZE))
@@ -301,7 +278,7 @@ statement :
 	  { if ($8 <= 7 && rx_uintop ($4, 8) && rx_disp5op0 (&$6, WSIZE))
 	      { B2 (0x3d, 0); rx_field5s2 ($6); F ($8, 9, 3); O1 ($4); }
 	    else
-	      { B2 (0xf8, 0x01); F ($8, 8, 4); DSP ($6, 6, WSIZE); IMMW ($4, 12); } }
+	      { B2 (0xf8, 0x01); F ($8, 8, 4); DSP ($6, 6, WSIZE); IMM ($4, 12); } }
 
 	| MOV DOT_L '#' EXPR ',' disp '[' REG ']'
 	  { if ($8 <= 7 && rx_uintop ($4, 8) && rx_disp5op0 (&$6, LSIZE))
@@ -354,7 +331,7 @@ statement :
 	      { B2 (0x60, 0); FE ($3, 8, 4); F ($5, 12, 4); }
 	    else
 	      /* This is really an add, but we negate the immediate.  */
-	      { B2 (0x70, 0); F ($5, 8, 4); F ($5, 12, 4); NIMM ($3, 6); } }
+	      { B2 (0x38, 0); F ($5, 8, 4); F ($5, 12, 4); NIMM ($3, 6); } } /* ? */
 
 	| CMP '#' EXPR ',' REG
 	  { if (rx_uintop ($3, 4))
@@ -485,9 +462,7 @@ statement :
 /* ---------------------------------------------------------------------- */
 
 	| PUSHC CREG
-	  { if ($2 == 13)
-	      { rx_check_v2 (); }
-	    if ($2 < 16)
+	  { if ($2 < 16)
 	      { B2 (0x7e, 0xc0); F ($2, 12, 4); }
 	    else
 	      as_bad (_("PUSHC can only push the first 16 control registers")); }
@@ -495,9 +470,7 @@ statement :
 /* ---------------------------------------------------------------------- */
 
 	| POPC CREG
-	  { if ($2 == 13)
-	    { rx_check_v2 (); }
-	    if ($2 < 16)
+	  { if ($2 < 16)
 	      { B2 (0x7e, 0xe0); F ($2, 12, 4); }
 	    else
 	      as_bad (_("POPC can only pop the first 16 control registers")); }
@@ -523,27 +496,27 @@ statement :
 /* ---------------------------------------------------------------------- */
 
 	| SCMPU
-	  { B2 (0x7f, 0x83); rx_note_string_insn_use (); }
+	  { B2 (0x7f, 0x83); }
 	| SMOVU
-	  { B2 (0x7f, 0x87); rx_note_string_insn_use (); }
+	  { B2 (0x7f, 0x87); }
 	| SMOVB
-	  { B2 (0x7f, 0x8b); rx_note_string_insn_use (); }
+	  { B2 (0x7f, 0x8b); }
 	| SMOVF
-	  { B2 (0x7f, 0x8f); rx_note_string_insn_use (); }
+	  { B2 (0x7f, 0x8f); }
 
 /* ---------------------------------------------------------------------- */
 
 	| SUNTIL bwl
-	  { B2 (0x7f, 0x80); F ($2, 14, 2); rx_note_string_insn_use (); }
+	  { B2 (0x7f, 0x80); F ($2, 14, 2); }
 	| SWHILE bwl
-	  { B2 (0x7f, 0x84); F ($2, 14, 2); rx_note_string_insn_use (); }
+	  { B2 (0x7f, 0x84); F ($2, 14, 2); }
 	| SSTR bwl
 	  { B2 (0x7f, 0x88); F ($2, 14, 2); }
 
 /* ---------------------------------------------------------------------- */
 
 	| RMPA bwl
-	  { B2 (0x7f, 0x8c); F ($2, 14, 2); rx_note_string_insn_use (); }
+	  { B2 (0x7f, 0x8c); F ($2, 14, 2); }
 
 /* ---------------------------------------------------------------------- */
 
@@ -625,10 +598,10 @@ statement :
 
 /* ---------------------------------------------------------------------- */
 
-	| SBB   { sub_op = 0; } op_dp20_rm_l
-	| NEG   { sub_op = 1; sub_op2 = 1; } op_dp20_rr
-	| ADC   { sub_op = 2; } op_dp20_rim_l
-	| ABS   { sub_op = 3; sub_op2 = 2; } op_dp20_rr
+	| SBB   { sub_op = 0; } op_dp20_rm
+	| NEG   { sub_op = 1; sub_op2 = 1; } op_dp20_rms
+	| ADC   { sub_op = 2; } op_dp20_rim
+	| ABS   { sub_op = 3; sub_op2 = 2; } op_dp20_rms
 	| MAX   { sub_op = 4; } op_dp20_rim
 	| MIN   { sub_op = 5; } op_dp20_rim
 	| EMUL  { sub_op = 6; } op_dp20_i
@@ -636,10 +609,10 @@ statement :
 	| DIV   { sub_op = 8; } op_dp20_rim
 	| DIVU  { sub_op = 9; } op_dp20_rim
 	| TST   { sub_op = 12; } op_dp20_rim
-	| XOR   { sub_op = 13; } op_xor
-	| NOT   { sub_op = 14; sub_op2 = 0; } op_dp20_rr
-	| STZ   { sub_op = 14; sub_op2 = 0; } op_dp20_ri
-	| STNZ  { sub_op = 15; sub_op2 = 1; } op_dp20_ri
+	| XOR   { sub_op = 13; } op_dp20_rim
+	| NOT   { sub_op = 14; sub_op2 = 0; } op_dp20_rms
+	| STZ   { sub_op = 14; } op_dp20_i
+	| STNZ  { sub_op = 15; } op_dp20_i
 
 /* ---------------------------------------------------------------------- */
 
@@ -647,7 +620,6 @@ statement :
 	| EMULU { sub_op = 7; } op_xchg
 	| XCHG  { sub_op = 16; } op_xchg
 	| ITOF  { sub_op = 17; } op_xchg
-	| UTOF  { sub_op = 21; } op_xchg
 
 /* ---------------------------------------------------------------------- */
 
@@ -660,29 +632,24 @@ statement :
 	| BNOT REG ',' REG
 	  { id24 (1, 0x6f, 0x00); F ($4, 16, 4); F ($2, 20, 4); }
 
-	| BSET REG ',' disp '[' REG ']' opt_b
+	| BSET REG ',' disp '[' REG ']' DOT_B
 	  { id24 (1, 0x60, 0x00); F ($6, 16, 4); F ($2, 20, 4); DSP ($4, 14, BSIZE); }
-	| BCLR REG ',' disp '[' REG ']' opt_b
+	| BCLR REG ',' disp '[' REG ']' DOT_B
 	  { id24 (1, 0x64, 0x00); F ($6, 16, 4); F ($2, 20, 4); DSP ($4, 14, BSIZE); }
-	| BTST REG ',' disp '[' REG ']' opt_b
+	| BTST REG ',' disp '[' REG ']' DOT_B
 	  { id24 (1, 0x68, 0x00); F ($6, 16, 4); F ($2, 20, 4); DSP ($4, 14, BSIZE); }
-	| BNOT REG ',' disp '[' REG ']' opt_b
+	| BNOT REG ',' disp '[' REG ']' DOT_B
 	  { id24 (1, 0x6c, 0x00); F ($6, 16, 4); F ($2, 20, 4); DSP ($4, 14, BSIZE); }
 
 /* ---------------------------------------------------------------------- */
 
-	| FSUB  { sub_op = 0; } float3_op
+	| FSUB  { sub_op = 0; } float2_op
 	| FCMP  { sub_op = 1; } float2_op
-	| FADD  { sub_op = 2; } float3_op
-	| FMUL  { sub_op = 3; } float3_op
+	| FADD  { sub_op = 2; } float2_op
+	| FMUL  { sub_op = 3; } float2_op
 	| FDIV  { sub_op = 4; } float2_op
-	| FSQRT { sub_op = 8; } float2_op_ni
 	| FTOI  { sub_op = 5; } float2_op_ni
-	| FTOU  { sub_op = 9; } float2_op_ni
 	| ROUND { sub_op = 6; } float2_op_ni
-
-/* ---------------------------------------------------------------------- */
-
 
 /* ---------------------------------------------------------------------- */
 
@@ -693,13 +660,13 @@ statement :
 
 /* ---------------------------------------------------------------------- */
 
-	| BMCND '#' EXPR ',' disp '[' REG ']' opt_b
+	| BMCND '#' EXPR ',' disp '[' REG ']' DOT_B
 	  { id24 (1, 0xe0, 0x00); F ($1, 20, 4); FE ($3, 11, 3);
 	      F ($7, 16, 4); DSP ($5, 14, BSIZE); }
 
 /* ---------------------------------------------------------------------- */
 
-	| BNOT '#' EXPR ',' disp '[' REG ']' opt_b
+	| BNOT '#' EXPR ',' disp '[' REG ']' DOT_B
 	  { id24 (1, 0xe0, 0x0f); FE ($3, 11, 3); F ($7, 16, 4);
 	      DSP ($5, 14, BSIZE); }
 
@@ -707,54 +674,32 @@ statement :
 
 	| MULHI REG ',' REG
 	  { id24 (2, 0x00, 0x00); F ($2, 16, 4); F ($4, 20, 4); }
-	| MULHI REG ',' REG ',' ACC
-	  { rx_check_v2 (); id24 (2, 0x00, 0x00); F ($2, 16, 4); F ($4, 20, 4); F ($6, 12, 1); }
 	| MULLO REG ',' REG
 	  { id24 (2, 0x01, 0x00); F ($2, 16, 4); F ($4, 20, 4); }
-	| MULLO REG ',' REG ',' ACC
-	  { rx_check_v2 (); id24 (2, 0x01, 0x00); F ($2, 16, 4); F ($4, 20, 4); F ($6, 12, 1); }
 	| MACHI REG ',' REG
 	  { id24 (2, 0x04, 0x00); F ($2, 16, 4); F ($4, 20, 4); }
-	| MACHI REG ',' REG ',' ACC
-	  { rx_check_v2 (); id24 (2, 0x04, 0x00); F ($2, 16, 4); F ($4, 20, 4); F ($6, 12, 1); }
 	| MACLO REG ',' REG
 	  { id24 (2, 0x05, 0x00); F ($2, 16, 4); F ($4, 20, 4); }
-	|  MACLO REG ',' REG ',' ACC
-	  { rx_check_v2 (); id24 (2, 0x05, 0x00); F ($2, 16, 4); F ($4, 20, 4); F ($6, 12, 1); }
 
 /* ---------------------------------------------------------------------- */
 
 	/* We don't have syntax for these yet.  */
 	| MVTACHI REG
 	  { id24 (2, 0x17, 0x00); F ($2, 20, 4); }
-	|  MVTACHI REG ',' ACC
-	  { rx_check_v2 (); id24 (2, 0x17, 0x00); F ($2, 20, 4); F ($4, 16, 1); }
 	| MVTACLO REG
 	  { id24 (2, 0x17, 0x10); F ($2, 20, 4); }
-	| MVTACLO REG ',' ACC
-	  { rx_check_v2 (); id24 (2, 0x17, 0x10); F ($2, 20, 4); F ($4, 16, 1); }
 	| MVFACHI REG
 	  { id24 (2, 0x1f, 0x00); F ($2, 20, 4); }
-	| MVFACHI { sub_op = 0; } mvfa_op
 	| MVFACMI REG
 	  { id24 (2, 0x1f, 0x20); F ($2, 20, 4); }
-	| MVFACMI { sub_op = 2; } mvfa_op
 	| MVFACLO REG
 	  { id24 (2, 0x1f, 0x10); F ($2, 20, 4); }
-	| MVFACLO { sub_op = 1; } mvfa_op
+
 	| RACW '#' EXPR
 	  { id24 (2, 0x18, 0x00);
-	    if (rx_uintop ($3, 4) && exp_val($3) == 1)
+	    if (rx_uintop ($3, 4) && $3.X_add_number == 1)
 	      ;
-	    else if (rx_uintop ($3, 4) && exp_val($3) == 2)
-	      F (1, 19, 1);
-	    else
-	      as_bad (_("RACW expects #1 or #2"));}
-	| RACW '#' EXPR ',' ACC
-	    { rx_check_v2 (); id24 (2, 0x18, 0x00); F ($5, 16, 1);
-	    if (rx_uintop ($3, 4) && exp_val($3) == 1)
-	      ;
-	    else if (rx_uintop ($3, 4) && exp_val($3) == 2)
+	    else if (rx_uintop ($3, 4) && $3.X_add_number == 2)
 	      F (1, 19, 1);
 	    else
 	      as_bad (_("RACW expects #1 or #2"));}
@@ -790,17 +735,13 @@ statement :
 /* ---------------------------------------------------------------------- */
 
 	| MVTC REG ',' CREG
-	  { if ($4 == 13)
-	      rx_check_v2 ();
-	  id24 (2, 0x68, 0x00); F ($4 % 16, 20, 4); F ($4 / 16, 15, 1);
+	  { id24 (2, 0x68, 0x00); F ($4 % 16, 20, 4); F ($4 / 16, 15, 1);
 	    F ($2, 16, 4); }
 
 /* ---------------------------------------------------------------------- */
 
 	| MVFC CREG ',' REG
-	  { if ($2 == 13)
-	    rx_check_v2 ();
-	  id24 (2, 0x6a, 0); F ($2, 15, 5); F ($4, 20, 4); }
+	  { id24 (2, 0x6a, 0); F ($2, 15, 5); F ($4, 20, 4); }
 
 /* ---------------------------------------------------------------------- */
 
@@ -812,9 +753,7 @@ statement :
 /* ---------------------------------------------------------------------- */
 
 	| MVTC '#' EXPR ',' CREG
-	  { if ($5 == 13)
-	      rx_check_v2 ();
-	    id24 (2, 0x73, 0x00); F ($5, 19, 5); IMM ($3, 12); }
+	  { id24 (2, 0x73, 0x00); F ($5, 19, 5); IMM ($3, 12); }
 
 /* ---------------------------------------------------------------------- */
 
@@ -854,155 +793,6 @@ statement :
 
 /* ---------------------------------------------------------------------- */
 
-	| MOVCO REG ',' '[' REG ']'
-	  { rx_check_v2 (); B3 (0xfd, 0x27, 0x00); F ($5, 16, 4); F ($2, 20, 4); }
-
-/* ---------------------------------------------------------------------- */
-
-	| MOVLI '[' REG ']' ',' REG
-	  { rx_check_v2 (); B3 (0xfd, 0x2f, 0x00); F ($3, 16, 4); F ($6, 20, 4); }
-
-/* ---------------------------------------------------------------------- */
-
-	| EMACA REG ',' REG ',' ACC
-	  { rx_check_v2 (); id24 (2, 0x07, 0x00); F ($2, 16, 4); F ($4, 20, 4); F ($6, 12, 1); }
-	| EMSBA REG ',' REG ',' ACC
-	  { rx_check_v2 (); id24 (2, 0x47, 0x00); F ($2, 16, 4); F ($4, 20, 4); F ($6, 12, 1); }
-	| EMULA REG ',' REG ',' ACC
-	  { rx_check_v2 (); id24 (2, 0x03, 0x00); F ($2, 16, 4); F ($4, 20, 4); F ($6, 12, 1); }
-	| MACLH REG ',' REG ',' ACC
-	  { rx_check_v2 (); id24 (2, 0x06, 0x00); F ($2, 16, 4); F ($4, 20, 4); F ($6, 12, 1); }
-	| MSBHI REG ',' REG ',' ACC
-	  { rx_check_v2 (); id24 (2, 0x44, 0x00); F ($2, 16, 4); F ($4, 20, 4); F ($6, 12, 1); }
-	| MSBLH REG ',' REG ',' ACC
-	  { rx_check_v2 (); id24 (2, 0x46, 0x00); F ($2, 16, 4); F ($4, 20, 4); F ($6, 12, 1); }
-	| MSBLO REG ',' REG ',' ACC
-	  { rx_check_v2 (); id24 (2, 0x45, 0x00); F ($2, 16, 4); F ($4, 20, 4); F ($6, 12, 1); }
-	| MULLH REG ',' REG ',' ACC
-	  { rx_check_v2 (); id24 (2, 0x02, 0x00); F ($2, 16, 4); F ($4, 20, 4); F ($6, 12, 1); }
-	| MVFACGU { sub_op = 3; } mvfa_op
-	| MVTACGU REG ',' ACC
-	  { rx_check_v2 (); id24 (2, 0x17, 0x30); F ($4, 16, 1); F ($2, 20, 4); }
-	| RACL '#' EXPR ',' ACC
-	{ rx_check_v2 (); id24 (2, 0x19, 0x00); F ($5, 16, 1);
-	    if (rx_uintop ($3, 4) && $3.X_add_number == 1)
-	      ;
-	    else if (rx_uintop ($3, 4) && $3.X_add_number == 2)
-	      F (1, 19, 1);
-	    else
-	      as_bad (_("RACL expects #1 or #2"));}
-	| RDACL '#' EXPR ',' ACC
-	{ rx_check_v2 (); id24 (2, 0x19, 0x40); F ($5, 16, 1);
-	    if (rx_uintop ($3, 4) && $3.X_add_number == 1)
-	      ;
-	    else if (rx_uintop ($3, 4) && $3.X_add_number == 2)
-	      F (1, 19, 1);
-	    else
-	      as_bad (_("RDACL expects #1 or #2"));}
-	| RDACW '#' EXPR ',' ACC
-	{ rx_check_v2 (); id24 (2, 0x18, 0x40); F ($5, 16, 1);
-	    if (rx_uintop ($3, 4) && $3.X_add_number == 1)
-	      ;
-	    else if (rx_uintop ($3, 4) && $3.X_add_number == 2)
-	      F (1, 19, 1);
-	    else
-	      as_bad (_("RDACW expects #1 or #2"));}
-
-/* ---------------------------------------------------------------------- */
-	| BFMOV { rx_check_v3(); sub_op = 1; } op_bfield
-	| BFMOVZ { rx_check_v3(); sub_op = 0; } op_bfield
-
-/* ---------------------------------------------------------------------- */
-	| RSTR { rx_check_v3(); sub_op = 1; } op_save_rstr
-	| SAVE { rx_check_v3(); sub_op = 0; } op_save_rstr
-
-/* ---------------------------------------------------------------------- */
-	| DABS { rx_check_dfpu(); sub_op = 0x0c; sub_op2 = 0x01; } double2_op
-	| DNEG { rx_check_dfpu(); sub_op = 0x0c; sub_op2 = 0x02; } double2_op
-	| DROUND { rx_check_dfpu(); sub_op = 0x0d; sub_op2 = 0x0d; } double2_op
-	| DSQRT { rx_check_dfpu(); sub_op = 0x0d; sub_op2 = 0x00; } double2_op
-	| DTOF { rx_check_dfpu(); sub_op = 0x0d; sub_op2 = 0x0c; } double2_op
-	| DTOI { rx_check_dfpu(); sub_op = 0x0d; sub_op2 = 0x08;} double2_op
-	| DTOU { rx_check_dfpu(); sub_op = 0x0d; sub_op2 = 0x09; } double2_op
-	| DADD { rx_check_dfpu(); sub_op = 0x00; } double3_op
-	| DDIV { rx_check_dfpu(); sub_op = 0x05; } double3_op
-	| DMUL { rx_check_dfpu(); sub_op = 0x02; } double3_op
-	| DSUB { rx_check_dfpu(); sub_op = 0x01; } double3_op
-	| DCMP DREG ',' DREG { rx_check_dfpu();
-	    B4(0x76, 0x90, 0x08, 0x00); F($1, 24, 4); F($2, 28, 4); F($4, 16, 4); }
-	| DMOV DOT_D REG ',' DREGH
-	{ rx_check_dfpu();
-	  B4(0xfd, 0x77, 0x80, 0x03); F($3, 20, 4); F($5, 24, 4); }
-	| DMOV DOT_L REG ',' DREGH
-	{ rx_check_dfpu();
-	  B4(0xfd, 0x77, 0x80, 0x02); F($3, 20, 4); F($5, 24, 4); }
-	| DMOV DOT_L REG ',' DREGL
-	{ rx_check_dfpu();
-	  B4(0xfd, 0x77, 0x80, 0x00); F($3, 20, 4); F($5, 24, 4); }
-	| DMOV DOT_L DREGH ',' REG
-	{ rx_check_dfpu();
-	  B4(0xfd, 0x75, 0x80, 0x02); F($3, 24, 4); F($5, 20, 4); }
-	| DMOV DOT_L DREGL ',' REG
-	{ rx_check_dfpu();
-	  B4(0xfd, 0x75, 0x80, 0x00); F($3, 24, 4); F($5, 20, 4); }
-	| DMOV DOT_D DREG ',' DREG
-	{ rx_check_dfpu();
-	  B4(0x76, 0x90, 0x0c, 0x00); F($3, 16, 4); F($5, 24, 4); }
-	| DMOV DOT_D DREG ',' '[' REG ']'
-	{ rx_check_dfpu();
-	  B4(0xfc, 0x78, 0x08, 0x00); F($6, 16, 4); F($3, 24, 4); }
-	| DMOV DOT_D DREG ',' disp '[' REG ']'
-	{ rx_check_dfpu();
-	  B3(0xfc, 0x78, 0x08); F($7, 16, 4); DSP($5, 14, DSIZE);
-	  POST($3 << 4); }
-	| DMOV DOT_D '[' REG ']' ',' DREG
-	{ rx_check_dfpu();
-	  B4(0xfc, 0xc8, 0x08, 0x00); F($4, 16, 4); F($7, 24, 4); }
-	| DMOV DOT_D disp '[' REG ']' ',' DREG
-	{ rx_check_dfpu();
-	  B3(0xfc, 0xc8, 0x08); F($5, 16, 4); DSP($3, 14, DSIZE);
-	  POST($8 << 4); }
-	| DMOV DOT_D '#' EXPR ',' DREGH
-	{ rx_check_dfpu();
-	  B3(0xf9, 0x03, 0x03); F($6, 16, 4); IMM($4, -1); }
-	| DMOV DOT_L '#' EXPR ',' DREGH
-	{ rx_check_dfpu();
-	  B3(0xf9, 0x03, 0x02); F($6, 16, 4); IMM($4, -1); }
-	| DMOV DOT_L '#' EXPR ',' DREGL
-	{ rx_check_dfpu();
-	  B3(0xf9, 0x03, 0x00); F($6, 16, 4); IMM($4, -1); }
-	| DPOPM DOT_D DREG '-' DREG
-	{ rx_check_dfpu();
-	  B3(0x75, 0xb8, 0x00); F($3, 16, 4); F($5 - $3, 20, 4); }
-	| DPOPM DOT_L DCREG '-' DCREG
-	{ rx_check_dfpu();
-	  B3(0x75, 0xa8, 0x00); F($3, 16, 4); F($5 - $3, 20, 4); }
-	| DPUSHM DOT_D DREG '-' DREG
-	{ rx_check_dfpu();
-	  B3(0x75, 0xb0, 0x00); F($3, 16, 4); F($5 - $3, 20, 4); }
-	| DPUSHM DOT_L DCREG '-' DCREG
-	{ rx_check_dfpu();
-	  B3(0x75, 0xa0, 0x00); F($3, 16, 4); F($5 - $3, 20, 4); }
-	| MVFDC DCREG ',' REG
-	{ rx_check_dfpu();
-	  B4(0xfd, 0x75, 0x80, 0x04); F($2, 24, 4); F($4, 20, 4); }
-	| MVFDR
-	{ rx_check_dfpu(); B3(0x75, 0x90, 0x1b); }
-	| MVTDC REG ',' DCREG
-	{ rx_check_dfpu();
-	  B4(0xfd, 0x77, 0x80, 0x04); F($2, 24, 4); F($4, 20, 4); }
-	| FTOD REG ',' DREG
-	{ rx_check_dfpu();
-	  B4(0xfd, 0x77, 0x80, 0x0a); F($2, 24, 4); F($4, 20, 4); }
-	| ITOD REG ',' DREG
-	{ rx_check_dfpu();
-	  B4(0xfd, 0x77, 0x80, 0x09); F($2, 24, 4); F($4, 20, 4); }
-	| UTOD REG ',' DREG
-	{ rx_check_dfpu();
-	  B4(0xfd, 0x77, 0x80, 0x0d); F($2, 24, 4); F($4, 20, 4); }
-
-/* ---------------------------------------------------------------------- */
-
 	;
 
 /* ====================================================================== */
@@ -1019,16 +809,6 @@ op_subadd
 	;
 
 /* sbb, neg, adc, abs, max, min, div, divu, tst, not, xor, stz, stnz, emul, emulu */
-
-op_dp20_rm_l
-	: REG ',' REG
-	  { id24 (1, 0x03 + (sub_op<<2), 0x00); F ($1, 16, 4); F ($3, 20, 4); }
-	| disp '[' REG ']' opt_l ',' REG
-	  { B4 (MEMEX, 0xa0, 0x00 + sub_op, 0x00);
-	  F ($3, 24, 4); F ($7, 28, 4); DSP ($1, 14, LSIZE); }
-	;
-
-/* neg, adc, abs, max, min, div, divu, tst, not, xor, stz, stnz, emul, emulu */
 
 op_dp20_rm
 	: REG ',' REG
@@ -1050,30 +830,13 @@ op_dp20_rim
 	| op_dp20_i
 	;
 
-op_dp20_rim_l
-	: op_dp20_rm_l
-	| op_dp20_i
-	;
-
-op_dp20_rr
-	: REG ',' REG
-	  { id24 (1, 0x03 + (sub_op<<2), 0x00); F ($1, 16, 4); F ($3, 20, 4); }
+op_dp20_rms
+	: op_dp20_rm
 	| REG
 	  { B2 (0x7e, sub_op2 << 4); F ($1, 12, 4); }
 	;
 
-op_dp20_r
-	: REG ',' REG
-	  { id24 (1, 0x4b + (sub_op2<<2), 0x00); F ($1, 16, 4); F ($3, 20, 4); }
-	;
-
-op_dp20_ri
-	: { rx_check_v2 (); }
-	  op_dp20_r
-	| op_dp20_i
-	;
-
-/* xchg, utof, itof, emul, emulu */
+/* xchg, itof, emul, emulu */
 op_xchg
 	: REG ',' REG
 	  { id24 (1, 0x03 + (sub_op<<2), 0); F ($1, 16, 4); F ($3, 20, 4); }
@@ -1097,84 +860,19 @@ op_shift
 	| op_shift_rot
 	;
 
-float3_op
-	: '#' EXPR ',' REG
-	  { rx_check_float_support (); id24 (2, 0x72, sub_op << 4); F ($4, 20, 4); O4 ($2); }
-	| REG ',' REG
-	  { rx_check_float_support (); id24 (1, 0x83 + (sub_op << 2), 0); F ($1, 16, 4); F ($3, 20, 4); }
-	| disp '[' REG ']' opt_l ',' REG
-	  { rx_check_float_support (); id24 (1, 0x80 + (sub_op << 2), 0); F ($3, 16, 4); F ($7, 20, 4); DSP ($1, 14, LSIZE); }
-	| REG ',' REG ',' REG
-	  { rx_check_v2 (); id24 (4, 0x80 + (sub_op << 4), 0 ); F ($1, 16, 4); F ($3, 20, 4); F ($5, 12, 4); }
-	;
+
 
 float2_op
-	: { rx_check_float_support (); }
-	  '#' EXPR ',' REG
-	  { id24 (2, 0x72, sub_op << 4); F ($5, 20, 4); O4 ($3); }
+	: '#' EXPR ',' REG
+	  { id24 (2, 0x72, sub_op << 4); F ($4, 20, 4); O4 ($2); }
 	| float2_op_ni
 	;
-
 float2_op_ni
-	: { rx_check_float_support (); }
-	  REG ',' REG
-	  { id24 (1, 0x83 + (sub_op << 2), 0); F ($2, 16, 4); F ($4, 20, 4); }
-	| { rx_check_float_support (); }
-	  disp '[' REG ']' opt_l ',' REG
-	  { id24 (1, 0x80 + (sub_op << 2), 0); F ($4, 16, 4); F ($8, 20, 4); DSP ($2, 14, LSIZE); }
+	: REG ',' REG
+	  { id24 (1, 0x83 + (sub_op << 2), 0); F ($1, 16, 4); F ($3, 20, 4); }
+	| disp '[' REG ']' opt_l ',' REG
+	  { id24 (1, 0x80 + (sub_op << 2), 0); F ($3, 16, 4); F ($7, 20, 4); DSP ($1, 14, LSIZE); }
 	;
-
-mvfa_op
-	: { rx_check_v2 (); }
-	  '#' EXPR ',' ACC ',' REG
-	  { id24 (2, 0x1e, sub_op << 4); F ($7, 20, 4); F ($5, 16, 1);
-	    if (rx_uintop ($3, 4))
-	      {
-		switch (exp_val ($3))
-		  {
-		  case 0:
-		    F (1, 15, 1);
-		    break;
-		  case 1:
-		    F (1, 15, 1);
-		    F (1, 17, 1);
-		    break;
-		  case 2:
-		    break;
-		  default:
-		    as_bad (_("IMM expects #0 to #2"));}
-	      } else
-	        as_bad (_("IMM expects #0 to #2"));}
-	;
-
-op_xor
-	: op_dp20_rim
-	| REG ',' REG ',' REG
-	  { rx_check_v3(); B3(0xff,0x60,0x00), F ($5, 12, 4), F ($1, 16, 4), F ($3, 20, 4); }
-	;
-
-op_bfield
-	: { rx_check_v3(); }
-	  '#' EXPR ',' '#' EXPR ',' '#' EXPR ',' REG ',' REG
-	  { rx_range($3, 0, 31); rx_range($6, 0, 31); rx_range($9, 1, 31);
-	    B3(0xfc, 0x5a + (sub_op << 2), 0); F($11, 16, 4); F($13, 20, 4);
-	  rx_bfield($3, $6, $9);}
-	;
-
-op_save_rstr
-	: '#' EXPR
-	  { B3(0xfd,0x76,0xe0 + (sub_op << 4)); UO1($2); }
-	| REG
-	  { B4(0xfd,0x76,0xc0 + (sub_op << 4), 0x00); F($1, 20, 4); }
-	;
-
-double2_op
-	: DREG ',' DREG
-	{ B4(0x76, 0x90, sub_op, sub_op2); F($1, 16, 4); F($3, 24, 4);}
-
-double3_op
-	: DREG ',' DREG ',' DREG
-	{ B4(0x76, 0x90, sub_op, 0x00); F($1, 28, 4); F($3, 16,4); F($5, 24, 4);}
 
 /* ====================================================================== */
 
@@ -1207,10 +905,6 @@ bw	:       { $$ = 1; }
 
 opt_l	: 	{}
 	| DOT_L {}
-	;
-
-opt_b	: 	{}
-	| DOT_B {}
 	;
 
 %%
@@ -1255,7 +949,6 @@ token_table[] =
   { "isp", CREG, 10 },
   { "fintv", CREG, 11 },
   { "intb", CREG, 12 },
-  { "extb", CREG, 13 },
 
   { "pbp", CREG, 16 },
   { "pben", CREG, 17 },
@@ -1263,66 +956,6 @@ token_table[] =
   { "bbpsw", CREG, 24 },
   { "bbpc", CREG, 25 },
 
-  { "dr0", DREG, 0 },
-  { "dr1", DREG, 1 },
-  { "dr2", DREG, 2 },
-  { "dr3", DREG, 3 },
-  { "dr4", DREG, 4 },
-  { "dr5", DREG, 5 },
-  { "dr6", DREG, 6 },
-  { "dr7", DREG, 7 },
-  { "dr8", DREG, 8 },
-  { "dr9", DREG, 9 },
-  { "dr10", DREG, 10 },
-  { "dr11", DREG, 11 },
-  { "dr12", DREG, 12 },
-  { "dr13", DREG, 13 },
-  { "dr14", DREG, 14 },
-  { "dr15", DREG, 15 },
-  
-  { "drh0", DREGH, 0 },
-  { "drh1", DREGH, 1 },
-  { "drh2", DREGH, 2 },
-  { "drh3", DREGH, 3 },
-  { "drh4", DREGH, 4 },
-  { "drh5", DREGH, 5 },
-  { "drh6", DREGH, 6 },
-  { "drh7", DREGH, 7 },
-  { "drh8", DREGH, 8 },
-  { "drh9", DREGH, 9 },
-  { "drh10", DREGH, 10 },
-  { "drh11", DREGH, 11 },
-  { "drh12", DREGH, 12 },
-  { "drh13", DREGH, 13 },
-  { "drh14", DREGH, 14 },
-  { "drh15", DREGH, 15 },
-
-  { "drl0", DREGL, 0 },
-  { "drl1", DREGL, 1 },
-  { "drl2", DREGL, 2 },
-  { "drl3", DREGL, 3 },
-  { "drl4", DREGL, 4 },
-  { "drl5", DREGL, 5 },
-  { "drl6", DREGL, 6 },
-  { "drl7", DREGL, 7 },
-  { "drl8", DREGL, 8 },
-  { "drl9", DREGL, 9 },
-  { "drl10", DREGL, 10 },
-  { "drl11", DREGL, 11 },
-  { "drl12", DREGL, 12 },
-  { "drl13", DREGL, 13 },
-  { "drl14", DREGL, 14 },
-  { "drl15", DREGL, 15 },
-
-  { "DPSW", DCREG, 0 },
-  { "DCMR", DCREG, 1 },
-  { "DCENT", DCREG, 2 },
-  { "DEPC", DCREG, 3 },
-  { "DCR0", DCREG, 0 },
-  { "DCR1", DCREG, 1 },
-  { "DCR2", DCREG, 2 },
-  { "DCR3", DCREG, 3 },
-  
   { ".s", DOT_S, 0 },
   { ".b", DOT_B, 0 },
   { ".w", DOT_W, 0 },
@@ -1330,7 +963,6 @@ token_table[] =
   { ".a", DOT_A , 0},
   { ".ub", DOT_UB, 0 },
   { ".uw", DOT_UW , 0},
-  { ".d", DOT_D , 0},
 
   { "c", FLAG, 0 },
   { "z", FLAG, 1 },
@@ -1339,9 +971,6 @@ token_table[] =
   { "i", FLAG, 8 },
   { "u", FLAG, 9 },
 
-  { "a0", ACC, 0 },
-  { "a1", ACC, 1 },
-
 #define OPC(x) { #x, x, IS_OPCODE }
   OPC(ABS),
   OPC(ADC),
@@ -1349,8 +978,6 @@ token_table[] =
   { "and", AND_, IS_OPCODE },
   OPC(BCLR),
   OPC(BCND),
-  OPC(BFMOV),
-  OPC(BFMOVZ),
   OPC(BMCND),
   OPC(BNOT),
   OPC(BRA),
@@ -1360,73 +987,40 @@ token_table[] =
   OPC(BTST),
   OPC(CLRPSW),
   OPC(CMP),
-  OPC(DABS),
-  OPC(DADD),
   OPC(DBT),
-  OPC(DDIV),
   OPC(DIV),
   OPC(DIVU),
-  OPC(DMOV),
-  OPC(DMUL),
-  OPC(DNEG),
-  OPC(DPOPM),
-  OPC(DPUSHM),
-  OPC(DROUND),
-  OPC(DSQRT),
-  OPC(DSUB),
-  OPC(DTOF),
-  OPC(DTOI),
-  OPC(DTOU),
   OPC(EDIV),
   OPC(EDIVU),
-  OPC(EMACA),
-  OPC(EMSBA),
   OPC(EMUL),
-  OPC(EMULA),
   OPC(EMULU),
   OPC(FADD),
   OPC(FCMP),
   OPC(FDIV),
   OPC(FMUL),
   OPC(FREIT),
-  OPC(FSQRT),
-  OPC(FTOD),
-  OPC(FTOU),
   OPC(FSUB),
   OPC(FTOI),
   OPC(INT),
-  OPC(ITOD),
   OPC(ITOF),
   OPC(JMP),
   OPC(JSR),
-  OPC(MVFACGU),
   OPC(MVFACHI),
   OPC(MVFACMI),
   OPC(MVFACLO),
   OPC(MVFC),
-  OPC(MVFDC),
-  OPC(MVFDR),
-  OPC(MVTDC),
-  OPC(MVTACGU),
   OPC(MVTACHI),
   OPC(MVTACLO),
   OPC(MVTC),
   OPC(MVTIPL),
   OPC(MACHI),
   OPC(MACLO),
-  OPC(MACLH),
   OPC(MAX),
   OPC(MIN),
   OPC(MOV),
-  OPC(MOVCO),
-  OPC(MOVLI),
   OPC(MOVU),
-  OPC(MSBHI),
-  OPC(MSBLH),
-  OPC(MSBLO),
   OPC(MUL),
   OPC(MULHI),
-  OPC(MULLH),
   OPC(MULLO),
   OPC(MULU),
   OPC(NEG),
@@ -1440,10 +1034,7 @@ token_table[] =
   OPC(PUSHA),
   OPC(PUSHC),
   OPC(PUSHM),
-  OPC(RACL),
   OPC(RACW),
-  OPC(RDACL),
-  OPC(RDACW),
   OPC(REIT),
   OPC(REVL),
   OPC(REVW),
@@ -1453,14 +1044,12 @@ token_table[] =
   OPC(ROTL),
   OPC(ROTR),
   OPC(ROUND),
-  OPC(RSTR),
   OPC(RTE),
   OPC(RTFI),
   OPC(RTS),
   OPC(RTSD),
   OPC(SAT),
   OPC(SATR),
-  OPC(SAVE),
   OPC(SBB),
   OPC(SCCND),
   OPC(SCMPU),
@@ -1479,8 +1068,6 @@ token_table[] =
   OPC(SUNTIL),
   OPC(SWHILE),
   OPC(TST),
-  OPC(UTOD),
-  OPC(UTOF),
   OPC(WAIT),
   OPC(XCHG),
   OPC(XOR),
@@ -1490,7 +1077,7 @@ token_table[] =
 
 static struct
 {
-  const char * string;
+  char * string;
   int    token;
 }
 condition_opcode_table[] =
@@ -1502,13 +1089,12 @@ condition_opcode_table[] =
 
 #define NUM_CONDITION_OPCODES (sizeof (condition_opcode_table) / sizeof (condition_opcode_table[0]))
 
-struct condition_symbol
+static struct
 {
-  const char * string;
+  char * string;
   int    val;
-};
-
-static struct condition_symbol condition_table[] =
+}
+condition_table[] =
 {
   { "z", 0 },
   { "eq", 0 },
@@ -1528,20 +1114,11 @@ static struct condition_symbol condition_table[] =
   { "n", 7 },
   { "lt", 9 },
   { "le", 11 },
-  { "no", 13 },
+  { "no", 13 }
   /* never = 15 */
 };
 
-static struct condition_symbol double_condition_table[] =
-{
-  { "un", 1 },
-  { "eq", 2 },
-  { "lt", 4 },
-  { "le", 6 },
-};
-
 #define NUM_CONDITIONS (sizeof (condition_table) / sizeof (condition_table[0]))
-#define NUM_DOUBLE_CONDITIONS (sizeof (double_condition_table) / sizeof (double_condition_table[0]))
 
 void
 rx_lex_init (char * beginning, char * ending)
@@ -1556,7 +1133,7 @@ rx_lex_init (char * beginning, char * ending)
 }
 
 static int
-check_condition (const char * base, struct condition_symbol *t, unsigned int num)
+check_condition (char * base)
 {
   char * cp;
   unsigned int i;
@@ -1566,11 +1143,11 @@ check_condition (const char * base, struct condition_symbol *t, unsigned int num
   if (memcmp (rx_lex_start, base, strlen (base)))
     return 0;
   cp = rx_lex_start + strlen (base);
-  for (i = 0; i < num; i ++)
+  for (i = 0; i < NUM_CONDITIONS; i ++)
     {
-      if (strcasecmp (cp, t[i].string) == 0)
+      if (strcasecmp (cp, condition_table[i].string) == 0)
 	{
-	  rx_lval.regno = t[i].val;
+	  rx_lval.regno = condition_table[i].val;
 	  return 1;
 	}
     }
@@ -1593,8 +1170,6 @@ rx_lex (void)
     return 0;
 
   if (ISALPHA (*rx_lex_start)
-      || (rx_pid_register != -1 && memcmp (rx_lex_start, "%pidreg", 7) == 0)
-      || (rx_gp_register != -1 && memcmp (rx_lex_start, "%gpreg", 6) == 0)
       || (*rx_lex_start == '.' && ISALPHA (rx_lex_start[1])))
     {
       unsigned int i;
@@ -1608,48 +1183,15 @@ rx_lex (void)
       save = *e;
       *e = 0;
 
-      if (strcmp (rx_lex_start, "%pidreg") == 0)
-	{
-	  {
-	    rx_lval.regno = rx_pid_register;
-	    *e = save;
-	    rx_lex_start = e;
-	    rx_last_token = REG;
-	    return REG;
-	  }
-	}
-
-      if (strcmp (rx_lex_start, "%gpreg") == 0)
-	{
-	  {
-	    rx_lval.regno = rx_gp_register;
-	    *e = save;
-	    rx_lex_start = e;
-	    rx_last_token = REG;
-	    return REG;
-	  }
-	}
-
       if (rx_last_token == 0)
-	{
-	  for (ci = 0; ci < NUM_CONDITION_OPCODES; ci ++)
-	    if (check_condition (condition_opcode_table[ci].string,
-				 condition_table, NUM_CONDITIONS))
-	      {
-		*e = save;
-		rx_lex_start = e;
-		rx_last_token = condition_opcode_table[ci].token;
-		return condition_opcode_table[ci].token;
-	      }
-	  if  (check_condition ("dcmp", double_condition_table,
-				NUM_DOUBLE_CONDITIONS))
+	for (ci = 0; ci < NUM_CONDITION_OPCODES; ci ++)
+	  if (check_condition (condition_opcode_table[ci].string))
 	    {
 	      *e = save;
 	      rx_lex_start = e;
-	      rx_last_token = DCMP;
-	      return DCMP;
+	      rx_last_token = condition_opcode_table[ci].token;
+	      return condition_opcode_table[ci].token;
 	    }
-	}
 
       for (i = 0; i < NUM_TOKENS; i++)
 	if (strcasecmp (rx_lex_start, token_table[i].string) == 0
@@ -1680,7 +1222,7 @@ rx_lex (void)
     rx_in_brackets = 0;
 
   if (rx_in_brackets
-      || rx_last_token == REG || rx_last_token == DREG || rx_last_token == DCREG
+      || rx_last_token == REG
       || strchr ("[],#", *rx_lex_start))
     {
       rx_last_token = *rx_lex_start;
@@ -1711,7 +1253,7 @@ rx_lex (void)
 }
 
 int
-rx_error (const char * str)
+rx_error (char * str)
 {
   int len;
 
@@ -1723,27 +1265,15 @@ rx_error (const char * str)
 }
 
 static int
-rx_intop (expressionS exp, int nbits, int opbits)
+rx_intop (expressionS exp, int nbits)
 {
   long v;
-  long mask, msb;
 
-  if (exp.X_op == O_big)
-    {
-      if (nbits == 32)
-	return 1;
-      if (exp.X_add_number == -1)
-	return 0;
-    }
-  else if (exp.X_op != O_constant)
+  if (exp.X_op == O_big && nbits == 32)
+      return 1;
+  if (exp.X_op != O_constant)
     return 0;
   v = exp.X_add_number;
-
-  msb = 1UL << (opbits - 1);
-  mask = (1UL << opbits) - 1;
-
-  if ((v & msb) && ! (v & ~mask))
-    v -= 1UL << opbits;
 
   switch (nbits)
     {
@@ -1817,13 +1347,13 @@ rx_disp5op (expressionS * exp, int msize)
   switch (msize)
     {
     case BSIZE:
-      if (0 <= v && v <= 31)
+      if (0 < v && v <= 31)
 	return 1;
       break;
     case WSIZE:
       if (v & 1)
 	return 0;
-      if (0 <= v && v <= 63)
+      if (0 < v && v <= 63)
 	{
 	  exp->X_add_number >>= 1;
 	  return 1;
@@ -1832,7 +1362,7 @@ rx_disp5op (expressionS * exp, int msize)
     case LSIZE:
       if (v & 3)
 	return 0;
-      if (0 <= v && v <= 127)
+      if (0 < v && v <= 127)
 	{
 	  exp->X_add_number >>= 2;
 	  return 1;
@@ -1875,9 +1405,9 @@ zero_expr (void)
 }
 
 static int
-immediate (expressionS exp, int type, int pos, int bits)
+immediate (expressionS exp, int type, int pos)
 {
-  /* We will emit constants ourselves here, so negate them.  */
+  /* We will emit constants ourself here, so negate them.  */
   if (type == RXREL_NEGATIVE && exp.X_op == O_constant)
     exp.X_add_number = - exp.X_add_number;
   if (type == RXREL_NEGATIVE_BORROW)
@@ -1888,32 +1418,27 @@ immediate (expressionS exp, int type, int pos, int bits)
 	rx_error (_("sbb cannot use symbolic immediates"));
     }
 
-  if (pos >= 0 && rx_intop (exp, 8, bits))
+  if (rx_intop (exp, 8))
     {
       rx_op (exp, 1, type);
       return 1;
     }
-  else if (pos >= 0 && rx_intop (exp, 16, bits))
+  else if (rx_intop (exp, 16))
     {
       rx_op (exp, 2, type);
       return 2;
     }
-  else if (pos >= 0 && rx_uintop (exp, 16) && bits == 16)
-    {
-      rx_op (exp, 2, type);
-      return 2;
-    }
-  else if (pos >= 0 && rx_intop (exp, 24, bits))
+  else if (rx_intop (exp, 24))
     {
       rx_op (exp, 3, type);
       return 3;
     }
-  else if (pos < 0 || rx_intop (exp, 32, bits))
+  else if (rx_intop (exp, 32))
     {
       rx_op (exp, 4, type);
       return 0;
     }
-  else if (type == RXREL_SIGNED && pos >= 0)
+  else if (type == RXREL_SIGNED)
     {
       /* This is a symbolic immediate, we will relax it later.  */
       rx_relax (RX_RELAX_IMM, pos);
@@ -1957,13 +1482,6 @@ displacement (expressionS exp, int msize)
 	}
     }
 
-  if (exp.X_op == O_subtract)
-    {
-      exp.X_md = BFD_RELOC_RX_DIFF;
-      O2 (exp);
-      return 2;
-    }
-
   if (exp.X_op != O_constant)
     {
       rx_error (_("displacements must be constants"));
@@ -1987,11 +1505,6 @@ displacement (expressionS exp, int msize)
       if (val & 3)
 	rx_error (_("long displacement not long-aligned"));
       vshift = 2;
-      break;
-    case DSIZE:
-      if (val & 7)
-	rx_error (_("double displacement not double-aligned"));
-      vshift = 3;
       break;
     default:
       as_bad (_("displacement with unknown size (internal bug?)\n"));
@@ -2039,45 +1552,4 @@ rtsd_immediate (expressionS exp)
   val >>= 2;
   exp.X_add_number = val;
   O1 (exp);
-}
-
-static void
-rx_range (expressionS exp, int minv, int maxv)
-{
-  int val;
-
-  if (exp.X_op != O_constant)
-    return;
-
-  val = exp.X_add_number;
-  if (val < minv || val > maxv)
-    as_warn (_("Value %d out of range %d..%d"), val, minv, maxv);
-}
-
-static void
-rx_check_float_support (void)
-{
-  if (rx_cpu == RX100 || rx_cpu == RX200)
-    rx_error (_("target CPU type does not support floating point instructions"));
-}
-
-static void
-rx_check_v2 (void)
-{
-  if (rx_cpu < RXV2)
-    rx_error (_("target CPU type does not support v2 instructions"));
-}
-
-static void
-rx_check_v3 (void)
-{
-  if (rx_cpu < RXV3)
-    rx_error (_("target CPU type does not support v3 instructions"));
-}
-
-static void
-rx_check_dfpu (void)
-{
-  if (rx_cpu != RXV3FPU)
-    rx_error (_("target CPU type does not support double float instructions"));
 }

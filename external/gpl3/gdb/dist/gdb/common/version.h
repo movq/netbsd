@@ -1,5 +1,5 @@
 /* Version information for GDB.
-   Copyright (C) 1999-2019 Free Software Foundation, Inc.
+   Copyright (C) 1999-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -16,8 +16,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef COMMON_VERSION_H
-#define COMMON_VERSION_H
+#ifndef VERSION_H
+#define VERSION_H
 
 /* Version number of GDB, as a string.  */
 extern const char version[];
@@ -28,4 +28,4 @@ extern const char host_name[];
 /* Canonical target name as a string.  */
 extern const char target_name[];
 
-#endif /* COMMON_VERSION_H */
+#endif /* #ifndef VERSION_H */

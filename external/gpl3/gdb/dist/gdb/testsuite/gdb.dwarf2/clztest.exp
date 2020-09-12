@@ -1,4 +1,4 @@
-# Copyright 2011-2019 Free Software Foundation, Inc.
+# Copyright 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,7 +15,6 @@
 
 load_lib dwarf.exp
 
-standard_testfile .S
 set test "clztest"
 
 # This test can only be run on targets which support DWARF-2 and use gas.
@@ -28,7 +27,7 @@ if {![istarget x86_64-*] || ![is_lp64_target]} {
     return 0
 }
 
-if { [prepare_for_testing "failed to prepare" "${test}" ${test}.S {nodebug additional_flags=-nostdlib}] } {
+if { [prepare_for_testing "${test}.exp" "${test}" ${test}.S {nodebug additional_flags=-nostdlib}] } {
     return -1
 }
 
@@ -36,9 +35,9 @@ if ![runto_main] {
     return -1
 }
 
-# Initialize tests to be an empty array.
-unset -nocomplain tests
-array set tests {}
+global tests
+set tests(_) -
+unset tests(_)
 
 proc gdb-test {line var value} {
     global tests

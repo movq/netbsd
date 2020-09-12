@@ -1,5 +1,6 @@
 /* Darwin support for GDB, the GNU debugger.
-   Copyright (C) 1997-2019 Free Software Foundation, Inc.
+   Copyright 1997, 1998, 1999, 2000, 2001, 2002, 2005, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    Contributed by Apple Computer, Inc.
 
@@ -23,15 +24,19 @@
 #include "inferior.h"
 #include "gdbcore.h"
 #include "target.h"
+#include "floatformat.h"
 #include "symtab.h"
 #include "regcache.h"
+#include "libbfd.h"
 #include "objfiles.h"
 
 #include "i387-tdep.h"
-#include "common/x86-xstate.h"
 #include "amd64-tdep.h"
 #include "osabi.h"
 #include "ui-out.h"
+#include "symtab.h"
+#include "frame.h"
+#include "gdb_assert.h"
 #include "amd64-darwin-tdep.h"
 #include "i386-darwin-tdep.h"
 #include "solib.h"
@@ -80,6 +85,7 @@ amd64_darwin_sigcontext_addr (struct frame_info *this_frame)
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   CORE_ADDR rbx;
+  CORE_ADDR si;
   gdb_byte buf[8];
 
   /* A pointer to the ucontext is passed as the fourth argument
@@ -99,8 +105,7 @@ x86_darwin_init_abi_64 (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
-  amd64_init_abi (info, gdbarch,
-		  amd64_target_description (X86_XSTATE_SSE_MASK, true));
+  amd64_init_abi (info, gdbarch);
 
   tdep->struct_return = reg_struct_return;
 
@@ -111,7 +116,7 @@ x86_darwin_init_abi_64 (struct gdbarch_info info, struct gdbarch *gdbarch)
   tdep->sc_reg_offset = amd64_darwin_thread_state_reg_offset;
   tdep->sc_num_regs = amd64_darwin_thread_state_num_regs;
 
-  tdep->jb_pc_offset = 56;
+  tdep->jb_pc_offset = 148;
 
   set_solib_ops (gdbarch, &darwin_so_ops);
 }

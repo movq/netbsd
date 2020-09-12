@@ -1,6 +1,7 @@
 // -*- C++ -*- forwarding header.
 
-// Copyright (C) 1997-2019 Free Software Foundation, Inc.
+// Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+// 2009, 2010  Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -42,6 +43,7 @@
 #pragma GCC system_header
 
 #include <bits/c++config.h>
+#include <cstddef>
 
 #if !_GLIBCXX_HOSTED
 // The C standard does not require a freestanding implementation to
@@ -52,20 +54,13 @@
 #define EXIT_SUCCESS 0
 #define EXIT_FAILURE 1
 
-namespace std
-{
+_GLIBCXX_BEGIN_NAMESPACE(std)
+
   extern "C" void abort(void) throw () _GLIBCXX_NORETURN;
-  extern "C" int atexit(void (*)(void)) throw ();
+  extern "C" int atexit(void (*)()) throw ();
   extern "C" void exit(int) throw () _GLIBCXX_NORETURN;
-#if __cplusplus >= 201103L
-# ifdef _GLIBCXX_HAVE_AT_QUICK_EXIT
-  extern "C" int at_quick_exit(void (*)(void)) throw ();
-# endif
-# ifdef _GLIBCXX_HAVE_QUICK_EXIT
-  extern "C" void quick_exit(int) throw() _GLIBCXX_NORETURN;
-# endif
-#endif
-} // namespace
+
+_GLIBCXX_END_NAMESPACE
 
 #else
 
@@ -75,11 +70,6 @@ namespace std
 #undef abort
 #undef abs
 #undef atexit
-#if __cplusplus >= 201103L
-# ifdef _GLIBCXX_HAVE_AT_QUICK_EXIT
-#  undef at_quick_exit
-# endif
-#endif
 #undef atof
 #undef atoi
 #undef atol
@@ -96,11 +86,6 @@ namespace std
 #undef mbstowcs
 #undef mbtowc
 #undef qsort
-#if __cplusplus >= 201103L
-# ifdef _GLIBCXX_HAVE_QUICK_EXIT
-#  undef quick_exit
-# endif
-#endif
 #undef rand
 #undef realloc
 #undef srand
@@ -111,9 +96,7 @@ namespace std
 #undef wcstombs
 #undef wctomb
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   using ::div_t;
   using ::ldiv_t;
@@ -121,11 +104,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   using ::abort;
   using ::abs;
   using ::atexit;
-#if __cplusplus >= 201103L
-# ifdef _GLIBCXX_HAVE_AT_QUICK_EXIT
-  using ::at_quick_exit;
-# endif
-#endif
   using ::atof;
   using ::atoi;
   using ::atol;
@@ -144,11 +122,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   using ::mbtowc;
 #endif // _GLIBCXX_HAVE_MBSTATE_T
   using ::qsort;
-#if __cplusplus >= 201103L
-# ifdef _GLIBCXX_HAVE_QUICK_EXIT
-  using ::quick_exit;
-# endif
-#endif
   using ::rand;
   using ::realloc;
   using ::srand;
@@ -162,37 +135,14 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #endif // _GLIBCXX_USE_WCHAR_T
 
   inline long
-  abs(long __i) { return __builtin_labs(__i); }
-
-#ifdef _GLIBCXX_USE_LONG_LONG
-  inline long long
-  abs(long long __x) { return __builtin_llabs (__x); }
-#endif
-
-#if defined(__GLIBCXX_TYPE_INT_N_0)
-  inline __GLIBCXX_TYPE_INT_N_0
-  abs(__GLIBCXX_TYPE_INT_N_0 __x) { return __x >= 0 ? __x : -__x; }
-#endif
-#if defined(__GLIBCXX_TYPE_INT_N_1)
-  inline __GLIBCXX_TYPE_INT_N_1
-  abs(__GLIBCXX_TYPE_INT_N_1 __x) { return __x >= 0 ? __x : -__x; }
-#endif
-#if defined(__GLIBCXX_TYPE_INT_N_2)
-  inline __GLIBCXX_TYPE_INT_N_2
-  abs(__GLIBCXX_TYPE_INT_N_2 __x) { return __x >= 0 ? __x : -__x; }
-#endif
-#if defined(__GLIBCXX_TYPE_INT_N_3)
-  inline __GLIBCXX_TYPE_INT_N_3
-  abs(__GLIBCXX_TYPE_INT_N_3 __x) { return __x >= 0 ? __x : -__x; }
-#endif
+  abs(long __i) { return labs(__i); }
 
   inline ldiv_t
   div(long __i, long __j) { return ldiv(__i, __j); }
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
-#if _GLIBCXX_USE_C99_STDLIB
+#if _GLIBCXX_USE_C99
 
 #undef _Exit
 #undef llabs
@@ -203,9 +153,7 @@ _GLIBCXX_END_NAMESPACE_VERSION
 #undef strtof
 #undef strtold
 
-namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
 
 #if !_GLIBCXX_USE_C99_LONG_LONG_DYNAMIC
   using ::lldiv_t;
@@ -216,6 +164,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #if !_GLIBCXX_USE_C99_DYNAMIC
   using ::_Exit;
 #endif
+
+  inline long long
+  abs(long long __x) { return __x >= 0 ? __x : -__x; }
 
 #if !_GLIBCXX_USE_C99_LONG_LONG_DYNAMIC
   using ::llabs;
@@ -230,9 +181,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #if _GLIBCXX_USE_C99_LONG_LONG_CHECK || _GLIBCXX_USE_C99_LONG_LONG_DYNAMIC
   extern "C" long long int (atoll)(const char *) throw ();
   extern "C" long long int
-    (strtoll)(const char * __restrict, char ** __restrict, int) throw ();
+    (strtoll)(const char * restrict, char ** restrict, int) throw ();
   extern "C" unsigned long long int
-    (strtoull)(const char * __restrict, char ** __restrict, int) throw ();
+    (strtoull)(const char * restrict, char ** restrict, int) throw ();
 #endif
 #if !_GLIBCXX_USE_C99_LONG_LONG_DYNAMIC
   using ::atoll;
@@ -242,15 +193,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   using ::strtof;
   using ::strtold;
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace __gnu_cxx
+_GLIBCXX_END_NAMESPACE
 
-namespace std
-{
+_GLIBCXX_BEGIN_NAMESPACE(std)
+
 #if !_GLIBCXX_USE_C99_LONG_LONG_DYNAMIC
   using ::__gnu_cxx::lldiv_t;
 #endif
   using ::__gnu_cxx::_Exit;
+  using ::__gnu_cxx::abs;
 #if !_GLIBCXX_USE_C99_LONG_LONG_DYNAMIC
   using ::__gnu_cxx::llabs;
   using ::__gnu_cxx::div;
@@ -261,9 +212,10 @@ namespace std
   using ::__gnu_cxx::strtoll;
   using ::__gnu_cxx::strtoull;
   using ::__gnu_cxx::strtold;
-} // namespace std
 
-#endif // _GLIBCXX_USE_C99_STDLIB
+_GLIBCXX_END_NAMESPACE
+
+#endif // _GLIBCXX_USE_C99
 
 #endif // !_GLIBCXX_HOSTED
 

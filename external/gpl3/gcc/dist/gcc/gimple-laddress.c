@@ -1,5 +1,5 @@
 /* Lower and optimize address expressions.
-   Copyright (C) 2015-2019 Free Software Foundation, Inc.
+   Copyright (C) 2015-2016 Free Software Foundation, Inc.
    Contributed by Marek Polacek <polacek@redhat.com>
 
 This file is part of GCC.
@@ -32,7 +32,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "symtab.h"
 #include "tree.h"
 #include "stringpool.h"
-#include "tree-vrp.h"
 #include "tree-ssanames.h"
 #include "fold-const.h"
 #include "gimple-expr.h"
@@ -100,19 +99,19 @@ pass_laddress::execute (function *fun)
 	  */
 
 	  tree expr = gimple_assign_rhs1 (stmt);
-	  poly_int64 bitsize, bitpos;
+	  HOST_WIDE_INT bitsize, bitpos;
 	  tree base, offset;
 	  machine_mode mode;
 	  int volatilep = 0, reversep, unsignedp = 0;
 	  base = get_inner_reference (TREE_OPERAND (expr, 0), &bitsize,
 				      &bitpos, &offset, &mode, &unsignedp,
-				      &reversep, &volatilep);
-	  gcc_assert (base != NULL_TREE);
-	  poly_int64 bytepos = exact_div (bitpos, BITS_PER_UNIT);
+				      &reversep, &volatilep, false);
+	  gcc_assert (base != NULL_TREE && (bitpos % BITS_PER_UNIT) == 0);
 	  if (offset != NULL_TREE)
 	    {
-	      if (maybe_ne (bytepos, 0))
-		offset = size_binop (PLUS_EXPR, offset, size_int (bytepos));
+	      if (bitpos != 0)
+		offset = size_binop (PLUS_EXPR, offset,
+				     size_int (bitpos / BITS_PER_UNIT));
 	      offset = force_gimple_operand_gsi (&gsi, offset, true, NULL,
 						 true, GSI_SAME_STMT);
 	      base = build_fold_addr_expr (base);

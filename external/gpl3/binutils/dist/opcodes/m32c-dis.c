@@ -1,11 +1,11 @@
-/* DO NOT EDIT!  -*- buffer-read-only: t -*- vi:set ro:  */
 /* Disassembler interface for targets using CGEN. -*- C -*-
    CGEN: Cpu tools GENerator
 
    THIS FILE IS MACHINE GENERATED WITH CGEN.
    - the resultant file is machine generated, cgen-dis.in isn't
 
-   Copyright (C) 1996-2020 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of libopcodes.
 
@@ -29,7 +29,7 @@
 #include "sysdep.h"
 #include <stdio.h>
 #include "ansidecl.h"
-#include "disassemble.h"
+#include "dis-asm.h"
 #include "bfd.h"
 #include "symcat.h"
 #include "libiberty.h"
@@ -204,27 +204,27 @@ print_regset (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
 	      int length ATTRIBUTE_UNUSED,
 	      int push)
 {
-  static char * m16c_register_names [] =
+  static char * m16c_register_names [] = 
   {
     "r0", "r1", "r2", "r3", "a0", "a1", "sb", "fb"
   };
   disassemble_info *info = dis_info;
   int mask;
-  int reg_index = 0;
+  int index = 0;
   char* comma = "";
 
   if (push)
     mask = 0x80;
   else
     mask = 1;
-
+ 
   if (value & mask)
     {
       (*info->fprintf_func) (info->stream, "%s", m16c_register_names [0]);
       comma = ",";
     }
 
-  for (reg_index = 1; reg_index <= 7; ++reg_index)
+  for (index = 1; index <= 7; ++index)
     {
       if (push)
         mask >>= 1;
@@ -234,7 +234,7 @@ print_regset (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
       if (value & mask)
         {
           (*info->fprintf_func) (info->stream, "%s%s", comma,
-				 m16c_register_names [reg_index]);
+				 m16c_register_names [index]);
           comma = ",";
         }
     }
@@ -888,14 +888,13 @@ m32c_cgen_print_operand (CGEN_CPU_DESC cd,
 
     default :
       /* xgettext:c-format */
-      opcodes_error_handler
-	(_("internal error: unrecognized field %d while printing insn"),
-	 opindex);
-      abort ();
+      fprintf (stderr, _("Unrecognized field %d while printing insn.\n"),
+	       opindex);
+    abort ();
   }
 }
 
-cgen_print_fn * const m32c_cgen_print_handlers[] =
+cgen_print_fn * const m32c_cgen_print_handlers[] = 
 {
   print_insn_normal,
 };
@@ -923,6 +922,10 @@ print_normal (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
 {
   disassemble_info *info = (disassemble_info *) dis_info;
 
+#ifdef CGEN_PRINT_NORMAL
+  CGEN_PRINT_NORMAL (cd, info, value, attrs, pc, length);
+#endif
+
   /* Print the operand as directed by the attributes.  */
   if (CGEN_BOOL_ATTR (attrs, CGEN_OPERAND_SEM_ONLY))
     ; /* nothing to do */
@@ -943,6 +946,10 @@ print_address (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
 	       int length ATTRIBUTE_UNUSED)
 {
   disassemble_info *info = (disassemble_info *) dis_info;
+
+#ifdef CGEN_PRINT_ADDRESS
+  CGEN_PRINT_ADDRESS (cd, info, value, attrs, pc, length);
+#endif
 
   /* Print the operand as directed by the attributes.  */
   if (CGEN_BOOL_ATTR (attrs, CGEN_OPERAND_SEM_ONLY))
@@ -1085,7 +1092,7 @@ print_insn (CGEN_CPU_DESC cd,
       int length;
       unsigned long insn_value_cropped;
 
-#ifdef CGEN_VALIDATE_INSN_SUPPORTED
+#ifdef CGEN_VALIDATE_INSN_SUPPORTED 
       /* Not needed as insn shouldn't be in hash lists if not supported.  */
       /* Supported by this cpu?  */
       if (! m32c_cgen_insn_supported (cd, insn))
@@ -1103,7 +1110,7 @@ print_insn (CGEN_CPU_DESC cd,
          relevant part from the buffer. */
       if ((unsigned) (CGEN_INSN_BITSIZE (insn) / 8) < buflen &&
 	  (unsigned) (CGEN_INSN_BITSIZE (insn) / 8) <= sizeof (unsigned long))
-	insn_value_cropped = bfd_get_bits (buf, CGEN_INSN_BITSIZE (insn),
+	insn_value_cropped = bfd_get_bits (buf, CGEN_INSN_BITSIZE (insn), 
 					   info->endian == BFD_ENDIAN_BIG);
       else
 	insn_value_cropped = insn_value;
@@ -1222,7 +1229,7 @@ print_insn_m32c (bfd_vma pc, disassemble_info *info)
   arch = info->arch;
   if (arch == bfd_arch_unknown)
     arch = CGEN_BFD_ARCH;
-
+   
   /* There's no standard way to compute the machine or isa number
      so we leave it to the target.  */
 #ifdef CGEN_COMPUTE_MACH
@@ -1242,7 +1249,7 @@ print_insn_m32c (bfd_vma pc, disassemble_info *info)
     cgen_bitset_add (isa, CGEN_COMPUTE_ISA (info));
   }
 #else
-  isa = info->private_data;
+  isa = info->insn_sets;
 #endif
 
   /* If we've switched cpu's, try to find a handle we've used before */
@@ -1263,7 +1270,7 @@ print_insn_m32c (bfd_vma pc, disassemble_info *info)
 	      break;
 	    }
 	}
-    }
+    } 
 
   /* If we haven't initialized yet, initialize the opcode table.  */
   if (! cd)

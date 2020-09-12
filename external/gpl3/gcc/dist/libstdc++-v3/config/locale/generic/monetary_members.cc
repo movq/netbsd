@@ -1,6 +1,7 @@
 // std::moneypunct implementation details, generic version -*- C++ -*-
 
-// Copyright (C) 2001-2019 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2003, 2004, 2005, 2009, 2010
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -30,20 +31,13 @@
 
 #include <locale>
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
-
-// This file might be compiled twice, but we only want to define the members
-// of money_base once.
-#if ! _GLIBCXX_USE_CXX11_ABI
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   // Construct and return valid pattern consisting of some combination of:
   // space none symbol sign value
   money_base::pattern
   money_base::_S_construct_pattern(char, char, char) throw()
   { return _S_default_pattern; }
-#endif
 
   template<>
     void
@@ -171,5 +165,4 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     { delete _M_data; }
 #endif
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE

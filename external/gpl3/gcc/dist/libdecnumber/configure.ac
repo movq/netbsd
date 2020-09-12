@@ -1,7 +1,7 @@
 # configure.ac for libdecnumber			-*- Autoconf -*-
 # Process this file with autoconf to generate a configuration script.
 
-# Copyright (C) 2005-2019 Free Software Foundation, Inc.
+# Copyright 2005, 2006, 2009 Free Software Foundation, Inc.
 
 # This file is part of GCC.
 
@@ -19,10 +19,10 @@
 # along with GCC; see the file COPYING3.  If not see
 # <http://www.gnu.org/licenses/>.
 
+AC_PREREQ(2.64)
 AC_INIT(libdecnumber, [ ], gcc-bugs@gcc.gnu.org, libdecnumber)
 AC_CONFIG_SRCDIR(decNumber.h)
 AC_CONFIG_MACRO_DIR(../config)
-AC_CONFIG_AUX_DIR(..)
 
 # Checks for programs.
 AC_PROG_MAKE_SET
@@ -41,8 +41,6 @@ ACX_PROG_CC_WARNING_OPTS([-W -Wall -Wwrite-strings -Wstrict-prototypes \
 			  -Wmissing-prototypes -Wold-style-definition \
 			  -Wmissing-format-attribute -Wcast-qual])
 ACX_PROG_CC_WARNING_ALMOST_PEDANTIC([-Wno-long-long])
-
-ACX_PROG_CC_WARNING_OPTS([-fno-lto], [nolto_flags])
 
 # Only enable with --enable-werror-always until existing warnings are
 # corrected.
@@ -77,11 +75,42 @@ AC_CANONICAL_TARGET
 # Default decimal format
 # If you change the defaults here, be sure to change them in the GCC directory also
 AC_MSG_CHECKING([for decimal floating point])
+AC_ARG_ENABLE(decimal-float,
+[  --enable-decimal-float={no,yes,bid,dpd}
+			enable decimal float extension to C.  Selecting 'bid'
+			or 'dpd' choses which decimal floating point format
+			to use],
+[
+  case $enable_decimal_float in
+    yes | no | bid | dpd) ;;
+    *) AC_MSG_ERROR(['$enable_decimal_float' is an invalid value for --enable-decimal-float.
+Valid choices are 'yes', 'bid', 'dpd', and 'no'.]) ;;
+  esac
+],
+[
+  case $target in
+    powerpc*-*-linux* | i?86*-*-linux* | x86_64*-*-linux*)
+      enable_decimal_float=yes
+      ;;
+    *)
+      enable_decimal_float=no
+      ;;
+  esac
+])
 
-GCC_AC_ENABLE_DECIMAL_FLOAT([$target])
-
-# Use default_decimal_float for dependency.
-enable_decimal_float=$default_decimal_float
+# x86's use BID format instead of DPD
+# In theory --enable-decimal-float=no should not compile anything
+# For the sake of simplicity, just use the default format in this directory
+if test x$enable_decimal_float = xyes -o x$enable_decimal_float = xno; then
+  case $target in
+    i?86*-*-linux* | x86_64*-*-linux*)
+      enable_decimal_float=bid
+      ;;
+    *)
+      enable_decimal_float=dpd
+      ;;
+  esac
+fi
 
 # If BID is being used, additional objects should be linked in.
 if test x$enable_decimal_float = xbid; then
@@ -95,13 +124,6 @@ AC_SUBST(enable_decimal_float)
 AC_SUBST(ADDITIONAL_OBJS)
 
 AC_C_BIGENDIAN
-
-# Enable --enable-host-shared.
-AC_ARG_ENABLE(host-shared,
-[AS_HELP_STRING([--enable-host-shared],
-		[build host code as shared libraries])],
-[PICFLAG=-fPIC], [PICFLAG=])
-AC_SUBST(PICFLAG)
 
 # Output.
 

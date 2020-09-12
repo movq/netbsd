@@ -1,5 +1,5 @@
 ;;- Machine description for Blackfin for GNU compiler
-;;  Copyright (C) 2005-2019 Free Software Foundation, Inc.
+;;  Copyright 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 ;;  Contributed by Analog Devices.
 
 ;; This file is part of GCC.
@@ -237,12 +237,14 @@
 
 (define_insn_reservation "dsp32shiftimm" 1
   (and (eq_attr "type" "dsp32shiftimm")
-       (not (match_test "ENABLE_WA_05000074")))
+       (eq (symbol_ref "ENABLE_WA_05000074")
+	   (const_int 0)))
   "slot0")
 
 (define_insn_reservation "dsp32shiftimm_anomaly_05000074" 1
   (and (eq_attr "type" "dsp32shiftimm")
-       (match_test "ENABLE_WA_05000074"))
+       (ne (symbol_ref "ENABLE_WA_05000074")
+	   (const_int 0)))
   "slot0+anomaly_05000074")
 
 (define_insn_reservation "load32" 1
@@ -275,7 +277,8 @@
 	    (and (eq_attr "type" "mcst")
 		 (ior (eq_attr "addrtype" "preg")
 		      (eq_attr "addrtype" "spreg"))))
-       (ior (not (match_test "ENABLE_WA_05000074"))
+       (ior (eq (symbol_ref "ENABLE_WA_05000074")
+		(const_int 0))
 	    (eq_attr "storereg" "other")))
   "slot1+pregs+store")
 
@@ -284,21 +287,24 @@
 	    (and (eq_attr "type" "mcst")
 		 (ior (eq_attr "addrtype" "preg")
 		      (eq_attr "addrtype" "spreg"))))
-       (and (match_test "ENABLE_WA_05000074")
+       (and (ne (symbol_ref "ENABLE_WA_05000074")
+		(const_int 0))
 	    (eq_attr "storereg" "preg")))
   "slot1+anomaly_05000074+pregs+store")
 
 (define_insn_reservation "storei" 1
   (and (and (not (eq_attr "seq_insns" "multi"))
 	    (and (eq_attr "type" "mcst") (eq_attr "addrtype" "ireg")))
-       (ior (not (match_test "ENABLE_WA_05000074"))
+       (ior (eq (symbol_ref "ENABLE_WA_05000074")
+		(const_int 0))
 	    (eq_attr "storereg" "other")))
   "(slot1|slot2)+store")
 
 (define_insn_reservation "storei_anomaly_05000074" 1
   (and (and (not (eq_attr "seq_insns" "multi"))
 	    (and (eq_attr "type" "mcst") (eq_attr "addrtype" "ireg")))
-       (and (match_test "ENABLE_WA_05000074")
+       (and (ne (symbol_ref "ENABLE_WA_05000074")
+		(const_int 0))
 	    (eq_attr "storereg" "preg")))
   "((slot1+anomaly_05000074)|slot2)+store")
 
@@ -409,46 +415,44 @@
 
 ;; Conditional moves
 
-(define_mode_iterator CCMOV [QI HI SI])
-
-(define_expand "mov<mode>cc"
-  [(set (match_operand:CCMOV 0 "register_operand" "")
-        (if_then_else:CCMOV (match_operand 1 "comparison_operator" "")
-			    (match_operand:CCMOV 2 "register_operand" "")
-			    (match_operand:CCMOV 3 "register_operand" "")))]
+(define_expand "movsicc"
+  [(set (match_operand:SI 0 "register_operand" "")
+        (if_then_else:SI (match_operand 1 "comparison_operator" "")
+                         (match_operand:SI 2 "register_operand" "")
+                         (match_operand:SI 3 "register_operand" "")))]
   ""
 {
-  operands[1] = bfin_gen_compare (operands[1], <MODE>mode);
+  operands[1] = bfin_gen_compare (operands[1], SImode);
 })
 
-(define_insn "*mov<mode>cc_insn1"
-  [(set (match_operand:CCMOV 0 "register_operand" "=da,da,da")
-        (if_then_else:CCMOV
+(define_insn "*movsicc_insn1"
+  [(set (match_operand:SI 0 "register_operand" "=da,da,da")
+        (if_then_else:SI
 	    (eq:BI (match_operand:BI 3 "register_operand" "C,C,C")
 		(const_int 0))
-	    (match_operand:CCMOV 1 "register_operand" "da,0,da")
-	    (match_operand:CCMOV 2 "register_operand" "0,da,da")))]
+	    (match_operand:SI 1 "register_operand" "da,0,da")
+	    (match_operand:SI 2 "register_operand" "0,da,da")))]
   ""
   "@
-    if !cc %0 = %1;
-    if cc %0 = %2;
-    if !cc %0 = %1; if cc %0 = %2;"
+    if !cc %0 =%1; /* movsicc-1a */
+    if cc %0 =%2; /* movsicc-1b */
+    if !cc %0 =%1; if cc %0=%2; /* movsicc-1 */"
   [(set_attr "length" "2,2,4")
    (set_attr "type" "movcc")
    (set_attr "seq_insns" "*,*,multi")])
 
-(define_insn "*mov<mode>cc_insn2"
-  [(set (match_operand:CCMOV 0 "register_operand" "=da,da,da")
-        (if_then_else:CCMOV
+(define_insn "*movsicc_insn2"
+  [(set (match_operand:SI 0 "register_operand" "=da,da,da")
+        (if_then_else:SI
 	    (ne:BI (match_operand:BI 3 "register_operand" "C,C,C")
 		(const_int 0))
-	    (match_operand:CCMOV 1 "register_operand" "0,da,da")
-	    (match_operand:CCMOV 2 "register_operand" "da,0,da")))]
+	    (match_operand:SI 1 "register_operand" "0,da,da")
+	    (match_operand:SI 2 "register_operand" "da,0,da")))]
   ""
   "@
-   if !cc %0 = %2;
-   if cc %0 = %1;
-   if cc %0 = %1; if !cc %0 = %2;"
+   if !cc %0 =%2; /* movsicc-2b */
+   if cc %0 =%1; /* movsicc-2a */
+   if cc %0 =%1; if !cc %0=%2; /* movsicc-1 */"
   [(set_attr "length" "2,2,4")
    (set_attr "type" "movcc")
    (set_attr "seq_insns" "*,*,multi")])
@@ -557,7 +561,6 @@
    %0 = %x1; %0 = %w1;
    %w0 = %1; %x0 = %1;"
   [(set_attr "type" "move,mcst,mcld")
-   (set_attr "length" "4,*,*")
    (set_attr "seq_insns" "*,multi,multi")])
 
 (define_insn "load_accumulator"
@@ -849,10 +852,12 @@
    (set (match_dup 2) (lo_sum:SI (match_dup 2) (match_dup 3)))]
 {
   long values;
+  REAL_VALUE_TYPE value;
 
   gcc_assert (GET_CODE (operands[1]) == CONST_DOUBLE);
 
-  REAL_VALUE_TO_TARGET_SINGLE (*CONST_DOUBLE_REAL_VALUE (operands[1]), values);
+  REAL_VALUE_FROM_CONST_DOUBLE (value, operands[1]);
+  REAL_VALUE_TO_TARGET_SINGLE (value, values);
 
   operands[2] = gen_rtx_REG (SImode, true_regnum (operands[0]));
   operands[3] = GEN_INT (trunc_int_for_mode (values, SImode));
@@ -1210,21 +1215,22 @@
   "%0 = %h2 * %h1 (IS,M)%!"
   [(set_attr "type" "dsp32")])
 
-;; The alternative involving IREGS requires that the corresponding L register
-;; is zero.
+;; The processor also supports ireg += mreg or ireg -= mreg, but these
+;; are unusable if we don't ensure that the corresponding lreg is zero.
+;; The same applies to the add/subtract constant versions involving
+;; iregs
 
 (define_insn "addsi3"
-  [(set (match_operand:SI 0 "register_operand" "=ad,a,d,b")
-       (plus:SI (match_operand:SI 1 "register_operand" "%0, a,d,0")
-                (match_operand:SI 2 "reg_or_7bit_operand" "Ks7, a,d,fP2P4")))]
+  [(set (match_operand:SI 0 "register_operand" "=ad,a,d")
+	(plus:SI (match_operand:SI 1 "register_operand" "%0, a,d")
+		 (match_operand:SI 2 "reg_or_7bit_operand" "Ks7, a,d")))]
   ""
   "@
    %0 += %2;
    %0 = %1 + %2;
-   %0 = %1 + %2;
-   %0 += %2;"
+   %0 = %1 + %2;"
   [(set_attr "type" "alu0")
-   (set_attr "length" "2,2,2,2")])
+   (set_attr "length" "2,2,2")])
 
 (define_insn "ssaddsi3"
   [(set (match_operand:SI 0 "register_operand" "=d")
@@ -1454,19 +1460,12 @@
   "%0 = ~%1;"
   [(set_attr "type" "alu0")])
 
-(define_expand "clrsbsi2"
-  [(set (match_dup 2)
-	(truncate:HI (clrsb:SI (match_operand:SI 1 "register_operand" "d"))))
-   (set (match_operand:SI 0 "register_operand")
-	(zero_extend:SI (match_dup 2)))]
-  ""
-{
-  operands[2] = gen_reg_rtx (HImode);
-})
-
 (define_insn "signbitssi2"
   [(set (match_operand:HI 0 "register_operand" "=d")
-	(truncate:HI (clrsb:SI (match_operand:SI 1 "register_operand" "d"))))]
+	(if_then_else:HI
+	 (lt (match_operand:SI 1 "register_operand" "d") (const_int 0))
+	 (clz:HI (not:SI (match_dup 1)))
+	 (clz:HI (match_dup 1))))]
   ""
   "%h0 = signbits %1%!"
   [(set_attr "type" "dsp32")])
@@ -1518,9 +1517,12 @@
   "%0 = -%1 (V)%!"
   [(set_attr "type" "dsp32")])
 
-(define_insn "clrsbhi2"
+(define_insn "signbitshi2"
   [(set (match_operand:HI 0 "register_operand" "=d")
-	(clrsb:HI (match_operand:HI 1 "register_operand" "d")))]
+	(if_then_else:HI
+	 (lt (match_operand:HI 1 "register_operand" "d") (const_int 0))
+	 (clz:HI (not:HI (match_dup 1)))
+	 (clz:HI (match_dup 1))))]
   ""
   "%h0 = signbits %h1%!"
   [(set_attr "type" "dsp32")])
@@ -1579,7 +1581,7 @@
 
       emit_library_call_value (umulsi3_highpart_libfunc,
 			       operands[0], LCT_NORMAL, SImode,
-			       operands[1], SImode, operands[2], SImode);
+			       2, operands[1], SImode, operands[2], SImode);
     }
   DONE;
 })
@@ -1629,7 +1631,7 @@
 
       emit_library_call_value (smulsi3_highpart_libfunc,
 			       operands[0], LCT_NORMAL, SImode,
-			       operands[1], SImode, operands[2], SImode);
+			       2, operands[1], SImode, operands[2], SImode);
     }
   DONE;
 })
@@ -1686,20 +1688,20 @@
 (define_expand "rotlsi3"
   [(set (match_operand:SI 0 "register_operand" "")
 	(rotate:SI (match_operand:SI 1 "register_operand" "")
-		   (match_operand:SI 2 "const_int_operand" "")))]
+		   (match_operand:SI 2 "immediate_operand" "")))]
   ""
 {
-  if (GET_CODE (operands[2]) != CONST_INT || INTVAL (operands[2]) != 16)
+  if (INTVAL (operands[2]) != 16)
     FAIL;
 })
 
 (define_expand "rotrsi3"
   [(set (match_operand:SI 0 "register_operand" "")
 	(rotatert:SI (match_operand:SI 1 "register_operand" "")
-		     (match_operand:SI 2 "const_int_operand" "")))]
+		     (match_operand:SI 2 "immediate_operand" "")))]
   ""
 {
-  if (GET_CODE (operands[2]) != CONST_INT || INTVAL (operands[2]) != 16)
+  if (INTVAL (operands[2]) != 16)
     FAIL;
   emit_insn (gen_rotl16 (operands[0], operands[1]));
   DONE;
@@ -1928,38 +1930,46 @@
 ;;  Hardware loop
 
 ; operand 0 is the loop count pseudo register
-; operand 1 is the label to jump to at the top of the loop
+; operand 1 is the number of loop iterations or 0 if it is unknown
+; operand 2 is the maximum number of loop iterations
+; operand 3 is the number of levels of enclosed loops
+; operand 4 is the label to jump to at the top of the loop
 (define_expand "doloop_end"
   [(parallel [(set (pc) (if_then_else
 			  (ne (match_operand:SI 0 "" "")
 			      (const_int 1))
-			  (label_ref (match_operand 1 "" ""))
+			  (label_ref (match_operand 4 "" ""))
 			  (pc)))
 	      (set (match_dup 0)
 		   (plus:SI (match_dup 0)
 			    (const_int -1)))
 	      (unspec [(const_int 0)] UNSPEC_LSETUP_END)
-	      (clobber (match_dup 2))])] ; match_scratch
+	      (clobber (match_scratch:SI 5 ""))])]
   ""
 {
   /* The loop optimizer doesn't check the predicates... */
   if (GET_MODE (operands[0]) != SImode)
     FAIL;
+  /* Due to limitations in the hardware (an initial loop count of 0
+     does not loop 2^32 times) we must avoid to generate a hardware
+     loops when we cannot rule out this case.  */
+  if (!flag_unsafe_loop_optimizations
+      && (unsigned HOST_WIDE_INT) INTVAL (operands[2]) >= 0xFFFFFFFF)
+    FAIL;
   bfin_hardware_loop ();
-  operands[2] = gen_rtx_SCRATCH (SImode);
 })
 
 (define_insn "loop_end"
   [(set (pc)
-	(if_then_else (ne (match_operand:SI 2 "nonimmediate_operand" "0,0,0")
+	(if_then_else (ne (match_operand:SI 0 "nonimmediate_operand" "+a*d,*b*v*f,m")
 			  (const_int 1))
 		      (label_ref (match_operand 1 "" ""))
 		      (pc)))
-   (set (match_operand:SI 0 "nonimmediate_operand" "=a*d,*b*v*f,m")
-	(plus (match_dup 2)
+   (set (match_dup 0)
+	(plus (match_dup 0)
 	      (const_int -1)))
    (unspec [(const_int 0)] UNSPEC_LSETUP_END)
-   (clobber (match_scratch:SI 3 "=X,&r,&r"))]
+   (clobber (match_scratch:SI 2 "=X,&r,&r"))]
   ""
   "@
    /* loop end %0 %l1 */
@@ -1969,16 +1979,16 @@
 
 (define_split
   [(set (pc)
-	(if_then_else (ne (match_operand:SI 0 "nondp_reg_or_memory_operand")
+	(if_then_else (ne (match_operand:SI 0 "nondp_reg_or_memory_operand" "")
 			  (const_int 1))
-		      (label_ref (match_operand 1 ""))
+		      (label_ref (match_operand 1 "" ""))
 		      (pc)))
    (set (match_dup 0)
 	(plus (match_dup 0)
 	      (const_int -1)))
    (unspec [(const_int 0)] UNSPEC_LSETUP_END)
-   (clobber (match_scratch:SI 2))]
-  "memory_operand (operands[0], SImode) || splitting_loops"
+   (clobber (match_scratch:SI 2 "=&r"))]
+  "splitting_loops"
   [(set (match_dup 2) (match_dup 0))
    (set (match_dup 2) (plus:SI (match_dup 2) (const_int -1)))
    (set (match_dup 0) (match_dup 2))

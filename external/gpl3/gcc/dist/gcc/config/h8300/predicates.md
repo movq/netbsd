@@ -1,5 +1,5 @@
 ;; Predicate definitions for Renesas H8/300.
-;; Copyright (C) 2005-2019 Free Software Foundation, Inc.
+;; Copyright (C) 2005, 2007 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -216,7 +216,7 @@
 
 ;; Return true if OP is a valid call operand.
 
-(define_predicate "call_expander_operand"
+(define_predicate "call_insn_operand"
   (match_code "mem")
 {
   if (GET_CODE (op) == MEM)
@@ -224,19 +224,9 @@
       rtx inside = XEXP (op, 0);
       if (register_operand (inside, Pmode))
 	return 1;
-      if (SYMBOL_REF_P (inside))
+      if (CONSTANT_ADDRESS_P (inside))
 	return 1;
     }
-  return 0;
-})
-
-(define_predicate "call_insn_operand"
-  (match_code "reg,symbol_ref")
-{
-  if (register_operand (op, Pmode))
-    return 1;
-  if (SYMBOL_REF_P (op))
-    return 1;
   return 0;
 })
 
@@ -244,17 +234,21 @@
 ;; operand for a small call (4 bytes instead of 6 bytes).
 
 (define_predicate "small_call_insn_operand"
-  (match_code "reg,symbol_ref")
+  (match_code "mem")
 {
-  /* Register indirect is a small call.  */
-  if (register_operand (op, Pmode))
-    return 1;
+  if (GET_CODE (op) == MEM)
+    {
+      rtx inside = XEXP (op, 0);
 
-  /* A call through the function vector is a small call too.  */
-  if (GET_CODE (op) == SYMBOL_REF
-      && (SYMBOL_REF_FLAGS (op) & SYMBOL_FLAG_FUNCVEC_FUNCTION))
-    return 1;
+      /* Register indirect is a small call.  */
+      if (register_operand (inside, Pmode))
+	return 1;
 
+      /* A call through the function vector is a small call too.  */
+      if (GET_CODE (inside) == SYMBOL_REF
+	  && (SYMBOL_REF_FLAGS (inside) & SYMBOL_FLAG_FUNCVEC_FUNCTION))
+	return 1;
+    }
   /* Otherwise it's a large call.  */
   return 0;
 })
@@ -265,7 +259,7 @@
   (match_code "reg,mem")
 {
   if (GET_CODE (op) == REG)
-    return GET_MODE (op) == Pmode;
+    return mode == Pmode;
 
   if (GET_CODE (op) == MEM)
     {
@@ -332,7 +326,7 @@
 {
   /* We can accept any nonimmediate operand, except that MEM operands must
      be limited to those that use addresses valid for the 'U' constraint.  */
-  if (!nonimmediate_operand (op, mode) && !satisfies_constraint_U (op))
+  if (!nonimmediate_operand (op, mode))
     return 0;
 
   /* H8SX accepts pretty much anything here.  */
@@ -350,7 +344,7 @@
   if (GET_CODE (op) == SUBREG)
     return 1;
   return (GET_CODE (op) == MEM
-	  && satisfies_constraint_U (op));
+	  && OK_FOR_U (op));
 })
 
 ;; Return nonzero if OP is a MEM suitable for bit manipulation insns.
@@ -359,18 +353,7 @@
   (match_code "mem")
 {
   return (GET_CODE (op) == MEM
-	  && satisfies_constraint_U (op));
-})
-
-;; Return nonzero if OP is indirect register or constant memory
-;; suitable for bit manipulation insns.
-
-(define_predicate "bit_register_indirect_operand"
-  (match_code "mem")
-{
-  return (GET_CODE (op) == MEM
-          && (GET_CODE (XEXP (op, 0)) == REG
-              || GET_CODE (XEXP (op, 0)) == CONST_INT));
+	  && OK_FOR_U (op));
 })
 
 ;; Return nonzero if X is a stack pointer.
@@ -379,20 +362,6 @@
   (match_code "reg")
 {
   return op == stack_pointer_rtx;
-})
-
-;; False if X is anything that might eliminate to the stack pointer.
-
-(define_predicate "register_no_sp_elim_operand"
-  (match_operand 0 "register_operand")
-{
-  if (GET_CODE (op) == SUBREG)
-    op = SUBREG_REG (op);
-  return !(op == stack_pointer_rtx
-	   || op == arg_pointer_rtx
-	   || op == frame_pointer_rtx
-	   || IN_RANGE (REGNO (op),
-			FIRST_PSEUDO_REGISTER, LAST_VIRTUAL_REGISTER));
 })
 
 ;; Return nonzero if X is a constant whose absolute value is greater
@@ -436,9 +405,12 @@
 ;; Return nonzero if X is a constant suitable for inc/dec.
 
 (define_predicate "incdec_operand"
-  (and (match_code "const_int")
-       (ior (match_test "satisfies_constraint_M (op)")
-	    (match_test "satisfies_constraint_O (op)"))))
+  (match_code "const_int")
+{
+  return (GET_CODE (op) == CONST_INT
+	  && (CONST_OK_FOR_M (INTVAL (op))
+	      || CONST_OK_FOR_O (INTVAL (op))));
+})
 
 ;; Recognize valid operators for bit instructions.
 

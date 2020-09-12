@@ -1,6 +1,8 @@
 /* IBM RS/6000 native-dependent code for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2019 Free Software Foundation, Inc.
+   Copyright (C) 1986, 1987, 1989, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
+   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -21,34 +23,36 @@
 #include "inferior.h"
 #include "target.h"
 #include "gdbcore.h"
+#include "xcoffsolib.h"
 #include "symfile.h"
 #include "objfiles.h"
+#include "libbfd.h"		/* For bfd_default_set_arch_mach (FIXME) */
 #include "bfd.h"
+#include "exceptions.h"
 #include "gdb-stabs.h"
 #include "regcache.h"
 #include "arch-utils.h"
-#include "inf-child.h"
 #include "inf-ptrace.h"
 #include "ppc-tdep.h"
 #include "rs6000-tdep.h"
-#include "rs6000-aix-tdep.h"
 #include "exec.h"
-#include "observable.h"
+#include "observer.h"
 #include "xcoffread.h"
 
 #include <sys/ptrace.h>
 #include <sys/reg.h>
 
+#include <sys/param.h>
 #include <sys/dir.h>
 #include <sys/user.h>
 #include <signal.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
+#include <errno.h>
 
 #include <a.out.h>
 #include <sys/file.h>
-#include <sys/stat.h>
-#include "gdb_bfd.h"
+#include "gdb_stat.h"
 #include <sys/core.h>
 #define __LDINFO_PTRACE32__	/* for __ld_info32 */
 #define __LDINFO_PTRACE64__	/* for __ld_info64 */
@@ -62,7 +66,7 @@
 /* In 32-bit compilation mode (which is the only mode from which ptrace()
    works on 4.3), __ld_info32 is #defined as equivalent to ld_info.  */
 
-#if defined (__ld_info32) || defined (__ld_info64)
+#ifdef __ld_info32
 # define ARCH3264
 #endif
 
@@ -71,37 +75,64 @@
 #ifndef ARCH3264
 # define ARCH64() 0
 #else
-# define ARCH64() (register_size (target_gdbarch (), 0) == 8)
+# define ARCH64() (register_size (target_gdbarch, 0) == 8)
 #endif
 
-class rs6000_nat_target final : public inf_ptrace_target
-{
-public:
-  void fetch_registers (struct regcache *, int) override;
-  void store_registers (struct regcache *, int) override;
+/* Union of 32-bit and 64-bit versions of ld_info.  */
 
-  enum target_xfer_status xfer_partial (enum target_object object,
-					const char *annex,
-					gdb_byte *readbuf,
-					const gdb_byte *writebuf,
-					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
+typedef union {
+#ifndef ARCH3264
+  struct ld_info l32;
+  struct ld_info l64;
+#else
+  struct __ld_info32 l32;
+  struct __ld_info64 l64;
+#endif
+} LdInfo;
 
-  void create_inferior (const char *, const std::string &,
-			char **, int) override;
+/* If compiling with 32-bit and 64-bit debugging capability (e.g. AIX 4.x),
+   declare and initialize a variable named VAR suitable for use as the arch64
+   parameter to the various LDI_*() macros.  */
 
-  ptid_t wait (ptid_t, struct target_waitstatus *, int) override;
+#ifndef ARCH3264
+# define ARCH64_DECL(var)
+#else
+# define ARCH64_DECL(var) int var = ARCH64 ()
+#endif
 
-private:
-  enum target_xfer_status
-    xfer_shared_libraries (enum target_object object,
-			   const char *annex, gdb_byte *readbuf,
-			   const gdb_byte *writebuf,
-			   ULONGEST offset, ULONGEST len,
-			   ULONGEST *xfered_len);
-};
+/* Return LDI's FIELD for a 64-bit process if ARCH64 and for a 32-bit process
+   otherwise.  This technique only works for FIELDs with the same data type in
+   32-bit and 64-bit versions of ld_info.  */
 
-static rs6000_nat_target the_rs6000_nat_target;
+#ifndef ARCH3264
+# define LDI_FIELD(ldi, arch64, field) (ldi)->l32.ldinfo_##field
+#else
+# define LDI_FIELD(ldi, arch64, field) \
+  (arch64 ? (ldi)->l64.ldinfo_##field : (ldi)->l32.ldinfo_##field)
+#endif
+
+/* Return various LDI fields for a 64-bit process if ARCH64 and for a 32-bit
+   process otherwise.  */
+
+#define LDI_NEXT(ldi, arch64)		LDI_FIELD(ldi, arch64, next)
+#define LDI_FD(ldi, arch64)		LDI_FIELD(ldi, arch64, fd)
+#define LDI_FILENAME(ldi, arch64)	LDI_FIELD(ldi, arch64, filename)
+
+extern struct vmap *map_vmap (bfd * bf, bfd * arch);
+
+static void vmap_exec (void);
+
+static void vmap_ldinfo (LdInfo *);
+
+static struct vmap *add_vmap (LdInfo *);
+
+static int objfile_symbol_add (void *);
+
+static void vmap_symtab (struct vmap *);
+
+static void exec_one_dummy_insn (struct regcache *);
+
+extern void fixup_breakpoints (CORE_ADDR low, CORE_ADDR high, CORE_ADDR delta);
 
 /* Given REGNO, a gdb register number, return the corresponding
    number suitable for use as a ptrace() parameter.  Return -1 if
@@ -150,11 +181,7 @@ regmap (struct gdbarch *gdbarch, int regno, int *isfloat)
 static int
 rs6000_ptrace32 (int req, int id, int *addr, int data, int *buf)
 {
-#ifdef HAVE_PTRACE64
-  int ret = ptrace64 (req, id, (uintptr_t) addr, data, buf);
-#else
   int ret = ptrace (req, id, (int *)addr, data, buf);
-#endif
 #if 0
   printf ("rs6000_ptrace32 (%d, %d, 0x%x, %08x, 0x%x) = 0x%x\n",
 	  req, id, (unsigned int)addr, data, (unsigned int)buf, ret);
@@ -168,11 +195,7 @@ static int
 rs6000_ptrace64 (int req, int id, long long addr, int data, void *buf)
 {
 #ifdef ARCH3264
-#  ifdef HAVE_PTRACE64
-  int ret = ptrace64 (req, id, addr, data, (PTRACE_TYPE_ARG5) buf);
-#  else
-  int ret = ptracex (req, id, addr, data, (PTRACE_TYPE_ARG5) buf);
-#  endif
+  int ret = ptracex (req, id, addr, data, buf);
 #else
   int ret = 0;
 #endif
@@ -188,10 +211,9 @@ rs6000_ptrace64 (int req, int id, long long addr, int data, void *buf)
 static void
 fetch_register (struct regcache *regcache, int regno)
 {
-  struct gdbarch *gdbarch = regcache->arch ();
-  int addr[PPC_MAX_REGISTER_SIZE];
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  int addr[MAX_REGISTER_SIZE];
   int nr, isfloat;
-  pid_t pid = regcache->ptid ().pid ();
 
   /* Retrieved values may be -1, so infer errors from errno.  */
   errno = 0;
@@ -200,7 +222,7 @@ fetch_register (struct regcache *regcache, int regno)
 
   /* Floating-point registers.  */
   if (isfloat)
-    rs6000_ptrace32 (PT_READ_FPR, pid, addr, nr, 0);
+    rs6000_ptrace32 (PT_READ_FPR, PIDGET (inferior_ptid), addr, nr, 0);
 
   /* Bogus register number.  */
   else if (nr < 0)
@@ -216,13 +238,14 @@ fetch_register (struct regcache *regcache, int regno)
   else
     {
       if (!ARCH64 ())
-	*addr = rs6000_ptrace32 (PT_READ_GPR, pid, (int *) nr, 0, 0);
+	*addr = rs6000_ptrace32 (PT_READ_GPR, PIDGET (inferior_ptid),
+				 (int *) nr, 0, 0);
       else
 	{
 	  /* PT_READ_GPR requires the buffer parameter to point to long long,
 	     even if the register is really only 32 bits.  */
 	  long long buf;
-	  rs6000_ptrace64 (PT_READ_GPR, pid, nr, 0, &buf);
+	  rs6000_ptrace64 (PT_READ_GPR, PIDGET (inferior_ptid), nr, 0, &buf);
 	  if (register_size (gdbarch, regno) == 8)
 	    memcpy (addr, &buf, 8);
 	  else
@@ -231,7 +254,7 @@ fetch_register (struct regcache *regcache, int regno)
     }
 
   if (!errno)
-    regcache->raw_supply (regno, (char *) addr);
+    regcache_raw_supply (regcache, regno, (char *) addr);
   else
     {
 #if 0
@@ -247,13 +270,12 @@ fetch_register (struct regcache *regcache, int regno)
 static void
 store_register (struct regcache *regcache, int regno)
 {
-  struct gdbarch *gdbarch = regcache->arch ();
-  int addr[PPC_MAX_REGISTER_SIZE];
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  int addr[MAX_REGISTER_SIZE];
   int nr, isfloat;
-  pid_t pid = regcache->ptid ().pid ();
 
   /* Fetch the register's value from the register cache.  */
-  regcache->raw_collect (regno, addr);
+  regcache_raw_collect (regcache, regno, addr);
 
   /* -1 can be a successful return value, so infer errors from errno.  */
   errno = 0;
@@ -262,7 +284,7 @@ store_register (struct regcache *regcache, int regno)
 
   /* Floating-point registers.  */
   if (isfloat)
-    rs6000_ptrace32 (PT_WRITE_FPR, pid, addr, nr, 0);
+    rs6000_ptrace32 (PT_WRITE_FPR, PIDGET (inferior_ptid), addr, nr, 0);
 
   /* Bogus register number.  */
   else if (nr < 0)
@@ -276,11 +298,20 @@ store_register (struct regcache *regcache, int regno)
   /* Fixed-point registers.  */
   else
     {
+      if (regno == gdbarch_sp_regnum (gdbarch))
+	/* Execute one dummy instruction (which is a breakpoint) in inferior
+	   process to give kernel a chance to do internal housekeeping.
+	   Otherwise the following ptrace(2) calls will mess up user stack
+	   since kernel will get confused about the bottom of the stack
+	   (%sp).  */
+	exec_one_dummy_insn (regcache);
+
       /* The PT_WRITE_GPR operation is rather odd.  For 32-bit inferiors,
          the register's value is passed by value, but for 64-bit inferiors,
 	 the address of a buffer containing the value is passed.  */
       if (!ARCH64 ())
-	rs6000_ptrace32 (PT_WRITE_GPR, pid, (int *) nr, *addr, 0);
+	rs6000_ptrace32 (PT_WRITE_GPR, PIDGET (inferior_ptid),
+			 (int *) nr, *addr, 0);
       else
 	{
 	  /* PT_WRITE_GPR requires the buffer parameter to point to an 8-byte
@@ -290,7 +321,7 @@ store_register (struct regcache *regcache, int regno)
 	    memcpy (&buf, addr, 8);
 	  else
 	    buf = *addr;
-	  rs6000_ptrace64 (PT_WRITE_GPR, pid, nr, 0, &buf);
+	  rs6000_ptrace64 (PT_WRITE_GPR, PIDGET (inferior_ptid), nr, 0, &buf);
 	}
     }
 
@@ -304,10 +335,11 @@ store_register (struct regcache *regcache, int regno)
 /* Read from the inferior all registers if REGNO == -1 and just register
    REGNO otherwise.  */
 
-void
-rs6000_nat_target::fetch_registers (struct regcache *regcache, int regno)
+static void
+rs6000_fetch_inferior_registers (struct target_ops *ops,
+				 struct regcache *regcache, int regno)
 {
-  struct gdbarch *gdbarch = regcache->arch ();
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   if (regno != -1)
     fetch_register (regcache, regno);
 
@@ -346,10 +378,11 @@ rs6000_nat_target::fetch_registers (struct regcache *regcache, int regno)
    If REGNO is -1, do this for all registers.
    Otherwise, REGNO specifies which register (so we can save time).  */
 
-void
-rs6000_nat_target::store_registers (struct regcache *regcache, int regno)
+static void
+rs6000_store_inferior_registers (struct target_ops *ops,
+				 struct regcache *regcache, int regno)
 {
-  struct gdbarch *gdbarch = regcache->arch ();
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   if (regno != -1)
     store_register (regcache, regno);
 
@@ -384,24 +417,22 @@ rs6000_nat_target::store_registers (struct regcache *regcache, int regno)
     }
 }
 
-/* Implement the to_xfer_partial target_ops method.  */
 
-enum target_xfer_status
-rs6000_nat_target::xfer_partial (enum target_object object,
-				 const char *annex, gdb_byte *readbuf,
-				 const gdb_byte *writebuf,
-				 ULONGEST offset, ULONGEST len,
-				 ULONGEST *xfered_len)
+/* Attempt a transfer all LEN bytes starting at OFFSET between the
+   inferior's OBJECT:ANNEX space and GDB's READBUF/WRITEBUF buffer.
+   Return the number of bytes actually transferred.  */
+
+static LONGEST
+rs6000_xfer_partial (struct target_ops *ops, enum target_object object,
+		     const char *annex, gdb_byte *readbuf,
+		     const gdb_byte *writebuf,
+		     ULONGEST offset, LONGEST len)
 {
-  pid_t pid = inferior_ptid.pid ();
+  pid_t pid = ptid_get_pid (inferior_ptid);
   int arch64 = ARCH64 ();
 
   switch (object)
     {
-    case TARGET_OBJECT_LIBRARIES_AIX:
-      return xfer_shared_libraries (object, annex,
-				    readbuf, writebuf,
-				    offset, len, xfered_len);
     case TARGET_OBJECT_MEMORY:
       {
 	union
@@ -459,7 +490,7 @@ rs6000_nat_target::xfer_partial (enum target_object object,
 			       (int *) (uintptr_t) rounded_offset,
 			       buffer.word, NULL);
 	    if (errno)
-	      return TARGET_XFER_EOF;
+	      return 0;
 	  }
 
 	if (readbuf)
@@ -473,19 +504,18 @@ rs6000_nat_target::xfer_partial (enum target_object object,
 					     (int *)(uintptr_t)rounded_offset,
 					     0, NULL);
 	    if (errno)
-	      return TARGET_XFER_EOF;
+	      return 0;
 
 	    /* Copy appropriate bytes out of the buffer.  */
 	    memcpy (readbuf, buffer.byte + (offset - rounded_offset),
 		    partial_len);
 	  }
 
-	*xfered_len = (ULONGEST) partial_len;
-	return TARGET_XFER_OK;
+	return partial_len;
       }
 
     default:
-      return TARGET_XFER_E_IO;
+      return -1;
     }
 }
 
@@ -493,9 +523,9 @@ rs6000_nat_target::xfer_partial (enum target_object object,
    process ID of the child, or MINUS_ONE_PTID in case of error; store
    the status in *OURSTATUS.  */
 
-ptid_t
-rs6000_nat_target::wait (ptid_t ptid, struct target_waitstatus *ourstatus,
-			 int options)
+static ptid_t
+rs6000_wait (struct target_ops *ops,
+	     ptid_t ptid, struct target_waitstatus *ourstatus, int options)
 {
   pid_t pid;
   int status, save_errno;
@@ -506,7 +536,7 @@ rs6000_nat_target::wait (ptid_t ptid, struct target_waitstatus *ourstatus,
 
       do
 	{
-	  pid = waitpid (ptid.pid (), &status, 0);
+	  pid = waitpid (ptid_get_pid (ptid), &status, 0);
 	  save_errno = errno;
 	}
       while (pid == -1 && errno == EINTR);
@@ -521,12 +551,12 @@ rs6000_nat_target::wait (ptid_t ptid, struct target_waitstatus *ourstatus,
 
 	  /* Claim it exited with unknown signal.  */
 	  ourstatus->kind = TARGET_WAITKIND_SIGNALLED;
-	  ourstatus->value.sig = GDB_SIGNAL_UNKNOWN;
+	  ourstatus->value.sig = TARGET_SIGNAL_UNKNOWN;
 	  return inferior_ptid;
 	}
 
       /* Ignore terminated detached child processes.  */
-      if (!WIFSTOPPED (status) && pid != inferior_ptid.pid ())
+      if (!WIFSTOPPED (status) && pid != ptid_get_pid (inferior_ptid))
 	pid = -1;
     }
   while (pid == -1);
@@ -543,24 +573,418 @@ rs6000_nat_target::wait (ptid_t ptid, struct target_waitstatus *ourstatus,
   else
     store_waitstatus (ourstatus, status);
 
-  return ptid_t (pid);
+  return pid_to_ptid (pid);
+}
+
+/* Execute one dummy breakpoint instruction.  This way we give the kernel
+   a chance to do some housekeeping and update inferior's internal data,
+   including u_area.  */
+
+static void
+exec_one_dummy_insn (struct regcache *regcache)
+{
+#define	DUMMY_INSN_ADDR	AIX_TEXT_SEGMENT_BASE+0x200
+
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  int ret, status, pid;
+  CORE_ADDR prev_pc;
+  void *bp;
+
+  /* We plant one dummy breakpoint into DUMMY_INSN_ADDR address.  We
+     assume that this address will never be executed again by the real
+     code.  */
+
+  bp = deprecated_insert_raw_breakpoint (gdbarch, NULL, DUMMY_INSN_ADDR);
+
+  /* You might think this could be done with a single ptrace call, and
+     you'd be correct for just about every platform I've ever worked
+     on.  However, rs6000-ibm-aix4.1.3 seems to have screwed this up --
+     the inferior never hits the breakpoint (it's also worth noting
+     powerpc-ibm-aix4.1.3 works correctly).  */
+  prev_pc = regcache_read_pc (regcache);
+  regcache_write_pc (regcache, DUMMY_INSN_ADDR);
+  if (ARCH64 ())
+    ret = rs6000_ptrace64 (PT_CONTINUE, PIDGET (inferior_ptid), 1, 0, NULL);
+  else
+    ret = rs6000_ptrace32 (PT_CONTINUE, PIDGET (inferior_ptid),
+			   (int *) 1, 0, NULL);
+
+  if (ret != 0)
+    perror (_("pt_continue"));
+
+  do
+    {
+      pid = wait (&status);
+    }
+  while (pid != PIDGET (inferior_ptid));
+
+  regcache_write_pc (regcache, prev_pc);
+  deprecated_remove_raw_breakpoint (gdbarch, bp);
 }
 
+
+/* Copy information about text and data sections from LDI to VP for a 64-bit
+   process if ARCH64 and for a 32-bit process otherwise.  */
+
+static void
+vmap_secs (struct vmap *vp, LdInfo *ldi, int arch64)
+{
+  if (arch64)
+    {
+      vp->tstart = (CORE_ADDR) ldi->l64.ldinfo_textorg;
+      vp->tend = vp->tstart + ldi->l64.ldinfo_textsize;
+      vp->dstart = (CORE_ADDR) ldi->l64.ldinfo_dataorg;
+      vp->dend = vp->dstart + ldi->l64.ldinfo_datasize;
+    }
+  else
+    {
+      vp->tstart = (unsigned long) ldi->l32.ldinfo_textorg;
+      vp->tend = vp->tstart + ldi->l32.ldinfo_textsize;
+      vp->dstart = (unsigned long) ldi->l32.ldinfo_dataorg;
+      vp->dend = vp->dstart + ldi->l32.ldinfo_datasize;
+    }
+
+  /* The run time loader maps the file header in addition to the text
+     section and returns a pointer to the header in ldinfo_textorg.
+     Adjust the text start address to point to the real start address
+     of the text section.  */
+  vp->tstart += vp->toffs;
+}
+
+/* Handle symbol translation on vmapping.  */
+
+static void
+vmap_symtab (struct vmap *vp)
+{
+  struct objfile *objfile;
+  struct section_offsets *new_offsets;
+  int i;
+
+  objfile = vp->objfile;
+  if (objfile == NULL)
+    {
+      /* OK, it's not an objfile we opened ourselves.
+         Currently, that can only happen with the exec file, so
+         relocate the symbols for the symfile.  */
+      if (symfile_objfile == NULL)
+	return;
+      objfile = symfile_objfile;
+    }
+  else if (!vp->loaded)
+    /* If symbols are not yet loaded, offsets are not yet valid.  */
+    return;
+
+  new_offsets =
+    (struct section_offsets *)
+    alloca (SIZEOF_N_SECTION_OFFSETS (objfile->num_sections));
+
+  for (i = 0; i < objfile->num_sections; ++i)
+    new_offsets->offsets[i] = ANOFFSET (objfile->section_offsets, i);
+
+  /* The symbols in the object file are linked to the VMA of the section,
+     relocate them VMA relative.  */
+  new_offsets->offsets[SECT_OFF_TEXT (objfile)] = vp->tstart - vp->tvma;
+  new_offsets->offsets[SECT_OFF_DATA (objfile)] = vp->dstart - vp->dvma;
+  new_offsets->offsets[SECT_OFF_BSS (objfile)] = vp->dstart - vp->dvma;
+
+  objfile_relocate (objfile, new_offsets);
+}
+
+/* Add symbols for an objfile.  */
+
+static int
+objfile_symbol_add (void *arg)
+{
+  struct objfile *obj = (struct objfile *) arg;
+
+  syms_from_objfile (obj, NULL, 0, 0, 0);
+  new_symfile_objfile (obj, 0);
+  return 1;
+}
+
+/* Add symbols for a vmap. Return zero upon error.  */
+
+int
+vmap_add_symbols (struct vmap *vp)
+{
+  if (catch_errors (objfile_symbol_add, vp->objfile,
+		    "Error while reading shared library symbols:\n",
+		    RETURN_MASK_ALL))
+    {
+      /* Note this is only done if symbol reading was successful.  */
+      vp->loaded = 1;
+      vmap_symtab (vp);
+      return 1;
+    }
+  return 0;
+}
+
+/* Add a new vmap entry based on ldinfo() information.
+
+   If ldi->ldinfo_fd is not valid (e.g. this struct ld_info is from a
+   core file), the caller should set it to -1, and we will open the file.
+
+   Return the vmap new entry.  */
+
+static struct vmap *
+add_vmap (LdInfo *ldi)
+{
+  bfd *abfd, *last;
+  char *mem, *objname, *filename;
+  struct objfile *obj;
+  struct vmap *vp;
+  int fd;
+  ARCH64_DECL (arch64);
+
+  /* This ldi structure was allocated using alloca() in 
+     xcoff_relocate_symtab().  Now we need to have persistent object 
+     and member names, so we should save them.  */
+
+  filename = LDI_FILENAME (ldi, arch64);
+  mem = filename + strlen (filename) + 1;
+  mem = xstrdup (mem);
+  objname = xstrdup (filename);
+
+  fd = LDI_FD (ldi, arch64);
+  if (fd < 0)
+    /* Note that this opens it once for every member; a possible
+       enhancement would be to only open it once for every object.  */
+    abfd = bfd_openr (objname, gnutarget);
+  else
+    abfd = bfd_fdopenr (objname, gnutarget, fd);
+  if (!abfd)
+    {
+      warning (_("Could not open `%s' as an executable file: %s"),
+	       objname, bfd_errmsg (bfd_get_error ()));
+      return NULL;
+    }
+
+  /* Make sure we have an object file.  */
+
+  if (bfd_check_format (abfd, bfd_object))
+    vp = map_vmap (abfd, 0);
+
+  else if (bfd_check_format (abfd, bfd_archive))
+    {
+      last = 0;
+      /* FIXME??? am I tossing BFDs?  bfd?  */
+      while ((last = bfd_openr_next_archived_file (abfd, last)))
+	if (strcmp (mem, last->filename) == 0)
+	  break;
+
+      if (!last)
+	{
+	  warning (_("\"%s\": member \"%s\" missing."), objname, mem);
+	  bfd_close (abfd);
+	  return NULL;
+	}
+
+      if (!bfd_check_format (last, bfd_object))
+	{
+	  warning (_("\"%s\": member \"%s\" not in executable format: %s."),
+		   objname, mem, bfd_errmsg (bfd_get_error ()));
+	  bfd_close (last);
+	  bfd_close (abfd);
+	  return NULL;
+	}
+
+      vp = map_vmap (last, abfd);
+    }
+  else
+    {
+      warning (_("\"%s\": not in executable format: %s."),
+	       objname, bfd_errmsg (bfd_get_error ()));
+      bfd_close (abfd);
+      return NULL;
+    }
+  obj = allocate_objfile (vp->bfd, 0);
+  vp->objfile = obj;
+
+  /* Always add symbols for the main objfile.  */
+  if (vp == vmap || auto_solib_add)
+    vmap_add_symbols (vp);
+  return vp;
+}
+
+/* update VMAP info with ldinfo() information
+   Input is ptr to ldinfo() results.  */
+
+static void
+vmap_ldinfo (LdInfo *ldi)
+{
+  struct stat ii, vi;
+  struct vmap *vp;
+  int got_one, retried;
+  int got_exec_file = 0;
+  uint next;
+  int arch64 = ARCH64 ();
+
+  /* For each *ldi, see if we have a corresponding *vp.
+     If so, update the mapping, and symbol table.
+     If not, add an entry and symbol table.  */
+
+  do
+    {
+      char *name = LDI_FILENAME (ldi, arch64);
+      char *memb = name + strlen (name) + 1;
+      int fd = LDI_FD (ldi, arch64);
+
+      retried = 0;
+
+      if (fstat (fd, &ii) < 0)
+	{
+	  /* The kernel sets ld_info to -1, if the process is still using the
+	     object, and the object is removed.  Keep the symbol info for the
+	     removed object and issue a warning.  */
+	  warning (_("%s (fd=%d) has disappeared, keeping its symbols"),
+		   name, fd);
+	  continue;
+	}
+    retry:
+      for (got_one = 0, vp = vmap; vp; vp = vp->nxt)
+	{
+	  struct objfile *objfile;
+
+	  /* First try to find a `vp', which is the same as in ldinfo.
+	     If not the same, just continue and grep the next `vp'.  If same,
+	     relocate its tstart, tend, dstart, dend values.  If no such `vp'
+	     found, get out of this for loop, add this ldi entry as a new vmap
+	     (add_vmap) and come back, find its `vp' and so on...  */
+
+	  /* The filenames are not always sufficient to match on.  */
+
+	  if ((name[0] == '/' && strcmp (name, vp->name) != 0)
+	      || (memb[0] && strcmp (memb, vp->member) != 0))
+	    continue;
+
+	  /* See if we are referring to the same file.
+	     We have to check objfile->obfd, symfile.c:reread_symbols might
+	     have updated the obfd after a change.  */
+	  objfile = vp->objfile == NULL ? symfile_objfile : vp->objfile;
+	  if (objfile == NULL
+	      || objfile->obfd == NULL
+	      || bfd_stat (objfile->obfd, &vi) < 0)
+	    {
+	      warning (_("Unable to stat %s, keeping its symbols"), name);
+	      continue;
+	    }
+
+	  if (ii.st_dev != vi.st_dev || ii.st_ino != vi.st_ino)
+	    continue;
+
+	  if (!retried)
+	    close (fd);
+
+	  ++got_one;
+
+	  /* Found a corresponding VMAP.  Remap!  */
+
+	  vmap_secs (vp, ldi, arch64);
+
+	  /* The objfile is only NULL for the exec file.  */
+	  if (vp->objfile == NULL)
+	    got_exec_file = 1;
+
+	  /* relocate symbol table(s).  */
+	  vmap_symtab (vp);
+
+	  /* Announce new object files.  Doing this after symbol relocation
+	     makes aix-thread.c's job easier.  */
+	  if (vp->objfile)
+	    observer_notify_new_objfile (vp->objfile);
+
+	  /* There may be more, so we don't break out of the loop.  */
+	}
+
+      /* If there was no matching *vp, we must perforce create the
+	 sucker(s). */
+      if (!got_one && !retried)
+	{
+	  add_vmap (ldi);
+	  ++retried;
+	  goto retry;
+	}
+    }
+  while ((next = LDI_NEXT (ldi, arch64))
+	 && (ldi = (void *) (next + (char *) ldi)));
+
+  /* If we don't find the symfile_objfile anywhere in the ldinfo, it
+     is unlikely that the symbol file is relocated to the proper
+     address.  And we might have attached to a process which is
+     running a different copy of the same executable.  */
+  if (symfile_objfile != NULL && !got_exec_file)
+    {
+      warning (_("Symbol file %s\nis not mapped; discarding it.\n\
+If in fact that file has symbols which the mapped files listed by\n\
+\"info files\" lack, you can load symbols with the \"symbol-file\" or\n\
+\"add-symbol-file\" commands (note that you must take care of relocating\n\
+symbols to the proper address)."),
+	       symfile_objfile->name);
+      free_objfile (symfile_objfile);
+      gdb_assert (symfile_objfile == NULL);
+    }
+  breakpoint_re_set ();
+}
+
+/* As well as symbol tables, exec_sections need relocation.  After
+   the inferior process' termination, there will be a relocated symbol
+   table exist with no corresponding inferior process.  At that time, we
+   need to use `exec' bfd, rather than the inferior process's memory space
+   to look up symbols.
+
+   `exec_sections' need to be relocated only once, as long as the exec
+   file remains unchanged.  */
+
+static void
+vmap_exec (void)
+{
+  static bfd *execbfd;
+  int i;
+  struct target_section_table *table = target_get_section_table (&exec_ops);
+
+  if (execbfd == exec_bfd)
+    return;
+
+  execbfd = exec_bfd;
+
+  if (!vmap || !table->sections)
+    error (_("vmap_exec: vmap or table->sections == 0."));
+
+  for (i = 0; &table->sections[i] < table->sections_end; i++)
+    {
+      if (strcmp (".text", table->sections[i].the_bfd_section->name) == 0)
+	{
+	  table->sections[i].addr += vmap->tstart - vmap->tvma;
+	  table->sections[i].endaddr += vmap->tstart - vmap->tvma;
+	}
+      else if (strcmp (".data", table->sections[i].the_bfd_section->name) == 0)
+	{
+	  table->sections[i].addr += vmap->dstart - vmap->dvma;
+	  table->sections[i].endaddr += vmap->dstart - vmap->dvma;
+	}
+      else if (strcmp (".bss", table->sections[i].the_bfd_section->name) == 0)
+	{
+	  table->sections[i].addr += vmap->dstart - vmap->dvma;
+	  table->sections[i].endaddr += vmap->dstart - vmap->dvma;
+	}
+    }
+}
 
 /* Set the current architecture from the host running GDB.  Called when
    starting a child process.  */
 
-void
-rs6000_nat_target::create_inferior (const char *exec_file,
-				    const std::string &allargs,
-				    char **env, int from_tty)
+static void (*super_create_inferior) (struct target_ops *,char *exec_file, 
+				      char *allargs, char **env, int from_tty);
+static void
+rs6000_create_inferior (struct target_ops * ops, char *exec_file,
+			char *allargs, char **env, int from_tty)
 {
   enum bfd_architecture arch;
   unsigned long mach;
   bfd abfd;
   struct gdbarch_info info;
 
-  inf_ptrace_target::create_inferior (exec_file, allargs, env, from_tty);
+  super_create_inferior (ops, exec_file, allargs, env, from_tty);
 
   if (__power_rs ())
     {
@@ -601,75 +1025,214 @@ rs6000_nat_target::create_inferior (const char *exec_file,
 		    _("rs6000_create_inferior: failed "
 		      "to select architecture"));
 }
+
 
+/* xcoff_relocate_symtab -      hook for symbol table relocation.
+   
+   This is only applicable to live processes, and is a no-op when
+   debugging a core file.  */
 
-/* Shared Object support.  */
-
-/* Return the LdInfo data for the given process.  Raises an error
-   if the data could not be obtained.  */
-
-static gdb::byte_vector
-rs6000_ptrace_ldinfo (ptid_t ptid)
+void
+xcoff_relocate_symtab (unsigned int pid)
 {
-  const int pid = ptid.pid ();
-  gdb::byte_vector ldi (1024);
-  int rc = -1;
+  int load_segs = 64; /* number of load segments */
+  int rc;
+  LdInfo *ldi = NULL;
+  int arch64 = ARCH64 ();
+  int ldisize = arch64 ? sizeof (ldi->l64) : sizeof (ldi->l32);
+  int size;
 
-  while (1)
+  /* Nothing to do if we are debugging a core file.  */
+  if (!target_has_execution)
+    return;
+
+  do
     {
-      if (ARCH64 ())
-	rc = rs6000_ptrace64 (PT_LDINFO, pid, (unsigned long) ldi.data (),
-			      ldi.size (), NULL);
+      size = load_segs * ldisize;
+      ldi = (void *) xrealloc (ldi, size);
+
+#if 0
+      /* According to my humble theory, AIX has some timing problems and
+         when the user stack grows, kernel doesn't update stack info in time
+         and ptrace calls step on user stack.  That is why we sleep here a
+         little, and give kernel to update its internals.  */
+      usleep (36000);
+#endif
+
+      if (arch64)
+	rc = rs6000_ptrace64 (PT_LDINFO, pid, (unsigned long) ldi, size, NULL);
       else
-	rc = rs6000_ptrace32 (PT_LDINFO, pid, (int *) ldi.data (),
-			      ldi.size (), NULL);
+	rc = rs6000_ptrace32 (PT_LDINFO, pid, (int *) ldi, size, NULL);
 
-      if (rc != -1)
-	break; /* Success, we got the entire ld_info data.  */
-
-      if (errno != ENOMEM)
-	perror_with_name (_("ptrace ldinfo"));
-
-      /* ldi is not big enough.  Double it and try again.  */
-      ldi.resize (ldi.size () * 2);
-    }
-
-  return ldi;
+      if (rc == -1)
+        {
+          if (errno == ENOMEM)
+            load_segs *= 2;
+          else
+            perror_with_name (_("ptrace ldinfo"));
+        }
+      else
+	{
+          vmap_ldinfo (ldi);
+          vmap_exec (); /* relocate the exec and core sections as well.  */
+	}
+    } while (rc == -1);
+  if (ldi)
+    xfree (ldi);
 }
+
+/* Core file stuff.  */
 
-/* Implement the to_xfer_partial target_ops method for
-   TARGET_OBJECT_LIBRARIES_AIX objects.  */
+/* Relocate symtabs and read in shared library info, based on symbols
+   from the core file.  */
 
-enum target_xfer_status
-rs6000_nat_target::xfer_shared_libraries
-  (enum target_object object,
-   const char *annex, gdb_byte *readbuf, const gdb_byte *writebuf,
-   ULONGEST offset, ULONGEST len, ULONGEST *xfered_len)
+void
+xcoff_relocate_core (struct target_ops *target)
 {
-  ULONGEST result;
+  struct bfd_section *ldinfo_sec;
+  int offset = 0;
+  LdInfo *ldi;
+  struct vmap *vp;
+  int arch64 = ARCH64 ();
 
-  /* This function assumes that it is being run with a live process.
-     Core files are handled via gdbarch.  */
-  gdb_assert (target_has_execution);
+  /* Size of a struct ld_info except for the variable-length filename.  */
+  int nonfilesz = (int)LDI_FILENAME ((LdInfo *)0, arch64);
 
-  if (writebuf)
-    return TARGET_XFER_E_IO;
+  /* Allocated size of buffer.  */
+  int buffer_size = nonfilesz;
+  char *buffer = xmalloc (buffer_size);
+  struct cleanup *old = make_cleanup (free_current_contents, &buffer);
 
-  gdb::byte_vector ldi_buf = rs6000_ptrace_ldinfo (inferior_ptid);
-  result = rs6000_aix_ld_info_to_xml (target_gdbarch (), ldi_buf.data (),
-				      readbuf, offset, len, 1);
-
-  if (result == 0)
-    return TARGET_XFER_EOF;
-  else
+  ldinfo_sec = bfd_get_section_by_name (core_bfd, ".ldinfo");
+  if (ldinfo_sec == NULL)
     {
-      *xfered_len = result;
-      return TARGET_XFER_OK;
+    bfd_err:
+      fprintf_filtered (gdb_stderr, "Couldn't get ldinfo from core file: %s\n",
+			bfd_errmsg (bfd_get_error ()));
+      do_cleanups (old);
+      return;
     }
+  do
+    {
+      int i;
+      int names_found = 0;
+
+      /* Read in everything but the name.  */
+      if (bfd_get_section_contents (core_bfd, ldinfo_sec, buffer,
+				    offset, nonfilesz) == 0)
+	goto bfd_err;
+
+      /* Now the name.  */
+      i = nonfilesz;
+      do
+	{
+	  if (i == buffer_size)
+	    {
+	      buffer_size *= 2;
+	      buffer = xrealloc (buffer, buffer_size);
+	    }
+	  if (bfd_get_section_contents (core_bfd, ldinfo_sec, &buffer[i],
+					offset + i, 1) == 0)
+	    goto bfd_err;
+	  if (buffer[i++] == '\0')
+	    ++names_found;
+	}
+      while (names_found < 2);
+
+      ldi = (LdInfo *) buffer;
+
+      /* Can't use a file descriptor from the core file; need to open it.  */
+      if (arch64)
+	ldi->l64.ldinfo_fd = -1;
+      else
+	ldi->l32.ldinfo_fd = -1;
+
+      /* The first ldinfo is for the exec file, allocated elsewhere.  */
+      if (offset == 0 && vmap != NULL)
+	vp = vmap;
+      else
+	vp = add_vmap (ldi);
+
+      /* Process next shared library upon error.  */
+      offset += LDI_NEXT (ldi, arch64);
+      if (vp == NULL)
+	continue;
+
+      vmap_secs (vp, ldi, arch64);
+
+      /* Unless this is the exec file,
+         add our sections to the section table for the core target.  */
+      if (vp != vmap)
+	{
+	  struct target_section *stp;
+
+	  stp = deprecated_core_resize_section_table (2);
+
+	  stp->bfd = vp->bfd;
+	  stp->the_bfd_section = bfd_get_section_by_name (stp->bfd, ".text");
+	  stp->addr = vp->tstart;
+	  stp->endaddr = vp->tend;
+	  stp++;
+
+	  stp->bfd = vp->bfd;
+	  stp->the_bfd_section = bfd_get_section_by_name (stp->bfd, ".data");
+	  stp->addr = vp->dstart;
+	  stp->endaddr = vp->dend;
+	}
+
+      vmap_symtab (vp);
+
+      if (vp != vmap && vp->objfile)
+	observer_notify_new_objfile (vp->objfile);
+    }
+  while (LDI_NEXT (ldi, arch64) != 0);
+  vmap_exec ();
+  breakpoint_re_set ();
+  do_cleanups (old);
 }
+
+/* Under AIX, we have to pass the correct TOC pointer to a function
+   when calling functions in the inferior.
+   We try to find the relative toc offset of the objfile containing PC
+   and add the current load address of the data segment from the vmap.  */
+
+static CORE_ADDR
+find_toc_address (CORE_ADDR pc)
+{
+  struct vmap *vp;
+
+  for (vp = vmap; vp; vp = vp->nxt)
+    {
+      if (pc >= vp->tstart && pc < vp->tend)
+	{
+	  /* vp->objfile is only NULL for the exec file.  */
+	  return vp->dstart + xcoff_get_toc_offset (vp->objfile == NULL
+						    ? symfile_objfile
+						    : vp->objfile);
+	}
+    }
+  error (_("Unable to find TOC entry for pc %s."), hex_string (pc));
+}
+
 
 void
 _initialize_rs6000_nat (void)
 {
-  add_inf_child_target (&the_rs6000_nat_target);
+  struct target_ops *t;
+
+  t = inf_ptrace_target ();
+  t->to_fetch_registers = rs6000_fetch_inferior_registers;
+  t->to_store_registers = rs6000_store_inferior_registers;
+  t->to_xfer_partial = rs6000_xfer_partial;
+
+  super_create_inferior = t->to_create_inferior;
+  t->to_create_inferior = rs6000_create_inferior;
+
+  t->to_wait = rs6000_wait;
+
+  add_target (t);
+
+  /* Initialize hook in rs6000-tdep.c for determining the TOC address
+     when calling functions in the inferior.  */
+  rs6000_find_toc_address_hook = find_toc_address;
 }

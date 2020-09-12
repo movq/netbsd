@@ -1,5 +1,6 @@
 ;; Machine Descriptions for R8C/M16C/M32C
-;; Copyright (C) 2005-2019 Free Software Foundation, Inc.
+;; Copyright (C) 2005, 2007, 2008
+;; Free Software Foundation, Inc.
 ;; Contributed by Red Hat.
 ;;
 ;; This file is part of GCC.
@@ -87,17 +88,14 @@
 (define_expand "eh_return"
   [(match_operand:PSI 0 "" "")]
   ""
-  "m32c_emit_eh_epilogue(operands[0]);
-   emit_barrier ();
-   DONE;"
+  "m32c_emit_eh_epilogue(operands[0]); DONE;"
   )
 
 (define_insn "eh_epilogue"
   [(set (pc)
 	(unspec_volatile [(match_operand 0 "m32c_r1_operand" "")
 			  (match_operand 1 "m32c_r0_operand" "")
-			  ] UNS_EH_EPILOGUE))
-   (return)]
+			  ] UNS_EH_EPILOGUE))]
   ""
   "jmp.a\t__m32c_eh_return"
   [(set_attr "flags" "x")]

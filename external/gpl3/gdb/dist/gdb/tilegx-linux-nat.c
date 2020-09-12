@@ -1,6 +1,6 @@
 /* Native-dependent code for GNU/Linux TILE-Gx.
 
-   Copyright (C) 2012-2019 Free Software Foundation, Inc.
+   Copyright (C) 2012-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,27 +22,22 @@
 #include "gdbcore.h"
 #include "regcache.h"
 #include "linux-nat.h"
-#include "inf-ptrace.h"
 
-#include "nat/gdb_ptrace.h"
+#include <sys/ptrace.h>
+
+#include "gdb_assert.h"
+#include "gdb_string.h"
 
 #include <sys/procfs.h>
 
-/* Defines ps_err_e, struct ps_prochandle.  */
 #include "gdb_proc_service.h"
+#include <sys/ptrace.h>
 
 /* Prototypes for supply_gregset etc.  */
 #include "gregset.h"
 
-class tilegx_linux_nat_target final : public linux_nat_target
-{
-public:
-  /* Add our register access methods.  */
-  void fetch_registers (struct regcache *, int) override;
-  void store_registers (struct regcache *, int) override;
-};
-
-static tilegx_linux_nat_target the_tilegx_linux_nat_target;
+/* Defines ps_err_e, struct ps_prochandle.  */
+#include "gdb_proc_service.h"
 
 /* The register sets used in GNU/Linux ELF core-dumps are identical to
    the register sets in `struct user' that is used for a.out
@@ -88,7 +83,7 @@ supply_gregset (struct regcache* regcache,
 
   for (i = 0; i < sizeof (regmap) / sizeof (regmap[0]); i++)
     if (regmap[i] >= 0)
-      regcache->raw_supply (i, regp + regmap[i]);
+      regcache_raw_supply (regcache, i, regp + regmap[i]);
 }
 
 /* Fill registers in *GREGSETPS with the values in GDB's
@@ -103,7 +98,7 @@ fill_gregset (const struct regcache* regcache,
 
   for (i = 0; i < sizeof (regmap) / sizeof (regmap[0]); i++)
     if (regmap[i] >= 0)
-      regcache->raw_collect (i, regp + regmap[i]);
+      regcache_raw_collect (regcache, i, regp + regmap[i]);
 }
 
 /* Transfering floating-point registers between GDB, inferiors and cores.  */
@@ -132,12 +127,16 @@ fill_fpregset (const struct regcache *regcache,
 /* Fetch register REGNUM from the inferior.  If REGNUM is -1, do this
    for all registers.  */
 
-void
-tilegx_linux_nat_target::fetch_registers (struct regcache *regcache,
-					  int regnum)
+static void
+fetch_inferior_registers (struct target_ops *ops,
+			  struct regcache *regcache, int regnum)
 {
   elf_gregset_t regs;
-  pid_t tid = get_ptrace_pid (regcache->ptid ());
+  int tid;
+
+  tid = ptid_get_lwp (inferior_ptid);
+  if (tid == 0)
+    tid = ptid_get_pid (inferior_ptid);
 
   if (ptrace (PTRACE_GETREGS, tid, 0, (PTRACE_TYPE_ARG3) &regs) < 0)
     perror_with_name (_("Couldn't get registers"));
@@ -148,12 +147,16 @@ tilegx_linux_nat_target::fetch_registers (struct regcache *regcache,
 /* Store register REGNUM back into the inferior.  If REGNUM is -1, do
    this for all registers.  */
 
-void
-tilegx_linux_nat_target::store_registers (struct regcache *regcache,
-					  int regnum)
+static void
+store_inferior_registers (struct target_ops *ops,
+			  struct regcache *regcache, int regnum)
 {
   elf_gregset_t regs;
-  pid_t tid = get_ptrace_pid (regcache->ptid ());
+  int tid;
+
+  tid = ptid_get_lwp (inferior_ptid);
+  if (tid == 0)
+    tid = ptid_get_pid (inferior_ptid);
 
   if (ptrace (PTRACE_GETREGS, tid, 0, (PTRACE_TYPE_ARG3) &regs) < 0)
     perror_with_name (_("Couldn't get registers"));
@@ -164,9 +167,21 @@ tilegx_linux_nat_target::store_registers (struct regcache *regcache,
     perror_with_name (_("Couldn't write registers"));
 }
 
+
+extern initialize_file_ftype _initialize_tile_linux_nat;
+
 void
 _initialize_tile_linux_nat (void)
 {
-  linux_target = &the_tilegx_linux_nat_target;
-  add_inf_child_target (&the_tilegx_linux_nat_target);
+  struct target_ops *t;
+
+  /* Fill in the generic GNU/Linux methods.  */
+  t = linux_target ();
+
+  /* Add our register access methods.  */
+  t->to_fetch_registers = fetch_inferior_registers;
+  t->to_store_registers = store_inferior_registers;
+
+  /* Register the target.  */
+  linux_nat_add_target (t);
 }

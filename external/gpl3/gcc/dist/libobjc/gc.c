@@ -1,5 +1,5 @@
 /* Basic data types for Objective C.
-   Copyright (C) 1998-2019 Free Software Foundation, Inc.
+   Copyright (C) 1998, 2002, 2004, 2005, 2006, 2009 Free Software Foundation, Inc.
    Contributed by Ovidiu Predescu.
 
 This file is part of GCC.
@@ -23,20 +23,17 @@ a copy of the GCC Runtime Library Exception along with this program;
 see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 <http://www.gnu.org/licenses/>.  */
 
-#include "objc-private/common.h"
+#include "tconfig.h"
 #include "objc/objc.h"
+#include "objc/encoding.h"
+
+#include <assert.h>
+#include <string.h>
+#include <stdlib.h>
 
 #if OBJC_WITH_GC
 
-#include "tconfig.h"
-#include <assert.h>
-#include <ctype.h> /* For isdigit.  */
-#include <string.h>
-#include <stdlib.h>
-#include "objc/runtime.h"
-#include "objc-private/module-abi-8.h"
-
-#include <gc/gc.h>
+#include <gc.h>
 #include <limits.h>
 
 /* gc_typed.h uses the following but doesn't declare them */
@@ -44,7 +41,7 @@ typedef GC_word word;
 typedef GC_signed_word signed_word;
 #define BITS_PER_WORD (CHAR_BIT * sizeof (word))
 
-#include <gc/gc_typed.h>
+#include <gc_typed.h>
 
 /* The following functions set up in `mask` the corresponding pointers.
    The offset is incremented with the size of the type.  */
@@ -303,7 +300,7 @@ __objc_generate_gc_type_description (Class class)
 
   /* The number of bits in the mask is the size of an instance in bytes divided
      by the size of a pointer. */
-  bits_no = (ROUND (class_getInstanceSize (class), sizeof (void *))
+  bits_no = (ROUND (class_get_instance_size (class), sizeof (void *))
              / sizeof (void *));
   size = ROUND (bits_no, BITS_PER_WORD) / BITS_PER_WORD;
   mask = objc_atomic_malloc (size * sizeof (int));
@@ -423,15 +420,11 @@ class_ivar_set_gcinvisible (Class class, const char *ivarname,
 
 	  /* The variable is gc visible so we make it gc_invisible.  */
 	  new_type = objc_malloc (strlen(ivar->ivar_type) + 2);
-
-	  /* Copy the variable name.  */
 	  len = (type - ivar->ivar_type);
 	  memcpy (new_type, ivar->ivar_type, len);
-	  /* Add '!'.  */
-	  new_type[len++] = _C_GCINVISIBLE;
-	  /* Copy the original types.  */
-	  strcpy (new_type + len, type);
-
+	  new_type[len] = 0;
+	  strcat (new_type, "!");
+	  strcat (new_type, type);
 	  ivar->ivar_type = new_type;
 	}
 

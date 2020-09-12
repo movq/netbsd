@@ -1,6 +1,6 @@
 // Support for atomic operations -*- C++ -*-
 
-// Copyright (C) 2004-2019 Free Software Foundation, Inc.
+// Copyright (C) 2004, 2005, 2006, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,35 +22,32 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file ext/atomicity.h
- *  This file is a GNU extension to the Standard C++ Library.
+/** @file atomicity.h
+ *  This is an internal header file, included by other library headers.
+ *  You should not attempt to use it directly.
  */
 
 #ifndef _GLIBCXX_ATOMICITY_H
 #define _GLIBCXX_ATOMICITY_H	1
 
-#pragma GCC system_header
-
 #include <bits/c++config.h>
 #include <bits/gthr.h>
 #include <bits/atomic_word.h>
 
-namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
 
   // Functions for portable atomic access.
   // To abstract locking primitives across all thread policies, use:
   // __exchange_and_add_dispatch
   // __atomic_add_dispatch
-#ifdef _GLIBCXX_ATOMIC_BUILTINS
+#ifdef _GLIBCXX_ATOMIC_BUILTINS_4
   static inline _Atomic_word 
   __exchange_and_add(volatile _Atomic_word* __mem, int __val)
-  { return __atomic_fetch_add(__mem, __val, __ATOMIC_ACQ_REL); }
+  { return __sync_fetch_and_add(__mem, __val); }
 
   static inline void
   __atomic_add(volatile _Atomic_word* __mem, int __val)
-  { __atomic_fetch_add(__mem, __val, __ATOMIC_ACQ_REL); }
+  { __sync_fetch_and_add(__mem, __val); }
 #else
   _Atomic_word
   __attribute__ ((__unused__))
@@ -101,17 +98,16 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #endif
   }
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 // Even if the CPU doesn't need a memory barrier, we need to ensure
 // that the compiler doesn't reorder memory accesses across the
 // barriers.
 #ifndef _GLIBCXX_READ_MEM_BARRIER
-#define _GLIBCXX_READ_MEM_BARRIER __atomic_thread_fence (__ATOMIC_ACQUIRE)
+#define _GLIBCXX_READ_MEM_BARRIER __asm __volatile ("":::"memory")
 #endif
 #ifndef _GLIBCXX_WRITE_MEM_BARRIER
-#define _GLIBCXX_WRITE_MEM_BARRIER __atomic_thread_fence (__ATOMIC_RELEASE)
+#define _GLIBCXX_WRITE_MEM_BARRIER __asm __volatile ("":::"memory")
 #endif
 
 #endif 

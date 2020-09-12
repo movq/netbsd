@@ -1,5 +1,7 @@
 /* This file is tc-m68k.h
-   Copyright (C) 1987-2020 Free Software Foundation, Inc.
+   Copyright 1987, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
+   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -24,7 +26,41 @@ struct fix;
 
 #define TARGET_BYTES_BIG_ENDIAN 1
 
+#ifdef OBJ_AOUT
+#ifdef TE_SUN3
+#define TARGET_FORMAT "a.out-sunos-big"
+#endif
+#ifdef TE_NetBSD
+#define TARGET_FORMAT "a.out-m68k-netbsd"
+#endif
+#ifdef TE_LINUX
+#define TARGET_FORMAT "a.out-m68k-linux"
+#endif
+#ifndef TARGET_FORMAT
+#define TARGET_FORMAT "a.out-zero-big"
+#endif
+#endif
+
+#ifdef OBJ_ELF
 #define TARGET_FORMAT "elf32-m68k"
+#endif
+
+#ifdef TE_APOLLO
+#define COFF_MAGIC		APOLLOM68KMAGIC
+#define COFF_AOUTHDR_MAGIC	APOLLO_COFF_VERSION_NUMBER
+#undef OBJ_COFF_OMIT_OPTIONAL_HEADER
+#endif
+
+#ifdef TE_AUX
+#define TARGET_FORMAT		"coff-m68k-aux"
+#endif
+#ifdef TE_DELTA
+#define TARGET_FORMAT		"coff-m68k-sysv"
+#endif
+
+#ifndef COFF_MAGIC
+#define COFF_MAGIC MC68MAGIC
+#endif
 #define TARGET_ARCH bfd_arch_m68k
 
 #define tc_comment_chars m68k_comment_chars
@@ -40,8 +76,23 @@ extern const char *m68k_comment_chars;
 #define REGISTER_PREFIX '%'
 #endif
 
-#ifndef REGISTER_PREFIX_OPTIONAL
+#if !defined (REGISTER_PREFIX_OPTIONAL)
+#if defined (M68KCOFF) || defined (OBJ_ELF)
 #define REGISTER_PREFIX_OPTIONAL 0
+#else /* ! (COFF || ELF) */
+#define REGISTER_PREFIX_OPTIONAL 1
+#endif /* ! (COFF || ELF) */
+#endif /* not def REGISTER_PREFIX and not def OPTIONAL_REGISTER_PREFIX */
+
+#ifdef TE_DELTA
+/* On the Delta, `%' can occur within a label name, but not as the
+   initial character.  */
+#define LEX_PCT LEX_NAME
+/* On the Delta, `~' can start a label name, but is converted to '.'.  */
+#define LEX_TILDE LEX_BEGIN_NAME
+#define tc_canonicalize_symbol_name(s) ((*(s) == '~' ? *(s) = '.' : '.'), s)
+/* On the Delta, dots are not required before pseudo-ops.  */
+#define NO_PSEUDO_DOT 1
 #endif
 
 extern void m68k_mri_mode_change (int);
@@ -75,6 +126,7 @@ while (0)
 #define RELAX_RELOC_PC16  BFD_RELOC_16_PCREL
 #define RELAX_RELOC_PC32  BFD_RELOC_32_PCREL
 
+#ifdef OBJ_ELF
 #define tc_fix_adjustable(X) tc_m68k_fix_adjustable(X)
 extern int tc_m68k_fix_adjustable (struct fix *);
 
@@ -89,6 +141,7 @@ extern int tc_m68k_fix_adjustable (struct fix *);
 
 #define elf_tc_final_processing m68k_elf_final_processing
 extern void m68k_elf_final_processing (void);
+#endif
 
 #define DIFF_EXPR_OK
 
@@ -96,6 +149,8 @@ extern int m68k_parse_long_option (char *);
 #define md_parse_long_option m68k_parse_long_option
 
 #define md_operand(x)
+
+#define TARGET_ARCH bfd_arch_m68k
 
 extern struct relax_type md_relax_table[];
 #define TC_GENERIC_RELAX_TABLE md_relax_table
@@ -119,23 +174,7 @@ extern struct relax_type md_relax_table[];
 #define DWARF2_CIE_DATA_ALIGNMENT (-4)
 
 #define tc_regname_to_dw2regnum tc_m68k_regname_to_dw2regnum
-extern int tc_m68k_regname_to_dw2regnum (const char *regname);
+extern int tc_m68k_regname_to_dw2regnum (char *regname);
 
 #define tc_cfi_frame_initial_instructions tc_m68k_frame_initial_instructions
 extern void tc_m68k_frame_initial_instructions (void);
-
-#ifdef TE_UCLINUX
-/* elf2flt does not honor PT_LOAD's from the executable.
-   .text and .eh_frame sections will not end up in the same segment and so
-   we cannot use PC-relative encoding for CFI.  */
-# define CFI_DIFF_EXPR_OK 0
-
-/* However, follow compiler's guidance when it specifies encoding for LSDA.  */
-# define CFI_DIFF_LSDA_OK 1
-#endif
-
-struct broken_word;
-#define TC_CHECK_ADJUSTED_BROKEN_DOT_WORD(new_offset, brokw) \
-  tc_m68k_check_adjusted_broken_word ((offsetT) (new_offset), (brokw))
-extern void tc_m68k_check_adjusted_broken_word (offsetT,
-						struct broken_word *);

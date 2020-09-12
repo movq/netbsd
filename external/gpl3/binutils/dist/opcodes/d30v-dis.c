@@ -1,5 +1,6 @@
 /* Disassemble D30V instructions.
-   Copyright (C) 1997-2020 Free Software Foundation, Inc.
+   Copyright 1997, 1998, 2000, 2001, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -18,12 +19,11 @@
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
-#include "sysdep.h"
 #include <stdio.h>
+#include "sysdep.h"
 #include "opcode/d30v.h"
-#include "disassemble.h"
+#include "dis-asm.h"
 #include "opintl.h"
-#include "libiberty.h"
 
 #define PC_MASK 0xFFFFFFFF
 
@@ -34,7 +34,7 @@
 static int
 lookup_opcode (struct d30v_insn *insn, long num, int is_long)
 {
-  int i = 0, op_index;
+  int i = 0, index;
   struct d30v_format *f;
   struct d30v_opcode *op = (struct d30v_opcode *) d30v_opcode_table;
   int op1 = (num >> 25) & 0x7;
@@ -56,11 +56,11 @@ lookup_opcode (struct d30v_insn *insn, long num, int is_long)
   while (op->op1 == op1 && op->op2 == op2)
     {
       /* Scan through all the formats for the opcode.  */
-      op_index = op->format[i++];
+      index = op->format[i++];
       do
 	{
-	  f = (struct d30v_format *) &d30v_format_table[op_index];
-	  while (f->form == op_index)
+	  f = (struct d30v_format *) &d30v_format_table[index];
+	  while (f->form == index)
 	    {
 	      if ((!is_long || f->form >= LONG) && (f->modifier == mod))
 		{
@@ -72,7 +72,7 @@ lookup_opcode (struct d30v_insn *insn, long num, int is_long)
 	  if (insn->form)
 	    break;
 	}
-      while ((op_index = op->format[i++]) != 0);
+      while ((index = op->format[i++]) != 0);
       if (insn->form)
 	break;
       op++;
@@ -90,11 +90,11 @@ lookup_opcode (struct d30v_insn *insn, long num, int is_long)
 }
 
 static int
-extract_value (uint64_t num, const struct d30v_operand *oper, int is_long)
+extract_value (long long num, struct d30v_operand *oper, int is_long)
 {
-  unsigned int val;
+  int val;
   int shift = 12 - oper->position;
-  unsigned int mask = (0xFFFFFFFF >> (32 - oper->bits));
+  int mask = (0xFFFFFFFF >> (32 - oper->bits));
 
   if (is_long)
     {
@@ -118,15 +118,14 @@ extract_value (uint64_t num, const struct d30v_operand *oper, int is_long)
 static void
 print_insn (struct disassemble_info *info,
 	    bfd_vma memaddr,
-	    uint64_t num,
+	    long long num,
 	    struct d30v_insn *insn,
 	    int is_long,
 	    int show_ext)
 {
   int val, opnum, need_comma = 0;
-  const struct d30v_operand *oper;
-  int i, match, need_paren = 0, found_control = 0;
-  unsigned int opind = 0;
+  struct d30v_operand *oper;
+  int i, match, opind = 0, need_paren = 0, found_control = 0;
 
   (*info->fprintf_func) (info->stream, "%s", insn->op->name);
 
@@ -136,7 +135,7 @@ print_insn (struct disassemble_info *info,
       opind++;
       val =
 	extract_value (num,
-		       &d30v_operand_table[insn->form->operands[0]],
+		       (struct d30v_operand *) &d30v_operand_table[insn->form->operands[0]],
 		       is_long);
       (*info->fprintf_func) (info->stream, "%s", d30v_cc_names[val]);
     }
@@ -155,12 +154,11 @@ print_insn (struct disassemble_info *info,
 
   (*info->fprintf_func) (info->stream, "\t");
 
-  while (opind < ARRAY_SIZE (insn->form->operands)
-	 && (opnum = insn->form->operands[opind++]) != 0)
+  while ((opnum = insn->form->operands[opind++]) != 0)
     {
       int bits;
 
-      oper = &d30v_operand_table[opnum];
+      oper = (struct d30v_operand *) &d30v_operand_table[opnum];
       bits = oper->bits;
       if (oper->flags & OPERAND_SHIFT)
 	bits += 3;
@@ -210,8 +208,8 @@ print_insn (struct disassemble_info *info,
 	  match = 0;
 	  if (oper->flags & OPERAND_CONTROL)
 	    {
-	      const struct d30v_operand *oper3
-		= &d30v_operand_table[insn->form->operands[2]];
+	      struct d30v_operand *oper3 =
+		(struct d30v_operand *) &d30v_operand_table[insn->form->operands[2]];
 	      int id = extract_value (num, oper3, is_long);
 
 	      found_control = 1;
@@ -228,9 +226,7 @@ print_insn (struct disassemble_info *info,
 		  val |= OPERAND_FLAG;
 		  break;
 		default:
-		  /* xgettext: c-format */
-		  opcodes_error_handler (_("illegal id (%d)"), id);
-		  abort ();
+		  fprintf (stderr, "illegal id (%d)\n", id);
 		}
 	    }
 	  else if (oper->flags & OPERAND_ACC)
@@ -271,10 +267,14 @@ print_insn (struct disassemble_info *info,
 	  /* IMM6S3 is unsigned.  */
 	  if (oper->flags & OPERAND_SIGNED || bits == 32)
 	    {
-	      unsigned int sign = 1u << (bits - 1);
-	      if (val & sign)
+	      long max;
+	      max = (1 << (bits - 1));
+	      if (val & max)
 		{
-		  val = -val & (sign + sign - 1);
+		  if (bits == 32)
+		    val = -val;
+		  else
+		    val = -val & ((1 << bits) - 1);
 		  neg = 1;
 		}
 	    }
@@ -299,20 +299,20 @@ print_insn (struct disassemble_info *info,
 	{
 	  if (oper->flags & OPERAND_SIGNED)
 	    {
-	      unsigned int sign = 1u << (bits - 1);
+	      int max = (1 << (bits - 1));
 
-	      if (val & sign)
+	      if (val & max)
 		{
-		  val = -val & (sign + sign - 1);
+		  val = -val;
+		  if (bits < 32)
+		    val &= ((1 << bits) - 1);
 		  (*info->fprintf_func) (info->stream, "-");
 		}
 	    }
 	  (*info->fprintf_func) (info->stream, "0x%x", val);
 	}
       /* If there is another operand, then write a comma and space.  */
-      if (opind < ARRAY_SIZE (insn->form->operands)
-	  && insn->form->operands[opind]
-	  && !(found_control && opind == 2))
+      if (insn->form->operands[opind] && !(found_control && opind == 2))
 	need_comma = 1;
     }
   if (need_paren)
@@ -324,9 +324,9 @@ print_insn_d30v (bfd_vma memaddr, struct disassemble_info *info)
 {
   int status, result;
   bfd_byte buffer[12];
-  uint32_t in1, in2;
+  unsigned long in1, in2;
   struct d30v_insn insn;
-  uint64_t num;
+  long long num;
 
   insn.form = NULL;
 
@@ -347,9 +347,9 @@ print_insn_d30v (bfd_vma memaddr, struct disassemble_info *info)
     {
       info->bytes_per_line = 8;
       if (!(result = lookup_opcode (&insn, in1, 0)))
-	(*info->fprintf_func) (info->stream, ".long\t0x%x", in1);
+	(*info->fprintf_func) (info->stream, ".long\t0x%lx", in1);
       else
-	print_insn (info, memaddr, (uint64_t) in1, &insn, 0, result);
+	print_insn (info, memaddr, (long long) in1, &insn, 0, result);
       return 4;
     }
   in2 = bfd_getb32 (buffer);
@@ -359,17 +359,17 @@ print_insn_d30v (bfd_vma memaddr, struct disassemble_info *info)
       /* LONG instruction.  */
       if (!(result = lookup_opcode (&insn, in1, 1)))
 	{
-	  (*info->fprintf_func) (info->stream, ".long\t0x%x,0x%x", in1, in2);
+	  (*info->fprintf_func) (info->stream, ".long\t0x%lx,0x%lx", in1, in2);
 	  return 8;
 	}
-      num = (uint64_t) in1 << 32 | in2;
+      num = (long long) in1 << 32 | in2;
       print_insn (info, memaddr, num, &insn, 1, result);
     }
   else
     {
       num = in1;
       if (!(result = lookup_opcode (&insn, in1, 0)))
-	(*info->fprintf_func) (info->stream, ".long\t0x%x", in1);
+	(*info->fprintf_func) (info->stream, ".long\t0x%lx", in1);
       else
 	print_insn (info, memaddr, num, &insn, 0, result);
 
@@ -390,7 +390,7 @@ print_insn_d30v (bfd_vma memaddr, struct disassemble_info *info)
       insn.form = NULL;
       num = in2;
       if (!(result = lookup_opcode (&insn, in2, 0)))
-	(*info->fprintf_func) (info->stream, ".long\t0x%x", in2);
+	(*info->fprintf_func) (info->stream, ".long\t0x%lx", in2);
       else
 	print_insn (info, memaddr, num, &insn, 0, result);
     }

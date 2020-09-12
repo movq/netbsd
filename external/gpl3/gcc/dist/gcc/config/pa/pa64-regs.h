@@ -1,5 +1,6 @@
 /* Configuration for GCC-compiler for PA-RISC.
-   Copyright (C) 1999-2019 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2003, 2004, 2007, 2008
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -37,8 +38,8 @@ along with GCC; see the file COPYING3.  If not see
    issue as using the halves independently triggers false dependency stalls
    anyway.  */
 
-#define FIRST_PSEUDO_REGISTER 62  /* 32 general regs + 28 fp regs +
-				     + 1 shift reg + frame pointer */
+#define FIRST_PSEUDO_REGISTER 61  /* 32 general regs + 28 fp regs +
+				     + 1 shift reg */
 
 /* 1 for registers that have pervasive standard uses
    and are not available for the register allocator.
@@ -78,8 +79,8 @@ along with GCC; see the file COPYING3.  If not see
   0, 0, 0, 0, 0, 0, 0, 0, \
   0, 0, 0, 0, 0, 0, 0, 0, \
   0, 0, 0, 0,		  \
-  /* shift register and soft frame pointer */	  \
-  0, 1}
+  /* shift register */	  \
+  0}
 
 /* 1 for registers not available across function calls.
    These must include the FIXED_REGISTERS and also any
@@ -97,8 +98,20 @@ along with GCC; see the file COPYING3.  If not see
   0, 0, 0, 0, 0, 0, 0, 0, \
   0, 0, 1, 1, 1, 1, 1, 1, \
   1, 1, 1, 1, 		  \
-  /* shift register and soft frame pointer */    \
-  1, 1}
+  /* shift register */    \
+  1}
+
+#define CONDITIONAL_REGISTER_USAGE \
+{						\
+  int i;					\
+  if (TARGET_DISABLE_FPREGS || TARGET_SOFT_FLOAT)\
+    {						\
+      for (i = FP_REG_FIRST; i <= FP_REG_LAST; i++)\
+	fixed_regs[i] = call_used_regs[i] = 1; 	\
+    }						\
+  if (flag_pic)					\
+    fixed_regs[PIC_OFFSET_TABLE_REGNUM] = 1;	\
+}
 
 /* Allocate the call used registers first.  This should minimize
    the number of registers that need to be saved (as call used
@@ -124,7 +137,7 @@ along with GCC; see the file COPYING3.  If not see
    3,  4,  5,  6,  7,  8,  9, 10, 	\
   11, 12, 13, 14, 15, 16, 17, 18,	\
   /* special registers.  */		\
-   1, 27, 30,  0, 60, 61}
+   1, 27, 30,  0, 60}
 
 
 /* Return number of consecutive hard regs needed starting at reg REGNO
@@ -137,7 +150,7 @@ along with GCC; see the file COPYING3.  If not see
    WORD_SIZE bits.  Note that SCmode values are placed in a single FPR.
    Thus, any patterns defined to operate on these values would have to
    use the 32-bit addressability of the FPR registers.  */
-#define PA_HARD_REGNO_NREGS(REGNO, MODE)				\
+#define HARD_REGNO_NREGS(REGNO, MODE)					\
   ((GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD)
 
 /* These are the valid FP modes.  */
@@ -149,7 +162,7 @@ along with GCC; see the file COPYING3.  If not see
 /* Value is 1 if hard register REGNO can hold a value of machine-mode MODE.
    On the HP-PA, the cpu registers can hold any mode.  We
    force this to be an even register if it cannot hold the full mode.  */
-#define PA_HARD_REGNO_MODE_OK(REGNO, MODE) \
+#define HARD_REGNO_MODE_OK(REGNO, MODE) \
   ((REGNO) == 0								\
    ? (MODE) == CCmode || (MODE) == CCFPmode				\
    : (REGNO) == 60 ? SCALAR_INT_MODE_P (MODE)				\
@@ -223,12 +236,30 @@ enum reg_class { NO_REGS, R1_REGS, GENERAL_REGS, FPUPPER_REGS, FP_REGS,
 #define REG_CLASS_CONTENTS	\
  {{0x00000000, 0x00000000},	/* NO_REGS */			\
   {0x00000002, 0x00000000},	/* R1_REGS */			\
-  {0xfffffffe, 0x20000000},	/* GENERAL_REGS */		\
+  {0xfffffffe, 0x00000000},	/* GENERAL_REGS */		\
   {0x00000000, 0x00000000},	/* FPUPPER_REGS */		\
   {0x00000000, 0x0fffffff},	/* FP_REGS */			\
-  {0xfffffffe, 0x2fffffff},	/* GENERAL_OR_FP_REGS */	\
+  {0xfffffffe, 0x0fffffff},	/* GENERAL_OR_FP_REGS */	\
   {0x00000000, 0x10000000},	/* SHIFT_REGS */		\
-  {0xfffffffe, 0x3fffffff}}	/* ALL_REGS */
+  {0xfffffffe, 0x1fffffff}}	/* ALL_REGS */
+
+/* The following macro defines cover classes for Integrated Register
+   Allocator.  Cover classes is a set of non-intersected register
+   classes covering all hard registers used for register allocation
+   purpose.  Any move between two registers of a cover class should be
+   cheaper than load or store of the registers.  The macro value is
+   array of register classes with LIM_REG_CLASSES used as the end
+   marker.  */
+
+#define IRA_COVER_CLASSES						\
+{									\
+  GENERAL_REGS, FP_REGS, SHIFT_REGS, LIM_REG_CLASSES			\
+}
+
+/* Defines invalid mode changes.  */
+
+#define CANNOT_CHANGE_MODE_CLASS(FROM, TO, CLASS) \
+  pa_cannot_change_mode_class (FROM, TO, CLASS)
 
 /* Return the class number of the smallest class containing
    reg number REGNO.  This could be a conditional expression
@@ -237,7 +268,7 @@ enum reg_class { NO_REGS, R1_REGS, GENERAL_REGS, FPUPPER_REGS, FP_REGS,
 #define REGNO_REG_CLASS(REGNO)						\
   ((REGNO) == 0 ? NO_REGS 						\
    : (REGNO) == 1 ? R1_REGS						\
-   : (REGNO) < 32 || (REGNO) == 61 ? GENERAL_REGS			\
+   : (REGNO) < 32 ? GENERAL_REGS					\
    : (REGNO) < 60 ? FP_REGS						\
    : SHIFT_REGS)
 
@@ -263,7 +294,7 @@ enum reg_class { NO_REGS, R1_REGS, GENERAL_REGS, FPUPPER_REGS, FP_REGS,
  "%fr4",  "%fr5",   "%fr6",  "%fr7",   "%fr8",  "%fr9",   "%fr10", "%fr11",  \
  "%fr12", "%fr13",  "%fr14", "%fr15",  "%fr16", "%fr17",  "%fr18", "%fr19",  \
  "%fr20", "%fr21",  "%fr22", "%fr23",  "%fr24", "%fr25",  "%fr26", "%fr27",  \
- "%fr28", "%fr29",  "%fr30", "%fr31",  "SAR",   "sfp"}
+ "%fr28", "%fr29",  "%fr30", "%fr31", "SAR"}
 
 #define ADDITIONAL_REGISTER_NAMES \
  {{"%cr11",60}}

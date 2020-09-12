@@ -1,5 +1,6 @@
 /* Adapteva epiphany specific support for 32-bit ELF
-   Copyright (C) 2000-2019 Free Software Foundation, Inc.
+   Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2009, 2011, 2012
+   Free Software Foundation, Inc.
    Contributed by Embecosm on behalf of Adapteva, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -32,7 +33,7 @@ struct misc
 {
   Elf_Internal_Shdr *  symtab_hdr;
   Elf_Internal_Rela *  irelbase;
-  bfd_byte *	       contents;
+  bfd_byte *           contents;
   Elf_Internal_Sym *   isymbuf;
 };
 
@@ -48,29 +49,29 @@ static bfd_boolean epiphany_relaxed = FALSE;
 static reloc_howto_type epiphany_elf_howto_table [] =
 {
 #define AHOW(t,rs,s,bs,pr,bp,co,name,sm,dm)	\
-    HOWTO(t,			/* type */ \
-	  rs,			/* rightshift */ \
-	  s,			/* size (0 = byte, 1 = short, 2 = long) */ \
-	  bs,			/* bitsize */ \
-	  pr,			/* pc_relative */ \
-	  bp,			/* bitpos */ \
+    HOWTO(t,                    /* type */ \
+	  rs,                   /* rightshift */ \
+	  s,                    /* size (0 = byte, 1 = short, 2 = long) */ \
+	  bs,                   /* bitsize */ \
+	  pr,                   /* pc_relative */ \
+	  bp,                   /* bitpos */ \
 	  co,			/* complain_on_overflow */	       \
 	  bfd_elf_generic_reloc,/* special_function */ \
-	  name,			/* name */ \
-	  FALSE,		/* partial_inplace */ \
-	  sm,			/* src_mask */ \
-	  dm,			/* dst_mask */ \
-	  pr)			/* pcrel_offset */
+	  name,                 /* name */ \
+	  FALSE,                /* partial_inplace */ \
+	  sm,                   /* src_mask */ \
+	  dm,                   /* dst_mask */ \
+	  pr)                   /* pcrel_offset */
 
   /* This reloc does nothing.  */
-  AHOW (R_EPIPHANY_NONE,    0, 3,0, FALSE, 0, complain_overflow_dont,	  "R_EPIPHANY_NONE",	    0,		0),
+  AHOW (R_EPIPHANY_NONE,    0, 0,32, FALSE, 0, complain_overflow_dont,     "R_EPIPHANY_NONE",        0,          0),
 
   /* 8 bit absolute (not likely) */
-  AHOW (R_EPIPHANY_8,	    0, 0, 8, FALSE, 0, complain_overflow_bitfield, "R_EPIPHANY_8",	0x000000ff, 0x000000ff),
+  AHOW (R_EPIPHANY_8,       0, 0, 8, FALSE, 0, complain_overflow_bitfield, "R_EPIPHANY_8",      0x000000ff, 0x000000ff),
   /* 16 bit absolute */
-  AHOW (R_EPIPHANY_16,	    0, 1,16, FALSE, 0, complain_overflow_bitfield, "R_EPIPHANY_16",	0x0000ffff, 0x00ff1fe0),
+  AHOW (R_EPIPHANY_16,      0, 1,16, FALSE, 0, complain_overflow_bitfield, "R_EPIPHANY_16",     0x0000ffff, 0x00ff1fe0),
   /* A 32 bit absolute relocation.  */
-  AHOW (R_EPIPHANY_32,	    0, 2,32, FALSE, 0, complain_overflow_dont,	   "R_EPIPHANY_32",	0xffffffff, 0xffffffff),
+  AHOW (R_EPIPHANY_32,      0, 2,32, FALSE, 0, complain_overflow_dont,     "R_EPIPHANY_32",     0xffffffff, 0xffffffff),
 
   /*  8 bit relative relocation */
   HOWTO ( R_EPIPHANY_8_PCREL,  0, 0,  8, TRUE, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_EPIPHANY_8_PCREL", FALSE, 0x000000ff, 0x000000ff, FALSE),
@@ -80,22 +81,22 @@ static reloc_howto_type epiphany_elf_howto_table [] =
   HOWTO ( R_EPIPHANY_32_PCREL, 0, 2, 32, TRUE, 0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_EPIPHANY_8_PCREL", FALSE, 0x000000ff, 0x000000ff, FALSE),
 
   /* 8 bit pc-relative relocation */
-  AHOW (R_EPIPHANY_SIMM8,   1, 0, 8,  TRUE, 8, complain_overflow_signed,   "R_EPIPHANY_SIMM8",	 0x000000ff, 0x0000ff00),
+  AHOW (R_EPIPHANY_SIMM8,   1, 0, 8,  TRUE, 8, complain_overflow_signed,   "R_EPIPHANY_SIMM8",   0x000000ff, 0x0000ff00),
   /* 24 bit pc-relative relocation */
-  AHOW (R_EPIPHANY_SIMM24,  1, 2,24,  TRUE, 8, complain_overflow_signed,   "R_EPIPHANY_SIMM24",	 0x00ffffff, 0xffffff00),
+  AHOW (R_EPIPHANY_SIMM24,  1, 2,24,  TRUE, 8, complain_overflow_signed,   "R_EPIPHANY_SIMM24",  0x00ffffff, 0xffffff00),
 
   /* %HIGH(EA) */
-  AHOW (R_EPIPHANY_HIGH,    0, 2,16, FALSE, 0, complain_overflow_dont,	   "R_EPIPHANY_HIGH",	 0x0ff01fe0, 0x0ff01fe0),
+  AHOW (R_EPIPHANY_HIGH,    0, 2,16, FALSE, 0, complain_overflow_dont,     "R_EPIPHANY_HIGH",    0x0ff01fe0, 0x0ff01fe0),
 
   /* %LOW(EA) */
-  AHOW (R_EPIPHANY_LOW,	    0, 2,16, FALSE, 0, complain_overflow_dont,	"R_EPIPHANY_LOW",     0x0ff01fe0, 0x0ff01fe0),
+  AHOW (R_EPIPHANY_LOW,     0, 2,16, FALSE, 0, complain_overflow_dont,	"R_EPIPHANY_LOW",     0x0ff01fe0, 0x0ff01fe0),
 
   /* simm11 */
-  AHOW (R_EPIPHANY_SIMM11,  0, 2,11, FALSE, 0, complain_overflow_bitfield, "R_EPIPHANY_SIMM11",	 0x00ff0380, 0x00ff0380),
+  AHOW (R_EPIPHANY_SIMM11,  0, 2,11, FALSE, 0, complain_overflow_bitfield, "R_EPIPHANY_SIMM11",  0x00ff0380, 0x00ff0380),
   /* imm12 - sign-magnitude */
-  AHOW (R_EPIPHANY_IMM11,   0, 2,11, FALSE, 0, complain_overflow_bitfield, "R_EPIPHANY_IMM12",	 0x00ff0380, 0x00ff0380),
+  AHOW (R_EPIPHANY_IMM11,   0, 2,11, FALSE, 0, complain_overflow_bitfield, "R_EPIPHANY_IMM12",   0x00ff0380, 0x00ff0380),
   /* imm8 */
-  AHOW (R_EPIPHANY_IMM8,    0, 1, 8, FALSE, 8, complain_overflow_signed,   "R_EPIPHANY_IMM8",	 0x0000ff00, 0x0000ff00)
+  AHOW (R_EPIPHANY_IMM8,    0, 1, 8, FALSE, 8, complain_overflow_signed,   "R_EPIPHANY_IMM8",    0x0000ff00, 0x0000ff00)
 
 
 };
@@ -212,7 +213,7 @@ epiphany_elf_relax_section (bfd *abfd, asection *sec,
   /* We don't have to do anything for a relocatable link,
      if this section does not have relocs, or if this is
      not a code section.  */
-  if (bfd_link_relocatable (link_info)
+  if (link_info->relocatable
       || (sec->flags & SEC_RELOC) == 0
       || sec->reloc_count == 0
       || (sec->flags & SEC_CODE) == 0)
@@ -362,24 +363,15 @@ epiphany_elf_relax_section (bfd *abfd, asection *sec,
 
 /* Set the howto pointer for a EPIPHANY ELF reloc.  */
 
-static bfd_boolean
-epiphany_info_to_howto_rela (bfd * abfd,
+static void
+epiphany_info_to_howto_rela (bfd * abfd ATTRIBUTE_UNUSED,
 			     arelent * cache_ptr,
 			     Elf_Internal_Rela * dst)
 {
   unsigned int r_type;
 
   r_type = ELF32_R_TYPE (dst->r_info);
-  if (r_type >= (unsigned int) R_EPIPHANY_max)
-    {
-      /* xgettext:c-format */
-      _bfd_error_handler (_("%pB: unsupported relocation type %#x"),
-			  abfd, r_type);
-      bfd_set_error (bfd_error_bad_value);
-      return FALSE;
-    }
   cache_ptr->howto = & epiphany_elf_howto_table [r_type];
-  return TRUE;
 }
 
 /* Perform a single relocation.
@@ -387,11 +379,11 @@ epiphany_info_to_howto_rela (bfd * abfd,
 
 static bfd_reloc_status_type
 epiphany_final_link_relocate (reloc_howto_type *  howto,
-			      bfd *		  input_bfd,
-			      asection *	  input_section,
-			      bfd_byte *	  contents,
+			      bfd *               input_bfd,
+			      asection *          input_section,
+			      bfd_byte *          contents,
 			      Elf_Internal_Rela * rel,
-			      bfd_vma		  relocation)
+			      bfd_vma             relocation)
 {
   switch (howto->type)
     {
@@ -424,10 +416,9 @@ epiphany_final_link_relocate (reloc_howto_type *  howto,
       relocation += rel->r_addend;
       if ((unsigned int) relocation > 0x7ff)
 	return bfd_reloc_outofrange;
-      /* Fall through.  */
     disp11:
-      relocation = (((relocation & 7) << 5)
-		    | ((relocation & 0x7f8 ) << 13));
+      relocation = ((relocation & 7) << 5)
+	|| ((relocation & 0x7f8 )  << 13);
       return _bfd_relocate_contents (howto, input_bfd, relocation,
 				     contents + rel->r_offset);
 
@@ -493,15 +484,15 @@ epiphany_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 
   for (rel = relocs; rel < relend; rel ++)
     {
-      reloc_howto_type *	   howto;
-      unsigned long		   r_symndx;
-      Elf_Internal_Sym *	   sym;
-      asection *		   sec;
+      reloc_howto_type *           howto;
+      unsigned long                r_symndx;
+      Elf_Internal_Sym *           sym;
+      asection *                   sec;
       struct elf_link_hash_entry * h;
-      bfd_vma			   relocation;
-      bfd_reloc_status_type	   r;
-      const char *		   name = NULL;
-      int			   r_type ATTRIBUTE_UNUSED;
+      bfd_vma                      relocation;
+      bfd_reloc_status_type        r;
+      const char *                 name = NULL;
+      int                          r_type ATTRIBUTE_UNUSED;
 
       r_type = ELF32_R_TYPE (rel->r_info);
       r_symndx = ELF32_R_SYM (rel->r_info);
@@ -524,12 +515,11 @@ epiphany_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 	{
 	  bfd_boolean warned ATTRIBUTE_UNUSED;
 	  bfd_boolean unresolved_reloc ATTRIBUTE_UNUSED;
-	  bfd_boolean ignored ATTRIBUTE_UNUSED;
 
 	  RELOC_FOR_GLOBAL_SYMBOL (info, input_bfd, input_section, rel,
 				   r_symndx, symtab_hdr, sym_hashes,
 				   h, sec, relocation,
-				   unresolved_reloc, warned, ignored);
+				   unresolved_reloc, warned);
 
 	  name = h->root.root.string;
 	}
@@ -538,7 +528,7 @@ epiphany_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 	RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
 					 rel, 1, relend, howto, 0, contents);
 
-      if (bfd_link_relocatable (info))
+      if (info->relocatable)
 	continue;
 
       /* Finally, the sole EPIPHANY-specific part.  */
@@ -552,13 +542,13 @@ epiphany_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 	  switch (r)
 	    {
 	    case bfd_reloc_overflow:
-	      (*info->callbacks->reloc_overflow)
+	      r = info->callbacks->reloc_overflow
 		(info, (h ? &h->root : NULL), name, howto->name,
 		 (bfd_vma) 0, input_bfd, input_section, rel->r_offset);
 	      break;
 
 	    case bfd_reloc_undefined:
-	      (*info->callbacks->undefined_symbol)
+	      r = info->callbacks->undefined_symbol
 		(info, name, input_bfd, input_section, rel->r_offset, TRUE);
 	      break;
 
@@ -583,8 +573,11 @@ epiphany_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 	    }
 
 	  if (msg)
-	    (*info->callbacks->warning) (info, msg, name, input_bfd,
-					 input_section, rel->r_offset);
+	    r = info->callbacks->warning
+	      (info, msg, name, input_bfd, input_section, rel->r_offset);
+
+	  if (! r)
+	    return FALSE;
 	}
     }
 
@@ -592,7 +585,7 @@ epiphany_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 }
 
 /* We only have a little-endian target.  */
-#define TARGET_LITTLE_SYM	 epiphany_elf32_vec
+#define TARGET_LITTLE_SYM	 bfd_elf32_epiphany_vec
 #define TARGET_LITTLE_NAME  "elf32-epiphany"
 
 #define ELF_ARCH	 bfd_arch_epiphany
@@ -603,7 +596,7 @@ epiphany_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 #define elf_info_to_howto_rel			NULL
 #define elf_info_to_howto			epiphany_info_to_howto_rela
 
-#define elf_backend_can_gc_sections		1
+#define elf_backend_can_gc_sections     	1
 #define elf_backend_rela_normal			1
 #define elf_backend_relocate_section		epiphany_elf_relocate_section
 

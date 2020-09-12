@@ -1,5 +1,5 @@
 /* simple-object-common.h -- common structs for object file manipulation.
-   Copyright (C) 2010-2020 Free Software Foundation, Inc.
+   Copyright (C) 2010 Free Software Foundation, Inc.
 
 This file is part of the libiberty library.
 Libiberty is free software; you can redistribute it and/or
@@ -123,10 +123,10 @@ struct simple_object_functions
   /* Release the private data for an simple_object_read.  */
   void (*release_read) (void *);
 
-  /* Merge the private data for the attributes of two files.  If they
-     could be linked together, return NULL.  Otherwise return an error
-     message.  */
-  const char *(*attributes_merge) (void *, void *, int *err);
+  /* Compare the private data for the attributes of two files.  If
+     they are the same, in the sense that they could be linked
+     together, return NULL.  Otherwise return an error message.  */
+  const char *(*attributes_compare) (void *, void *, int *err);
 
   /* Release the private data for an simple_object_attributes.  */
   void (*release_attributes) (void *);
@@ -141,12 +141,6 @@ struct simple_object_functions
 
   /* Release the private data for an simple_object_write.  */
   void (*release_write) (void *);
-
-  /* Copy LTO debug sections.  */
-  const char *(*copy_lto_debug_sections) (simple_object_read *sobj,
-					  simple_object_write *dobj,
-					  char *(*pfn) (const char *),
-					  int *err);
 };
 
 /* The known object file formats.  */
@@ -154,7 +148,6 @@ struct simple_object_functions
 extern const struct simple_object_functions simple_object_coff_functions;
 extern const struct simple_object_functions simple_object_elf_functions;
 extern const struct simple_object_functions simple_object_mach_o_functions;
-extern const struct simple_object_functions simple_object_xcoff_functions;
 
 /* Read SIZE bytes from DESCRIPTOR at file offset OFFSET into BUFFER.
    Return non-zero on success.  On failure return 0 and set *ERRMSG

@@ -1,5 +1,6 @@
 /* Variables and structures for declaration processing.
-   Copyright (C) 1993-2019 Free Software Foundation, Inc.
+   Copyright (C) 1993, 2000, 2002, 2004, 2005, 2007, 2008
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -33,9 +34,8 @@ enum decl_context
 
 /* We need this in here to get the decl_context definition.  */
 extern tree grokdeclarator (const cp_declarator *,
-			    cp_decl_specifier_seq *,
+			    const cp_decl_specifier_seq *,
 			    enum decl_context, int, tree*);
-extern void name_unnamed_type (tree, tree);
 
 /* States indicating how grokdeclarator() should handle declspecs marked
    with __attribute__((deprecated)).  An object declared as

@@ -1,6 +1,6 @@
 /* Infineon XC16X-specific support for 16-bit ELF.
-   Copyright (C) 2006-2020 Free Software Foundation, Inc.
-   Contributed by KPIT Cummins Infosystems
+   Copyright 2006, 2007  Free Software Foundation, Inc.
+   Contributed by KPIT Cummins Infosystems 
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -24,7 +24,7 @@
 #include "libbfd.h"
 #include "elf-bfd.h"
 #include "elf/xc16x.h"
-#include "dwarf2.h"
+#include "elf/dwarf2.h"
 #include "libiberty.h"
 
 static reloc_howto_type xc16x_elf_howto_table [] =
@@ -32,11 +32,11 @@ static reloc_howto_type xc16x_elf_howto_table [] =
   /* This reloc does nothing.  */
   HOWTO (R_XC16X_NONE,		/* type */
 	 0,			/* rightshift */
-	 3,			/* size (0 = byte, 1 = short, 2 = long) */
-	 0,			/* bitsize */
+	 1,			/* size (0 = byte, 1 = short, 2 = long) */
+	 16,			/* bitsize */
 	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
-	 complain_overflow_dont, /* complain_on_overflow */
+	 complain_overflow_bitfield, /* complain_on_overflow */
 	 bfd_elf_generic_reloc,	/* special_function */
 	 "R_XC16X_NONE",	/* name */
 	 FALSE,			/* partial_inplace */
@@ -75,18 +75,18 @@ static reloc_howto_type xc16x_elf_howto_table [] =
 	 FALSE),		/* pcrel_offset */
 
   HOWTO (R_XC16X_ABS_32,	/* type */
-	 0,			/* rightshift */
-	 2,			/* size (0 = byte, 1 = short, 2 = long) */
-	 32,			/* bitsize */
-	 FALSE,			/* pc_relative */
-	 0,			/* bitpos */
-	 complain_overflow_bitfield, /* complain_on_overflow */
-	 bfd_elf_generic_reloc,	/* special_function */
-	 "R_XC16X_ABS_32",	/* name */
-	 TRUE,			/* partial_inplace */
-	 0x00000000,		/* src_mask */
-	 0xffffffff,		/* dst_mask */
-	 FALSE),		/* pcrel_offset */
+  	 0,			/* rightshift */
+  	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+  	 32,			/* bitsize */
+  	 FALSE,			/* pc_relative */
+  	 0,			/* bitpos */
+  	 complain_overflow_bitfield, /* complain_on_overflow */
+  	 bfd_elf_generic_reloc,	/* special_function */
+  	 "R_XC16X_ABS_32",	/* name */
+  	 TRUE,			/* partial_inplace */
+  	 0x00000000,		/* src_mask */
+  	 0xffffffff,		/* dst_mask */
+  	 FALSE),		/* pcrel_offset */
 
 
   /* A PC relative 8 bit relocation.  */
@@ -106,65 +106,65 @@ static reloc_howto_type xc16x_elf_howto_table [] =
 
   /* Relocation regarding page number.  */
     HOWTO (R_XC16X_PAG,	/* type */
-	 0,			/* rightshift */
-	 1,			/* size (0 = byte, 1 = short, 2 = long) */
-	 16,			/* bitsize */
-	 FALSE,			/* pc_relative */
-	 0,			/* bitpos */
-	 complain_overflow_signed, /* complain_on_overflow */
-	 bfd_elf_generic_reloc, /* special_function */
-	 "R_XC16X_PAG",	/* name */
-	 TRUE,			/* partial_inplace */
-	 0x00000000,		/* src_mask */
-	 0x0000ffff,		/* dst_mask */
-	 FALSE),		/* pcrel_offset */
+  	 0,			/* rightshift */
+  	 1,			/* size (0 = byte, 1 = short, 2 = long) */
+  	 16,			/* bitsize */
+  	 FALSE,			/* pc_relative */
+  	 0,			/* bitpos */
+  	 complain_overflow_signed, /* complain_on_overflow */
+  	 bfd_elf_generic_reloc, /* special_function */
+  	 "R_XC16X_PAG",	/* name */
+  	 TRUE,			/* partial_inplace */
+  	 0x00000000,		/* src_mask */
+  	 0x0000ffff,		/* dst_mask */
+  	 FALSE),		/* pcrel_offset */
 
 
   /* Relocation regarding page number.  */
       HOWTO (R_XC16X_POF,	/* type */
-	 0,			/* rightshift */
-	 1,			/* size (0 = byte, 1 = short, 2 = long) */
-	 16,			/* bitsize */
-	 FALSE,			/* pc_relative */
-	 0,			/* bitpos  */
-	 complain_overflow_signed, /* complain_on_overflow  */
-	 bfd_elf_generic_reloc, /* special_function  */
-	 "R_XC16X_POF",	/* name  */
-	 TRUE,			/* partial_inplace  */
-	 0x00000000,		/* src_mask  */
-	 0x0000ffff,		/* dst_mask  */
-	 FALSE),		/* pcrel_offset  */
+    	 0,			/* rightshift */
+    	 1,			/* size (0 = byte, 1 = short, 2 = long) */
+    	 16,			/* bitsize */
+    	 FALSE,			/* pc_relative */
+    	 0,			/* bitpos  */
+    	 complain_overflow_signed, /* complain_on_overflow  */
+    	 bfd_elf_generic_reloc, /* special_function  */
+    	 "R_XC16X_POF",	/* name  */
+    	 TRUE,			/* partial_inplace  */
+    	 0x00000000,		/* src_mask  */
+    	 0x0000ffff,		/* dst_mask  */
+    	 FALSE),		/* pcrel_offset  */
 
 
   /* Relocation regarding segment number.   */
       HOWTO (R_XC16X_SEG,	/* type  */
-	 0,			/* rightshift  */
-	 1,			/* size (0 = byte, 1 = short, 2 = long)  */
-	 16,			/* bitsize  */
-	 FALSE,			/* pc_relative  */
-	 0,			/* bitpos  */
-	 complain_overflow_signed, /* complain_on_overflow  */
-	 bfd_elf_generic_reloc, /* special_function  */
-	 "R_XC16X_SEG",	/* name  */
-	 TRUE,			/* partial_inplace  */
-	 0x00000000,		/* src_mask  */
-	 0x0000ffff,		/* dst_mask  */
-	 FALSE),		/* pcrel_offset  */
+    	 0,			/* rightshift  */
+    	 1,			/* size (0 = byte, 1 = short, 2 = long)  */
+    	 16,			/* bitsize  */
+    	 FALSE,			/* pc_relative  */
+    	 0,			/* bitpos  */
+    	 complain_overflow_signed, /* complain_on_overflow  */
+    	 bfd_elf_generic_reloc, /* special_function  */
+    	 "R_XC16X_SEG",	/* name  */
+    	 TRUE,			/* partial_inplace  */
+    	 0x00000000,		/* src_mask  */
+    	 0x0000ffff,		/* dst_mask  */
+    	 FALSE),		/* pcrel_offset  */
 
   /* Relocation regarding segment offset.  */
       HOWTO (R_XC16X_SOF,	/* type  */
-	 0,			/* rightshift  */
-	 1,			/* size (0 = byte, 1 = short, 2 = long)  */
-	 16,			/* bitsize  */
-	 FALSE,			/* pc_relative  */
-	 0,			/* bitpos  */
-	 complain_overflow_signed, /* complain_on_overflow  */
-	 bfd_elf_generic_reloc, /* special_function  */
-	 "R_XC16X_SOF",	/* name */
-	 TRUE,			/* partial_inplace  */
-	 0x00000000,		/* src_mask  */
-	 0x0000ffff,		/* dst_mask  */
-	 FALSE)			/* pcrel_offset  */
+    	 0,			/* rightshift  */
+    	 1,			/* size (0 = byte, 1 = short, 2 = long)  */
+    	 16,			/* bitsize  */
+    	 FALSE,			/* pc_relative  */
+    	 0,			/* bitpos  */
+    	 complain_overflow_signed, /* complain_on_overflow  */
+    	 bfd_elf_generic_reloc, /* special_function  */
+    	 "R_XC16X_SOF",	/* name */
+    	 TRUE,			/* partial_inplace  */
+    	 0x00000000,		/* src_mask  */
+    	 0x0000ffff,		/* dst_mask  */
+    	 FALSE)			/* pcrel_offset  */
 };
 
 
@@ -178,11 +178,11 @@ struct xc16x_reloc_map
 
 static const struct xc16x_reloc_map xc16x_reloc_map [] =
 {
-  { BFD_RELOC_NONE,	      R_XC16X_NONE },
-  { BFD_RELOC_8,	      R_XC16X_ABS_8 },
-  { BFD_RELOC_16,	      R_XC16X_ABS_16 },
-  { BFD_RELOC_32,	      R_XC16X_ABS_32 },
-  { BFD_RELOC_8_PCREL,	      R_XC16X_8_PCREL },
+  { BFD_RELOC_NONE,           R_XC16X_NONE },
+  { BFD_RELOC_8,              R_XC16X_ABS_8 },
+  { BFD_RELOC_16,             R_XC16X_ABS_16 },
+  { BFD_RELOC_32,             R_XC16X_ABS_32 },
+  { BFD_RELOC_8_PCREL,        R_XC16X_8_PCREL },
   { BFD_RELOC_XC16X_PAG,      R_XC16X_PAG},
   { BFD_RELOC_XC16X_POF,      R_XC16X_POF},
   { BFD_RELOC_XC16X_SEG,      R_XC16X_SEG},
@@ -212,7 +212,9 @@ xc16x_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
 {
   unsigned int i;
 
-  for (i = 0; i < ARRAY_SIZE (xc16x_elf_howto_table); i++)
+  for (i = 0;
+       i < sizeof (xc16x_elf_howto_table) / sizeof (xc16x_elf_howto_table[0]);
+       i++)
     if (xc16x_elf_howto_table[i].name != NULL
 	&& strcasecmp (xc16x_elf_howto_table[i].name, r_name) == 0)
       return &xc16x_elf_howto_table[i];
@@ -220,20 +222,11 @@ xc16x_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
   return NULL;
 }
 
-static reloc_howto_type *
-elf32_xc16x_rtype_to_howto (bfd *abfd ATTRIBUTE_UNUSED, unsigned r_type)
-{
-  if (r_type < ARRAY_SIZE (xc16x_elf_howto_table))
-    return & xc16x_elf_howto_table[r_type];
-
-  return NULL;
-}
-
 /* For a particular operand this function is
    called to finalise the type of relocation.  */
 
-static bfd_boolean
-elf32_xc16x_info_to_howto (bfd *abfd, arelent *bfd_reloc,
+static void
+elf32_xc16x_info_to_howto (bfd *abfd ATTRIBUTE_UNUSED, arelent *bfd_reloc,
 			   Elf_Internal_Rela *elf_reloc)
 {
   unsigned int r;
@@ -244,12 +237,9 @@ elf32_xc16x_info_to_howto (bfd *abfd, arelent *bfd_reloc,
     if (xc16x_elf_howto_table[i].type == r)
       {
 	bfd_reloc->howto = &xc16x_elf_howto_table[i];
-	return TRUE;
+	return;
       }
-  /* xgettext:c-format */
-  _bfd_error_handler (_("%pB: unsupported relocation type %#x"), abfd, r);
-  bfd_set_error (bfd_error_bad_value);
-  return FALSE;
+  abort ();
 }
 
 static bfd_reloc_status_type
@@ -368,6 +358,7 @@ elf32_xc16x_relocate_section (bfd *output_bfd,
       asection *sec;
       struct elf_link_hash_entry *h;
       bfd_vma relocation;
+      bfd_reloc_status_type r;
 
       /* This is a final link.  */
       r_symndx = ELF32_R_SYM (rel->r_info);
@@ -383,41 +374,44 @@ elf32_xc16x_relocate_section (bfd *output_bfd,
 	}
       else
 	{
-	  bfd_boolean unresolved_reloc, warned, ignored;
+	  bfd_boolean unresolved_reloc, warned;
 
 	  RELOC_FOR_GLOBAL_SYMBOL (info, input_bfd, input_section, rel,
 				   r_symndx, symtab_hdr, sym_hashes,
 				   h, sec, relocation,
-				   unresolved_reloc, warned, ignored);
+				   unresolved_reloc, warned);
 	}
 
-      if (sec != NULL && discarded_section (sec))
+      if (sec != NULL && elf_discarded_section (sec))
 	{
 	  /* For relocs against symbols from removed linkonce sections,
 	     or sections discarded by a linker script, we just want the
-	     section contents cleared.  Avoid any special processing.  */
+	     section contents zeroed.  Avoid any special processing.  */
 	  reloc_howto_type *howto;
-	  howto = elf32_xc16x_rtype_to_howto (input_bfd, r_type);
-	  RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
-					   rel, 1, relend, howto, 0, contents);
+	  howto = xc16x_reloc_type_lookup (input_bfd, r_type);
+	  _bfd_clear_contents (howto, input_bfd, contents + rel->r_offset);
+	  rel->r_info = 0;
+	  rel->r_addend = 0;
+	  continue;
 	}
 
-      if (bfd_link_relocatable (info))
+      if (info->relocatable)
 	continue;
 
-      elf32_xc16x_final_link_relocate (r_type, input_bfd, output_bfd,
-				       input_section,
-				       contents, rel->r_offset,
-				       relocation, rel->r_addend,
-				       info, sec, h == NULL);
+      r = elf32_xc16x_final_link_relocate (r_type, input_bfd, output_bfd,
+					   input_section,
+					   contents, rel->r_offset,
+					   relocation, rel->r_addend,
+					   info, sec, h == NULL);
     }
 
   return TRUE;
 }
 
 
-static bfd_boolean
-elf32_xc16x_final_write_processing (bfd *abfd)
+static void
+elf32_xc16x_final_write_processing (bfd *abfd,
+				    bfd_boolean linker ATTRIBUTE_UNUSED)
 {
   unsigned long val;
 
@@ -438,16 +432,15 @@ elf32_xc16x_final_write_processing (bfd *abfd)
     }
 
   elf_elfheader (abfd)->e_flags |= val;
-  return _bfd_elf_final_write_processing (abfd);
 }
 
 static unsigned long
 elf32_xc16x_mach (flagword flags)
-{
+{  
   switch (flags)
     {
     case 0x1000:
-    default:
+    default: 
       return bfd_mach_xc16x;
 
     case 0x1001:
@@ -472,16 +465,16 @@ elf32_xc16x_object_p (bfd *abfd)
 #define ELF_MACHINE_CODE	EM_XC16X
 #define ELF_MAXPAGESIZE		0x100
 
-#define TARGET_LITTLE_SYM       xc16x_elf32_vec
+#define TARGET_LITTLE_SYM       bfd_elf32_xc16x_vec
 #define TARGET_LITTLE_NAME	"elf32-xc16x"
 #define elf_backend_final_write_processing	elf32_xc16x_final_write_processing
-#define elf_backend_object_p		elf32_xc16x_object_p
+#define elf_backend_object_p   		elf32_xc16x_object_p
 #define elf_backend_can_gc_sections	1
 #define bfd_elf32_bfd_reloc_type_lookup	xc16x_reloc_type_lookup
 #define bfd_elf32_bfd_reloc_name_lookup xc16x_reloc_name_lookup
 #define elf_info_to_howto		elf32_xc16x_info_to_howto
 #define elf_info_to_howto_rel		elf32_xc16x_info_to_howto
-#define elf_backend_relocate_section	elf32_xc16x_relocate_section
+#define elf_backend_relocate_section  	elf32_xc16x_relocate_section
 #define elf_backend_rela_normal		1
 
 #include "elf32-target.h"

@@ -1,6 +1,6 @@
 // Specific definitions for GNU/Linux with uClibc  -*- C++ -*-
 
-// Copyright (C) 2000-2019 Free Software Foundation, Inc.
+// Copyright (C) 2000, 2001, 2002, 2003, 2006, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,9 +22,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file bits/os_defines.h
+/** @file os_defines.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{iosfwd}
+ *  You should not attempt to use it directly.
  */
 
 #ifndef _GLIBCXX_OS_DEFINES
@@ -37,5 +37,8 @@
 #define __NO_CTYPE 1
 
 #include <features.h>
+
+// We must not see the optimized string functions GNU libc defines.
+#define __NO_STRING_INLINES
 
 #endif

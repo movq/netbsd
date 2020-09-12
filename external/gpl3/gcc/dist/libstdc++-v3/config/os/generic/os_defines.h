@@ -1,6 +1,6 @@
 // Specific definitions for generic platforms  -*- C++ -*-
 
-// Copyright (C) 2000-2019 Free Software Foundation, Inc.
+// Copyright (C) 2000, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,9 +22,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file bits/os_defines.h
+/** @file os_defines.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{iosfwd}
+ *  You should not attempt to use it directly.
  */
 
 #ifndef _GLIBCXX_OS_DEFINES
@@ -32,10 +32,5 @@
 
 // System-specific #define, typedefs, corrections, etc, go here.  This
 // file will come before all others.
-
-// Disable the weak reference logic in gthr.h for os/generic because it
-// is broken on every platform unless there is implementation specific
-// workaround in gthr-posix.h and at link-time for static linking.
-#define _GLIBCXX_GTHREAD_USE_WEAK 0
 
 #endif

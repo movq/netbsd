@@ -1,4 +1,4 @@
-/* Copyright (C) 1992-2019 Free Software Foundation, Inc.
+/* Copyright (C) 1992-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -31,7 +31,7 @@ static const struct address_space_data *target_dcache_aspace_key;
 static void
 target_dcache_cleanup (struct address_space *aspace, void *arg)
 {
-  dcache_free ((DCACHE *) arg);
+  dcache_free (arg);
 }
 
 /* Target dcache is initialized or not.  */
@@ -39,9 +39,8 @@ target_dcache_cleanup (struct address_space *aspace, void *arg)
 int
 target_dcache_init_p (void)
 {
-  DCACHE *dcache
-    = (DCACHE *) address_space_data (current_program_space->aspace,
-				     target_dcache_aspace_key);
+  DCACHE *dcache = address_space_data (current_program_space->aspace,
+				       target_dcache_aspace_key);
 
   return (dcache != NULL);
 }
@@ -51,9 +50,8 @@ target_dcache_init_p (void)
 void
 target_dcache_invalidate (void)
 {
-  DCACHE *dcache
-    = (DCACHE *) address_space_data (current_program_space->aspace,
-				     target_dcache_aspace_key);
+  DCACHE *dcache = address_space_data (current_program_space->aspace,
+				       target_dcache_aspace_key);
 
   if (dcache != NULL)
     dcache_invalidate (dcache);
@@ -65,9 +63,8 @@ target_dcache_invalidate (void)
 DCACHE *
 target_dcache_get (void)
 {
-  DCACHE *dcache
-    = (DCACHE *) address_space_data (current_program_space->aspace,
-				     target_dcache_aspace_key);
+  DCACHE *dcache = address_space_data (current_program_space->aspace,
+				       target_dcache_aspace_key);
 
   return dcache;
 }
@@ -78,9 +75,8 @@ target_dcache_get (void)
 DCACHE *
 target_dcache_get_or_init (void)
 {
-  DCACHE *dcache
-    = (DCACHE *) address_space_data (current_program_space->aspace,
-				     target_dcache_aspace_key);
+  DCACHE *dcache = address_space_data (current_program_space->aspace,
+				       target_dcache_aspace_key);
 
   if (dcache == NULL)
     {
@@ -105,7 +101,7 @@ static int stack_cache_enabled = 1;
    except cleanliness.  */
 
 static void
-set_stack_cache (const char *args, int from_tty, struct cmd_list_element *c)
+set_stack_cache (char *args, int from_tty, struct cmd_list_element *c)
 {
   if (stack_cache_enabled != stack_cache_enabled_1)
     target_dcache_invalidate ();
@@ -143,7 +139,7 @@ static int code_cache_enabled = 1;
    except cleanliness.  */
 
 static void
-set_code_cache (const char *args, int from_tty, struct cmd_list_element *c)
+set_code_cache (char *args, int from_tty, struct cmd_list_element *c)
 {
   if (code_cache_enabled != code_cache_enabled_1)
     target_dcache_invalidate ();
@@ -167,6 +163,9 @@ code_cache_enabled_p (void)
 {
   return code_cache_enabled;
 }
+
+/* -Wmissing-prototypes */
+extern initialize_file_ftype _initialize_target_dcache;
 
 void
 _initialize_target_dcache (void)

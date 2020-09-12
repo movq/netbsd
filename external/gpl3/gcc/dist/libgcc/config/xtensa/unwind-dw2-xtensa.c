@@ -1,5 +1,5 @@
 /* DWARF2 exception handling and frame unwinding for Xtensa.
-   Copyright (C) 1997-2019 Free Software Foundation, Inc.
+   Copyright (C) 1997-2013 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -130,7 +130,7 @@ _Unwind_GetGR (struct _Unwind_Context *context, int index)
 _Unwind_Word
 _Unwind_GetCFA (struct _Unwind_Context *context)
 {
-  return (_Unwind_Ptr) context->sp;
+  return (_Unwind_Ptr) context->cfa;
 }
 
 /* Overwrite the saved value for register INDEX in CONTEXT with VAL.  */
@@ -172,7 +172,7 @@ _Unwind_SetIP (struct _Unwind_Context *context, _Unwind_Ptr val)
   context->ra = (void *) val;
 }
 
-_Unwind_Ptr
+void *
 _Unwind_GetLanguageSpecificData (struct _Unwind_Context *context)
 {
   return context->lsda;
@@ -483,7 +483,7 @@ uw_init_context_1 (struct _Unwind_Context *context, void *outer_cfa,
    macro because __builtin_eh_return must be invoked in the context of
    our caller.  */
 
-#define uw_install_context(CURRENT, TARGET, FRAMES)				 \
+#define uw_install_context(CURRENT, TARGET)				 \
   do									 \
     {									 \
       long offset = uw_install_context_1 ((CURRENT), (TARGET));		 \

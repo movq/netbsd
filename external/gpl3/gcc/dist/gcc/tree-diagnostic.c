@@ -1,7 +1,7 @@
 /* Language-independent diagnostic subroutines for the GNU Compiler
    Collection that are only for use in the compilers proper and not
    the driver or other programs.
-   Copyright (C) 1999-2019 Free Software Foundation, Inc.
+   Copyright (C) 1999-2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -25,9 +25,11 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree.h"
 #include "diagnostic.h"
 #include "tree-pretty-print.h"
-#include "gimple-pretty-print.h"
 #include "tree-diagnostic.h"
+#include "dumpfile.h" /* TDF_DIAGNOSTIC */
 #include "langhooks.h"
+#include "langhooks-def.h"
+#include "vec.h"
 #include "intl.h"
 
 /* Prints out, if necessary, the name of the current function
@@ -36,9 +38,8 @@ void
 diagnostic_report_current_function (diagnostic_context *context,
 				    diagnostic_info *diagnostic)
 {
-  diagnostic_report_current_module (context, diagnostic_location (diagnostic));
-  lang_hooks.print_error_function (context, LOCATION_FILE (input_location),
-				   diagnostic);
+  diagnostic_report_current_module (context, diagnostic->location);
+  lang_hooks.print_error_function (context, input_filename, diagnostic);
 }
 
 static void
@@ -53,11 +54,11 @@ default_tree_diagnostic_starter (diagnostic_context *context,
 /* This is a pair made of a location and the line map it originated
    from.  It's used in the maybe_unwind_expanded_macro_loc function
    below.  */
-struct loc_map_pair
+typedef struct
 {
-  const line_map_macro *map;
-  location_t where;
-};
+  const struct line_map *map;
+  source_location where;
+} loc_map_pair;
 
 
 /* Unwind the different macro expansions that lead to the token which
@@ -99,10 +100,10 @@ struct loc_map_pair
 static void
 maybe_unwind_expanded_macro_loc (diagnostic_context *context,
                                  const diagnostic_info *diagnostic,
-                                 location_t where)
+                                 source_location where)
 {
   const struct line_map *map;
-  auto_vec<loc_map_pair> loc_vec;
+  vec<loc_map_pair> loc_vec = vNULL;
   unsigned ix;
   loc_map_pair loc, *iter;
 
@@ -121,7 +122,7 @@ maybe_unwind_expanded_macro_loc (diagnostic_context *context,
   do
     {
       loc.where = where;
-      loc.map = linemap_check_macro (map);
+      loc.map = map;
 
       loc_vec.safe_push (loc);
 
@@ -136,15 +137,14 @@ maybe_unwind_expanded_macro_loc (diagnostic_context *context,
 
   /* Now map is set to the map of the location in the source that
      first triggered the macro expansion.  This must be an ordinary map.  */
-  const line_map_ordinary *ord_map = linemap_check_ordinary (map);
 
   /* Walk LOC_VEC and print the macro expansion trace, unless the
      first macro which expansion triggered this trace was expanded
      inside a system header.  */
   int saved_location_line =
-    expand_location_to_spelling_point (diagnostic_location (diagnostic)).line;
+    expand_location_to_spelling_point (diagnostic->location).line;
 
-  if (!LINEMAP_SYSP (ord_map))
+  if (!LINEMAP_SYSP (map))
     FOR_EACH_VEC_ELT (loc_vec, ix, iter)
       {
 	/* Sometimes, in the unwound macro expansion trace, we want to
@@ -178,14 +178,14 @@ maybe_unwind_expanded_macro_loc (diagnostic_context *context,
 
         /* Resolve the location iter->where into the locus 1/ of the
            comment above.  */
-        location_t resolved_def_loc =
+        source_location resolved_def_loc =
           linemap_resolve_location (line_table, iter->where,
                                     LRK_MACRO_DEFINITION_LOCATION, NULL);
 
 	/* Don't print trace for locations that are reserved or from
 	   within a system header.  */
-        const line_map_ordinary *m = NULL;
-        location_t l = 
+        const struct line_map *m = NULL;
+        source_location l = 
           linemap_resolve_location (line_table, resolved_def_loc,
                                     LRK_SPELLING_LOCATION,  &m);
         if (l < RESERVED_LOCATION_COUNT || LINEMAP_SYSP (m))
@@ -210,7 +210,7 @@ maybe_unwind_expanded_macro_loc (diagnostic_context *context,
         /* Resolve the location of the expansion point of the macro
            which expansion gave the token represented by def_loc.
            This is the locus 2/ of the earlier comment.  */
-        location_t resolved_exp_loc =
+        source_location resolved_exp_loc =
           linemap_resolve_location (line_table,
                                     MACRO_MAP_EXPANSION_POINT_LOCATION (iter->map),
                                     LRK_MACRO_DEFINITION_LOCATION, NULL);
@@ -219,6 +219,8 @@ maybe_unwind_expanded_macro_loc (diagnostic_context *context,
                                 "in expansion of macro %qs",
                                 linemap_map_get_macro_name (iter->map));
       }
+
+  loc_vec.release ();
 }
 
 /*  This is a diagnostic finalizer implementation that is aware of
@@ -239,14 +241,13 @@ virt_loc_aware_diagnostic_finalizer (diagnostic_context *context,
 				     diagnostic_info *diagnostic)
 {
   maybe_unwind_expanded_macro_loc (context, diagnostic,
-				   diagnostic_location (diagnostic));
+				   diagnostic->location);
 }
 
 /* Default tree printer.   Handles declarations only.  */
-bool
+static bool
 default_tree_printer (pretty_printer *pp, text_info *text, const char *spec,
-		      int precision, bool wide, bool set_locus, bool hash,
-		      bool *, const char **)
+		      int precision, bool wide, bool set_locus, bool hash)
 {
   tree t;
 
@@ -267,7 +268,7 @@ default_tree_printer (pretty_printer *pp, text_info *text, const char *spec,
 
     case 'D':
       t = va_arg (*text->args_ptr, tree);
-      if (VAR_P (t) && DECL_HAS_DEBUG_EXPR_P (t))
+      if (DECL_DEBUG_EXPR_IS_FROM (t) && DECL_DEBUG_EXPR (t))
 	t = DECL_DEBUG_EXPR (t);
       break;
 
@@ -276,21 +277,16 @@ default_tree_printer (pretty_printer *pp, text_info *text, const char *spec,
       t = va_arg (*text->args_ptr, tree);
       break;
 
-    case 'G':
-      percent_G_format (text);
-      return true;
-
     case 'K':
-      t = va_arg (*text->args_ptr, tree);
-      percent_K_format (text, EXPR_LOCATION (t), TREE_BLOCK (t));
+      percent_K_format (text);
       return true;
 
     default:
       return false;
     }
 
-  if (set_locus)
-    text->set_location (0, DECL_SOURCE_LOCATION (t), SHOW_RANGE_WITH_CARET);
+  if (set_locus && text->locus)
+    *text->locus = DECL_SOURCE_LOCATION (t);
 
   if (DECL_P (t))
     {
@@ -300,7 +296,7 @@ default_tree_printer (pretty_printer *pp, text_info *text, const char *spec,
       pp_string (pp, n);
     }
   else
-    dump_generic_node (pp, t, 0, TDF_SLIM, 0);
+    dump_generic_node (pp, t, 0, TDF_DIAGNOSTIC, 0);
 
   return true;
 }

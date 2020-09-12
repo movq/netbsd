@@ -1,4 +1,4 @@
-# Copyright 2010-2019 Free Software Foundation, Inc.
+# Copyright 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -22,12 +22,15 @@ if {![dwarf2_support]} {
     return 0  
 }
 
-standard_testfile .S
+set testfile "dw2-double-set-die-type"
+set srcfile "$testfile.S"
+set executable "$testfile.x"
 
-if  { [gdb_compile [file join $srcdir $subdir $srcfile] $binfile \
+if  { [gdb_compile [file join $srcdir $subdir $srcfile] \
+	   [file join $objdir $subdir $executable] \
 	   object {nodebug}] != "" } {
     return -1
 }
 
-clean_restart $testfile
+clean_restart $executable
 gdb_test "ptype a" "type = class .*"

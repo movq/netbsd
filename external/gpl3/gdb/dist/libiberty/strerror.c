@@ -469,13 +469,8 @@ static const char **sys_errlist;
 
 #else
 
-
-#ifndef sys_nerr
 extern int sys_nerr;
-#endif
-#ifndef sys_errlist
 extern char *sys_errlist[];
-#endif
 
 #endif
 

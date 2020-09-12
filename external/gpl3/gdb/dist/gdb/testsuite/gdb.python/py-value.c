@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2008-2019 Free Software Foundation, Inc.
+   Copyright 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -16,8 +16,6 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 struct s
 {
@@ -41,13 +39,6 @@ typedef struct s *PTR;
 
 enum e evalue = TWO;
 
-struct str
-{
-  int length;
-  /* Variable length.  */
-  char text[1];
-};
-
 #ifdef __cplusplus
 
 struct Base {
@@ -58,8 +49,6 @@ struct Derived : public Base {
 };
 
 Base *base = new Derived ();
-Derived derived;
-Base &base_ref = derived;
 
 void ptr_ref(int*& rptr_int)
 {
@@ -77,12 +66,10 @@ int func2 (int arg1, int arg2)
   return arg1 + arg2;
 }
 
-char **save_argv;
-
 int
 main (int argc, char *argv[])
 {
-  char *cp;
+  char *cp = argv[0]; /* Prevent gcc from optimizing argv[] out.  */
   struct s s;
   union u u;
   PTR x = &s;
@@ -90,21 +77,13 @@ main (int argc, char *argv[])
   char nullst[17] = "divide\0et\0impera";
   void (*fp1) (void)  = &func1;
   int  (*fp2) (int, int) = &func2;
+  const char *sptr = "pointer";
   const char *embed = "embedded x\201\202\203\204";
   int a[3] = {1,2,3};
   int *p = a;
   int i = 2;
   int *ptr_i = &i;
-  struct str *xstr;
-
-  /* Prevent gcc from optimizing argv[] out.  */
-
-  /* We also check for a NULL argv in case we are dealing with a target
-     executing in a freestanding environment, therefore there are no
-     guarantees about argc or argv.  */
-  if (argv != NULL)
-    cp = argv[0];
-
+  const char *sn = 0;
   s.a = 3;
   s.b = 5;
   u.a = 7;
@@ -115,12 +94,5 @@ main (int argc, char *argv[])
   ptr_ref(ptr_i);
 #endif
 
-#define STR_LENGTH 100
-  xstr = (struct str *) malloc (sizeof (*xstr) + STR_LENGTH);
-  xstr->length = STR_LENGTH;
-  memset (xstr->text, 'x', STR_LENGTH);
-#undef STR_LENGTH
-
-  save_argv = argv;      /* break to inspect struct and union */
-  return 0;
+  return 0;      /* break to inspect struct and union */
 }

@@ -1,5 +1,5 @@
 /* tc-metag.c -- Assembler for the Imagination Technologies Meta.
-   Copyright (C) 2013-2020 Free Software Foundation, Inc.
+   Copyright (C) 2013-2015 Free Software Foundation, Inc.
    Contributed by Imagination Technologies Ltd.
 
    This file is part of GAS, the GNU Assembler.
@@ -24,6 +24,7 @@
 #include "symcat.h"
 #include "safe-ctype.h"
 #include "hashtab.h"
+#include "libbfd.h"
 
 #include <stdio.h>
 
@@ -635,7 +636,7 @@ parse_addr_op (const char *line, metag_addr *addr)
   return NULL;
 }
 
-/* Parse the immediate portion of an addressing mode.  */
+/* Parse the immediate portion of an addrssing mode.  */
 static const char *
 parse_imm_addr (const char *line, metag_addr *addr)
 {
@@ -2040,7 +2041,6 @@ parse_swap (const char *line, metag_insn *insn,
 	  as_bad (_("PC, CT, TR and TT are treated as if they are a single unit but operands must be in different units"));
 	  return NULL;
 	}
-      break;
 
     default:
       /* Registers must be in different units.  */
@@ -2683,7 +2683,6 @@ parse_alu (const char *line, metag_insn *insn,
 	      insn->bits |= (1 << 7);
 	      break;
 	    }
-	  /* Fall through.  */
 	default:
 	  as_bad (_("invalid quickrot register specified"));
 	  return NULL;
@@ -4099,7 +4098,7 @@ __parse_dsp_reg (const char *line, const metag_reg **reg, htab_t dsp_regtab)
   /* We don't entirely strip the register name because we might
      actually want to match whole string in the register table,
      e.g. "D0AW.1++" not just "D0AW.1". The string length of the table
-     entry limits our comparison to a reasonable bound anyway.  */
+     entry limits our comaprison to a reasonable bound anyway.  */
   while (is_register_char (*l) || *l == PLUS)
     {
       name[len] = *l;
@@ -4717,7 +4716,7 @@ parse_dtemplate (const char *line, metag_insn *insn,
   return l;
 }
 
-/* Parse a DSP Template definition memory reference, e.g
+/* Parse a DSP Template definiton memory reference, e.g
    [A0.7+A0.5++]. DSPRAM is set to true by this function if this
    template definition is a DSP RAM template definition.  */
 static const char *
@@ -4739,7 +4738,7 @@ template_mem_ref(const char *line, metag_addr *addr,
   return l;
 }
 
-/* Sets LOAD to TRUE if this is a Template load definition (otherwise
+/* Sets LOAD to TRUE if this is a Template load definiton (otherwise
    it's a store). Fills out ADDR, TEMPLATE_REG and ADDR_UNIT.  */
 static const char *
 parse_template_regs (const char *line, bfd_boolean *load,
@@ -5340,7 +5339,7 @@ parse_dalu (const char *line, metag_insn *insn,
 	      /* Only MOV instructions have a DSP register as a
 		 destination. Set the MOV DSPe.r opcode. The simple
 		 OR'ing is OK because the usual MOV opcode is 0x00.  */
-	      insn->bits = 0x91u << 24;
+	      insn->bits = (0x91 << 24);
 	      du_shift = 0;
 	      l1_shift = 2;
 	      regs_shift[0] = 19;
@@ -5455,7 +5454,7 @@ parse_dalu (const char *line, metag_insn *insn,
 			  du_shift = 0;
 			  l1_shift = 2;
 			  regs_shift[1] = 14;
-			  insn->bits = 0x92u << 24; /* Set opcode.  */
+			  insn->bits = (0x92 << 24); /* Set opcode.  */
 			}
 		    }
 		}
@@ -5506,7 +5505,7 @@ parse_dalu (const char *line, metag_insn *insn,
 	  insn->bits |= (1 << 2);
 	}
 
-      /* Check for template definitions.  */
+      /* Check for template definitons.  */
       if (IS_TEMPLATE_DEF (insn))
 	{
 	  l = interpret_template_regs(l, insn, regs, regs_shift, &load,
@@ -5626,7 +5625,7 @@ parse_dalu (const char *line, metag_insn *insn,
   if ((template->meta_opcode >> 26) & 0x1)
     ls_shift = INVALID_SHIFT;
 
-  /* The Condition Is Always (CA) bit must be set if we're targeting a
+  /* The Condition Is Always (CA) bit must be set if we're targetting a
      Ux.r register as the destination. This means that we can't have
      any other condition bits set.  */
   if (!is_same_data_unit (regs[1]->unit, regs[0]->unit))
@@ -5792,7 +5791,7 @@ static const insn_parser insn_parsers[ENC_MAX] =
 
 struct metag_core_option
 {
-  const char *name;
+  char *name;
   unsigned int value;
 };
 
@@ -5822,7 +5821,7 @@ static const struct metag_core_option metag_dsps[] =
 
 /* Parse a CPU command line option.  */
 static int
-metag_parse_cpu (const char * str)
+metag_parse_cpu (char * str)
 {
   const struct metag_core_option * opt;
   int optlen;
@@ -5848,7 +5847,7 @@ metag_parse_cpu (const char * str)
 
 /* Parse an FPU command line option.  */
 static int
-metag_parse_fpu (const char * str)
+metag_parse_fpu (char * str)
 {
   const struct metag_core_option * opt;
   int optlen;
@@ -5874,7 +5873,7 @@ metag_parse_fpu (const char * str)
 
 /* Parse a DSP command line option.  */
 static int
-metag_parse_dsp (const char * str)
+metag_parse_dsp (char * str)
 {
   const struct metag_core_option * opt;
   int optlen;
@@ -5900,10 +5899,10 @@ metag_parse_dsp (const char * str)
 
 struct metag_long_option
 {
-  const char * option;                /* Substring to match.  */
-  const char * help;                  /* Help information.  */
-  int (* func) (const char * subopt); /* Function to decode sub-option.  */
-  const char * deprecated;            /* If non-null, print this message.  */
+  char * option;                /* Substring to match.  */
+  char * help;                  /* Help information.  */
+  int (* func) (char * subopt); /* Function to decode sub-option.  */
+  char * deprecated;            /* If non-null, print this message.  */
 };
 
 struct metag_long_option metag_long_opts[] =
@@ -5918,7 +5917,7 @@ struct metag_long_option metag_long_opts[] =
   };
 
 int
-md_parse_option (int c, const char * arg)
+md_parse_option (int c, char * arg)
 {
   struct metag_long_option *lopt;
 
@@ -6332,7 +6331,7 @@ create_mnemonic_htab (void)
       insn_templates **slot = NULL;
       insn_templates *new_entry;
 
-      new_entry = XNEW (insn_templates);
+      new_entry = xmalloc (sizeof (insn_templates));
 
       new_entry->template = template;
       new_entry->next = NULL;
@@ -6417,7 +6416,7 @@ create_dspreg_htabs (void)
 
       /* Make sure there are no hash table collisions, which would
 	 require chaining entries.  */
-      gas_assert (*slot == NULL);
+      BFD_ASSERT (*slot == NULL);
       *slot = reg;
     }
 
@@ -6440,7 +6439,7 @@ create_dspreg_htabs (void)
 
 	  /* Make sure there are no hash table collisions, which would
 	     require chaining entries.  */
-	  gas_assert (*slot == NULL);
+	  BFD_ASSERT (*slot == NULL);
 	  *slot = reg;
 	}
     }
@@ -6487,7 +6486,7 @@ create_scond_htab (void)
 							scond, INSERT);
       /* Make sure there are no hash table collisions, which would
 	 require chaining entries.  */
-      gas_assert (*slot == NULL);
+      BFD_ASSERT (*slot == NULL);
       *slot = scond;
     }
 }
@@ -6705,7 +6704,10 @@ md_number_to_chars (char * buf, valueT val, int n)
    emitted is stored in *sizeP .  An error message is returned, or NULL on OK.
 */
 
-const char *
+/* Equal to MAX_PRECISION in atof-ieee.c */
+#define MAX_LITTLENUMS 6
+
+char *
 md_atof (int type, char * litP, int * sizeP)
 {
   int              i;
@@ -6845,7 +6847,7 @@ md_convert_frag (bfd * abfd ATTRIBUTE_UNUSED, segT sec ATTRIBUTE_UNUSED,
 void
 metag_handle_align (fragS * fragP)
 {
-  static unsigned char const noop[4] = { 0xfe, 0xff, 0xff, 0xa0 };
+  static char const noop[4] = { 0xfe, 0xff, 0xff, 0xa0 };
   int bytes, fix;
   char *p;
 
@@ -6877,7 +6879,7 @@ metag_handle_align (fragS * fragP)
 }
 
 static char *
-metag_end_of_match (char * cont, const char * what)
+metag_end_of_match (char * cont, char * what)
 {
   int len = strlen (what);
 
@@ -7000,12 +7002,14 @@ metag_parse_name (char const * name, expressionS * exprP, enum expr_mode mode,
    then it is done here.  */
 
 arelent *
-tc_gen_reloc (asection *seg ATTRIBUTE_UNUSED, fixS *fixp)
+tc_gen_reloc (seg, fixp)
+     asection *seg ATTRIBUTE_UNUSED;
+     fixS *fixp;
 {
   arelent *reloc;
 
-  reloc		      = XNEW (arelent);
-  reloc->sym_ptr_ptr  = XNEW (asymbol *);
+  reloc		      = (arelent *) xmalloc (sizeof (arelent));
+  reloc->sym_ptr_ptr  = (asymbol **) xmalloc (sizeof (asymbol *));
   *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixp->fx_addsy);
   reloc->address      = fixp->fx_frag->fr_address + fixp->fx_where;
 
@@ -7108,7 +7112,6 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
       break;
     case BFD_RELOC_64:
       md_number_to_chars (buf, value, 8);
-      break;
 
     case BFD_RELOC_METAG_RELBRANCH:
       if (!value)

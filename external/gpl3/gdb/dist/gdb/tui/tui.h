@@ -1,6 +1,7 @@
 /* External/Public TUI Header File.
 
-   Copyright (C) 1998-2019 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2001, 2004, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
 
@@ -19,8 +20,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef TUI_TUI_H
-#define TUI_TUI_H
+#ifndef TUI_H
+#define TUI_H
 
 struct ui_file;
 
@@ -64,6 +65,10 @@ extern int tui_get_command_dimension (unsigned int *width,
    key shortcut.  */
 extern void tui_initialize_readline (void);
 
+/* True if enabling the TUI is allowed.  Example, if the top level
+   interpreter is MI, enabling curses will certainly lose.  */
+extern int tui_allowed_p (void);
+
 /* Enter in the tui mode (curses).  */
 extern void tui_enable (void);
 
@@ -91,9 +96,11 @@ extern void tui_set_key_mode (enum tui_key_mode mode);
 
 extern int tui_active;
 
-extern void tui_show_source (const char *fullname, int line);
+extern void tui_show_source (const char *file, int line);
+
+extern struct ui_out *tui_out_new (struct ui_file *stream);
 
 /* tui-layout.c */
-extern enum tui_status tui_set_layout_by_name (const char *);
+extern enum tui_status tui_set_layout_for_display_command (const char *);
 
-#endif /* TUI_TUI_H */
+#endif

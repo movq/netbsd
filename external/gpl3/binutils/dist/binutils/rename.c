@@ -1,5 +1,5 @@
 /* rename.c -- rename a file, preserving symlinks.
-   Copyright (C) 1999-2020 Free Software Foundation, Inc.
+   Copyright 1999, 2002, 2003, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -21,6 +21,8 @@
 #include "sysdep.h"
 #include "bfd.h"
 #include "bucomm.h"
+
+#include <sys/stat.h>
 
 #ifdef HAVE_GOOD_UTIME_H
 #include <utime.h>

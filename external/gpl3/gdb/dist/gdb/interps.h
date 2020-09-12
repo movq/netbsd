@@ -1,6 +1,7 @@
 /* Manages interpreters for GDB, the GNU debugger.
 
-   Copyright (C) 2000-2019 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2002, 2003, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    Written by Jim Ingham <jingham@apple.com> of Apple Computer, Inc.
 
@@ -22,153 +23,53 @@
 #ifndef INTERPS_H
 #define INTERPS_H
 
+#include "exceptions.h"
+
 struct ui_out;
 struct interp;
-struct ui;
 
-typedef struct interp *(*interp_factory_func) (const char *name);
-
-/* Each interpreter kind (CLI, MI, etc.) registers itself with a call
-   to this function, passing along its name, and a pointer to a
-   function that creates a new instance of an interpreter with that
-   name.  */
-extern void interp_factory_register (const char *name,
-				     interp_factory_func func);
-
+extern int interp_resume (struct interp *interp);
+extern int interp_suspend (struct interp *interp);
+extern int interp_prompt_p (struct interp *interp);
+extern int interp_exec_p (struct interp *interp);
 extern struct gdb_exception interp_exec (struct interp *interp,
 					 const char *command);
+extern int interp_quiet_p (struct interp *interp);
 
-class interp
+typedef void *(interp_init_ftype) (int top_level);
+typedef int (interp_resume_ftype) (void *data);
+typedef int (interp_suspend_ftype) (void *data);
+typedef int (interp_prompt_p_ftype) (void *data);
+typedef struct gdb_exception (interp_exec_ftype) (void *data,
+						  const char *command);
+typedef void (interp_command_loop_ftype) (void *data);
+
+struct interp_procs
 {
-public:
-  explicit interp (const char *name);
-  virtual ~interp () = 0;
-
-  virtual void init (bool top_level)
-  {}
-
-  virtual void resume () = 0;
-  virtual void suspend () = 0;
-
-  virtual gdb_exception exec (const char *command) = 0;
-
-  /* Returns the ui_out currently used to collect results for this
-     interpreter.  It can be a formatter for stdout, as is the case
-     for the console & mi outputs, or it might be a result
-     formatter.  */
-  virtual ui_out *interp_ui_out () = 0;
-
-  /* Provides a hook for interpreters to do any additional
-     setup/cleanup that they might need when logging is enabled or
-     disabled.  */
-  virtual void set_logging (ui_file_up logfile, bool logging_redirect) = 0;
-
-  /* Called before starting an event loop, to give the interpreter a
-     chance to e.g., print a prompt.  */
-  virtual void pre_command_loop ()
-  {}
-
-  /* Returns true if this interpreter supports using the readline
-     library; false if it uses GDB's own simplified readline
-     emulation.  */
-  virtual bool supports_command_editing ()
-  { return false; }
-
-  const char *name () const
-  {
-    return m_name;
-  }
-
-  /* This is the name in "-i=" and "set interpreter".  */
-private:
-  char *m_name;
-
-  /* Interpreters are stored in a linked list, this is the next
-     one...  */
-public:
-  struct interp *next;
-
-  /* Has the init method been run?  */
-  bool inited;
+  interp_init_ftype *init_proc;
+  interp_resume_ftype *resume_proc;
+  interp_suspend_ftype *suspend_proc;
+  interp_exec_ftype *exec_proc;
+  interp_prompt_p_ftype *prompt_proc_p;
+  interp_command_loop_ftype *command_loop_proc;
 };
 
-extern void interp_add (struct ui *ui, struct interp *interp);
-
-/* Look up the interpreter for NAME, creating one if none exists yet.
-   If NAME is not a interpreter type previously registered with
-   interp_factory_register, return NULL; otherwise return a pointer to
-   the interpreter.  */
-extern struct interp *interp_lookup (struct ui *ui, const char *name);
-
-/* Set the current UI's top level interpreter to the interpreter named
-   NAME.  Throws an error if NAME is not a known interpreter or the
-   interpreter fails to initialize.  */
-extern void set_top_level_interpreter (const char *name);
-
-/* Temporarily set the current interpreter, and reset it on
-   destruction.  */
-class scoped_restore_interp
-{
-public:
-
-  scoped_restore_interp (const char *name)
-    : m_interp (set_interp (name))
-  {
-  }
-
-  ~scoped_restore_interp ()
-  {
-    set_interp (m_interp->name ());
-  }
-
-  scoped_restore_interp (const scoped_restore_interp &) = delete;
-  scoped_restore_interp &operator= (const scoped_restore_interp &) = delete;
-
-private:
-
-  struct interp *set_interp (const char *name);
-
-  struct interp *m_interp;
-};
+extern struct interp *interp_new (const char *name, void *data,
+				  struct ui_out *uiout,
+				  const struct interp_procs *procs);
+extern void interp_add (struct interp *interp);
+extern int interp_set (struct interp *interp, int top_level);
+extern struct interp *interp_lookup (const char *name);
+extern struct ui_out *interp_ui_out (struct interp *interp);
 
 extern int current_interp_named_p (const char *name);
-
-/* Call this function to give the current interpreter an opportunity
-   to do any special handling of streams when logging is enabled or
-   disabled.  LOGFILE is the stream for the log file when logging is
-   starting and is NULL when logging is ending.  LOGGING_REDIRECT is
-   the value of the "set logging redirect" setting.  If true, the
-   interpreter should configure the output streams to send output only
-   to the logfile.  If false, the interpreter should configure the
-   output streams to send output to both the current output stream
-   (i.e., the terminal) and the log file.  */
-extern void current_interp_set_logging (ui_file_up logfile,
-					bool logging_redirect);
-
-/* Returns the top-level interpreter.  */
+extern int current_interp_display_prompt_p (void);
+extern void current_interp_command_loop (void);
+/* Returns opaque data associated with the top-level interpreter.  */
+extern void *top_level_interpreter_data (void);
 extern struct interp *top_level_interpreter (void);
 
-/* Return the current UI's current interpreter.  */
-extern struct interp *current_interpreter (void);
-
-extern struct interp *command_interp (void);
-
 extern void clear_interpreter_hooks (void);
-
-/* Returns true if INTERP supports using the readline library; false
-   if it uses GDB's own simplified form of readline.  */
-extern int interp_supports_command_editing (struct interp *interp);
-
-/* Called before starting an event loop, to give the interpreter a
-   chance to e.g., print a prompt.  */
-extern void interp_pre_command_loop (struct interp *interp);
-
-/* List the possible interpreters which could complete the given
-   text.  */
-extern void interpreter_completer (struct cmd_list_element *ignore,
-				   completion_tracker &tracker,
-				   const char *text,
-				   const char *word);
 
 /* well-known interpreters */
 #define INTERP_CONSOLE		"console"

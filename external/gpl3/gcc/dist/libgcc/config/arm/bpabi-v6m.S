@@ -1,7 +1,6 @@
-/* Miscellaneous BPABI functions.  Thumb-1 implementation, suitable for ARMv4T,
-   ARMv6-M and ARMv8-M Baseline like ISA variants.
+/* Miscellaneous BPABI functions.  ARMv6M implementation
 
-   Copyright (C) 2006-2019 Free Software Foundation, Inc.
+   Copyright (C) 2006-2013 Free Software Foundation, Inc.
    Contributed by CodeSourcery.
 
    This file is free software; you can redistribute it and/or modify it
@@ -86,21 +85,19 @@ FUNC_START aeabi_ulcmp
 	cmp	yyl, #0
 	bne	7f
 	cmp	xxh, #0
-	.ifc	\signed, unsigned
 	bne	2f
 	cmp	xxl, #0
 2:
+	.ifc	\signed, unsigned
 	beq	3f
 	mov	xxh, #0
 	mvn	xxh, xxh		@ 0xffffffff
 	mov	xxl, xxh
 3:
 	.else
-	blt	6f
-	bgt	4f
-	cmp	xxl, #0
 	beq	5f
-4:	mov	xxl, #0
+	blt	6f
+	mov	xxl, #0
 	mvn	xxl, xxl		@ 0xffffffff
 	lsr	xxh, xxl, #1		@ 0x7fffffff
 	b	5f
@@ -151,7 +148,7 @@ FUNC_START aeabi_uldivmod
 	mov r0, sp
 	push {r0, lr}
 	ldr r0, [sp, #8]
-	bl SYM(__udivmoddi4)
+	bl SYM(__gnu_uldivmod_helper)
 	ldr r3, [sp, #4]
 	mov lr, r3
 	add sp, sp, #8

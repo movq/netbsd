@@ -1,6 +1,6 @@
 // Concept-checking control -*- C++ -*-
 
-// Copyright (C) 2001-2019 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,9 +22,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file bits/concept_check.h
+/** @file concept_check.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{iterator}
+ *  You should not attempt to use it directly.
  */
 
 #ifndef _CONCEPT_CHECK_H
@@ -41,9 +41,8 @@
 
 // Concept-checking code is off by default unless users turn it on via
 // configure options or editing c++config.h.
-// It is not supported for freestanding implementations.
 
-#if !defined(_GLIBCXX_CONCEPT_CHECKS) || !_GLIBCXX_HOSTED
+#ifndef _GLIBCXX_CONCEPT_CHECKS
 
 #define __glibcxx_function_requires(...)
 #define __glibcxx_class_requires(_a,_b)
@@ -57,12 +56,12 @@
 
 // Note that the obvious and elegant approach of
 //
-//#define glibcxx_function_requires(C) debug::function_requires< debug::C >()
+//#define glibcxx_function_requires(C) boost::function_requires< boost::C >()
 //
 // won't work due to concept templates with more than one parameter, e.g.,
 // BinaryPredicateConcept.  The preprocessor tries to split things up on
 // the commas in the template argument list.  We can't use an inner pair of
-// parenthesis to hide the commas, because "debug::(Temp<Foo,Bar>)" isn't
+// parenthesis to hide the commas, because "boost::(Temp<Foo,Bar>)" isn't
 // a valid instantiation pattern.  Thus, we steal a feature from C99.
 
 #define __glibcxx_function_requires(...)                                 \

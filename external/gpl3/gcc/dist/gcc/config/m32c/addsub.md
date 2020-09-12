@@ -1,5 +1,6 @@
 ;; Machine Descriptions for R8C/M16C/M32C
-;; Copyright (C) 2005-2019 Free Software Foundation, Inc.
+;; Copyright (C) 2005, 2007
+;; Free Software Foundation, Inc.
 ;; Contributed by Red Hat.
 ;;
 ;; This file is part of GCC.
@@ -81,7 +82,7 @@
 (define_insn "addsi3_1"
   [(set (match_operand:SI 0 "mra_operand" "=RsiSd,??Rmm,RsiSd,RsiSd,??Rmm,??Rmm,??Rmm,RsiSd")
         (plus:SI (match_operand:SI 1 "mra_operand" "%0,0,0,0,0,0,0,0")
-                 (match_operand:SI 2 "mrai_operand" "IU2,IU2,i,?Rmm,i,RsiSd,?Rmm,RsiSd")))]
+                 (match_operand 2 "mrai_operand" "IU2,IU2,i,?Rmm,i,RsiSd,?Rmm,RsiSd")))]
   "TARGET_A16"
   "*
   
@@ -92,17 +93,9 @@
     case 1:
       return \"add.w %X2,%h0\;adcf.w %H0\";
     case 2:
-      if (GET_CODE (operands[2]) == SYMBOL_REF)
-        {
-          output_asm_insn (\"add.w #%%lo(%d2),%h0\",operands);
-          return \"adc.w #%%hi(%d2),%H0\";
-        }
-      else
-        {
-          output_asm_insn (\"add.w %X2,%h0\",operands);
-          operands[2]= GEN_INT (INTVAL (operands[2]) >> 16);
-          return \"adc.w %X2,%H0\";
-        }
+      output_asm_insn (\"add.w %X2,%h0\",operands);
+      operands[2]= GEN_INT (INTVAL (operands[2]) >> 16);
+      return \"adc.w %X2,%H0\";
     case 3:
       return \"add.w %h2,%h0\;adc.w %H2,%H0\";
     case 4:
@@ -115,8 +108,6 @@
       return \"add.w %h2,%h0\;adc.w %H2,%H0\";
     case 7:
       return \"add.w %h2,%h0\;adc.w %H2,%H0\";
-    default:
-      gcc_unreachable ();
     }"
   [(set_attr "flags" "x,x,x,x,x,x,x,x")]
 )
@@ -201,8 +192,6 @@
       return \"sub.w %h2,%h0\;sbb.w %H2,%H0\";
     case 5:
       return \"sub.w %h2,%h0\;sbb.w %H2,%H0\";
-    default:
-      gcc_unreachable ();
     }"
   [(set_attr "flags" "x,x,x,x,x,x")]
 )

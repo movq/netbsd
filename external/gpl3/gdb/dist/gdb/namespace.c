@@ -1,5 +1,5 @@
 /* Code dealing with "using" directives for GDB.
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright (C) 2003-2016 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -39,7 +39,7 @@ add_using_directive (struct using_direct **using_directives,
 		     const char *src,
 		     const char *alias,
 		     const char *declaration,
-		     const std::vector<const char *> &excludes,
+		     VEC (const_char_ptr) *excludes,
 		     int copy_names,
 		     struct obstack *obstack)
 {
@@ -52,6 +52,7 @@ add_using_directive (struct using_direct **using_directives,
   for (current = *using_directives; current != NULL; current = current->next)
     {
       int ix;
+      const char *param;
 
       if (strcmp (current->import_src, src) != 0)
 	continue;
@@ -69,11 +70,12 @@ add_using_directive (struct using_direct **using_directives,
 	continue;
 
       /* Compare the contents of EXCLUDES.  */
-      for (ix = 0; ix < excludes.size (); ++ix)
+      for (ix = 0; VEC_iterate (const_char_ptr, excludes, ix, param); ix++)
 	if (current->excludes[ix] == NULL
-	    || strcmp (excludes[ix], current->excludes[ix]) != 0)
+	    || strcmp (param, current->excludes[ix]) != 0)
 	  break;
-      if (ix < excludes.size () || current->excludes[ix] != NULL)
+      if (ix < VEC_length (const_char_ptr, excludes)
+	  || current->excludes[ix] != NULL)
 	continue;
 
       /* Parameters exactly match CURRENT.  */
@@ -81,7 +83,8 @@ add_using_directive (struct using_direct **using_directives,
     }
 
   alloc_len = (sizeof(*newobj)
-	       + (excludes.size () * sizeof(*newobj->excludes)));
+	       + (VEC_length (const_char_ptr, excludes)
+		  * sizeof(*newobj->excludes)));
   newobj = (struct using_direct *) obstack_alloc (obstack, alloc_len);
   memset (newobj, 0, sizeof (*newobj));
 
@@ -111,10 +114,9 @@ add_using_directive (struct using_direct **using_directives,
   else
     newobj->declaration = declaration;
 
-  if (!excludes.empty ())
-    memcpy (newobj->excludes, excludes.data (),
-	    excludes.size () * sizeof (*newobj->excludes));
-  newobj->excludes[excludes.size ()] = NULL;
+  memcpy (newobj->excludes, VEC_address (const_char_ptr, excludes),
+	  VEC_length (const_char_ptr, excludes) * sizeof (*newobj->excludes));
+  newobj->excludes[VEC_length (const_char_ptr, excludes)] = NULL;
 
   newobj->next = *using_directives;
   *using_directives = newobj;

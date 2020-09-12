@@ -1,6 +1,6 @@
 /* Print instructions for the Texas TMS320C[34]X, for GDB and GNU Binutils.
 
-   Copyright (C) 2002-2019 Free Software Foundation, Inc.
+   Copyright 2002, 2003, 2005, 2007 Free Software Foundation, Inc.
 
    Contributed by Michael P. Hayes (m.hayes@elec.canterbury.ac.nz)
 
@@ -21,10 +21,9 @@
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
-#include "sysdep.h"
 #include <math.h>
 #include "libiberty.h"
-#include "disassemble.h"
+#include "dis-asm.h"
 #include "opcode/tic4x.h"
 
 #define TIC4X_DEBUG 0
@@ -120,7 +119,7 @@ tic4x_print_char (struct disassemble_info * info, char ch)
 }
 
 static int
-tic4x_print_str (struct disassemble_info *info, const char *str)
+tic4x_print_str (struct disassemble_info *info, char *str)
 {
   if (info != NULL)
     (*info->fprintf_func) (info->stream, "%s", str);
@@ -294,7 +293,7 @@ tic4x_print_indirect (struct disassemble_info *info,
   unsigned int aregno;
   unsigned int modn;
   unsigned int disp;
-  const char *a;
+  char *a;
 
   aregno = 0;
   modn = 0;
@@ -357,8 +356,8 @@ tic4x_print_op (struct disassemble_info *info,
 		unsigned long pc)
 {
   int val;
-  const char *s;
-  const char *parallel = NULL;
+  char *s;
+  char *parallel = NULL;
 
   /* Print instruction name.  */
   s = p->name;
@@ -467,7 +466,6 @@ tic4x_print_op (struct disassemble_info *info,
                 return 0;
               break;
             }
-	  /* Fall through.  */
 
 	case 'J': /* Indirect (short) 8--15.  */
 	  if (! tic4x_print_indirect (info, INDIRECT_SHORT,

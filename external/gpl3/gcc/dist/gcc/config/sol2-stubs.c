@@ -1,5 +1,5 @@
 /* Stubs for C++ specific Solaris system support.
-   Copyright (C) 2011-2019 Free Software Foundation, Inc.
+   Copyright (C) 2011-2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,8 +20,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
 #include "tree.h"
+#include "tm.h"
+#include "tm_p.h"
 
 /* Stub implemenation of TARGET_CXX_DECL_MANGLING_CONTEXT for non-C++
    frontends.  */

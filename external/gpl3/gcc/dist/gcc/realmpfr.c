@@ -1,5 +1,5 @@
 /* Conversion routines from GCC internal float representation to MPFR.
-   Copyright (C) 2010-2019 Free Software Foundation, Inc.
+   Copyright (C) 2010-2013 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -20,9 +20,8 @@
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tree.h"
 #include "realmpfr.h"
-#include "stor-layout.h"
+#include "tree.h"	/* For TYPE_MODE in real_from_mpfr.  */
 
 /* Convert from REAL_VALUE_TYPE to MPFR.  The caller is responsible
    for initializing and clearing the MPFR parameter.  */
@@ -54,12 +53,11 @@ mpfr_from_real (mpfr_ptr m, const REAL_VALUE_TYPE *r, mp_rnd_t rndmode)
   gcc_assert (ret == 0);
 }
 
-/* Convert from MPFR to REAL_VALUE_TYPE, for a given format FORMAT and
-   rounding mode RNDMODE.  FORMAT is only relevant if M is a NaN.  */
+/* Convert from MPFR to REAL_VALUE_TYPE, for a given type TYPE and rounding
+   mode RNDMODE.  TYPE is only relevant if M is a NaN.  */
 
 void
-real_from_mpfr (REAL_VALUE_TYPE *r, mpfr_srcptr m, const real_format *format,
-		mp_rnd_t rndmode)
+real_from_mpfr (REAL_VALUE_TYPE *r, mpfr_srcptr m, tree type, mp_rnd_t rndmode)
 {
   /* We use a string as an intermediate type.  */
   char buf[128], *rstr;
@@ -76,7 +74,7 @@ real_from_mpfr (REAL_VALUE_TYPE *r, mpfr_srcptr m, const real_format *format,
 
   if (mpfr_nan_p (m))
     {
-      real_nan (r, "", 1, format);
+      real_nan (r, "", 1, TYPE_MODE (type));
       return;
     }
 
@@ -99,15 +97,5 @@ real_from_mpfr (REAL_VALUE_TYPE *r, mpfr_srcptr m, const real_format *format,
   mpfr_free_str (rstr);
 
   real_from_string (r, buf);
-}
-
-/* Convert from MPFR to REAL_VALUE_TYPE, for a given type TYPE and rounding
-   mode RNDMODE.  TYPE is only relevant if M is a NaN.  */
-
-void
-real_from_mpfr (REAL_VALUE_TYPE *r, mpfr_srcptr m, tree type, mp_rnd_t rndmode)
-{
-  real_from_mpfr (r, m, type ? REAL_MODE_FORMAT (TYPE_MODE (type)) : NULL,
-		  rndmode);
 }
 

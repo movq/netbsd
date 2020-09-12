@@ -1,5 +1,6 @@
 /* Dwarf2 assembler output helper routines.
-   Copyright (C) 2001-2019 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -21,22 +22,22 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "target.h"
-#include "rtl.h"
+#include "tm.h"
+#include "flags.h"
 #include "tree.h"
-#include "memmodel.h"
-#include "tm_p.h"
-#include "stringpool.h"
-#include "varasm.h"
+#include "rtl.h"
 #include "output.h"
+#include "target.h"
 #include "dwarf2asm.h"
 #include "dwarf2.h"
-#include "function.h"
-#include "emit-rtl.h"
-#include "fold-const.h"
+#include "splay-tree.h"
+#include "ggc.h"
+#include "tm_p.h"
 
-#ifndef XCOFF_DEBUGGING_INFO
-#define XCOFF_DEBUGGING_INFO 0
+
+/* How to start an assembler comment.  */
+#ifndef ASM_COMMENT_START
+#define ASM_COMMENT_START ";#"
 #endif
 
 
@@ -52,7 +53,8 @@ dw2_assemble_integer (int size, rtx x)
     {
       fputs (op, asm_out_file);
       if (CONST_INT_P (x))
-	fprint_whex (asm_out_file, (unsigned HOST_WIDE_INT) INTVAL (x));
+	fprintf (asm_out_file, HOST_WIDE_INT_PRINT_HEX,
+		 (unsigned HOST_WIDE_INT) INTVAL (x));
       else
 	output_addr_const (asm_out_file, x);
     }
@@ -78,14 +80,14 @@ dw2_asm_output_data_raw (int size, unsigned HOST_WIDE_INT value)
   if (BYTES_BIG_ENDIAN)
     {
       for (i = size - 1; i > 0; --i)
-	fprintf (asm_out_file, "%#x,", bytes[i]);
-      fprintf (asm_out_file, "%#x", bytes[0]);
+	fprintf (asm_out_file, "0x%x,", bytes[i]);
+      fprintf (asm_out_file, "0x%x", bytes[0]);
     }
   else
     {
       for (i = 0; i < size - 1; ++i)
-	fprintf (asm_out_file, "%#x,", bytes[i]);
-      fprintf (asm_out_file, "%#x", bytes[i]);
+	fprintf (asm_out_file, "0x%x,", bytes[i]);
+      fprintf (asm_out_file, "0x%x", bytes[i]);
     }
 }
 
@@ -101,22 +103,19 @@ dw2_asm_output_data (int size, unsigned HOST_WIDE_INT value,
   va_start (ap, comment);
 
   if (size * 8 < HOST_BITS_PER_WIDE_INT)
-    value &= ~(HOST_WIDE_INT_M1U << (size * 8));
+    value &= ~(~(unsigned HOST_WIDE_INT) 0 << (size * 8));
 
   if (op)
-    {
-      fputs (op, asm_out_file);
-      fprint_whex (asm_out_file, value);
-    }
+    fprintf (asm_out_file, "%s" HOST_WIDE_INT_PRINT_HEX, op, value);
   else
     assemble_integer (GEN_INT (value), size, BITS_PER_UNIT, 1);
 
   if (flag_debug_asm && comment)
     {
-      fputs ("\t" ASM_COMMENT_START " ", asm_out_file);
+      fprintf (asm_out_file, "\t%s ", ASM_COMMENT_START);
       vfprintf (asm_out_file, comment, ap);
     }
-  putc ('\n', asm_out_file);
+  fputc ('\n', asm_out_file);
 
   va_end (ap);
 }
@@ -153,31 +152,6 @@ dw2_asm_output_delta (int size, const char *lab1, const char *lab2,
   va_end (ap);
 }
 
-#ifdef ASM_OUTPUT_DWARF_VMS_DELTA
-/* Output the difference between two symbols in instruction units
-   in a given size.  */
-
-void
-dw2_asm_output_vms_delta (int size ATTRIBUTE_UNUSED,
-			  const char *lab1, const char *lab2,
-			  const char *comment, ...)
-{
-  va_list ap;
-
-  va_start (ap, comment);
-
-  ASM_OUTPUT_DWARF_VMS_DELTA (asm_out_file, size, lab1, lab2);
-  if (flag_debug_asm && comment)
-    {
-      fprintf (asm_out_file, "\t%s ", ASM_COMMENT_START);
-      vfprintf (asm_out_file, comment, ap);
-    }
-  fputc ('\n', asm_out_file);
-
-  va_end (ap);
-}
-#endif
-
 /* Output a section-relative reference to a LABEL, which was placed in
    BASE.  In general this can only be done for debugging symbols.
    E.g. on most targets with the GNU linker, this is accomplished with
@@ -195,36 +169,9 @@ dw2_asm_output_offset (int size, const char *label,
   va_start (ap, comment);
 
 #ifdef ASM_OUTPUT_DWARF_OFFSET
-  ASM_OUTPUT_DWARF_OFFSET (asm_out_file, size, label, 0, base);
+  ASM_OUTPUT_DWARF_OFFSET (asm_out_file, size, label, base);
 #else
   dw2_assemble_integer (size, gen_rtx_SYMBOL_REF (Pmode, label));
-#endif
-
-  if (flag_debug_asm && comment)
-    {
-      fprintf (asm_out_file, "\t%s ", ASM_COMMENT_START);
-      vfprintf (asm_out_file, comment, ap);
-    }
-  fputc ('\n', asm_out_file);
-
-  va_end (ap);
-}
-
-void
-dw2_asm_output_offset (int size, const char *label, HOST_WIDE_INT offset,
-		       section *base ATTRIBUTE_UNUSED,
-		       const char *comment, ...)
-{
-  va_list ap;
-
-  va_start (ap, comment);
-
-#ifdef ASM_OUTPUT_DWARF_OFFSET
-  ASM_OUTPUT_DWARF_OFFSET (asm_out_file, size, label, offset, base);
-#else
-  dw2_assemble_integer (size, gen_rtx_PLUS (Pmode,
-					    gen_rtx_SYMBOL_REF (Pmode, label),
-					    gen_int_mode (offset, Pmode)));
 #endif
 
   if (flag_debug_asm && comment)
@@ -338,19 +285,13 @@ dw2_asm_output_nstring (const char *str, size_t orig_len,
 
   if (flag_debug_asm && comment)
     {
-      if (XCOFF_DEBUGGING_INFO)
-	fputs ("\t.byte \"", asm_out_file);
-      else
-	fputs ("\t.ascii \"", asm_out_file);
-
+      fputs ("\t.ascii \"", asm_out_file);
       for (i = 0; i < len; i++)
 	{
 	  int c = str[i];
-	  if (c == '\"')
-	    fputc (XCOFF_DEBUGGING_INFO ? '\"' : '\\', asm_out_file);
-	  else if (c == '\\')
+	  if (c == '\"' || c == '\\')
 	    fputc ('\\', asm_out_file);
-	  if (ISPRINT (c))
+	  if (ISPRINT(c))
 	    fputc (c, asm_out_file);
 	  else
 	    fprintf (asm_out_file, "\\%o", c);
@@ -423,7 +364,7 @@ size_of_encoded_value (int encoding)
   switch (encoding & 0x07)
     {
     case DW_EH_PE_absptr:
-      return POINTER_SIZE_UNITS;
+      return POINTER_SIZE / BITS_PER_UNIT;
     case DW_EH_PE_udata2:
       return 2;
     case DW_EH_PE_udata4:
@@ -608,7 +549,7 @@ dw2_asm_output_data_uleb128_raw (unsigned HOST_WIDE_INT value)
 	/* More bytes to follow.  */
 	byte |= 0x80;
 
-      fprintf (asm_out_file, "%#x", byte);
+      fprintf (asm_out_file, "0x%x", byte);
       if (value == 0)
 	break;
       fputc (',', asm_out_file);
@@ -625,56 +566,53 @@ dw2_asm_output_data_uleb128 (unsigned HOST_WIDE_INT value,
 
   va_start (ap, comment);
 
-  if (HAVE_AS_LEB128)
-    {
-      fputs ("\t.uleb128 ", asm_out_file);
-      fprint_whex (asm_out_file, value);
+#ifdef HAVE_AS_LEB128
+  fprintf (asm_out_file, "\t.uleb128 " HOST_WIDE_INT_PRINT_HEX , value);
 
-      if (flag_debug_asm && comment)
+  if (flag_debug_asm && comment)
+    {
+      fprintf (asm_out_file, "\t%s ", ASM_COMMENT_START);
+      vfprintf (asm_out_file, comment, ap);
+    }
+#else
+  {
+    unsigned HOST_WIDE_INT work = value;
+    const char *byte_op = targetm.asm_out.byte_op;
+
+    if (byte_op)
+      fputs (byte_op, asm_out_file);
+    do
+      {
+	int byte = (work & 0x7f);
+	work >>= 7;
+	if (work != 0)
+	  /* More bytes to follow.  */
+	  byte |= 0x80;
+
+	if (byte_op)
+	  {
+	    fprintf (asm_out_file, "0x%x", byte);
+	    if (work != 0)
+	      fputc (',', asm_out_file);
+	  }
+	else
+	  assemble_integer (GEN_INT (byte), 1, BITS_PER_UNIT, 1);
+      }
+    while (work != 0);
+
+  if (flag_debug_asm)
+    {
+      fprintf (asm_out_file, "\t%s uleb128 " HOST_WIDE_INT_PRINT_HEX,
+	       ASM_COMMENT_START, value);
+      if (comment)
 	{
-	  fprintf (asm_out_file, "\t%s ", ASM_COMMENT_START);
+	  fputs ("; ", asm_out_file);
 	  vfprintf (asm_out_file, comment, ap);
 	}
     }
-  else
-    {
-      unsigned HOST_WIDE_INT work = value;
-      const char *byte_op = targetm.asm_out.byte_op;
-
-      if (byte_op)
-	fputs (byte_op, asm_out_file);
-      do
-	{
-	  int byte = (work & 0x7f);
-	  work >>= 7;
-	  if (work != 0)
-	    /* More bytes to follow.  */
-	    byte |= 0x80;
-
-	  if (byte_op)
-	    {
-	      fprintf (asm_out_file, "%#x", byte);
-	      if (work != 0)
-		fputc (',', asm_out_file);
-	    }
-	  else
-	    assemble_integer (GEN_INT (byte), 1, BITS_PER_UNIT, 1);
-	}
-      while (work != 0);
-
-      if (flag_debug_asm)
-	{
-	  fprintf (asm_out_file, "\t%s uleb128 " HOST_WIDE_INT_PRINT_HEX,
-		   ASM_COMMENT_START, value);
-	  if (comment)
-	    {
-	      fputs ("; ", asm_out_file);
-	      vfprintf (asm_out_file, comment, ap);
-	    }
-	}
-    }
-
-  putc ('\n', asm_out_file);
+  }
+#endif
+  fputc ('\n', asm_out_file);
 
   va_end (ap);
 }
@@ -695,7 +633,7 @@ dw2_asm_output_data_sleb128_raw (HOST_WIDE_INT value)
       if (more)
 	byte |= 0x80;
 
-      fprintf (asm_out_file, "%#x", byte);
+      fprintf (asm_out_file, "0x%x", byte);
       if (!more)
 	break;
       fputc (',', asm_out_file);
@@ -712,86 +650,55 @@ dw2_asm_output_data_sleb128 (HOST_WIDE_INT value,
 
   va_start (ap, comment);
 
-  if (HAVE_AS_LEB128)
-    {
-      fprintf (asm_out_file, "\t.sleb128 " HOST_WIDE_INT_PRINT_DEC, value);
-
-      if (flag_debug_asm && comment)
-	{
-	  fprintf (asm_out_file, "\t%s ", ASM_COMMENT_START);
-	  vfprintf (asm_out_file, comment, ap);
-	}
-    }
-  else
-    {
-      HOST_WIDE_INT work = value;
-      int more, byte;
-      const char *byte_op = targetm.asm_out.byte_op;
-
-      if (byte_op)
-	fputs (byte_op, asm_out_file);
-      do
-	{
-	  byte = (work & 0x7f);
-	  /* arithmetic shift */
-	  work >>= 7;
-	  more = !((work == 0 && (byte & 0x40) == 0)
-		   || (work == -1 && (byte & 0x40) != 0));
-	  if (more)
-	    byte |= 0x80;
-
-	  if (byte_op)
-	    {
-	      fprintf (asm_out_file, "%#x", byte);
-	      if (more)
-		fputc (',', asm_out_file);
-	    }
-	  else
-	    assemble_integer (GEN_INT (byte), 1, BITS_PER_UNIT, 1);
-	}
-      while (more);
-
-      if (flag_debug_asm)
-	{
-	  fprintf (asm_out_file, "\t%s sleb128 " HOST_WIDE_INT_PRINT_DEC,
-		   ASM_COMMENT_START, value);
-	  if (comment)
-	    {
-	      fputs ("; ", asm_out_file);
-	      vfprintf (asm_out_file, comment, ap);
-	    }
-	}
-    }
-
-  fputc ('\n', asm_out_file);
-
-  va_end (ap);
-}
-
-/* Output symbol LAB1 as an unsigned LEB128 quantity.  LAB1 should be
-   an assembler-computed constant, e.g. a view number, because we
-   can't have relocations in LEB128 quantities.  */
-
-void
-dw2_asm_output_symname_uleb128 (const char *lab1 ATTRIBUTE_UNUSED,
-				const char *comment, ...)
-{
-  va_list ap;
-
-  va_start (ap, comment);
-
 #ifdef HAVE_AS_LEB128
-  fputs ("\t.uleb128 ", asm_out_file);
-  assemble_name (asm_out_file, lab1);
-#else
-  gcc_unreachable ();
-#endif
+  fprintf (asm_out_file, "\t.sleb128 " HOST_WIDE_INT_PRINT_DEC, value);
 
   if (flag_debug_asm && comment)
     {
       fprintf (asm_out_file, "\t%s ", ASM_COMMENT_START);
       vfprintf (asm_out_file, comment, ap);
     }
+#else
+  {
+    HOST_WIDE_INT work = value;
+    int more, byte;
+    const char *byte_op = targetm.asm_out.byte_op;
+
+    if (byte_op)
+      fputs (byte_op, asm_out_file);
+    do
+      {
+	byte = (work & 0x7f);
+	/* arithmetic shift */
+	work >>= 7;
+	more = !((work == 0 && (byte & 0x40) == 0)
+		 || (work == -1 && (byte & 0x40) != 0));
+	if (more)
+	  byte |= 0x80;
+
+	if (byte_op)
+	  {
+	    fprintf (asm_out_file, "0x%x", byte);
+	    if (more)
+	      fputc (',', asm_out_file);
+	  }
+	else
+	  assemble_integer (GEN_INT (byte), 1, BITS_PER_UNIT, 1);
+      }
+    while (more);
+
+  if (flag_debug_asm)
+    {
+      fprintf (asm_out_file, "\t%s sleb128 " HOST_WIDE_INT_PRINT_DEC,
+	       ASM_COMMENT_START, value);
+      if (comment)
+	{
+	  fputs ("; ", asm_out_file);
+	  vfprintf (asm_out_file, comment, ap);
+	}
+    }
+  }
+#endif
   fputc ('\n', asm_out_file);
 
   va_end (ap);
@@ -806,22 +713,14 @@ dw2_asm_output_delta_uleb128 (const char *lab1 ATTRIBUTE_UNUSED,
 
   va_start (ap, comment);
 
-  gcc_assert (HAVE_AS_LEB128);
-
+#ifdef HAVE_AS_LEB128
   fputs ("\t.uleb128 ", asm_out_file);
   assemble_name (asm_out_file, lab1);
-  putc ('-', asm_out_file);
-  /* dwarf2out.c might give us a label expression (e.g. .LVL548-1)
-     as second argument.  If so, make it a subexpression, to make
-     sure the substraction is done in the right order.  */
-  if (strchr (lab2, '-') != NULL)
-    {
-      putc ('(', asm_out_file);
-      assemble_name (asm_out_file, lab2);
-      putc (')', asm_out_file);
-    }
-  else
-    assemble_name (asm_out_file, lab2);
+  fputc ('-', asm_out_file);
+  assemble_name (asm_out_file, lab2);
+#else
+  gcc_unreachable ();
+#endif
 
   if (flag_debug_asm && comment)
     {
@@ -844,12 +743,14 @@ dw2_asm_output_delta_sleb128 (const char *lab1 ATTRIBUTE_UNUSED,
 
   va_start (ap, comment);
 
-  gcc_assert (HAVE_AS_LEB128);
-
+#ifdef HAVE_AS_LEB128
   fputs ("\t.sleb128 ", asm_out_file);
   assemble_name (asm_out_file, lab1);
-  putc ('-', asm_out_file);
+  fputc ('-', asm_out_file);
   assemble_name (asm_out_file, lab2);
+#else
+  gcc_unreachable ();
+#endif
 
   if (flag_debug_asm && comment)
     {
@@ -862,26 +763,28 @@ dw2_asm_output_delta_sleb128 (const char *lab1 ATTRIBUTE_UNUSED,
 }
 #endif /* 0 */
 
-static GTY(()) hash_map<const char *, tree> *indirect_pool;
+static int dw2_output_indirect_constant_1 (splay_tree_node, void *);
+
+static GTY((param1_is (char *), param2_is (tree))) splay_tree indirect_pool;
 
 static GTY(()) int dw2_const_labelno;
 
-#if defined(HAVE_GAS_HIDDEN)
-# define USE_LINKONCE_INDIRECT (SUPPORTS_ONE_ONLY && !XCOFF_DEBUGGING_INFO)
+#if defined(HAVE_GAS_HIDDEN) && defined(SUPPORTS_ONE_ONLY)
+# define USE_LINKONCE_INDIRECT 1
 #else
 # define USE_LINKONCE_INDIRECT 0
 #endif
 
-/* Compare two std::pair<const char *, tree> by their first element.
-   Returns <0, 0, or
+/* Comparison function for a splay tree in which the keys are strings.
+   K1 and K2 have the dynamic type "const char *".  Returns <0, 0, or
    >0 to indicate whether K1 is less than, equal to, or greater than
    K2, respectively.  */
 
 static int
-compare_strings (const void *a, const void *b)
+splay_tree_compare_strings (splay_tree_key k1, splay_tree_key k2)
 {
-  const char *s1 = ((const std::pair<const char *, tree> *) a)->first;
-  const char *s2 = ((const std::pair<const char *, tree> *) b)->first;
+  const char *s1 = (const char *)k1;
+  const char *s2 = (const char *)k2;
   int ret;
 
   if (s1 == s2)
@@ -906,18 +809,21 @@ compare_strings (const void *a, const void *b)
 rtx
 dw2_force_const_mem (rtx x, bool is_public)
 {
+  splay_tree_node node;
   const char *key;
   tree decl_id;
 
   if (! indirect_pool)
-    indirect_pool = hash_map<const char *, tree>::create_ggc (64);
+    /* We use strcmp, rather than just comparing pointers, so that the
+       sort order will not depend on the host system.  */
+    indirect_pool = splay_tree_new_ggc (splay_tree_compare_strings);
 
   gcc_assert (GET_CODE (x) == SYMBOL_REF);
 
   key = XSTR (x, 0);
-  tree *slot = indirect_pool->get (key);
-  if (slot)
-    decl_id = *slot;
+  node = splay_tree_lookup (indirect_pool, (splay_tree_key) key);
+  if (node)
+    decl_id = (tree) node->value;
   else
     {
       tree id;
@@ -946,55 +852,47 @@ dw2_force_const_mem (rtx x, bool is_public)
       if (id)
 	TREE_SYMBOL_REFERENCED (id) = 1;
 
-      indirect_pool->put (key, decl_id);
+      splay_tree_insert (indirect_pool, (splay_tree_key) key,
+			 (splay_tree_value) decl_id);
     }
 
   return gen_rtx_SYMBOL_REF (Pmode, IDENTIFIER_POINTER (decl_id));
 }
 
-/* A helper function for dw2_output_indirect_constants.  Emit one queued
-   constant to memory.  */
+/* A helper function for dw2_output_indirect_constants called through
+   splay_tree_foreach.  Emit one queued constant to memory.  */
 
 static int
-dw2_output_indirect_constant_1 (const char *sym, tree id)
+dw2_output_indirect_constant_1 (splay_tree_node node,
+				void *data ATTRIBUTE_UNUSED)
 {
+  const char *sym;
   rtx sym_ref;
-  tree decl;
+  tree id, decl;
+
+  sym = (const char *) node->key;
+  id = (tree) node->value;
 
   decl = build_decl (UNKNOWN_LOCATION, VAR_DECL, id, ptr_type_node);
-  SET_DECL_ASSEMBLER_NAME (decl, id);
   DECL_ARTIFICIAL (decl) = 1;
   DECL_IGNORED_P (decl) = 1;
-  DECL_INITIAL (decl) = build_fold_addr_expr (decl);
+  DECL_INITIAL (decl) = decl;
   TREE_READONLY (decl) = 1;
-  TREE_STATIC (decl) = 1;
 
   if (TREE_PUBLIC (id))
     {
       TREE_PUBLIC (decl) = 1;
       make_decl_one_only (decl, DECL_ASSEMBLER_NAME (decl));
-      if (USE_LINKONCE_INDIRECT)
-	DECL_VISIBILITY (decl) = VISIBILITY_HIDDEN;
     }
+  else
+    TREE_STATIC (decl) = 1;
 
   sym_ref = gen_rtx_SYMBOL_REF (Pmode, sym);
-  /* Disable ASan for decl because redzones cause ABI breakage between GCC and
-     libstdc++ for `.LDFCM*' variables.  See PR 78651 for details.  */
-  unsigned int save_flag_sanitize = flag_sanitize;
-  flag_sanitize &= ~(SANITIZE_ADDRESS | SANITIZE_USER_ADDRESS
-		     | SANITIZE_KERNEL_ADDRESS);
-  /* And also temporarily disable -fsection-anchors.  These indirect constants
-     are never referenced from code, so it doesn't make any sense to aggregate
-     them in blocks.  */
-  int save_flag_section_anchors = flag_section_anchors;
-  flag_section_anchors = 0;
+  sym = targetm.strip_name_encoding (sym);
+  if (TREE_PUBLIC (decl) && USE_LINKONCE_INDIRECT)
+    fprintf (asm_out_file, "\t.hidden %sDW.ref.%s\n", user_label_prefix, sym);
   assemble_variable (decl, 1, 1, 1);
-  flag_section_anchors = save_flag_section_anchors;
-  flag_sanitize = save_flag_sanitize;
-  assemble_integer (sym_ref, POINTER_SIZE_UNITS, POINTER_SIZE, 1);
-  /* The following is a hack recognized by use_blocks_for_decl_p to disable
-     section anchor handling of the decl.  */
-  DECL_INITIAL (decl) = decl;
+  assemble_integer (sym_ref, POINTER_SIZE / BITS_PER_UNIT, POINTER_SIZE, 1);
 
   return 0;
 }
@@ -1004,18 +902,8 @@ dw2_output_indirect_constant_1 (const char *sym, tree id)
 void
 dw2_output_indirect_constants (void)
 {
-  if (!indirect_pool)
-    return;
-
-  auto_vec<std::pair<const char *, tree> > temp (indirect_pool->elements ());
-  for (hash_map<const char *, tree>::iterator iter = indirect_pool->begin ();
-       iter != indirect_pool->end (); ++iter)
-    temp.quick_push (*iter);
-
-  temp.qsort (compare_strings);
-
-  for (unsigned int i = 0; i < temp.length (); i++)
-    dw2_output_indirect_constant_1 (temp[i].first, temp[i].second);
+  if (indirect_pool)
+    splay_tree_foreach (indirect_pool, dw2_output_indirect_constant_1, NULL);
 }
 
 /* Like dw2_asm_output_addr_rtx, but encode the pointer as directed.
@@ -1037,7 +925,6 @@ dw2_asm_output_encoded_addr_rtx (int encoding, rtx addr, bool is_public,
     {
       assemble_align (POINTER_SIZE);
       assemble_integer (addr, size, POINTER_SIZE, 1);
-      va_end (ap);
       return;
     }
 
@@ -1075,13 +962,6 @@ dw2_asm_output_encoded_addr_rtx (int encoding, rtx addr, bool is_public,
 	case DW_EH_PE_absptr:
 	  dw2_assemble_integer (size, addr);
 	  break;
-
-#ifdef ASM_OUTPUT_DWARF_DATAREL
-	case DW_EH_PE_datarel:
-	  gcc_assert (GET_CODE (addr) == SYMBOL_REF);
-	  ASM_OUTPUT_DWARF_DATAREL (asm_out_file, size, XSTR (addr, 0));
-	  break;
-#endif
 
 	case DW_EH_PE_pcrel:
 	  gcc_assert (GET_CODE (addr) == SYMBOL_REF);

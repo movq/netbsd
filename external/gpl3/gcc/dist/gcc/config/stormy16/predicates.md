@@ -1,5 +1,5 @@
 ;; Predicate definitions for XSTORMY16.
-;; Copyright (C) 2005-2019 Free Software Foundation, Inc.
+;; Copyright (C) 2005, 2007, 2008 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -140,8 +140,8 @@
 {
   /* 'Q' is for pushes, 'R' for pops.  */
   return (nonimmediate_operand (op, mode) 
-	  && ! satisfies_constraint_Q (op)
-	  && ! satisfies_constraint_R (op));
+	  && ! xstormy16_extra_constraint_p (op, 'Q')
+	  && ! xstormy16_extra_constraint_p (op, 'R'));
 })
 
 (define_predicate "xstormy16_carry_plus_operand"
@@ -151,8 +151,28 @@
 	  && (INTVAL (XEXP (op, 1)) < -4 || INTVAL (XEXP (op, 1)) > 4));
 })
 
+(define_predicate "xs_hi_general_operand"
+  (match_code "const_int,reg,subreg,mem,symbol_ref,label_ref,const")
+{
+  if ((GET_CODE (op) == CONST_INT)
+       && ((INTVAL (op) >= 32768) || (INTVAL (op) < -32768)))
+    {
+      error ("constant halfword load operand out of range");
+      return false;
+    }
+    
+  return general_operand (op, mode);
+})
+
 (define_predicate "xs_hi_nonmemory_operand"
   (match_code "const_int,reg,subreg,const")
 {
+  if ((GET_CODE (op) == CONST_INT) 
+       && ((INTVAL (op) >= 32768) || (INTVAL (op) < -32768)))
+    {
+      error ("constant arithmetic operand out of range");
+      return false;
+    }
+
   return nonmemory_operand (op, mode);
 })

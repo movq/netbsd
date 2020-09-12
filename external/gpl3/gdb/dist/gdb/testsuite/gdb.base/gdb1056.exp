@@ -1,4 +1,4 @@
-# Copyright 2003-2019 Free Software Foundation, Inc.
+# Copyright 2003, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,6 +15,10 @@
 
 # Test for PR gdb/1056.
 # 2003-10-18  Michael Chastain <mec@shout.net>
+
+if $tracelevel then {
+    strace $tracelevel
+}
 
 # test SIGFPE (such as division by 0) inside gdb itself
 
@@ -39,5 +43,5 @@ gdb_test_multiple "print 1/0" "" {
 	kfail "gdb/1056" "print 1/0"
     }
 }
-gdb_test "print 1U/0" ".*Division by zero.*" "test unsigned division by zero"
+gdb_test "print 1U/0" ".*Division by zero.*" "Test unsigned division by zero"
 

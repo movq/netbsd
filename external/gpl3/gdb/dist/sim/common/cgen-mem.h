@@ -1,5 +1,6 @@
 /* Memory ops header for CGEN-based simulators.
-   Copyright (C) 1996-2019 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1997, 1998, 1999, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
    Contributed by Cygnus Solutions.
 
 This file is part of the GNU Simulators.
@@ -20,11 +21,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #ifndef CGEN_MEM_H
 #define CGEN_MEM_H
 
-/* TODO: This should get moved into sim-inline.h.  */
 #ifdef MEMOPS_DEFINE_INLINE
 #define MEMOPS_INLINE
 #else
-#define MEMOPS_INLINE EXTERN_INLINE
+#define MEMOPS_INLINE extern inline
 #endif
 
 /* Integer memory read support.

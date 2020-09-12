@@ -1,5 +1,5 @@
 /* Low-level file-handling.
-   Copyright (C) 2012-2019 Free Software Foundation, Inc.
+   Copyright (C) 2012-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -16,14 +16,20 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "common-defs.h"
+#ifdef GDBSERVER
+#include "server.h"
+#else
+#include "defs.h"
+#include <string.h>
+#endif
 #include "filestuff.h"
 #include "gdb_vecs.h"
+
+#include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <algorithm>
 
 #ifdef USE_WIN32API
 #include <winsock2.h>
@@ -36,21 +42,12 @@
 #define HAVE_SOCKETS 1
 #endif
 
-#ifdef HAVE_KINFO_GETFILE
-#include <sys/user.h>
-#include <libutil.h>
-#endif
-
 #ifdef HAVE_SYS_RESOURCE_H
 #include <sys/resource.h>
 #endif /* HAVE_SYS_RESOURCE_H */
 
 #ifndef O_CLOEXEC
 #define O_CLOEXEC 0
-#endif
-
-#ifndef O_NOINHERIT
-#define O_NOINHERIT 0
 #endif
 
 #ifndef SOCK_CLOEXEC
@@ -89,6 +86,7 @@ fdwalk (int (*func) (void *, int), void *arg)
 	{
 	  long fd;
 	  char *tail;
+	  int result;
 
 	  errno = 0;
 	  fd = strtol (entry->d_name, &tail, 10);
@@ -110,25 +108,6 @@ fdwalk (int (*func) (void *, int), void *arg)
 
       closedir (dir);
       return result;
-    }
-  /* We may fall through to the next case.  */
-#endif
-#ifdef HAVE_KINFO_GETFILE
-  int nfd;
-  gdb::unique_xmalloc_ptr<struct kinfo_file[]> fdtbl
-    (kinfo_getfile (getpid (), &nfd));
-  if (fdtbl != NULL)
-    {
-      for (int i = 0; i < nfd; i++)
-	{
-	  if (fdtbl[i].kf_fd >= 0)
-	    {
-	      int result = func (arg, fdtbl[i].kf_fd);
-	      if (result != 0)
-		return result;
-	    }
-	}
-      return 0;
     }
   /* We may fall through to the next case.  */
 #endif
@@ -174,10 +153,11 @@ fdwalk (int (*func) (void *, int), void *arg)
 
 
 
-/* A vector holding all the fds open when notice_open_fds was called.  We
-   don't use a hashtab because we don't expect there to be many open fds.  */
+/* A VEC holding all the fds open when notice_open_fds was called.  We
+   don't use a hashtab because libiberty isn't linked into gdbserver;
+   and anyway we don't expect there to be many open fds.  */
 
-static std::vector<int> open_fds;
+static VEC (int) *open_fds;
 
 /* An fdwalk callback function used by notice_open_fds.  It puts the
    given file descriptor into the vec.  */
@@ -185,7 +165,7 @@ static std::vector<int> open_fds;
 static int
 do_mark_open_fd (void *ignore, int fd)
 {
-  open_fds.push_back (fd);
+  VEC_safe_push (int, open_fds, fd);
   return 0;
 }
 
@@ -210,12 +190,18 @@ mark_fd_no_cloexec (int fd)
 void
 unmark_fd_no_cloexec (int fd)
 {
-  auto it = std::remove (open_fds.begin (), open_fds.end (), fd);
+  int i, val;
 
-  if (it != open_fds.end ())
-    open_fds.erase (it);
-  else
-    gdb_assert_not_reached (_("fd not found in open_fds"));
+  for (i = 0; VEC_iterate (int, open_fds, i, val); ++i)
+    {
+      if (fd == val)
+	{
+	  VEC_unordered_remove (int, open_fds, i);
+	  return;
+	}
+    }
+
+  gdb_assert_not_reached (_("fd not found in open_fds"));
 }
 
 /* Helper function for close_most_fds that closes the file descriptor
@@ -224,7 +210,9 @@ unmark_fd_no_cloexec (int fd)
 static int
 do_close (void *ignore, int fd)
 {
-  for (int val : open_fds)
+  int i, val;
+
+  for (i = 0; VEC_iterate (int, open_fds, i, val); ++i)
     {
       if (fd == val)
 	{
@@ -319,7 +307,7 @@ gdb_open_cloexec (const char *filename, int flags, unsigned long mode)
 
 /* See filestuff.h.  */
 
-gdb_file_up
+FILE *
 gdb_fopen_cloexec (const char *filename, const char *opentype)
 {
   FILE *result;
@@ -328,16 +316,14 @@ gdb_fopen_cloexec (const char *filename, const char *opentype)
      skip it.  E.g., the Windows runtime issues an "Invalid parameter
      passed to C runtime function" OutputDebugString warning for
      unknown modes.  Assume that if O_CLOEXEC is zero, then "e" isn't
-     supported.  On MinGW, O_CLOEXEC is an alias of O_NOINHERIT, and
-     "e" isn't supported.  */
-  static int fopen_e_ever_failed_einval =
-    O_CLOEXEC == 0 || O_CLOEXEC == O_NOINHERIT;
+     supported.  */
+  static int fopen_e_ever_failed_einval = O_CLOEXEC == 0;
 
   if (!fopen_e_ever_failed_einval)
     {
       char *copy;
 
-      copy = (char *) alloca (strlen (opentype) + 2);
+      copy = alloca (strlen (opentype) + 2);
       strcpy (copy, opentype);
       /* This is a glibc extension but we try it unconditionally on
 	 this path.  */
@@ -357,18 +343,17 @@ gdb_fopen_cloexec (const char *filename, const char *opentype)
   if (result != NULL)
     maybe_mark_cloexec (fileno (result));
 
-  return gdb_file_up (result);
+  return result;
 }
 
 #ifdef HAVE_SOCKETS
 /* See filestuff.h.  */
 
 int
-gdb_socketpair_cloexec (int domain, int style, int protocol,
-			int filedes[2])
+gdb_socketpair_cloexec (int namespace, int style, int protocol, int filedes[2])
 {
 #ifdef HAVE_SOCKETPAIR
-  int result = socketpair (domain, style | SOCK_CLOEXEC, protocol, filedes);
+  int result = socketpair (namespace, style | SOCK_CLOEXEC, protocol, filedes);
 
   if (result != -1)
     {
@@ -385,9 +370,9 @@ gdb_socketpair_cloexec (int domain, int style, int protocol,
 /* See filestuff.h.  */
 
 int
-gdb_socket_cloexec (int domain, int style, int protocol)
+gdb_socket_cloexec (int namespace, int style, int protocol)
 {
-  int result = socket (domain, style | SOCK_CLOEXEC, protocol);
+  int result = socket (namespace, style | SOCK_CLOEXEC, protocol);
 
   if (result != -1)
     socket_mark_cloexec (result);
@@ -424,101 +409,4 @@ gdb_pipe_cloexec (int filedes[2])
 #endif /* HAVE_PIPE2 */
 
   return result;
-}
-
-/* Helper function which does the work for make_cleanup_close.  */
-
-static void
-do_close_cleanup (void *arg)
-{
-  int *fd = (int *) arg;
-
-  close (*fd);
-}
-
-/* See filestuff.h.  */
-
-struct cleanup *
-make_cleanup_close (int fd)
-{
-  int *saved_fd = XNEW (int);
-
-  *saved_fd = fd;
-  return make_cleanup_dtor (do_close_cleanup, saved_fd, xfree);
-}
-
-/* See common/filestuff.h.  */
-
-bool
-is_regular_file (const char *name, int *errno_ptr)
-{
-  struct stat st;
-  const int status = stat (name, &st);
-
-  /* Stat should never fail except when the file does not exist.
-     If stat fails, analyze the source of error and return true
-     unless the file does not exist, to avoid returning false results
-     on obscure systems where stat does not work as expected.  */
-
-  if (status != 0)
-    {
-      if (errno != ENOENT)
-	return true;
-      *errno_ptr = ENOENT;
-      return false;
-    }
-
-  if (S_ISREG (st.st_mode))
-    return true;
-
-  if (S_ISDIR (st.st_mode))
-    *errno_ptr = EISDIR;
-  else
-    *errno_ptr = EINVAL;
-  return false;
-}
-
-/* See common/filestuff.h.  */
-
-bool
-mkdir_recursive (const char *dir)
-{
-  gdb::unique_xmalloc_ptr<char> holder (xstrdup (dir));
-  char * const start = holder.get ();
-  char *component_start = start;
-  char *component_end = start;
-
-  while (1)
-    {
-      /* Find the beginning of the next component.  */
-      while (*component_start == '/')
-	component_start++;
-
-      /* Are we done?  */
-      if (*component_start == '\0')
-	return true;
-
-      /* Find the slash or null-terminator after this component.  */
-      component_end = component_start;
-      while (*component_end != '/' && *component_end != '\0')
-	component_end++;
-
-      /* Temporarily replace the slash with a null terminator, so we can create
-         the directory up to this component.  */
-      char saved_char = *component_end;
-      *component_end = '\0';
-
-      /* If we get EEXIST and the existing path is a directory, then we're
-         happy.  If it exists, but it's a regular file and this is not the last
-         component, we'll fail at the next component.  If this is the last
-         component, the caller will fail with ENOTDIR when trying to
-         open/create a file under that path.  */
-      if (mkdir (start, 0700) != 0)
-	if (errno != EEXIST)
-	  return false;
-
-      /* Restore the overwritten char.  */
-      *component_end = saved_char;
-      component_start = component_end;
-    }
 }

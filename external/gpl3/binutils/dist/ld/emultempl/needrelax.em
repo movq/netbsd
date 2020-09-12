@@ -1,5 +1,5 @@
 # This shell script emits a C file. -*- C -*-
-#   Copyright (C) 2001-2020 Free Software Foundation, Inc.
+#   Copyright 2001, 2002, 2003, 2007 Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -19,7 +19,7 @@
 # MA 02110-1301, USA.
 #
 
-# This file is sourced from elf.em.  It is used by targets for
+# This file is sourced from elf32.em.  It is used by targets for
 # which relaxation is not just an optimization, but for correctness.
 
 LDEMUL_BEFORE_ALLOCATION=need_relax_${EMULATION_NAME}_before_allocation
@@ -33,7 +33,7 @@ need_relax_${EMULATION_NAME}_before_allocation (void)
   gld${EMULATION_NAME}_before_allocation ();
 
   /* Force -relax on if not doing a relocatable link.  */
-  if (!bfd_link_relocatable (&link_info))
-    ENABLE_RELAXATION;
+  if (! link_info.relocatable)
+    command_line.relax = TRUE;
 }
 EOF

@@ -1,5 +1,6 @@
 /* Support code for various pieces of CGEN simulators.
-   Copyright (C) 1996-2019 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1997, 1998, 1999, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
    Contributed by Cygnus Support.
 
 This file is part of GDB, the GNU debugger.
@@ -17,7 +18,6 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "config.h"
 #include "bfd.h"
 #include "sim-main.h"
 #include "dis-asm.h"
@@ -28,7 +28,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #define SEMOPS_DEFINE_INLINE
 #include "cgen-ops.h"
 
-const char * const mode_names[] = {
+#undef min
+#define min(a,b) ((a) < (b) ? (a) : (b))
+
+const char *mode_names[] = {
   "VOID",
   "BI",
   "QI",
@@ -431,5 +434,5 @@ cgen_rtx_error (SIM_CPU *cpu, const char * msg)
   sim_io_printf (sd, msg);
   sim_io_printf (sd, "\n");
 
-  sim_engine_halt (sd, cpu, NULL, CPU_PC_GET (cpu), sim_stopped, SIM_SIGTRAP);
+  sim_engine_halt (sd, cpu, NULL, CIA_GET (cpu), sim_stopped, SIM_SIGTRAP);
 }

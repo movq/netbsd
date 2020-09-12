@@ -1,5 +1,5 @@
 /* Table of opcodes for the Texas Instruments TMS320C54X
-   Copyright (C) 1999-2020 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001, 2007 Free Software Foundation, Inc.
    Contributed by Timothy Wall (twall@cygnus.com)
 
    This file is part of the GNU opcodes library.
@@ -24,7 +24,7 @@
 #include "opcode/tic54x.h"
 
 /* these are the only register names not found in mmregs */
-const tic54x_symbol regs[] = {
+const symbol regs[] = {
   { "AR0", 16 },                  { "ar0", 16 },
   { "AR1", 17 },                  { "ar1", 17 },
   { "AR2", 18 },                  { "ar2", 18 },
@@ -38,7 +38,7 @@ const tic54x_symbol regs[] = {
 
 /* status bits, MM registers, condition codes, etc */
 /* some symbols are only valid for certain chips... */
-const tic54x_symbol mmregs[] = {
+const symbol mmregs[] = {
   { "IMR", 0 },                   { "imr", 0 },
   { "IFR", 1 },                   { "ifr", 1 },
   { "ST0", 6 },                   { "st0", 6 },
@@ -111,7 +111,7 @@ const tic54x_symbol mmregs[] = {
   { NULL, 0},
 };
 
-const tic54x_symbol condition_codes[] = {
+const symbol condition_codes[] = {
   /* condition codes */
   { "UNC",  0 },                { "unc",  0 },
 #define CC1   0x40
@@ -155,7 +155,7 @@ const tic54x_symbol condition_codes[] = {
   { NULL, 0 }
 };
 
-const tic54x_symbol cc2_codes[] = {
+const symbol cc2_codes[] = {
   { "UNC", 0 },  { "unc", 0 },
   { "AEQ", 5 },  { "aeq", 5 },
   { "ANEQ", 4 }, { "aneq", 4 },
@@ -172,7 +172,7 @@ const tic54x_symbol cc2_codes[] = {
   { NULL, 0 },
 };
 
-const tic54x_symbol cc3_codes[] = {
+const symbol cc3_codes[] = {
   { "EQ", 0x0000 },  { "eq", 0x0000 },
   { "LT", 0x0100 },  { "lt", 0x0100 },
   { "GT", 0x0200 },  { "gt", 0x0200 },
@@ -189,7 +189,7 @@ const tic54x_symbol cc3_codes[] = {
 };
 
 /* FIXME -- also allow decimal digits */
-const tic54x_symbol status_bits[] = {
+const symbol status_bits[] = {
   /* status register 0 */
   { "TC",  12 },                { "tc",  12 },
   { "C",   11 },                { "c",   11 },
@@ -231,9 +231,9 @@ const char *misc_symbols[] = {
 #define ZPAR 0,{OP_None}
 #define REST 0,0,ZPAR
 #define XREST ZPAR
-const insn_template tic54x_unknown_opcode =
+const template tic54x_unknown_opcode =
   { "???",   1,0,0,0x0000, 0x0000, {0}, 0, REST};
-const insn_template tic54x_optab[] = {
+const template tic54x_optab[] = {
   /* these must precede bc/bcd, cc/ccd to avoid misinterpretation */
   { "fb",    2,1,1,0xF880, 0xFF80, {OP_xpmad}, B_BRANCH|FL_FAR|FL_NR, REST},
   { "fbd",   2,1,1,0xFA80, 0xFF80, {OP_xpmad}, B_BRANCH|FL_FAR|FL_DELAY|FL_NR, REST},
@@ -465,7 +465,7 @@ const insn_template tic54x_optab[] = {
 };
 
 /* assume all parallel instructions have at least three operands */
-const insn_template tic54x_paroptab[] = {
+const template tic54x_paroptab[] = {
   { "ld",1,1,2,0xA800, 0xFE00, {OP_Xmem,OP_DST},      FL_PAR,0,0,
     "mac",                     {OP_Ymem,OPT|OP_RND},},
   { "ld",1,1,2,0xAA00, 0xFE00, {OP_Xmem,OP_DST},      FL_PAR,0,0,

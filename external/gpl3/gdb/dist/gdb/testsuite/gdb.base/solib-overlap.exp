@@ -1,4 +1,4 @@
-# Copyright 2009-2019 Free Software Foundation, Inc.
+# Copyright 2009, 2010, 2011 Free Software Foundation, Inc.
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 3 of the License, or
@@ -31,12 +31,13 @@ if [skip_shlib_tests] {
     return 0
 }
 
-if {![can_spawn_for_attach]} {
+# Are we on a target board?  It is required for attaching to a process.
+if [is_remote target] {
     return 0
 }
 
-if [get_compiler_info] {
-    return -1
+if [get_compiler_info binfile-unused] {
+    return -1;
 }
 
 # Library file.
@@ -51,18 +52,21 @@ set srcfile ${srcdir}/${subdir}/${testfile}.c
 # false PASS.
 # Prelink first lib1 at 0x40000000 and lib2 at 0x41000000.
 # During second pass try lib1 at 0x50000000 and lib2 at 0x51000000.
-foreach prelink_lib1 {0x40000000 0x50000000} { with_test_prefix "$prelink_lib1" {
+foreach prelink_lib1 {0x40000000 0x50000000} {
     set prelink_lib2 [format "0x%x" [expr $prelink_lib1 + 0x01000000]]
 
+    set old_prefix $pf_prefix
+    lappend pf_prefix "$prelink_lib1:"
+
     # Library file.
-    set binfile_lib1 [standard_output_file ${libname}1-${prelink_lib1}.so]
+    set binfile_lib1 ${objdir}/${subdir}/${libname}1-${prelink_lib1}.so
     set binfile_lib1_test_msg OBJDIR/${subdir}/${libname}1-${prelink_lib1}.so
-    set binfile_lib2 [standard_output_file ${libname}2-${prelink_lib1}.so]
+    set binfile_lib2 ${objdir}/${subdir}/${libname}2-${prelink_lib1}.so
     set binfile_lib2_test_msg OBJDIR/${subdir}/${libname}2-${prelink_lib1}.so
     set lib_flags {debug}
     # Binary file.
     set binfile_base ${testfile}-${prelink_lib1}
-    set binfile [standard_output_file ${binfile_base}]
+    set binfile ${objdir}/${subdir}/${binfile_base}
     set binfile_test_msg OBJDIR/${subdir}/${binfile_base}
     set bin_flags [list debug shlib=${binfile_lib1} shlib=${binfile_lib2}]
     set escapedbinfile  [string_to_regexp ${binfile}]
@@ -70,19 +74,27 @@ foreach prelink_lib1 {0x40000000 0x50000000} { with_test_prefix "$prelink_lib1" 
     if { [gdb_compile_shlib ${srcfile_lib} ${binfile_lib1} $lib_flags] != ""
 	 || [gdb_compile_shlib ${srcfile_lib} ${binfile_lib2} $lib_flags] != ""
 	 || [gdb_compile ${srcfile} ${binfile} executable $bin_flags] != "" } {
-	untested "failed to compile"
+	untested "Could not compile ${binfile_lib1_test_msg}, ${binfile_lib2_test_msg} or ${binfile_test_msg}."
 	return -1
     }
 
     if {[catch "system \"prelink -N -r ${prelink_lib1} ${binfile_lib1}\""] != 0
 	|| [catch "system \"prelink -N -r ${prelink_lib2} ${binfile_lib2}\""] != 0} {
 	# Maybe we don't have prelink.
-	untested "could not prelink ${binfile_lib1_test_msg} or ${binfile_lib2_test_msg}."
+	untested "Could not prelink ${binfile_lib1_test_msg} or ${binfile_lib2_test_msg}."
 	return -1
     }
 
-    set test_spawn_id [spawn_wait_for_attach $binfile]
-    set testpid [spawn_id_get_pid $test_spawn_id]
+    # Start the program running and then wait for a bit, to be sure
+    # that it can be attached to.
+
+    set testpid [eval exec $binfile &]
+    sleep 2
+    if { [istarget "*-*-cygwin*"] } {
+	# testpid is the Cygwin PID, GDB uses the Windows PID, which might be
+	# different due to the way fork/exec works.
+	set testpid [ exec ps -e | gawk "{ if (\$1 == $testpid) print \$4; }" ]
+    }
 
     remote_exec build "mv -f ${binfile_lib1} ${binfile_lib1}-running"
     remote_exec build "mv -f ${binfile_lib2} ${binfile_lib2}-running"
@@ -92,15 +104,14 @@ foreach prelink_lib1 {0x40000000 0x50000000} { with_test_prefix "$prelink_lib1" 
 
     if { [gdb_compile_shlib ${srcfile_lib} ${binfile_lib1} $lib_flags] != ""
 	 || [gdb_compile_shlib ${srcfile_lib} ${binfile_lib2} $lib_flags] != ""} {
-	untested "failed to compile shared library"
-	kill_wait_spawned_process $test_spawn_id
+	untested "Could not recompile ${binfile_lib1_test_msg} or ${binfile_lib2_test_msg}."
+	remote_exec build "kill -9 ${testpid}"
 	return -1
     }
 
     clean_restart ${binfile_base}
     # This testcase currently does not support remote targets.
-    # gdb_load_shlib ${binfile_lib1}
-    # gdb_load_shlib ${binfile_lib2}
+    # gdb_load_shlibs ${binfile_lib1} ${binfile_lib2}
 
     # Here we should get:
     # warning: .dynamic section for ".../solib-overlap-lib1.so" is not at the expected address (wrong library or version mismatch?)
@@ -119,11 +130,13 @@ foreach prelink_lib1 {0x40000000 0x50000000} { with_test_prefix "$prelink_lib1" 
 
     # Detach the process.
 
-    gdb_test "detach" "Detaching from program: .*$escapedbinfile, process $testpid\r\n\\\[Inferior $decimal \\(.*\\) detached\\\]"
+    gdb_test "detach" "Detaching from program: .*$escapedbinfile, process $testpid"
 
     # Wait a bit for gdb to finish detaching
 
     sleep 5
 
-    kill_wait_spawned_process $test_spawn_id
-}}
+    remote_exec build "kill -9 ${testpid}"
+
+    set pf_prefix $old_prefix
+}

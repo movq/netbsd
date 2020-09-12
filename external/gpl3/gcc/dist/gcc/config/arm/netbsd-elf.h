@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler, NetBSD/arm ELF version.
-   Copyright (C) 2002-2019 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
    Contributed by Wasabi Systems, Inc.
 
    This file is part of GCC.
@@ -14,33 +14,19 @@
    or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
    License for more details.
 
-   Under Section 7 of GPL version 3, you are granted additional
-   permissions described in the GCC Runtime Library Exception, version
-   3.1, as published by the Free Software Foundation.
-
-   You should have received a copy of the GNU General Public License and
-   a copy of the GCC Runtime Library Exception along with this program;
-   see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+   You should have received a copy of the GNU General Public License
+   along with GCC; see the file COPYING3.  If not see
    <http://www.gnu.org/licenses/>.  */
 
 /* Run-time Target Specification.  */
+#undef TARGET_VERSION
+#define TARGET_VERSION fputs (" (NetBSD/arm ELF)", stderr);
 
 /* arm.h defaults to ARM6 CPU.  */
 
-/* Default EABI to armv5t so that thumb shared libraries work.
-   The ARM926EH-S core is the default for armv5te, so set
-   SUBTARGET_CPU_DEFAULT to achieve this.  */
-
-#define SUBTARGET_CPU_DEFAULT \
-	(ARM_DEFAULT_ABI != ARM_ABI_APCS && ARM_DEFAULT_ABI != ARM_ABI_ATPCS \
-	    ? TARGET_CPU_arm926ejs : TARGET_CPU_arm6)
-
-/* TARGET_BIG_ENDIAN_DEFAULT is set in
-   config.gcc for big endian configurations.  */
-#if TARGET_BIG_ENDIAN_DEFAULT
-#define TARGET_ENDIAN_DEFAULT    MASK_BIG_END
-#else
-#define TARGET_ENDIAN_DEFAULT    0
+/* This defaults us to little-endian.  */
+#ifndef TARGET_ENDIAN_DEFAULT
+#define TARGET_ENDIAN_DEFAULT 0
 #endif
 
 #undef MULTILIB_DEFAULTS
@@ -54,7 +40,6 @@
 #undef ARM_DEFAULT_ABI
 #define ARM_DEFAULT_ABI ARM_ABI_ATPCS
 
-#undef TARGET_OS_CPP_BUILTINS
 #define TARGET_OS_CPP_BUILTINS()	\
   do					\
     {					\
@@ -67,21 +52,26 @@
 
 #undef SUBTARGET_EXTRA_ASM_SPEC
 #define SUBTARGET_EXTRA_ASM_SPEC	\
-  "-matpcs %{mabi=aapcs*:-meabi=5} %{" FPIE_OR_FPIC_SPEC ":-k}"
+  "-matpcs %{fpic|fpie:-k} %{fPIC|fPIE:-k}"
 
-/* Default to full VFP if -mfloat-abi=hard is specified.  */
+/* Default to full VFP if -mhard-float is specified.  */
 #undef SUBTARGET_ASM_FLOAT_SPEC
 #define SUBTARGET_ASM_FLOAT_SPEC	\
-  "%{mhard-float:%{!mfpu=*:-mfpu=vfp}}   \
-   %{mfloat-abi=hard:%{!mfpu=*:-mfpu=vfp}}"
+  "%{mhard-float:{!mfpu=*:-mfpu=vfp}}   \
+   %{mfloat-abi=hard:{!mfpu=*:-mfpu=vfp}}"
+
+#undef SUBTARGET_EXTRA_SPECS
+#define SUBTARGET_EXTRA_SPECS				\
+  { "subtarget_extra_asm_spec",	SUBTARGET_EXTRA_ASM_SPEC }, \
+  { "subtarget_asm_float_spec", SUBTARGET_ASM_FLOAT_SPEC }, \
+  { "netbsd_link_spec",		NETBSD_LINK_SPEC_ELF },	\
+  { "netbsd_entry_point",	NETBSD_ENTRY_POINT },
 
 #define NETBSD_ENTRY_POINT "__start"
 
 #undef LINK_SPEC
 #define LINK_SPEC \
-  "-X \
-   %{mbig-endian:-EB %{-mabi=aapcs*:-m armelfb_nbsd_eabi}} \
-   %{mlittle-endian:-EL %{-mabi=aapcs*:-m armelf_nbsd_eabi}} \
+  "-X %{mbig-endian:-EB} %{mlittle-endian:-EL} \
    %(netbsd_link_spec)"
 
 /* Make GCC agree with <machine/ansi.h>.  */
@@ -91,12 +81,6 @@
 
 #undef PTRDIFF_TYPE
 #define PTRDIFF_TYPE "long int"
-
-#undef INTPTR_TYPE
-#define INTPTR_TYPE PTRDIFF_TYPE
-
-#undef UINTPTR_TYPE
-#define UINTPTR_TYPE SIZE_TYPE
 
 /* We don't have any limit on the length as out debugger is GDB.  */
 #undef DBX_CONTIN_LENGTH
@@ -167,5 +151,7 @@ do									\
     (void) sysarch (0, &s);						\
   }									\
 while (0)
-//#undef FPUTYPE_DEFAULT
-//#define FPUTYPE_DEFAULT "vfp"
+
+#undef FPUTYPE_DEFAULT
+#define FPUTYPE_DEFAULT "vfp"
+

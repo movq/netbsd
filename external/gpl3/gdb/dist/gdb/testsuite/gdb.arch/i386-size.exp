@@ -1,4 +1,4 @@
-# Copyright 2006-2019 Free Software Foundation, Inc.
+# Copyright 2006, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,19 +18,27 @@
 
 # This file is part of the gdb testsuite.
 
+if $tracelevel {
+    strace $tracelevel
+}
+
 # Test that GDB can see the sizes of symbols.
 
-if { ![is_x86_like_target] } then {
+if {(![istarget "x86_64-*-*"] && ![istarget "i?86-*-*"]) || ![is_ilp32_target] } then {
     verbose "Skipping i386 unwinder tests."
     return
 }
 
 set testfile "i386-size"
 set srcfile ${testfile}.c
-set binfile [standard_output_file ${testfile}]
+set binfile ${objdir}/${subdir}/${testfile}
 
 # some targets have leading underscores on assembly symbols.
-set additional_flags [gdb_target_symbol_prefix_flags]
+# TODO: detect this automatically
+set additional_flags ""
+if [istarget "i?86-*-cygwin*"] then {
+  set additional_flags "additional_flags=-DSYMBOL_PREFIX=\"_\""
+}
 
 if { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" \
 	  executable [list debug $additional_flags]] != "" } {
@@ -46,7 +54,18 @@ gdb_load ${binfile}
 # We use gdb_run_cmd so this stands a chance to work for remote
 # targets too.
 gdb_run_cmd
-gdb_test "" "Program received signal SIGTRAP.*" "run past main"
+
+gdb_expect {
+    -re "Program received signal SIGTRAP.*$gdb_prompt $" {
+	pass "run past main"
+    }
+    -re ".*$gdb_prompt $" {
+	fail "run past main"
+    }
+    timeout {
+	fail "run past main (timeout)"
+    }
+}
 
 set message "backtrace shows no function"
 gdb_test_multiple "backtrace 10" $message {

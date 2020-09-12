@@ -1,6 +1,8 @@
 /* Read a symbol table in MIPS' format (Third-Eye).
 
-   Copyright (C) 1986-2019 Free Software Foundation, Inc.
+   Copyright (C) 1986, 1987, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996,
+   1998, 1999, 2000, 2001, 2003, 2004, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    Contributed by Alessandro Forin (af@cs.cmu.edu) at CMU.  Major work
    by Per Bothner, John Gilmore and Ian Lance Taylor at Cygnus Support.
@@ -24,11 +26,12 @@
    mdebugread.c.  */
 
 #include "defs.h"
+#include "gdb_string.h"
 #include "bfd.h"
 #include "symtab.h"
 #include "objfiles.h"
+#include "buildsym.h"
 #include "stabsread.h"
-#include "mdebugread.h"
 
 #include "coff/sym.h"
 #include "coff/internal.h"
@@ -42,8 +45,7 @@
 #include "psymtab.h"
 
 static void
-read_alphacoff_dynamic_symtab (minimal_symbol_reader &,
-			       struct section_offsets *,
+read_alphacoff_dynamic_symtab (struct section_offsets *,
 			       struct objfile *objfile);
 
 /* Initialize anything that needs initializing when a completely new
@@ -54,6 +56,7 @@ static void
 mipscoff_new_init (struct objfile *ignore)
 {
   stabsread_new_init ();
+  buildsym_new_init ();
 }
 
 /* Initialize to read a symbol file (nothing to do).  */
@@ -66,11 +69,13 @@ mipscoff_symfile_init (struct objfile *objfile)
 /* Read a symbol file from a file.  */
 
 static void
-mipscoff_symfile_read (struct objfile *objfile, symfile_add_flags symfile_flags)
+mipscoff_symfile_read (struct objfile *objfile, int symfile_flags)
 {
   bfd *abfd = objfile->obfd;
+  struct cleanup *back_to;
 
-  minimal_symbol_reader reader (objfile);
+  init_minimal_symbol_collection ();
+  back_to = make_cleanup_discard_minimal_symbols ();
 
   /* Now that the executable file is positioned at symbol table,
      process it and define symbols accordingly.  */
@@ -79,17 +84,18 @@ mipscoff_symfile_read (struct objfile *objfile, symfile_add_flags symfile_flags)
 	(abfd, (asection *) NULL, &ecoff_data (abfd)->debug_info)))
     error (_("Error reading symbol table: %s"), bfd_errmsg (bfd_get_error ()));
 
-  mdebug_build_psymtabs (reader, objfile, &ecoff_backend (abfd)->debug_swap,
+  mdebug_build_psymtabs (objfile, &ecoff_backend (abfd)->debug_swap,
 			 &ecoff_data (abfd)->debug_info);
 
   /* Add alpha coff dynamic symbols.  */
 
-  read_alphacoff_dynamic_symtab (reader, objfile->section_offsets, objfile);
+  read_alphacoff_dynamic_symtab (objfile->section_offsets, objfile);
 
   /* Install any minimal symbols that have been collected as the current
      minimal symbols for this objfile.  */
 
-  reader.install ();
+  install_minimal_symbols (objfile);
+  do_cleanups (back_to);
 }
 
 /* Perform any local cleanups required when we are done with a
@@ -173,21 +179,29 @@ alphacoff_locate_sections (bfd *ignore_abfd, asection *sectp, void *sip)
    them to the minimal symbol table.  */
 
 static void
-read_alphacoff_dynamic_symtab (minimal_symbol_reader &reader,
-			       struct section_offsets *section_offsets,
+read_alphacoff_dynamic_symtab (struct section_offsets *section_offsets,
 			       struct objfile *objfile)
 {
   bfd *abfd = objfile->obfd;
   struct alphacoff_dynsecinfo si;
+  char *sym_secptr;
+  char *str_secptr;
+  char *dyninfo_secptr;
+  char *got_secptr;
+  bfd_size_type sym_secsize;
+  bfd_size_type str_secsize;
+  bfd_size_type dyninfo_secsize;
+  bfd_size_type got_secsize;
   int sym_count;
   int i;
   int stripped;
   Elfalpha_External_Sym *x_symp;
-  gdb_byte *dyninfo_p;
-  gdb_byte *dyninfo_end;
+  char *dyninfo_p;
+  char *dyninfo_end;
   int got_entry_size = 8;
   int dt_mips_local_gotno = -1;
   int dt_mips_gotsym = -1;
+  struct cleanup *cleanups;
 
   /* We currently only know how to handle alpha dynamic symbols.  */
   if (bfd_get_arch (abfd) != bfd_arch_alpha)
@@ -200,28 +214,35 @@ read_alphacoff_dynamic_symtab (minimal_symbol_reader &reader,
       || si.dyninfo_sect == NULL || si.got_sect == NULL)
     return;
 
-  gdb::byte_vector sym_sec (bfd_get_section_size (si.sym_sect));
-  gdb::byte_vector str_sec (bfd_get_section_size (si.str_sect));
-  gdb::byte_vector dyninfo_sec (bfd_get_section_size (si.dyninfo_sect));
-  gdb::byte_vector got_sec (bfd_get_section_size (si.got_sect));
+  sym_secsize = bfd_get_section_size (si.sym_sect);
+  str_secsize = bfd_get_section_size (si.str_sect);
+  dyninfo_secsize = bfd_get_section_size (si.dyninfo_sect);
+  got_secsize = bfd_get_section_size (si.got_sect);
+  sym_secptr = xmalloc (sym_secsize);
+  cleanups = make_cleanup (xfree, sym_secptr);
+  str_secptr = xmalloc (str_secsize);
+  make_cleanup (xfree, str_secptr);
+  dyninfo_secptr = xmalloc (dyninfo_secsize);
+  make_cleanup (xfree, dyninfo_secptr);
+  got_secptr = xmalloc (got_secsize);
+  make_cleanup (xfree, got_secptr);
 
-  if (!bfd_get_section_contents (abfd, si.sym_sect, sym_sec.data (),
-				 (file_ptr) 0, sym_sec.size ()))
+  if (!bfd_get_section_contents (abfd, si.sym_sect, sym_secptr,
+				 (file_ptr) 0, sym_secsize))
     return;
-  if (!bfd_get_section_contents (abfd, si.str_sect, str_sec.data (),
-				 (file_ptr) 0, str_sec.size ()))
+  if (!bfd_get_section_contents (abfd, si.str_sect, str_secptr,
+				 (file_ptr) 0, str_secsize))
     return;
-  if (!bfd_get_section_contents (abfd, si.dyninfo_sect, dyninfo_sec.data (),
-				 (file_ptr) 0, dyninfo_sec.size ()))
+  if (!bfd_get_section_contents (abfd, si.dyninfo_sect, dyninfo_secptr,
+				 (file_ptr) 0, dyninfo_secsize))
     return;
-  if (!bfd_get_section_contents (abfd, si.got_sect, got_sec.data (),
-				 (file_ptr) 0, got_sec.size ()))
+  if (!bfd_get_section_contents (abfd, si.got_sect, got_secptr,
+				 (file_ptr) 0, got_secsize))
     return;
 
-  /* Find the number of local GOT entries and the index for the
+  /* Find the number of local GOT entries and the index for the the
      first dynamic symbol in the GOT.  */
-  for ((dyninfo_p = dyninfo_sec.data (),
-	dyninfo_end = dyninfo_p + dyninfo_sec.size ());
+  for (dyninfo_p = dyninfo_secptr, dyninfo_end = dyninfo_p + dyninfo_secsize;
        dyninfo_p < dyninfo_end;
        dyninfo_p += sizeof (Elfalpha_External_Dyn))
     {
@@ -249,11 +270,11 @@ read_alphacoff_dynamic_symtab (minimal_symbol_reader &reader,
 
   /* Scan all dynamic symbols and enter them into the minimal symbol
      table if appropriate.  */
-  sym_count = sym_sec.size () / sizeof (Elfalpha_External_Sym);
+  sym_count = sym_secsize / sizeof (Elfalpha_External_Sym);
   stripped = (bfd_get_symcount (abfd) == 0);
 
   /* Skip first symbol, which is a null dummy.  */
-  for (i = 1, x_symp = (Elfalpha_External_Sym *) sym_sec.data () + 1;
+  for (i = 1, x_symp = (Elfalpha_External_Sym *) sym_secptr + 1;
        i < sym_count;
        i++, x_symp++)
     {
@@ -266,9 +287,9 @@ read_alphacoff_dynamic_symtab (minimal_symbol_reader &reader,
       enum minimal_symbol_type ms_type;
 
       strx = bfd_h_get_32 (abfd, (bfd_byte *) x_symp->st_name);
-      if (strx >= str_sec.size ())
+      if (strx >= str_secsize)
 	continue;
-      name = (char *) (str_sec.data () + strx);
+      name = str_secptr + strx;
       if (*name == '\0' || *name == '.')
 	continue;
 
@@ -309,13 +330,11 @@ read_alphacoff_dynamic_symtab (minimal_symbol_reader &reader,
 	      int got_entry_offset =
 		(i - dt_mips_gotsym + dt_mips_local_gotno) * got_entry_size;
 
-	      if (got_entry_offset < 0
-		  || got_entry_offset >= got_sec.size ())
+	      if (got_entry_offset < 0 || got_entry_offset >= got_secsize)
 		continue;
 	      sym_value =
 		bfd_h_get_64 (abfd,
-			      (bfd_byte *) (got_sec.data ()
-					    + got_entry_offset));
+			      (bfd_byte *) (got_secptr + got_entry_offset));
 	      if (sym_value == 0)
 		continue;
 	    }
@@ -335,6 +354,7 @@ read_alphacoff_dynamic_symtab (minimal_symbol_reader &reader,
 		ms_type = mst_text;
 	      else
 		ms_type = mst_file_text;
+	      sym_value += ANOFFSET (section_offsets, SECT_OFF_TEXT (objfile));
 	    }
 	  else if (sym_shndx == SHN_MIPS_DATA)
 	    {
@@ -342,6 +362,7 @@ read_alphacoff_dynamic_symtab (minimal_symbol_reader &reader,
 		ms_type = mst_data;
 	      else
 		ms_type = mst_file_data;
+	      sym_value += ANOFFSET (section_offsets, SECT_OFF_DATA (objfile));
 	    }
 	  else if (sym_shndx == SHN_MIPS_ACOMMON)
 	    {
@@ -349,6 +370,7 @@ read_alphacoff_dynamic_symtab (minimal_symbol_reader &reader,
 		ms_type = mst_bss;
 	      else
 		ms_type = mst_file_bss;
+	      sym_value += ANOFFSET (section_offsets, SECT_OFF_BSS (objfile));
 	    }
 	  else if (sym_shndx == SHN_ABS)
 	    {
@@ -360,14 +382,17 @@ read_alphacoff_dynamic_symtab (minimal_symbol_reader &reader,
 	    }
 	}
 
-      reader.record (name, sym_value, ms_type);
+      prim_record_minimal_symbol (name, sym_value, ms_type, objfile);
     }
+
+  do_cleanups (cleanups);
 }
 
 /* Initialization.  */
 
 static const struct sym_fns ecoff_sym_fns =
 {
+  bfd_target_ecoff_flavour,
   mipscoff_new_init,		/* init anything gbl to entire symtab */
   mipscoff_symfile_init,	/* read initial info, setup for sym_read() */
   mipscoff_symfile_read,	/* read a symbol file into symtab */
@@ -377,12 +402,14 @@ static const struct sym_fns ecoff_sym_fns =
   default_symfile_segments,	/* Get segment information from a file.  */
   NULL,
   default_symfile_relocate,	/* Relocate a debug section.  */
-  NULL,				/* sym_probe_fns */
   &psym_functions
 };
+
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+void _initialize_mipsread (void);
 
 void
 _initialize_mipsread (void)
 {
-  add_symtab_fns (bfd_target_ecoff_flavour, &ecoff_sym_fns);
+  add_symtab_fns (&ecoff_sym_fns);
 }

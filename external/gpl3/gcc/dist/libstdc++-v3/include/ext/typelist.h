@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2005-2019 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -33,11 +33,9 @@
 // purpose. It is provided "as is" without express or implied warranty.
 
 /**
- *  @file ext/typelist.h
- *  This file is a GNU extension to the Standard C++ Library.
- *
- *  Contains typelist_chain definitions.
- *  Typelists are an idea by Andrei Alexandrescu.
+ * @file typelist.h
+ * Contains typelist_chain definitions.
+ * Typelists are an idea by Andrei Alexandrescu.
  */
 
 #ifndef _TYPELIST_H
@@ -45,9 +43,7 @@
 
 #include <ext/type_traits.h>
 
-namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
 
 /** @namespace __gnu_cxx::typelist
  *  @brief GNU typelist extensions for public compile-time use.
@@ -93,7 +89,7 @@ namespace typelist
 
   template<typename Typelist, typename T>
     struct contains;
-
+ 
   template<typename Typelist, template<typename T> class Pred>
     struct filter;
 
@@ -124,10 +120,18 @@ namespace typelist
   template<typename T1, typename T2, typename T3, typename T4, typename T5>
     struct create5;
 
-  template<typename T1, typename T2, typename T3,
+  template<typename T1, typename T2, typename T3, 
 	   typename T4, typename T5, typename T6>
     struct create6;
+} // namespace typelist
 
+_GLIBCXX_END_NAMESPACE
+
+
+_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
+
+namespace typelist 
+{
 namespace detail
 {
   template<typename Fn, typename Typelist_Chain>
@@ -215,10 +219,10 @@ namespace detail
       typedef Typelist_Chain 			      		type;
     };
 
-  template<typename Hd, typename Tl>
-    struct append_<chain<Hd, Tl>, null_type>
+  template<typename Typelist_Chain>
+    struct append_<Typelist_Chain, null_type>
     {
-      typedef chain<Hd, Tl>  					type;
+      typedef Typelist_Chain 					type;
     };
 
   template<>
@@ -241,7 +245,7 @@ namespace detail
     {
     private:
       typedef typename append_typelist_<Tl>::type 		rest_type;
-
+      
     public:
       typedef typename append<Hd, node<rest_type> >::type::root	type;
     };
@@ -266,7 +270,7 @@ namespace detail
 	  value = contains_<Tl, T>::value
 	};
     };
-
+  
   template<typename Tl, typename T>
     struct contains_<chain<T, Tl>, T>
     {
@@ -293,7 +297,7 @@ namespace detail
 	{
 	  include_hd = Pred<Hd>::value
 	};
-
+      
       typedef typename chain_filter_<Tl, Pred>::type 		rest_type;
       typedef chain<Hd, rest_type> 				chain_type;
 
@@ -309,7 +313,7 @@ namespace detail
     {
       typedef Hd 						type;
     };
-
+  
   template<typename Hd, typename Tl, int i>
     struct chain_at_index_<chain<Hd, Tl>, i>
     {
@@ -324,7 +328,7 @@ namespace detail
     {
       typedef null_type 					type;
     };
-
+  
   template<class Hd, class Tl, template<typename T> class Transform>
     struct chain_transform_<chain<Hd, Tl>, Transform>
     {
@@ -355,6 +359,9 @@ namespace detail
       typedef typename append_type::type::root 			type;
     };
 } // namespace detail
+} // namespace typelist
+
+_GLIBCXX_END_NAMESPACE
 
 #define _GLIBCXX_TYPELIST_CHAIN1(X0) __gnu_cxx::typelist::chain<X0, __gnu_cxx::typelist::null_type>
 #define _GLIBCXX_TYPELIST_CHAIN2(X0, X1) __gnu_cxx::typelist::chain<X0, _GLIBCXX_TYPELIST_CHAIN1(X1) >
@@ -371,12 +378,11 @@ namespace detail
 #define _GLIBCXX_TYPELIST_CHAIN13(X0, X1, X2, X3, X4, X5, X6, X7, X8, X9, X10, X11, X12) __gnu_cxx::typelist::chain<X0, _GLIBCXX_TYPELIST_CHAIN12(X1, X2, X3, X4, X5, X6, X7, X8, X9, X10, X11, X12) >
 #define _GLIBCXX_TYPELIST_CHAIN14(X0, X1, X2, X3, X4, X5, X6, X7, X8, X9, X10, X11, X12, X13) __gnu_cxx::typelist::chain<X0, _GLIBCXX_TYPELIST_CHAIN13(X1, X2, X3, X4, X5, X6, X7, X8, X9, X10, X11, X12, X13) >
 #define _GLIBCXX_TYPELIST_CHAIN15(X0, X1, X2, X3, X4, X5, X6, X7, X8, X9, X10, X11, X12, X13, X14) __gnu_cxx::typelist::chain<X0, _GLIBCXX_TYPELIST_CHAIN14(X1, X2, X3, X4, X5, X6, X7, X8, X9, X10, X11, X12, X13, X14) >
-#define _GLIBCXX_TYPELIST_CHAIN16(X0, X1, X2, X3, X4, X5, X6, X7, X8, X9, X10, X11, X12, X13, X14, X15) __gnu_cxx::typelist::chain<X0, _GLIBCXX_TYPELIST_CHAIN15(X1, X2, X3, X4, X5, X6, X7, X8, X9, X10, X11, X12, X13, X14, X15) >
-#define _GLIBCXX_TYPELIST_CHAIN17(X0, X1, X2, X3, X4, X5, X6, X7, X8, X9, X10, X11, X12, X13, X14, X15, X16) __gnu_cxx::typelist::chain<X0, _GLIBCXX_TYPELIST_CHAIN16(X1, X2, X3, X4, X5, X6, X7, X8, X9, X10, X11, X12, X13, X14, X15, X16) >
-#define _GLIBCXX_TYPELIST_CHAIN18(X0, X1, X2, X3, X4, X5, X6, X7, X8, X9, X10, X11, X12, X13, X14, X15, X16, X17) __gnu_cxx::typelist::chain<X0, _GLIBCXX_TYPELIST_CHAIN17(X1, X2, X3, X4, X5, X6, X7, X8, X9, X10, X11, X12, X13, X14, X15, X16, X17) >
-#define _GLIBCXX_TYPELIST_CHAIN19(X0, X1, X2, X3, X4, X5, X6, X7, X8, X9, X10, X11, X12, X13, X14, X15, X16, X17, X18) __gnu_cxx::typelist::chain<X0, _GLIBCXX_TYPELIST_CHAIN18(X1, X2, X3, X4, X5, X6, X7, X8, X9, X10, X11, X12, X13, X14, X15, X16, X17, X18) >
-#define _GLIBCXX_TYPELIST_CHAIN20(X0, X1, X2, X3, X4, X5, X6, X7, X8, X9, X10, X11, X12, X13, X14, X15, X16, X17, X18, X19) __gnu_cxx::typelist::chain<X0, _GLIBCXX_TYPELIST_CHAIN19(X1, X2, X3, X4, X5, X6, X7, X8, X9, X10, X11, X12, X13, X14, X15, X16, X17, X18, X19) >
 
+_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
+
+namespace typelist
+{
   template<typename Fn, typename Typelist>
     void
     apply(Fn& fn, Typelist)
@@ -456,7 +462,7 @@ namespace detail
     private:
       typedef typename Typelist::root 				root_type;
       typedef detail::chain_at_index_<root_type, i> 		index_type;
-
+      
     public:
       typedef typename index_type::type 			type;
     };
@@ -517,22 +523,22 @@ namespace detail
       typedef node<_GLIBCXX_TYPELIST_CHAIN4(T1,T2,T3,T4)>	type;
     };
 
-  template<typename T1, typename T2, typename T3,
+  template<typename T1, typename T2, typename T3, 
 	   typename T4, typename T5>
     struct create5
     {
       typedef node<_GLIBCXX_TYPELIST_CHAIN5(T1,T2,T3,T4,T5)>	type;
     };
 
-  template<typename T1, typename T2, typename T3,
+  template<typename T1, typename T2, typename T3, 
 	   typename T4, typename T5, typename T6>
     struct create6
     {
       typedef node<_GLIBCXX_TYPELIST_CHAIN6(T1,T2,T3,T4,T5,T6)>	type;
     };
 } // namespace typelist
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 
 #endif
+

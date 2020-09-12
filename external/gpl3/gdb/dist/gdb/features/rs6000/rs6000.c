@@ -1,8 +1,6 @@
-/* THIS FILE IS GENERATED.  -*- buffer-read-only: t -*- vi:set ro:
-  Original: rs6000.xml */
+/* THIS FILE IS GENERATED.  Original: rs6000.xml */
 
 #include "defs.h"
-#include "osabi.h"
 #include "target-descriptions.h"
 
 struct target_desc *tdesc_rs6000;
@@ -10,9 +8,10 @@ static void
 initialize_tdesc_rs6000 (void)
 {
   struct target_desc *result = allocate_target_description ();
-  set_tdesc_architecture (result, bfd_scan_arch ("rs6000:6000"));
-
   struct tdesc_feature *feature;
+  struct tdesc_type *field_type, *type;
+
+  set_tdesc_architecture (result, bfd_scan_arch ("rs6000:6000"));
 
   feature = tdesc_create_feature (result, "org.gnu.gdb.power.core");
   tdesc_create_reg (feature, "r0", 0, 1, NULL, 32, "int");

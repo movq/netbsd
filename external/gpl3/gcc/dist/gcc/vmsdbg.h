@@ -1,5 +1,5 @@
 /* Definitions for the data structures and codes used in VMS debugging.
-   Copyright (C) 2001-2019 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2007 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -28,8 +28,7 @@ along with GCC; see the file COPYING3.  If not see
     size of the struct.  */
 
 /* Header type codes.  */
-typedef enum _DST_TYPE {DST_K_TBG = 0x17,
-			DST_K_SOURCE = 155, DST_K_PROLOG = 162,
+typedef enum _DST_TYPE {DST_K_SOURCE = 155, DST_K_PROLOG = 162,
 			DST_K_BLKBEG = 176, DST_K_BLKEND = 177,
 			DST_K_LINE_NUM = 185, DST_K_MODBEG = 188,
 			DST_K_MODEND = 189, DST_K_RTNBEG = 190,
@@ -216,7 +215,13 @@ typedef struct _DST_SRC_COMMAND
 	  unsigned char dst_b_src_df_length;
 	  unsigned char dst_b_src_df_flags;
 	  unsigned short int dst_w_src_df_fileid;
-	  int64_t dst_q_src_df_rms_cdt;
+#ifdef HAVE_LONG_LONG
+	  long long dst_q_src_df_rms_cdt;
+#else
+#ifdef HAVE___INT64
+	  __int64 dst_q_src_df_rms_cdt;
+#endif
+#endif
 	  unsigned int dst_l_src_df_rms_ebk;
 	  unsigned short int dst_w_src_df_rms_ffb;
 	  unsigned char dst_b_src_df_rms_rfo;

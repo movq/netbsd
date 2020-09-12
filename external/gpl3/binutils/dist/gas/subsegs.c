@@ -1,5 +1,7 @@
 /* subsegs.c - subsegments -
-   Copyright (C) 1987-2020 Free Software Foundation, Inc.
+   Copyright 1987, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -55,7 +57,7 @@ subsegs_begin (void)
  * segment context correct.
  */
 void
-subseg_change (segT seg, int subseg)
+subseg_change (register segT seg, register int subseg)
 {
   segment_info_type *seginfo = seg_info (seg);
   now_seg = seg;
@@ -63,9 +65,9 @@ subseg_change (segT seg, int subseg)
 
   if (! seginfo)
     {
-      seginfo = XCNEW (segment_info_type);
+      seginfo = xcalloc (1, sizeof (*seginfo));
       seginfo->bfd_section = seg;
-      bfd_set_section_userdata (seg, seginfo);
+      bfd_set_section_userdata (stdoutput, seg, seginfo);
     }
 }
 
@@ -82,7 +84,7 @@ subseg_set_rest (segT seg, subsegT subseg)
   if (frag_now && frchain_now)
     frchain_now->frch_frag_now = frag_now;
 
-  gas_assert (frchain_now == 0
+  assert (frchain_now == 0
 	  || frchain_now->frch_last == frag_now);
 
   subseg_change (seg, (int) subseg);
@@ -101,7 +103,7 @@ subseg_set_rest (segT seg, subsegT subseg)
     {
       /* This should be the only code that creates a frchainS.  */
 
-      newP = (frchainS *) obstack_alloc (&frchains, sizeof (frchainS));
+      newP = obstack_alloc (&frchains, sizeof (frchainS));
       newP->frch_subseg = subseg;
       newP->fix_root = NULL;
       newP->fix_tail = NULL;
@@ -123,7 +125,7 @@ subseg_set_rest (segT seg, subsegT subseg)
   frchain_now = frcP;
   frag_now = frcP->frch_frag_now;
 
-  gas_assert (frchain_now->frch_last == frag_now);
+  assert (frchain_now->frch_last == frag_now);
 }
 
 /*
@@ -146,7 +148,9 @@ subseg_get (const char *segname, int force_new)
 {
   segT secptr;
   segment_info_type *seginfo;
-  const char *now_seg_name = now_seg ? bfd_section_name (now_seg) : 0;
+  const char *now_seg_name = (now_seg
+			      ? bfd_get_section_name (stdoutput, now_seg)
+			      : 0);
 
   if (!force_new
       && now_seg_name
@@ -163,9 +167,9 @@ subseg_get (const char *segname, int force_new)
   if (! seginfo)
     {
       secptr->output_section = secptr;
-      seginfo = XCNEW (segment_info_type);
+      seginfo = xcalloc (1, sizeof (*seginfo));
       seginfo->bfd_section = secptr;
-      bfd_set_section_userdata (secptr, seginfo);
+      bfd_set_section_userdata (stdoutput, secptr, seginfo);
     }
   return secptr;
 }
@@ -258,7 +262,7 @@ section_symbol (segT sec)
 int
 subseg_text_p (segT sec)
 {
-  return (bfd_section_flags (sec) & SEC_CODE) != 0;
+  return (bfd_get_section_flags (stdoutput, sec) & SEC_CODE) != 0;
 }
 
 /* Return non zero if SEC has at least one byte of data.  It is
@@ -276,7 +280,7 @@ seg_not_empty_p (segT sec ATTRIBUTE_UNUSED)
 
   if (!seginfo)
     return 0;
-
+  
   for (chain = seginfo->frchainP; chain; chain = chain->frch_next)
     {
       for (frag = chain->frch_root; frag; frag = frag->fr_next)
@@ -294,10 +298,6 @@ subsegs_print_statistics (FILE *file)
 {
   frchainS *frchp;
   asection *s;
-
-  /* PR 20897 - check to see if the output bfd was actually created.  */
-  if (stdoutput == NULL)
-    return;
 
   fprintf (file, "frag chains:\n");
   for (s = stdoutput->sections; s; s = s->next)

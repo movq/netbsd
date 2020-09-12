@@ -1,6 +1,6 @@
 /* Definitions of target machine for GCC,
    for SPARC running in an embedded environment using the ELF file format.
-   Copyright (C) 2005-2019 Free Software Foundation, Inc.
+   Copyright (C) 2005, 2007 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -18,11 +18,18 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-/* It's safe to pass -s always, even if -g is not used.  */
+#undef TARGET_VERSION
+#define TARGET_VERSION fprintf (stderr, " (sparc-elf)")
+
+/* Don't assume anything about the header files.  */
+#define NO_IMPLICIT_EXTERN_C
+
+/* The sun bundled assembler doesn't accept -Yd, (and neither does gas).
+   It's safe to pass -s always, even if -g is not used.  */
 #undef ASM_SPEC
 #define ASM_SPEC \
-  "-s \
-   %{" FPIE_OR_FPIC_SPEC ":-K PIC} %(asm_cpu)"
+  "%{v:-V} %{Qy:} %{!Qn:-Qy} %{n} %{T} %{Ym,*} %{Wa,*:%*} -s \
+   %{fpic|fpie|fPIC|fPIE:-K PIC} %(asm_cpu)"
 
 /* Use the default.  */
 #undef LINK_SPEC
@@ -32,12 +39,21 @@ along with GCC; see the file COPYING3.  If not see
 
 #undef ENDFILE_SPEC
 #define ENDFILE_SPEC \
-  "%{Ofast|ffast-math|funsafe-math-optimizations:crtfastmath.o%s} \
+  "%{ffast-math|funsafe-math-optimizations:crtfastmath.o%s} \
    crtend.o%s crtn.o%s"
 
 /* Don't set the target flags, this is done by the linker script */
 #undef LIB_SPEC
 #define LIB_SPEC ""
+
+/* This defines which switch letters take arguments.
+   It is as in svr4.h but with -R added.  */
+#undef SWITCH_TAKES_ARG
+#define SWITCH_TAKES_ARG(CHAR) \
+  (DEFAULT_SWITCH_TAKES_ARG(CHAR) \
+   || (CHAR) == 'R' \
+   || (CHAR) == 'h' \
+   || (CHAR) == 'z')
 
 #undef  LOCAL_LABEL_PREFIX
 #define LOCAL_LABEL_PREFIX  "."
@@ -50,10 +66,6 @@ along with GCC; see the file COPYING3.  If not see
 #undef  ASM_GENERATE_INTERNAL_LABEL
 #define ASM_GENERATE_INTERNAL_LABEL(LABEL,PREFIX,NUM)	\
   sprintf ((LABEL), "*.L%s%ld", (PREFIX), (long)(NUM))
-
-/* We use GNU ld so undefine this so that attribute((init_priority)) works.  */
-#undef CTORS_SECTION_ASM_OP
-#undef DTORS_SECTION_ASM_OP
 
 /* ??? Inherited from sol2.h.  Probably wrong.  */
 #undef WCHAR_TYPE

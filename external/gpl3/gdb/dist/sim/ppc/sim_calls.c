@@ -4,7 +4,7 @@
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or
+    the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
     This program is distributed in the hope that it will be useful,
@@ -13,7 +13,8 @@
     GNU General Public License for more details.
  
     You should have received a copy of the GNU General Public License
-    along with this program; if not, see <http://www.gnu.org/licenses/>.
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  
     */
 
@@ -63,7 +64,7 @@ SIM_DESC
 sim_open (SIM_OPEN_KIND kind,
 	  host_callback *callback,
 	  struct bfd *abfd,
-	  char * const *argv)
+	  char **argv)
 {
   callbacks = callback;
 
@@ -77,8 +78,7 @@ sim_open (SIM_OPEN_KIND kind,
   root_device = psim_tree();
   simulator = NULL;
 
-  if (psim_options (root_device, argv + 1, kind) == NULL)
-    return NULL;
+  psim_options(root_device, argv + 1);
 
   if (ppc_trace[trace_opts])
     print_options ();
@@ -98,7 +98,7 @@ sim_close (SIM_DESC sd, int quitting)
 
 
 SIM_RC
-sim_load (SIM_DESC sd, const char *prog, bfd *abfd, int from_tty)
+sim_load (SIM_DESC sd, char *prog, bfd *abfd, int from_tty)
 {
   TRACE(trace_gdb, ("sim_load(prog=%s, from_tty=%d) called\n",
 		    prog, from_tty));
@@ -165,8 +165,8 @@ sim_info (SIM_DESC sd, int verbose)
 SIM_RC
 sim_create_inferior (SIM_DESC sd,
 		     struct bfd *abfd,
-		     char * const *argv,
-		     char * const *envp)
+		     char **argv,
+		     char **envp)
 {
   unsigned_word entry_point;
   TRACE(trace_gdb, ("sim_create_inferior(start_address=0x%x, ...)\n",
@@ -198,13 +198,13 @@ sim_stop_reason (SIM_DESC sd, enum sim_stop *reason, int *sigrc)
   case was_continuing:
     *reason = sim_stopped;
     if (status.signal == 0)
-      *sigrc = GDB_SIGNAL_TRAP;
+      *sigrc = TARGET_SIGNAL_TRAP;
     else
       *sigrc = status.signal;
     break;
   case was_trap:
     *reason = sim_stopped;
-    *sigrc = GDB_SIGNAL_TRAP;
+    *sigrc = TARGET_SIGNAL_TRAP;
     break;
   case was_exited:
     *reason = sim_exited;
@@ -248,7 +248,7 @@ sim_resume (SIM_DESC sd, int step, int siggnal)
 }
 
 void
-sim_do_command (SIM_DESC sd, const char *cmd)
+sim_do_command (SIM_DESC sd, char *cmd)
 {
   TRACE(trace_gdb, ("sim_do_commands(cmd=%s) called\n",
 		    cmd ? cmd : "(null)"));
@@ -259,11 +259,6 @@ sim_do_command (SIM_DESC sd, const char *cmd)
   }
 }
 
-char **
-sim_complete_command (SIM_DESC sd, const char *text, const char *word)
-{
-  return NULL;
-}
 
 /* Polling, if required */
 
@@ -385,16 +380,6 @@ sim_io_error (SIM_DESC sd, const char *fmt, ...)
 }
 
 /****/
-
-void NORETURN
-error (const char *msg, ...)
-{
-  va_list ap;
-  va_start(ap, msg);
-  callbacks->evprintf_filtered (callbacks, msg, ap);
-  va_end(ap);
-  callbacks->error (callbacks, "");
-}
 
 void *
 zalloc(long size)

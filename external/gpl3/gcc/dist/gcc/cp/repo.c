@@ -1,5 +1,6 @@
 /* Code to maintain a C++ template repository.
-   Copyright (C) 1995-2019 Free Software Foundation, Inc.
+   Copyright (C) 1995, 1996, 1997, 1998, 2000, 2001, 2002, 2003, 2004, 2005,
+   2006, 2007, 2008  Free Software Foundation, Inc.
    Contributed by Jason Merrill (jason@cygnus.com)
 
 This file is part of GCC.
@@ -27,9 +28,14 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
+#include "tm.h"
+#include "tree.h"
 #include "cp-tree.h"
-#include "stringpool.h"
+#include "input.h"
+#include "obstack.h"
 #include "toplev.h"
+#include "diagnostic.h"
+#include "flags.h"
 
 static const char *extract_string (const char **);
 static const char *get_base_filename (const char *);
@@ -37,7 +43,7 @@ static FILE *open_repo_file (const char *);
 static char *afgets (FILE *);
 static FILE *reopen_repo_file_for_write (void);
 
-static GTY(()) vec<tree, va_gc> *pending_repo;
+static GTY(()) tree pending_repo;
 static char *repo_name;
 
 static const char *old_args, *old_dir, *old_main;
@@ -110,7 +116,7 @@ get_base_filename (const char *filename)
 
   if (p && ! compiling)
     {
-      warning (0, "%<-frepo%> must be used with %<-c%>");
+      warning (0, "-frepo must be used with -c");
       flag_use_repository = 0;
       return NULL;
     }
@@ -218,7 +224,7 @@ reopen_repo_file_for_write (void)
 
   if (repo_file == 0)
     {
-      error ("can%'t create repository information file %qs", repo_name);
+      error ("can't create repository information file %qs", repo_name);
       flag_use_repository = 0;
     }
 
@@ -230,15 +236,14 @@ reopen_repo_file_for_write (void)
 void
 finish_repo (void)
 {
-  tree val;
+  tree t;
   char *dir, *args;
   FILE *repo_file;
-  unsigned ix;
 
   if (!flag_use_repository || flag_compare_debug)
     return;
 
-  if (seen_error ())
+  if (errorcount || sorrycount)
     return;
 
   repo_file = reopen_repo_file_for_write ();
@@ -257,13 +262,13 @@ finish_repo (void)
 	 anonymous namespaces will get the same mangling when this
 	 file is recompiled.  */
       if (!strstr (args, "'-frandom-seed="))
-	fprintf (repo_file, " '-frandom-seed=" HOST_WIDE_INT_PRINT_HEX_PURE "'", 
-		 get_random_seed (false));
+	fprintf (repo_file, " '-frandom-seed=%s'", get_random_seed (false));
       fprintf (repo_file, "\n");
     }
 
-  FOR_EACH_VEC_SAFE_ELT_REVERSE (pending_repo, ix, val)
+  for (t = pending_repo; t; t = TREE_CHAIN (t))
     {
+      tree val = TREE_VALUE (t);
       tree name = DECL_ASSEMBLER_NAME (val);
       char type = IDENTIFIER_REPO_CHOSEN (name) ? 'C' : 'O';
       fprintf (repo_file, "%c %s\n", type, IDENTIFIER_POINTER (name));
@@ -286,12 +291,9 @@ repo_emit_p (tree decl)
 {
   int ret = 0;
   gcc_assert (TREE_PUBLIC (decl));
-  gcc_assert (VAR_OR_FUNCTION_DECL_P (decl));
-  gcc_assert (!DECL_REALLY_EXTERN (decl)
-	      /* A clone might not have its linkage flags updated yet
-		 because we call import_export_decl before
-		 maybe_clone_body.  */
-	      || DECL_ABSTRACT_ORIGIN (decl));
+  gcc_assert (TREE_CODE (decl) == FUNCTION_DECL
+	      || TREE_CODE (decl) == VAR_DECL);
+  gcc_assert (!DECL_REALLY_EXTERN (decl));
 
   /* When not using the repository, emit everything.  */
   if (!flag_use_repository)
@@ -301,7 +303,7 @@ repo_emit_p (tree decl)
      is an artificial restriction; the code in the prelinker and here
      will work fine if all entities with vague linkage are managed by
      the repository.  */
-  if (VAR_P (decl))
+  if (TREE_CODE (decl) == VAR_DECL)
     {
       tree type = NULL_TREE;
       if (DECL_VTABLE_OR_VTT_P (decl))
@@ -317,7 +319,7 @@ repo_emit_p (tree decl)
 	 available.  Still record them into *.rpo files, so if they
 	 weren't actually emitted and collect2 requests them, they can
 	 be provided.  */
-      if (decl_maybe_constant_var_p (decl)
+      if (DECL_INTEGRAL_CONSTANT_VAR_P (decl)
 	  && DECL_CLASS_SCOPE_P (decl))
 	ret = 2;
     }
@@ -330,7 +332,8 @@ repo_emit_p (tree decl)
   /* For constructors and destructors, the repository contains
      information about the clones -- not the original function --
      because only the clones are emitted in the object file.  */
-  if (DECL_MAYBE_IN_CHARGE_CDTOR_P (decl))
+  if (DECL_MAYBE_IN_CHARGE_CONSTRUCTOR_P (decl)
+      || DECL_MAYBE_IN_CHARGE_DESTRUCTOR_P (decl))
     {
       int emit_p = 0;
       tree clone;
@@ -349,7 +352,7 @@ repo_emit_p (tree decl)
   if (!DECL_REPO_AVAILABLE_P (decl))
     {
       DECL_REPO_AVAILABLE_P (decl) = 1;
-      vec_safe_push (pending_repo, decl);
+      pending_repo = tree_cons (NULL_TREE, decl, pending_repo);
     }
 
   return IDENTIFIER_REPO_CHOSEN (DECL_ASSEMBLER_NAME (decl)) ? 1 : ret;

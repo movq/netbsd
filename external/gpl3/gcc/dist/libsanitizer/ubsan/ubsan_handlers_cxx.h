@@ -32,6 +32,7 @@ void __ubsan_handle_dynamic_type_cache_miss(
 extern "C" SANITIZER_INTERFACE_ATTRIBUTE
 void __ubsan_handle_dynamic_type_cache_miss_abort(
   DynamicTypeCacheMissData *Data, ValueHandle Pointer, ValueHandle Hash);
+
 }
 
 #endif // UBSAN_HANDLERS_H

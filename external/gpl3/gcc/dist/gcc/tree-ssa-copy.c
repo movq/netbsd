@@ -1,5 +1,6 @@
 /* Copy propagation and SSA_NAME replacement support routines.
-   Copyright (C) 2004-2019 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2006, 2007, 2008, 2010
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,20 +21,24 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "backend.h"
+#include "tm.h"
 #include "tree.h"
-#include "gimple.h"
+#include "flags.h"
+#include "rtl.h"
+#include "tm_p.h"
+#include "ggc.h"
+#include "basic-block.h"
+#include "output.h"
+#include "expr.h"
+#include "function.h"
+#include "diagnostic.h"
+#include "timevar.h"
+#include "tree-dump.h"
+#include "tree-flow.h"
 #include "tree-pass.h"
-#include "ssa.h"
-#include "gimple-pretty-print.h"
-#include "fold-const.h"
-#include "gimple-iterator.h"
-#include "tree-cfg.h"
 #include "tree-ssa-propagate.h"
+#include "langhooks.h"
 #include "cfgloop.h"
-#include "tree-scalar-evolution.h"
-#include "tree-ssa-loop-niter.h"
-
 
 /* This file implements the copy propagation pass and provides a
    handful of interfaces for performing const/copy propagation and
@@ -51,38 +56,248 @@ along with GCC; see the file COPYING3.  If not see
    replacements of one SSA_NAME with a different SSA_NAME to use the
    APIs defined in this file.  */
 
+/* Return true if we may propagate ORIG into DEST, false otherwise.  */
+
+bool
+may_propagate_copy (tree dest, tree orig)
+{
+  tree type_d = TREE_TYPE (dest);
+  tree type_o = TREE_TYPE (orig);
+
+  /* If ORIG flows in from an abnormal edge, it cannot be propagated.  */
+  if (TREE_CODE (orig) == SSA_NAME
+      && SSA_NAME_OCCURS_IN_ABNORMAL_PHI (orig))
+    return false;
+
+  /* If DEST is an SSA_NAME that flows from an abnormal edge, then it
+     cannot be replaced.  */
+  if (TREE_CODE (dest) == SSA_NAME
+      && SSA_NAME_OCCURS_IN_ABNORMAL_PHI (dest))
+    return false;
+
+  /* Do not copy between types for which we *do* need a conversion.  */
+  if (!useless_type_conversion_p (type_d, type_o))
+    return false;
+
+  /* Propagating virtual operands is always ok.  */
+  if (TREE_CODE (dest) == SSA_NAME && !is_gimple_reg (dest))
+    {
+      /* But only between virtual operands.  */
+      gcc_assert (TREE_CODE (orig) == SSA_NAME && !is_gimple_reg (orig));
+
+      return true;
+    }
+
+  /* Anything else is OK.  */
+  return true;
+}
+
+/* Like may_propagate_copy, but use as the destination expression
+   the principal expression (typically, the RHS) contained in
+   statement DEST.  This is more efficient when working with the
+   gimple tuples representation.  */
+
+bool
+may_propagate_copy_into_stmt (gimple dest, tree orig)
+{
+  tree type_d;
+  tree type_o;
+
+  /* If the statement is a switch or a single-rhs assignment,
+     then the expression to be replaced by the propagation may
+     be an SSA_NAME.  Fortunately, there is an explicit tree
+     for the expression, so we delegate to may_propagate_copy.  */
+
+  if (gimple_assign_single_p (dest))
+    return may_propagate_copy (gimple_assign_rhs1 (dest), orig);
+  else if (gimple_code (dest) == GIMPLE_SWITCH)
+    return may_propagate_copy (gimple_switch_index (dest), orig);
+
+  /* In other cases, the expression is not materialized, so there
+     is no destination to pass to may_propagate_copy.  On the other
+     hand, the expression cannot be an SSA_NAME, so the analysis
+     is much simpler.  */
+
+  if (TREE_CODE (orig) == SSA_NAME
+      && SSA_NAME_OCCURS_IN_ABNORMAL_PHI (orig))
+    return false;
+
+  if (is_gimple_assign (dest))
+    type_d = TREE_TYPE (gimple_assign_lhs (dest));
+  else if (gimple_code (dest) == GIMPLE_COND)
+    type_d = boolean_type_node;
+  else if (is_gimple_call (dest)
+           && gimple_call_lhs (dest) != NULL_TREE)
+    type_d = TREE_TYPE (gimple_call_lhs (dest));
+  else
+    gcc_unreachable ();
+
+  type_o = TREE_TYPE (orig);
+
+  if (!useless_type_conversion_p (type_d, type_o))
+    return false;
+
+  return true;
+}
+
+/* Similarly, but we know that we're propagating into an ASM_EXPR.  */
+
+bool
+may_propagate_copy_into_asm (tree dest)
+{
+  /* Hard register operands of asms are special.  Do not bypass.  */
+  return !(TREE_CODE (dest) == SSA_NAME
+	   && TREE_CODE (SSA_NAME_VAR (dest)) == VAR_DECL
+	   && DECL_HARD_REGISTER (SSA_NAME_VAR (dest)));
+}
+
+
+/* Common code for propagate_value and replace_exp.
+
+   Replace use operand OP_P with VAL.  FOR_PROPAGATION indicates if the
+   replacement is done to propagate a value or not.  */
+
+static void
+replace_exp_1 (use_operand_p op_p, tree val,
+    	       bool for_propagation ATTRIBUTE_UNUSED)
+{
+#if defined ENABLE_CHECKING
+  tree op = USE_FROM_PTR (op_p);
+
+  gcc_assert (!(for_propagation
+		&& TREE_CODE (op) == SSA_NAME
+		&& TREE_CODE (val) == SSA_NAME
+		&& !may_propagate_copy (op, val)));
+#endif
+
+  if (TREE_CODE (val) == SSA_NAME)
+    SET_USE (op_p, val);
+  else
+    SET_USE (op_p, unsave_expr_now (val));
+}
+
+
+/* Propagate the value VAL (assumed to be a constant or another SSA_NAME)
+   into the operand pointed to by OP_P.
+
+   Use this version for const/copy propagation as it will perform additional
+   checks to ensure validity of the const/copy propagation.  */
+
+void
+propagate_value (use_operand_p op_p, tree val)
+{
+  replace_exp_1 (op_p, val, true);
+}
+
+/* Replace *OP_P with value VAL (assumed to be a constant or another SSA_NAME).
+
+   Use this version when not const/copy propagating values.  For example,
+   PRE uses this version when building expressions as they would appear
+   in specific blocks taking into account actions of PHI nodes.  */
+
+void
+replace_exp (use_operand_p op_p, tree val)
+{
+  replace_exp_1 (op_p, val, false);
+}
+
+
+/* Propagate the value VAL (assumed to be a constant or another SSA_NAME)
+   into the tree pointed to by OP_P.
+
+   Use this version for const/copy propagation when SSA operands are not
+   available.  It will perform the additional checks to ensure validity of
+   the const/copy propagation, but will not update any operand information.
+   Be sure to mark the stmt as modified.  */
+
+void
+propagate_tree_value (tree *op_p, tree val)
+{
+#if defined ENABLE_CHECKING
+  gcc_assert (!(TREE_CODE (val) == SSA_NAME
+                && *op_p
+		&& TREE_CODE (*op_p) == SSA_NAME
+		&& !may_propagate_copy (*op_p, val)));
+#endif
+
+  if (TREE_CODE (val) == SSA_NAME)
+    *op_p = val;
+  else
+    *op_p = unsave_expr_now (val);
+}
+
+
+/* Like propagate_tree_value, but use as the operand to replace
+   the principal expression (typically, the RHS) contained in the
+   statement referenced by iterator GSI.  Note that it is not
+   always possible to update the statement in-place, so a new
+   statement may be created to replace the original.  */
+
+void
+propagate_tree_value_into_stmt (gimple_stmt_iterator *gsi, tree val)
+{
+  gimple stmt = gsi_stmt (*gsi);
+
+  if (is_gimple_assign (stmt))
+    {
+      tree expr = NULL_TREE;
+      if (gimple_assign_single_p (stmt))
+        expr = gimple_assign_rhs1 (stmt);
+      propagate_tree_value (&expr, val);
+      gimple_assign_set_rhs_from_tree (gsi, expr);
+      stmt = gsi_stmt (*gsi);
+    }
+  else if (gimple_code (stmt) == GIMPLE_COND)
+    {
+      tree lhs = NULL_TREE;
+      tree rhs = fold_convert (TREE_TYPE (val), integer_zero_node);
+      propagate_tree_value (&lhs, val);
+      gimple_cond_set_code (stmt, NE_EXPR);
+      gimple_cond_set_lhs (stmt, lhs);
+      gimple_cond_set_rhs (stmt, rhs);
+    }
+  else if (is_gimple_call (stmt)
+           && gimple_call_lhs (stmt) != NULL_TREE)
+    {
+      gimple new_stmt;
+
+      tree expr = NULL_TREE;
+      propagate_tree_value (&expr, val);
+      new_stmt = gimple_build_assign (gimple_call_lhs (stmt), expr);
+      move_ssa_defining_stmt_for_defs (new_stmt, stmt);
+      gsi_replace (gsi, new_stmt, false);
+    }
+  else if (gimple_code (stmt) == GIMPLE_SWITCH)
+    propagate_tree_value (gimple_switch_index_ptr (stmt), val);
+  else
+    gcc_unreachable ();
+}
+
 /*---------------------------------------------------------------------------
 				Copy propagation
 ---------------------------------------------------------------------------*/
-/* Lattice for copy-propagation.  The lattice is initialized to
-   UNDEFINED (value == NULL) for SSA names that can become a copy
-   of something or VARYING (value == self) if not (see get_copy_of_val
-   and stmt_may_generate_copy).  Other values make the name a COPY
-   of that value.
+/* During propagation, we keep chains of variables that are copies of
+   one another.  If variable X_i is a copy of X_j and X_j is a copy of
+   X_k, COPY_OF will contain:
 
-   When visiting a statement or PHI node the lattice value for an
-   SSA name can transition from UNDEFINED to COPY to VARYING.  */
+   	COPY_OF[i].VALUE = X_j
+	COPY_OF[j].VALUE = X_k
+	COPY_OF[k].VALUE = X_k
 
-struct prop_value_t {
-    /* Copy-of value.  */
-    tree value;
-};
-
-class copy_prop : public ssa_propagation_engine
-{
- public:
-  enum ssa_prop_result visit_stmt (gimple *, edge *, tree *) FINAL OVERRIDE;
-  enum ssa_prop_result visit_phi (gphi *) FINAL OVERRIDE;
-};
-
+   After propagation, the copy-of value for each variable X_i is
+   converted into the final value by walking the copy-of chains and
+   updating COPY_OF[i].VALUE to be the last element of the chain.  */
 static prop_value_t *copy_of;
-static unsigned n_copy_of;
+
+/* Used in set_copy_of_val to determine if the last link of a copy-of
+   chain has changed.  */
+static tree *cached_last_copy_of;
 
 
 /* Return true if this statement may generate a useful copy.  */
 
 static bool
-stmt_may_generate_copy (gimple *stmt)
+stmt_may_generate_copy (gimple stmt)
 {
   if (gimple_code (stmt) == GIMPLE_PHI)
     return !SSA_NAME_OCCURS_IN_ABNORMAL_PHI (gimple_phi_result (stmt));
@@ -102,9 +317,8 @@ stmt_may_generate_copy (gimple *stmt)
   /* Otherwise, the only statements that generate useful copies are
      assignments whose RHS is just an SSA name that doesn't flow
      through abnormal edges.  */
-  return ((gimple_assign_rhs_code (stmt) == SSA_NAME
-	   && !SSA_NAME_OCCURS_IN_ABNORMAL_PHI (gimple_assign_rhs1 (stmt)))
-	  || is_gimple_min_invariant (gimple_assign_rhs1 (stmt)));
+  return (gimple_assign_rhs_code (stmt) == SSA_NAME
+	  && !SSA_NAME_OCCURS_IN_ABNORMAL_PHI (gimple_assign_rhs1 (stmt)));
 }
 
 
@@ -126,39 +340,82 @@ get_copy_of_val (tree var)
   return val;
 }
 
-/* Return the variable VAR is a copy of or VAR if VAR isn't the result
-   of a copy.  */
 
-static inline tree
-valueize_val (tree var)
+/* Return last link in the copy-of chain for VAR.  */
+
+static tree
+get_last_copy_of (tree var)
 {
-  if (TREE_CODE (var) == SSA_NAME)
+  tree last;
+  int i;
+
+  /* Traverse COPY_OF starting at VAR until we get to the last
+     link in the chain.  Since it is possible to have cycles in PHI
+     nodes, the copy-of chain may also contain cycles.
+
+     To avoid infinite loops and to avoid traversing lengthy copy-of
+     chains, we artificially limit the maximum number of chains we are
+     willing to traverse.
+
+     The value 5 was taken from a compiler and runtime library
+     bootstrap and a mixture of C and C++ code from various sources.
+     More than 82% of all copy-of chains were shorter than 5 links.  */
+#define LIMIT	5
+
+  last = var;
+  for (i = 0; i < LIMIT; i++)
     {
-      tree val = get_copy_of_val (var)->value;
-      if (val)
-	return val;
+      tree copy = copy_of[SSA_NAME_VERSION (last)].value;
+      if (copy == NULL_TREE || copy == last)
+	break;
+      last = copy;
     }
-  return var;
+
+  /* If we have reached the limit, then we are either in a copy-of
+     cycle or the copy-of chain is too long.  In this case, just
+     return VAR so that it is not considered a copy of anything.  */
+  return (i < LIMIT ? last : var);
 }
 
-/* Set VAL to be the copy of VAR.  If that changed return true.  */
+
+/* Set FIRST to be the first variable in the copy-of chain for DEST.
+   If DEST's copy-of value or its copy-of chain has changed, return
+   true.
+
+   MEM_REF is the memory reference where FIRST is stored.  This is
+   used when DEST is a non-register and we are copy propagating loads
+   and stores.  */
 
 static inline bool
-set_copy_of_val (tree var, tree val)
+set_copy_of_val (tree dest, tree first)
 {
-  unsigned int ver = SSA_NAME_VERSION (var);
-  tree old;
+  unsigned int dest_ver = SSA_NAME_VERSION (dest);
+  tree old_first, old_last, new_last;
 
   /* Set FIRST to be the first link in COPY_OF[DEST].  If that
      changed, return true.  */
-  old = copy_of[ver].value;
-  copy_of[ver].value = val;
+  old_first = copy_of[dest_ver].value;
+  copy_of[dest_ver].value = first;
 
-  if (old != val
-      && (!old || !operand_equal_p (old, val, 0)))
+  if (old_first != first)
     return true;
 
-  return false;
+  /* If FIRST and OLD_FIRST are the same, we need to check whether the
+     copy-of chain starting at FIRST ends in a different variable.  If
+     the copy-of chain starting at FIRST ends up in a different
+     variable than the last cached value we had for DEST, then return
+     true because DEST is now a copy of a different variable.
+
+     This test is necessary because even though the first link in the
+     copy-of chain may not have changed, if any of the variables in
+     the copy-of chain changed its final value, DEST will now be the
+     copy of a different variable, so we have to do another round of
+     propagation for everything that depends on DEST.  */
+  old_last = cached_last_copy_of[dest_ver];
+  new_last = get_last_copy_of (dest);
+  cached_last_copy_of[dest_ver] = new_last;
+
+  return (old_last != new_last);
 }
 
 
@@ -168,39 +425,64 @@ static void
 dump_copy_of (FILE *file, tree var)
 {
   tree val;
+  sbitmap visited;
 
   print_generic_expr (file, var, dump_flags);
+
   if (TREE_CODE (var) != SSA_NAME)
     return;
 
-  val = copy_of[SSA_NAME_VERSION (var)].value;
+  visited = sbitmap_alloc (num_ssa_names);
+  sbitmap_zero (visited);
+  SET_BIT (visited, SSA_NAME_VERSION (var));
+
   fprintf (file, " copy-of chain: ");
-  print_generic_expr (file, var);
+
+  val = var;
+  print_generic_expr (file, val, 0);
   fprintf (file, " ");
-  if (!val)
-    fprintf (file, "[UNDEFINED]");
-  else if (val == var)
-    fprintf (file, "[NOT A COPY]");
-  else
+  while (copy_of[SSA_NAME_VERSION (val)].value)
     {
       fprintf (file, "-> ");
-      print_generic_expr (file, val);
+      val = copy_of[SSA_NAME_VERSION (val)].value;
+      print_generic_expr (file, val, 0);
       fprintf (file, " ");
-      fprintf (file, "[COPY]");
+      if (TEST_BIT (visited, SSA_NAME_VERSION (val)))
+        break;
+      SET_BIT (visited, SSA_NAME_VERSION (val));
     }
+
+  val = get_copy_of_val (var)->value;
+  if (val == NULL_TREE)
+    fprintf (file, "[UNDEFINED]");
+  else if (val != var)
+    fprintf (file, "[COPY]");
+  else
+    fprintf (file, "[NOT A COPY]");
+
+  sbitmap_free (visited);
 }
 
 
 /* Evaluate the RHS of STMT.  If it produces a valid copy, set the LHS
-   value and store the LHS into *RESULT_P.  */
+   value and store the LHS into *RESULT_P.  If STMT generates more
+   than one name (i.e., STMT is an aliased store), it is enough to
+   store the first name in the VDEF list into *RESULT_P.  After
+   all, the names generated will be VUSEd in the same statements.  */
 
 static enum ssa_prop_result
-copy_prop_visit_assignment (gimple *stmt, tree *result_p)
+copy_prop_visit_assignment (gimple stmt, tree *result_p)
 {
   tree lhs, rhs;
+  prop_value_t *rhs_val;
 
   lhs = gimple_assign_lhs (stmt);
-  rhs = valueize_val (gimple_assign_rhs1 (stmt));
+  rhs = gimple_assign_rhs1 (stmt);
+
+
+  gcc_assert (gimple_assign_rhs_code (stmt) == SSA_NAME);
+
+  rhs_val = get_copy_of_val (rhs);
 
   if (TREE_CODE (lhs) == SSA_NAME)
     {
@@ -209,8 +491,14 @@ copy_prop_visit_assignment (gimple *stmt, tree *result_p)
       if (!may_propagate_copy (lhs, rhs))
 	return SSA_PROP_VARYING;
 
+      /* Notice that in the case of assignments, we make the LHS be a
+	 copy of RHS's value, not of RHS itself.  This avoids keeping
+	 unnecessary copy-of chains (assignments cannot be in a cycle
+	 like PHI nodes), speeding up the propagation process.
+	 This is different from what we do in copy_prop_visit_phi_node.
+	 In those cases, we are interested in the copy-of chains.  */
       *result_p = lhs;
-      if (set_copy_of_val (*result_p, rhs))
+      if (set_copy_of_val (*result_p, rhs_val->value))
 	return SSA_PROP_INTERESTING;
       else
 	return SSA_PROP_NOT_INTERESTING;
@@ -225,31 +513,43 @@ copy_prop_visit_assignment (gimple *stmt, tree *result_p)
    SSA_PROP_VARYING.  */
 
 static enum ssa_prop_result
-copy_prop_visit_cond_stmt (gimple *stmt, edge *taken_edge_p)
+copy_prop_visit_cond_stmt (gimple stmt, edge *taken_edge_p)
 {
   enum ssa_prop_result retval = SSA_PROP_VARYING;
   location_t loc = gimple_location (stmt);
 
-  tree op0 = valueize_val (gimple_cond_lhs (stmt));
-  tree op1 = valueize_val (gimple_cond_rhs (stmt));
+  tree op0 = gimple_cond_lhs (stmt);
+  tree op1 = gimple_cond_rhs (stmt);
 
-  /* See if we can determine the predicate's value.  */
-  if (dump_file && (dump_flags & TDF_DETAILS))
+  /* The only conditionals that we may be able to compute statically
+     are predicates involving two SSA_NAMEs.  */
+  if (TREE_CODE (op0) == SSA_NAME && TREE_CODE (op1) == SSA_NAME)
     {
-      fprintf (dump_file, "Trying to determine truth value of ");
-      fprintf (dump_file, "predicate ");
-      print_gimple_stmt (dump_file, stmt, 0);
-    }
+      op0 = get_last_copy_of (op0);
+      op1 = get_last_copy_of (op1);
 
-  /* Fold COND and see whether we get a useful result.  */
-  tree folded_cond = fold_binary_loc (loc, gimple_cond_code (stmt),
-				      boolean_type_node, op0, op1);
-  if (folded_cond)
-    {
-      basic_block bb = gimple_bb (stmt);
-      *taken_edge_p = find_taken_edge (bb, folded_cond);
-      if (*taken_edge_p)
-	retval = SSA_PROP_INTERESTING;
+      /* See if we can determine the predicate's value.  */
+      if (dump_file && (dump_flags & TDF_DETAILS))
+	{
+	  fprintf (dump_file, "Trying to determine truth value of ");
+	  fprintf (dump_file, "predicate ");
+	  print_gimple_stmt (dump_file, stmt, 0, 0);
+	}
+
+      /* We can fold COND and get a useful result only when we have
+	 the same SSA_NAME on both sides of a comparison operator.  */
+      if (op0 == op1)
+	{
+	  tree folded_cond = fold_binary_loc (loc, gimple_cond_code (stmt),
+                                          boolean_type_node, op0, op1);
+	  if (folded_cond)
+	    {
+	      basic_block bb = gimple_bb (stmt);
+	      *taken_edge_p = find_taken_edge (bb, folded_cond);
+	      if (*taken_edge_p)
+		retval = SSA_PROP_INTERESTING;
+	    }
+	}
     }
 
   if (dump_file && (dump_flags & TDF_DETAILS) && *taken_edge_p)
@@ -270,8 +570,8 @@ copy_prop_visit_cond_stmt (gimple *stmt, edge *taken_edge_p)
    If the new value produced by STMT is varying, return
    SSA_PROP_VARYING.  */
 
-enum ssa_prop_result
-copy_prop::visit_stmt (gimple *stmt, edge *taken_edge_p, tree *result_p)
+static enum ssa_prop_result
+copy_prop_visit_stmt (gimple stmt, edge *taken_edge_p, tree *result_p)
 {
   enum ssa_prop_result retval;
 
@@ -284,8 +584,7 @@ copy_prop::visit_stmt (gimple *stmt, edge *taken_edge_p, tree *result_p)
 
   if (gimple_assign_single_p (stmt)
       && TREE_CODE (gimple_assign_lhs (stmt)) == SSA_NAME
-      && (TREE_CODE (gimple_assign_rhs1 (stmt)) == SSA_NAME
-	  || is_gimple_min_invariant (gimple_assign_rhs1 (stmt))))
+      && TREE_CODE (gimple_assign_rhs1 (stmt)) == SSA_NAME)
     {
       /* If the statement is a copy assignment, evaluate its RHS to
 	 see if the lattice value of its output has changed.  */
@@ -324,12 +623,12 @@ copy_prop::visit_stmt (gimple *stmt, edge *taken_edge_p, tree *result_p)
 /* Visit PHI node PHI.  If all the arguments produce the same value,
    set it to be the value of the LHS of PHI.  */
 
-enum ssa_prop_result
-copy_prop::visit_phi (gphi *phi)
+static enum ssa_prop_result
+copy_prop_visit_phi_node (gimple phi)
 {
   enum ssa_prop_result retval;
   unsigned i;
-  prop_value_t phi_val = { NULL_TREE };
+  prop_value_t phi_val = { 0, NULL_TREE };
 
   tree lhs = gimple_phi_result (phi);
 
@@ -337,12 +636,12 @@ copy_prop::visit_phi (gphi *phi)
     {
       fprintf (dump_file, "\nVisiting PHI node: ");
       print_gimple_stmt (dump_file, phi, 0, dump_flags);
+      fprintf (dump_file, "\n\n");
     }
 
   for (i = 0; i < gimple_phi_num_args (phi); i++)
     {
       prop_value_t *arg_val;
-      tree arg_value;
       tree arg = gimple_phi_arg_def (phi, i);
       edge e = gimple_phi_arg_edge (phi, i);
 
@@ -351,13 +650,32 @@ copy_prop::visit_phi (gphi *phi)
       if (!(e->flags & EDGE_EXECUTABLE))
 	continue;
 
-      /* Names that flow through abnormal edges cannot be used to
-	 derive copies.  */
-      if (TREE_CODE (arg) == SSA_NAME && SSA_NAME_OCCURS_IN_ABNORMAL_PHI (arg))
+      /* Constants in the argument list never generate a useful copy.
+	 Similarly, names that flow through abnormal edges cannot be
+	 used to derive copies.  */
+      if (TREE_CODE (arg) != SSA_NAME || SSA_NAME_OCCURS_IN_ABNORMAL_PHI (arg))
 	{
 	  phi_val.value = lhs;
 	  break;
 	}
+
+      /* Avoid copy propagation from an inner into an outer loop.
+	 Otherwise, this may move loop variant variables outside of
+	 their loops and prevent coalescing opportunities.  If the
+	 value was loop invariant, it will be hoisted by LICM and
+	 exposed for copy propagation.  Not a problem for virtual
+	 operands though.  */
+      if (is_gimple_reg (lhs)
+	  && loop_depth_of_name (arg) > loop_depth_of_name (lhs))
+	{
+	  phi_val.value = lhs;
+	  break;
+	}
+
+      /* If the LHS appears in the argument list, ignore it.  It is
+	 irrelevant as a copy.  */
+      if (arg == lhs || get_last_copy_of (arg) == lhs)
+	continue;
 
       if (dump_file && (dump_flags & TDF_DETAILS))
 	{
@@ -366,51 +684,32 @@ copy_prop::visit_phi (gphi *phi)
 	  fprintf (dump_file, "\n");
 	}
 
-      if (TREE_CODE (arg) == SSA_NAME)
-	{
-	  arg_val = get_copy_of_val (arg);
-
-	  /* If we didn't visit the definition of arg yet treat it as
-	     UNDEFINED.  This also handles PHI arguments that are the
-	     same as lhs.  We'll come here again.  */
-	  if (!arg_val->value)
-	    continue;
-
-	  arg_value = arg_val->value;
-	}
-      else
-	arg_value = valueize_val (arg);
-
-      /* In loop-closed SSA form do not copy-propagate SSA-names across
-	 loop exit edges.  */
-      if (loops_state_satisfies_p (LOOP_CLOSED_SSA)
-	  && TREE_CODE (arg_value) == SSA_NAME
-	  && loop_exit_edge_p (e->src->loop_father, e))
-	{
-	  phi_val.value = lhs;
-	  break;
-	}
+      arg_val = get_copy_of_val (arg);
 
       /* If the LHS didn't have a value yet, make it a copy of the
-	 first argument we find.   */
+	 first argument we find.  Notice that while we make the LHS be
+	 a copy of the argument itself, we take the memory reference
+	 from the argument's value so that we can compare it to the
+	 memory reference of all the other arguments.  */
       if (phi_val.value == NULL_TREE)
 	{
-	  phi_val.value = arg_value;
+	  phi_val.value = arg_val->value ? arg_val->value : arg;
 	  continue;
 	}
 
       /* If PHI_VAL and ARG don't have a common copy-of chain, then
-	 this PHI node cannot be a copy operation.  */
-      if (phi_val.value != arg_value
-	  && !operand_equal_p (phi_val.value, arg_value, 0))
+	 this PHI node cannot be a copy operation.  Also, if we are
+	 copy propagating stores and these two arguments came from
+	 different memory references, they cannot be considered
+	 copies.  */
+      if (get_last_copy_of (phi_val.value) != get_last_copy_of (arg))
 	{
 	  phi_val.value = lhs;
 	  break;
 	}
     }
 
-  if (phi_val.value
-      && may_propagate_copy (lhs, phi_val.value)
+  if (phi_val.value &&  may_propagate_copy (lhs, phi_val.value)
       && set_copy_of_val (lhs, phi_val.value))
     retval = (phi_val.value != lhs) ? SSA_PROP_INTERESTING : SSA_PROP_VARYING;
   else
@@ -418,7 +717,7 @@ copy_prop::visit_phi (gphi *phi)
 
   if (dump_file && (dump_flags & TDF_DETAILS))
     {
-      fprintf (dump_file, "PHI node ");
+      fprintf (dump_file, "\nPHI node ");
       dump_copy_of (dump_file, lhs);
       fprintf (dump_file, "\nTelling the propagator to ");
       if (retval == SSA_PROP_INTERESTING)
@@ -434,32 +733,48 @@ copy_prop::visit_phi (gphi *phi)
 }
 
 
-/* Initialize structures used for copy propagation.  */
+/* Initialize structures used for copy propagation.   PHIS_ONLY is true
+   if we should only consider PHI nodes as generating copy propagation
+   opportunities.  */
 
 static void
 init_copy_prop (void)
 {
   basic_block bb;
 
-  n_copy_of = num_ssa_names;
-  copy_of = XCNEWVEC (prop_value_t, n_copy_of);
+  copy_of = XCNEWVEC (prop_value_t, num_ssa_names);
 
-  FOR_EACH_BB_FN (bb, cfun)
+  cached_last_copy_of = XCNEWVEC (tree, num_ssa_names);
+
+  FOR_EACH_BB (bb)
     {
-      for (gimple_stmt_iterator si = gsi_start_bb (bb); !gsi_end_p (si);
-	   gsi_next (&si))
+      gimple_stmt_iterator si;
+      int depth = bb->loop_depth;
+      bool loop_exit_p = false;
+
+      for (si = gsi_start_bb (bb); !gsi_end_p (si); gsi_next (&si))
 	{
-	  gimple *stmt = gsi_stmt (si);
+	  gimple stmt = gsi_stmt (si);
 	  ssa_op_iter iter;
           tree def;
 
 	  /* The only statements that we care about are those that may
 	     generate useful copies.  We also need to mark conditional
 	     jumps so that their outgoing edges are added to the work
-	     lists of the propagator.  */
+	     lists of the propagator.
+
+	     Avoid copy propagation from an inner into an outer loop.
+	     Otherwise, this may move loop variant variables outside of
+	     their loops and prevent coalescing opportunities.  If the
+	     value was loop invariant, it will be hoisted by LICM and
+	     exposed for copy propagation.  */
 	  if (stmt_ends_bb_p (stmt))
             prop_set_simulate_again (stmt, true);
-	  else if (stmt_may_generate_copy (stmt))
+	  else if (stmt_may_generate_copy (stmt)
+                   /* Since we are iterating over the statements in
+                      BB, not the phi nodes, STMT will always be an
+                      assignment.  */
+                   && loop_depth_of_name (gimple_assign_rhs1 (stmt)) <= depth)
             prop_set_simulate_again (stmt, true);
 	  else
             prop_set_simulate_again (stmt, false);
@@ -469,62 +784,64 @@ init_copy_prop (void)
 	  FOR_EACH_SSA_TREE_OPERAND (def, stmt, iter, SSA_OP_ALL_DEFS)
             if (!prop_simulate_again_p (stmt))
 	      set_copy_of_val (def, def);
+	    else
+	      cached_last_copy_of[SSA_NAME_VERSION (def)] = def;
 	}
 
-      for (gphi_iterator si = gsi_start_phis (bb); !gsi_end_p (si);
-	   gsi_next (&si))
+      /* In loop-closed SSA form do not copy-propagate through
+	 PHI nodes in blocks with a loop exit edge predecessor.  */
+      if (current_loops
+	  && loops_state_satisfies_p (LOOP_CLOSED_SSA))
 	{
-          gphi *phi = si.phi ();
+	  edge_iterator ei;
+	  edge e;
+	  FOR_EACH_EDGE (e, ei, bb->preds)
+	    if (loop_exit_edge_p (e->src->loop_father, e))
+	      loop_exit_p = true;
+	}
+
+      for (si = gsi_start_phis (bb); !gsi_end_p (si); gsi_next (&si))
+	{
+          gimple phi = gsi_stmt (si);
           tree def;
 
 	  def = gimple_phi_result (phi);
-	  if (virtual_operand_p (def))
+	  if (!is_gimple_reg (def)
+	      || loop_exit_p)
             prop_set_simulate_again (phi, false);
 	  else
             prop_set_simulate_again (phi, true);
 
 	  if (!prop_simulate_again_p (phi))
 	    set_copy_of_val (def, def);
+	  else
+	    cached_last_copy_of[SSA_NAME_VERSION (def)] = def;
 	}
     }
 }
 
-class copy_folder : public substitute_and_fold_engine
-{
- public:
-  tree get_value (tree) FINAL OVERRIDE;
-};
-
-/* Callback for substitute_and_fold to get at the final copy-of values.  */
-
-tree
-copy_folder::get_value (tree name)
-{
-  tree val;
-  if (SSA_NAME_VERSION (name) >= n_copy_of)
-    return NULL_TREE;
-  val = copy_of[SSA_NAME_VERSION (name)].value;
-  if (val && val != name)
-    return val;
-  return NULL_TREE;
-}
 
 /* Deallocate memory used in copy propagation and do final
    substitution.  */
 
-static bool
+static void
 fini_copy_prop (void)
 {
-  unsigned i;
-  tree var;
+  size_t i;
+  prop_value_t *tmp;
 
   /* Set the final copy-of value for each variable by traversing the
      copy-of chains.  */
-  FOR_EACH_SSA_NAME (i, var, cfun)
+  tmp = XCNEWVEC (prop_value_t, num_ssa_names);
+  for (i = 1; i < num_ssa_names; i++)
     {
-      if (!copy_of[i].value
+      tree var = ssa_name (i);
+      if (!var
+	  || !copy_of[i].value
 	  || copy_of[i].value == var)
 	continue;
+
+      tmp[i].value = get_last_copy_of (var);
 
       /* In theory the points-to solution of all members of the
          copy chain is their intersection.  For now we do not bother
@@ -532,48 +849,18 @@ fini_copy_prop (void)
 	 information completely by setting the points-to solution
 	 of the representative to the first solution we find if
 	 it doesn't have one already.  */
-      if (copy_of[i].value != var
-	  && TREE_CODE (copy_of[i].value) == SSA_NAME)
-	{
-	  basic_block copy_of_bb
-	    = gimple_bb (SSA_NAME_DEF_STMT (copy_of[i].value));
-	  basic_block var_bb = gimple_bb (SSA_NAME_DEF_STMT (var));
-	  if (POINTER_TYPE_P (TREE_TYPE (var))
-	      && SSA_NAME_PTR_INFO (var)
-	      && !SSA_NAME_PTR_INFO (copy_of[i].value))
-	    {
-	      duplicate_ssa_name_ptr_info (copy_of[i].value,
-					   SSA_NAME_PTR_INFO (var));
-	      /* Points-to information is cfg insensitive,
-		 but [E]VRP might record context sensitive alignment
-		 info, non-nullness, etc.  So reset context sensitive
-		 info if the two SSA_NAMEs aren't defined in the same
-		 basic block.  */
-	      if (var_bb != copy_of_bb)
-		reset_flow_sensitive_info (copy_of[i].value);
-	    }
-	  else if (!POINTER_TYPE_P (TREE_TYPE (var))
-		   && SSA_NAME_RANGE_INFO (var)
-		   && !SSA_NAME_RANGE_INFO (copy_of[i].value)
-		   && var_bb == copy_of_bb)
-	    duplicate_ssa_name_range_info (copy_of[i].value,
-					   SSA_NAME_RANGE_TYPE (var),
-					   SSA_NAME_RANGE_INFO (var));
-	}
+      if (tmp[i].value != var
+	  && POINTER_TYPE_P (TREE_TYPE (var))
+	  && SSA_NAME_PTR_INFO (var)
+	  && !SSA_NAME_PTR_INFO (tmp[i].value))
+	duplicate_ssa_name_ptr_info (tmp[i].value, SSA_NAME_PTR_INFO (var));
     }
 
-  class copy_folder copy_folder;
-  bool changed = copy_folder.substitute_and_fold ();
-  if (changed)
-    {
-      free_numbers_of_iterations_estimates (cfun);
-      if (scev_initialized_p ())
-	scev_reset ();
-    }
+  substitute_and_fold (tmp, NULL, true);
 
+  free (cached_last_copy_of);
   free (copy_of);
-
-  return changed;
+  free (tmp);
 }
 
 
@@ -608,52 +895,116 @@ fini_copy_prop (void)
    through edges marked executable by the propagation engine.  So,
    when visiting statement #2 for the first time, we will only look at
    the first argument (a_24) and optimistically assume that its value
-   is the copy of a_24 (x_1).  */
+   is the copy of a_24 (x_1).
+
+   The problem with this approach is that it may fail to discover copy
+   relations in PHI cycles.  Instead of propagating copy-of
+   values, we actually propagate copy-of chains.  For instance:
+
+   		A_3 = B_1;
+		C_9 = A_3;
+		D_4 = C_9;
+		X_i = D_4;
+
+   In this code fragment, COPY-OF (X_i) = { D_4, C_9, A_3, B_1 }.
+   Obviously, we are only really interested in the last value of the
+   chain, however the propagator needs to access the copy-of chain
+   when visiting PHI nodes.
+
+   To represent the copy-of chain, we use the array COPY_CHAINS, which
+   holds the first link in the copy-of chain for every variable.
+   If variable X_i is a copy of X_j, which in turn is a copy of X_k,
+   the array will contain:
+
+		COPY_CHAINS[i] = X_j
+		COPY_CHAINS[j] = X_k
+		COPY_CHAINS[k] = X_k
+
+   Keeping copy-of chains instead of copy-of values directly becomes
+   important when visiting PHI nodes.  Suppose that we had the
+   following PHI cycle, such that x_52 is already considered a copy of
+   x_53:
+
+	    1	x_54 = PHI <x_53, x_52>
+	    2	x_53 = PHI <x_898, x_54>
+
+   Visit #1: x_54 is copy-of x_53 (because x_52 is copy-of x_53)
+   Visit #2: x_53 is copy-of x_898 (because x_54 is a copy of x_53,
+				    so it is considered irrelevant
+				    as a copy).
+   Visit #1: x_54 is copy-of nothing (x_53 is a copy-of x_898 and
+				      x_52 is a copy of x_53, so
+				      they don't match)
+   Visit #2: x_53 is copy-of nothing
+
+   This problem is avoided by keeping a chain of copies, instead of
+   the final copy-of value.  Propagation will now only keep the first
+   element of a variable's copy-of chain.  When visiting PHI nodes,
+   arguments are considered equal if their copy-of chains end in the
+   same variable.  So, as long as their copy-of chains overlap, we
+   know that they will be a copy of the same variable, regardless of
+   which variable that may be).
+
+   Propagation would then proceed as follows (the notation a -> b
+   means that a is a copy-of b):
+
+   Visit #1: x_54 = PHI <x_53, x_52>
+		x_53 -> x_53
+		x_52 -> x_53
+		Result: x_54 -> x_53.  Value changed.  Add SSA edges.
+
+   Visit #1: x_53 = PHI <x_898, x_54>
+   		x_898 -> x_898
+		x_54 -> x_53
+		Result: x_53 -> x_898.  Value changed.  Add SSA edges.
+
+   Visit #2: x_54 = PHI <x_53, x_52>
+   		x_53 -> x_898
+		x_52 -> x_53 -> x_898
+		Result: x_54 -> x_898.  Value changed.  Add SSA edges.
+
+   Visit #2: x_53 = PHI <x_898, x_54>
+   		x_898 -> x_898
+		x_54 -> x_898
+		Result: x_53 -> x_898.  Value didn't change.  Stable state
+
+   Once the propagator stabilizes, we end up with the desired result
+   x_53 and x_54 are both copies of x_898.  */
 
 static unsigned int
 execute_copy_prop (void)
 {
   init_copy_prop ();
-  class copy_prop copy_prop;
-  copy_prop.ssa_propagate ();
-  if (fini_copy_prop ())
-    return TODO_cleanup_cfg;
+  ssa_propagate (copy_prop_visit_stmt, copy_prop_visit_phi_node);
+  fini_copy_prop ();
   return 0;
 }
 
-namespace {
-
-const pass_data pass_data_copy_prop =
+static bool
+gate_copy_prop (void)
 {
-  GIMPLE_PASS, /* type */
-  "copyprop", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
-  TV_TREE_COPY_PROP, /* tv_id */
-  ( PROP_ssa | PROP_cfg ), /* properties_required */
-  0, /* properties_provided */
-  0, /* properties_destroyed */
-  0, /* todo_flags_start */
-  0, /* todo_flags_finish */
-};
-
-class pass_copy_prop : public gimple_opt_pass
-{
-public:
-  pass_copy_prop (gcc::context *ctxt)
-    : gimple_opt_pass (pass_data_copy_prop, ctxt)
-  {}
-
-  /* opt_pass methods: */
-  opt_pass * clone () { return new pass_copy_prop (m_ctxt); }
-  virtual bool gate (function *) { return flag_tree_copy_prop != 0; }
-  virtual unsigned int execute (function *) { return execute_copy_prop (); }
-
-}; // class pass_copy_prop
-
-} // anon namespace
-
-gimple_opt_pass *
-make_pass_copy_prop (gcc::context *ctxt)
-{
-  return new pass_copy_prop (ctxt);
+  return flag_tree_copy_prop != 0;
 }
+
+struct gimple_opt_pass pass_copy_prop =
+{
+ {
+  GIMPLE_PASS,
+  "copyprop",				/* name */
+  gate_copy_prop,			/* gate */
+  execute_copy_prop,			/* execute */
+  NULL,					/* sub */
+  NULL,					/* next */
+  0,					/* static_pass_number */
+  TV_TREE_COPY_PROP,			/* tv_id */
+  PROP_ssa | PROP_cfg,			/* properties_required */
+  0,					/* properties_provided */
+  0,					/* properties_destroyed */
+  0,					/* todo_flags_start */
+  TODO_cleanup_cfg
+    | TODO_dump_func
+    | TODO_ggc_collect
+    | TODO_verify_ssa
+    | TODO_update_ssa			/* todo_flags_finish */
+ }
+};

@@ -1,5 +1,5 @@
 /* VxWorks support for ELF
-   Copyright (C) 2005-2020 Free Software Foundation, Inc.
+   Copyright 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -14,7 +14,9 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 59 Temple Place - Suite 330, Boston,
+   MA 02111-1307, USA.  */
 
 /* This file provides routines used by all VxWorks targets.  */
 
@@ -62,7 +64,7 @@ elf_vxworks_add_symbol_hook (bfd *abfd,
      give the symbol weak binding to get the desired samantics.
      This transformation will be undone in
      elf_i386_vxworks_link_output_symbol_hook. */
-  if ((bfd_link_pic (info) || abfd->flags & DYNAMIC)
+  if ((info->shared || abfd->flags & DYNAMIC)
       && elf_vxworks_gott_symbol_p (abfd, *namep))
     {
       sym->st_info = ELF_ST_INFO (STB_WEAK, ELF_ST_TYPE (sym->st_info));
@@ -87,17 +89,16 @@ elf_vxworks_create_dynamic_sections (bfd *dynobj, struct bfd_link_info *info,
   htab = elf_hash_table (info);
   bed = get_elf_backend_data (dynobj);
 
-  if (!bfd_link_pic (info))
+  if (!info->shared)
     {
-      s = bfd_make_section_anyway_with_flags (dynobj,
-					      bed->default_use_rela_p
-					      ? ".rela.plt.unloaded"
-					      : ".rel.plt.unloaded",
-					      SEC_HAS_CONTENTS | SEC_IN_MEMORY
-					      | SEC_READONLY
-					      | SEC_LINKER_CREATED);
+      s = bfd_make_section_with_flags (dynobj,
+				       bed->default_use_rela_p
+				       ? ".rela.plt.unloaded"
+				       : ".rel.plt.unloaded",
+				       SEC_HAS_CONTENTS | SEC_IN_MEMORY
+				       | SEC_READONLY | SEC_LINKER_CREATED);
       if (s == NULL
-	  || !bfd_set_section_alignment (s, bed->s->log_file_align))
+	  || !bfd_set_section_alignment (dynobj, s, bed->s->log_file_align))
 	return FALSE;
 
       *srelplt2_out = s;
@@ -126,7 +127,7 @@ elf_vxworks_create_dynamic_sections (bfd *dynobj, struct bfd_link_info *info,
 }
 
 /* Tweak magic VxWorks symbols as they are written to the output file.  */
-int
+bfd_boolean
 elf_vxworks_link_output_symbol_hook (struct bfd_link_info *info
 				       ATTRIBUTE_UNUSED,
 				     const char *name,
@@ -140,7 +141,7 @@ elf_vxworks_link_output_symbol_hook (struct bfd_link_info *info
       && elf_vxworks_gott_symbol_p (h->root.u.undef.abfd, name))
     sym->st_info = ELF_ST_INFO (STB_GLOBAL, ELF_ST_TYPE (sym->st_info));
 
-  return 1;
+  return TRUE;
 }
 
 /* Copy relocations into the output file.  Fixes up relocations against PLT
@@ -180,20 +181,20 @@ elf_vxworks_emit_relocs (bfd *output_bfd,
 	      && (*hash_ptr)->root.u.def.section->output_section != NULL)
 	    {
 	      /* This is a relocation from an executable or shared
-		 library against a symbol in a different shared
-		 library.  We are creating a definition in the output
-		 file but it does not come from any of our normal (.o)
-		 files. ie. a PLT stub.  Normally this would be a
-		 relocation against against SHN_UNDEF with the VMA of
-		 the PLT stub.  This upsets the VxWorks loader.
-		 Convert it to a section-relative relocation.  This
-		 gets some other symbols (for instance .dynbss), but
-		 is conservatively correct.  */
+	         library against a symbol in a different shared
+	         library.  We are creating a definition in the output
+	         file but it does not come from any of our normal (.o)
+	         files. ie. a PLT stub.  Normally this would be a
+	         relocation against against SHN_UNDEF with the VMA of
+	         the PLT stub.  This upsets the VxWorks loader.
+	         Convert it to a section-relative relocation.  This
+	         gets some other symbols (for instance .dynbss), but
+	         is conservatively correct.  */
 	      for (j = 0; j < bed->s->int_rels_per_ext_rel; j++)
 		{
 		  asection *sec = (*hash_ptr)->root.u.def.section;
 		  int this_idx = sec->output_section->target_index;
-
+		  
 		  irela[j].r_info
 		    = ELF32_R_INFO (this_idx, ELF32_R_TYPE (irela[j].r_info));
 		  irela[j].r_addend += (*hash_ptr)->root.u.def.value;
@@ -212,8 +213,9 @@ elf_vxworks_emit_relocs (bfd *output_bfd,
 
 /* Set the sh_link and sh_info fields on the static plt relocation secton.  */
 
-bfd_boolean
-elf_vxworks_final_write_processing (bfd *abfd)
+void
+elf_vxworks_final_write_processing (bfd *abfd,
+				    bfd_boolean linker ATTRIBUTE_UNUSED)
 {
   asection * sec;
   struct bfd_elf_section_data *d;
@@ -221,15 +223,13 @@ elf_vxworks_final_write_processing (bfd *abfd)
   sec = bfd_get_section_by_name (abfd, ".rel.plt.unloaded");
   if (!sec)
     sec = bfd_get_section_by_name (abfd, ".rela.plt.unloaded");
+  if (!sec)
+    return;
+  d = elf_section_data (sec);
+  d->this_hdr.sh_link = elf_tdata (abfd)->symtab_section;
+  sec = bfd_get_section_by_name (abfd, ".plt");
   if (sec)
-    {
-      d = elf_section_data (sec);
-      d->this_hdr.sh_link = elf_onesymtab (abfd);
-      sec = bfd_get_section_by_name (abfd, ".plt");
-      if (sec)
-	d->this_hdr.sh_info = elf_section_data (sec)->this_idx;
-    }
-  return _bfd_elf_final_write_processing (abfd);
+    d->this_hdr.sh_info = elf_section_data (sec)->this_idx;
 }
 
 /* Add the dynamic entries required by VxWorks.  These point to the
@@ -261,32 +261,33 @@ bfd_boolean
 elf_vxworks_finish_dynamic_entry (bfd *output_bfd, Elf_Internal_Dyn *dyn)
 {
   asection *sec;
-
+  
   switch (dyn->d_tag)
     {
     default:
       return FALSE;
-
+      
     case DT_VX_WRS_TLS_DATA_START:
       sec = bfd_get_section_by_name (output_bfd, ".tls_data");
       dyn->d_un.d_ptr = sec->vma;
       break;
-
+      
     case DT_VX_WRS_TLS_DATA_SIZE:
       sec = bfd_get_section_by_name (output_bfd, ".tls_data");
       dyn->d_un.d_val = sec->size;
       break;
-
+      
     case DT_VX_WRS_TLS_DATA_ALIGN:
       sec = bfd_get_section_by_name (output_bfd, ".tls_data");
-      dyn->d_un.d_val = (bfd_size_type) 1 << bfd_section_alignment (sec);
+      dyn->d_un.d_val
+	= (bfd_size_type)1 << bfd_get_section_alignment (abfd, sec);
       break;
-
+      
     case DT_VX_WRS_TLS_VARS_START:
       sec = bfd_get_section_by_name (output_bfd, ".tls_vars");
       dyn->d_un.d_ptr = sec->vma;
       break;
-
+      
     case DT_VX_WRS_TLS_VARS_SIZE:
       sec = bfd_get_section_by_name (output_bfd, ".tls_vars");
       dyn->d_un.d_val = sec->size;

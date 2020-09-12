@@ -1,7 +1,8 @@
 /* Parts of target interface that deal with accessing memory and memory-like
    objects.
 
-   Copyright (C) 2006-2019 Free Software Foundation, Inc.
+   Copyright (C) 2006, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,18 +20,27 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
-#include "common/vec.h"
+#include "vec.h"
 #include "target.h"
 #include "memory-map.h"
 
-#include "common/gdb_sys_time.h"
-#include <algorithm>
+#include "gdb_assert.h"
 
-static bool
-compare_block_starting_address (const memory_write_request &a_req,
-				const memory_write_request &b_req)
+#include <stdio.h>
+#include <sys/time.h>
+
+static int
+compare_block_starting_address (const void *a, const void *b)
 {
-  return a_req.begin < b_req.begin;
+  const struct memory_write_request *a_req = a;
+  const struct memory_write_request *b_req = b;
+
+  if (a_req->begin < b_req->begin)
+    return -1;
+  else if (a_req->begin == b_req->begin)
+    return 0;
+  else
+    return 1;
 }
 
 /* Adds to RESULT all memory write requests from BLOCK that are
@@ -40,15 +50,17 @@ compare_block_starting_address (const memory_write_request &a_req,
    that part of the memory request will be added.  */
 
 static void
-claim_memory (const std::vector<memory_write_request> &blocks,
-	      std::vector<memory_write_request> *result,
+claim_memory (VEC(memory_write_request_s) *blocks,
+	      VEC(memory_write_request_s) **result,
 	      ULONGEST begin,
 	      ULONGEST end)
 {
+  int i;
   ULONGEST claimed_begin;
   ULONGEST claimed_end;
+  struct memory_write_request *r;
 
-  for (const memory_write_request &r : blocks)
+  for (i = 0; VEC_iterate (memory_write_request_s, blocks, i, r); ++i)
     {
       /* If the request doesn't overlap [BEGIN, END), skip it.  We
 	 must handle END == 0 meaning the top of memory; we don't yet
@@ -56,28 +68,28 @@ claim_memory (const std::vector<memory_write_request> &blocks,
 	 memory, but there's an assertion in
 	 target_write_memory_blocks which checks for that.  */
 
-      if (begin >= r.end)
+      if (begin >= r->end)
 	continue;
-      if (end != 0 && end <= r.begin)
+      if (end != 0 && end <= r->begin)
 	continue;
 
-      claimed_begin = std::max (begin, r.begin);
+      claimed_begin = max (begin, r->begin);
       if (end == 0)
-	claimed_end = r.end;
+	claimed_end = r->end;
       else
-	claimed_end = std::min (end, r.end);
+	claimed_end = min (end, r->end);
 
-      if (claimed_begin == r.begin && claimed_end == r.end)
-	result->push_back (r);
+      if (claimed_begin == r->begin && claimed_end == r->end)
+	VEC_safe_push (memory_write_request_s, *result, r);
       else
 	{
-	  struct memory_write_request n = r;
+	  struct memory_write_request *n =
+	    VEC_safe_push (memory_write_request_s, *result, NULL);
 
-	  n.begin = claimed_begin;
-	  n.end = claimed_end;
-	  n.data += claimed_begin - r.begin;
-
-	  result->push_back (n);
+	  *n = *r;
+	  n->begin = claimed_begin;
+	  n->end = claimed_end;
+	  n->data += claimed_begin - r->begin;
 	}
     }
 }
@@ -87,9 +99,9 @@ claim_memory (const std::vector<memory_write_request> &blocks,
    regular memory to REGULAR_BLOCKS.  */
 
 static void
-split_regular_and_flash_blocks (const std::vector<memory_write_request> &blocks,
-				std::vector<memory_write_request> *regular_blocks,
-				std::vector<memory_write_request> *flash_blocks)
+split_regular_and_flash_blocks (VEC(memory_write_request_s) *blocks,
+				VEC(memory_write_request_s) **regular_blocks,
+				VEC(memory_write_request_s) **flash_blocks)
 {
   struct mem_region *region;
   CORE_ADDR cur_address;
@@ -105,7 +117,7 @@ split_regular_and_flash_blocks (const std::vector<memory_write_request> &blocks,
   cur_address = 0;
   while (1)
     {
-      std::vector<memory_write_request> *r;
+      VEC(memory_write_request_s) **r;
 
       region = lookup_mem_region (cur_address);
       r = region->attrib.mode == MEM_FLASH ? flash_blocks : regular_blocks;
@@ -127,40 +139,49 @@ block_boundaries (CORE_ADDR address, CORE_ADDR *begin, CORE_ADDR *end)
 {
   struct mem_region *region;
   unsigned blocksize;
-  CORE_ADDR offset_in_region;
 
   region = lookup_mem_region (address);
   gdb_assert (region->attrib.mode == MEM_FLASH);
   blocksize = region->attrib.blocksize;
-
-  offset_in_region = address - region->lo;
-
   if (begin)
-    *begin = region->lo + offset_in_region / blocksize * blocksize;
+    *begin = address / blocksize * blocksize;
   if (end)
-    *end = region->lo + (offset_in_region + blocksize - 1) / blocksize * blocksize;
+    *end = (address + blocksize - 1) / blocksize * blocksize;
 }
 
 /* Given the list of memory requests to be WRITTEN, this function
    returns write requests covering each group of flash blocks which must
    be erased.  */
 
-static std::vector<memory_write_request>
-blocks_to_erase (const std::vector<memory_write_request> &written)
+static VEC(memory_write_request_s) *
+blocks_to_erase (VEC(memory_write_request_s) *written)
 {
-  std::vector<memory_write_request> result;
+  unsigned i;
+  struct memory_write_request *ptr;
 
-  for (const memory_write_request &request : written)
+  VEC(memory_write_request_s) *result = NULL;
+
+  for (i = 0; VEC_iterate (memory_write_request_s, written, i, ptr); ++i)
     {
       CORE_ADDR begin, end;
 
-      block_boundaries (request.begin, &begin, 0);
-      block_boundaries (request.end - 1, 0, &end);
+      block_boundaries (ptr->begin, &begin, 0);
+      block_boundaries (ptr->end - 1, 0, &end);
 
-      if (!result.empty () && result.back ().end >= begin)
-	result.back ().end = end;
+      if (!VEC_empty (memory_write_request_s, result)
+	  && VEC_last (memory_write_request_s, result)->end >= begin)
+	{
+	  VEC_last (memory_write_request_s, result)->end = end;
+	}
       else
-	result.emplace_back (begin, end);
+	{
+	  struct memory_write_request *n =
+	    VEC_safe_push (memory_write_request_s, result, NULL);
+
+	  memset (n, 0, sizeof (struct memory_write_request));
+	  n->begin = begin;
+	  n->end = end;
+	}
     }
 
   return result;
@@ -172,14 +193,15 @@ blocks_to_erase (const std::vector<memory_write_request> &written)
    that will be erased but not rewritten (e.g. padding within a block
    which is only partially filled by "load").  */
 
-static std::vector<memory_write_request>
-compute_garbled_blocks (const std::vector<memory_write_request> &erased_blocks,
-			const std::vector<memory_write_request> &written_blocks)
+static VEC(memory_write_request_s) *
+compute_garbled_blocks (VEC(memory_write_request_s) *erased_blocks,
+			VEC(memory_write_request_s) *written_blocks)
 {
-  std::vector<memory_write_request> result;
+  VEC(memory_write_request_s) *result = NULL;
 
-  unsigned j;
-  unsigned je = written_blocks.size ();
+  unsigned i, j;
+  unsigned je = VEC_length (memory_write_request_s, written_blocks);
+  struct memory_write_request *erased_p;
 
   /* Look at each erased memory_write_request in turn, and
      see what part of it is subsequently written to.
@@ -188,15 +210,19 @@ compute_garbled_blocks (const std::vector<memory_write_request> &erased_blocks,
      the lists are sorted at this point it could be rewritten more
      efficiently, but the complexity is not generally worthwhile.  */
 
-  for (const memory_write_request &erased_iter : erased_blocks)
+  for (i = 0;
+       VEC_iterate (memory_write_request_s, erased_blocks, i, erased_p);
+       ++i)
     {
       /* Make a deep copy -- it will be modified inside the loop, but
 	 we don't want to modify original vector.  */
-      struct memory_write_request erased = erased_iter;
+      struct memory_write_request erased = *erased_p;
 
       for (j = 0; j != je;)
 	{
-	  const memory_write_request *written = &written_blocks[j];
+	  struct memory_write_request *written
+	    = VEC_index (memory_write_request_s,
+			 written_blocks, j);
 
 	  /* Now try various cases.  */
 
@@ -213,7 +239,7 @@ compute_garbled_blocks (const std::vector<memory_write_request> &erased_blocks,
 	     blocks.  */
 	  if (written->begin >= erased.end)
 	    {
-	      result.push_back (erased);
+	      VEC_safe_push (memory_write_request_s, result, &erased);
 	      goto next_erased;
 	    }
 
@@ -230,7 +256,12 @@ compute_garbled_blocks (const std::vector<memory_write_request> &erased_blocks,
 	     again for the remainder.  */
 	  if (written->begin > erased.begin)
 	    {
-	      result.emplace_back (erased.begin, written->begin);
+	      struct memory_write_request *n =
+		VEC_safe_push (memory_write_request_s, result, NULL);
+
+	      memset (n, 0, sizeof (struct memory_write_request));
+	      n->begin = erased.begin;
+	      n->end = written->begin;
 	      erased.begin = written->begin;
 	      continue;
 	    }
@@ -249,7 +280,7 @@ compute_garbled_blocks (const std::vector<memory_write_request> &erased_blocks,
 
       /* If we ran out of write requests without doing anything about
 	 ERASED, then that means it's really erased.  */
-      result.push_back (erased);
+      VEC_safe_push (memory_write_request_s, result, &erased);
 
     next_erased:
       ;
@@ -258,29 +289,59 @@ compute_garbled_blocks (const std::vector<memory_write_request> &erased_blocks,
   return result;
 }
 
+static void
+cleanup_request_data (void *p)
+{
+  VEC(memory_write_request_s) **v = p;
+  struct memory_write_request *r;
+  int i;
+
+  for (i = 0; VEC_iterate (memory_write_request_s, *v, i, r); ++i)
+    xfree (r->data);
+}
+
+static void
+cleanup_write_requests_vector (void *p)
+{
+  VEC(memory_write_request_s) **v = p;
+
+  VEC_free (memory_write_request_s, *v);
+}
+
 int
-target_write_memory_blocks (const std::vector<memory_write_request> &requests,
+target_write_memory_blocks (VEC(memory_write_request_s) *requests,
 			    enum flash_preserve_mode preserve_flash_p,
 			    void (*progress_cb) (ULONGEST, void *))
 {
-  std::vector<memory_write_request> blocks = requests;
-  std::vector<memory_write_request> regular;
-  std::vector<memory_write_request> flash;
-  std::vector<memory_write_request> erased, garbled;
+  struct cleanup *back_to = make_cleanup (null_cleanup, NULL);
+  VEC(memory_write_request_s) *blocks = VEC_copy (memory_write_request_s,
+						  requests);
+  unsigned i;
+  int err = 0;
+  struct memory_write_request *r;
+  VEC(memory_write_request_s) *regular = NULL;
+  VEC(memory_write_request_s) *flash = NULL;
+  VEC(memory_write_request_s) *erased, *garbled;
 
   /* END == 0 would represent wraparound: a write to the very last
      byte of the address space.  This file was not written with that
      possibility in mind.  This is fixable, but a lot of work for a
      rare problem; so for now, fail noisily here instead of obscurely
      later.  */
-  for (const memory_write_request &iter : requests)
-    gdb_assert (iter.end != 0);
+  for (i = 0; VEC_iterate (memory_write_request_s, requests, i, r); ++i)
+    gdb_assert (r->end != 0);
+
+  make_cleanup (cleanup_write_requests_vector, &blocks);
 
   /* Sort the blocks by their start address.  */
-  std::sort (blocks.begin (), blocks.end (), compare_block_starting_address);
+  qsort (VEC_address (memory_write_request_s, blocks),
+	 VEC_length (memory_write_request_s, blocks),
+	 sizeof (struct memory_write_request), compare_block_starting_address);
 
   /* Split blocks into list of regular memory blocks,
      and list of flash memory blocks.  */
+  make_cleanup (cleanup_write_requests_vector, &regular);
+  make_cleanup (cleanup_write_requests_vector, &flash);
   split_regular_and_flash_blocks (blocks, &regular, &flash);
 
   /* If a variable is added to forbid flash write, even during "load",
@@ -290,35 +351,37 @@ target_write_memory_blocks (const std::vector<memory_write_request> &requests,
 
   /* Find flash blocks to erase.  */
   erased = blocks_to_erase (flash);
+  make_cleanup (cleanup_write_requests_vector, &erased);
 
   /* Find what flash regions will be erased, and not overwritten; then
      either preserve or discard the old contents.  */
   garbled = compute_garbled_blocks (erased, flash);
+  make_cleanup (cleanup_request_data, &garbled);
+  make_cleanup (cleanup_write_requests_vector, &garbled);
 
-  std::vector<gdb::unique_xmalloc_ptr<gdb_byte>> mem_holders;
-  if (!garbled.empty ())
+  if (!VEC_empty (memory_write_request_s, garbled))
     {
       if (preserve_flash_p == flash_preserve)
 	{
+	  struct memory_write_request *r;
+
 	  /* Read in regions that must be preserved and add them to
 	     the list of blocks we read.  */
-	  for (memory_write_request &iter : garbled)
+	  for (i = 0; VEC_iterate (memory_write_request_s, garbled, i, r); ++i)
 	    {
-	      gdb_assert (iter.data == NULL);
-	      gdb::unique_xmalloc_ptr<gdb_byte> holder
-		((gdb_byte *) xmalloc (iter.end - iter.begin));
-	      iter.data = holder.get ();
-	      mem_holders.push_back (std::move (holder));
-	      int err = target_read_memory (iter.begin, iter.data,
-					    iter.end - iter.begin);
+	      gdb_assert (r->data == NULL);
+	      r->data = xmalloc (r->end - r->begin);
+	      err = target_read_memory (r->begin, r->data, r->end - r->begin);
 	      if (err != 0)
-		return err;
+		goto out;
 
-	      flash.push_back (iter);
+	      VEC_safe_push (memory_write_request_s, flash, r);
 	    }
 
-	  std::sort (flash.begin (), flash.end (),
-		     compare_block_starting_address);
+	  qsort (VEC_address (memory_write_request_s, flash),
+		 VEC_length (memory_write_request_s, flash),
+		 sizeof (struct memory_write_request),
+		 compare_block_starting_address);
 	}
     }
 
@@ -332,44 +395,47 @@ target_write_memory_blocks (const std::vector<memory_write_request> &requests,
      have the opportunity to batch flash requests.  */
 
   /* Write regular blocks.  */
-  for (const memory_write_request &iter : regular)
+  for (i = 0; VEC_iterate (memory_write_request_s, regular, i, r); ++i)
     {
       LONGEST len;
 
-      len = target_write_with_progress (current_top_target (),
+      len = target_write_with_progress (current_target.beneath,
 					TARGET_OBJECT_MEMORY, NULL,
-					iter.data, iter.begin,
-					iter.end - iter.begin,
-					progress_cb, iter.baton);
-      if (len < (LONGEST) (iter.end - iter.begin))
+					r->data, r->begin, r->end - r->begin,
+					progress_cb, r->baton);
+      if (len < (LONGEST) (r->end - r->begin))
 	{
 	  /* Call error?  */
-	  return -1;
+	  err = -1;
+	  goto out;
 	}
     }
 
-  if (!erased.empty ())
+  if (!VEC_empty (memory_write_request_s, erased))
     {
       /* Erase all pages.  */
-      for (const memory_write_request &iter : erased)
-	target_flash_erase (iter.begin, iter.end - iter.begin);
+      for (i = 0; VEC_iterate (memory_write_request_s, erased, i, r); ++i)
+	target_flash_erase (r->begin, r->end - r->begin);
 
       /* Write flash data.  */
-      for (const memory_write_request &iter : flash)
+      for (i = 0; VEC_iterate (memory_write_request_s, flash, i, r); ++i)
 	{
 	  LONGEST len;
 
-	  len = target_write_with_progress (current_top_target (),
+	  len = target_write_with_progress (&current_target,
 					    TARGET_OBJECT_FLASH, NULL,
-					    iter.data, iter.begin,
-					    iter.end - iter.begin,
-					    progress_cb, iter.baton);
-	  if (len < (LONGEST) (iter.end - iter.begin))
+					    r->data, r->begin,
+					    r->end - r->begin,
+					    progress_cb, r->baton);
+	  if (len < (LONGEST) (r->end - r->begin))
 	    error (_("Error writing data to flash"));
 	}
 
       target_flash_done ();
     }
 
-  return 0;
+ out:
+  do_cleanups (back_to);
+
+  return err;
 }

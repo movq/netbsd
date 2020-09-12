@@ -1,5 +1,6 @@
 /* Base configuration file for all NetBSD targets.
-   Copyright (C) 1997-2019 Free Software Foundation, Inc.
+   Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
+   2007 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -23,7 +24,6 @@ along with GCC; see the file COPYING3.  If not see
     {						\
       builtin_define ("__NetBSD__");		\
       builtin_define ("__unix__");		\
-      builtin_define ("__syslog_attribute__");	\
       builtin_assert ("system=bsd");		\
       builtin_assert ("system=unix");		\
       builtin_assert ("system=NetBSD");		\
@@ -37,59 +37,37 @@ along with GCC; see the file COPYING3.  If not see
 
 /* NETBSD_NATIVE is defined when gcc is integrated into the NetBSD
    source tree so it can be configured appropriately without using
-   the GNU configure/build mechanism.
+   the GNU configure/build mechanism.  */
 
-   NETBSD_TOOLS is defined when gcc is built as cross-compiler for
-   the in-tree toolchain.
- */
-
-#if defined(NETBSD_NATIVE) || defined(NETBSD_TOOLS)
+#ifdef NETBSD_NATIVE
 
 /* Look for the include files in the system-defined places.  */
 
 #undef GPLUSPLUS_INCLUDE_DIR
 #define GPLUSPLUS_INCLUDE_DIR "/usr/include/g++"
 
-#undef GPLUSPLUS_INCLUDE_DIR_ADD_SYSROOT
-#define GPLUSPLUS_INCLUDE_DIR_ADD_SYSROOT 1
-
-#undef GPLUSPLUS_BACKWARD_INCLUDE_DIR
-#define GPLUSPLUS_BACKWARD_INCLUDE_DIR "/usr/include/g++/backward"
-
-#undef GCC_INCLUDE_DIR_ADD_SYSROOT
-#define GCC_INCLUDE_DIR_ADD_SYSROOT 1
-
-/*
- * XXX figure out a better way to do this
- */
 #undef GCC_INCLUDE_DIR
-#define GCC_INCLUDE_DIR "/usr/include/gcc-9"
+#define GCC_INCLUDE_DIR "/usr/include"
 
-/* Under NetBSD, the normal location of the various *crt*.o files is the
-   /usr/lib directory.  */
+#undef INCLUDE_DEFAULTS
+#define INCLUDE_DEFAULTS			\
+  {						\
+    { GPLUSPLUS_INCLUDE_DIR, "G++", 1, 1 },	\
+    { GCC_INCLUDE_DIR, "GCC", 0, 0 },		\
+    { 0, 0, 0, 0 }				\
+  }
 
-#undef STANDARD_STARTFILE_PREFIX
-#define STANDARD_STARTFILE_PREFIX	"/usr/lib/"
-#undef STANDARD_STARTFILE_PREFIX_1
-#define STANDARD_STARTFILE_PREFIX_1	"/usr/lib/"
-
-#endif /* NETBSD_NATIVE || NETBSD_TOOLS */
-
-#if defined(NETBSD_NATIVE)
 /* Under NetBSD, the normal location of the compiler back ends is the
    /usr/libexec directory.  */
 
 #undef STANDARD_EXEC_PREFIX
 #define STANDARD_EXEC_PREFIX		"/usr/libexec/"
 
-#undef TOOLDIR_BASE_PREFIX
-#define TOOLDIR_BASE_PREFIX		"../"
+/* Under NetBSD, the normal location of the various *crt*.o files is the
+   /usr/lib directory.  */
 
-#undef STANDARD_BINDIR_PREFIX
-#define STANDARD_BINDIR_PREFIX		"/usr/bin"
-
-#undef STANDARD_LIBEXEC_PREFIX
-#define STANDARD_LIBEXEC_PREFIX		STANDARD_EXEC_PREFIX
+#undef STANDARD_STARTFILE_PREFIX
+#define STANDARD_STARTFILE_PREFIX	"/usr/lib/"
 
 #endif /* NETBSD_NATIVE */
 
@@ -99,10 +77,15 @@ along with GCC; see the file COPYING3.  If not see
    1. Select the appropriate set of libs, depending on whether we're
       profiling.
 
-   2. Include the pthread library if -pthread is specified.
+   2. Include the pthread library if -pthread is specified (only
+      if threads are enabled).
 
-   3. Include the posix library if -posix is specified. */
+   3. Include the posix library if -posix is specified.
 
+   FIXME: Could eliminate the duplication here if we were allowed to
+   use string concatenation.  */
+
+#ifdef NETBSD_ENABLE_PTHREADS
 #define NETBSD_LIB_SPEC		\
   "%{pthread:			\
      %{!p:			\
@@ -114,25 +97,33 @@ along with GCC; see the file COPYING3.  If not see
        %{!pg:-lposix}}		\
      %{p:-lposix_p}		\
      %{pg:-lposix_p}}		\
-   %{shared:			\
-     %{!p:			\
-       %{!pg:-lc}}		\
-     %{p:-lc_p}			\
-       %{pg:-lc_p}}		\
    %{!shared:			\
      %{!symbolic:		\
        %{!p:			\
 	 %{!pg:-lc}}		\
        %{p:-lc_p}		\
        %{pg:-lc_p}}}"
+#else
+#define NETBSD_LIB_SPEC		\
+  "%{posix:			\
+     %{!p:			\
+       %{!pg:-lposix}}		\
+     %{p:-lposix_p}		\
+     %{pg:-lposix_p}}		\
+   %{!shared:			\
+     %{!symbolic:		\
+       %{!p:			\
+	 %{!pg:-lc}}		\
+       %{p:-lc_p}		\
+       %{pg:-lc_p}}}"
+#endif
 
 #undef LIB_SPEC
 #define LIB_SPEC NETBSD_LIB_SPEC
 
-#define LIBSTDCXX_PROFILE "stdc++_p"
-#define MATH_LIBRARY_PROFILE "m_p"
+/* Provide a LIBGCC_SPEC appropriate for NetBSD.  We also want to exclude
+   libgcc with -symbolic.  */
 
-/* Provide a LIBGCC_SPEC appropriate for NetBSD.  */
 #ifdef NETBSD_NATIVE
 #define NETBSD_LIBGCC_SPEC	\
   "%{!symbolic:			\
@@ -143,25 +134,11 @@ along with GCC; see the file COPYING3.  If not see
      %{p: -lgcc_p}		\
      %{pg: -lgcc_p}}"
 #else
-#define NETBSD_LIBGCC_SPEC "-lgcc"
+#define NETBSD_LIBGCC_SPEC "%{!shared:%{!symbolic: -lgcc}}"
 #endif
 
-/* Pass -cxx-isystem to cc1/cc1plus.  */
-#define NETBSD_CC1_AND_CC1PLUS_SPEC		\
-  "%{cxx-isystem}"
-
-#undef CC1_SPEC
-#define CC1_SPEC NETBSD_CC1_AND_CC1PLUS_SPEC
-
-#undef CC1PLUS_SPEC
-#define CC1PLUS_SPEC NETBSD_CC1_AND_CC1PLUS_SPEC
-
-#if defined(HAVE_LD_EH_FRAME_HDR)
-#define LINK_EH_SPEC "%{!static|static-pie:--eh-frame-hdr} "
-#endif
-
-#undef TARGET_LIBC_HAS_FUNCTION
-#define TARGET_LIBC_HAS_FUNCTION no_c99_libc_has_function
+#undef LIBGCC_SPEC
+#define LIBGCC_SPEC NETBSD_LIBGCC_SPEC
 
 /* When building shared libraries, the initialization and finalization 
    functions for the library are .init and .fini respectively.  */
@@ -181,6 +158,14 @@ along with GCC; see the file COPYING3.  If not see
 #undef TARGET_POSIX_IO
 #define TARGET_POSIX_IO
 
+/* Handle #pragma weak and #pragma pack.  */
+
+#define HANDLE_SYSV_PRAGMA 1
+
+/* Don't assume anything about the header files.  */
+#undef  NO_IMPLICIT_EXTERN_C
+#define NO_IMPLICIT_EXTERN_C    1
+
 /* Define some types that are the same on all NetBSD platforms,
    making them agree with <machine/ansi.h>.  */
 
@@ -192,14 +177,53 @@ along with GCC; see the file COPYING3.  If not see
 
 #undef WINT_TYPE
 #define WINT_TYPE "int"
+
 
-/* Use --as-needed -lgcc_s for eh support.  */
-#ifdef HAVE_LD_AS_NEEDED
-#define USE_LD_AS_NEEDED 1
-#endif
+/* Attempt to turn on execute permission for the stack.  This may be
+   used by TARGET_TRAMPOLINE_INIT if the target needs it (that is,
+   if the target machine can change execute permissions on a page).
 
-#undef  SUBTARGET_INIT_BUILTINS
-#define SUBTARGET_INIT_BUILTINS						\
-  do {									\
-    netbsd_patch_builtins ();						\
-  } while(0)
+   There is no way to query the execute permission of the stack, so
+   we always issue the mprotect() call.
+
+   Note that we go out of our way to use namespace-non-invasive calls
+   here.  Unfortunately, there is no libc-internal name for mprotect().
+
+   Also note that no errors should be emitted by this code; it is considered
+   dangerous for library calls to send messages to stdout/stderr.  */
+
+#define NETBSD_ENABLE_EXECUTE_STACK					\
+extern void __enable_execute_stack (void *);				\
+void									\
+__enable_execute_stack (void *addr)					\
+{									\
+  extern int mprotect (void *, size_t, int);				\
+  extern int __sysctl (int *, unsigned int, void *, size_t *,		\
+		       void *, size_t);					\
+									\
+  static int size;							\
+  static long mask;							\
+									\
+  char *page, *end;							\
+									\
+  if (size == 0)							\
+    {									\
+      int mib[2];							\
+      size_t len;							\
+									\
+      mib[0] = 6; /* CTL_HW */						\
+      mib[1] = 7; /* HW_PAGESIZE */					\
+      len = sizeof (size);						\
+      (void) __sysctl (mib, 2, &size, &len, NULL, 0);			\
+      mask = ~((long) size - 1);					\
+    }									\
+									\
+  page = (char *) (((long) addr) & mask);				\
+  end  = (char *) ((((long) (addr + TRAMPOLINE_SIZE)) & mask) + size);	\
+									\
+  /* 7 == PROT_READ | PROT_WRITE | PROT_EXEC */				\
+  (void) mprotect (page, end - page, 7);				\
+}
+
+/* Define this so we can compile MS code for use with WINE.  */
+#define HANDLE_PRAGMA_PACK_PUSH_POP 1

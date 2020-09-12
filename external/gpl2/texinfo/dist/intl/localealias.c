@@ -1,4 +1,4 @@
-/*	$NetBSD: localealias.c,v 1.1.1.1 2016/01/14 00:11:28 christos Exp $	*/
+/*	$NetBSD: localealias.c,v 1.1 2016/01/14 00:11:28 christos Exp $	*/
 
 /* Handle aliases for locale names.
    Copyright (C) 1995-1999, 2000-2001, 2003 Free Software Foundation, Inc.

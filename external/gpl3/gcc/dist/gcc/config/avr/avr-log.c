@@ -1,5 +1,5 @@
 /* Subroutines for log output for Atmel AVR back end.
-   Copyright (C) 2011-2019 Free Software Foundation, Inc.
+   Copyright (C) 2011-2013 Free Software Foundation, Inc.
    Contributed by Georg-Johann Lay (avr@gjlay.de)
 
    This file is part of GCC.
@@ -18,27 +18,27 @@
    along with GCC; see the file COPYING3.  If not see
    <http://www.gnu.org/licenses/>.  */
 
-#define IN_TARGET_CODE 1
-
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
-#include "function.h"
 #include "rtl.h"
 #include "tree.h"
-#include "tree-pass.h"	/* for current_pass */
-#include "memmodel.h"
+#include "output.h"
+#include "input.h"
+#include "function.h"
 #include "tm_p.h"
-#include "print-tree.h"
+#include "tree-pass.h"	/* for current_pass */
 
 /* This file supplies some functions for AVR back-end developers
    with a printf-like interface.  The functions are called through
-   macros `avr_dump', `avr_edump' or `avr_fdump' from avr-protos.h:
+   macros avr_edump or avr_fdump from avr-protos.h:
 
-   avr_fdump (FILE *stream, const char *fmt, ...);
+      avr_edump (const char *fmt, ...);
+
+      avr_fdump (FILE *stream, const char *fmt, ...);
+
    avr_edump (fmt, ...) is a shortcut for avr_fdump (stderr, fmt, ...)
-   avr_dump (fmt, ...)  is a shortcut for avr_fdump (dump_file, fmt, ...)
 
   == known %-codes ==
 
@@ -47,8 +47,10 @@
   t: tree
   T: tree (brief)
   C: enum rtx_code
-  m: machine_mode
+  m: enum machine_mode
   R: enum reg_class
+  D: double_int (signed decimal)
+  X: double_int (unsigned hex)
   L: insn list
   H: location_t
 
@@ -74,27 +76,104 @@
 /* Set according to -mlog= option.  */
 avr_log_t avr_log;
 
+/* The caller as of __FUNCTION__ */
+static const char *avr_log_caller = "?";
+
 /* The worker function implementing the %-codes */
 static void avr_log_vadump (FILE*, const char*, va_list);
 
-/* Wrapper for avr_log_vadump.  If STREAM is NULL we are called by avr_dump,
-   i.e. output to dump_file if available.  The 2nd argument is __FUNCTION__.
-   The 3rd argument is the format string. */
+/* As we have no variadic macros, avr_edump maps to a call to
+   avr_log_set_caller_e which saves __FUNCTION__ to avr_log_caller and
+   returns a function pointer to avr_log_fdump_e.  avr_log_fdump_e
+   gets the printf-like arguments and calls avr_log_vadump, the
+   worker function.  avr_fdump works the same way.  */
 
-int
-avr_vdump (FILE *stream, const char *caller, ...)
+/* Provide avr_log_fdump_e/f so that avr_log_set_caller_e/_f can return
+   their address.  */
+
+static int
+avr_log_fdump_e (const char *fmt, ...)
 {
   va_list ap;
-        
-  if (stream == NULL && dump_file)
-    stream = dump_file;
 
-  va_start (ap, caller);
-  if (stream)
-    avr_log_vadump (stream, caller, ap);
+  va_start (ap, fmt);
+  avr_log_vadump (stderr, fmt, ap);
   va_end (ap);
 
   return 1;
+}
+
+static int
+avr_log_fdump_f (FILE *stream, const char *fmt, ...)
+{
+  va_list ap;
+
+  va_start (ap, fmt);
+  if (stream)
+    avr_log_vadump (stream, fmt, ap);
+  va_end (ap);
+
+  return 1;
+}
+
+/* Macros avr_edump/avr_fdump map to calls of the following two functions,
+   respectively.  You don't need to call them directly.  */
+
+int (*
+avr_log_set_caller_e (const char *caller)
+     )(const char*, ...)
+{
+  avr_log_caller = caller;
+
+  return avr_log_fdump_e;
+}
+
+int (*
+avr_log_set_caller_f (const char *caller)
+     )(FILE*, const char*, ...)
+{
+  avr_log_caller = caller;
+
+  return avr_log_fdump_f;
+}
+
+
+/* Copy-paste from double-int.c:double_int_split_digit (it's static there).
+   Splits last digit of *CST (taken as unsigned) in BASE and returns it.  */
+
+static unsigned
+avr_double_int_pop_digit (double_int *cst, unsigned base)
+{
+  double_int drem;
+
+  *cst = cst->udivmod (double_int::from_uhwi (base), (int) FLOOR_DIV_EXPR,
+                       &drem);
+
+  return (unsigned) drem.to_uhwi();
+}
+
+
+/* Dump VAL as hex value to FILE.  */
+
+static void
+avr_dump_double_int_hex (FILE *file, double_int val)
+{
+  unsigned digit[4];
+
+  digit[0] = avr_double_int_pop_digit (&val, 1 << 16);
+  digit[1] = avr_double_int_pop_digit (&val, 1 << 16);
+  digit[2] = avr_double_int_pop_digit (&val, 1 << 16);
+  digit[3] = avr_double_int_pop_digit (&val, 1 << 16);
+
+  fprintf (file, "0x");
+
+  if (digit[3] | digit[2])
+    fprintf (file, "%04x%04x", digit[3], digit[2]);
+
+  if (digit[3] | digit[2] | digit[1] | digit[0])
+    fprintf (file, "%04x%04x", digit[1], digit[0]);
+  else
+    fprintf (file, "0");
 }
 
 
@@ -102,12 +181,9 @@ avr_vdump (FILE *stream, const char *caller, ...)
    respective print/dump function.  */
 
 static void
-avr_log_vadump (FILE *file, const char *caller, va_list ap)
+avr_log_vadump (FILE *file, const char *fmt, va_list ap)
 {
   char bs[3] = {'\\', '?', '\0'};
-
-  /* 3rd proper argument is always the format string.  */
-  const char *fmt = va_arg (ap, const char*);
 
   while (*fmt)
     {
@@ -148,17 +224,19 @@ avr_log_vadump (FILE *file, const char *caller, va_list ap)
               }
 
             case 'T':
-              {
-                tree t = va_arg (ap, tree);
-                if (NULL_TREE == t)
-                  fprintf (file, "<NULL-TREE>");
-                else
-                  print_node_brief (file, "", t, 3);
-              }
+              print_node_brief (file, "", va_arg (ap, tree), 3);
               break;
 
             case 'd':
               fprintf (file, "%d", va_arg (ap, int));
+              break;
+
+            case 'D':
+              dump_double_int (file, va_arg (ap, double_int), false);
+              break;
+
+            case 'X':
+              avr_dump_double_int_hex (file, va_arg (ap, double_int));
               break;
 
             case 'x':
@@ -179,7 +257,7 @@ avr_log_vadump (FILE *file, const char *caller, va_list ap)
 
             case 'L':
               {
-                rtx_insn *insn = safe_as_a <rtx_insn *> (va_arg (ap, rtx));
+                rtx insn = va_arg (ap, rtx);
 
                 while (insn)
                   {
@@ -203,7 +281,7 @@ avr_log_vadump (FILE *file, const char *caller, va_list ap)
               break;
 
             case 'm':
-              fputs (GET_MODE_NAME ((machine_mode) va_arg (ap, int)),
+              fputs (GET_MODE_NAME ((enum machine_mode) va_arg (ap, int)),
                      file);
               break;
 
@@ -216,7 +294,7 @@ avr_log_vadump (FILE *file, const char *caller, va_list ap)
               break;
 
             case 'F':
-              fputs (caller, file);
+              fputs (avr_log_caller, file);
               break;
 
             case 'H':
@@ -240,7 +318,7 @@ avr_log_vadump (FILE *file, const char *caller, va_list ap)
               /* FALLTHRU */
 
             case '?':
-              avr_vdump (file, caller, "%F[%f:%P]");
+              avr_log_fdump_f (file, "%F[%f:%P]");
               break;
 
             case 'P':
@@ -281,9 +359,6 @@ avr_log_set_avr_log (void)
 {
   bool all = TARGET_ALL_DEBUG != 0;
 
-  if (all)
-    avr_log_details = "all";
-	
   if (all || avr_log_details)
     {
       /* Adding , at beginning and end of string makes searching easier.  */
@@ -294,15 +369,15 @@ avr_log_set_avr_log (void)
       str[0] = ',';
       strcat (stpcpy (str+1, avr_log_details), ",");
 
-      all |= strstr (str, ",all,") != NULL;
-      info = strstr (str, ",?,") != NULL;
+      all |= NULL != strstr (str, ",all,");
+      info = NULL != strstr (str, ",?,");
 
       if (info)
         fprintf (stderr, "\n-mlog=");
 
 #define SET_DUMP_DETAIL(S)                                       \
       do {                                                       \
-	avr_log.S = (all || strstr (str, "," #S ",") != NULL);   \
+        avr_log.S = (all || NULL != strstr (str, "," #S ","));   \
         if (info)                                                \
           fprintf (stderr, #S ",");                              \
       } while (0)
@@ -310,7 +385,6 @@ avr_log_set_avr_log (void)
       SET_DUMP_DETAIL (address_cost);
       SET_DUMP_DETAIL (builtin);
       SET_DUMP_DETAIL (constraints);
-      SET_DUMP_DETAIL (insn_addresses);
       SET_DUMP_DETAIL (legitimate_address_p);
       SET_DUMP_DETAIL (legitimize_address);
       SET_DUMP_DETAIL (legitimize_reload_address);

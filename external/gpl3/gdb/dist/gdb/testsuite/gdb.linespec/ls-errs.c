@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2012-2019 Free Software Foundation, Inc.
+   Copyright 2012-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,21 +15,14 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-int
-myfunction (int aa)
-{
-  int i;
-
-  i = aa + 42;
-  return i;    /* set breakpoint here */
-}
+int myfunction (void) { return 0; }
 
 int
 main (void)
-{
+{  
   int a;
 
-  a = myfunction (a);
+  a = myfunction ();
 
  here:
   return a;

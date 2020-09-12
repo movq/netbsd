@@ -1,5 +1,6 @@
 /* TI C6X ELF support for BFD.
-   Copyright (C) 2010-2019 Free Software Foundation, Inc.
+   Copyright 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -156,11 +157,5 @@ enum
     C6XABI_Tag_ISA_C64XP = 7,
     C6XABI_Tag_ISA_C674X = 8
   };
-
-/* Special section names.  */
-#define ELF_STRING_C6000_unwind           ".c6xabi.exidx"
-#define ELF_STRING_C6000_unwind_info      ".c6xabi.extab"
-#define ELF_STRING_C6000_unwind_once      ".gnu.linkonce.c6xabi.exidx."
-#define ELF_STRING_C6000_unwind_info_once ".gnu.linkonce.c6xabi.extab."
 
 #endif /* _ELF_TIC6X_H */

@@ -1,6 +1,6 @@
 /* aarch64-gen.c -- Generate tables and routines for opcode lookup and
    instruction encoding and decoding.
-   Copyright (C) 2012-2019 Free Software Foundation, Inc.
+   Copyright 2012, 2013  Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of the GNU opcodes library.
@@ -28,7 +28,6 @@
 #include "getopt.h"
 #include "opcode/aarch64.h"
 
-#define VERIFIER(x) NULL
 #include "aarch64-tbl.h"
 
 static int debug = 0;
@@ -143,9 +142,9 @@ read_table (const struct aarch64_opcode* table)
       /* F_PSEUDO needs to be used together with F_ALIAS to indicate an alias
 	 opcode is a programmer friendly pseudo instruction available only in
 	 the assembly code (thus will not show up in the disassembly).  */
-      assert (!pseudo_opcode_p (ent) || alias_opcode_p (ent));
+      assert (pseudo_opcode_p (ent) == FALSE || alias_opcode_p (ent) == TRUE);
       /* Skip alias (inc. pseudo) opcode.  */
-      if (alias_opcode_p (ent))
+      if (alias_opcode_p (ent) == TRUE)
 	{
 	  index++;
 	  continue;
@@ -210,7 +209,7 @@ static int max_num_opcodes_at_leaf_node = 0;
    is decided to be undividable and OPCODE will be assigned to BITTREE->LIST.
 
    The function recursively call itself until OPCODE is undividable.
-
+   
    N.B. the nature of this algrithm determines that given any value in the
    32-bit space, the computed decision tree will always be able to find one or
    more opcodes entries for it, regardless whether there is a valid instruction
@@ -378,9 +377,13 @@ initialize_decoder_tree (void)
 static void __attribute__ ((format (printf, 2, 3)))
 indented_print (unsigned int indent, const char *format, ...)
 {
+  /* 80 number of spaces pluc a NULL terminator.  */
+  static const char spaces[81] =
+    "                                                                                ";
   va_list ap;
   va_start (ap, format);
-  printf ("%*s", (int) indent, "");
+  assert (indent <= 80);
+  printf ("%s", &spaces[80 - indent]);
   vprintf (format, ap);
   va_end (ap);
 }
@@ -393,9 +396,6 @@ print_decision_tree_1 (unsigned int indent, struct bittree* bittree)
 {
   /* PATTERN is only used to generate comment in the code.  */
   static char pattern[33] = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
-  /* Low bits in PATTERN will be printed first which then look as the high
-     bits in comment.  We need to reverse the index to get correct print.  */
-  unsigned int msb = sizeof (pattern) - 2;
   assert (bittree != NULL);
 
   /* Leaf node located.  */
@@ -415,15 +415,15 @@ print_decision_tree_1 (unsigned int indent, struct bittree* bittree)
   /* Walk down the decoder tree.  */
   indented_print (indent, "if (((word >> %d) & 0x1) == 0)\n", bittree->bitno);
   indented_print (indent, "  {\n");
-  pattern[msb - bittree->bitno] = '0';
+  pattern[bittree->bitno] = '0';
   print_decision_tree_1 (indent + 4, bittree->bits[0]);
   indented_print (indent, "  }\n");
   indented_print (indent, "else\n");
   indented_print (indent, "  {\n");
-  pattern[msb - bittree->bitno] = '1';
+  pattern[bittree->bitno] = '1';
   print_decision_tree_1 (indent + 4, bittree->bits[1]);
   indented_print (indent, "  }\n");
-  pattern[msb - bittree->bitno] = 'x';
+  pattern[bittree->bitno] = 'x';
 }
 
 /* Generate aarch64_opcode_lookup in C code to the standard output.  */
@@ -690,24 +690,22 @@ opcode_node *
 find_alias_opcode (const aarch64_opcode *opcode)
 {
   int i;
-  /* Assume maximum of 32 disassemble preference candidates.  */
-  const int max_num_aliases = 32;
+  /* Assume maximum of 8 disassemble preference candidates.  */
+  const int max_num_aliases = 8;
   const aarch64_opcode *ent;
-  const aarch64_opcode *preferred[max_num_aliases + 1];
+  const aarch64_opcode *preferred[max_num_aliases];
   opcode_node head, **next;
 
   assert (opcode_has_alias (opcode));
 
   i = 0;
-  if (opcode->name != NULL)
-    preferred[i++] = opcode;
   ent = aarch64_opcode_table;
   while (ent->name != NULL)
     {
       /* The mask of an alias opcode must be equal to or a super-set (i.e.
 	 more constrained) of that of the aliased opcode; so is the base
 	 opcode value.  */
-      if (alias_opcode_p (ent)
+      if (alias_opcode_p (ent) == TRUE
 	  && (ent->mask & opcode->mask) == opcode->mask
 	  && (opcode->mask & ent->opcode) == (opcode->mask & opcode->opcode))
 	{
@@ -984,11 +982,10 @@ print_operand_inserter (void)
     printf ("Enter print_operand_inserter\n");
 
   printf ("\n");
-  printf ("bfd_boolean\n");
+  printf ("const char*\n");
   printf ("aarch64_insert_operand (const aarch64_operand *self,\n\
 			   const aarch64_opnd_info *info,\n\
-			   aarch64_insn *code, const aarch64_inst *inst,\n\
-			   aarch64_operand_error *errors)\n");
+			   aarch64_insn *code, const aarch64_inst *inst)\n");
   printf ("{\n");
   printf ("  /* Use the index as the key.  */\n");
   printf ("  int key = self - aarch64_operands;\n");
@@ -1018,7 +1015,7 @@ print_operand_inserter (void)
 		  opnd2->processed = 1;
 		}
 	    }
-	  printf ("      return aarch64_%s (self, info, code, inst, errors);\n",
+	  printf ("      return aarch64_%s (self, info, code, inst);\n",
 		  opnd->inserter);
 	}
     }
@@ -1041,11 +1038,10 @@ print_operand_extractor (void)
     printf ("Enter print_operand_extractor\n");
 
   printf ("\n");
-  printf ("bfd_boolean\n");
+  printf ("int\n");
   printf ("aarch64_extract_operand (const aarch64_operand *self,\n\
 			   aarch64_opnd_info *info,\n\
-			   aarch64_insn code, const aarch64_inst *inst,\n\
-			   aarch64_operand_error *errors)\n");
+			   aarch64_insn code, const aarch64_inst *inst)\n");
   printf ("{\n");
   printf ("  /* Use the index as the key.  */\n");
   printf ("  int key = self - aarch64_operands;\n");
@@ -1075,7 +1071,7 @@ print_operand_extractor (void)
 		  opnd2->processed = 1;
 		}
 	    }
-	  printf ("      return aarch64_%s (self, info, code, inst, errors);\n",
+	  printf ("      return aarch64_%s (self, info, code, inst);\n",
 		  opnd->extractor);
 	}
     }
@@ -1246,7 +1242,7 @@ main (int argc, char **argv)
     print_divide_result (decoder_tree);
 
   printf ("/* This file is automatically generated by aarch64-gen.  Do not edit!  */\n");
-  printf ("/* Copyright (C) 2012-2019 Free Software Foundation, Inc.\n\
+  printf ("/* Copyright 2012, 2013  Free Software Foundation, Inc.\n\
    Contributed by ARM Ltd.\n\
 \n\
    This file is part of the GNU opcodes library.\n\

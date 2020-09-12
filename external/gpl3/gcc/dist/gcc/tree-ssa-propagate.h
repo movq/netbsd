@@ -1,6 +1,6 @@
 /* Data structures and function declarations for the SSA value propagation
    engine.
-   Copyright (C) 2004-2019 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Diego Novillo <dnovillo@redhat.com>
 
 This file is part of GCC.
@@ -25,7 +25,7 @@ along with GCC; see the file COPYING3.  If not see
 /* If SIM_P is true, statement S will be simulated again.  */
 
 static inline void
-prop_set_simulate_again (gimple *s, bool visit_p)
+prop_set_simulate_again (gimple s, bool visit_p)
 {
   gimple_set_visited (s, visit_p);
 }
@@ -33,7 +33,7 @@ prop_set_simulate_again (gimple *s, bool visit_p)
 /* Return true if statement T should be simulated again.  */
 
 static inline bool
-prop_simulate_again_p (gimple *s)
+prop_simulate_again_p (gimple s)
 {
   return gimple_visited_p (s);
 }
@@ -61,52 +61,65 @@ enum ssa_prop_result {
 };
 
 
-extern bool valid_gimple_rhs_p (tree);
-extern void move_ssa_defining_stmt_for_defs (gimple *, gimple *);
-extern bool update_gimple_call (gimple_stmt_iterator *, tree, int, ...);
-extern bool update_call_from_tree (gimple_stmt_iterator *, tree);
-extern bool stmt_makes_single_store (gimple *);
-extern bool may_propagate_copy (tree, tree);
-extern bool may_propagate_copy_into_stmt (gimple *, tree);
-extern bool may_propagate_copy_into_asm (tree);
-extern void propagate_value (use_operand_p, tree);
-extern void replace_exp (use_operand_p, tree);
-extern void propagate_tree_value (tree *, tree);
-extern void propagate_tree_value_into_stmt (gimple_stmt_iterator *, tree);
+struct prop_value_d {
+    /* Lattice value.  Each propagator is free to define its own
+       lattice and this field is only meaningful while propagating.
+       It will not be used by substitute_and_fold.  */
+    unsigned lattice_val;
 
-/* Public interface into the SSA propagation engine.  Clients should inherit
-   from this class and provide their own visitors.  */
-
-class ssa_propagation_engine
-{
- public:
-
-  virtual ~ssa_propagation_engine (void) { }
-
-  /* Virtual functions the clients must provide to visit statements
-     and phi nodes respectively.  */
-  virtual enum ssa_prop_result visit_stmt (gimple *, edge *, tree *) = 0;
-  virtual enum ssa_prop_result visit_phi (gphi *) = 0;
-
-  /* Main interface into the propagation engine.  */
-  void ssa_propagate (void);
-
- private:
-  /* Internal implementation details.  */
-  void simulate_stmt (gimple *stmt);
-  void simulate_block (basic_block);
+    /* Propagated value.  */
+    tree value;
 };
 
-class substitute_and_fold_engine
-{
- public:
-  virtual ~substitute_and_fold_engine (void) { }
-  virtual bool fold_stmt (gimple_stmt_iterator *) { return false; }
-  virtual tree get_value (tree) { return NULL_TREE; }
+typedef struct prop_value_d prop_value_t;
 
-  bool substitute_and_fold (basic_block = NULL);
-  bool replace_uses_in (gimple *);
-  bool replace_phi_args_in (gphi *);
+
+/* Type of value ranges.  See value_range_d for a description of these
+   types.  */
+enum value_range_type { VR_UNDEFINED, VR_RANGE, VR_ANTI_RANGE, VR_VARYING };
+
+/* Range of values that can be associated with an SSA_NAME after VRP
+   has executed.  */
+struct value_range_d
+{
+  /* Lattice value represented by this range.  */
+  enum value_range_type type;
+
+  /* Minimum and maximum values represented by this range.  These
+     values should be interpreted as follows:
+
+	- If TYPE is VR_UNDEFINED or VR_VARYING then MIN and MAX must
+	  be NULL.
+
+	- If TYPE == VR_RANGE then MIN holds the minimum value and
+	  MAX holds the maximum value of the range [MIN, MAX].
+
+	- If TYPE == ANTI_RANGE the variable is known to NOT
+	  take any values in the range [MIN, MAX].  */
+  tree min;
+  tree max;
+
+  /* Set of SSA names whose value ranges are equivalent to this one.
+     This set is only valid when TYPE is VR_RANGE or VR_ANTI_RANGE.  */
+  bitmap equiv;
 };
+
+typedef struct value_range_d value_range_t;
+
+
+/* Call-back functions used by the value propagation engine.  */
+typedef enum ssa_prop_result (*ssa_prop_visit_stmt_fn) (gimple, edge *, tree *);
+typedef enum ssa_prop_result (*ssa_prop_visit_phi_fn) (gimple);
+typedef bool (*ssa_prop_fold_stmt_fn) (gimple_stmt_iterator *gsi);
+
+
+/* In tree-ssa-propagate.c  */
+void ssa_propagate (ssa_prop_visit_stmt_fn, ssa_prop_visit_phi_fn);
+bool valid_gimple_rhs_p (tree);
+bool valid_gimple_call_p (tree);
+void move_ssa_defining_stmt_for_defs (gimple, gimple);
+bool update_call_from_tree (gimple_stmt_iterator *, tree);
+bool stmt_makes_single_store (gimple);
+bool substitute_and_fold (prop_value_t *, ssa_prop_fold_stmt_fn, bool);
 
 #endif /* _TREE_SSA_PROPAGATE_H  */

@@ -1,4 +1,4 @@
-/*	$NetBSD: defun.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: defun.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* defun.c -- @defun and friends.
    Id: defun.c,v 1.11 2004/04/11 17:56:46 karl Exp 

@@ -1,8 +1,7 @@
-/* Copyright (C) 2005-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2005, 2008, 2009 Free Software Foundation, Inc.
    Contributed by Richard Henderson <rth@redhat.com>.
 
-   This file is part of the GNU Offloading and Multi Processing Library
-   (libgomp).
+   This file is part of the GNU OpenMP Library (libgomp).
 
    Libgomp is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by
@@ -60,7 +59,7 @@ gomp_iter_static_next (long *pstart, long *pend)
      trip through the outer loop.  */
   if (ws->chunk_size == 0)
     {
-      unsigned long n, q, i, t;
+      unsigned long n, q, i;
       unsigned long s0, e0;
       long s, e;
 
@@ -75,14 +74,11 @@ gomp_iter_static_next (long *pstart, long *pend)
       /* Compute the "zero-based" start and end points.  That is, as
          if the loop began at zero and incremented by one.  */
       q = n / nthreads;
-      t = n % nthreads;
-      if (i < t)
-	{
-	  t = 0;
-	  q++;
-	}
-      s0 = q * i + t;
+      q += (q * nthreads != n);
+      s0 = q * i;
       e0 = s0 + q;
+      if (e0 > n)
+        e0 = n;
 
       /* Notice when no iterations allocated for this thread.  */
       if (s0 >= e0)
@@ -218,7 +214,7 @@ gomp_iter_dynamic_next (long *pstart, long *pend)
 	}
     }
 
-  start = __atomic_load_n (&ws->next, MEMMODEL_RELAXED);
+  start = ws->next;
   while (1)
     {
       long left = end - start;
@@ -301,7 +297,7 @@ gomp_iter_guided_next (long *pstart, long *pend)
   long start, end, nend, incr;
   unsigned long chunk_size;
 
-  start = __atomic_load_n (&ws->next, MEMMODEL_RELAXED);
+  start = ws->next;
   end = ws->end;
   incr = ws->incr;
   chunk_size = ws->chunk_size;

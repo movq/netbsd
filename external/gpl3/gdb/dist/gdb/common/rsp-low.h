@@ -1,6 +1,6 @@
 /* Low-level RSP routines for GDB, the GNU debugger.
 
-   Copyright (C) 1988-2019 Free Software Foundation, Inc.
+   Copyright (C) 1988-2015 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,8 +19,6 @@
 
 #ifndef COMMON_RSP_LOW_H
 #define COMMON_RSP_LOW_H
-
-#include "common/byte-vector.h"
 
 /* Convert hex digit A to a number, or throw an exception.  */
 
@@ -43,7 +41,7 @@ extern char *pack_hex_byte (char *pkt, int byte);
    in RESULT.  Reads until a non-hex digit is seen.  Returns a pointer
    to the terminating character.  */
 
-extern const char *unpack_varlen_hex (const char *buff, ULONGEST *result);
+extern char *unpack_varlen_hex (char *buff, ULONGEST *result);
 
 /* HEX is a string of characters representing hexadecimal digits.
    Convert pairs of hex digits to bytes and store sequentially into
@@ -54,18 +52,6 @@ extern const char *unpack_varlen_hex (const char *buff, ULONGEST *result);
 
 extern int hex2bin (const char *hex, gdb_byte *bin, int count);
 
-/* Like the above, but return a gdb::byte_vector.  */
-
-gdb::byte_vector hex2bin (const char *hex);
-
-/* Like hex2bin, but return a std::string.  */
-
-extern std::string hex2str (const char *hex);
-
-/* Like hex2bin, but return a std::string.  */
-
-extern std::string hex2str (const char *hex, int count);
-
 /* Convert some bytes to a hexadecimal representation.  BIN holds the
    bytes to convert.  COUNT says how many bytes to convert.  The
    resulting characters are stored in HEX, followed by a NUL
@@ -73,21 +59,17 @@ extern std::string hex2str (const char *hex, int count);
 
 extern int bin2hex (const gdb_byte *bin, char *hex, int count);
 
-/* Overloaded version of bin2hex that returns a std::string.  */
-
-extern std::string bin2hex (const gdb_byte *bin, int count);
-
-/* Convert BUFFER, binary data at least LEN_UNITS addressable memory units
-   long, into escaped binary data in OUT_BUF.  Only copy memory units that fit
-   completely in OUT_BUF.  Set *OUT_LEN_UNITS to the number of units from
-   BUFFER successfully encoded in OUT_BUF, and return the number of bytes used
-   in OUT_BUF.  The total number of bytes in the output buffer will be at most
-   OUT_MAXLEN_BYTES.  This function properly escapes '*', and so is suitable
+/* Convert BUFFER, binary data at least LEN bytes long, into escaped
+   binary data in OUT_BUF.  Set *OUT_LEN to the length of the data
+   encoded in OUT_BUF, and return the number of bytes in OUT_BUF
+   (which may be more than *OUT_LEN due to escape characters).  The
+   total number of bytes in the output buffer will be at most
+   OUT_MAXLEN.  This function properly escapes '*', and so is suitable
    for the server side as well as the client.  */
 
-extern int remote_escape_output (const gdb_byte *buffer, int len_units,
-				 int unit_size, gdb_byte *out_buf,
-				 int *out_len_units, int out_maxlen_bytes);
+extern int remote_escape_output (const gdb_byte *buffer, int len,
+				 gdb_byte *out_buf, int *out_len,
+				 int out_maxlen);
 
 /* Convert BUFFER, escaped data LEN bytes long, into binary data
    in OUT_BUF.  Return the number of bytes written to OUT_BUF.

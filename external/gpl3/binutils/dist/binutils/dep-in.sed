@@ -1,7 +1,6 @@
 :loop
 /\\$/N
-s/\\\n */ /g
-t loop
+/\\$/b loop
 
 s! \./! !g
 s!@INCDIR@!$(INCDIR)!g
@@ -12,9 +11,11 @@ s!@SRCDIR@/!!g
 s!@OBJDIR@/!!g
 s! \.\./intl/libintl\.h!!g
 
+s/\\\n */ /g
+
 s/ *$//
 s/  */ /g
-s/^ */A/
-s/ / \\\
-B/g
-$s/$/ \\/
+/:$/d
+
+s/\(.\{50\}[^ ]*\) /\1 \\\
+  /g

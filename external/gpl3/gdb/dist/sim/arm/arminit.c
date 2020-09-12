@@ -1,18 +1,19 @@
 /*  arminit.c -- ARMulator initialization:  ARM6 Instruction Emulator.
     Copyright (C) 1994 Advanced RISC Machines Ltd.
-
+ 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or
+    the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
-
+ 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-
+ 
     You should have received a copy of the GNU General Public License
-    along with this program; if not, see <http://www.gnu.org/licenses/>. */
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA. */
 
 #include <string.h>
 
@@ -198,6 +199,7 @@ ARMul_Reset (ARMul_State * state)
   FLUSHPIPE;
 
   state->EndCondition = 0;
+  state->ErrorCode = 0;
 
   state->Exception = FALSE;
   state->NresetSig = HIGH;
@@ -278,6 +280,9 @@ ARMul_Abort (ARMul_State * state, ARMword vector)
   int e2size = (TFLAG ? -4 : 0);
 
   state->Aborted = FALSE;
+
+  if (ARMul_OSException (state, vector, ARMul_GetPC (state)))
+    return;
 
   if (state->prog32Sig)
     if (ARMul_MODE26BIT)

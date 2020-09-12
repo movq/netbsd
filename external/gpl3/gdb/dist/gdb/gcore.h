@@ -1,6 +1,6 @@
 /* Support for reading/writing gcore files.
 
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright (C) 2009, Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,13 +20,8 @@
 #if !defined (GCORE_H)
 #define GCORE_H 1
 
-#include "gdb_bfd.h"
-
-extern gdb_bfd_ref_ptr create_gcore_bfd (const char *filename);
+extern bfd *create_gcore_bfd (char *filename);
 extern void write_gcore_file (bfd *obfd);
 extern bfd *load_corefile (char *filename, int from_tty);
-extern int objfile_find_memory_regions (struct target_ops *self,
-					find_memory_region_ftype func,
-					void *obfd);
 
 #endif /* GCORE_H */

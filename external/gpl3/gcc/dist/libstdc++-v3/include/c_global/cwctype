@@ -1,6 +1,8 @@
 // -*- C++ -*- forwarding header.
 
-// Copyright (C) 1997-2019 Free Software Foundation, Inc.
+// Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+// 2006, 2007, 2008, 2009, 2010
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -41,14 +43,8 @@
 #include <bits/c++config.h>
 
 #if _GLIBCXX_HAVE_WCTYPE_H
-
-#if __GLIBC__ == 2 && __GLIBC_MINOR__ < 10
-// Work around glibc BZ 9694
-#include <stddef.h>
-#endif
-
 #include <wctype.h>
-#endif // _GLIBCXX_HAVE_WCTYPE_H
+#endif
 
 #ifndef _GLIBCXX_CWCTYPE
 #define _GLIBCXX_CWCTYPE 1
@@ -77,8 +73,8 @@
 
 #if _GLIBCXX_USE_WCHAR_T
 
-namespace std
-{
+_GLIBCXX_BEGIN_NAMESPACE(std)
+
   using ::wctrans_t;
   using ::wctype_t;
   using ::wint_t;
@@ -103,8 +99,28 @@ namespace std
   using ::towupper;
   using ::wctrans;
   using ::wctype;
-} // namespace
+
+_GLIBCXX_END_NAMESPACE
 
 #endif //_GLIBCXX_USE_WCHAR_T
 
-#endif // _GLIBCXX_CWCTYPE
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
+#  if defined(_GLIBCXX_INCLUDE_AS_TR1)
+#    error C++0x header cannot be included from TR1 header
+#  endif
+#  if defined(_GLIBCXX_INCLUDE_AS_CXX0X)
+#    include <tr1_impl/cwctype>
+#  else
+#    define _GLIBCXX_INCLUDE_AS_CXX0X
+#    define _GLIBCXX_BEGIN_NAMESPACE_TR1
+#    define _GLIBCXX_END_NAMESPACE_TR1
+#    define _GLIBCXX_TR1
+#    include <tr1_impl/cwctype>
+#    undef _GLIBCXX_TR1
+#    undef _GLIBCXX_END_NAMESPACE_TR1
+#    undef _GLIBCXX_BEGIN_NAMESPACE_TR1
+#    undef _GLIBCXX_INCLUDE_AS_CXX0X
+#  endif
+#endif
+
+#endif

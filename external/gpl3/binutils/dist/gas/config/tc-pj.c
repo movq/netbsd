@@ -1,5 +1,6 @@
 /* tc-pj.c -- Assemble code for Pico Java
-   Copyright (C) 1999-2020 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001, 2002, 2003, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -96,8 +97,7 @@ parse_exp_save_ilp (char *s, expressionS *op)
    we want to handle magic pending reloc expressions specially.  */
 
 void
-pj_cons_fix_new_pj (fragS *frag, int where, int nbytes, expressionS *exp,
-		    bfd_reloc_code_real_type r ATTRIBUTE_UNUSED)
+pj_cons_fix_new_pj (fragS *frag, int where, int nbytes, expressionS *exp)
 {
   static int rv[5][2] =
   { { 0, 0 },
@@ -171,7 +171,7 @@ static void
 fake_opcode (const char *name,
 	     void (*func) (struct pj_opc_info_t *, char *))
 {
-  pj_opc_info_t * fake = XNEW (pj_opc_info_t);
+  pj_opc_info_t * fake = xmalloc (sizeof (pj_opc_info_t));
 
   fake->opcode = -1;
   fake->opcode_next = -1;
@@ -183,9 +183,9 @@ fake_opcode (const char *name,
    can have another name.  */
 
 static void
-alias (const char *new_name, const char *old)
+alias (const char *new, const char *old)
 {
-  hash_insert (opcode_hash_control, new_name,
+  hash_insert (opcode_hash_control, new,
 	       (char *) hash_find (opcode_hash_control, old));
 }
 
@@ -261,7 +261,6 @@ md_assemble (char *str)
       return;
     }
 
-  dwarf2_emit_insn (0);
   if (opcode->opcode == -1)
     {
       /* It's a fake opcode.  Dig out the args and pretend that was
@@ -286,7 +285,7 @@ md_assemble (char *str)
 	    op_end++;
 
 	  if (*op_end == 0)
-	    as_bad (_("expected expression"));
+	    as_bad ("expected expresssion");
 
 	  op_end = parse_exp_save_ilp (op_end, &arg);
 
@@ -305,15 +304,16 @@ md_assemble (char *str)
 	op_end++;
 
       if (*op_end != 0)
-	as_warn (_("extra stuff on line ignored"));
+	as_warn ("extra stuff on line ignored");
 
     }
 
   if (pending_reloc)
-    as_bad (_("Something forgot to clean up\n"));
+    as_bad ("Something forgot to clean up\n");
+
 }
 
-const char *
+char *
 md_atof (int type, char *litP, int *sizeP)
 {
   return ieee_md_atof (type, litP, sizeP, target_big_endian);
@@ -333,7 +333,7 @@ struct option md_longopts[] =
 size_t md_longopts_size = sizeof (md_longopts);
 
 int
-md_parse_option (int c, const char *arg ATTRIBUTE_UNUSED)
+md_parse_option (int c, char *arg ATTRIBUTE_UNUSED)
 {
   switch (c)
     {
@@ -366,8 +366,10 @@ md_apply_fix (fixS *fixP, valueT * valP, segT seg ATTRIBUTE_UNUSED)
   char *buf = fixP->fx_where + fixP->fx_frag->fr_literal;
   long val = *valP;
   long max, min;
+  int shift;
 
   max = min = 0;
+  shift = 0;
   switch (fixP->fx_r_type)
     {
     case BFD_RELOC_VTABLE_INHERIT:
@@ -440,10 +442,6 @@ md_apply_fix (fixS *fixP, valueT * valP, segT seg ATTRIBUTE_UNUSED)
 	}
       break;
 
-    case BFD_RELOC_PJ_CODE_REL32:
-      fixP->fx_done = 0;
-      return;
-
     default:
       abort ();
     }
@@ -476,8 +474,8 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
   arelent *rel;
   bfd_reloc_code_real_type r_type;
 
-  rel = XNEW (arelent);
-  rel->sym_ptr_ptr = XNEW (asymbol *);
+  rel = xmalloc (sizeof (arelent));
+  rel->sym_ptr_ptr = xmalloc (sizeof (asymbol *));
   *rel->sym_ptr_ptr = symbol_get_bfdsym (fixp->fx_addsy);
   rel->address = fixp->fx_frag->fr_address + fixp->fx_where;
 
@@ -492,7 +490,7 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
 		    bfd_get_reloc_code_name (r_type));
       /* Set howto to a garbage value so that we can keep going.  */
       rel->howto = bfd_reloc_type_lookup (stdoutput, BFD_RELOC_32);
-      gas_assert (rel->howto != NULL);
+      assert (rel->howto != NULL);
     }
 
   return rel;

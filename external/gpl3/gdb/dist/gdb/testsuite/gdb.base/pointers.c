@@ -91,6 +91,10 @@ int main ()
   void dummy();
   int more_code();
   
+#ifdef usestubs
+  set_debug_traps();
+  breakpoint();
+#endif
   dummy();
 
   more_code ();

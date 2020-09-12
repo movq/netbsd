@@ -1,5 +1,5 @@
 /* mingw32 host-specific hook definitions.
-   Copyright (C) 2004-2019 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2007, 2009 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -17,19 +17,17 @@
    along with GCC; see the file COPYING3.  If not see
    <http://www.gnu.org/licenses/>.  */
 
-#define IN_TARGET_CODE 1
-
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "diagnostic.h"
 #include "hosthooks.h"
 #include "hosthooks-def.h"
+#include "toplev.h"
+#include "diagnostic.h"
 
 
 #define WIN32_LEAN_AND_MEAN  /* Not so important if we have windows.h.gch.  */
 #include <windows.h>
-#include <stdlib.h>
 
 static void * mingw32_gt_pch_get_address (size_t, int);
 static int mingw32_gt_pch_use_address (void *, size_t, int, size_t);
@@ -48,7 +46,7 @@ static inline void w32_error(const char*, const char*, int, const char*);
 static const size_t pch_VA_max_size  = 128 * 1024 * 1024;
 
 /* Granularity for reserving address space.  */
-static size_t va_granularity = 0x10000;
+static const size_t va_granularity = 0x10000;
 
 /* Print out the GetLastError() translation.  */ 
 static inline void
@@ -69,14 +67,8 @@ w32_error (const char* function, const char* file, int line,
 }
 
 /* Granularity for reserving address space.  */
-static size_t
-mingw32_gt_pch_alloc_granularity (void)
+static size_t mingw32_gt_pch_alloc_granularity (void)
 {
-  SYSTEM_INFO si;
-
-  GetSystemInfo (&si);
-  va_granularity = (size_t) si.dwAllocationGranularity;
-
   return va_granularity;
 }
 
@@ -85,7 +77,7 @@ mingw32_gt_pch_alloc_granularity (void)
    open file descriptor if the host would like to probe with mmap.  */
 
 static void *
-mingw32_gt_pch_get_address (size_t size, int)
+mingw32_gt_pch_get_address (size_t size, int fd  ATTRIBUTE_UNUSED)
 {
   void* res;
   size = (size + va_granularity - 1) & ~(va_granularity - 1);
@@ -123,7 +115,7 @@ mingw32_gt_pch_use_address (void *addr, size_t size, int fd,
 {
   void * mmap_addr;
   HANDLE mmap_handle;
- 
+
   /* Apparently, MS Vista puts unnamed file mapping objects into Global
      namespace when running an application in a Terminal Server
      session.  This causes failure since, by default, applications 
@@ -141,8 +133,6 @@ mingw32_gt_pch_use_address (void *addr, size_t size, int fd,
      and earlier, backslashes are invalid in object name.  So, we need
      to check if we are on Windows2000 or higher.  */
   OSVERSIONINFO version_info;
-  int r;
-
   version_info.dwOSVersionInfoSize = sizeof (version_info);
 
   if (size == 0)
@@ -165,6 +155,7 @@ mingw32_gt_pch_use_address (void *addr, size_t size, int fd,
 		OBJECT_NAME_FMT "%lx", GetCurrentProcessId());
       object_name = local_object_name;
     }
+     
   mmap_handle = CreateFileMappingA ((HANDLE) _get_osfhandle (fd), NULL,
 				    PAGE_WRITECOPY | SEC_COMMIT, 0, 0,
 				    object_name);
@@ -174,19 +165,8 @@ mingw32_gt_pch_use_address (void *addr, size_t size, int fd,
       w32_error (__FUNCTION__,  __FILE__, __LINE__, "CreateFileMapping");
       return -1; 
     }
-
-  /* Retry five times, as here might occure a race with multiple gcc's
-     instances at same time.  */
-  for (r = 0; r < 5; r++)
-   {
-      mmap_addr = MapViewOfFileEx (mmap_handle, FILE_MAP_COPY, 0, offset,
-				   size, addr);
-      if (mmap_addr == addr)
-	break;
-      if (r != 4)
-        Sleep (500);
-   }
-      
+  mmap_addr = MapViewOfFileEx (mmap_handle, FILE_MAP_COPY, 0, offset,
+			       size, addr);
   if (mmap_addr != addr)
     {
       w32_error (__FUNCTION__, __FILE__, __LINE__, "MapViewOfFileEx");

@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2007-2019 Free Software Foundation, Inc.
+// Copyright (C) 2007, 2008, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute __it and/or modify __it under the terms
@@ -90,10 +90,10 @@ namespace __gnu_parallel
    *  @param __f Functor to be applied to each element by traversing __it
    *  @param __oversampling Oversampling factor. If 0, then the
    *  partitions will differ in at most 
-   *  \f$\sqrt{\mathrm{end} - \mathrm{begin}}\f$ 
-   *  elements. Otherwise, the ratio between the
+   *  \sqrt{\mathrm{__end} - \mathrm{__begin}} 
+   *  __elements. Otherwise, the ratio between the
    *  longest and the shortest part is bounded by
-   *  \f$1/(\mathrm{oversampling} \cdot \mathrm{num\_parts})\f$
+   *  1/(\mathrm{__oversampling} \cdot \mathrm{num\_parts})
    *  @return Length of the whole sequence.
    */
   template<typename _IIter, typename _FunctorType>

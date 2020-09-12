@@ -1,6 +1,6 @@
 // random number generation -*- C++ -*-
 
-// Copyright (C) 2009-2019 Free Software Foundation, Inc.
+// Copyright (C) 2009, 2010 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -25,7 +25,7 @@
 /**
  * @file tr1/random.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{tr1/random}
+ *  You should not attempt to use it directly.
  */
 
 #ifndef _GLIBCXX_TR1_RANDOM_H
@@ -33,10 +33,8 @@
 
 #pragma GCC system_header
 
-namespace std _GLIBCXX_VISIBILITY(default)
+namespace std
 {
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
-
 namespace tr1
 {
   // [5.1] Random number generation
@@ -590,7 +588,7 @@ namespace tr1
 
       result_type
       min() const
-      { return 0; }
+      { return 0; };
 
       result_type
       max() const
@@ -2407,8 +2405,6 @@ namespace tr1
   /* @} */ // group tr1_random_distributions
   /* @} */ // group tr1_random
 }
-
-_GLIBCXX_END_NAMESPACE_VERSION
 }
 
 #endif // _GLIBCXX_TR1_RANDOM_H

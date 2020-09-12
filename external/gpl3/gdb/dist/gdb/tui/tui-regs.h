@@ -1,6 +1,7 @@
 /* TUI display registers in window.
 
-   Copyright (C) 1998-2019 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2001, 2004, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
 
@@ -19,8 +20,8 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef TUI_TUI_REGS_H
-#define TUI_TUI_REGS_H
+#ifndef TUI_REGS_H
+#define TUI_REGS_H
 
 #include "tui/tui-data.h"  /* For struct tui_register_display_type.  */
 
@@ -33,4 +34,4 @@ extern int tui_first_reg_element_inline (int);
 extern int tui_line_from_reg_element_no (int);
 extern int tui_first_reg_element_no_inline (int lineno);
 
-#endif /* TUI_TUI_REGS_H */
+#endif

@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2016 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -35,7 +35,7 @@ static sigset_t original_signal_mask;
 /* See signals-state-save-restore.h.   */
 
 void
-save_original_signals_state (bool quiet)
+save_original_signals_state (void)
 {
 #ifdef HAVE_SIGACTION
   int i;
@@ -44,8 +44,6 @@ save_original_signals_state (bool quiet)
   res = sigprocmask (0,  NULL, &original_signal_mask);
   if (res == -1)
     perror_with_name (("sigprocmask"));
-
-  bool found_preinstalled = false;
 
   for (i = 1; i < NSIG; i++)
     {
@@ -61,30 +59,9 @@ save_original_signals_state (bool quiet)
 	perror_with_name (("sigaction"));
 
       /* If we find a custom signal handler already installed, then
-	 this function was called too late.  This is a warning instead
-	 of an internal error because this can also happen if you
-	 LD_PRELOAD a library that installs a signal handler early via
-	 __attribute__((constructor)), like libSegFault.so.  */
-      if (!quiet
-	  && oldact->sa_handler != SIG_DFL
-	  && oldact->sa_handler != SIG_IGN)
-	{
-	  found_preinstalled = true;
-
-	  /* Use raw fprintf here because we're being called in early
-	     startup, before GDB's filtered streams are created.  */
-	  fprintf (stderr,
-		   _("warning: Found custom handler for signal "
-		     "%d (%s) preinstalled.\n"), i,
-		   strsignal (i));
-	}
-    }
-
-  if (found_preinstalled)
-    {
-      fprintf (stderr, _("\
-Some signal dispositions inherited from the environment (SIG_DFL/SIG_IGN)\n\
-won't be propagated to spawned programs.\n"));
+	 this function was called too late.  */
+      if (oldact->sa_handler != SIG_DFL && oldact->sa_handler != SIG_IGN)
+	internal_error (__FILE__, __LINE__, _("unexpected signal handler"));
     }
 #endif
 }

@@ -1,4 +1,4 @@
-# Copyright (C) 2008-2019 Free Software Foundation, Inc.
+# Copyright (C) 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,8 +15,11 @@
 
 # Test handling of threads across an execl.
 
+
 # Original image, loads a thread library.
-standard_testfile
+set testfile "execl"
+set srcfile ${testfile}.c
+set binfile ${objdir}/${subdir}/${testfile}
 
 if {[gdb_compile_pthreads "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug}] != "" } {
     return -1
@@ -25,13 +28,16 @@ if {[gdb_compile_pthreads "${srcdir}/${subdir}/${srcfile}" "${binfile}" executab
 # New image, that does not load a thread library.
 set testfile1 "execl1"
 set srcfile1 ${testfile1}.c
-set binfile1 [standard_output_file ${testfile1}]
+set binfile1 ${objdir}/${subdir}/${testfile1}
 
 if {[gdb_compile "${srcdir}/${subdir}/${srcfile1}" "${binfile1}" executable {debug}] != "" } {
     return -1
 }
 
-clean_restart ${binfile}
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
 
 runto_main
 
@@ -40,7 +46,7 @@ gdb_test "b [gdb_get_line_number "breakpoint here"]" \
 
 gdb_test "continue" ".*breakpoint here.*" "continue to exec"
 
-gdb_test "info threads" "1 *Thread.*2 *Thread.*3 *Thread.*" "info threads before exec"
+gdb_test "info threads" ".*3 *Thread.*2 *Thread.*1 *Thread.*" "info threads before exec"
 
 # When continuing from this point we'll hit the breakpoint in main()
 # again, this time in the exec'd process.

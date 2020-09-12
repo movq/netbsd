@@ -1,5 +1,6 @@
 /* Definitions for Intel 386 running kFreeBSD-based GNU systems with ELF format
-   Copyright (C) 2011-2019 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2007
+   Free Software Foundation, Inc.
    Contributed by Robert Millan.
 
 This file is part of GCC.
@@ -18,5 +19,7 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-#define GNU_USER_LINK_EMULATION "elf_i386_fbsd"
-#define GLIBC_DYNAMIC_LINKER "/lib/ld.so.1"
+#undef LINK_EMULATION
+#define LINK_EMULATION "elf_i386_fbsd"
+#undef REG_NAME
+#define REG_NAME(reg) sc_ ## reg

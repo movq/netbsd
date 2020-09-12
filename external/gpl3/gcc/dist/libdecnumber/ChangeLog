@@ -1,210 +1,18 @@
-2020-03-12  Release Manager
+2011-04-28  Release Manager
 
-	* GCC 9.3.0 released.
+	* GCC 4.5.3 released.
 
-2020-01-13  Joseph Myers  <joseph@codesourcery.com>
+2010-12-16  Release Manager
 
-	Backport from mainline:
-	2019-12-09  Joseph Myers  <joseph@codesourcery.com>
+	* GCC 4.5.2 released.
 
-	PR middle-end/91226
-	* bid/bid2dpd_dpd2bid.c (_bid_to_dpd64): Handle non-canonical
-	significands.
-	(_bid_to_dpd128): Likewise.  Check for case where combination
-	field starts 1100, 1101 or 1110.
+2010-07-31  Release Manager
 
-2019-08-12  Release Manager
+	* GCC 4.5.1 released.
 
-	* GCC 9.2.0 released.
+2010-04-14  Release Manager
 
-2019-05-03  Release Manager
-
-	* GCC 9.1.0 released.
-
-2019-01-01  Jakub Jelinek  <jakub@redhat.com>
-
-	Update copyright years.
-
-2018-10-31  Joseph Myers  <joseph@codesourcery.com>
-
-	PR bootstrap/82856
-	Merge from binutils-gdb:
-	2018-06-19  Simon Marchi  <simon.marchi@ericsson.com>
-
-	* configure.ac: Remove AC_PREREQ.
-	* configure: Re-generate.
-	* aclocal.m4.
-
-2018-07-05  James Clarke  <jrtc27@jrtc27.com>
-
-	* configure: Regenerated.
-
-2018-02-19  Martin Liska  <mliska@suse.cz>
-
-	PR c/81272
-	* decNumber.c (decCompareOp): Do not use bit and
-	for conjunction of predicates.
-
-2018-01-03  Jakub Jelinek  <jakub@redhat.com>
-
-	Update copyright years.
-
-2017-05-29  Sylvestre Ledru  <sylvestre@debian.org>
-
-	* bid/bid2dpd_dpd2bid.c (_bid_to_dpd32): Fix whitespace.
-	(_dpd_to_bid32): Simplify identical code on multiple branches.
-	Fix whitespace.
-	(_bid_to_dpd64, _dpd_to_bid64): Likewise.
-	(_bid_to_dpd128, _dpd_to_bid128): Likewise.
-
-2017-04-03  Jonathan Wakely  <jwakely@redhat.com>
-
-	* decCommon.c (decFloatFromPackedChecked): Fix typo in comment.
-	* decNumber.c (decNumberPower, decMultiplyOp): Likewise.
-
-2017-01-08  Jakub Jelinek  <jakub@redhat.com>
-
-	PR bootstrap/79003
-	* Makefile.in (CFLAGS, CPPFLAGS, LDFLAGS): Remove -fno-lto.
-	(NOLTO_FLAGS): New variable.
-	(ALL_CFLAGS): Use it.
-	* configure.ac (nolto_flags): New ACX_PROG_CC_WARNING_OPTS,
-	check for whether -fno-lto works.
-	* configure: Regenerated.
-
-2017-01-06  Martin Liska  <mliska@suse.cz>
-
-	PR bootstrap/79003
-	* Makefile.in: Add -fno-lto to {C,CPP,LD}FLAGS.
-
-2017-01-01  Jakub Jelinek  <jakub@redhat.com>
-
-	Update copyright years.
-
-2016-11-15  Matthias Klose  <doko@ubuntu.com>
-
-	* configure: Regenerate.
-
-2016-01-04  Jakub Jelinek  <jakub@redhat.com>
-
-	Update copyright years.
-
-2015-06-30  H.J. Lu  <hongjiu.lu@intel.com>
-
-	* configure: Regenerated.
-
-2015-05-13  Michael Haubenwallner  <michael.haubenwallner@ssi-schaefer.com>
-
-	* aclocal.m4: Regenerated with automake-1.11.6.
-
-2015-01-05  Jakub Jelinek  <jakub@redhat.com>
-
-	Update copyright years.
-
-2014-11-11  David Malcolm  <dmalcolm@redhat.com>
-
-	* ChangeLog.jit: New.
-
-2014-01-23  Marek Polacek  <polacek@redhat.com>
-
-	PR c/59871
-	* decNumberLocal.h (UBFROMUS, UBFROMUI): Remove last argument.
-
-2014-01-02  Richard Sandiford  <rdsandiford@googlemail.com>
-
-	Update copyright years
-
-2013-10-15  David Malcolm  <dmalcolm@redhat.com>
-
-	* Makefile.in (PICFLAG): New.
-	(ALL_CFLAGS): Add PICFLAG.
-	* configure.ac: Add --enable-host-shared, setting up new
-	PICFLAG variable.
-	* configure: Regenerate.
-
-2013-07-09  Simon Baldwin  <simonb@google.com>
-
-	* configure.ac: Add AC_CONFIG_AUX_DIR.
-	* configure: Regenerated.
-		
-2013-03-27  Kai Tietz  <ktietz@redhat.com>
-
-	* configure: Regenerated.
-
-2013-02-06  Richard Sandiford  <rdsandiford@googlemail.com>
-
-	Update copyright years.
-
-2012-11-04  Thomas Schwinge  <thomas@codesourcery.com>
-
-	* configure: Regenerate.
-
-2011-12-20  Andreas Schwab  <schwab@linux-m68k.org>
-
-	* configure: Regenerate.
-
-2011-12-19  Andreas Schwab  <schwab@linux-m68k.org>
-
-	* configure: Regenerate.
-
-2011-04-20  Jim Meyering  <meyering@redhat.com>
-
-	* decNumber.c (decNumberFromString): Remove useless
-	if-before-free test.
-	(decNumberCompareTotalMag, decNumberExp, decNumberFMA): Likewise.
-	(decNumberLn, decNumberLog10, decNumberPower): Likewise.
-	(decNumberReduce, decNumberSquareRoot, decAddOp): Likewise.
-	(decDivideOp, NEEDTWO, decExpOp, LN2): Likewise.
-
-2011-03-28  Mike Frysinger  <vapier@gentoo.org>
-
-	* .gitignore: New file.
-
-2010-11-24  Nathan Froyd  <froydnj@codesourcery.com>
-
-	* dconfig.h (LIBGCC2_FLOAT_WORDS_BIG_ENDIAN): Delete.
-	(WORDS_BIG_ENDIAN): Define based on value of __FLOAT_WORD_ORDER__.
-
-2010-10-23  Nathan Froyd  <froydnj@codesourcery.com>
-
-	* dconfig.h (LIBGCC2_WORDS_BIG_ENDIAN): Delete.
-	(LIBGCC2_FLOAT_WORDS_BIG_ENDIAN): Test __BYTE_ORDER__.
-
-2010-09-10  Kai Tietz  <kai.tietz@onevision.com>
-
-       * configure: Regenerated.
-
-2010-09-08  Tristan Gingold  <gingold@adacore.com>
-
-	PR 44001
-	* Makefile.in (objext): New variable.
-	(bid_OBJS): Use $(objext) for extension.
-	(libdecnumber_a_OBJS): Ditto.
-	(mostlyclean): Ditto
-	(.c.o): Ditto.
-	Update dependencies.
-
-2010-09-06  H.J. Lu  <hongjiu.lu@intel.com>
-
-	PR target/45524
-	* configure.ac (enable_decimal_float): Set to
-	$default_decimal_float.
-	* configure: Regenerated.
-
-2010-09-06  Andreas Schwab  <schwab@redhat.com>
-
-	* configure: Regenerate.
-
-2010-09-03  Andreas Krebbel  <Andreas.Krebbel@de.ibm.com>
-
-	* configure.ac: Use the GCC_AC_ENABLE_DECIMAL_FLOAT macro.
-	* Makefile.in: Add aclocal.m4 dependency to dfp.m4.
-	* configure: Regenerate.
-	* aclocal.m4: Regenerate.
-
-2010-08-21  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
-
-	* configure: Regenerate.
+	* GCC 4.5.0 released.
 
 2010-04-02  Ralf Wildenhues  <Ralf.Wildenhues@gmx.de>
 
@@ -311,7 +119,7 @@
 
 2009-04-01  Ben Elliston  <bje@au.ibm.com>
 
-	* decContext.h: Include gstdint.h instead of <stdint.h>.
+        * decContext.h: Include gstdint.h instead of <stdint.h>.
 
 2009-03-30  Ben Elliston  <bje@au.ibm.com>
 
@@ -658,11 +466,11 @@
 
 2006-01-02  Paolo Bonzini  <bonzini@gnu.org>
 
-	PR target/25259
-	* configure.ac: Use GCC_HEADER_STDINT.
-	* decContext.h: Include gstdint.h.
-	* aclocal.m4: Regenerate.
-	* configure: Regenerate.
+        PR target/25259
+        * configure.ac: Use GCC_HEADER_STDINT.
+        * decContext.h: Include gstdint.h.
+        * aclocal.m4: Regenerate.
+        * configure: Regenerate.
 
 2005-12-20  Roger Sayle  <roger@eyesopen.com>
 
@@ -718,15 +526,9 @@
 2005-11-29  Ben Elliston  <bje@au.ibm.com>
 
 	* decimal32.h, decimal64.h, decimal128.h: New.
-	* decimal32.c, decimal64.c, decimal128.c: Likewise.
+        * decimal32.c, decimal64.c, decimal128.c: Likewise.
 	* decContext.c, decContext.h: Likewise.
 	* decUtility.c, decUtility.h: Likewise.
 	* decNumber.c, decNumber.h, decNumberLocal.h: Likewise.
 	* decDPD.h: Likewise.
 	* decLibrary.c, decRound.c: Likewise.
-
-Copyright (C) 2005-2019 Free Software Foundation, Inc.
-
-Copying and distribution of this file, with or without modification,
-are permitted in any medium without royalty provided the copyright
-notice and this notice are preserved.

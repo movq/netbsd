@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2005-2019 Free Software Foundation, Inc.
+// Copyright (C) 2005, 2006, 2009 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
@@ -41,33 +41,33 @@
 #ifndef PB_DS_SAMPLE_SIZE_POLICY_HPP
 #define PB_DS_SAMPLE_SIZE_POLICY_HPP
 
-namespace __gnu_pbds
+// A sample size policy.
+class sample_size_policy
 {
-  /// A sample size policy.
-  class sample_size_policy
-  {
-  public:
-    /// Size type.
-    typedef std::size_t size_type;
+public:
 
-    /// Default constructor.
-    sample_size_policy();
+  // Size type.
+  typedef size_t size_type;
 
-    /// Copy constructor.
-    sample_range_hashing(const sample_size_policy&);
+  // Default constructor.
+  sample_size_policy();
 
-    /// Swaps content.
-    inline void
-    swap(sample_size_policy& other);
+  // Copy constructor.
+  sample_range_hashing(const sample_size_policy& other);
 
-  protected:
-    /// Given a __size size, returns a __size that is larger.
-    inline size_type
-    get_nearest_larger_size(size_type size) const;
+  // Swaps content.
+  inline void
+  swap(sample_size_policy& other);
 
-    /// Given a __size size, returns a __size that is smaller.
-    inline size_type
-    get_nearest_smaller_size(size_type size) const;
-  };
-}
-#endif
+protected:
+
+  // Given a __size size, returns a __size that is larger.
+  inline size_type
+  get_nearest_larger_size(size_type size) const;
+
+  // Given a __size size, returns a __size that is smaller.
+  inline size_type
+  get_nearest_smaller_size(size_type size) const;
+};
+
+#endif 

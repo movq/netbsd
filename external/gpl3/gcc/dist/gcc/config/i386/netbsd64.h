@@ -1,6 +1,6 @@
 /* Definitions of target machine for GCC,
    for x86-64/ELF NetBSD systems.
-   Copyright (C) 2002-2019 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2004, 2007 Free Software Foundation, Inc.
    Contributed by Wasabi Systems, Inc.
 
 This file is part of GCC.
@@ -27,6 +27,15 @@ along with GCC; see the file COPYING3.  If not see
   while (0)
 
 
+/* Extra specs needed for NetBSD/x86-64 ELF.  */
+
+#undef SUBTARGET_EXTRA_SPECS
+#define SUBTARGET_EXTRA_SPECS			\
+  { "netbsd_cpp_spec", NETBSD_CPP_SPEC },	\
+  { "netbsd_link_spec", NETBSD_LINK_SPEC_ELF },	\
+  { "netbsd_entry_point", NETBSD_ENTRY_POINT },
+
+
 /* Provide a LINK_SPEC appropriate for a NetBSD/x86-64 ELF target.  */
 
 #undef LINK_SPEC
@@ -44,32 +53,20 @@ along with GCC; see the file COPYING3.  If not see
 #define CPP_SPEC "%(netbsd_cpp_spec)"
 
 
-/* Provide C11_SPEC/CC1PLUS_SPEC appropriate for NetBSD/x86-64.  */
-#define NETBSD_CC1_CPU_SPEC " %(cc1_cpu) "
-
-#undef CC1_SPEC
-#define CC1_SPEC NETBSD_CC1_AND_CC1PLUS_SPEC NETBSD_CC1_CPU_SPEC
-
-#undef CC1PLUS_SPEC
-#define CC1PLUS_SPEC NETBSD_CC1_AND_CC1PLUS_SPEC NETBSD_CC1_CPU_SPEC
-
-
 /* Output assembler code to FILE to call the profiler.  */
 
 #undef FUNCTION_PROFILER
 #define FUNCTION_PROFILER(FILE, LABELNO)				\
 {									\
   if (TARGET_64BIT && flag_pic)						\
-    fprintf (FILE, "\tcall __mcount@PLT\n");				\
+    fprintf (FILE, "\tcall *__mcount@PLT\n");				\
   else if (flag_pic)							\
-    fprintf (FILE, "\tcall __mcount@PLT\n");				\
+    fprintf (FILE, "\tcall *__mcount@PLT\n");				\
   else									\
     fprintf (FILE, "\tcall __mcount\n");				\
 }
 
-/* Preserve i386 psABI  */
-#undef PREFERRED_STACK_BOUNDARY_DEFAULT
-#define PREFERRED_STACK_BOUNDARY_DEFAULT \
-  ((TARGET_64BIT || TARGET_SSE) ? 128 : 32)
+/* Attempt to enable execute permissions on the stack.  */
+#define ENABLE_EXECUTE_STACK NETBSD_ENABLE_EXECUTE_STACK
 
-#define HAVE_ENABLE_EXECUTE_STACK
+#define TARGET_VERSION fprintf (stderr, " (NetBSD/x86_64 ELF)");

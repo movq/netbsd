@@ -1,6 +1,6 @@
 /* Macros for general registry objects.
 
-   Copyright (C) 2011-2019 Free Software Foundation, Inc.
+   Copyright (C) 2011-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -45,12 +45,11 @@
    
    - register_TAG_data_with_cleanup(TAG, SAVE, FREE)
    Get a new key for the container type TAG.
-   SAVE and FREE are defined as void (*) (struct TAG *object, void *data)
-   When the container object OBJECT is destroyed, first all registered SAVE
+   SAVE and FREE are defined as void (*) (struct TAG *, void *)
+   When the container is destroyed, first all registered SAVE
    functions are called.
    Then all FREE functions are called.
-   Either or both may be NULL.  DATA is the data associated with the
-   container object OBJECT.
+   Either or both may be NULL.
    
    - clear_TAG_data(TAG, OBJECT)
    Clear all the data associated with OBJECT.  Should be called by the
@@ -158,6 +157,8 @@ const struct TAG ## _data *						\
 register_ ## TAG ## _data_with_cleanup (void (*save) (struct TAG *, void *), \
 					void (*free) (struct TAG *, void *)) \
 {									\
+  struct registry_data_registration **curr;				\
+									\
   return (struct TAG ## _data *)					\
     register_data_with_cleanup (&TAG ## _data_registry,			\
 				(registry_data_callback) save,		\
@@ -184,6 +185,8 @@ TAG ## registry_callback_adaptor (registry_data_callback func,		\
 				  void *data)				\
 {									\
   struct TAG *tagged_container = (struct TAG *) container;		\
+  struct registry_fields *rdata						\
+    = &ACCESS (tagged_container)->registry_data;			\
 									\
   registry_ ## TAG ## _callback tagged_func				\
     = (registry_ ## TAG ## _callback) func;				\

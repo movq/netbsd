@@ -1,4 +1,4 @@
-# Copyright 2011-2019 Free Software Foundation, Inc.
+# Copyright 2011 Free Software Foundation, Inc.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,8 +15,12 @@
 
 load_lib "ada.exp"
 
-standard_ada_testfile foo
+set testdir "mi_catch_ex"
+set testfile "${testdir}/foo"
+set srcfile ${srcdir}/${subdir}/${testfile}.adb
+set binfile ${objdir}/${subdir}/${testfile}
 
+file mkdir ${objdir}/${subdir}/${testdir}
 if {[gdb_compile_ada "${srcfile}" "${binfile}" executable [list debug additional_flags=-gnata ]] != "" } {
   return -1
 }
@@ -33,7 +37,7 @@ set eol "\[\r\n\]+"
 clean_restart ${testfile}
 
 if ![runto_main] then {
-   fail "cannot run to main, testcase aborted"
+   fail "Cannot run to main, testcase aborted"
    return 0
 }
 
@@ -42,7 +46,7 @@ gdb_test_multiple "catch exception" $msg {
     -re "Catchpoint $any_nb: all Ada exceptions$eol$gdb_prompt $" {
 	pass $msg
     }
-    -re "Your Ada runtime appears to be missing some debugging information.*\[\r\n\]+$gdb_prompt $" {
+    -re "Cannot break on __gnat_raise_nodefer_with_msg in this configuration\.\[\r\n\]+$gdb_prompt $" {
 	# If the runtime was not built with enough debug information,
 	# or if it was stripped, we can not test exception
 	# catchpoints.
@@ -70,46 +74,23 @@ mi_gdb_load ${binfile}
 ####################################
 
 if ![mi_run_to_main] then {
-   fail "cannot run to main, testcase aborted"
+   fail "Cannot run to main, testcase aborted"
    return 0
 }
 
-mi_gdb_test "-catch-exception" \
-            "\\^done,bkptno=\"$decimal\",bkpt={.*disp=\"keep\",enabled=\"y\",addr=\"$hex\",what=\"all Ada exceptions\",.*}" \
-            "catch all exceptions"
+mi_gdb_test "catch exception"
 
-# Continue to caught exception.
+mi_execute_to "exec-continue" \
+              "breakpoint-hit\",disp=\"keep\",bkptno=\"$any_nb\",exception-name=\"CONSTRAINT_ERROR" \
+              "foo" "" ".*" ".*" \
+              ".*" \
+              "continue to exception catchpoint hit"
 
-proc continue_to_exception { exception_name exception_message test } {
-    global hex any_nb
-
-    mi_send_resuming_command "exec-continue" "$test"
-
-    # Match console stream output.
-    gdb_expect {
-	-re " $exception_name\( \\($exception_message\\)\)? at $hex in foo " {
-	}
-	timeout {
-	    fail "$test (timeout)"
-	    return -1
-	}
-    }
-
-    # Now MI stream output.
-    mi_expect_stop \
-	"breakpoint-hit\",disp=\"keep\",bkptno=\"$any_nb\",exception-name=\"$exception_name\(\",exception-message=\"$exception_message\)?" \
-	"foo" "" ".*" ".*" \
-	".*" \
-	$test
-}
-
-continue_to_exception \
-    "CONSTRAINT_ERROR" "foo\\.adb:$decimal explicit raise" \
-    "continue until CE caught by all-exceptions catchpoint"
-
-continue_to_exception \
-    "PROGRAM_ERROR" "foo\\.adb:$decimal explicit raise" \
-    "continue until PE caught by all-exceptions catchpoint"
+mi_execute_to "exec-continue" \
+              "breakpoint-hit\",disp=\"keep\",bkptno=\"$any_nb\",exception-name=\"PROGRAM_ERROR" \
+              "foo" "" ".*" ".*" \
+              ".*" \
+              "continue to exception catchpoint hit"
 
 ################################################
 # 2. Try catching only some of the exceptions. #
@@ -126,24 +107,18 @@ continue_to_exception \
 #  - continue, the program exits.
 
 if ![mi_run_to_main] then {
-   fail "cannot run to main, testcase aborted"
+   fail "Cannot run to main, testcase aborted"
    return 0
 }
 
-mi_gdb_test "-catch-exception -e Program_Error" \
-            "\\^done,bkptno=\"$decimal\",bkpt={.*disp=\"keep\",enabled=\"y\",addr=\"$hex\",what=\"`Program_Error' Ada exception\",.*}" \
-            "catch Program_Error"
+mi_gdb_test "catch exception Program_Error"
 
-mi_gdb_test "-catch-assert" \
-            "\\^done,bkptno=\"$decimal\",bkpt={.*disp=\"keep\",enabled=\"y\",addr=\"$hex\",what=\"failed Ada assertions\",.*}" \
-            "catch assert failures"
+mi_gdb_test "catch assert"
 
-mi_gdb_test "-catch-exception -u" \
-            "\\^done,bkptno=\"$decimal\",bkpt={.*disp=\"keep\",enabled=\"y\",addr=\"$hex\",what=\"unhandled Ada exceptions\",.*}" \
-            "catch unhandled exceptions"
+mi_gdb_test "catch exception unhandled"
 
 mi_execute_to "exec-continue" \
-              "breakpoint-hit\",disp=\"keep\",bkptno=\"$any_nb\",exception-name=\"PROGRAM_ERROR(\",exception-message=\"foo\\.adb:$decimal explicit raise)?" \
+              "breakpoint-hit\",disp=\"keep\",bkptno=\"$any_nb\",exception-name=\"PROGRAM_ERROR" \
               "foo" "" ".*" ".*" \
               ".*" \
               "continue to exception catchpoint hit"
@@ -152,11 +127,11 @@ mi_execute_to "exec-continue" \
               "breakpoint-hit\",disp=\"keep\",bkptno=\"$any_nb" \
               "foo" "" ".*" ".*" \
               ".*" \
-              "continue to assert failure catchpoint hit"
+              "continue to exception catchpoint hit"
 
 mi_execute_to "exec-continue" \
               "breakpoint-hit\",disp=\"keep\",bkptno=\"$any_nb\",exception-name=\"CONSTRAINT_ERROR" \
               "foo" "" ".*" ".*" \
               ".*" \
-              "continue to unhandled exception catchpoint hit"
+              "continue to exception catchpoint hit"
 

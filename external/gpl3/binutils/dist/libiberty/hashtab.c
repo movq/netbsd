@@ -1,5 +1,6 @@
 /* An expandable hash tables datatype.  
-   Copyright (C) 1999-2020 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2001, 2002, 2003, 2004
+   Free Software Foundation, Inc.
    Contributed by Vladimir Makarov (vmakarov@cygnus.com).
 
 This file is part of the libiberty library.
@@ -48,9 +49,6 @@ Boston, MA 02110-1301, USA.  */
 #endif
 #ifdef HAVE_LIMITS_H
 #include <limits.h>
-#endif
-#ifdef HAVE_INTTYPES_H
-#include <inttypes.h>
 #endif
 #ifdef HAVE_STDINT_H
 #include <stdint.h>
@@ -193,6 +191,14 @@ higher_prime_index (unsigned long n)
   return low;
 }
 
+/* Returns a hash code for P.  */
+
+static hashval_t
+hash_pointer (const PTR p)
+{
+  return (hashval_t) ((long)p >> 3);
+}
+
 /* Returns non-zero if P1 and P2 are equal.  */
 
 static int
@@ -282,17 +288,39 @@ htab_t
 htab_create_alloc (size_t size, htab_hash hash_f, htab_eq eq_f,
                    htab_del del_f, htab_alloc alloc_f, htab_free free_f)
 {
-  return htab_create_typed_alloc (size, hash_f, eq_f, del_f, alloc_f, alloc_f,
-				  free_f);
+  htab_t result;
+  unsigned int size_prime_index;
+
+  size_prime_index = higher_prime_index (size);
+  size = prime_tab[size_prime_index].prime;
+
+  result = (htab_t) (*alloc_f) (1, sizeof (struct htab));
+  if (result == NULL)
+    return NULL;
+  result->entries = (PTR *) (*alloc_f) (size, sizeof (PTR));
+  if (result->entries == NULL)
+    {
+      if (free_f != NULL)
+	(*free_f) (result);
+      return NULL;
+    }
+  result->size = size;
+  result->size_prime_index = size_prime_index;
+  result->hash_f = hash_f;
+  result->eq_f = eq_f;
+  result->del_f = del_f;
+  result->alloc_f = alloc_f;
+  result->free_f = free_f;
+  return result;
 }
 
-/* As above, but uses the variants of ALLOC_F and FREE_F which accept
+/* As above, but use the variants of alloc_f and free_f which accept
    an extra argument.  */
 
 htab_t
 htab_create_alloc_ex (size_t size, htab_hash hash_f, htab_eq eq_f,
-		      htab_del del_f, void *alloc_arg,
-		      htab_alloc_with_arg alloc_f,
+                      htab_del del_f, void *alloc_arg,
+                      htab_alloc_with_arg alloc_f,
 		      htab_free_with_arg free_f)
 {
   htab_t result;
@@ -321,59 +349,6 @@ htab_create_alloc_ex (size_t size, htab_hash hash_f, htab_eq eq_f,
   result->free_with_arg_f = free_f;
   return result;
 }
-
-/*
-
-@deftypefn Supplemental htab_t htab_create_typed_alloc (size_t @var{size}, @
-htab_hash @var{hash_f}, htab_eq @var{eq_f}, htab_del @var{del_f}, @
-htab_alloc @var{alloc_tab_f}, htab_alloc @var{alloc_f}, @
-htab_free @var{free_f})
-
-This function creates a hash table that uses two different allocators
-@var{alloc_tab_f} and @var{alloc_f} to use for allocating the table itself
-and its entries respectively.  This is useful when variables of different
-types need to be allocated with different allocators.
-
-The created hash table is slightly larger than @var{size} and it is
-initially empty (all the hash table entries are @code{HTAB_EMPTY_ENTRY}).
-The function returns the created hash table, or @code{NULL} if memory
-allocation fails.
-
-@end deftypefn
-
-*/
-
-htab_t
-htab_create_typed_alloc (size_t size, htab_hash hash_f, htab_eq eq_f,
-			 htab_del del_f, htab_alloc alloc_tab_f,
-			 htab_alloc alloc_f, htab_free free_f)
-{
-  htab_t result;
-  unsigned int size_prime_index;
-
-  size_prime_index = higher_prime_index (size);
-  size = prime_tab[size_prime_index].prime;
-
-  result = (htab_t) (*alloc_tab_f) (1, sizeof (struct htab));
-  if (result == NULL)
-    return NULL;
-  result->entries = (PTR *) (*alloc_f) (size, sizeof (PTR));
-  if (result->entries == NULL)
-    {
-      if (free_f != NULL)
-	(*free_f) (result);
-      return NULL;
-    }
-  result->size = size;
-  result->size_prime_index = size_prime_index;
-  result->hash_f = hash_f;
-  result->eq_f = eq_f;
-  result->del_f = del_f;
-  result->alloc_f = alloc_f;
-  result->free_f = free_f;
-  return result;
-}
-
 
 /* Update the function pointers and allocation parameter in the htab_t.  */
 
@@ -725,7 +700,7 @@ htab_remove_elt_with_hash (htab_t htab, PTR element, hashval_t hash)
   PTR *slot;
 
   slot = htab_find_slot_with_hash (htab, element, hash, NO_INSERT);
-  if (slot == NULL)
+  if (*slot == HTAB_EMPTY_ENTRY)
     return;
 
   if (htab->del_f)
@@ -784,8 +759,7 @@ htab_traverse_noresize (htab_t htab, htab_trav callback, PTR info)
 void
 htab_traverse (htab_t htab, htab_trav callback, PTR info)
 {
-  size_t size = htab_size (htab);
-  if (htab_elements (htab) * 8 < size && size > 32)
+  if (htab_elements (htab) * 8 < htab_size (htab))
     htab_expand (htab);
 
   htab_traverse_noresize (htab, callback, info);
@@ -961,37 +935,21 @@ iterative_hash (const PTR k_in /* the key */,
   c += length;
   switch(len)              /* all the case statements fall through */
     {
-    case 11: c+=((hashval_t)k[10]<<24);	/* fall through */
-    case 10: c+=((hashval_t)k[9]<<16);	/* fall through */
-    case 9 : c+=((hashval_t)k[8]<<8);	/* fall through */
+    case 11: c+=((hashval_t)k[10]<<24);
+    case 10: c+=((hashval_t)k[9]<<16);
+    case 9 : c+=((hashval_t)k[8]<<8);
       /* the first byte of c is reserved for the length */
-    case 8 : b+=((hashval_t)k[7]<<24);	/* fall through */
-    case 7 : b+=((hashval_t)k[6]<<16);	/* fall through */
-    case 6 : b+=((hashval_t)k[5]<<8);	/* fall through */
-    case 5 : b+=k[4];			/* fall through */
-    case 4 : a+=((hashval_t)k[3]<<24);	/* fall through */
-    case 3 : a+=((hashval_t)k[2]<<16);	/* fall through */
-    case 2 : a+=((hashval_t)k[1]<<8);	/* fall through */
+    case 8 : b+=((hashval_t)k[7]<<24);
+    case 7 : b+=((hashval_t)k[6]<<16);
+    case 6 : b+=((hashval_t)k[5]<<8);
+    case 5 : b+=k[4];
+    case 4 : a+=((hashval_t)k[3]<<24);
+    case 3 : a+=((hashval_t)k[2]<<16);
+    case 2 : a+=((hashval_t)k[1]<<8);
     case 1 : a+=k[0];
       /* case 0: nothing left to add */
     }
   mix(a,b,c);
   /*-------------------------------------------- report the result */
-  return c;
-}
-
-/* Returns a hash code for pointer P. Simplified version of evahash */
-
-static hashval_t
-hash_pointer (const PTR p)
-{
-  intptr_t v = (intptr_t) p;
-  unsigned a, b, c;
-
-  a = b = 0x9e3779b9;
-  a += v >> (sizeof (intptr_t) * CHAR_BIT / 2);
-  b += v & (((intptr_t) 1 << (sizeof (intptr_t) * CHAR_BIT / 2)) - 1);
-  c = 0x42135234;
-  mix (a, b, c);
   return c;
 }

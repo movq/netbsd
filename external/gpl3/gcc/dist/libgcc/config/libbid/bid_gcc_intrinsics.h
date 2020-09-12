@@ -1,4 +1,4 @@
-/* Copyright (C) 2007-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2007, 2009  Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -29,18 +29,27 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #include "tconfig.h"
 #include "coretypes.h"
 #include "tm.h"
-#include "libgcc_tm.h"
 
-#ifdef __LIBGCC_HAS_XF_MODE__
-#define LIBGCC2_HAS_XF_MODE 1
-#else
-#define LIBGCC2_HAS_XF_MODE 0
+#ifndef LIBGCC2_WORDS_BIG_ENDIAN
+#define LIBGCC2_WORDS_BIG_ENDIAN WORDS_BIG_ENDIAN
 #endif
 
-#ifdef __LIBGCC_HAS_TF_MODE__
-#define LIBGCC2_HAS_TF_MODE 1
-#else
-#define LIBGCC2_HAS_TF_MODE 0
+#ifndef LIBGCC2_FLOAT_WORDS_BIG_ENDIAN
+#define LIBGCC2_FLOAT_WORDS_BIG_ENDIAN LIBGCC2_WORDS_BIG_ENDIAN
+#endif
+
+#ifndef LIBGCC2_LONG_DOUBLE_TYPE_SIZE
+#define LIBGCC2_LONG_DOUBLE_TYPE_SIZE LONG_DOUBLE_TYPE_SIZE
+#endif
+
+#ifndef LIBGCC2_HAS_XF_MODE
+#define LIBGCC2_HAS_XF_MODE \
+  (BITS_PER_UNIT == 8 && LIBGCC2_LONG_DOUBLE_TYPE_SIZE == 80)
+#endif
+
+#ifndef LIBGCC2_HAS_TF_MODE
+#define LIBGCC2_HAS_TF_MODE \
+  (BITS_PER_UNIT == 8 && LIBGCC2_LONG_DOUBLE_TYPE_SIZE == 128)
 #endif
 
 #ifndef BID_HAS_XF_MODE

@@ -1,7 +1,8 @@
 # Process this file with autoconf to produce a configure script, like so:
 # aclocal -I ../config && autoconf && autoheader && automake
 
-AC_INIT([GNU Offloading and Multi Processing Runtime Library], 1.0,,[libgomp])
+AC_PREREQ(2.64)
+AC_INIT([GNU OpenMP Runtime Library], 1.0,,[libgomp])
 AC_CONFIG_HEADER(config.h)
 
 # -------
@@ -57,11 +58,10 @@ target_alias=${target_alias-$host_alias}
 #              we can do about that; they come from AC_INIT).
 #  foreign:  we don't follow the normal rules for GNU packages (no COPYING
 #            file in the top srcdir, etc, etc), so stop complaining.
-#  no-dist:  we don't want 'dist' and related rules.
 #  -Wall:  turns on all automake warnings...
 #  -Wno-portability:  ...except this one, since GNU make is required.
 #  -Wno-override: ... and this one, since we do want this in testsuite.
-AM_INIT_AUTOMAKE([1.9.0 foreign no-dist -Wall -Wno-portability -Wno-override])
+AM_INIT_AUTOMAKE([1.9.0 foreign -Wall -Wno-portability -Wno-override])
 AM_ENABLE_MULTILIB(, ..)
 
 # Calculate toolexeclibdir
@@ -134,15 +134,10 @@ AM_CONDITIONAL(BUILD_INFO, test $gcc_cv_prog_makeinfo_modern = "yes")
 
 # Configure libtool
 AM_PROG_LIBTOOL
-ACX_LT_HOST_FLAGS
 AC_SUBST(enable_shared)
 AC_SUBST(enable_static)
 
 AM_MAINTAINER_MODE
-
-# Create a spec file, so that compile/link tests don't fail
-test -f libgfortran.spec || touch libgfortran.spec
-FCFLAGS="$FCFLAGS -L."
 
 # We need gfortran to compile parts of the library
 # We can't use AC_PROG_FC because it expects a fully working gfortran.
@@ -159,7 +154,7 @@ case `echo $GFORTRAN` in
     fi ;;
 esac
 AC_PROG_FC(gfortran)
-FCFLAGS="$FCFLAGS -Wall -L../libgfortran"
+FCFLAGS="$FCFLAGS -Wall"
 
 # For libtool versioning info, format is CURRENT:REVISION:AGE
 libtool_VERSION=1:0:0
@@ -169,56 +164,31 @@ AC_SUBST(libtool_VERSION)
 AC_STDC_HEADERS
 AC_HEADER_TIME
 ACX_HEADER_STRING
-AC_CHECK_HEADERS(pthread.h unistd.h semaphore.h sys/loadavg.h sys/sysctl.h sys/time.h)
+AC_CHECK_HEADERS(unistd.h semaphore.h sys/loadavg.h sys/time.h sys/time.h)
 
 GCC_HEADER_STDINT(gstdint.h)
 
+# Check to see if -pthread or -lpthread is needed.  Prefer the former.
+# In case the pthread.h system header is not found, this test will fail.
 XPCFLAGS=""
-case "$host" in
-  *-*-rtems*)
-    # RTEMS supports Pthreads, but the library is not available at GCC build time.
-    ;;
-  nvptx*-*-*)
-    # NVPTX does not support Pthreads, has its own code replacement.
-    libgomp_use_pthreads=no
-    # NVPTX is an accelerator-only target
-    libgomp_offloaded_only=yes
-    ;;
-  *)
-    # Check to see if -pthread or -lpthread is needed.  Prefer the former.
-    # In case the pthread.h system header is not found, this test will fail.
-    CFLAGS="$CFLAGS -pthread"
-    AC_LINK_IFELSE(
-     [AC_LANG_PROGRAM(
-      [#include <pthread.h>
-       void *g(void *d) { return NULL; }],
-      [pthread_t t; pthread_create(&t,NULL,g,NULL);])],
-     [XPCFLAGS=" -Wc,-pthread"],
-     [CFLAGS="$save_CFLAGS" LIBS="-lpthread $LIBS"
-      AC_LINK_IFELSE(
-       [AC_LANG_PROGRAM(
-        [#include <pthread.h>
-         void *g(void *d) { return NULL; }],
-        [pthread_t t; pthread_create(&t,NULL,g,NULL);])],
-       [],
-       [AC_MSG_ERROR([Pthreads are required to build libgomp])])])
-esac
-
-if test x$libgomp_use_pthreads != xno; then
-  AC_DEFINE(LIBGOMP_USE_PTHREADS, 1,
-            [Define to 1 if libgomp should use POSIX threads.])
-fi
-
-if test x$libgomp_offloaded_only = xyes; then
-  AC_DEFINE(LIBGOMP_OFFLOADED_ONLY, 1,
-            [Define to 1 if building libgomp for an accelerator-only target.])
-fi
-
-m4_include([plugin/configfrag.ac])
+CFLAGS="$CFLAGS -pthread"
+AC_LINK_IFELSE(
+ [AC_LANG_PROGRAM(
+  [#include <pthread.h>
+   void *g(void *d) { return NULL; }],
+  [pthread_t t; pthread_create(&t,NULL,g,NULL);])],
+ [XPCFLAGS=" -Wc,-pthread"],
+ [CFLAGS="$save_CFLAGS" LIBS="-lpthread $LIBS"
+  AC_LINK_IFELSE(
+   [AC_LANG_PROGRAM(
+    [#include <pthread.h>
+     void *g(void *d) { return NULL; }],
+    [pthread_t t; pthread_create(&t,NULL,g,NULL);])],
+   [],
+   [AC_MSG_ERROR([Pthreads are required to build libgomp])])])
 
 # Check for functions needed.
 AC_CHECK_FUNCS(getloadavg clock_gettime strtoull)
-AC_CHECK_FUNCS(aligned_alloc posix_memalign memalign _aligned_malloc)
 
 # Check for broken semaphore implementation on darwin.
 # sem_init returns: sem_init error: Function not implemented.
@@ -226,13 +196,6 @@ case "$host" in
   *-darwin*)
     AC_DEFINE(HAVE_BROKEN_POSIX_SEMAPHORES, 1,
 	Define if the POSIX Semaphores do not work on your system.)
-    ;;
-esac
-
-# RTEMS specific checks
-case "$host" in
-  *-*-rtems*)
-    AC_CHECK_TYPES([struct _Mutex_Control],[],[],[#include <sys/lock.h>])
     ;;
 esac
 
@@ -266,48 +229,10 @@ if test $ac_cv_func_clock_gettime = no; then
 	       [Define to 1 if you have the `clock_gettime' function.])])
 fi
 
-# Check for uname.
-AC_COMPILE_IFELSE(
- [AC_LANG_PROGRAM(
-  [#include <string.h>
-   #include <stdlib.h>
-   #include <sys/utsname.h>],
-  [struct utsname buf;
-   volatile size_t len = 0;
-   if (!uname (buf))
-     len = strlen (buf.nodename);])],
-  AC_DEFINE(HAVE_UNAME, 1,
-[	Define if uname is supported and struct utsname has nodename field.]))
-
-# Check for gethostname.
-AC_COMPILE_IFELSE(
- [AC_LANG_PROGRAM(
-  [#include <unistd.h>],
-  [
-changequote(,)dnl
-   char buf[256];
-   if (gethostname (buf, sizeof (buf) - 1) == 0)
-     buf[255] = '\0';
-changequote([,])dnl
-  ])],
-  AC_DEFINE(HAVE_GETHOSTNAME, 1,
-[	Define if gethostname is supported.]))
-
-# Check for getpid.
-AC_COMPILE_IFELSE(
- [AC_LANG_PROGRAM(
-  [#include <unistd.h>],
-  [int pid = getpid ();])],
-  AC_DEFINE(HAVE_GETPID, 1,
-[	Define if getpid is supported.]))
-
 # See if we support thread-local storage.
 GCC_CHECK_TLS
 
-# See if we have emulated thread-local storage.
-GCC_CHECK_EMUTLS
-
-# See what sort of export controls are available.
+# See what sort of export controls are availible.
 LIBGOMP_CHECK_ATTRIBUTE_VISIBILITY
 LIBGOMP_CHECK_ATTRIBUTE_DLLEXPORT
 LIBGOMP_CHECK_ATTRIBUTE_ALIAS
@@ -328,11 +253,6 @@ LIBGOMP_CHECK_SYNC_BUILTINS
 
 XCFLAGS="$XCFLAGS$XPCFLAGS"
 
-# Add CET specific flags if CET is enabled
-GCC_CET_FLAGS(CET_FLAGS)
-XCFLAGS="$XCFLAGS $CET_FLAGS"
-FCFLAGS="$FCFLAGS $CET_FLAGS"
-
 AC_SUBST(config_path)
 AC_SUBST(XCFLAGS)
 AC_SUBST(XLDFLAGS)
@@ -348,7 +268,7 @@ else
 fi
 
 # Set up the set of libraries that we need to link against for libgomp.
-# Note that the GOMP_SELF_SPEC in gcc.c may force -pthread,
+# Note that the GOMP_SELF_SPEC in gcc.c will force -pthread for -fopenmp,
 # which will force linkage against -lpthread (or equivalent for the system).
 # That's not 100% ideal, but about the best we can do easily.
 if test $enable_shared = yes; then
@@ -419,9 +339,6 @@ AC_SUBST(OMP_LOCK_25_KIND)
 AC_SUBST(OMP_NEST_LOCK_25_KIND)
 CFLAGS="$save_CFLAGS"
 
-# Determine what GCC version number to use in filesystem paths.
-GCC_BASE_VER
-
 AC_CONFIG_FILES(omp.h omp_lib.h omp_lib.f90 libgomp_f.h)
-AC_CONFIG_FILES(Makefile libgomp.spec)
+AC_CONFIG_FILES(Makefile testsuite/Makefile libgomp.spec)
 AC_OUTPUT

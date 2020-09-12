@@ -1,5 +1,5 @@
 /* Machine description for AArch64 architecture.
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright (C) 2009-2013 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
 This file is part of GCC.
@@ -24,9 +24,9 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 <http://www.gnu.org/licenses/>.  */
 
 #define _FP_W_TYPE_SIZE		64
-#define _FP_W_TYPE		unsigned long long
-#define _FP_WS_TYPE		signed long long
-#define _FP_I_TYPE		long long
+#define _FP_W_TYPE		unsigned long
+#define _FP_WS_TYPE		signed long
+#define _FP_I_TYPE		int
 
 typedef int TItype __attribute__ ((mode (TI)));
 typedef unsigned int UTItype __attribute__ ((mode (TI)));
@@ -42,17 +42,14 @@ typedef int __gcc_CMPtype __attribute__ ((mode (__libgcc_cmp_return__)));
 
 #define _FP_DIV_MEAT_Q(R,X,Y)	_FP_DIV_MEAT_2_udiv(Q,R,X,Y)
 
-#define _FP_NANFRAC_H		((_FP_QNANBIT_H << 1) - 1)
 #define _FP_NANFRAC_S		((_FP_QNANBIT_S << 1) - 1)
 #define _FP_NANFRAC_D		((_FP_QNANBIT_D << 1) - 1)
 #define _FP_NANFRAC_Q		((_FP_QNANBIT_Q << 1) - 1), -1
-#define _FP_NANSIGN_H		0
 #define _FP_NANSIGN_S		0
 #define _FP_NANSIGN_D		0
 #define _FP_NANSIGN_Q		0
 
 #define _FP_KEEPNANFRACP 1
-#define _FP_QNANNEGATEDP 0
 
 /* This appears to be in line with the VFP conventions in the v7-a
    ARM-ARM. Need to check with the v8 version.  */
@@ -82,15 +79,13 @@ typedef int __gcc_CMPtype __attribute__ ((mode (__libgcc_cmp_return__)));
 	(FP_EX_INVALID | FP_EX_DIVZERO | FP_EX_OVERFLOW | FP_EX_UNDERFLOW \
 	 | FP_EX_INEXACT)
 
-#define _FP_TININESS_AFTER_ROUNDING 0
-
 void __sfp_handle_exceptions (int);
 
 #define FP_HANDLE_EXCEPTIONS			\
   do {						\
     if (__builtin_expect (_fex, 0))		\
       __sfp_handle_exceptions (_fex);		\
-  } while (0)
+  } while (0);
 
 #define FP_TRAPPING_EXCEPTIONS ((_fpcr >> FP_EX_SHIFT) & FP_EX_ALL)
 

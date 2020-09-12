@@ -1,4 +1,4 @@
-# Copyright 2015-2019 Free Software Foundation, Inc.
+# Copyright 2015 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,17 +13,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-if {![istarget "powerpc*"] || ![is_lp64_target]} {
-    verbose "Skipping powerpc64 separate debug file symtab test."
-    return
-}
-
 standard_testfile
 
 set kobz2file ${srcdir}/${subdir}/cordic.ko.bz2
-set kofile [standard_output_file cordic.ko]
+set kofile ${objdir}/${subdir}/cordic.ko
 set kodebugbz2file ${srcdir}/${subdir}/cordic.ko.debug.bz2
-set kodebugfile [standard_output_file cordic.ko.debug]
+set kodebugfile ${objdir}/${subdir}/cordic.ko.debug
 
 if {[catch "system \"bzip2 -dc ${kobz2file} >${kofile}\""] != 0} {
     untested "failed bzip2 for ${kobz2file}"

@@ -1,6 +1,6 @@
 // thread -*- C++ -*-
 
-// Copyright (C) 2008-2019 Free Software Foundation, Inc.
+// Copyright (C) 2008-2013 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -23,13 +23,12 @@
 // <http://www.gnu.org/licenses/>.
 
 
-#define _GLIBCXX_THREAD_ABI_COMPAT 1
 #include <thread>
 #include <system_error>
 #include <cerrno>
 #include <cxxabi_forced.h>
 
-#ifdef _GLIBCXX_HAS_GTHREADS
+#if defined(_GLIBCXX_HAS_GTHREADS) && defined(_GLIBCXX_USE_C99_STDINT_TR1)
 
 #if defined(_GLIBCXX_USE_GET_NPROCS)
 # include <sys/sysinfo.h>
@@ -71,35 +70,33 @@ static inline int get_nprocs()
 
 namespace std _GLIBCXX_VISIBILITY(default)
 {
-  extern "C"
+  namespace
   {
-    static void*
+    extern "C" void*
     execute_native_thread_routine(void* __p)
-    {
-      thread::_State_ptr __t{ static_cast<thread::_State*>(__p) };
-      __t->_M_run();
-      return nullptr;
-    }
-
-#if _GLIBCXX_THREAD_ABI_COMPAT
-    static void*
-    execute_native_thread_routine_compat(void* __p)
     {
       thread::_Impl_base* __t = static_cast<thread::_Impl_base*>(__p);
       thread::__shared_base_type __local;
-      // Now that a new thread has been created we can transfer ownership of
-      // the thread state to a local object, breaking the reference cycle
-      // created in thread::_M_start_thread.
       __local.swap(__t->_M_this_ptr);
-      __t->_M_run();
-      return nullptr;
+
+      __try
+	{
+	  __t->_M_run();
+	}
+      __catch(const __cxxabiv1::__forced_unwind&)
+	{
+	  __throw_exception_again;
+	}
+      __catch(...)
+	{
+	  std::terminate();
+	}
+
+      return 0;
     }
-#endif
-  } // extern "C"
+  }
 
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
-
-  thread::_State::~_State() = default;
 
   void
   thread::join()
@@ -130,46 +127,25 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   }
 
   void
-  thread::_M_start_thread(_State_ptr state, void (*)())
-  {
-    const int err = __gthread_create(&_M_id._M_thread,
-				     &execute_native_thread_routine,
-				     state.get());
-    if (err)
-      __throw_system_error(err);
-    state.release();
-  }
-
-#if _GLIBCXX_THREAD_ABI_COMPAT
-  void
   thread::_M_start_thread(__shared_base_type __b)
   {
     if (!__gthread_active_p())
-#if __cpp_exceptions
+#if __EXCEPTIONS
       throw system_error(make_error_code(errc::operation_not_permitted),
 			 "Enable multithreading to use std::thread");
 #else
       __throw_system_error(int(errc::operation_not_permitted));
 #endif
 
-    _M_start_thread(std::move(__b), nullptr);
-  }
-
-  void
-  thread::_M_start_thread(__shared_base_type __b, void (*)())
-  {
-    auto ptr = __b.get();
-    // Create a reference cycle that will be broken in the new thread.
-    ptr->_M_this_ptr = std::move(__b);
+    __b->_M_this_ptr = __b;
     int __e = __gthread_create(&_M_id._M_thread,
-			       &execute_native_thread_routine_compat, ptr);
+			       &execute_native_thread_routine, __b.get());
     if (__e)
     {
-      ptr->_M_this_ptr.reset();  // break reference cycle, destroying *ptr.
+      __b->_M_this_ptr.reset();
       __throw_system_error(__e);
     }
   }
-#endif
 
   unsigned int
   thread::hardware_concurrency() noexcept
@@ -180,8 +156,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     return __n;
   }
 
+_GLIBCXX_END_NAMESPACE_VERSION
+
 namespace this_thread
 {
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
+
   void
   __sleep_for(chrono::seconds __s, chrono::nanoseconds __ns)
   {
@@ -191,38 +171,20 @@ namespace this_thread
 	static_cast<std::time_t>(__s.count()),
 	static_cast<long>(__ns.count())
       };
-    while (::nanosleep(&__ts, &__ts) == -1 && errno == EINTR)
-      { }
+    ::nanosleep(&__ts, 0);
 #elif defined(_GLIBCXX_HAVE_SLEEP)
-    const auto target = chrono::steady_clock::now() + __s + __ns;
-    while (true)
-      {
-	unsigned secs = __s.count();
-	if (__ns.count() > 0)
-	  {
 # ifdef _GLIBCXX_HAVE_USLEEP
-	    long us = __ns.count() / 1000;
-	    if (us == 0)
-	      us = 1;
-	    ::usleep(us);
+    ::sleep(__s.count());
+    if (__ns.count() > 0)
+      {
+        long __us = __ns.count() / 1000;
+        if (__us == 0)
+          __us = 1;
+        ::usleep(__us);
+      }
 # else
-	    if (__ns.count() > 1000000 || secs == 0)
-	      ++secs; // No sub-second sleep function, so round up.
+    ::sleep(__s.count() + (__ns >= 1000000));
 # endif
-	  }
-
-	if (secs > 0)
-	  {
-	    // Sleep in a loop to handle interruption by signals:
-	    while ((secs = ::sleep(secs)))
-	      { }
-	  }
-	const auto now = chrono::steady_clock::now();
-	if (now >= target)
-	  break;
-	__s = chrono::duration_cast<chrono::seconds>(target - now);
-	__ns = chrono::duration_cast<chrono::nanoseconds>(target - (now + __s));
-    }
 #elif defined(_GLIBCXX_HAVE_WIN32_SLEEP)
     unsigned long ms = __ns.count() / 1000000;
     if (__ns.count() > 0 && ms == 0)
@@ -230,9 +192,10 @@ namespace this_thread
     ::Sleep(chrono::milliseconds(__s).count() + ms);
 #endif
   }
-}
 
 _GLIBCXX_END_NAMESPACE_VERSION
+}
+
 } // namespace std
 
-#endif // _GLIBCXX_HAS_GTHREADS
+#endif // _GLIBCXX_HAS_GTHREADS && _GLIBCXX_USE_C99_STDINT_TR1

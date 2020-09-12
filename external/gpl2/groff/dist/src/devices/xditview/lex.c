@@ -1,4 +1,4 @@
-/*	$NetBSD: lex.c,v 1.1.1.1 2016/01/13 18:41:49 christos Exp $	*/
+/*	$NetBSD: lex.c,v 1.1 2016/01/13 18:41:49 christos Exp $	*/
 
 #include <X11/Xos.h>
 #include <X11/IntrinsicP.h>

@@ -83,9 +83,7 @@
 .ie '\*(.T'cp1047' \
 .  do mso cp1047.tmac
 .el \
-.  ie '\*(.T'ascii' \
-.    do mso ascii.tmac
-.  el \
+.  if !'\*(.T'ascii' \
 .    do mso latin1.tmac
 .
 .\" If you want the character definitions in tty-char.tmac to be loaded

@@ -1,6 +1,7 @@
 /* Command-line output logging for GDB, the GNU debugger.
 
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright (c) 2003, 2004, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,8 +21,21 @@
 #include "defs.h"
 #include "gdbcmd.h"
 #include "ui-out.h"
-#include "interps.h"
+#include "gdb_assert.h"
 
+#include "gdb_string.h"
+
+/* These hold the pushed copies of the gdb output files.
+   If NULL then nothing has yet been pushed.  */
+struct saved_output_files
+{
+  struct ui_file *out;
+  struct ui_file *err;
+  struct ui_file *log;
+  struct ui_file *targ;
+  struct ui_file *targerr;
+};
+static struct saved_output_files saved_output;
 static char *saved_filename;
 
 static char *logging_filename;
@@ -36,18 +50,11 @@ show_logging_filename (struct ui_file *file, int from_tty,
 static int logging_overwrite;
 
 static void
-maybe_warn_already_logging ()
+set_logging_overwrite (char *args, int from_tty, struct cmd_list_element *c)
 {
   if (saved_filename)
     warning (_("Currently logging to %s.  Turn the logging off and on to "
 	       "make the new setting effective."), saved_filename);
-}
-
-static void
-set_logging_overwrite (const char *args,
-		       int from_tty, struct cmd_list_element *c)
-{
-  maybe_warn_already_logging ();
 }
 
 static void
@@ -63,11 +70,70 @@ show_logging_overwrite (struct ui_file *file, int from_tty,
 /* Value as configured by the user.  */
 static int logging_redirect;
 
+/* The on-disk file in use if logging is currently active together
+   with redirection turned off (and therefore using tee_file_new).
+   For active logging with redirection the on-disk file is directly in
+   GDB_STDOUT and this variable is NULL.  */
+static struct ui_file *logging_no_redirect_file;
+
 static void
-set_logging_redirect (const char *args,
-		      int from_tty, struct cmd_list_element *c)
+set_logging_redirect (char *args, int from_tty, struct cmd_list_element *c)
 {
-  maybe_warn_already_logging ();
+  struct cleanup *cleanups = NULL;
+  struct ui_file *output, *new_logging_no_redirect_file;
+
+  if (saved_filename == NULL
+      || (logging_redirect != 0 && logging_no_redirect_file == NULL)
+      || (logging_redirect == 0 && logging_no_redirect_file != NULL))
+    return;
+
+  if (logging_redirect != 0)
+    {
+      gdb_assert (logging_no_redirect_file != NULL);
+
+      /* ui_out_redirect still has not been called for next
+	 gdb_stdout.  */
+      cleanups = make_cleanup_ui_file_delete (gdb_stdout);
+
+      output = logging_no_redirect_file;
+      new_logging_no_redirect_file = NULL;
+
+      if (from_tty)
+	fprintf_unfiltered (saved_output.out, "Redirecting output to %s.\n",
+			    logging_filename);
+    }
+  else
+    {
+      gdb_assert (logging_no_redirect_file == NULL);
+      output = tee_file_new (saved_output.out, 0, gdb_stdout, 0);
+      if (output == NULL)
+	perror_with_name (_("set logging"));
+      new_logging_no_redirect_file = gdb_stdout;
+
+      if (from_tty)
+	fprintf_unfiltered (saved_output.out, "Copying output to %s.\n",
+			    logging_filename);
+    }
+
+  gdb_stdout = output;
+  gdb_stderr = output;
+  gdb_stdlog = output;
+  gdb_stdtarg = output;
+  gdb_stdtargerr = output;
+  logging_no_redirect_file = new_logging_no_redirect_file;
+
+  /* There is a former output pushed on the ui_out_redirect stack.  We
+     want to replace it by OUTPUT so we must pop the former value
+     first.  We should either do both the pop and push or to do
+     neither of it.  At least do not try to push OUTPUT if the pop
+     already failed.  */
+
+  if (ui_out_redirect (uiout, NULL) < 0
+      || ui_out_redirect (uiout, output) < 0)
+    warning (_("Current output protocol does not support redirection"));
+
+  if (logging_redirect != 0)
+    do_cleanups (cleanups);
 }
 
 static void
@@ -81,35 +147,35 @@ show_logging_redirect (struct ui_file *file, int from_tty,
 static void
 pop_output_files (void)
 {
-  current_interp_set_logging (NULL, false);
-
-  /* Stay consistent with handle_redirections.  */
-  if (!current_uiout->is_mi_like_p ())
-    current_uiout->redirect (NULL);
-}
-
-/* See cli-interp.h.  */
-
-ui_file *
-make_logging_output (ui_file *curr_output, ui_file_up logfile,
-		     bool logging_redirect)
-{
-  if (logging_redirect)
-    return logfile.release ();
-  else
+  /* Only delete one of the files -- they are all set to the same
+     value.  */
+  ui_file_delete (gdb_stdout);
+  if (logging_no_redirect_file)
     {
-      /* Note that the "tee" takes ownership of the log file.  */
-      ui_file *out = new tee_file (curr_output, false,
-				   logfile.get (), true);
-      logfile.release ();
-      return out;
+      ui_file_delete (logging_no_redirect_file);
+      logging_no_redirect_file = NULL;
     }
+  gdb_stdout = saved_output.out;
+  gdb_stderr = saved_output.err;
+  gdb_stdlog = saved_output.log;
+  gdb_stdtarg = saved_output.targ;
+  gdb_stdtargerr = saved_output.targ;
+  saved_output.out = NULL;
+  saved_output.err = NULL;
+  saved_output.log = NULL;
+  saved_output.targ = NULL;
+  saved_output.targerr = NULL;
+
+  ui_out_redirect (uiout, NULL);
 }
 
 /* This is a helper for the `set logging' command.  */
 static void
 handle_redirections (int from_tty)
 {
+  struct cleanup *cleanups;
+  struct ui_file *output;
+
   if (saved_filename != NULL)
     {
       fprintf_unfiltered (gdb_stdout, "Already logging to %s.\n",
@@ -117,40 +183,57 @@ handle_redirections (int from_tty)
       return;
     }
 
-  stdio_file_up log (new stdio_file ());
-  if (!log->open (logging_filename, logging_overwrite ? "w" : "a"))
+  output = gdb_fopen (logging_filename, logging_overwrite ? "w" : "a");
+  if (output == NULL)
     perror_with_name (_("set logging"));
+  cleanups = make_cleanup_ui_file_delete (output);
 
   /* Redirects everything to gdb_stdout while this is running.  */
-  if (from_tty)
+  if (!logging_redirect)
     {
-      if (!logging_redirect)
+      struct ui_file *no_redirect_file = output;
+
+      output = tee_file_new (gdb_stdout, 0, no_redirect_file, 0);
+      if (output == NULL)
+	perror_with_name (_("set logging"));
+      make_cleanup_ui_file_delete (output);
+      if (from_tty)
 	fprintf_unfiltered (gdb_stdout, "Copying output to %s.\n",
 			    logging_filename);
-      else
+      logging_no_redirect_file = no_redirect_file;
+    }
+  else
+    {
+      gdb_assert (logging_no_redirect_file == NULL);
+
+      if (from_tty)
 	fprintf_unfiltered (gdb_stdout, "Redirecting output to %s.\n",
 			    logging_filename);
     }
 
+  discard_cleanups (cleanups);
+
   saved_filename = xstrdup (logging_filename);
+  saved_output.out = gdb_stdout;
+  saved_output.err = gdb_stderr;
+  saved_output.log = gdb_stdlog;
+  saved_output.targ = gdb_stdtarg;
+  saved_output.targerr = gdb_stdtargerr;
 
-  /* Let the interpreter do anything it needs.  */
-  current_interp_set_logging (std::move (log), logging_redirect);
+  gdb_stdout = output;
+  gdb_stderr = output;
+  gdb_stdlog = output;
+  gdb_stdtarg = output;
+  gdb_stdtargerr = output;
 
-  /* Redirect the current ui-out object's output to the log.  Use
-     gdb_stdout, not log, since the interpreter may have created a tee
-     that wraps the log.  Don't do the redirect for MI, it confuses
-     MI's ui-out scheme.  Note that we may get here with MI as current
-     interpreter, but with the current ui_out as a CLI ui_out, with
-     '-interpreter-exec console "set logging on"'.  */
-  if (!current_uiout->is_mi_like_p ())
-    current_uiout->redirect (gdb_stdout);
+  if (ui_out_redirect (uiout, output) < 0)
+    warning (_("Current output protocol does not support redirection"));
 }
 
 static void
-set_logging_on (const char *args, int from_tty)
+set_logging_on (char *args, int from_tty)
 {
-  const char *rest = args;
+  char *rest = args;
 
   if (rest && *rest)
     {
@@ -161,7 +244,7 @@ set_logging_on (const char *args, int from_tty)
 }
 
 static void 
-set_logging_off (const char *args, int from_tty)
+set_logging_off (char *args, int from_tty)
 {
   if (saved_filename == NULL)
     return;
@@ -174,7 +257,7 @@ set_logging_off (const char *args, int from_tty)
 }
 
 static void
-set_logging_command (const char *args, int from_tty)
+set_logging_command (char *args, int from_tty)
 {
   printf_unfiltered (_("\"set logging\" lets you log output to a file.\n"
 		       "Usage: set logging on [FILENAME]\n"
@@ -185,7 +268,7 @@ set_logging_command (const char *args, int from_tty)
 }
 
 static void
-show_logging_command (const char *args, int from_tty)
+show_logging_command (char *args, int from_tty)
 {
   if (saved_filename)
     printf_unfiltered (_("Currently logging to \"%s\".\n"), saved_filename);
@@ -199,11 +282,24 @@ show_logging_command (const char *args, int from_tty)
   else
     printf_unfiltered (_("Logs will be appended to the log file.\n"));
 
-  if (logging_redirect)
-    printf_unfiltered (_("Output will be sent only to the log file.\n"));
+  if (saved_filename)
+    {
+      if (logging_redirect)
+	printf_unfiltered (_("Output is being sent only to the log file.\n"));
+      else
+	printf_unfiltered (_("Output is being logged and displayed.\n"));
+    }
   else
-    printf_unfiltered (_("Output will be logged and displayed.\n"));
+    {
+      if (logging_redirect)
+	printf_unfiltered (_("Output will be sent only to the log file.\n"));
+      else
+	printf_unfiltered (_("Output will be logged and displayed.\n"));
+    }
 }
+
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+extern initialize_file_ftype _initialize_cli_logging;
 
 void
 _initialize_cli_logging (void)

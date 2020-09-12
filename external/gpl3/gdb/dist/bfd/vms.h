@@ -1,5 +1,6 @@
 /* vms.h -- Header file for VMS (Alpha and Vax) support.
-   Copyright (C) 1996-2019 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2005, 2006, 2007,
+   2008, 2009, 2010 Free Software Foundation, Inc.
 
    Main header file.
 
@@ -118,8 +119,8 @@ extern void vms_time_t_to_vms_time (time_t ut, unsigned int *hi, unsigned int *l
 extern void vms_get_time (unsigned int *hi, unsigned int *lo);
 extern void vms_raw_get_time (unsigned char *buf);
 
-extern char * _bfd_vms_save_sized_string (unsigned char *, unsigned);
-extern char * _bfd_vms_save_counted_string (unsigned char *, unsigned);
+extern char * _bfd_vms_save_sized_string (unsigned char *, int);
+extern char * _bfd_vms_save_counted_string (unsigned char *);
 extern void   _bfd_vms_output_begin (struct vms_rec_wr *, int);
 extern void   _bfd_vms_output_alignment (struct vms_rec_wr *, int);
 extern void   _bfd_vms_output_begin_subrec (struct vms_rec_wr *, int);

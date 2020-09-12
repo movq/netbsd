@@ -1,7 +1,7 @@
 /* Definitions of target machine for GNU compiler, Lattice Mico32 architecture.
    Contributed by Jon Beniston <jon@beniston.com>
 
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright (C) 2009, 2010 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -22,6 +22,11 @@
 /*-------------------------------*/
 /* Run-time Target Specification */
 /*-------------------------------*/
+
+/* Print subsidiary information on the compiler version in use.  */
+#ifndef TARGET_VERSION
+#define TARGET_VERSION fprintf (stderr, " (LatticeMico32)")
+#endif
 
 /* Target CPU builtins.  */
 #define TARGET_CPU_CPP_BUILTINS()                       \
@@ -49,7 +54,8 @@
 %{mdivide-enabled} \
 %{mbarrel-shift-enabled} \
 %{msign-extend-enabled} \
-%{muser-enabled} \
+%{muser-extend-enabled} \
+%{v} \
 "
 
 /* Let link script define all link options. 
@@ -62,6 +68,16 @@
 #undef  LIB_SPEC
 #define LIB_SPEC "%{!T*:-T sim.ld}"
 
+#define OVERRIDE_OPTIONS lm32_override_options()
+
+extern int target_flags;
+
+/* Add -G xx support.  */
+
+#undef  SWITCH_TAKES_ARG
+#define SWITCH_TAKES_ARG(CHAR) \
+(DEFAULT_SWITCH_TAKES_ARG (CHAR) || (CHAR) == 'G')
+
 #undef  CC1_SPEC
 #define CC1_SPEC "%{G*}"
 
@@ -72,7 +88,9 @@
 #define BITS_BIG_ENDIAN 0
 #define BYTES_BIG_ENDIAN 1
 #define WORDS_BIG_ENDIAN 1
+#define LIBGCC2_WORDS_BIG_ENDIAN 1
 
+#define BITS_PER_UNIT 8
 #define BITS_PER_WORD 32
 #define UNITS_PER_WORD 4
 
@@ -98,6 +116,11 @@ do {                                                    \
 #define STRICT_ALIGNMENT 1
 
 #define TARGET_FLOAT_FORMAT IEEE_FLOAT_FORMAT
+
+/* Make strings word-aligned so strcpy from constants will be faster.  */
+#define CONSTANT_ALIGNMENT(EXP, ALIGN)  \
+  (TREE_CODE (EXP) == STRING_CST	\
+   && (ALIGN) < BITS_PER_WORD ? BITS_PER_WORD : (ALIGN))
 
 /* Make arrays and structures word-aligned to allow faster copying etc.  */
 #define DATA_ALIGNMENT(TYPE, ALIGN)					\
@@ -158,6 +181,17 @@ do {                                                    \
   0, 0, 0, 0, 0, 0, 0, 0,   \
   0, 0, 1, 0, 1, 0, 1, 1}
 
+#define HARD_REGNO_NREGS(REGNO, MODE)                                   \
+    ((GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD)
+
+#define HARD_REGNO_MODE_OK(REGNO, MODE) G_REG_P(REGNO)
+
+#define MODES_TIEABLE_P(MODE1, MODE2)           \
+(      GET_MODE_CLASS (MODE1) == MODE_INT		\
+    && GET_MODE_CLASS (MODE2) == MODE_INT		\
+    && GET_MODE_SIZE (MODE1) <= UNITS_PER_WORD	\
+    && GET_MODE_SIZE (MODE2) <= UNITS_PER_WORD)
+
 #define AVOID_CCMODE_COPIES
 
 /*----------------------------------*/
@@ -185,6 +219,9 @@ enum reg_class
 #define REGNO_REG_CLASS(REGNO) \
     (G_REG_P(REGNO) ? GENERAL_REGS : NO_REGS)
 
+#define CLASS_MAX_NREGS(CLASS, MODE) \
+    ((GET_MODE_SIZE (MODE) + UNITS_PER_WORD - 1) / UNITS_PER_WORD)
+
 #define INDEX_REG_CLASS NO_REGS
 
 #define BASE_REG_CLASS GENERAL_REGS
@@ -193,6 +230,8 @@ enum reg_class
     (G_REG_P (REGNO) || G_REG_P ((unsigned) reg_renumber[REGNO]))
 
 #define REGNO_OK_FOR_INDEX_P(REGNO) 0
+
+#define PREFERRED_RELOAD_CLASS(X,CLASS) (CLASS)
 
 /*----------------------------------------*/
 /* Stack Layout and Calling Conventions.  */
@@ -204,6 +243,8 @@ enum reg_class
 
 #define STACK_POINTER_OFFSET (UNITS_PER_WORD)
 
+#define STARTING_FRAME_OFFSET (UNITS_PER_WORD)
+
 #define FIRST_PARM_OFFSET(FNDECL) (UNITS_PER_WORD)
 
 #define STACK_POINTER_REGNUM SP_REGNUM
@@ -211,8 +252,6 @@ enum reg_class
 #define FRAME_POINTER_REGNUM FP_REGNUM
 
 #define ARG_POINTER_REGNUM FRAME_POINTER_REGNUM
-
-#define INCOMING_RETURN_ADDR_RTX gen_rtx_REG (SImode, RA_REGNUM)
 
 #define RETURN_ADDR_RTX(count, frame)                                   \
   lm32_return_addr_rtx (count, frame)
@@ -234,6 +273,8 @@ enum reg_class
 
 #define ACCUMULATE_OUTGOING_ARGS 1
 
+#define RETURN_POPS_ARGS(DECL, FUNTYPE, SIZE) 0
+
 /*--------------------------------*/
 /* Passing Arguments in Registers */
 /*--------------------------------*/
@@ -244,10 +285,16 @@ enum reg_class
 /* The number of (integer) argument register available.  */
 #define LM32_NUM_ARG_REGS 8
 
+#define FUNCTION_ARG(CUM, MODE, TYPE, NAMED)                            \
+  lm32_function_arg ((CUM), (MODE), (TYPE), (NAMED))
+
 #define CUMULATIVE_ARGS int
 
 #define INIT_CUMULATIVE_ARGS(CUM,FNTYPE,LIBNAME,INDIRECT,N_NAMED_ARGS)  \
   (CUM) = 0
+
+#define FUNCTION_ARG_ADVANCE(CUM, MODE, TYPE, NAMED)                    \
+  (CUM) += LM32_NUM_REGS2 (MODE, TYPE)
 
 #define FUNCTION_ARG_REGNO_P(r)                                         \
   (((r) >= LM32_FIRST_ARG_REG) && ((r) <= LM32_NUM_ARG_REGS))
@@ -283,6 +330,8 @@ enum reg_class
 #define LM32_NUM_REGS2(MODE, TYPE)                       \
   LM32_NUM_INTS ((MODE) == BLKmode ?                     \
   int_size_in_bytes (TYPE) : GET_MODE_SIZE (MODE))
+
+#define STRUCT_VALUE 0
 
 /*---------------------------*/
 /* Function entry and exit.  */
@@ -322,6 +371,8 @@ enum reg_class
 #define REG_OK_FOR_BASE_P(X) NONSTRICT_REG_OK_FOR_BASE_P(X)
 #endif
 
+#define LEGITIMATE_CONSTANT_P(X) lm32_legitimate_constant_p
+
 /*-------------------------*/
 /* Condition Code Status.  */
 /*-------------------------*/
@@ -334,7 +385,7 @@ enum reg_class
 
 #define SLOW_BYTE_ACCESS 1
 
-#define NO_FUNCTION_CSE 1
+#define NO_FUNCTION_CSE
 
 #define BRANCH_COST(speed_p, predictable_p) 4
 
@@ -384,7 +435,7 @@ enum reg_class
 #undef  ASM_OUTPUT_ALIGNED_LOCAL
 #define ASM_OUTPUT_ALIGNED_LOCAL(FILE, NAME, SIZE, ALIGN)		\
 do {									\
-  if ((SIZE) <= (unsigned HOST_WIDE_INT) g_switch_value)		\
+  if ((SIZE) <= g_switch_value)						\
     switch_to_section (sbss_section);					\
   else									\
     switch_to_section (bss_section);					\
@@ -401,7 +452,7 @@ do {									\
 #define ASM_OUTPUT_ALIGNED_COMMON(FILE, NAME, SIZE, ALIGN)		\
 do 									\
 {									\
-  if ((SIZE) <= (unsigned HOST_WIDE_INT) g_switch_value)		\
+  if ((SIZE) <= g_switch_value)						\
     {									\
       switch_to_section (sbss_section);					\
       (*targetm.asm_out.globalize_label) (FILE, NAME);			\
@@ -417,7 +468,7 @@ do 									\
       switch_to_section (bss_section);					\
       fprintf ((FILE), "%s", COMMON_ASM_OP);				\
       assemble_name ((FILE), (NAME));					\
-      fprintf ((FILE), "," HOST_WIDE_INT_PRINT_UNSIGNED",%u\n",          \
+      fprintf ((FILE), ","HOST_WIDE_INT_PRINT_UNSIGNED",%u\n",          \
                (SIZE), (ALIGN) / BITS_PER_UNIT);	                \
     }									\
 }									\
@@ -493,6 +544,8 @@ do {                                                            \
 
 #define DBX_REGISTER_NUMBER(REGNO) (REGNO)
 
+#define CAN_DEBUG_WITHOUT_FP
+
 #define DEFAULT_GDB_EXTENSIONS 1
 
 /*--------*/
@@ -501,19 +554,25 @@ do {                                                            \
 
 #define CASE_VECTOR_MODE Pmode
 
-#define WORD_REGISTER_OPERATIONS 1
+#define WORD_REGISTER_OPERATIONS
 
 #define LOAD_EXTEND_OP(MODE) ZERO_EXTEND
 
-#define SHORT_IMMEDIATES_SIGN_EXTEND 1
+#define SHORT_IMMEDIATES_SIGN_EXTEND
 
 #define MOVE_MAX        UNITS_PER_WORD
 #define MAX_MOVE_MAX    4
 
 #define SHIFT_COUNT_TRUNCATED 1
 
+#define TRULY_NOOP_TRUNCATION(OUTPREC, INPREC) 1
+
 #define Pmode SImode
 
 #define FUNCTION_MODE SImode
+
+#ifndef NO_IMPLICIT_EXTERN_C
+#define NO_IMPLICIT_EXTERN_C
+#endif
 
 #define STORE_FLAG_VALUE 1

@@ -1,4 +1,5 @@
-dnl Copyright (C) 1994-2019 Free Software Foundation, Inc.
+dnl Copyright 1994, 1995, 1996, 1997, 1998, 1999, 2001, 2004
+dnl Free Software Foundation, Inc.
 dnl This file is free software; the Free Software Foundation
 dnl gives unlimited permission to copy and/or distribute it,
 dnl with or without modifications, as long as this notice is preserved.
@@ -10,9 +11,6 @@ dnl PARTICULAR PURPOSE.
 
 m4_include(../config/acx.m4)
 m4_include(../config/no-executables.m4)
-m4_include(../config/enable.m4)
-m4_include(../config/tls.m4)
-m4_include(../config/bitfields.m4)
 
 m4_include(../libtool.m4)
 dnl The lines below arrange for aclocal not to bring an installed

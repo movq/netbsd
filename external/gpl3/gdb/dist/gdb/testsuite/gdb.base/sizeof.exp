@@ -1,6 +1,7 @@
 # This testcase is part of GDB, the GNU debugger.
 
-# Copyright 2000-2019 Free Software Foundation, Inc.
+# Copyright 2000, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010, 2011
+# Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,19 +16,35 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+if [target_info exists gdb,noinferiorio] {
+    verbose "Skipping fileio.exp because of no fileio capabilities."
+    continue
+}
+
+if $tracelevel {
+    strace $tracelevel
+}
+
 #
 # test running programs
 #
 
-standard_testfile
-
-if [get_compiler_info] {
-    return -1
+set testfile "sizeof"
+set srcfile ${testfile}.c
+set binfile ${objdir}/${subdir}/${testfile}
+if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug}] != "" } {
+     untested sizeof.exp
+     return -1
 }
 
-if {[prepare_for_testing "failed to prepare" $testfile $srcfile debug]} {
-    return -1
+if [get_compiler_info ${binfile}] {
+    return -1;
 }
+
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
 
 #
 # set it up at a breakpoint so we can play with the variable values
@@ -62,8 +79,10 @@ set sizeof_long_double [get_sizeof "long double" 8]
 #
 
 proc check_sizeof { type size } {
-    gdb_test "next" "" ""
-    gdb_test "p size" " = ${size}" "check sizeof \"$type\""
+    global gdb_prompt
+
+    set pat [string_to_regexp "sizeof (${type}) == ${size}"]
+    gdb_test "next" "${pat}\[\r\n\]+\[0-9\].*"  "check sizeof \"$type\""
 }
 
 check_sizeof "char" ${sizeof_char}
@@ -80,13 +99,15 @@ check_sizeof "double" ${sizeof_double}
 check_sizeof "long double" ${sizeof_long_double}
 
 proc check_valueof { exp val } {
-    gdb_test "next" "" ""
-    gdb_test "p /d value" " = ${val}" "check valueof \"$exp\""
+    global gdb_prompt
+
+    set pat [string_to_regexp "valueof (${exp}) == ${val}"]
+    gdb_test "next" "${pat}\[\r\n\]+\[0-9\].*" "check valueof \"$exp\""
 }
 
 # Check that GDB and the target agree over the sign of a character.
 
-set signof_byte [get_integer_valueof "(int) '\\377'" -1]
+set signof_byte [get_integer_valueof "'\\377'" -1]
 set signof_char [get_integer_valueof "(int) (char) -1" -1]
 set signof_signed_char [get_integer_valueof "(int) (signed char) -1" -1]
 set signof_unsigned_char [get_integer_valueof "(int) (unsigned char) -1" -1]

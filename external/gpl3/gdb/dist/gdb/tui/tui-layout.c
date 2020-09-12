@@ -1,6 +1,7 @@
 /* TUI layout window management.
 
-   Copyright (C) 1998-2019 Free Software Foundation, Inc.
+   Copyright (C) 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2007, 2008, 2009,
+   2010, 2011 Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
 
@@ -37,6 +38,8 @@
 #include "tui/tui-winsource.h"
 #include "tui/tui-disasm.h"
 #include "tui/tui-layout.h"
+
+#include "gdb_string.h"
 #include "gdb_curses.h"
 
 /*******************************
@@ -62,8 +65,11 @@ static void show_source_disasm_command (void);
 static void show_data (enum tui_layout_type);
 static enum tui_layout_type next_layout (void);
 static enum tui_layout_type prev_layout (void);
-static void tui_layout_command (const char *, int);
+static void tui_layout_command (char *, int);
+static void tui_toggle_layout_command (char *, int);
+static void tui_toggle_split_layout_command (char *, int);
 static void extract_display_start_addr (struct gdbarch **, CORE_ADDR *);
+static void tui_handle_xdb_layout (struct tui_layout_def *);
 
 
 /***************************************
@@ -122,13 +128,18 @@ show_layout (enum tui_layout_type layout)
 
 
 /* Function to set the layout to SRC_COMMAND, DISASSEM_COMMAND,
-   SRC_DISASSEM_COMMAND, SRC_DATA_COMMAND, or DISASSEM_DATA_COMMAND.  */
+   SRC_DISASSEM_COMMAND, SRC_DATA_COMMAND, or DISASSEM_DATA_COMMAND.
+   If the layout is SRC_DATA_COMMAND, DISASSEM_DATA_COMMAND, or
+   UNDEFINED_LAYOUT, then the data window is populated according to
+   regs_display_type.  */
 enum tui_status
-tui_set_layout (enum tui_layout_type layout_type)
+tui_set_layout (enum tui_layout_type layout_type,
+		enum tui_register_display_type regs_display_type)
 {
   enum tui_status status = TUI_SUCCESS;
 
-  if (layout_type != UNDEFINED_LAYOUT)
+  if (layout_type != UNDEFINED_LAYOUT 
+      || regs_display_type != TUI_UNDEFINED_REGS)
     {
       enum tui_layout_type cur_layout = tui_current_layout (),
 	new_layout = UNDEFINED_LAYOUT;
@@ -140,98 +151,113 @@ tui_set_layout (enum tui_layout_type layout_type)
 
       extract_display_start_addr (&gdbarch, &addr);
 
-      new_layout = layout_type;
-
-      regs_populate = (new_layout == SRC_DATA_COMMAND
-		       || new_layout == DISASSEM_DATA_COMMAND);
-      if (new_layout != cur_layout)
+      if (layout_type == UNDEFINED_LAYOUT
+	  && regs_display_type != TUI_UNDEFINED_REGS)
 	{
-	  show_layout (new_layout);
+	  if (cur_layout == SRC_DISASSEM_COMMAND)
+	    new_layout = DISASSEM_DATA_COMMAND;
+	  else if (cur_layout == SRC_COMMAND 
+		   || cur_layout == SRC_DATA_COMMAND)
+	    new_layout = SRC_DATA_COMMAND;
+	  else if (cur_layout == DISASSEM_COMMAND 
+		   || cur_layout == DISASSEM_DATA_COMMAND)
+	    new_layout = DISASSEM_DATA_COMMAND;
+	}
+      else
+	new_layout = layout_type;
 
-	  /* Now determine where focus should be.  */
-	  if (win_with_focus != TUI_CMD_WIN)
+      regs_populate = (new_layout == SRC_DATA_COMMAND 
+		       || new_layout == DISASSEM_DATA_COMMAND 
+		       || regs_display_type != TUI_UNDEFINED_REGS);
+      if (new_layout != cur_layout
+	  || regs_display_type != TUI_UNDEFINED_REGS)
+	{
+	  if (new_layout != cur_layout)
 	    {
-	      switch (new_layout)
+	      show_layout (new_layout);
+
+	      /* Now determine where focus should be.  */
+	      if (win_with_focus != TUI_CMD_WIN)
 		{
-		case SRC_COMMAND:
-		  tui_set_win_focus_to (TUI_SRC_WIN);
-		  layout_def->display_mode = SRC_WIN;
-		  layout_def->split = FALSE;
-		  break;
-		case DISASSEM_COMMAND:
-		  /* The previous layout was not showing code.
-		     This can happen if there is no source
-		     available:
+		  switch (new_layout)
+		    {
+		    case SRC_COMMAND:
+		      tui_set_win_focus_to (TUI_SRC_WIN);
+		      layout_def->display_mode = SRC_WIN;
+		      layout_def->split = FALSE;
+		      break;
+		    case DISASSEM_COMMAND:
+		      /* The previous layout was not showing code.
+		         This can happen if there is no source
+		         available:
 
-		     1. if the source file is in another dir OR
-		     2. if target was compiled without -g
-		     We still want to show the assembly though!  */
+		         1. if the source file is in another dir OR
+		         2. if target was compiled without -g
+		         We still want to show the assembly though!  */
 
-		  tui_get_begin_asm_address (&gdbarch, &addr);
-		  tui_set_win_focus_to (TUI_DISASM_WIN);
-		  layout_def->display_mode = DISASSEM_WIN;
-		  layout_def->split = FALSE;
-		  break;
-		case SRC_DISASSEM_COMMAND:
-		  /* The previous layout was not showing code.
-		     This can happen if there is no source
-		     available:
+		      tui_get_begin_asm_address (&gdbarch, &addr);
+		      tui_set_win_focus_to (TUI_DISASM_WIN);
+		      layout_def->display_mode = DISASSEM_WIN;
+		      layout_def->split = FALSE;
+		      break;
+		    case SRC_DISASSEM_COMMAND:
+		      /* The previous layout was not showing code.
+		         This can happen if there is no source
+		         available:
 
-		     1. if the source file is in another dir OR
-		     2. if target was compiled without -g
-		     We still want to show the assembly though!  */
+		         1. if the source file is in another dir OR
+		         2. if target was compiled without -g
+		         We still want to show the assembly though!  */
 
-		  tui_get_begin_asm_address (&gdbarch, &addr);
-		  if (win_with_focus == TUI_SRC_WIN)
-		    tui_set_win_focus_to (TUI_SRC_WIN);
-		  else
-		    tui_set_win_focus_to (TUI_DISASM_WIN);
-		  layout_def->split = TRUE;
-		  break;
-		case SRC_DATA_COMMAND:
-		  if (win_with_focus != TUI_DATA_WIN)
-		    tui_set_win_focus_to (TUI_SRC_WIN);
-		  else
-		    tui_set_win_focus_to (TUI_DATA_WIN);
-		  layout_def->display_mode = SRC_WIN;
-		  layout_def->split = FALSE;
-		  break;
-		case DISASSEM_DATA_COMMAND:
-		  /* The previous layout was not showing code.
-		     This can happen if there is no source
-		     available:
+		      tui_get_begin_asm_address (&gdbarch, &addr);
+		      if (win_with_focus == TUI_SRC_WIN)
+			tui_set_win_focus_to (TUI_SRC_WIN);
+		      else
+			tui_set_win_focus_to (TUI_DISASM_WIN);
+		      layout_def->split = TRUE;
+		      break;
+		    case SRC_DATA_COMMAND:
+		      if (win_with_focus != TUI_DATA_WIN)
+			tui_set_win_focus_to (TUI_SRC_WIN);
+		      else
+			tui_set_win_focus_to (TUI_DATA_WIN);
+		      layout_def->display_mode = SRC_WIN;
+		      layout_def->split = FALSE;
+		      break;
+		    case DISASSEM_DATA_COMMAND:
+		      /* The previous layout was not showing code.
+		         This can happen if there is no source
+		         available:
 
-		     1. if the source file is in another dir OR
-		     2. if target was compiled without -g
-		     We still want to show the assembly though!  */
+			 1. if the source file is in another dir OR
+		         2. if target was compiled without -g
+		         We still want to show the assembly though!  */
 
-		  tui_get_begin_asm_address (&gdbarch, &addr);
-		  if (win_with_focus != TUI_DATA_WIN)
-		    tui_set_win_focus_to (TUI_DISASM_WIN);
-		  else
-		    tui_set_win_focus_to (TUI_DATA_WIN);
-		  layout_def->display_mode = DISASSEM_WIN;
-		  layout_def->split = FALSE;
-		  break;
-		default:
-		  break;
+		      tui_get_begin_asm_address (&gdbarch, &addr);
+		      if (win_with_focus != TUI_DATA_WIN)
+			tui_set_win_focus_to (TUI_DISASM_WIN);
+		      else
+			tui_set_win_focus_to (TUI_DATA_WIN);
+		      layout_def->display_mode = DISASSEM_WIN;
+		      layout_def->split = FALSE;
+		      break;
+		    default:
+		      break;
+		    }
 		}
+	      /*
+	       * Now update the window content.
+	       */
+	      if (!regs_populate 
+		  && (new_layout == SRC_DATA_COMMAND 
+		      || new_layout == DISASSEM_DATA_COMMAND))
+		tui_display_all_data ();
+
+	      tui_update_source_windows_with_addr (gdbarch, addr);
 	    }
-	  /*
-	   * Now update the window content.
-	   */
-	  if (!regs_populate
-	      && (new_layout == SRC_DATA_COMMAND
-		  || new_layout == DISASSEM_DATA_COMMAND))
-	    tui_display_all_data ();
-
-	  tui_update_source_windows_with_addr (gdbarch, addr);
-
 	  if (regs_populate)
 	    {
-	      struct reggroup *group =
-		TUI_DATA_WIN->detail.data_display_info.current_group;
-	      tui_show_registers (group);
+              tui_show_registers (TUI_DATA_WIN->detail.data_display_info.current_group);
 	    }
 	}
     }
@@ -350,31 +376,19 @@ tui_default_win_viewport_height (enum tui_win_type type,
   return h;
 }
 
-/* Complete possible layout names.  TEXT is the complete text entered so
-   far, WORD is the word currently being completed.  */
-
-static void
-layout_completer (struct cmd_list_element *ignore,
-		  completion_tracker &tracker,
-		  const char *text, const char *word)
-{
-  static const char *layout_names [] =
-    { "src", "asm", "split", "regs", "next", "prev", NULL };
-
-  complete_on_enum (tracker, layout_names, text, word);
-}
 
 /* Function to initialize gdb commands, for tui window layout
    manipulation.  */
 
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+extern initialize_file_ftype _initialize_tui_layout;
+
 void
 _initialize_tui_layout (void)
 {
-  struct cmd_list_element *cmd;
-
-  cmd = add_com ("layout", class_tui, tui_layout_command, _("\
+  add_com ("layout", class_tui, tui_layout_command, _("\
 Change the layout of windows.\n\
-Usage: layout prev | next | LAYOUT-NAME\n\
+Usage: layout prev | next | <layout_name> \n\
 Layout names are:\n\
    src   : Displays source and command windows.\n\
    asm   : Displays disassembly and command windows.\n\
@@ -385,7 +399,14 @@ Layout names are:\n\
            source/assembly/command (split) is displayed, \n\
            the register window is displayed with \n\
            the window that has current logical focus.\n"));
-  set_cmd_completer (cmd, layout_completer);
+  if (xdb_commands)
+    {
+      add_com ("td", class_tui, tui_toggle_layout_command, _("\
+Toggle between Source/Command and Disassembly/Command layouts.\n"));
+      add_com ("ts", class_tui, tui_toggle_split_layout_command, _("\
+Toggle between Source/Command or Disassembly/Command and \n\
+Source/Disassembly/Command layouts.\n"));
+    }
 }
 
 
@@ -394,26 +415,28 @@ Layout names are:\n\
 **************************/
 
 
-/* Function to set the layout to SRC, ASM, SPLIT, NEXT, PREV, DATA, or
-   REGS. */
+/* Function to set the layout to SRC, ASM, SPLIT, NEXT, PREV, DATA,
+   REGS, $REGS, $GREGS, $FREGS, $SREGS.  */
 enum tui_status
-tui_set_layout_by_name (const char *layout_name)
+tui_set_layout_for_display_command (const char *layout_name)
 {
   enum tui_status status = TUI_SUCCESS;
 
-  if (layout_name != NULL)
+  if (layout_name != (char *) NULL)
     {
       int i;
+      char *buf_ptr;
       enum tui_layout_type new_layout = UNDEFINED_LAYOUT;
+      enum tui_register_display_type dpy_type = TUI_UNDEFINED_REGS;
       enum tui_layout_type cur_layout = tui_current_layout ();
 
-      std::string copy = layout_name;
-      for (i = 0; i < copy.size (); i++)
-	copy[i] = toupper (copy[i]);
-      const char *buf_ptr = copy.c_str ();
+      buf_ptr = (char *) xstrdup (layout_name);
+      for (i = 0; (i < strlen (layout_name)); i++)
+	buf_ptr[i] = toupper (buf_ptr[i]);
 
       /* First check for ambiguous input.  */
-      if (strlen (buf_ptr) <= 1 && *buf_ptr == 'S')
+      if (strlen (buf_ptr) <= 1 
+	  && (*buf_ptr == 'S' || *buf_ptr == '$'))
 	{
 	  warning (_("Ambiguous command input."));
 	  status = TUI_FAILURE;
@@ -426,13 +449,59 @@ tui_set_layout_by_name (const char *layout_name)
 	    new_layout = DISASSEM_COMMAND;
 	  else if (subset_compare (buf_ptr, "SPLIT"))
 	    new_layout = SRC_DISASSEM_COMMAND;
-	  else if (subset_compare (buf_ptr, "REGS"))
+	  else if (subset_compare (buf_ptr, "REGS") 
+		   || subset_compare (buf_ptr, TUI_GENERAL_SPECIAL_REGS_NAME)
+		   || subset_compare (buf_ptr, TUI_GENERAL_REGS_NAME)
+		   || subset_compare (buf_ptr, TUI_FLOAT_REGS_NAME)
+		   || subset_compare (buf_ptr, TUI_SPECIAL_REGS_NAME))
 	    {
-	      if (cur_layout == SRC_COMMAND
+	      if (cur_layout == SRC_COMMAND 
 		  || cur_layout == SRC_DATA_COMMAND)
 		new_layout = SRC_DATA_COMMAND;
 	      else
 		new_layout = DISASSEM_DATA_COMMAND;
+
+	      /* Could ifdef out the following code. when compile with
+		 -z, there are null pointer references that cause a
+		 core dump if 'layout regs' is the first layout
+		 command issued by the user. HP has asked us to hook
+		 up this code.  - edie epstein  */
+	      if (subset_compare (buf_ptr, TUI_FLOAT_REGS_NAME))
+		{
+		  if (TUI_DATA_WIN->detail.data_display_info.regs_display_type
+		      != TUI_SFLOAT_REGS
+		      && TUI_DATA_WIN->detail.data_display_info.regs_display_type
+		      != TUI_DFLOAT_REGS)
+		    dpy_type = TUI_SFLOAT_REGS;
+		  else
+		    dpy_type =
+		      TUI_DATA_WIN->detail.data_display_info.regs_display_type;
+		}
+	      else if (subset_compare (buf_ptr,
+				      TUI_GENERAL_SPECIAL_REGS_NAME))
+		dpy_type = TUI_GENERAL_AND_SPECIAL_REGS;
+	      else if (subset_compare (buf_ptr, TUI_GENERAL_REGS_NAME))
+		dpy_type = TUI_GENERAL_REGS;
+	      else if (subset_compare (buf_ptr, TUI_SPECIAL_REGS_NAME))
+		dpy_type = TUI_SPECIAL_REGS;
+	      else if (TUI_DATA_WIN)
+		{
+		  if (TUI_DATA_WIN->detail.data_display_info.regs_display_type
+		      != TUI_UNDEFINED_REGS)
+		    dpy_type
+		      = TUI_DATA_WIN->detail.data_display_info.regs_display_type;
+		  else
+		    dpy_type = TUI_GENERAL_REGS;
+		}
+
+	      /* End of potential ifdef.
+	       */
+
+	      /* If ifdefed out code above, then assume that the user
+		 wishes to display the general purpose registers .
+	      */
+
+	      /* dpy_type = TUI_GENERAL_REGS; */
 	    }
 	  else if (subset_compare (buf_ptr, "NEXT"))
 	    new_layout = next_layout ();
@@ -441,13 +510,9 @@ tui_set_layout_by_name (const char *layout_name)
 	  else
 	    status = TUI_FAILURE;
 
-	  if (status == TUI_SUCCESS)
-	    {
-	      /* Make sure the curses mode is enabled.  */
-	      tui_enable ();
-	      tui_set_layout (new_layout);
-	    }
+	  tui_set_layout (new_layout, dpy_type);
 	}
+      xfree (buf_ptr);
     }
   else
     status = TUI_FAILURE;
@@ -492,18 +557,69 @@ extract_display_start_addr (struct gdbarch **gdbarch_p, CORE_ADDR *addr_p)
 
 
 static void
-tui_layout_command (const char *arg, int from_tty)
+tui_handle_xdb_layout (struct tui_layout_def *layout_def)
 {
+  if (layout_def->split)
+    {
+      tui_set_layout (SRC_DISASSEM_COMMAND, TUI_UNDEFINED_REGS);
+      tui_set_win_focus_to (tui_win_list[layout_def->display_mode]);
+    }
+  else
+    {
+      if (layout_def->display_mode == SRC_WIN)
+	tui_set_layout (SRC_COMMAND, TUI_UNDEFINED_REGS);
+      else
+	tui_set_layout (DISASSEM_DATA_COMMAND, layout_def->regs_display_type);
+    }
+}
+
+
+static void
+tui_toggle_layout_command (char *arg, int from_tty)
+{
+  struct tui_layout_def *layout_def = tui_layout_def ();
+
+  /* Make sure the curses mode is enabled.  */
+  tui_enable ();
+  if (layout_def->display_mode == SRC_WIN)
+    layout_def->display_mode = DISASSEM_WIN;
+  else
+    layout_def->display_mode = SRC_WIN;
+
+  if (!layout_def->split)
+    tui_handle_xdb_layout (layout_def);
+}
+
+
+static void
+tui_toggle_split_layout_command (char *arg, int from_tty)
+{
+  struct tui_layout_def *layout_def = tui_layout_def ();
+
+  /* Make sure the curses mode is enabled.  */
+  tui_enable ();
+  layout_def->split = (!layout_def->split);
+  tui_handle_xdb_layout (layout_def);
+}
+
+
+static void
+tui_layout_command (char *arg, int from_tty)
+{
+  /* Make sure the curses mode is enabled.  */
+  tui_enable ();
+
   /* Switch to the selected layout.  */
-  if (tui_set_layout_by_name (arg) != TUI_SUCCESS)
+  if (tui_set_layout_for_display_command (arg) != TUI_SUCCESS)
     warning (_("Invalid layout specified.\n%s"), LAYOUT_USAGE);
+
 }
 
 /* Answer the previous layout to cycle to.  */
 static enum tui_layout_type
 next_layout (void)
 {
-  int new_layout;
+  enum tui_layout_type new_layout;
 
   new_layout = tui_current_layout ();
   if (new_layout == UNDEFINED_LAYOUT)
@@ -515,7 +631,7 @@ next_layout (void)
 	new_layout = SRC_COMMAND;
     }
 
-  return (enum tui_layout_type) new_layout;
+  return new_layout;
 }
 
 
@@ -523,7 +639,7 @@ next_layout (void)
 static enum tui_layout_type
 prev_layout (void)
 {
-  int new_layout;
+  enum tui_layout_type new_layout;
 
   new_layout = tui_current_layout ();
   if (new_layout == SRC_COMMAND)
@@ -535,7 +651,7 @@ prev_layout (void)
 	new_layout = DISASSEM_DATA_COMMAND;
     }
 
-  return (enum tui_layout_type) new_layout;
+  return new_layout;
 }
 
 
@@ -544,14 +660,13 @@ static void
 make_command_window (struct tui_win_info **win_info_ptr, 
 		     int height, int origin_y)
 {
-  *win_info_ptr
-    = (struct tui_win_info *) init_and_make_win (*win_info_ptr,
-						 CMD_WIN,
-						 height,
-						 tui_term_width (),
-						 0,
-						 origin_y,
-						 DONT_BOX_WINDOW);
+  *win_info_ptr = init_and_make_win (*win_info_ptr,
+				     CMD_WIN,
+				     height,
+				     tui_term_width (),
+				     0,
+				     origin_y,
+				     DONT_BOX_WINDOW);
 
   (*win_info_ptr)->can_highlight = FALSE;
 }
@@ -585,14 +700,13 @@ static void
 make_data_window (struct tui_win_info **win_info_ptr, 
 		  int height, int origin_y)
 {
-  *win_info_ptr
-    = (struct tui_win_info *) init_and_make_win (*win_info_ptr,
-						 DATA_WIN,
-						 height,
-						 tui_term_width (),
-						 0,
-						 origin_y,
-						 BOX_WINDOW);
+  *win_info_ptr = init_and_make_win (*win_info_ptr,
+				     DATA_WIN,
+				     height,
+				     tui_term_width (),
+				     0,
+				     origin_y,
+				     BOX_WINDOW);
 }
 
 
@@ -658,15 +772,13 @@ show_source_disasm_command (void)
 	  if (TUI_DISASM_WIN == NULL)
 	    {
 	      make_disasm_window (&TUI_DISASM_WIN, asm_height, src_height - 1);
-	      locator
-		= ((struct tui_gen_win_info *)
-		   init_and_make_win (locator,
-				      LOCATOR_WIN,
-				      2 /* 1 */ ,
-				      tui_term_width (),
-				      0,
-				      (src_height + asm_height) - 1,
-				      DONT_BOX_WINDOW));
+	      locator = init_and_make_win (locator,
+					   LOCATOR_WIN,
+					   2 /* 1 */ ,
+					   tui_term_width (),
+					   0,
+					   (src_height + asm_height) - 1,
+					   DONT_BOX_WINDOW);
 	    }
 	  else
 	    {
@@ -752,15 +864,13 @@ show_data (enum tui_layout_type new_layout)
 	make_source_window (&tui_win_list[win_type], src_height, data_height - 1);
       else
 	make_disasm_window (&tui_win_list[win_type], src_height, data_height - 1);
-      locator
-	= ((struct tui_gen_win_info *)
-	   init_and_make_win (locator,
-			      LOCATOR_WIN,
-			      2 /* 1 */ ,
-			      tui_term_width (),
-			      0,
-			      total_height - 1,
-			      DONT_BOX_WINDOW));
+      locator = init_and_make_win (locator,
+				   LOCATOR_WIN,
+				   2 /* 1 */ ,
+				   tui_term_width (),
+				   0,
+				   total_height - 1,
+				   DONT_BOX_WINDOW);
     }
   else
     {
@@ -863,33 +973,29 @@ make_source_or_disasm_window (struct tui_win_info **win_info_ptr,
 			      enum tui_win_type type,
 			      int height, int origin_y)
 {
-  struct tui_gen_win_info *execution_info = NULL;
+  struct tui_gen_win_info *execution_info = (struct tui_gen_win_info *) NULL;
 
   /* Create the exeuction info window.  */
   if (type == SRC_WIN)
     execution_info = tui_source_exec_info_win_ptr ();
   else
     execution_info = tui_disassem_exec_info_win_ptr ();
-  execution_info
-    = ((struct tui_gen_win_info *)
-       init_and_make_win (execution_info,
-			  EXEC_INFO_WIN,
-			  height,
-			  3,
-			  0,
-			  origin_y,
-			  DONT_BOX_WINDOW));
+  execution_info = init_and_make_win (execution_info,
+				      EXEC_INFO_WIN,
+				      height,
+				      3,
+				      0,
+				      origin_y,
+				      DONT_BOX_WINDOW);
 
   /* Now create the source window.  */
-  *win_info_ptr
-    = ((struct tui_win_info *)
-       init_and_make_win (*win_info_ptr,
-			  type,
-			  height,
-			  tui_term_width () - execution_info->width,
-			  execution_info->width,
-			  origin_y,
-			  BOX_WINDOW));
+  *win_info_ptr = init_and_make_win (*win_info_ptr,
+				     type,
+				     height,
+				     tui_term_width () - execution_info->width,
+				     execution_info->width,
+				     origin_y,
+				     BOX_WINDOW);
 
   (*win_info_ptr)->detail.source_info.execution_info = execution_info;
 }
@@ -922,15 +1028,13 @@ show_source_or_disasm_and_command (enum tui_layout_type layout_type)
 	    make_source_window (win_info_ptr, src_height - 1, 0);
 	  else
 	    make_disasm_window (win_info_ptr, src_height - 1, 0);
-	  locator
-	    = ((struct tui_gen_win_info *)
-	       init_and_make_win (locator,
-				  LOCATOR_WIN,
-				  2 /* 1 */ ,
-				  tui_term_width (),
-				  0,
-				  src_height - 1,
-				  DONT_BOX_WINDOW));
+	  locator = init_and_make_win (locator,
+				       LOCATOR_WIN,
+				       2 /* 1 */ ,
+				       tui_term_width (),
+				       0,
+				       src_height - 1,
+				       DONT_BOX_WINDOW);
 	}
       else
 	{

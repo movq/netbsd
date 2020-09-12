@@ -1,6 +1,7 @@
 // Singly-linked list implementation -*- C++ -*-
 
-// Copyright (C) 2001-2019 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2004, 2005, 2007, 2008, 2009
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -50,9 +51,7 @@
 #include <bits/stl_uninitialized.h>
 #include <bits/concept_check.h>
 
-namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
 
   using std::size_t;
   using std::ptrdiff_t;
@@ -458,7 +457,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       max_size() const
       { return size_type(-1); }
 
-      _GLIBCXX_NODISCARD bool
+      bool
       empty() const
       { return this->_M_head._M_next == 0; }
 
@@ -1022,12 +1021,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  }
       }
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   // Specialization of insert_iterator so that insertions will be constant
   // time rather than linear time.
@@ -1076,7 +1072,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       { return *this; }
     };
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 #endif

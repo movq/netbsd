@@ -1,5 +1,6 @@
 /* Annotation routines for GDB.
-   Copyright (C) 1986-2019 Free Software Foundation, Inc.
+   Copyright (C) 1986, 1989, 1990, 1991, 1992, 1994, 1995, 1996, 1998, 1999,
+   2000, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,28 +23,22 @@
 #include "target.h"
 #include "gdbtypes.h"
 #include "breakpoint.h"
-#include "observable.h"
-#include "inferior.h"
-#include "infrun.h"
-#include "top.h"
+#include "observer.h"
 
 
 /* Prototypes for local functions.  */
 
+extern void _initialize_annotate (void);
+
 static void print_value_flags (struct type *);
 
-static void breakpoint_changed (struct breakpoint *b);
+static void breakpoint_changed (int);
 
 
 void (*deprecated_annotate_signalled_hook) (void);
 void (*deprecated_annotate_signal_hook) (void);
 
-/* Booleans indicating whether we've emitted certain notifications.
-   Used to suppress useless repeated notifications until the next time
-   we're ready to accept more commands.  Reset whenever a prompt is
-   displayed.  */
-static int frames_invalid_emitted;
-static int breakpoints_invalid_emitted;
+static int ignore_count_changed = 0;
 
 static void
 print_value_flags (struct type *t)
@@ -53,27 +48,30 @@ print_value_flags (struct type *t)
   else
     printf_filtered (("-"));
 }
-
-static void
-annotate_breakpoints_invalid (void)
+
+void
+breakpoints_changed (void)
 {
-  if (annotation_level == 2
-      && (!breakpoints_invalid_emitted
-	  || current_ui->prompt_state != PROMPT_BLOCKED))
+  if (annotation_level == 2)
     {
-      /* If the inferior owns the terminal (e.g., we're resuming),
-	 make sure to leave with the inferior still owning it.  */
-      int was_inferior = target_terminal::is_inferior ();
-
-      target_terminal::ours_for_output ();
-
+      target_terminal_ours ();
       printf_unfiltered (("\n\032\032breakpoints-invalid\n"));
-
-      if (was_inferior)
-	target_terminal::inferior ();
-
-      breakpoints_invalid_emitted = 1;
+      if (ignore_count_changed)
+	ignore_count_changed = 0;   /* Avoid multiple break annotations.  */
     }
+}
+
+/* The GUI needs to be informed of ignore_count changes, but we don't
+   want to provide successive multiple breakpoints-invalid messages
+   that are all caused by the fact that the ignore count is changing
+   (which could keep the GUI very busy).  One is enough, after the
+   target actually "stops".  */
+
+void
+annotate_ignore_count_change (void)
+{
+  if (annotation_level > 1)
+    ignore_count_changed = 1;
 }
 
 void
@@ -109,6 +107,11 @@ annotate_stopped (void)
 {
   if (annotation_level > 1)
     printf_filtered (("\n\032\032stopped\n"));
+  if (annotation_level > 1 && ignore_count_changed)
+    {
+      ignore_count_changed = 0;
+      breakpoints_changed ();
+    }
 }
 
 void
@@ -204,22 +207,10 @@ annotate_breakpoints_table_end (void)
 void
 annotate_frames_invalid (void)
 {
-  if (annotation_level == 2
-      && (!frames_invalid_emitted
-	  || current_ui->prompt_state != PROMPT_BLOCKED))
+  if (annotation_level == 2)
     {
-      /* If the inferior owns the terminal (e.g., we're resuming),
-	 make sure to leave with the inferior still owning it.  */
-      int was_inferior = target_terminal::is_inferior ();
-
-      target_terminal::ours_for_output ();
-
+      target_terminal_ours ();
       printf_unfiltered (("\n\032\032frames-invalid\n"));
-
-      if (was_inferior)
-	target_terminal::inferior ();
-
-      frames_invalid_emitted = 1;
     }
 }
 
@@ -531,11 +522,11 @@ annotate_frame_end (void)
 }
 
 void
-annotate_array_section_begin (int idx, struct type *elttype)
+annotate_array_section_begin (int index, struct type *elttype)
 {
   if (annotation_level == 2)
     {
-      printf_filtered (("\n\032\032array-section-begin %d "), idx);
+      printf_filtered (("\n\032\032array-section-begin %d "), index);
       print_value_flags (elttype);
       printf_filtered (("\n"));
     }
@@ -569,30 +560,18 @@ annotate_array_section_end (void)
     printf_filtered (("\n\032\032array-section-end\n"));
 }
 
-/* Called when GDB is about to display the prompt.  Used to reset
-   annotation suppression whenever we're ready to accept new
-   frontend/user commands.  */
-
-void
-annotate_display_prompt (void)
-{
-  frames_invalid_emitted = 0;
-  breakpoints_invalid_emitted = 0;
-}
-
 static void
-breakpoint_changed (struct breakpoint *b)
+breakpoint_changed (int bpno)
 {
-  if (b->number <= 0)
-    return;
-
-  annotate_breakpoints_invalid ();
+  breakpoints_changed ();
 }
 
 void
 _initialize_annotate (void)
 {
-  gdb::observers::breakpoint_created.attach (breakpoint_changed);
-  gdb::observers::breakpoint_deleted.attach (breakpoint_changed);
-  gdb::observers::breakpoint_modified.attach (breakpoint_changed);
+  if (annotation_level == 2)
+    {
+      observer_attach_breakpoint_deleted (breakpoint_changed);
+      observer_attach_breakpoint_modified (breakpoint_changed);
+    }
 }

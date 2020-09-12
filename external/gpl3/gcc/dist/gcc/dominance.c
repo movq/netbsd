@@ -1,5 +1,6 @@
 /* Calculate (post)dominators in slightly super-linear time.
-   Copyright (C) 2000-2019 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010
+   Free Software Foundation, Inc.
    Contributed by Michael Matz (matz@ifh.de).
 
    This file is part of GCC.
@@ -35,11 +36,16 @@
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "backend.h"
-#include "timevar.h"
-#include "diagnostic-core.h"
-#include "cfganal.h"
+#include "tm.h"
+#include "rtl.h"
+#include "hard-reg-set.h"
+#include "obstack.h"
+#include "basic-block.h"
+#include "toplev.h"
 #include "et-forest.h"
+#include "timevar.h"
+#include "vecprim.h"
+#include "pointer-set.h"
 #include "graphds.h"
 
 /* We name our nodes with integers, beginning with 1.  Zero is reserved for
@@ -51,288 +57,221 @@
 /* Type of Basic Block aka. TBB */
 typedef unsigned int TBB;
 
-namespace {
+/* We work in a poor-mans object oriented fashion, and carry an instance of
+   this structure through all our 'methods'.  It holds various arrays
+   reflecting the (sub)structure of the flowgraph.  Most of them are of type
+   TBB and are also indexed by TBB.  */
 
-/* This class holds various arrays reflecting the (sub)structure of the
-   flowgraph.  Most of them are of type TBB and are also indexed by TBB.  */
-
-class dom_info
+struct dom_info
 {
-public:
-  dom_info (function *, cdi_direction);
-  dom_info (vec <basic_block>, cdi_direction);
-  ~dom_info ();
-  void calc_dfs_tree ();
-  void calc_idoms ();
-
-  inline basic_block get_idom (basic_block);
-private:
-  void calc_dfs_tree_nonrec (basic_block);
-  void compress (TBB);
-  void dom_init (void);
-  TBB eval (TBB);
-  void link_roots (TBB, TBB);
-
   /* The parent of a node in the DFS tree.  */
-  TBB *m_dfs_parent;
-  /* For a node x m_key[x] is roughly the node nearest to the root from which
+  TBB *dfs_parent;
+  /* For a node x key[x] is roughly the node nearest to the root from which
      exists a way to x only over nodes behind x.  Such a node is also called
      semidominator.  */
-  TBB *m_key;
-  /* The value in m_path_min[x] is the node y on the path from x to the root of
-     the tree x is in with the smallest m_key[y].  */
-  TBB *m_path_min;
-  /* m_bucket[x] points to the first node of the set of nodes having x as
-     key.  */
-  TBB *m_bucket;
-  /* And m_next_bucket[x] points to the next node.  */
-  TBB *m_next_bucket;
-  /* After the algorithm is done, m_dom[x] contains the immediate dominator
+  TBB *key;
+  /* The value in path_min[x] is the node y on the path from x to the root of
+     the tree x is in with the smallest key[y].  */
+  TBB *path_min;
+  /* bucket[x] points to the first node of the set of nodes having x as key.  */
+  TBB *bucket;
+  /* And next_bucket[x] points to the next node.  */
+  TBB *next_bucket;
+  /* After the algorithm is done, dom[x] contains the immediate dominator
      of x.  */
-  TBB *m_dom;
+  TBB *dom;
 
   /* The following few fields implement the structures needed for disjoint
      sets.  */
-  /* m_set_chain[x] is the next node on the path from x to the representative
-     of the set containing x.  If m_set_chain[x]==0 then x is a root.  */
-  TBB *m_set_chain;
-  /* m_set_size[x] is the number of elements in the set named by x.  */
-  unsigned int *m_set_size;
-  /* m_set_child[x] is used for balancing the tree representing a set.  It can
+  /* set_chain[x] is the next node on the path from x to the representative
+     of the set containing x.  If set_chain[x]==0 then x is a root.  */
+  TBB *set_chain;
+  /* set_size[x] is the number of elements in the set named by x.  */
+  unsigned int *set_size;
+  /* set_child[x] is used for balancing the tree representing a set.  It can
      be understood as the next sibling of x.  */
-  TBB *m_set_child;
+  TBB *set_child;
 
-  /* If b is the number of a basic block (BB->index), m_dfs_order[b] is the
+  /* If b is the number of a basic block (BB->index), dfs_order[b] is the
      number of that node in DFS order counted from 1.  This is an index
      into most of the other arrays in this structure.  */
-  TBB *m_dfs_order;
-  /* Points to last element in m_dfs_order array.  */
-  TBB *m_dfs_last;
+  TBB *dfs_order;
   /* If x is the DFS-index of a node which corresponds with a basic block,
-     m_dfs_to_bb[x] is that basic block.  Note, that in our structure there are
-     more nodes that basic blocks, so only
-     m_dfs_to_bb[m_dfs_order[bb->index]]==bb is true for every basic block bb,
-     but not the opposite.  */
-  basic_block *m_dfs_to_bb;
+     dfs_to_bb[x] is that basic block.  Note, that in our structure there are
+     more nodes that basic blocks, so only dfs_to_bb[dfs_order[bb->index]]==bb
+     is true for every basic block bb, but not the opposite.  */
+  basic_block *dfs_to_bb;
 
   /* This is the next free DFS number when creating the DFS tree.  */
-  unsigned int m_dfsnum;
-  /* The number of nodes in the DFS tree (==m_dfsnum-1).  */
-  unsigned int m_nodes;
+  unsigned int dfsnum;
+  /* The number of nodes in the DFS tree (==dfsnum-1).  */
+  unsigned int nodes;
 
   /* Blocks with bits set here have a fake edge to EXIT.  These are used
      to turn a DFS forest into a proper tree.  */
-  bitmap m_fake_exit_edge;
-
-  /* Number of basic blocks in the function being compiled.  */
-  unsigned m_n_basic_blocks;
-
-  /* True, if we are computing postdominators (rather than dominators).  */
-  bool m_reverse;
-
-  /* Start block (the entry block for forward problem, exit block for backward
-     problem).  */
-  basic_block m_start_block;
-  /* Ending block.  */
-  basic_block m_end_block;
+  bitmap fake_exit_edge;
 };
 
-} // anonymous namespace
+static void init_dom_info (struct dom_info *, enum cdi_direction);
+static void free_dom_info (struct dom_info *);
+static void calc_dfs_tree_nonrec (struct dom_info *, basic_block, bool);
+static void calc_dfs_tree (struct dom_info *, bool);
+static void compress (struct dom_info *, TBB);
+static TBB eval (struct dom_info *, TBB);
+static void link_roots (struct dom_info *, TBB, TBB);
+static void calc_idoms (struct dom_info *, bool);
+void debug_dominance_info (enum cdi_direction);
+void debug_dominance_tree (enum cdi_direction, basic_block);
 
-void debug_dominance_info (cdi_direction);
-void debug_dominance_tree (cdi_direction, basic_block);
+/* Helper macro for allocating and initializing an array,
+   for aesthetic reasons.  */
+#define init_ar(var, type, num, content)			\
+  do								\
+    {								\
+      unsigned int i = 1;    /* Catch content == i.  */		\
+      if (! (content))						\
+	(var) = XCNEWVEC (type, num);				\
+      else							\
+	{							\
+	  (var) = XNEWVEC (type, (num));			\
+	  for (i = 0; i < num; i++)				\
+	    (var)[i] = (content);				\
+	}							\
+    }								\
+  while (0)
 
-/* Allocate and zero-initialize NUM elements of type T (T must be a
-   POD-type).  Note: after transition to C++11 or later,
-   `x = new_zero_array <T> (num);' can be replaced with
-   `x = new T[num] {};'.  */
+/* Allocate all needed memory in a pessimistic fashion (so we round up).
+   This initializes the contents of DI, which already must be allocated.  */
 
-template<typename T>
-inline T *new_zero_array (unsigned num)
+static void
+init_dom_info (struct dom_info *di, enum cdi_direction dir)
 {
-  T *result = new T[num];
-  memset (result, 0, sizeof (T) * num);
-  return result;
-}
+  /* We need memory for n_basic_blocks nodes.  */
+  unsigned int num = n_basic_blocks;
+  init_ar (di->dfs_parent, TBB, num, 0);
+  init_ar (di->path_min, TBB, num, i);
+  init_ar (di->key, TBB, num, i);
+  init_ar (di->dom, TBB, num, 0);
 
-/* Helper function for constructors to initialize a part of class members.  */
+  init_ar (di->bucket, TBB, num, 0);
+  init_ar (di->next_bucket, TBB, num, 0);
 
-void
-dom_info::dom_init (void)
-{
-  unsigned num = m_n_basic_blocks;
+  init_ar (di->set_chain, TBB, num, 0);
+  init_ar (di->set_size, unsigned int, num, 1);
+  init_ar (di->set_child, TBB, num, 0);
 
-  m_dfs_parent = new_zero_array <TBB> (num);
-  m_dom = new_zero_array <TBB> (num);
+  init_ar (di->dfs_order, TBB, (unsigned int) last_basic_block + 1, 0);
+  init_ar (di->dfs_to_bb, basic_block, num, 0);
 
-  m_path_min = new TBB[num];
-  m_key = new TBB[num];
-  m_set_size = new unsigned int[num];
-  for (unsigned i = 0; i < num; i++)
-    {
-      m_path_min[i] = m_key[i] = i;
-      m_set_size[i] = 1;
-    }
-
-  m_bucket = new_zero_array <TBB> (num);
-  m_next_bucket = new_zero_array <TBB> (num);
-
-  m_set_chain = new_zero_array <TBB> (num);
-  m_set_child = new_zero_array <TBB> (num);
-
-  m_dfs_to_bb = new_zero_array <basic_block> (num);
-
-  m_dfsnum = 1;
-  m_nodes = 0;
-}
-
-/* Allocate all needed memory in a pessimistic fashion (so we round up).  */
-
-dom_info::dom_info (function *fn, cdi_direction dir)
-{
-  m_n_basic_blocks = n_basic_blocks_for_fn (fn);
-
-  dom_init ();
-
-  unsigned last_bb_index = last_basic_block_for_fn (fn);
-  m_dfs_order = new_zero_array <TBB> (last_bb_index + 1);
-  m_dfs_last = &m_dfs_order[last_bb_index];
+  di->dfsnum = 1;
+  di->nodes = 0;
 
   switch (dir)
     {
       case CDI_DOMINATORS:
-	m_reverse = false;
-	m_fake_exit_edge = NULL;
-	m_start_block = ENTRY_BLOCK_PTR_FOR_FN (fn);
-	m_end_block = EXIT_BLOCK_PTR_FOR_FN (fn);
+	di->fake_exit_edge = NULL;
 	break;
       case CDI_POST_DOMINATORS:
-	m_reverse = true;
-	m_fake_exit_edge = BITMAP_ALLOC (NULL);
-	m_start_block = EXIT_BLOCK_PTR_FOR_FN (fn);
-	m_end_block = ENTRY_BLOCK_PTR_FOR_FN (fn);
+	di->fake_exit_edge = BITMAP_ALLOC (NULL);
 	break;
       default:
 	gcc_unreachable ();
+	break;
     }
 }
 
-/* Constructor for reducible region REGION.  */
-
-dom_info::dom_info (vec<basic_block> region, cdi_direction dir)
-{
-  m_n_basic_blocks = region.length ();
-  unsigned nm1 = m_n_basic_blocks - 1;
-
-  dom_init ();
-
-  /* Determine max basic block index in region.  */
-  int max_index = region[0]->index;
-  for (unsigned i = 1; i <= nm1; i++)
-    if (region[i]->index > max_index)
-      max_index = region[i]->index;
-  max_index += 1;  /* set index on the first bb out of region.  */
-
-  m_dfs_order = new_zero_array <TBB> (max_index + 1);
-  m_dfs_last = &m_dfs_order[max_index];
-
-  m_fake_exit_edge = NULL; /* Assume that region is reducible.  */
-
-  switch (dir)
-    {
-      case CDI_DOMINATORS:
-	m_reverse = false;
-	m_start_block = region[0];
-	m_end_block = region[nm1];
-	break;
-      case CDI_POST_DOMINATORS:
-	m_reverse = true;
-	m_start_block = region[nm1];
-	m_end_block = region[0];
-	break;
-      default:
-	gcc_unreachable ();
-    }
-}
-
-inline basic_block
-dom_info::get_idom (basic_block bb)
-{
-  TBB d = m_dom[m_dfs_order[bb->index]];
-  return m_dfs_to_bb[d];
-}
+#undef init_ar
 
 /* Map dominance calculation type to array index used for various
    dominance information arrays.  This version is simple -- it will need
    to be modified, obviously, if additional values are added to
    cdi_direction.  */
 
-static inline unsigned int
-dom_convert_dir_to_idx (cdi_direction dir)
+static unsigned int
+dom_convert_dir_to_idx (enum cdi_direction dir)
 {
-  gcc_checking_assert (dir == CDI_DOMINATORS || dir == CDI_POST_DOMINATORS);
+  gcc_assert (dir == CDI_DOMINATORS || dir == CDI_POST_DOMINATORS);
   return dir - 1;
 }
 
-/* Free all allocated memory in dom_info.  */
+/* Free all allocated memory in DI, but not DI itself.  */
 
-dom_info::~dom_info ()
+static void
+free_dom_info (struct dom_info *di)
 {
-  delete[] m_dfs_parent;
-  delete[] m_path_min;
-  delete[] m_key;
-  delete[] m_dom;
-  delete[] m_bucket;
-  delete[] m_next_bucket;
-  delete[] m_set_chain;
-  delete[] m_set_size;
-  delete[] m_set_child;
-  delete[] m_dfs_order;
-  delete[] m_dfs_to_bb;
-  BITMAP_FREE (m_fake_exit_edge);
+  free (di->dfs_parent);
+  free (di->path_min);
+  free (di->key);
+  free (di->dom);
+  free (di->bucket);
+  free (di->next_bucket);
+  free (di->set_chain);
+  free (di->set_size);
+  free (di->set_child);
+  free (di->dfs_order);
+  free (di->dfs_to_bb);
+  BITMAP_FREE (di->fake_exit_edge);
 }
 
-/* The nonrecursive variant of creating a DFS tree.  BB is the starting basic
-   block for this tree and m_reverse is true, if predecessors should be visited
-   instead of successors of a node.  After this is done all nodes reachable
-   from BB were visited, have assigned their dfs number and are linked together
-   to form a tree.  */
+/* The nonrecursive variant of creating a DFS tree.  DI is our working
+   structure, BB the starting basic block for this tree and REVERSE
+   is true, if predecessors should be visited instead of successors of a
+   node.  After this is done all nodes reachable from BB were visited, have
+   assigned their dfs number and are linked together to form a tree.  */
 
-void
-dom_info::calc_dfs_tree_nonrec (basic_block bb)
+static void
+calc_dfs_tree_nonrec (struct dom_info *di, basic_block bb, bool reverse)
 {
-  edge_iterator *stack = new edge_iterator[m_n_basic_blocks + 1];
-  int sp = 0;
-  unsigned d_i = dom_convert_dir_to_idx (m_reverse ? CDI_POST_DOMINATORS
-					 : CDI_DOMINATORS);
+  /* We call this _only_ if bb is not already visited.  */
+  edge e;
+  TBB child_i, my_i = 0;
+  edge_iterator *stack;
+  edge_iterator ei, einext;
+  int sp;
+  /* Start block (ENTRY_BLOCK_PTR for forward problem, EXIT_BLOCK for backward
+     problem).  */
+  basic_block en_block;
+  /* Ending block.  */
+  basic_block ex_block;
 
-  /* Initialize the first edge.  */
-  edge_iterator ei = m_reverse ? ei_start (bb->preds)
-			       : ei_start (bb->succs);
+  stack = XNEWVEC (edge_iterator, n_basic_blocks + 1);
+  sp = 0;
+
+  /* Initialize our border blocks, and the first edge.  */
+  if (reverse)
+    {
+      ei = ei_start (bb->preds);
+      en_block = EXIT_BLOCK_PTR;
+      ex_block = ENTRY_BLOCK_PTR;
+    }
+  else
+    {
+      ei = ei_start (bb->succs);
+      en_block = ENTRY_BLOCK_PTR;
+      ex_block = EXIT_BLOCK_PTR;
+    }
 
   /* When the stack is empty we break out of this loop.  */
   while (1)
     {
       basic_block bn;
-      edge_iterator einext;
 
       /* This loop traverses edges e in depth first manner, and fills the
          stack.  */
       while (!ei_end_p (ei))
 	{
-	  edge e = ei_edge (ei);
+	  e = ei_edge (ei);
 
 	  /* Deduce from E the current and the next block (BB and BN), and the
 	     next edge.  */
-	  if (m_reverse)
+	  if (reverse)
 	    {
 	      bn = e->src;
 
 	      /* If the next node BN is either already visited or a border
-		 block or out of region the current edge is useless, and simply
-		 overwritten with the next edge out of the current node.  */
-	      if (bn == m_end_block || bn->dom[d_i] == NULL
-		  || m_dfs_order[bn->index])
+	         block the current edge is useless, and simply overwritten
+	         with the next edge out of the current node.  */
+	      if (bn == ex_block || di->dfs_order[bn->index])
 		{
 		  ei_next (&ei);
 		  continue;
@@ -343,8 +282,7 @@ dom_info::calc_dfs_tree_nonrec (basic_block bb)
 	  else
 	    {
 	      bn = e->dest;
-	      if (bn == m_end_block || bn->dom[d_i] == NULL
-		  || m_dfs_order[bn->index])
+	      if (bn == ex_block || di->dfs_order[bn->index])
 		{
 		  ei_next (&ei);
 		  continue;
@@ -353,17 +291,16 @@ dom_info::calc_dfs_tree_nonrec (basic_block bb)
 	      einext = ei_start (bn->succs);
 	    }
 
-	  gcc_assert (bn != m_start_block);
+	  gcc_assert (bn != en_block);
 
 	  /* Fill the DFS tree info calculatable _before_ recursing.  */
-	  TBB my_i;
-	  if (bb != m_start_block)
-	    my_i = m_dfs_order[bb->index];
+	  if (bb != en_block)
+	    my_i = di->dfs_order[bb->index];
 	  else
-	    my_i = *m_dfs_last;
-	  TBB child_i = m_dfs_order[bn->index] = m_dfsnum++;
-	  m_dfs_to_bb[child_i] = bn;
-	  m_dfs_parent[child_i] = my_i;
+	    my_i = di->dfs_order[last_basic_block];
+	  child_i = di->dfs_order[bn->index] = di->dfsnum++;
+	  di->dfs_to_bb[child_i] = bn;
+	  di->dfs_parent[child_i] = my_i;
 
 	  /* Save the current point in the CFG on the stack, and recurse.  */
 	  stack[sp++] = ei;
@@ -385,24 +322,26 @@ dom_info::calc_dfs_tree_nonrec (basic_block bb)
          descendants or the tree depth.  */
       ei_next (&ei);
     }
-  delete[] stack;
+  free (stack);
 }
 
-/* The main entry for calculating the DFS tree or forest.  m_reverse is true,
-   if we are interested in the reverse flow graph.  In that case the result is
-   not necessarily a tree but a forest, because there may be nodes from which
-   the EXIT_BLOCK is unreachable.  */
+/* The main entry for calculating the DFS tree or forest.  DI is our working
+   structure and REVERSE is true, if we are interested in the reverse flow
+   graph.  In that case the result is not necessarily a tree but a forest,
+   because there may be nodes from which the EXIT_BLOCK is unreachable.  */
 
-void
-dom_info::calc_dfs_tree ()
+static void
+calc_dfs_tree (struct dom_info *di, bool reverse)
 {
-  *m_dfs_last = m_dfsnum;
-  m_dfs_to_bb[m_dfsnum] = m_start_block;
-  m_dfsnum++;
+  /* The first block is the ENTRY_BLOCK (or EXIT_BLOCK if REVERSE).  */
+  basic_block begin = reverse ? EXIT_BLOCK_PTR : ENTRY_BLOCK_PTR;
+  di->dfs_order[last_basic_block] = di->dfsnum;
+  di->dfs_to_bb[di->dfsnum] = begin;
+  di->dfsnum++;
 
-  calc_dfs_tree_nonrec (m_start_block);
+  calc_dfs_tree_nonrec (di, begin, reverse);
 
-  if (m_fake_exit_edge)
+  if (reverse)
     {
       /* In the post-dom case we may have nodes without a path to EXIT_BLOCK.
          They are reverse-unreachable.  In the dom-case we disallow such
@@ -417,45 +356,42 @@ dom_info::calc_dfs_tree ()
       basic_block b;
       bool saw_unconnected = false;
 
-      FOR_BB_BETWEEN (b, m_start_block->prev_bb, m_end_block, prev_bb)
+      FOR_EACH_BB_REVERSE (b)
 	{
 	  if (EDGE_COUNT (b->succs) > 0)
 	    {
-	      if (m_dfs_order[b->index] == 0)
+	      if (di->dfs_order[b->index] == 0)
 		saw_unconnected = true;
 	      continue;
 	    }
-	  bitmap_set_bit (m_fake_exit_edge, b->index);
-	  m_dfs_order[b->index] = m_dfsnum;
-	  m_dfs_to_bb[m_dfsnum] = b;
-	  m_dfs_parent[m_dfsnum] = *m_dfs_last;
-	  m_dfsnum++;
-	  calc_dfs_tree_nonrec (b);
+	  bitmap_set_bit (di->fake_exit_edge, b->index);
+	  di->dfs_order[b->index] = di->dfsnum;
+	  di->dfs_to_bb[di->dfsnum] = b;
+	  di->dfs_parent[di->dfsnum] = di->dfs_order[last_basic_block];
+	  di->dfsnum++;
+	  calc_dfs_tree_nonrec (di, b, reverse);
 	}
 
       if (saw_unconnected)
 	{
-	  FOR_BB_BETWEEN (b, m_start_block->prev_bb, m_end_block, prev_bb)
+	  FOR_EACH_BB_REVERSE (b)
 	    {
-	      if (m_dfs_order[b->index])
+	      if (di->dfs_order[b->index])
 		continue;
-	      basic_block b2 = dfs_find_deadend (b);
-	      gcc_checking_assert (m_dfs_order[b2->index] == 0);
-	      bitmap_set_bit (m_fake_exit_edge, b2->index);
-	      m_dfs_order[b2->index] = m_dfsnum;
-	      m_dfs_to_bb[m_dfsnum] = b2;
-	      m_dfs_parent[m_dfsnum] = *m_dfs_last;
-	      m_dfsnum++;
-	      calc_dfs_tree_nonrec (b2);
-	      gcc_checking_assert (m_dfs_order[b->index]);
+	      bitmap_set_bit (di->fake_exit_edge, b->index);
+	      di->dfs_order[b->index] = di->dfsnum;
+	      di->dfs_to_bb[di->dfsnum] = b;
+	      di->dfs_parent[di->dfsnum] = di->dfs_order[last_basic_block];
+	      di->dfsnum++;
+	      calc_dfs_tree_nonrec (di, b, reverse);
 	    }
 	}
     }
 
-  m_nodes = m_dfsnum - 1;
+  di->nodes = di->dfsnum - 1;
 
   /* This aborts e.g. when there is _no_ path from ENTRY to EXIT at all.  */
-  gcc_assert (m_nodes == (unsigned int) m_n_basic_blocks - 1);
+  gcc_assert (di->nodes == (unsigned int) n_basic_blocks - 1);
 }
 
 /* Compress the path from V to the root of its set and update path_min at the
@@ -463,19 +399,19 @@ dom_info::calc_dfs_tree ()
    in and path_min[V] is the node with the smallest key[] value on the path
    from V to that root.  */
 
-void
-dom_info::compress (TBB v)
+static void
+compress (struct dom_info *di, TBB v)
 {
   /* Btw. It's not worth to unrecurse compress() as the depth is usually not
      greater than 5 even for huge graphs (I've not seen call depth > 4).
      Also performance wise compress() ranges _far_ behind eval().  */
-  TBB parent = m_set_chain[v];
-  if (m_set_chain[parent])
+  TBB parent = di->set_chain[v];
+  if (di->set_chain[parent])
     {
-      compress (parent);
-      if (m_key[m_path_min[parent]] < m_key[m_path_min[v]])
-	m_path_min[v] = m_path_min[parent];
-      m_set_chain[v] = m_set_chain[parent];
+      compress (di, parent);
+      if (di->key[di->path_min[parent]] < di->key[di->path_min[v]])
+	di->path_min[v] = di->path_min[parent];
+      di->set_chain[v] = di->set_chain[parent];
     }
 }
 
@@ -483,28 +419,28 @@ dom_info::compress (TBB v)
    changed since the last call).  Returns the node with the smallest key[]
    value on the path from V to the root.  */
 
-inline TBB
-dom_info::eval (TBB v)
+static inline TBB
+eval (struct dom_info *di, TBB v)
 {
   /* The representative of the set V is in, also called root (as the set
      representation is a tree).  */
-  TBB rep = m_set_chain[v];
+  TBB rep = di->set_chain[v];
 
   /* V itself is the root.  */
   if (!rep)
-    return m_path_min[v];
+    return di->path_min[v];
 
   /* Compress only if necessary.  */
-  if (m_set_chain[rep])
+  if (di->set_chain[rep])
     {
-      compress (v);
-      rep = m_set_chain[v];
+      compress (di, v);
+      rep = di->set_chain[v];
     }
 
-  if (m_key[m_path_min[rep]] >= m_key[m_path_min[v]])
-    return m_path_min[v];
+  if (di->key[di->path_min[rep]] >= di->key[di->path_min[v]])
+    return di->path_min[v];
   else
-    return m_path_min[rep];
+    return di->path_min[rep];
 }
 
 /* This essentially merges the two sets of V and W, giving a single set with
@@ -512,64 +448,76 @@ dom_info::eval (TBB v)
    balanced tree.  Currently link(V,W) is only used with V being the parent
    of W.  */
 
-void
-dom_info::link_roots (TBB v, TBB w)
+static void
+link_roots (struct dom_info *di, TBB v, TBB w)
 {
   TBB s = w;
 
   /* Rebalance the tree.  */
-  while (m_key[m_path_min[w]] < m_key[m_path_min[m_set_child[s]]])
+  while (di->key[di->path_min[w]] < di->key[di->path_min[di->set_child[s]]])
     {
-      if (m_set_size[s] + m_set_size[m_set_child[m_set_child[s]]]
-	  >= 2 * m_set_size[m_set_child[s]])
+      if (di->set_size[s] + di->set_size[di->set_child[di->set_child[s]]]
+	  >= 2 * di->set_size[di->set_child[s]])
 	{
-	  m_set_chain[m_set_child[s]] = s;
-	  m_set_child[s] = m_set_child[m_set_child[s]];
+	  di->set_chain[di->set_child[s]] = s;
+	  di->set_child[s] = di->set_child[di->set_child[s]];
 	}
       else
 	{
-	  m_set_size[m_set_child[s]] = m_set_size[s];
-	  s = m_set_chain[s] = m_set_child[s];
+	  di->set_size[di->set_child[s]] = di->set_size[s];
+	  s = di->set_chain[s] = di->set_child[s];
 	}
     }
 
-  m_path_min[s] = m_path_min[w];
-  m_set_size[v] += m_set_size[w];
-  if (m_set_size[v] < 2 * m_set_size[w])
-    std::swap (m_set_child[v], s);
+  di->path_min[s] = di->path_min[w];
+  di->set_size[v] += di->set_size[w];
+  if (di->set_size[v] < 2 * di->set_size[w])
+    {
+      TBB tmp = s;
+      s = di->set_child[v];
+      di->set_child[v] = tmp;
+    }
 
   /* Merge all subtrees.  */
   while (s)
     {
-      m_set_chain[s] = v;
-      s = m_set_child[s];
+      di->set_chain[s] = v;
+      s = di->set_child[s];
     }
 }
 
-/* This calculates the immediate dominators (or post-dominators). THIS is our
-   working structure and should hold the DFS forest.
-   On return the immediate dominator to node V is in m_dom[V].  */
+/* This calculates the immediate dominators (or post-dominators if REVERSE is
+   true).  DI is our working structure and should hold the DFS forest.
+   On return the immediate dominator to node V is in di->dom[V].  */
 
-void
-dom_info::calc_idoms ()
+static void
+calc_idoms (struct dom_info *di, bool reverse)
 {
+  TBB v, w, k, par;
+  basic_block en_block;
+  edge_iterator ei, einext;
+
+  if (reverse)
+    en_block = EXIT_BLOCK_PTR;
+  else
+    en_block = ENTRY_BLOCK_PTR;
+
   /* Go backwards in DFS order, to first look at the leafs.  */
-  for (TBB v = m_nodes; v > 1; v--)
+  v = di->nodes;
+  while (v > 1)
     {
-      basic_block bb = m_dfs_to_bb[v];
+      basic_block bb = di->dfs_to_bb[v];
       edge e;
 
-      TBB par = m_dfs_parent[v];
-      TBB k = v;
+      par = di->dfs_parent[v];
+      k = v;
 
-      edge_iterator ei = m_reverse ? ei_start (bb->succs)
-				   : ei_start (bb->preds);
-      edge_iterator einext;
+      ei = (reverse) ? ei_start (bb->succs) : ei_start (bb->preds);
 
-      if (m_fake_exit_edge)
+      if (reverse)
 	{
 	  /* If this block has a fake edge to exit, process that first.  */
-	  if (bitmap_bit_p (m_fake_exit_edge, bb->index))
+	  if (bitmap_bit_p (di->fake_exit_edge, bb->index))
 	    {
 	      einext = ei;
 	      einext.index = 0;
@@ -583,55 +531,56 @@ dom_info::calc_idoms ()
          semidominator.  */
       while (!ei_end_p (ei))
 	{
-	  basic_block b;
 	  TBB k1;
+	  basic_block b;
 
 	  e = ei_edge (ei);
-	  b = m_reverse ? e->dest : e->src;
+	  b = (reverse) ? e->dest : e->src;
 	  einext = ei;
 	  ei_next (&einext);
 
-	  if (b == m_start_block)
+	  if (b == en_block)
 	    {
 	    do_fake_exit_edge:
-	      k1 = *m_dfs_last;
+	      k1 = di->dfs_order[last_basic_block];
 	    }
 	  else
-	    k1 = m_dfs_order[b->index];
+	    k1 = di->dfs_order[b->index];
 
 	  /* Call eval() only if really needed.  If k1 is above V in DFS tree,
 	     then we know, that eval(k1) == k1 and key[k1] == k1.  */
 	  if (k1 > v)
-	    k1 = m_key[eval (k1)];
+	    k1 = di->key[eval (di, k1)];
 	  if (k1 < k)
 	    k = k1;
 
 	  ei = einext;
 	}
 
-      m_key[v] = k;
-      link_roots (par, v);
-      m_next_bucket[v] = m_bucket[k];
-      m_bucket[k] = v;
+      di->key[v] = k;
+      link_roots (di, par, v);
+      di->next_bucket[v] = di->bucket[k];
+      di->bucket[k] = v;
 
       /* Transform semidominators into dominators.  */
-      for (TBB w = m_bucket[par]; w; w = m_next_bucket[w])
+      for (w = di->bucket[par]; w; w = di->next_bucket[w])
 	{
-	  k = eval (w);
-	  if (m_key[k] < m_key[w])
-	    m_dom[w] = k;
+	  k = eval (di, w);
+	  if (di->key[k] < di->key[w])
+	    di->dom[w] = k;
 	  else
-	    m_dom[w] = par;
+	    di->dom[w] = par;
 	}
       /* We don't need to cleanup next_bucket[].  */
-      m_bucket[par] = 0;
+      di->bucket[par] = 0;
+      v--;
     }
 
   /* Explicitly define the dominators.  */
-  m_dom[1] = 0;
-  for (TBB v = 2; v <= m_nodes; v++)
-    if (m_dom[v] != m_key[v])
-      m_dom[v] = m_dom[m_dom[v]];
+  di->dom[1] = 0;
+  for (v = 2; v <= di->nodes; v++)
+    if (di->dom[v] != di->key[v])
+      di->dom[v] = di->dom[di->dom[v]];
 }
 
 /* Assign dfs numbers starting from NUM to NODE and its sons.  */
@@ -663,40 +612,13 @@ compute_dom_fast_query (enum cdi_direction dir)
   basic_block bb;
   unsigned int dir_index = dom_convert_dir_to_idx (dir);
 
-  gcc_checking_assert (dom_info_available_p (dir));
+  gcc_assert (dom_info_available_p (dir));
 
   if (dom_computed[dir_index] == DOM_OK)
     return;
 
-  FOR_ALL_BB_FN (bb, cfun)
+  FOR_ALL_BB (bb)
     {
-      if (!bb->dom[dir_index]->father)
-	assign_dfs_numbers (bb->dom[dir_index], &num);
-    }
-
-  dom_computed[dir_index] = DOM_OK;
-}
-
-/* Analogous to the previous function but compute the data for reducible
-   region REGION.  */
-
-static void
-compute_dom_fast_query_in_region (enum cdi_direction dir,
-				  vec<basic_block> region)
-{
-  int num = 0;
-  basic_block bb;
-  unsigned int dir_index = dom_convert_dir_to_idx (dir);
-
-  gcc_checking_assert (dom_info_available_p (dir));
-
-  if (dom_computed[dir_index] == DOM_OK)
-    return;
-
-  /* Assign dfs numbers for region nodes except for entry and exit nodes.  */
-  for (unsigned int i = 1; i < region.length () - 1; i++)
-    {
-      bb = region[i];
       if (!bb->dom[dir_index]->father)
 	assign_dfs_numbers (bb->dom[dir_index], &num);
     }
@@ -708,137 +630,68 @@ compute_dom_fast_query_in_region (enum cdi_direction dir,
    we want to compute dominators or postdominators.  */
 
 void
-calculate_dominance_info (cdi_direction dir)
+calculate_dominance_info (enum cdi_direction dir)
 {
+  struct dom_info di;
+  basic_block b;
   unsigned int dir_index = dom_convert_dir_to_idx (dir);
+  bool reverse = (dir == CDI_POST_DOMINATORS) ? true : false;
 
   if (dom_computed[dir_index] == DOM_OK)
-    {
-      checking_verify_dominators (dir);
-      return;
-    }
+    return;
 
   timevar_push (TV_DOMINANCE);
   if (!dom_info_available_p (dir))
     {
       gcc_assert (!n_bbs_in_dom_tree[dir_index]);
 
-      basic_block b;
-      FOR_ALL_BB_FN (b, cfun)
+      FOR_ALL_BB (b)
 	{
 	  b->dom[dir_index] = et_new_tree (b);
 	}
-      n_bbs_in_dom_tree[dir_index] = n_basic_blocks_for_fn (cfun);
+      n_bbs_in_dom_tree[dir_index] = n_basic_blocks;
 
-      dom_info di (cfun, dir);
-      di.calc_dfs_tree ();
-      di.calc_idoms ();
+      init_dom_info (&di, dir);
+      calc_dfs_tree (&di, reverse);
+      calc_idoms (&di, reverse);
 
-      FOR_EACH_BB_FN (b, cfun)
+      FOR_EACH_BB (b)
 	{
-	  if (basic_block d = di.get_idom (b))
-	    et_set_father (b->dom[dir_index], d->dom[dir_index]);
+	  TBB d = di.dom[di.dfs_order[b->index]];
+
+	  if (di.dfs_to_bb[d])
+	    et_set_father (b->dom[dir_index], di.dfs_to_bb[d]->dom[dir_index]);
 	}
 
+      free_dom_info (&di);
       dom_computed[dir_index] = DOM_NO_FAST_QUERY;
     }
-  else
-    checking_verify_dominators (dir);
 
   compute_dom_fast_query (dir);
 
   timevar_pop (TV_DOMINANCE);
 }
 
-/* Analogous to the previous function but compute dominance info for regions
-   which are single entry, multiple exit regions for CDI_DOMINATORs and
-   multiple entry, single exit regions for CDI_POST_DOMINATORs.  */
-
-void
-calculate_dominance_info_for_region (cdi_direction dir,
-				     vec<basic_block> region)
-{
-  unsigned int dir_index = dom_convert_dir_to_idx (dir);
-  basic_block bb;
-  unsigned int i;
-
-  if (dom_computed[dir_index] == DOM_OK)
-    return;
-
-  timevar_push (TV_DOMINANCE);
-  /* Assume that dom info is not partially computed.  */
-  gcc_assert (!dom_info_available_p (dir));
-
-  FOR_EACH_VEC_ELT (region, i, bb)
-    {
-      bb->dom[dir_index] = et_new_tree (bb);
-    }
-  dom_info di (region, dir);
-  di.calc_dfs_tree ();
-  di.calc_idoms ();
-
-  FOR_EACH_VEC_ELT (region, i, bb)
-    if (basic_block d = di.get_idom (bb))
-      et_set_father (bb->dom[dir_index], d->dom[dir_index]);
-
-  dom_computed[dir_index] = DOM_NO_FAST_QUERY;
-  compute_dom_fast_query_in_region (dir, region);
-
-  timevar_pop (TV_DOMINANCE);
-}
-
 /* Free dominance information for direction DIR.  */
-void
-free_dominance_info (function *fn, enum cdi_direction dir)
-{
-  basic_block bb;
-  unsigned int dir_index = dom_convert_dir_to_idx (dir);
-
-  if (!dom_info_available_p (fn, dir))
-    return;
-
-  FOR_ALL_BB_FN (bb, fn)
-    {
-      et_free_tree_force (bb->dom[dir_index]);
-      bb->dom[dir_index] = NULL;
-    }
-  et_free_pools ();
-
-  fn->cfg->x_n_bbs_in_dom_tree[dir_index] = 0;
-
-  fn->cfg->x_dom_computed[dir_index] = DOM_NONE;
-}
-
 void
 free_dominance_info (enum cdi_direction dir)
 {
-  free_dominance_info (cfun, dir);
-}
-
-/* Free dominance information for direction DIR in region REGION.  */
-
-void
-free_dominance_info_for_region (function *fn,
-				enum cdi_direction dir,
-				vec<basic_block> region)
-{
   basic_block bb;
-  unsigned int i;
   unsigned int dir_index = dom_convert_dir_to_idx (dir);
 
   if (!dom_info_available_p (dir))
     return;
 
-  FOR_EACH_VEC_ELT (region, i, bb)
+  FOR_ALL_BB (bb)
     {
       et_free_tree_force (bb->dom[dir_index]);
       bb->dom[dir_index] = NULL;
     }
   et_free_pools ();
 
-  fn->cfg->x_dom_computed[dir_index] = DOM_NONE;
+  n_bbs_in_dom_tree[dir_index] = 0;
 
-  fn->cfg->x_n_bbs_in_dom_tree[dir_index] = 0;
+  dom_computed[dir_index] = DOM_NONE;
 }
 
 /* Return the immediate dominator of basic block BB.  */
@@ -848,7 +701,7 @@ get_immediate_dominator (enum cdi_direction dir, basic_block bb)
   unsigned int dir_index = dom_convert_dir_to_idx (dir);
   struct et_node *node = bb->dom[dir_index];
 
-  gcc_checking_assert (dom_computed[dir_index]);
+  gcc_assert (dom_computed[dir_index]);
 
   if (!node->father)
     return NULL;
@@ -865,7 +718,7 @@ set_immediate_dominator (enum cdi_direction dir, basic_block bb,
   unsigned int dir_index = dom_convert_dir_to_idx (dir);
   struct et_node *node = bb->dom[dir_index];
 
-  gcc_checking_assert (dom_computed[dir_index]);
+  gcc_assert (dom_computed[dir_index]);
 
   if (node->father)
     {
@@ -883,21 +736,21 @@ set_immediate_dominator (enum cdi_direction dir, basic_block bb,
 
 /* Returns the list of basic blocks immediately dominated by BB, in the
    direction DIR.  */
-vec<basic_block> 
+VEC (basic_block, heap) *
 get_dominated_by (enum cdi_direction dir, basic_block bb)
 {
   unsigned int dir_index = dom_convert_dir_to_idx (dir);
   struct et_node *node = bb->dom[dir_index], *son = node->son, *ason;
-  vec<basic_block> bbs = vNULL;
+  VEC (basic_block, heap) *bbs = NULL;
 
-  gcc_checking_assert (dom_computed[dir_index]);
+  gcc_assert (dom_computed[dir_index]);
 
   if (!son)
-    return vNULL;
+    return NULL;
 
-  bbs.safe_push ((basic_block) son->data);
+  VEC_safe_push (basic_block, heap, bbs, (basic_block) son->data);
   for (ason = son->right; ason != son; ason = ason->right)
-    bbs.safe_push ((basic_block) ason->data);
+    VEC_safe_push (basic_block, heap, bbs, (basic_block) ason->data);
 
   return bbs;
 }
@@ -906,13 +759,13 @@ get_dominated_by (enum cdi_direction dir, basic_block bb)
    direction DIR) by some block between N_REGION ones stored in REGION,
    except for blocks in the REGION itself.  */
 
-vec<basic_block> 
+VEC (basic_block, heap) *
 get_dominated_by_region (enum cdi_direction dir, basic_block *region,
 			 unsigned n_region)
 {
   unsigned i;
   basic_block dom;
-  vec<basic_block> doms = vNULL;
+  VEC (basic_block, heap) *doms = NULL;
 
   for (i = 0; i < n_region; i++)
     region[i]->flags |= BB_DUPLICATED;
@@ -921,7 +774,7 @@ get_dominated_by_region (enum cdi_direction dir, basic_block *region,
 	 dom;
 	 dom = next_dom_son (dir, dom))
       if (!(dom->flags & BB_DUPLICATED))
-	doms.safe_push (dom);
+	VEC_safe_push (basic_block, heap, doms, dom);
   for (i = 0; i < n_region; i++)
     region[i]->flags &= ~BB_DUPLICATED;
 
@@ -929,46 +782,30 @@ get_dominated_by_region (enum cdi_direction dir, basic_block *region,
 }
 
 /* Returns the list of basic blocks including BB dominated by BB, in the
-   direction DIR up to DEPTH in the dominator tree.  The DEPTH of zero will
-   produce a vector containing all dominated blocks.  The vector will be sorted
-   in preorder.  */
+   direction DIR.  The vector will be sorted in preorder.  */
 
-vec<basic_block> 
-get_dominated_to_depth (enum cdi_direction dir, basic_block bb, int depth)
+VEC (basic_block, heap) *
+get_all_dominated_blocks (enum cdi_direction dir, basic_block bb)
 {
-  vec<basic_block> bbs = vNULL;
+  VEC(basic_block, heap) *bbs = NULL;
   unsigned i;
-  unsigned next_level_start;
 
   i = 0;
-  bbs.safe_push (bb);
-  next_level_start = 1; /* = bbs.length (); */
+  VEC_safe_push (basic_block, heap, bbs, bb);
 
   do
     {
       basic_block son;
 
-      bb = bbs[i++];
+      bb = VEC_index (basic_block, bbs, i++);
       for (son = first_dom_son (dir, bb);
 	   son;
 	   son = next_dom_son (dir, son))
-	bbs.safe_push (son);
-
-      if (i == next_level_start && --depth)
-	next_level_start = bbs.length ();
+	VEC_safe_push (basic_block, heap, bbs, son);
     }
-  while (i < next_level_start);
+  while (i < VEC_length (basic_block, bbs));
 
   return bbs;
-}
-
-/* Returns the list of basic blocks including BB dominated by BB, in the
-   direction DIR.  The vector will be sorted in preorder.  */
-
-vec<basic_block> 
-get_all_dominated_blocks (enum cdi_direction dir, basic_block bb)
-{
-  return get_dominated_to_depth (dir, bb, 0);
 }
 
 /* Redirect all edges pointing to BB to TO.  */
@@ -982,7 +819,7 @@ redirect_immediate_dominators (enum cdi_direction dir, basic_block bb,
   bb_node = bb->dom[dir_index];
   to_node = to->dom[dir_index];
 
-  gcc_checking_assert (dom_computed[dir_index]);
+  gcc_assert (dom_computed[dir_index]);
 
   if (!bb_node->son)
     return;
@@ -1005,7 +842,7 @@ nearest_common_dominator (enum cdi_direction dir, basic_block bb1, basic_block b
 {
   unsigned int dir_index = dom_convert_dir_to_idx (dir);
 
-  gcc_checking_assert (dom_computed[dir_index]);
+  gcc_assert (dom_computed[dir_index]);
 
   if (!bb1)
     return bb2;
@@ -1027,10 +864,10 @@ nearest_common_dominator_for_set (enum cdi_direction dir, bitmap blocks)
   basic_block dom;
 
   first = bitmap_first_set_bit (blocks);
-  dom = BASIC_BLOCK_FOR_FN (cfun, first);
+  dom = BASIC_BLOCK (first);
   EXECUTE_IF_SET_IN_BITMAP (blocks, 0, i, bi)
-    if (dom != BASIC_BLOCK_FOR_FN (cfun, i))
-      dom = nearest_common_dominator (dir, dom, BASIC_BLOCK_FOR_FN (cfun, i));
+    if (dom != BASIC_BLOCK (i))
+      dom = nearest_common_dominator (dir, dom, BASIC_BLOCK (i));
 
   return dom;
 }
@@ -1106,7 +943,7 @@ nearest_common_dominator_for_set (enum cdi_direction dir, bitmap blocks)
 
    A_Dominated_by_B (node A, node B)
    {
-     return DFS_Number_In(A) >= DFS_Number_In(B)
+     return DFS_Number_In(A) >= DFS_Number_In(A)
             && DFS_Number_Out (A) <= DFS_Number_Out(B);
    }  */
 
@@ -1117,7 +954,7 @@ dominated_by_p (enum cdi_direction dir, const_basic_block bb1, const_basic_block
   unsigned int dir_index = dom_convert_dir_to_idx (dir);
   struct et_node *n1 = bb1->dom[dir_index], *n2 = bb2->dom[dir_index];
 
-  gcc_checking_assert (dom_computed[dir_index]);
+  gcc_assert (dom_computed[dir_index]);
 
   if (dom_computed[dir_index] == DOM_OK)
     return (n1->dfs_num_in >= n2->dfs_num_in
@@ -1134,7 +971,7 @@ bb_dom_dfs_in (enum cdi_direction dir, basic_block bb)
   unsigned int dir_index = dom_convert_dir_to_idx (dir);
   struct et_node *n = bb->dom[dir_index];
 
-  gcc_checking_assert (dom_computed[dir_index] == DOM_OK);
+  gcc_assert (dom_computed[dir_index] == DOM_OK);
   return n->dfs_num_in;
 }
 
@@ -1146,41 +983,44 @@ bb_dom_dfs_out (enum cdi_direction dir, basic_block bb)
   unsigned int dir_index = dom_convert_dir_to_idx (dir);
   struct et_node *n = bb->dom[dir_index];
 
-  gcc_checking_assert (dom_computed[dir_index] == DOM_OK);
+  gcc_assert (dom_computed[dir_index] == DOM_OK);
   return n->dfs_num_out;
 }
 
 /* Verify invariants of dominator structure.  */
-DEBUG_FUNCTION void
-verify_dominators (cdi_direction dir)
+void
+verify_dominators (enum cdi_direction dir)
 {
+  int err = 0;
+  basic_block bb, imm_bb, imm_bb_correct;
+  struct dom_info di;
+  bool reverse = (dir == CDI_POST_DOMINATORS) ? true : false;
+
   gcc_assert (dom_info_available_p (dir));
 
-  dom_info di (cfun, dir);
-  di.calc_dfs_tree ();
-  di.calc_idoms ();
+  init_dom_info (&di, dir);
+  calc_dfs_tree (&di, reverse);
+  calc_idoms (&di, reverse);
 
-  bool err = false;
-  basic_block bb;
-  FOR_EACH_BB_FN (bb, cfun)
+  FOR_EACH_BB (bb)
     {
-      basic_block imm_bb = get_immediate_dominator (dir, bb);
+      imm_bb = get_immediate_dominator (dir, bb);
       if (!imm_bb)
 	{
 	  error ("dominator of %d status unknown", bb->index);
-	  err = true;
-	  continue;
+	  err = 1;
 	}
 
-      basic_block imm_bb_correct = di.get_idom (bb);
+      imm_bb_correct = di.dfs_to_bb[di.dom[di.dfs_order[bb->index]]];
       if (imm_bb != imm_bb_correct)
 	{
 	  error ("dominator of %d should be %d, not %d",
 		 bb->index, imm_bb_correct->index, imm_bb->index);
-	  err = true;
+	  err = 1;
 	}
     }
 
+  free_dom_info (&di);
   gcc_assert (!err);
 }
 
@@ -1197,7 +1037,7 @@ recompute_dominator (enum cdi_direction dir, basic_block bb)
   edge e;
   edge_iterator ei;
 
-  gcc_checking_assert (dom_computed[dir_index]);
+  gcc_assert (dom_computed[dir_index]);
 
   if (dir == CDI_DOMINATORS)
     {
@@ -1227,7 +1067,7 @@ recompute_dominator (enum cdi_direction dir, basic_block bb)
    from BBS.  */
 
 static void
-prune_bbs_to_update_dominators (vec<basic_block> bbs,
+prune_bbs_to_update_dominators (VEC (basic_block, heap) *bbs,
 				bool conservative)
 {
   unsigned i;
@@ -1236,9 +1076,9 @@ prune_bbs_to_update_dominators (vec<basic_block> bbs,
   edge_iterator ei;
   edge e;
 
-  for (i = 0; bbs.iterate (i, &bb);)
+  for (i = 0; VEC_iterate (basic_block, bbs, i, bb);)
     {
-      if (bb == ENTRY_BLOCK_PTR_FOR_FN (cfun))
+      if (bb == ENTRY_BLOCK_PTR)
 	goto succeed;
 
       if (single_pred_p (bb))
@@ -1279,7 +1119,7 @@ fail:
       continue;
 
 succeed:
-      bbs.unordered_remove (i);
+      VEC_unordered_remove (basic_block, bbs, i);
     }
 }
 
@@ -1298,12 +1138,12 @@ root_of_dom_tree (enum cdi_direction dir, basic_block bb)
    blocks.  */
 
 static void
-determine_dominators_for_sons (struct graph *g, vec<basic_block> bbs,
+determine_dominators_for_sons (struct graph *g, VEC (basic_block, heap) *bbs,
 			       int y, int *son, int *brother)
 {
   bitmap gprime;
   int i, a, nc;
-  vec<int> *sccs;
+  VEC (int, heap) **sccs;
   basic_block bb, dom, ybb;
   unsigned si;
   edge e;
@@ -1311,15 +1151,15 @@ determine_dominators_for_sons (struct graph *g, vec<basic_block> bbs,
 
   if (son[y] == -1)
     return;
-  if (y == (int) bbs.length ())
-    ybb = ENTRY_BLOCK_PTR_FOR_FN (cfun);
+  if (y == (int) VEC_length (basic_block, bbs))
+    ybb = ENTRY_BLOCK_PTR;
   else
-    ybb = bbs[y];
+    ybb = VEC_index (basic_block, bbs, y);
 
   if (brother[son[y]] == -1)
     {
       /* Handle the common case Y has just one son specially.  */
-      bb = bbs[son[y]];
+      bb = VEC_index (basic_block, bbs, son[y]);
       set_immediate_dominator (CDI_DOMINATORS, bb,
 			       recompute_dominator (CDI_DOMINATORS, bb));
       identify_vertices (g, y, son[y]);
@@ -1333,19 +1173,16 @@ determine_dominators_for_sons (struct graph *g, vec<basic_block> bbs,
   nc = graphds_scc (g, gprime);
   BITMAP_FREE (gprime);
 
-  /* ???  Needed to work around the pre-processor confusion with
-     using a multi-argument template type as macro argument.  */
-  typedef vec<int> vec_int_heap;
-  sccs = XCNEWVEC (vec_int_heap, nc);
+  sccs = XCNEWVEC (VEC (int, heap) *, nc);
   for (a = son[y]; a != -1; a = brother[a])
-    sccs[g->vertices[a].component].safe_push (a);
+    VEC_safe_push (int, heap, sccs[g->vertices[a].component], a);
 
   for (i = nc - 1; i >= 0; i--)
     {
       dom = NULL;
-      FOR_EACH_VEC_ELT (sccs[i], si, a)
+      for (si = 0; VEC_iterate (int, sccs[i], si, a); si++)
 	{
-	  bb = bbs[a];
+	  bb = VEC_index (basic_block, bbs, a);
 	  FOR_EACH_EDGE (e, ei, bb->preds)
 	    {
 	      if (root_of_dom_tree (CDI_DOMINATORS, e->src) != ybb)
@@ -1356,15 +1193,15 @@ determine_dominators_for_sons (struct graph *g, vec<basic_block> bbs,
 	}
 
       gcc_assert (dom != NULL);
-      FOR_EACH_VEC_ELT (sccs[i], si, a)
+      for (si = 0; VEC_iterate (int, sccs[i], si, a); si++)
 	{
-	  bb = bbs[a];
+	  bb = VEC_index (basic_block, bbs, a);
 	  set_immediate_dominator (CDI_DOMINATORS, bb, dom);
 	}
     }
 
   for (i = 0; i < nc; i++)
-    sccs[i].release ();
+    VEC_free (int, heap, sccs[i]);
   free (sccs);
 
   for (a = son[y]; a != -1; a = brother[a])
@@ -1379,7 +1216,7 @@ determine_dominators_for_sons (struct graph *g, vec<basic_block> bbs,
    a block of BBS in the current dominance tree dominate it.  */
 
 void
-iterate_fix_dominators (enum cdi_direction dir, vec<basic_block> bbs,
+iterate_fix_dominators (enum cdi_direction dir, VEC (basic_block, heap) *bbs,
 			bool conservative)
 {
   unsigned i;
@@ -1389,6 +1226,7 @@ iterate_fix_dominators (enum cdi_direction dir, vec<basic_block> bbs,
   size_t dom_i;
   edge e;
   edge_iterator ei;
+  struct pointer_map_t *map;
   int *parent, *son, *brother;
   unsigned int dir_index = dom_convert_dir_to_idx (dir);
 
@@ -1399,7 +1237,8 @@ iterate_fix_dominators (enum cdi_direction dir, vec<basic_block> bbs,
      problems would be unused, untested, and almost surely buggy.  We keep
      the DIR argument for consistency with the rest of the dominator analysis
      interface.  */
-  gcc_checking_assert (dir == CDI_DOMINATORS && dom_computed[dir_index]);
+  gcc_assert (dir == CDI_DOMINATORS);
+  gcc_assert (dom_computed[dir_index]);
 
   /* The algorithm we use takes inspiration from the following papers, although
      the details are quite different from any of them:
@@ -1457,41 +1296,39 @@ iterate_fix_dominators (enum cdi_direction dir, vec<basic_block> bbs,
 	 conservatively correct, setting the dominators using the
 	 heuristics in prune_bbs_to_update_dominators could
 	 create cycles in the dominance "tree", and cause ICE.  */
-      FOR_EACH_VEC_ELT (bbs, i, bb)
+      for (i = 0; VEC_iterate (basic_block, bbs, i, bb); i++)
 	set_immediate_dominator (CDI_DOMINATORS, bb, NULL);
     }
 
   prune_bbs_to_update_dominators (bbs, conservative);
-  n = bbs.length ();
+  n = VEC_length (basic_block, bbs);
 
   if (n == 0)
     return;
 
   if (n == 1)
     {
-      bb = bbs[0];
+      bb = VEC_index (basic_block, bbs, 0);
       set_immediate_dominator (CDI_DOMINATORS, bb,
 			       recompute_dominator (CDI_DOMINATORS, bb));
       return;
     }
 
-  timevar_push (TV_DOMINANCE);
-
   /* Construct the graph G.  */
-  hash_map<basic_block, int> map (251);
-  FOR_EACH_VEC_ELT (bbs, i, bb)
+  map = pointer_map_create ();
+  for (i = 0; VEC_iterate (basic_block, bbs, i, bb); i++)
     {
       /* If the dominance tree is conservatively correct, split it now.  */
       if (conservative)
 	set_immediate_dominator (CDI_DOMINATORS, bb, NULL);
-      map.put (bb, i);
+      *pointer_map_insert (map, bb) = (void *) (size_t) i;
     }
-  map.put (ENTRY_BLOCK_PTR_FOR_FN (cfun), n);
+  *pointer_map_insert (map, ENTRY_BLOCK_PTR) = (void *) (size_t) n;
 
   g = new_graph (n + 1);
   for (y = 0; y < g->n_vertices; y++)
     g->vertices[y].data = BITMAP_ALLOC (NULL);
-  FOR_EACH_VEC_ELT (bbs, i, bb)
+  for (i = 0; VEC_iterate (basic_block, bbs, i, bb); i++)
     {
       FOR_EACH_EDGE (e, ei, bb->preds)
 	{
@@ -1499,17 +1336,19 @@ iterate_fix_dominators (enum cdi_direction dir, vec<basic_block> bbs,
 	  if (dom == bb)
 	    continue;
 
-	  dom_i = *map.get (dom);
+	  dom_i = (size_t) *pointer_map_contains (map, dom);
 
 	  /* Do not include parallel edges to G.  */
-	  if (!bitmap_set_bit ((bitmap) g->vertices[dom_i].data, i))
+	  if (bitmap_bit_p ((bitmap) g->vertices[dom_i].data, i))
 	    continue;
 
+	  bitmap_set_bit ((bitmap) g->vertices[dom_i].data, i);
 	  add_edge (g, dom_i, i);
 	}
     }
   for (y = 0; y < g->n_vertices; y++)
     BITMAP_FREE (g->vertices[y].data);
+  pointer_map_destroy (map);
 
   /* Find the dominator tree of G.  */
   son = XNEWVEC (int, n + 1);
@@ -1539,8 +1378,6 @@ iterate_fix_dominators (enum cdi_direction dir, vec<basic_block> bbs,
   free (parent);
 
   free_graph (g);
-
-  timevar_pop (TV_DOMINANCE);
 }
 
 void
@@ -1548,7 +1385,8 @@ add_to_dominance_info (enum cdi_direction dir, basic_block bb)
 {
   unsigned int dir_index = dom_convert_dir_to_idx (dir);
 
-  gcc_checking_assert (dom_computed[dir_index] && !bb->dom[dir_index]);
+  gcc_assert (dom_computed[dir_index]);
+  gcc_assert (!bb->dom[dir_index]);
 
   n_bbs_in_dom_tree[dir_index]++;
 
@@ -1563,7 +1401,7 @@ delete_from_dominance_info (enum cdi_direction dir, basic_block bb)
 {
   unsigned int dir_index = dom_convert_dir_to_idx (dir);
 
-  gcc_checking_assert (dom_computed[dir_index]);
+  gcc_assert (dom_computed[dir_index]);
 
   et_free_tree (bb->dom[dir_index]);
   bb->dom[dir_index] = NULL;
@@ -1600,19 +1438,11 @@ next_dom_son (enum cdi_direction dir, basic_block bb)
 /* Return dominance availability for dominance info DIR.  */
 
 enum dom_state
-dom_info_state (function *fn, enum cdi_direction dir)
-{
-  if (!fn->cfg)
-    return DOM_NONE;
-
-  unsigned int dir_index = dom_convert_dir_to_idx (dir);
-  return fn->cfg->x_dom_computed[dir_index];
-}
-
-enum dom_state
 dom_info_state (enum cdi_direction dir)
 {
-  return dom_info_state (cfun, dir);
+  unsigned int dir_index = dom_convert_dir_to_idx (dir);
+
+  return dom_computed[dir_index];
 }
 
 /* Set the dominance availability for dominance info DIR to NEW_STATE.  */
@@ -1628,22 +1458,18 @@ set_dom_info_availability (enum cdi_direction dir, enum dom_state new_state)
 /* Returns true if dominance information for direction DIR is available.  */
 
 bool
-dom_info_available_p (function *fn, enum cdi_direction dir)
-{
-  return dom_info_state (fn, dir) != DOM_NONE;
-}
-
-bool
 dom_info_available_p (enum cdi_direction dir)
 {
-  return dom_info_available_p (cfun, dir);
+  unsigned int dir_index = dom_convert_dir_to_idx (dir);
+
+  return dom_computed[dir_index] != DOM_NONE;
 }
 
-DEBUG_FUNCTION void
+void
 debug_dominance_info (enum cdi_direction dir)
 {
   basic_block bb, bb2;
-  FOR_EACH_BB_FN (bb, cfun)
+  FOR_EACH_BB (bb)
     if ((bb2 = get_immediate_dominator (dir, bb)))
       fprintf (stderr, "%i %i\n", bb->index, bb2->index);
 }
@@ -1680,7 +1506,7 @@ debug_dominance_tree_1 (enum cdi_direction dir, basic_block root,
 /* Prints to stderr representation of the dominance tree (for direction DIR)
    rooted in ROOT.  */
 
-DEBUG_FUNCTION void
+void
 debug_dominance_tree (enum cdi_direction dir, basic_block root)
 {
   debug_dominance_tree_1 (dir, root, 0, false);

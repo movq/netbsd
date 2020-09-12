@@ -1,7 +1,6 @@
 /* Fujitsu FRV opcode support, for GNU Binutils.  -*- C -*-
 
-   Copyright 2000, 2001, 2003, 2004, 2005, 2007, 2009
-   Free Software Foundation, Inc.
+   Copyright 2000, 2001, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
 
    Contributed by Red Hat Inc; developed under contract from Fujitsu.
 
@@ -78,12 +77,8 @@ int spr_valid           (long);
 /* -- */
 
 /* -- opc.c */
-#include "opintl.h"
 #include "elf/frv.h"
 #include <stdio.h>
-
-/* DEBUG appears below as argument of OP macro.  */
-#undef DEBUG
 
 /* Returns TRUE if {MAJOR,MACH} is a major branch of the FRV
    development tree.  */
@@ -501,9 +496,9 @@ add_next_to_vliw (FRV_VLIW *vliw, CGEN_ATTR_VALUE_ENUM_TYPE unit)
 
   if (next <= 0)
     {
-      /* xgettext:c-format */
-      opcodes_error_handler (_("internal error: bad vliw->next_slot value"));
-      abort ();
+      fprintf (stderr, "frv-opc.c line %d: bad vliw->next_slot value.\n",
+	       __LINE__);
+      abort (); /* Should never happen.  */
     }
 
   /* The table is sorted by units allowed within slots, so vliws with
@@ -811,8 +806,8 @@ fr500_check_insn_major_constraints (FRV_VLIW *vliw, CGEN_ATTR_VALUE_ENUM_TYPE ma
 	&&   ! find_major_in_vliw (vliw, FR500_MAJOR_F_6)
 	&&   ! find_major_in_vliw (vliw, FR500_MAJOR_F_7);
     default:
-      /* xgettext:c-format */
-      opcodes_error_handler (_("internal error: bad major code"));
+      fprintf (stderr, "frv-opc.c, line %d: bad major code, aborting.\n",
+	       __LINE__);
       abort ();
       break;
     }
@@ -846,7 +841,7 @@ check_insn_major_constraints (FRV_VLIW *vliw,
 int
 frv_vliw_add_insn (FRV_VLIW *vliw, const CGEN_INSN *insn)
 {
-  int slot_index;
+  int index;
   CGEN_ATTR_VALUE_ENUM_TYPE major;
   CGEN_ATTR_VALUE_ENUM_TYPE unit;
   VLIW_COMBO *new_vliw;
@@ -854,16 +849,16 @@ frv_vliw_add_insn (FRV_VLIW *vliw, const CGEN_INSN *insn)
   if (vliw->constraint_violation || CGEN_INSN_INVALID_P (insn))
     return 1;
 
-  slot_index = vliw->next_slot;
-  if (slot_index >= FRV_VLIW_SIZE)
+  index = vliw->next_slot;
+  if (index >= FRV_VLIW_SIZE)
     return 1;
 
   unit = CGEN_INSN_ATTR_VALUE (insn, CGEN_INSN_UNIT);
   if (unit == UNIT_NIL)
     {
-      /* xgettext:c-format */
-      opcodes_error_handler (_("internal error: bad insn unit"));
-      abort ();
+      fprintf (stderr, "frv-opc.c line %d: bad insn unit.\n",
+	       __LINE__);
+      abort (); /* No UNIT specified for this insn in frv.cpu.  */
     }
 
   switch (vliw->mach)
@@ -882,7 +877,7 @@ frv_vliw_add_insn (FRV_VLIW *vliw, const CGEN_INSN *insn)
       break;
     }
 
-  if (slot_index <= 0)
+  if (index <= 0)
     {
       /* Any insn can be added to slot 0.  */
       while (! match_unit (vliw, unit, (*vliw->current_vliw)[0]))
@@ -902,8 +897,8 @@ frv_vliw_add_insn (FRV_VLIW *vliw, const CGEN_INSN *insn)
       if (new_vliw && check_insn_major_constraints (vliw, major, insn))
 	{
 	  vliw->current_vliw = new_vliw;
-	  vliw->major[slot_index] = major;
-	  vliw->insn[slot_index] = insn;
+	  vliw->major[index] = major;
+	  vliw->insn[index] = insn;
 	  vliw->next_slot++;
 	  return 0;
 	}
@@ -1344,11 +1339,11 @@ parse_uhi16 (CGEN_CPU_DESC cd,
 	  if (errmsg == NULL
 	      && result_type == CGEN_PARSE_OPERAND_RESULT_NUMBER)
 	    {
- 	      /* If value is wider than 32 bits then be
- 		 careful about how we extract bits 16-31.  */
- 	      if (sizeof (value) > 4)
- 		value &= (((bfd_vma)1 << 16) << 16) - 1;
-
+	      /* If bfd_vma is wider than 32 bits, but we have a sign-
+		 or zero-extension, truncate it.  */
+	      if (value >= - ((bfd_vma)1 << 31)
+		  || value <= ((bfd_vma)1 << 31) - (bfd_vma)1)
+		value &= (((bfd_vma)1 << 16) << 16) - 1;
 	      value >>= 16;
 	    }
 	  *valuep = value;

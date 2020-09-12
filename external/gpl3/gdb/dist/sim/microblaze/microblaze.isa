@@ -1,4 +1,4 @@
-/* Copyright 2009-2019 Free Software Foundation, Inc.
+/* Copyright 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of the Xilinx MicroBlaze simulator.
 
@@ -13,7 +13,9 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, see <http://www.gnu.org/licenses/>.  */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
 /*
  *  MICROBLAZE Instruction Set Architecture
@@ -261,19 +263,19 @@ INSTRUCTION(ncput,
             INST_TYPE_R1_IMM12,
             PC += INST_SIZE) 
 
-INSTRUCTION(microblaze_or,
+INSTRUCTION(or,
 	    0x20,
             INST_TYPE_RD_RA_RB,
 	    RD = RA | RB;
 	    PC += INST_SIZE)
 
-INSTRUCTION(microblaze_and,
+INSTRUCTION(and,
 	    0x21,
             INST_TYPE_RD_RA_RB,
 	    RD = RA & RB;
 	    PC += INST_SIZE)
 
-INSTRUCTION(microblaze_xor,
+INSTRUCTION(xor,
 	    0x22,
             INST_TYPE_RD_RA_RB,
 	    RD = RA ^ RB;

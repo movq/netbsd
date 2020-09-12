@@ -10,8 +10,8 @@
 </info>
 
 <para>
-In this implementation the <literal>-std=gnu++14</literal> or
-<literal>-std=c++14</literal> flag must be used to enable language
+In this implementation <literal>-std=gnu++1y</literal> or
+<literal>-std=c++1y</literal> flags must be used to enable language
 and library
 features. See <link linkend="manual.intro.using.flags">dialect</link>
 options. The pre-defined symbol
@@ -20,7 +20,8 @@ presence of the required flag.
 </para>
 
 <para>
-This page describes the C++14 and library TS support in the GCC 9 series.
+This page describes the C++14 and library TS support in mainline GCC SVN,
+not in any particular release.
 </para>
 
 <table frame="all" xml:id="table.cxx14_status">
@@ -195,7 +196,7 @@ This page describes the C++14 and library TS support in the GCC 9 series.
       </entry>
       <entry>Shared Locking in C++</entry>
       <entry>Y</entry>
-      <entry/>
+      <entry>Need tests</entry>
     </row>
 
 
@@ -233,7 +234,7 @@ This page describes the C++14 and library TS support in the GCC 9 series.
     </row>
 
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>
 	<link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="http://www.open-std.org/JTC1/sc22/WG21/docs/papers/2013/n3644.pdf">
 	  N3644
@@ -337,25 +338,26 @@ This page describes the C++14 and library TS support in the GCC 9 series.
     </row>
 
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>
 	<link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2014/n3916.pdf">
 	  N3916
 	</link>
       </entry>
       <entry>Polymorphic memory resources</entry>
-      <entry>Partial (missing pool resource and buffer resource classes)</entry>
+      <entry>N</entry>
       <entry>Library Fundamentals TS</entry>
     </row>
 
     <row>
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>
 	<link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2014/n3920.html">
 	  N3920
 	</link>
       </entry>
       <entry>Extending shared_ptr to support arrays</entry>
-      <entry>Y</entry>
+      <entry>N</entry>
       <entry>Library Fundamentals TS</entry>
     </row>
 
@@ -393,18 +395,15 @@ This page describes the C++14 and library TS support in the GCC 9 series.
     </row>
 
     <row>
+      <?dbhtml bgcolor="#C8C8B0" ?>
       <entry>
-	<link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2014/n4100.pdf">
-	  N4100
+	<link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2014/n3932.htm">
+	  N3940
 	</link>
       </entry>
       <entry>File System</entry>
-      <entry>Y</entry>
-      <entry>
-	Link with
-	<link linkend="manual.intro.using.linkage.experimental">
-	<option>-lstdc++fs</option></link>
-      </entry>
+      <entry>WIP</entry>
+      <entry></entry>
     </row>
 
 

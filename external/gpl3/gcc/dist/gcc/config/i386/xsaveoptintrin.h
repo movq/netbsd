@@ -1,4 +1,4 @@
-/* Copyright (C) 2012-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2012-2013 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -21,24 +21,18 @@
    see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
    <http://www.gnu.org/licenses/>.  */
 
-#if !defined _IMMINTRIN_H_INCLUDED
-# error "Never use <xsaveoptintrin.h> directly; include <immintrin.h> instead."
-#endif
+/* #if !defined _X86INTRIN_H_INCLUDED && !defined _IMMINTRIN_H_INCLUDED */
+/* # error "Never use <xsaveoptintrin.h> directly; include <x86intrin.h> instead." */
+/* #endif */
 
 #ifndef _XSAVEOPTINTRIN_H_INCLUDED
 #define _XSAVEOPTINTRIN_H_INCLUDED
-
-#ifndef __XSAVEOPT__
-#pragma GCC push_options
-#pragma GCC target("xsaveopt")
-#define __DISABLE_XSAVEOPT__
-#endif /* __XSAVEOPT__ */
 
 extern __inline void
 __attribute__((__gnu_inline__, __always_inline__, __artificial__))
 _xsaveopt (void *__P, long long __M)
 {
-  __builtin_ia32_xsaveopt (__P, __M);
+  return __builtin_ia32_xsaveopt (__P, __M);
 }
 
 #ifdef __x86_64__
@@ -46,13 +40,8 @@ extern __inline void
 __attribute__((__gnu_inline__, __always_inline__, __artificial__))
 _xsaveopt64 (void *__P, long long __M)
 {
-  __builtin_ia32_xsaveopt64 (__P, __M);
+  return __builtin_ia32_xsaveopt64 (__P, __M);
 }
 #endif
-
-#ifdef __DISABLE_XSAVEOPT__
-#undef __DISABLE_XSAVEOPT__
-#pragma GCC pop_options
-#endif /* __DISABLE_XSAVEOPT__ */
 
 #endif /* _XSAVEOPTINTRIN_H_INCLUDED */

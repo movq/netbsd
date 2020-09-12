@@ -1,5 +1,7 @@
 /* Print Motorola 68k instructions.
-   Copyright (C) 1986-2019 Free Software Foundation, Inc.
+   Copyright 1986, 1987, 1989, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
+   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -19,7 +21,7 @@
    MA 02110-1301, USA.  */
 
 #include "sysdep.h"
-#include "disassemble.h"
+#include "dis-asm.h"
 #include "floatformat.h"
 #include "libiberty.h"
 #include "opintl.h"
@@ -57,27 +59,13 @@ static char *const reg_half_names[] =
 #define COERCE_SIGNED_CHAR(ch) ((int) (((ch) ^ 0x80) & 0xFF) - 128)
 #endif
 
-/* Error code of print_insn_arg's return value.  */
-
-enum print_insn_arg_error
-  {
-    /* An invalid operand is found.  */
-    PRINT_INSN_ARG_INVALID_OPERAND = -1,
-
-    /* An opcode table error.  */
-    PRINT_INSN_ARG_INVALID_OP_TABLE = -2,
-
-    /* A memory error.  */
-    PRINT_INSN_ARG_MEMORY_ERROR = -3,
-  };
-
 /* Get a 1 byte signed integer.  */
 #define NEXTBYTE(p, val)			\
   do						\
     {						\
       p += 2;					\
       if (!FETCH_DATA (info, p))		\
-	return PRINT_INSN_ARG_MEMORY_ERROR;	\
+	return -3;				\
       val = COERCE_SIGNED_CHAR (p[-1]);		\
     }						\
   while (0)
@@ -93,7 +81,7 @@ enum print_insn_arg_error
 	return ret_val;				\
       val = COERCE16 ((p[-2] << 8) + p[-1]);	\
     }						\
-  while (0)
+  while (0)						
 
 /* Get a 4 byte signed integer.  */
 #define COERCE32(x) ((bfd_signed_vma) ((x) ^ 0x80000000) - 0x80000000)
@@ -114,7 +102,7 @@ enum print_insn_arg_error
     {									\
       p += 4;								\
       if (!FETCH_DATA (info, p))					\
-	return PRINT_INSN_ARG_MEMORY_ERROR;				\
+	return -3;							\
       val = (unsigned int) ((((((p[-4] << 8) + p[-3]) << 8) + p[-2]) << 8) + p[-1]); \
     }									\
   while (0)
@@ -125,7 +113,7 @@ enum print_insn_arg_error
     {								\
       p += 4;							\
       if (!FETCH_DATA (info, p))				\
-	return PRINT_INSN_ARG_MEMORY_ERROR;			\
+	return -3;						\
       floatformat_to_double (& floatformat_ieee_single_big,	\
 			     (char *) p - 4, & val);		\
     }								\
@@ -137,7 +125,7 @@ enum print_insn_arg_error
     {								\
       p += 8;							\
       if (!FETCH_DATA (info, p))				\
-	return PRINT_INSN_ARG_MEMORY_ERROR;			\
+	return -3;						\
       floatformat_to_double (& floatformat_ieee_double_big,	\
 			     (char *) p - 8, & val);		\
     }								\
@@ -149,7 +137,7 @@ enum print_insn_arg_error
     {							\
       p += 12;						\
       if (!FETCH_DATA (info, p))			\
-	return PRINT_INSN_ARG_MEMORY_ERROR;		\
+	return -3;					\
       floatformat_to_double (& floatformat_m68881_ext,	\
 			     (char *) p - 12, & val);	\
     }							\
@@ -164,7 +152,7 @@ enum print_insn_arg_error
     {						\
       p += 12;					\
       if (!FETCH_DATA (info, p))		\
-	return PRINT_INSN_ARG_MEMORY_ERROR;	\
+	return -3;				\
       val = 0.0;				\
     }						\
   while (0)
@@ -172,6 +160,8 @@ enum print_insn_arg_error
 
 /* Maximum length of an instruction.  */
 #define MAXLEN 22
+
+#include <setjmp.h>
 
 struct private
 {
@@ -182,8 +172,7 @@ struct private
 };
 
 /* Make sure that bytes from INFO->PRIVATE_DATA->BUFFER (inclusive)
-   to ADDR (exclusive) are valid.  Returns 1 for success, 0 on memory
-   error.  */
+   to ADDR (exclusive) are valid.  Returns 1 for success, 0 on error.  */
 #define FETCH_DATA(info, addr) \
   ((addr) <= ((struct private *) (info->private_data))->max_fetched \
    ? 1 : fetch_data ((info), (addr)))
@@ -632,13 +621,14 @@ print_indexed (int basereg,
     {							\
       val = fetch_arg (buffer, place, size, info);	\
       if (val < 0)					\
-	return PRINT_INSN_ARG_MEMORY_ERROR;		\
+	return -3;					\
     }							\
   while (0)
 
 /* Returns number of bytes "eaten" by the operand, or
-   return enum print_insn_arg_error.  ADDR is the pc for this arg to be
-   relative to.  */
+   return -1 if an invalid operand was found, or -2 if
+   an opcode tabe error was found or -3 to simply abort.
+   ADDR is the pc for this arg to be relative to.  */
 
 static int
 print_insn_arg (const char *d,
@@ -664,7 +654,7 @@ print_insn_arg (const char *d,
       {
         static char *const cacheFieldName[] = { "nc", "dc", "ic", "bc" };
         FETCH_ARG (2, val);
-	(*info->fprintf_func) (info->stream, "%s", cacheFieldName[val]);
+	(*info->fprintf_func) (info->stream, cacheFieldName[val]);
         break;
       }
 
@@ -802,7 +792,7 @@ print_insn_arg (const char *d,
 	  static char *const scalefactor_name[] = { "<<", ">>" };
 
 	  FETCH_ARG (1, val);
-	  (*info->fprintf_func) (info->stream, "%s", scalefactor_name[val]);
+	  (*info->fprintf_func) (info->stream, scalefactor_name[val]);
 	}
       else
 	{
@@ -878,7 +868,7 @@ print_insn_arg (const char *d,
 	  (*info->fprintf_func) (info->stream, "{#%d}", val);
 	}
       else
-	return PRINT_INSN_ARG_INVALID_OPERAND;
+	return -1;
       break;
 
     case '#':
@@ -895,11 +885,11 @@ print_insn_arg (const char *d,
       else if (place == 'b')
 	NEXTBYTE (p1, val);
       else if (place == 'w' || place == 'W')
-	NEXTWORD (p1, val, PRINT_INSN_ARG_MEMORY_ERROR);
+	NEXTWORD (p1, val, -3);
       else if (place == 'l')
-	NEXTLONG (p1, val, PRINT_INSN_ARG_MEMORY_ERROR);
+	NEXTLONG (p1, val, -3);
       else
-	return PRINT_INSN_ARG_INVALID_OP_TABLE;
+	return -2;
 
       (*info->fprintf_func) (info->stream, "#%d", val);
       break;
@@ -910,26 +900,26 @@ print_insn_arg (const char *d,
       else if (place == 'B')
 	disp = COERCE_SIGNED_CHAR (buffer[1]);
       else if (place == 'w' || place == 'W')
-	NEXTWORD (p, disp, PRINT_INSN_ARG_MEMORY_ERROR);
+	NEXTWORD (p, disp, -3);
       else if (place == 'l' || place == 'L' || place == 'C')
-	NEXTLONG (p, disp, PRINT_INSN_ARG_MEMORY_ERROR);
+	NEXTLONG (p, disp, -3);
       else if (place == 'g')
 	{
 	  NEXTBYTE (buffer, disp);
 	  if (disp == 0)
-	    NEXTWORD (p, disp, PRINT_INSN_ARG_MEMORY_ERROR);
+	    NEXTWORD (p, disp, -3);
 	  else if (disp == -1)
-	    NEXTLONG (p, disp, PRINT_INSN_ARG_MEMORY_ERROR);
+	    NEXTLONG (p, disp, -3);
 	}
       else if (place == 'c')
 	{
 	  if (buffer[1] & 0x40)		/* If bit six is one, long offset.  */
-	    NEXTLONG (p, disp, PRINT_INSN_ARG_MEMORY_ERROR);
+	    NEXTLONG (p, disp, -3);
 	  else
-	    NEXTWORD (p, disp, PRINT_INSN_ARG_MEMORY_ERROR);
+	    NEXTWORD (p, disp, -3);
 	}
       else
-	return PRINT_INSN_ARG_INVALID_OP_TABLE;
+	return -2;
 
       (*info->print_address_func) (addr + disp, info);
       break;
@@ -938,7 +928,7 @@ print_insn_arg (const char *d,
       {
 	int val1;
 
-	NEXTWORD (p, val, PRINT_INSN_ARG_MEMORY_ERROR);
+	NEXTWORD (p, val, -3);
 	FETCH_ARG (3, val1);
 	(*info->fprintf_func) (info->stream, "%s@(%d)", reg_names[val1 + 8], val);
 	break;
@@ -966,14 +956,14 @@ print_insn_arg (const char *d,
       else if (val == 3)
 	(*info->fprintf_func) (info->stream, ">>");
       else
-	return PRINT_INSN_ARG_INVALID_OPERAND;
+	return -1;
       break;
 
     case 'I':
       /* Get coprocessor ID... */
       val = fetch_arg (buffer, 'd', 3, info);
       if (val < 0)
-	return PRINT_INSN_ARG_MEMORY_ERROR;
+	return -3;
       if (val != 1)				/* Unusual coprocessor ID?  */
 	(*info->fprintf_func) (info->stream, "(cpid=%d) ", val);
       break;
@@ -1006,19 +996,19 @@ print_insn_arg (const char *d,
 	{
 	  val = fetch_arg (buffer, 'x', 6, info);
 	  if (val < 0)
-	    return PRINT_INSN_ARG_MEMORY_ERROR;
+	    return -3;
 	  val = ((val & 7) << 3) + ((val >> 3) & 7);
 	}
       else
 	{
 	  val = fetch_arg (buffer, 's', 6, info);
 	  if (val < 0)
-	    return PRINT_INSN_ARG_MEMORY_ERROR;
+	    return -3;
 	}
 
       /* If the <ea> is invalid for *d, then reject this match.  */
       if (!m68k_valid_ea (*d, val))
-	return PRINT_INSN_ARG_INVALID_OPERAND;
+	return -1;
 
       /* Get register number assuming address register.  */
       regno = (val & 7) + 8;
@@ -1046,21 +1036,21 @@ print_insn_arg (const char *d,
 	  break;
 
 	case 5:
-	  NEXTWORD (p, val, PRINT_INSN_ARG_MEMORY_ERROR);
+	  NEXTWORD (p, val, -3);
 	  (*info->fprintf_func) (info->stream, "%s@(%d)", regname, val);
 	  break;
 
 	case 6:
 	  p = print_indexed (regno, p, addr, info);
 	  if (p == NULL)
-	    return PRINT_INSN_ARG_MEMORY_ERROR;
+	    return -3;
 	  break;
 
 	case 7:
 	  switch (val & 7)
 	    {
 	    case 0:
-	      NEXTWORD (p, val, PRINT_INSN_ARG_MEMORY_ERROR);
+	      NEXTWORD (p, val, -3);
 	      (*info->print_address_func) (val, info);
 	      break;
 
@@ -1070,7 +1060,7 @@ print_insn_arg (const char *d,
 	      break;
 
 	    case 2:
-	      NEXTWORD (p, val, PRINT_INSN_ARG_MEMORY_ERROR);
+	      NEXTWORD (p, val, -3);
 	      (*info->fprintf_func) (info->stream, "%%pc@(");
 	      (*info->print_address_func) (addr + val, info);
 	      (*info->fprintf_func) (info->stream, ")");
@@ -1079,7 +1069,7 @@ print_insn_arg (const char *d,
 	    case 3:
 	      p = print_indexed (-1, p, addr, info);
 	      if (p == NULL)
-		return PRINT_INSN_ARG_MEMORY_ERROR;
+		return -3;
 	      break;
 
 	    case 4:
@@ -1092,12 +1082,12 @@ print_insn_arg (const char *d,
 		  break;
 
 		case 'w':
-		  NEXTWORD (p, val, PRINT_INSN_ARG_MEMORY_ERROR);
+		  NEXTWORD (p, val, -3);
 		  flt_p = 0;
 		  break;
 
 		case 'l':
-		  NEXTLONG (p, val, PRINT_INSN_ARG_MEMORY_ERROR);
+		  NEXTLONG (p, val, -3);
 		  flt_p = 0;
 		  break;
 
@@ -1118,7 +1108,7 @@ print_insn_arg (const char *d,
 		  break;
 
 		default:
-		  return PRINT_INSN_ARG_INVALID_OPERAND;
+		  return -1;
 	      }
 	      if (flt_p)	/* Print a float? */
 		(*info->fprintf_func) (info->stream, "#0e%g", flval);
@@ -1127,7 +1117,7 @@ print_insn_arg (const char *d,
 	      break;
 
 	    default:
-	      return PRINT_INSN_ARG_INVALID_OPERAND;
+	      return -1;
 	    }
 	}
 
@@ -1148,7 +1138,7 @@ print_insn_arg (const char *d,
 	  {
 	    char doneany;
 	    p1 = buffer + 2;
-	    NEXTWORD (p1, val, PRINT_INSN_ARG_MEMORY_ERROR);
+	    NEXTWORD (p1, val, -3);
 	    /* Move the pointer ahead if this point is farther ahead
 	       than the last.  */
 	    p = p1 > p ? p1 : p;
@@ -1229,12 +1219,11 @@ print_insn_arg (const char *d,
 	    (*info->fprintf_func) (info->stream, "%s", fpcr_names[val]);
 	  }
 	else
-	  return PRINT_INSN_ARG_INVALID_OP_TABLE;
+	  return -2;
       break;
 
     case 'X':
       place = '8';
-      /* Fall through.  */
     case 'Y':
     case 'Z':
     case 'W':
@@ -1324,15 +1313,14 @@ print_insn_arg (const char *d,
       break;
 
     default:
-      return PRINT_INSN_ARG_INVALID_OP_TABLE;
+      return -2;
     }
 
   return p - p0;
 }
 
 /* Try to match the current instruction to best and if so, return the
-   number of bytes consumed from the instruction stream, else zero.
-   Return -1 on memory error.  */
+   number of bytes consumed from the instruction stream, else zero.  */
 
 static int
 match_insn_m68k (bfd_vma memaddr,
@@ -1352,7 +1340,7 @@ match_insn_m68k (bfd_vma memaddr,
 
   if (*args == '.')
     args++;
-
+  
   /* Point at first word of argument data,
      and at descriptor for first argument.  */
   p = buffer + 2;
@@ -1416,14 +1404,12 @@ match_insn_m68k (bfd_vma memaddr,
 	 this because we know exactly what the second word is, and we
 	 aren't going to print anything based on it.  */
       p = buffer + 6;
-      if (!FETCH_DATA (info, p))
-	return -1;
+      FETCH_DATA (info, p);
       buffer[2] = buffer[4];
       buffer[3] = buffer[5];
     }
 
-  if (!FETCH_DATA (info, p))
-    return -1;
+  FETCH_DATA (info, p);
 
   save_p = p;
   info->print_address_func = dummy_print_address;
@@ -1437,12 +1423,11 @@ match_insn_m68k (bfd_vma memaddr,
 
       if (eaten >= 0)
 	p += eaten;
-      else if (eaten == PRINT_INSN_ARG_INVALID_OPERAND
-	       || eaten == PRINT_INSN_ARG_MEMORY_ERROR)
+      else if (eaten == -1 || eaten == -3)
 	{
 	  info->fprintf_func = save_printer;
 	  info->print_address_func = save_print_address;
-	  return eaten == PRINT_INSN_ARG_MEMORY_ERROR ? -1 : 0;
+	  return 0;
 	}
       else
 	{
@@ -1484,8 +1469,7 @@ match_insn_m68k (bfd_vma memaddr,
 /* Try to interpret the instruction at address MEMADDR as one that
    can execute on a processor with the features given by ARCH_MASK.
    If successful, print the instruction to INFO->STREAM and return
-   its length in bytes.  Return 0 otherwise.  Return -1 on memory
-   error.  */
+   its length in bytes.  Return 0 otherwise.  */
 
 static int
 m68k_scan_mask (bfd_vma memaddr, disassemble_info *info,
@@ -1527,8 +1511,7 @@ m68k_scan_mask (bfd_vma memaddr, disassemble_info *info,
 	*opc_pointer[(m68k_opcodes[i].opcode >> 28) & 15]++ = &m68k_opcodes[i];
     }
 
-  if (!FETCH_DATA (info, buffer + 2))
-    return -1;
+  FETCH_DATA (info, buffer + 2);
   major_opcode = (buffer[0] >> 4) & 15;
 
   for (i = 0; i < numopcodes[major_opcode]; i++)
@@ -1604,7 +1587,7 @@ m68k_scan_mask (bfd_vma memaddr, disassemble_info *info,
 	}
     }
   return 0;
-}
+}		
 
 /* Print the m68k instruction at address MEMADDR in debugged memory,
    on INFO->STREAM.  Returns length of the instruction, in bytes.  */
@@ -1633,7 +1616,7 @@ print_insn_m68k (bfd_vma memaddr, disassemble_info *info)
       /* First try printing an m680x0 instruction.  Try printing a Coldfire
 	 one if that fails.  */
       val = m68k_scan_mask (memaddr, info, m68k_mask);
-      if (val <= 0)
+      if (val == 0)
 	val = m68k_scan_mask (memaddr, info, mcf_mask);
     }
   else

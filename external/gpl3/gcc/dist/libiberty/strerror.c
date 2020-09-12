@@ -299,7 +299,7 @@ static const struct error_info error_table[] =
   ENTRY(EREMCHG, "EREMCHG", "Remote address changed"),
 #endif
 #if defined (ELIBACC)
-  ENTRY(ELIBACC, "ELIBACC", "Cannot access a needed shared library"),
+  ENTRY(ELIBACC, "ELIBACC", "Can not access a needed shared library"),
 #endif
 #if defined (ELIBBAD)
   ENTRY(ELIBBAD, "ELIBBAD", "Accessing a corrupted shared library"),
@@ -347,7 +347,7 @@ static const struct error_info error_table[] =
   ENTRY(EPROTOTYPE, "EPROTOTYPE", "Protocol wrong type for socket"),
 #endif
 #if defined (ENOPROTOOPT)
-  ENTRY(ENOPROTOOPT, "ENOPROTOOPT", "Protocol option not available"),
+  ENTRY(ENOPROTOOPT, "ENOPROTOOPT", "Protocol not available"),
 #endif
 #if defined (EPROTONOSUPPORT)
   ENTRY(EPROTONOSUPPORT, "EPROTONOSUPPORT", "Protocol not supported"),
@@ -469,13 +469,8 @@ static const char **sys_errlist;
 
 #else
 
-
-#ifndef sys_nerr
 extern int sys_nerr;
-#endif
-#ifndef sys_errlist
 extern char *sys_errlist[];
-#endif
 
 #endif
 

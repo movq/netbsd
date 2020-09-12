@@ -1,5 +1,6 @@
 /* elfcomm.h -- include file of common code for ELF format file.
-   Copyright (C) 2010-2020 Free Software Foundation, Inc.
+   Copyright 2010
+   Free Software Foundation, Inc.
 
    Originally developed by Eric Youngdale <eric@andante.jic.com>
    Modifications by Nick Clifton <nickc@redhat.com>
@@ -29,17 +30,23 @@
 void error (const char *, ...) ATTRIBUTE_PRINTF_1;
 void warn (const char *, ...) ATTRIBUTE_PRINTF_1;
 
+#if __STDC_VERSION__ >= 199901L || (defined(__GNUC__) && __GNUC__ >= 2)
+/* We can't use any bfd types here since readelf may define BFD64 and
+   objdump may not.  */
+#define HOST_WIDEST_INT	long long
+#else
+#define HOST_WIDEST_INT long
+#endif
 typedef unsigned HOST_WIDEST_INT elf_vma;
 
 extern void (*byte_put) (unsigned char *, elf_vma, int);
 extern void byte_put_little_endian (unsigned char *, elf_vma, int);
 extern void byte_put_big_endian (unsigned char *, elf_vma, int);
 
-extern elf_vma (*byte_get) (const unsigned char *, int);
-extern elf_vma byte_get_signed (const unsigned char *, int);
-extern elf_vma byte_get_little_endian (const unsigned char *, int);
-extern elf_vma byte_get_big_endian (const unsigned char *, int);
-extern void byte_get_64 (const unsigned char *, elf_vma *, elf_vma *);
+extern elf_vma (*byte_get) (unsigned char *, int);
+extern elf_vma byte_get_signed (unsigned char *, int);
+extern elf_vma byte_get_little_endian (unsigned char *, int);
+extern elf_vma byte_get_big_endian (unsigned char *, int);
 
 #define BYTE_PUT(field, val)	byte_put (field, val, sizeof (field))
 #define BYTE_GET(field)		byte_get (field, sizeof (field))
@@ -56,8 +63,8 @@ struct archive_info
 {
   char * file_name;                     /* Archive file name.  */
   FILE * file;                          /* Open file descriptor.  */
-  elf_vma index_num;                    /* Number of symbols in table.  */
-  elf_vma * index_array;                /* The array of member offsets.  */
+  unsigned long index_num;              /* Number of symbols in table.  */
+  unsigned long * index_array;          /* The array of member offsets.  */
   char * sym_table;                     /* The symbol table.  */
   unsigned long sym_size;               /* Size of the symbol table.  */
   char * longnames;                     /* The long file names table.  */
@@ -65,12 +72,11 @@ struct archive_info
   unsigned long nested_member_origin;   /* Origin in the nested archive of the current member.  */
   unsigned long next_arhdr_offset;      /* Offset of the next archive header.  */
   bfd_boolean is_thin_archive;          /* TRUE if this is a thin archive.  */
-  bfd_boolean uses_64bit_indices;       /* TRUE if the index table uses 64bit entries.  */
   struct ar_hdr arhdr;                  /* Current archive header.  */
 };
 
 /* Return the path name for a proxy entry in a thin archive.  */
-extern char *adjust_relative_path (const char *, const char *, unsigned long);
+extern char *adjust_relative_path (const char *, const char *, int);
 
 /* Read the symbol table and long-name table from an archive.  */
 extern int setup_archive (struct archive_info *, const char *, FILE *,

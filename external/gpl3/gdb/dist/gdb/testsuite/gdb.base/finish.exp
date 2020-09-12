@@ -1,4 +1,5 @@
-# Copyright 2000-2019 Free Software Foundation, Inc.
+# Copyright 2000, 2004, 2007, 2008, 2009, 2010, 2011
+# Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,10 +16,13 @@
 
 # This file was written by Michael Snyder (msnyder@redhat.com)
 
-set skip_float_test [gdb_skip_float_test]
+if $tracelevel then {
+	strace $tracelevel
+}
+
 
 # re-use the program from the "return2" test.
-if { [prepare_for_testing "failed to prepare" finish return2.c] } {
+if { [prepare_for_testing finish.exp finish return2.c] } {
     return -1
 }
 
@@ -87,10 +91,10 @@ proc finish_abbreviation { abbrev } {
 }
 
 proc finish_tests { } {
-    global gdb_prompt skip_float_test
+    global gdb_prompt
 
     if { ! [ runto_main ] } then {
-	untested "couldn't run to main"
+	untested finish.exp
 	return -1
     }
 
@@ -100,7 +104,7 @@ proc finish_tests { } {
     finish_1 "int"
     finish_1 "long"
     finish_1 "long_long"
-    if {!$skip_float_test} {
+    if ![target_info exists gdb,skip_float_tests] {
 	finish_1 "float"
 	finish_1 "double"
     }

@@ -976,7 +976,7 @@ func_enable_tag ()
 
 
   case $host in
-    *cygwin* | *mingw* | *pw32* | *cegcc* | *solaris2* )
+    *cygwin* | *mingw* | *pw32* | *cegcc*)
       # don't eliminate duplications in $postdeps and $predeps
       opt_duplicate_compiler_generated_deps=:
       ;;
@@ -2917,7 +2917,7 @@ func_extract_archives ()
 	    darwin_file=
 	    darwin_files=
 	    for darwin_file in $darwin_filelist; do
-	      darwin_files=`find unfat-$$ -name $darwin_file -print | sort | $NL2SP`
+	      darwin_files=`find unfat-$$ -name $darwin_file -print | $NL2SP`
 	      $LIPO -create -output "$darwin_file" $darwin_files
 	    done # $darwin_filelist
 	    $RM -rf unfat-$$
@@ -2932,7 +2932,7 @@ func_extract_archives ()
         func_extract_an_archive "$my_xdir" "$my_xabs"
 	;;
       esac
-      my_oldobjs="$my_oldobjs "`find $my_xdir -name \*.$objext -print -o -name \*.lo -print | sort | $NL2SP`
+      my_oldobjs="$my_oldobjs "`find $my_xdir -name \*.$objext -print -o -name \*.lo -print | $NL2SP`
     done
 
     func_extract_archives_result="$my_oldobjs"
@@ -5928,7 +5928,7 @@ func_mode_link ()
 	         test "$hardcode_direct_absolute" = no; then
 		add="$dir/$linklib"
 	      elif test "$hardcode_minus_L" = yes; then
-		add_dir="-L$absdir"
+		add_dir="-L$dir"
 		# Try looking first in the location we're being installed to.
 		if test -n "$inst_prefix_dir"; then
 		  case $libdir in

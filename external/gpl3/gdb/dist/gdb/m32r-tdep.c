@@ -1,6 +1,7 @@
 /* Target-dependent code for Renesas M32R, for GDB.
 
-   Copyright (C) 1996-2019 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007,
+   2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,6 +26,7 @@
 #include "gdbtypes.h"
 #include "gdbcmd.h"
 #include "gdbcore.h"
+#include "gdb_string.h"
 #include "value.h"
 #include "inferior.h"
 #include "symfile.h"
@@ -35,13 +37,14 @@
 #include "regcache.h"
 #include "trad-frame.h"
 #include "dis-asm.h"
-#include "m32r-tdep.h"
-#include <algorithm>
 
-/* The size of the argument registers (r0 - r3) in bytes.  */
-#define M32R_ARG_REGISTER_SIZE 4
+#include "gdb_assert.h"
+
+#include "m32r-tdep.h"
 
 /* Local functions */
+
+extern void _initialize_m32r_tdep (void);
 
 static CORE_ADDR
 m32r_frame_align (struct gdbarch *gdbarch, CORE_ADDR sp)
@@ -79,10 +82,10 @@ static int
 m32r_memory_insert_breakpoint (struct gdbarch *gdbarch,
 			       struct bp_target_info *bp_tgt)
 {
-  CORE_ADDR addr = bp_tgt->placed_address = bp_tgt->reqstd_address;
+  CORE_ADDR addr = bp_tgt->placed_address;
   int val;
   gdb_byte buf[4];
-  gdb_byte contents_cache[4];
+  gdb_byte *contents_cache = bp_tgt->shadow_contents;
   gdb_byte bp_entry[] = { 0x10, 0xf1 };	/* dpt */
 
   /* Save the memory contents.  */
@@ -90,8 +93,7 @@ m32r_memory_insert_breakpoint (struct gdbarch *gdbarch,
   if (val != 0)
     return val;			/* return error */
 
-  memcpy (bp_tgt->shadow_contents, contents_cache, 4);
-  bp_tgt->shadow_len = 4;
+  bp_tgt->placed_size = bp_tgt->shadow_len = 4;
 
   /* Determine appropriate breakpoint contents and size for this address.  */
   if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
@@ -161,25 +163,13 @@ m32r_memory_remove_breakpoint (struct gdbarch *gdbarch,
     }
 
   /* Write contents.  */
-  val = target_write_raw_memory (addr & 0xfffffffc, buf, 4);
+  val = target_write_memory (addr & 0xfffffffc, buf, 4);
   return val;
 }
 
-/* Implement the breakpoint_kind_from_pc gdbarch method.  */
-
-static int
-m32r_breakpoint_kind_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr)
-{
-  if ((*pcptr & 3) == 0)
-    return 4;
-  else
-    return 2;
-}
-
-/* Implement the sw_breakpoint_from_kind gdbarch method.  */
-
 static const gdb_byte *
-m32r_sw_breakpoint_from_kind (struct gdbarch *gdbarch, int kind, int *size)
+m32r_breakpoint_from_pc (struct gdbarch *gdbarch,
+			 CORE_ADDR *pcptr, int *lenptr)
 {
   static gdb_byte be_bp_entry[] = {
     0x10, 0xf1, 0x70, 0x00
@@ -187,22 +177,41 @@ m32r_sw_breakpoint_from_kind (struct gdbarch *gdbarch, int kind, int *size)
   static gdb_byte le_bp_entry[] = {
     0x00, 0x70, 0xf1, 0x10
   };	/* dpt -> nop */
-
-  *size = kind;
+  gdb_byte *bp;
 
   /* Determine appropriate breakpoint.  */
   if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
-    return be_bp_entry;
+    {
+      if ((*pcptr & 3) == 0)
+	{
+	  bp = be_bp_entry;
+	  *lenptr = 4;
+	}
+      else
+	{
+	  bp = be_bp_entry;
+	  *lenptr = 2;
+	}
+    }
   else
     {
-      if (kind == 4)
-	return le_bp_entry;
+      if ((*pcptr & 3) == 0)
+	{
+	  bp = le_bp_entry;
+	  *lenptr = 4;
+	}
       else
-	return le_bp_entry + 2;
+	{
+	  bp = le_bp_entry + 2;
+	  *lenptr = 2;
+	}
     }
+
+  return bp;
 }
 
-static const char *m32r_register_names[] = {
+
+char *m32r_register_names[] = {
   "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7",
   "r8", "r9", "r10", "r11", "r12", "fp", "lr", "sp",
   "psw", "cbr", "spi", "spu", "bpc", "pc", "accl", "acch",
@@ -242,9 +251,9 @@ m32r_register_type (struct gdbarch *gdbarch, int reg_nr)
 
 static void
 m32r_store_return_value (struct type *type, struct regcache *regcache,
-			 const gdb_byte *valbuf)
+			 const void *valbuf)
 {
-  struct gdbarch *gdbarch = regcache->arch ();
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   CORE_ADDR regval;
   int len = TYPE_LENGTH (type);
@@ -254,7 +263,7 @@ m32r_store_return_value (struct type *type, struct regcache *regcache,
 
   if (len > 4)
     {
-      regval = extract_unsigned_integer (valbuf + 4,
+      regval = extract_unsigned_integer ((gdb_byte *) valbuf + 4,
 					 len - 4, byte_order);
       regcache_cooked_write_unsigned (regcache, RET1_REGNUM + 1, regval);
     }
@@ -348,7 +357,9 @@ decode_prologue (struct gdbarch *gdbarch,
 
       if ((insn & 0xf0ff) == 0x207f)
 	{			/* st reg, @-sp */
+	  int regno;
 	  framesize += 4;
+	  regno = ((insn >> 8) & 0xf);
 	  after_prologue = 0;
 	  continue;
 	}
@@ -477,7 +488,7 @@ m32r_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 	   the end of the function.  In this case, there probably isn't a
 	   prologue.  */
 	{
-	  func_end = std::min (func_end, func_addr + DEFAULT_SEARCH_LIMIT);
+	  func_end = min (func_end, func_addr + DEFAULT_SEARCH_LIMIT);
 	}
     }
   else
@@ -525,13 +536,13 @@ m32r_frame_unwind_cache (struct frame_info *this_frame,
   CORE_ADDR pc, scan_limit;
   ULONGEST prev_sp;
   ULONGEST this_base;
-  unsigned long op;
+  unsigned long op, op2;
   int i;
   struct m32r_unwind_cache *info;
 
 
   if ((*this_prologue_cache))
-    return (struct m32r_unwind_cache *) (*this_prologue_cache);
+    return (*this_prologue_cache);
 
   info = FRAME_OBSTACK_ZALLOC (struct m32r_unwind_cache);
   (*this_prologue_cache) = info;
@@ -649,6 +660,20 @@ m32r_frame_unwind_cache (struct frame_info *this_frame,
 }
 
 static CORE_ADDR
+m32r_read_pc (struct regcache *regcache)
+{
+  ULONGEST pc;
+  regcache_cooked_read_unsigned (regcache, M32R_PC_REGNUM, &pc);
+  return pc;
+}
+
+static void
+m32r_write_pc (struct regcache *regcache, CORE_ADDR val)
+{
+  regcache_cooked_write_unsigned (regcache, M32R_PC_REGNUM, val);
+}
+
+static CORE_ADDR
 m32r_unwind_sp (struct gdbarch *gdbarch, struct frame_info *next_frame)
 {
   return frame_unwind_register_unsigned (next_frame, M32R_SP_REGNUM);
@@ -658,8 +683,7 @@ m32r_unwind_sp (struct gdbarch *gdbarch, struct frame_info *next_frame)
 static CORE_ADDR
 m32r_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 		      struct regcache *regcache, CORE_ADDR bp_addr, int nargs,
-		      struct value **args, CORE_ADDR sp,
-		      function_call_return_method return_method,
+		      struct value **args, CORE_ADDR sp, int struct_return,
 		      CORE_ADDR struct_addr)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
@@ -670,8 +694,9 @@ m32r_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   enum type_code typecode;
   CORE_ADDR regval;
   gdb_byte *val;
-  gdb_byte valbuf[M32R_ARG_REGISTER_SIZE];
+  gdb_byte valbuf[MAX_REGISTER_SIZE];
   int len;
+  int odd_sized_struct;
 
   /* First force sp to a 4-byte alignment.  */
   sp = sp & ~3;
@@ -683,7 +708,7 @@ m32r_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   /* If STRUCT_RETURN is true, then the struct return address (in
      STRUCT_ADDR) will consume the first argument-passing register.
      Both adjust the register count and store that value.  */
-  if (return_method == return_method_struct)
+  if (struct_return)
     {
       regcache_cooked_write_unsigned (regcache, argreg, struct_addr);
       argreg++;
@@ -760,29 +785,30 @@ m32r_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
 static void
 m32r_extract_return_value (struct type *type, struct regcache *regcache,
-			   gdb_byte *dst)
+			   void *dst)
 {
-  struct gdbarch *gdbarch = regcache->arch ();
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  bfd_byte *valbuf = dst;
   int len = TYPE_LENGTH (type);
   ULONGEST tmp;
 
   /* By using store_unsigned_integer we avoid having to do
      anything special for small big-endian values.  */
   regcache_cooked_read_unsigned (regcache, RET1_REGNUM, &tmp);
-  store_unsigned_integer (dst, (len > 4 ? len - 4 : len), byte_order, tmp);
+  store_unsigned_integer (valbuf, (len > 4 ? len - 4 : len), byte_order, tmp);
 
   /* Ignore return values more than 8 bytes in size because the m32r
      returns anything more than 8 bytes in the stack.  */
   if (len > 4)
     {
       regcache_cooked_read_unsigned (regcache, RET1_REGNUM + 1, &tmp);
-      store_unsigned_integer (dst + len - 4, 4, byte_order, tmp);
+      store_unsigned_integer (valbuf + len - 4, 4, byte_order, tmp);
     }
 }
 
 static enum return_value_convention
-m32r_return_value (struct gdbarch *gdbarch, struct value *function,
+m32r_return_value (struct gdbarch *gdbarch, struct type *func_type,
 		   struct type *valtype, struct regcache *regcache,
 		   gdb_byte *readbuf, const gdb_byte *writebuf)
 {
@@ -817,7 +843,7 @@ m32r_frame_this_id (struct frame_info *this_frame,
     = m32r_frame_unwind_cache (this_frame, this_prologue_cache);
   CORE_ADDR base;
   CORE_ADDR func;
-  struct bound_minimal_symbol msym_stack;
+  struct minimal_symbol *msym_stack;
   struct frame_id id;
 
   /* The FUNC is easy.  */
@@ -825,7 +851,7 @@ m32r_frame_this_id (struct frame_info *this_frame,
 
   /* Check if the stack is empty.  */
   msym_stack = lookup_minimal_symbol ("_stack", NULL, NULL);
-  if (msym_stack.minsym && info->base == BMSYMBOL_VALUE_ADDRESS (msym_stack))
+  if (msym_stack && info->base == SYMBOL_VALUE_ADDRESS (msym_stack))
     return;
 
   /* Hopefully the prologue analysis either correctly determined the
@@ -898,16 +924,14 @@ m32r_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     return arches->gdbarch;
 
   /* Allocate space for the new architecture.  */
-  tdep = XCNEW (struct gdbarch_tdep);
+  tdep = XMALLOC (struct gdbarch_tdep);
   gdbarch = gdbarch_alloc (&info, tdep);
 
-  set_gdbarch_wchar_bit (gdbarch, 16);
-  set_gdbarch_wchar_signed (gdbarch, 0);
-
+  set_gdbarch_read_pc (gdbarch, m32r_read_pc);
+  set_gdbarch_write_pc (gdbarch, m32r_write_pc);
   set_gdbarch_unwind_sp (gdbarch, m32r_unwind_sp);
 
   set_gdbarch_num_regs (gdbarch, M32R_NUM_REGS);
-  set_gdbarch_pc_regnum (gdbarch, M32R_PC_REGNUM);
   set_gdbarch_sp_regnum (gdbarch, M32R_SP_REGNUM);
   set_gdbarch_register_name (gdbarch, m32r_register_name);
   set_gdbarch_register_type (gdbarch, m32r_register_type);
@@ -917,8 +941,7 @@ m32r_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   set_gdbarch_skip_prologue (gdbarch, m32r_skip_prologue);
   set_gdbarch_inner_than (gdbarch, core_addr_lessthan);
-  set_gdbarch_breakpoint_kind_from_pc (gdbarch, m32r_breakpoint_kind_from_pc);
-  set_gdbarch_sw_breakpoint_from_kind (gdbarch, m32r_sw_breakpoint_from_kind);
+  set_gdbarch_breakpoint_from_pc (gdbarch, m32r_breakpoint_from_pc);
   set_gdbarch_memory_insert_breakpoint (gdbarch,
 					m32r_memory_insert_breakpoint);
   set_gdbarch_memory_remove_breakpoint (gdbarch,
@@ -935,6 +958,8 @@ m32r_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   /* Return the unwound PC value.  */
   set_gdbarch_unwind_pc (gdbarch, m32r_unwind_pc);
+
+  set_gdbarch_print_insn (gdbarch, print_insn_m32r);
 
   /* Hook in ABI-specific overrides, if they have been registered.  */
   gdbarch_init_osabi (info, gdbarch);

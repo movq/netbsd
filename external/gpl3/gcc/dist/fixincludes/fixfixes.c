@@ -790,8 +790,7 @@ main( int argc, char** argv )
       return EXIT_FAILURE;
     }
 
-  /* Second parameter of apply_fix is file name */
-  apply_fix (pFix, argv[2]);
+  apply_fix (pFix, argv[1]);
   fclose (stdout);
   fclose (stdin);
   unlink (argv[4]);

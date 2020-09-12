@@ -1,6 +1,6 @@
 # This testcase is part of GDB, the GNU debugger.
 #
-# Copyright 2013-2019 Free Software Foundation, Inc.
+# Copyright 2013 Free Software Foundation, Inc.
 #
 # Contributed by Intel Corp. <christian.himpel@intel.com>
 #
@@ -17,10 +17,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-if { [skip_btrace_tests] } {
-    unsupported "target does not support record-btrace"
-    return -1
-}
+# check for btrace support
+if { [skip_btrace_tests] } { return -1 }
 
 # start fresh - without an executable
 gdb_exit
@@ -37,13 +35,12 @@ gdb_test "record function-call-history" "No record target is currently active\\.
 gdb_test "record instruction-history" "No record target is currently active\\..*" "record instruction-history without target"
 gdb_test "info record" "No record target is currently active\\." "info record without target"
 
+# start inferior
 standard_testfile
-if [prepare_for_testing "failed to prepare" $testfile {} {debug}] {
+if [prepare_for_testing $testfile.exp $testfile {} {debug}] {
     return -1
 }
-
 if ![runto_main] {
-    untested "failed to run to main"
     return -1
 }
 
@@ -53,15 +50,13 @@ gdb_test "record function-call-history" "No trace\\." "record function-call-hist
 gdb_test "record instruction-history" "No trace\\." "record instruction-history without trace"
 
 # btrace cannot be enabled twice
-gdb_test "record btrace" "The process is already being recorded\\.  Use \"record stop\" to stop recording first\\." "record btrace the second time"
+gdb_test "record btrace" "The process is already being recorded\\." "record btrace the second time"
 
 # full record cannot be activated as long as btrace is active
-gdb_test "record full" "The process is already being recorded\\.  Use \"record stop\" to stop recording first\\." "record full cannot be enabled"
+gdb_test "record full" "Process record target already running\\.  Use \"record stop\" to stop record target first\\." "record full cannot be enabled"
 
 # no trace recorded yet
-gdb_test "info record" "Active record target: record-btrace\r
-.*\r
-Recorded 0 instructions in 0 functions \\\(0 gaps\\\) for thread 1.*\\." "info record without trace"
+gdb_test "info record" "Active record target: record-btrace\r\nRecorded 0 instructions in 0 functions for thread 1.*\\." "info record without trace"
 
 # stop btrace record
 gdb_test "record stop" "Process record is stopped and all execution logs are deleted\\." "record stop"
@@ -69,40 +64,32 @@ gdb_test "record stop" "No record target is currently active\\..*" "record stop 
 
 # enable btrace again
 gdb_test_no_output "record btrace" "record btrace re-enable"
-gdb_test "record btrace" "The process is already being recorded\\.  Use \"record stop\" to stop recording first\\." "record btrace re-enable twice"
+gdb_test "record btrace" "The process is already being recorded\\." "record btrace re-enable twice"
 
 # continue to the end and make sure we don't die
 gdb_test "continue" ".*Inferior.*exited.*" "continue to end"
-
-# skip_gdbserver_tests requires GDB not running.
-gdb_exit
 
 # skip the rerun test when using gdbserver
 # otherwise rerun twice, target should be automatically disabled
 load_lib gdbserver-support.exp
 if [skip_gdbserver_tests] {
-    unsupported "target does not support gdbserver"
     return 0
 }
 clean_restart $testfile
 if ![runto_main] {
-    untested "failed to run to main"
     return -1
 }
 if ![runto_main] {
-    untested "failed to run to main"
     return -1
 }
 
 # make sure record-btrace can be enabled after re-run
 clean_restart $testfile
 if ![runto_main] {
-    untested "failed to run to main"
     return -1
 }
 gdb_test_no_output "record btrace"
 if ![runto_main] {
-    untested "failed to run to main"
     return -1
 }
 gdb_test_no_output "record btrace" "enable after re-run"

@@ -1,5 +1,6 @@
 /* symbols.h -
-   Copyright (C) 1987-2020 Free Software Foundation, Inc.
+   Copyright 1987, 1990, 1992, 1993, 1994, 1995, 1997, 1999, 2000, 2001,
+   2002, 2003, 2004, 2005, 2006 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -27,7 +28,6 @@ extern symbolS *symbol_rootP;	/* all the symbol nodes */
 extern symbolS *symbol_lastP;	/* last struct symbol we made, or NULL */
 
 extern symbolS abs_symbol;
-extern symbolS dot_symbol;
 
 extern int symbol_table_frozen;
 
@@ -49,21 +49,17 @@ symbolS *symbol_new (const char *name, segT segment, valueT value,
 		     fragS * frag);
 symbolS *symbol_create (const char *name, segT segment, valueT value,
 			fragS * frag);
-struct local_symbol *local_symbol_make (const char *name, segT section,
-					valueT val, fragS *frag);
 symbolS *symbol_clone (symbolS *, int);
 #undef symbol_clone_if_forward_ref
 symbolS *symbol_clone_if_forward_ref (symbolS *, int);
 #define symbol_clone_if_forward_ref(s) symbol_clone_if_forward_ref (s, 0)
 symbolS *symbol_temp_new (segT, valueT, fragS *);
 symbolS *symbol_temp_new_now (void);
-symbolS *symbol_temp_new_now_octets (void);
 symbolS *symbol_temp_make (void);
 
 symbolS *colon (const char *sym_name);
 void local_colon (int n);
 void symbol_begin (void);
-void dot_symbol_init (void);
 void symbol_print_statistics (FILE *);
 void symbol_table_insert (symbolS * symbolP);
 valueT resolve_symbol_value (symbolS *);
@@ -100,7 +96,6 @@ extern int S_FORCE_RELOC (symbolS *, int);
 extern int S_IS_DEBUG (symbolS *);
 extern int S_IS_LOCAL (symbolS *);
 extern int S_IS_STABD (symbolS *);
-extern int S_CAN_BE_REDEFINED (const symbolS *);
 extern int S_IS_VOLATILE (const symbolS *);
 extern int S_IS_FORWARD_REF (const symbolS *);
 extern const char *S_GET_NAME (symbolS *);
@@ -147,7 +142,7 @@ struct broken_word
     struct broken_word *use_jump;
   };
 extern struct broken_word *broken_words;
-#endif /* ifdef WORKING_DOT_WORD */
+#endif /* ndef WORKING_DOT_WORD */
 
 /*
  * Current means for getting from symbols to segments and vice verse.
@@ -168,8 +163,6 @@ void symbol_remove (symbolS * symbolP, symbolS ** rootP,
 		    symbolS ** lastP);
 
 extern symbolS *symbol_previous (symbolS *);
-
-extern int symbol_on_chain (symbolS *s, symbolS *rootPP, symbolS *lastPP);
 
 void verify_symbol_chain (symbolS * rootP, symbolS * lastP);
 
@@ -203,10 +196,8 @@ extern int symbol_equated_p (symbolS *);
 extern int symbol_equated_reloc_p (symbolS *);
 extern int symbol_constant_p (symbolS *);
 extern int symbol_shadow_p (symbolS *);
-extern symbolS *symbol_symbolS (symbolS *);
 extern asymbol *symbol_get_bfdsym (symbolS *);
 extern void symbol_set_bfdsym (symbolS *, asymbol *);
-extern int symbol_same_p (symbolS *, symbolS *);
 
 #ifdef OBJ_SYMFIELD_TYPE
 OBJ_SYMFIELD_TYPE *symbol_get_obj (symbolS *);

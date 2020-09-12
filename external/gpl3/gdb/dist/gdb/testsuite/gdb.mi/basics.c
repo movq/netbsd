@@ -1,4 +1,5 @@
-/* Copyright 1999-2019 Free Software Foundation, Inc.
+/* Copyright 1999, 2000, 2004, 2007, 2008, 2009, 2010, 2011
+Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,7 +21,8 @@
  *      on function calls.  Useful to test printing frames, stepping, etc.
  */
 
-unsigned long long global_zero = 0;
+#include <stdio.h>
+#include <unistd.h>
 
 int callee4 (void)
 {
@@ -31,23 +33,24 @@ int callee4 (void)
   C = A + B;
   return 0;
 }
-void callee3 (char *strarg)
+callee3 (char *strarg)
 {
   callee4 ();
 }
 
-void callee2 (int intarg, char *strarg)
+callee2 (int intarg, char *strarg)
 {
   callee3 (strarg);
 }
 
-void callee1 (int intarg, char *strarg, double fltarg)
+callee1 (int intarg, char *strarg, double fltarg)
 {
   callee2 (intarg, strarg);
 }
 
 void callme (int i)
 {
+  printf ("callme\n");
 }
 
 int return_1 ()
@@ -59,7 +62,7 @@ void do_nothing (void)
 {
 }
 
-int main ()
+main ()
 {
   callee1 (2, "A string argument.", 3.5);
   callee1 (2, "A string argument.", 3.5);

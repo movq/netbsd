@@ -1,5 +1,5 @@
 /* Routines for liveness in SSA trees.
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2007, 2008 Free Software Foundation, Inc.
    Contributed by Andrew MacLeod  <amacleod@redhat.com>
 
 This file is part of GCC.
@@ -23,11 +23,20 @@ along with GCC; see the file COPYING3.  If not see
 #define _TREE_SSA_LIVE_H 1
 
 #include "partition.h"
+#include "vecprim.h"
+
+
 
 /* Used to create the variable mapping when we go out of SSA form.
 
    Mapping from an ssa_name to a partition number is maintained, as well as
-   partition number back to ssa_name.
+   partition number to back to ssa_name. A partition can also be represented
+   by a non-ssa_name variable.  This allows ssa_names and their partition to
+   be coalesced with live on entry compiler variables, as well as eventually
+   having real compiler variables assigned to each partition as part of the
+   final stage of going of of ssa.
+
+   Non-ssa_names maintain their partition index in the variable annotation.
 
    This data structure also supports "views", which work on a subset of all
    partitions.  This allows the coalescer to decide what partitions are
@@ -63,48 +72,27 @@ typedef struct _var_map
   /* Map of partitions numbers to base variable table indexes.  */
   int *partition_to_base_index;
 
-  /* Bitmap of basic block.  It describes the region within which the analysis
-     is done.  Using pointer avoids allocating memory in out-of-ssa case.  */
-  bitmap bmp_bbs;
-
-  /* Vector of basic block in the region.  */
-  vec<basic_block> vec_bbs;
-
-  /* True if this map is for out-of-ssa, otherwise for live range
-     computation.  When for out-of-ssa, it also means the var map is computed
-     for whole current function.  */
-  bool outofssa_p;
+  /* Table of base variable's.  */
+  VEC (tree, heap) *basevars;
 } *var_map;
+
+
+/* Index to the basevar table of a non ssa-name variable.  */
+#define VAR_ANN_BASE_INDEX(ann) (ann->base_index)
 
 
 /* Value used to represent no partition number.  */
 #define NO_PARTITION		-1
 
-extern var_map init_var_map (int, struct loop* = NULL);
+extern var_map init_var_map (int);
 extern void delete_var_map (var_map);
-extern int var_union (var_map, tree, tree);
-extern void partition_view_normal (var_map);
-extern void partition_view_bitmap (var_map, bitmap);
-extern void dump_scope_blocks (FILE *, dump_flags_t);
-extern void debug_scope_block (tree, dump_flags_t);
-extern void debug_scope_blocks (dump_flags_t);
-extern void remove_unused_locals (void);
 extern void dump_var_map (FILE *, var_map);
-extern void debug (_var_map &ref);
-extern void debug (_var_map *ptr);
-
-
-/* Return TRUE if region of the MAP contains basic block BB.  */
-
-inline bool
-region_contains_p (var_map map, basic_block bb)
-{
-  /* It's possible that the function is called with ENTRY_BLOCK/EXIT_BLOCK.  */
-  if (map->outofssa_p)
-    return (bb->index != ENTRY_BLOCK && bb->index != EXIT_BLOCK);
-
-  return bitmap_bit_p (map->bmp_bbs, bb->index);
-}
+extern int var_union (var_map, tree, tree);
+extern void partition_view_normal (var_map, bool);
+extern void partition_view_bitmap (var_map, bitmap, bool);
+#ifdef ENABLE_CHECKING
+extern void register_ssa_partition_check (tree ssa_var);
+#endif
 
 
 /* Return number of partitions in MAP.  */
@@ -156,6 +144,7 @@ var_to_partition (var_map map, tree var)
 {
   int part;
 
+  gcc_assert (TREE_CODE (var) == SSA_NAME);
   part = partition_find (map->var_partition, SSA_NAME_VERSION (var));
   if (map->partition_to_view)
     part = map->partition_to_view[part];
@@ -183,8 +172,8 @@ var_to_partition_to_var (var_map map, tree var)
 static inline int
 basevar_index (var_map map, int partition)
 {
-  gcc_checking_assert (partition >= 0
-	      	       && partition <= (int) num_var_partitions (map));
+  gcc_assert (partition >= 0
+	      && partition <= (int) num_var_partitions (map));
   return map->partition_to_base_index[partition];
 }
 
@@ -195,6 +184,20 @@ static inline int
 num_basevars (var_map map)
 {
   return map->num_basevars;
+}
+
+
+
+/* This routine registers a partition for SSA_VAR with MAP.  Any unregistered
+   partitions may be filtered out by a view later.  */
+
+static inline void
+register_ssa_partition (var_map map ATTRIBUTE_UNUSED,
+			tree ssa_var ATTRIBUTE_UNUSED)
+{
+#if defined ENABLE_CHECKING
+  register_ssa_partition_check (ssa_var);
+#endif
 }
 
 
@@ -236,11 +239,8 @@ typedef struct tree_live_info_d
   /* Bitmap indicating which partitions are global.  */
   bitmap global;
 
-  /* Bitmaps of live on entry blocks for partition elements.  */
-  bitmap_head *livein;
-
-  /* Bitmaps of what variables are live on exit for a basic blocks.  */
-  bitmap_head *liveout;
+  /* Bitmap of live on entry blocks for partition elements.  */
+  bitmap *livein;
 
   /* Number of basic blocks when live on exit calculated.  */
   int num_blocks;
@@ -251,19 +251,18 @@ typedef struct tree_live_info_d
   /* Top of workstack.  */
   int *stack_top;
 
-  /* Obstacks to allocate the bitmaps on.  */
-  bitmap_obstack livein_obstack;
-  bitmap_obstack liveout_obstack;
+  /* Bitmap of what variables are live on exit for a basic blocks.  */
+  bitmap *liveout;
 } *tree_live_info_p;
 
+
+extern tree_live_info_p calculate_live_ranges (var_map);
+extern void calculate_live_on_exit (tree_live_info_p);
+extern void delete_tree_live_info (tree_live_info_p);
 
 #define LIVEDUMP_ENTRY	0x01
 #define LIVEDUMP_EXIT	0x02
 #define LIVEDUMP_ALL	(LIVEDUMP_ENTRY | LIVEDUMP_EXIT)
-extern void delete_tree_live_info (tree_live_info_p);
-extern tree_live_info_p calculate_live_ranges (var_map, bool);
-extern void debug (tree_live_info_d &ref);
-extern void debug (tree_live_info_d *ptr);
 extern void dump_live_info (FILE *, tree_live_info_p, int);
 
 
@@ -272,7 +271,7 @@ extern void dump_live_info (FILE *, tree_live_info_p, int);
 static inline int
 partition_is_global (tree_live_info_p live, int p)
 {
-  gcc_checking_assert (live->global);
+  gcc_assert (live->global);
   return bitmap_bit_p (live->global, p);
 }
 
@@ -283,11 +282,11 @@ partition_is_global (tree_live_info_p live, int p)
 static inline bitmap
 live_on_entry (tree_live_info_p live, basic_block bb)
 {
-  gcc_checking_assert (live->livein
-		       && bb != ENTRY_BLOCK_PTR_FOR_FN (cfun)
-		       && bb != EXIT_BLOCK_PTR_FOR_FN (cfun));
+  gcc_assert (live->livein);
+  gcc_assert (bb != ENTRY_BLOCK_PTR);
+  gcc_assert (bb != EXIT_BLOCK_PTR);
 
-  return &live->livein[bb->index];
+  return live->livein[bb->index];
 }
 
 
@@ -297,11 +296,11 @@ live_on_entry (tree_live_info_p live, basic_block bb)
 static inline bitmap
 live_on_exit (tree_live_info_p live, basic_block bb)
 {
-  gcc_checking_assert (live->liveout
-		       && bb != ENTRY_BLOCK_PTR_FOR_FN (cfun)
-		       && bb != EXIT_BLOCK_PTR_FOR_FN (cfun));
+  gcc_assert (live->liveout);
+  gcc_assert (bb != ENTRY_BLOCK_PTR);
+  gcc_assert (bb != EXIT_BLOCK_PTR);
 
-  return &live->liveout[bb->index];
+  return live->liveout[bb->index];
 }
 
 
@@ -314,13 +313,36 @@ live_var_map (tree_live_info_p live)
 }
 
 
+/* Merge the live on entry information in LIVE for partitions P1 and P2. Place
+   the result into P1.  Clear P2.  */
+
+static inline void
+live_merge_and_clear (tree_live_info_p live, int p1, int p2)
+{
+  gcc_assert (live->livein[p1]);
+  gcc_assert (live->livein[p2]);
+  bitmap_ior_into (live->livein[p1], live->livein[p2]);
+  bitmap_zero (live->livein[p2]);
+}
+
+
 /* Mark partition P as live on entry to basic block BB in LIVE.  */
 
 static inline void
 make_live_on_entry (tree_live_info_p live, basic_block bb , int p)
 {
-  bitmap_set_bit (&live->livein[bb->index], p);
+  bitmap_set_bit (live->livein[bb->index], p);
   bitmap_set_bit (live->global, p);
 }
+
+
+/* From tree-ssa-coalesce.c  */
+extern var_map coalesce_ssa_name (void);
+
+
+/* From tree-ssa-ter.c  */
+extern bitmap find_replaceable_exprs (var_map);
+extern void dump_replaceable_exprs (FILE *, bitmap);
+
 
 #endif /* _TREE_SSA_LIVE_H  */

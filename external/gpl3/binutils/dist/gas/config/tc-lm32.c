@@ -1,5 +1,5 @@
 /* tc-lm32.c - Lattice Mico32 assembler.
-   Copyright (C) 2008-2020 Free Software Foundation, Inc.
+   Copyright 2008   Free Software Foundation, Inc.
    Contributed by Jon Beniston <jon@beniston.com>
 
    This file is part of GAS, the GNU Assembler.
@@ -19,9 +19,10 @@
    Foundation, 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
-#include "as.h"
 #include <string.h>
 #include <stdlib.h>
+
+#include "as.h"
 #include "safe-ctype.h"
 #include "subsegs.h"
 #include "bfd.h"
@@ -132,7 +133,7 @@ md_show_usage (FILE * fp)
 /* Parse command line options.  */
 
 int
-md_parse_option (int c, const char * arg ATTRIBUTE_UNUSED)
+md_parse_option (int c, char * arg ATTRIBUTE_UNUSED)
 {
   switch (c)
     {
@@ -214,7 +215,7 @@ md_number_to_chars (char * buf, valueT val, int n)
    of LITTLENUMS emitted is stored in *SIZEP.  An error message is
    returned, or NULL on OK.  */
 
-const char *
+char *
 md_atof (int type, char *litP, int *sizeP)
 {
   int i;
@@ -277,8 +278,8 @@ md_undefined_symbol (char * name ATTRIBUTE_UNUSED)
 valueT
 md_section_align (asection *seg, valueT addr)
 {
-  int align = bfd_section_alignment (seg);
-  return ((addr + (1 << align) - 1) & -(1 << align));
+  int align = bfd_get_section_alignment (stdoutput, seg);
+  return ((addr + (1 << align) - 1) & (-1 << align));
 }
 
 /* This function assembles the instructions. It emits the frags/bytes to the

@@ -1,5 +1,5 @@
 /* Compatibility routines for Windows CE.
-   Copyright (C) 2007-2019 Free Software Foundation, Inc.
+   Copyright (C) 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,6 +18,7 @@
 
 #include "server.h"
 
+#include <stdio.h>
 #include <windows.h>
 
 void

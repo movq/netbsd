@@ -1,5 +1,5 @@
 /* Language independent return value optimizations
-   Copyright (C) 2004-2019 Free Software Foundation, Inc.
+   Copyright (C) 2004, 2005, 2007, 2008, 2009 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -20,15 +20,18 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "backend.h"
+#include "tm.h"
 #include "tree.h"
-#include "gimple.h"
+#include "rtl.h"
+#include "function.h"
+#include "basic-block.h"
+#include "expr.h"
+#include "diagnostic.h"
+#include "tree-flow.h"
+#include "timevar.h"
+#include "tree-dump.h"
 #include "tree-pass.h"
-#include "ssa.h"
-#include "tree-pretty-print.h"
-#include "gimple-iterator.h"
-#include "gimple-walk.h"
-#include "internal-fn.h"
+#include "langhooks.h"
 
 /* This file implements return value optimizations for functions which
    return aggregate types.
@@ -44,7 +47,7 @@ along with GCC; see the file COPYING3.  If not see
    This is basically a generic equivalent to the C++ front-end's
    Named Return Value optimization.  */
 
-struct nrv_data_t
+struct nrv_data
 {
   /* This is the temporary (a VAR_DECL) which appears in all of
      this function's RETURN_EXPR statements.  */
@@ -73,7 +76,7 @@ static tree
 finalize_nrv_r (tree *tp, int *walk_subtrees, void *data)
 {
   struct walk_stmt_info *wi = (struct walk_stmt_info *) data;
-  struct nrv_data_t *dp = (struct nrv_data_t *) wi->info;
+  struct nrv_data *dp = (struct nrv_data *) wi->info;
 
   /* No need to walk into types.  */
   if (TYPE_P (*tp))
@@ -102,44 +105,15 @@ finalize_nrv_r (tree *tp, int *walk_subtrees, void *data)
    then we could either have the languages register the optimization or
    we could change the gating function to check the current language.  */
 
-namespace {
-
-const pass_data pass_data_nrv =
-{
-  GIMPLE_PASS, /* type */
-  "nrv", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
-  TV_TREE_NRV, /* tv_id */
-  ( PROP_ssa | PROP_cfg ), /* properties_required */
-  0, /* properties_provided */
-  0, /* properties_destroyed */
-  0, /* todo_flags_start */
-  0, /* todo_flags_finish */
-};
-
-class pass_nrv : public gimple_opt_pass
-{
-public:
-  pass_nrv (gcc::context *ctxt)
-    : gimple_opt_pass (pass_data_nrv, ctxt)
-  {}
-
-  /* opt_pass methods: */
-  virtual bool gate (function *) { return optimize > 0; }
-
-  virtual unsigned int execute (function *);
-
-}; // class pass_nrv
-
-unsigned int
-pass_nrv::execute (function *fun)
+static unsigned int
+tree_nrv (void)
 {
   tree result = DECL_RESULT (current_function_decl);
   tree result_type = TREE_TYPE (result);
   tree found = NULL;
   basic_block bb;
   gimple_stmt_iterator gsi;
-  struct nrv_data_t data;
+  struct nrv_data data;
 
   /* If this function does not return an aggregate type in memory, then
      there is nothing to do.  */
@@ -162,19 +136,19 @@ pass_nrv::execute (function *fun)
     return 0;
 
   /* Look through each block for assignments to the RESULT_DECL.  */
-  FOR_EACH_BB_FN (bb, fun)
+  FOR_EACH_BB (bb)
     {
       for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
 	{
-	  gimple *stmt = gsi_stmt (gsi);
+	  gimple stmt = gsi_stmt (gsi);
 	  tree ret_val;
 
-	  if (greturn *return_stmt = dyn_cast <greturn *> (stmt))
+	  if (gimple_code (stmt) == GIMPLE_RETURN)
 	    {
 	      /* In a function with an aggregate return value, the
 		 gimplifier has changed all non-empty RETURN_EXPRs to
 		 return the RESULT_DECL.  */
-	      ret_val = gimple_return_retval (return_stmt);
+	      ret_val = gimple_return_retval (stmt);
 	      if (ret_val)
 		gcc_assert (ret_val == result);
 	    }
@@ -193,7 +167,7 @@ pass_nrv::execute (function *fun)
 	      if (found != NULL)
 		{
 		  /* If we found a return statement using a different variable
-		     than previous return statements, then we cannot perform
+		     than previous return statements, then we can not perform
 		     NRV optimizations.  */
 		  if (found != rhs)
 		    return 0;
@@ -203,9 +177,10 @@ pass_nrv::execute (function *fun)
 
 	      /* The returned value must be a local automatic variable of the
 		 same type and alignment as the function's result.  */
-	      if (!VAR_P (found)
+	      if (TREE_CODE (found) != VAR_DECL
 		  || TREE_THIS_VOLATILE (found)
-		  || !auto_var_in_fn_p (found, current_function_decl)
+		  || DECL_CONTEXT (found) != current_function_decl
+		  || TREE_STATIC (found)
 		  || TREE_ADDRESSABLE (found)
 		  || DECL_ALIGN (found) > DECL_ALIGN (result)
 		  || !useless_type_conversion_p (result_type,
@@ -255,11 +230,11 @@ pass_nrv::execute (function *fun)
      RESULT.  */
   data.var = found;
   data.result = result;
-  FOR_EACH_BB_FN (bb, fun)
+  FOR_EACH_BB (bb)
     {
       for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); )
 	{
-	  gimple *stmt = gsi_stmt (gsi);
+	  gimple stmt = gsi_stmt (gsi);
 	  /* If this is a copy from VAR to RESULT, remove it.  */
 	  if (gimple_assign_copy_p (stmt)
 	      && gimple_assign_lhs (stmt) == result
@@ -267,7 +242,6 @@ pass_nrv::execute (function *fun)
 	    {
 	      unlink_stmt_vdef (stmt);
 	      gsi_remove (&gsi, true);
-	      release_defs (stmt);
 	    }
 	  else
 	    {
@@ -283,40 +257,57 @@ pass_nrv::execute (function *fun)
 	}
     }
 
-  SET_DECL_VALUE_EXPR (found, result);
-  DECL_HAS_VALUE_EXPR_P (found) = 1;
-
+  /* FOUND is no longer used.  Ensure it gets removed.  */
+  var_ann (found)->used = 0;
   return 0;
 }
 
-} // anon namespace
-
-gimple_opt_pass *
-make_pass_nrv (gcc::context *ctxt)
+static bool
+gate_pass_return_slot (void)
 {
-  return new pass_nrv (ctxt);
+  return optimize > 0;
 }
+
+struct gimple_opt_pass pass_nrv =
+{
+ {
+  GIMPLE_PASS,
+  "nrv",				/* name */
+  gate_pass_return_slot,		/* gate */
+  tree_nrv,				/* execute */
+  NULL,					/* sub */
+  NULL,					/* next */
+  0,					/* static_pass_number */
+  TV_TREE_NRV,				/* tv_id */
+  PROP_ssa | PROP_cfg,				/* properties_required */
+  0,					/* properties_provided */
+  0,					/* properties_destroyed */
+  0,					/* todo_flags_start */
+  TODO_dump_func | TODO_ggc_collect			/* todo_flags_finish */
+ }
+};
 
 /* Determine (pessimistically) whether DEST is available for NRV
    optimization, where DEST is expected to be the LHS of a modify
    expression where the RHS is a function returning an aggregate.
 
-   DEST is available if it is not clobbered or used by the call.  */
+   We search for a base VAR_DECL and look to see if it is call clobbered.
+   Note that we could do better, for example, by
+   attempting to doing points-to analysis on INDIRECT_REFs.  */
 
 static bool
-dest_safe_for_nrv_p (gcall *call)
+dest_safe_for_nrv_p (tree dest)
 {
-  tree dest = gimple_call_lhs (call);
+  while (handled_component_p (dest))
+    dest = TREE_OPERAND (dest, 0);
 
-  dest = get_base_address (dest);
-  if (! dest)
+  if (! SSA_VAR_P (dest))
     return false;
 
   if (TREE_CODE (dest) == SSA_NAME)
-    return true;
+    dest = SSA_NAME_VAR (dest);
 
-  if (call_may_clobber_ref_p (call, dest)
-      || ref_maybe_used_by_stmt_p (call, dest))
+  if (is_call_used (dest))
     return false;
 
   return true;
@@ -334,62 +325,29 @@ dest_safe_for_nrv_p (gcall *call)
    escaped prior to the call.  If it has, modifications to the local
    variable will produce visible changes elsewhere, as in PR c++/19317.  */
 
-namespace {
-
-const pass_data pass_data_return_slot =
-{
-  GIMPLE_PASS, /* type */
-  "retslot", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
-  TV_NONE, /* tv_id */
-  PROP_ssa, /* properties_required */
-  0, /* properties_provided */
-  0, /* properties_destroyed */
-  0, /* todo_flags_start */
-  0, /* todo_flags_finish */
-};
-
-class pass_return_slot : public gimple_opt_pass
-{
-public:
-  pass_return_slot (gcc::context *ctxt)
-    : gimple_opt_pass (pass_data_return_slot, ctxt)
-  {}
-
-  /* opt_pass methods: */
-  virtual unsigned int execute (function *);
-
-}; // class pass_return_slot
-
-unsigned int
-pass_return_slot::execute (function *fun)
+static unsigned int
+execute_return_slot_opt (void)
 {
   basic_block bb;
 
-  FOR_EACH_BB_FN (bb, fun)
+  FOR_EACH_BB (bb)
     {
       gimple_stmt_iterator gsi;
       for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
 	{
-	  gcall *stmt;
+	  gimple stmt = gsi_stmt (gsi);
 	  bool slot_opt_p;
 
-	  stmt = dyn_cast <gcall *> (gsi_stmt (gsi));
-	  if (stmt
+	  if (is_gimple_call (stmt)
 	      && gimple_call_lhs (stmt)
 	      && !gimple_call_return_slot_opt_p (stmt)
-	      /* Ignore internal functions without direct optabs,
-		 those are expanded specially and aggregate_value_p
-		 on their result might result in undesirable warnings
-		 with some backends.  */
-	      && (!gimple_call_internal_p (stmt)
-		  || direct_internal_fn_p (gimple_call_internal_fn (stmt)))
 	      && aggregate_value_p (TREE_TYPE (gimple_call_lhs (stmt)),
-				    gimple_call_fndecl (stmt)))
+				    gimple_call_fndecl (stmt))
+	     )
 	    {
 	      /* Check if the location being assigned to is
-		 clobbered by the call.  */
-	      slot_opt_p = dest_safe_for_nrv_p (stmt);
+	         call-clobbered.  */
+	      slot_opt_p = dest_safe_for_nrv_p (gimple_call_lhs (stmt));
 	      gimple_call_set_return_slot_opt (stmt, slot_opt_p);
 	    }
 	}
@@ -397,10 +355,21 @@ pass_return_slot::execute (function *fun)
   return 0;
 }
 
-} // anon namespace
-
-gimple_opt_pass *
-make_pass_return_slot (gcc::context *ctxt)
+struct gimple_opt_pass pass_return_slot =
 {
-  return new pass_return_slot (ctxt);
-}
+ {
+  GIMPLE_PASS,
+  "retslot",				/* name */
+  NULL,					/* gate */
+  execute_return_slot_opt,		/* execute */
+  NULL,					/* sub */
+  NULL,					/* next */
+  0,					/* static_pass_number */
+  TV_NONE,				/* tv_id */
+  PROP_ssa,				/* properties_required */
+  0,					/* properties_provided */
+  0,					/* properties_destroyed */
+  0,					/* todo_flags_start */
+  0					/* todo_flags_finish */
+ }
+};

@@ -1,5 +1,5 @@
 /* Machine description for AArch64 architecture.
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright (C) 2009-2013 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of GCC.
@@ -24,6 +24,15 @@
 
 #define ASM_OUTPUT_LABELREF(FILE, NAME) \
   aarch64_asm_output_labelref (FILE, NAME)
+
+#define ASM_OUTPUT_DEF(FILE, NAME1, NAME2)	\
+  do						\
+    {						\
+      assemble_name (FILE, NAME1);		\
+      fputs (" = ", FILE);			\
+      assemble_name (FILE, NAME2);		\
+      fputc ('\n', FILE);			\
+    } while (0)
 
 #define TEXT_SECTION_ASM_OP	"\t.text"
 #define DATA_SECTION_ASM_OP	"\t.data"
@@ -74,16 +83,16 @@
   do {									\
     switch (GET_MODE (BODY))						\
       {									\
-      case E_QImode:							\
+      case QImode:							\
 	asm_fprintf (STREAM, "\t.byte\t(%LL%d - %LLrtx%d) / 4\n",	\
 		     VALUE, REL);					\
 	break;								\
-      case E_HImode:							\
+      case HImode:							\
 	asm_fprintf (STREAM, "\t.2byte\t(%LL%d - %LLrtx%d) / 4\n",	\
 		     VALUE, REL);					\
 	break;								\
-      case E_SImode:							\
-      case E_DImode: /* See comment in aarch64_output_casesi.  */		\
+      case SImode:							\
+      case DImode: /* See comment in aarch64_output_casesi.  */		\
 	asm_fprintf (STREAM, "\t.word\t(%LL%d - %LLrtx%d) / 4\n",	\
 		     VALUE, REL);					\
 	break;								\
@@ -97,52 +106,25 @@
 
 #define ASM_COMMENT_START "//"
 
+#define REGISTER_PREFIX		""
 #define LOCAL_LABEL_PREFIX	"."
 #define USER_LABEL_PREFIX	""
 
 #define GLOBAL_ASM_OP "\t.global\t"
 
-#ifdef TARGET_BIG_ENDIAN_DEFAULT
-#define ENDIAN_SPEC "-mbig-endian"
-#else
-#define ENDIAN_SPEC "-mlittle-endian"
-#endif
-
-#if TARGET_DATA_MODEL == 1
-#define ABI_SPEC  "-mabi=lp64"
-#define MULTILIB_DEFAULTS { "mabi=lp64" }
-#elif TARGET_DATA_MODEL == 2
-#define ABI_SPEC  "-mabi=ilp32"
-#define MULTILIB_DEFAULTS { "mabi=ilp32" }
-#else
-#error "Unknown or undefined TARGET_DATA_MODEL!"
-#endif
-
-/* Force the default endianness and ABI flags onto the command line
-   in order to make the other specs easier to write.  */
-#undef DRIVER_SELF_SPECS
-#define DRIVER_SELF_SPECS \
-  " %{!mbig-endian:%{!mlittle-endian:" ENDIAN_SPEC "}}" \
-  " %{!mabi=*:" ABI_SPEC "}" \
-  MCPU_MTUNE_NATIVE_SPECS
-
-#ifdef HAVE_AS_MABI_OPTION
-#define ASM_MABI_SPEC	"%{mabi=*:-mabi=%*}"
-#else
-#define ASM_MABI_SPEC	"%{mabi=lp64:}"
-#endif
-
 #ifndef ASM_SPEC
 #define ASM_SPEC "\
 %{mbig-endian:-EB} \
 %{mlittle-endian:-EL} \
-%{march=*:-march=%*} \
-%(asm_cpu_spec)" \
-ASM_MABI_SPEC
+%{mcpu=*:-mcpu=%*} \
+%{march=*:-march=%*}"
 #endif
 
 #undef TYPE_OPERAND_FMT
 #define TYPE_OPERAND_FMT	"%%%s"
+
+#undef TARGET_ASM_NAMED_SECTION
+#define TARGET_ASM_NAMED_SECTION  aarch64_elf_asm_named_section
 
 /* Stabs debug not required.  */
 #undef DBX_DEBUGGING_INFO

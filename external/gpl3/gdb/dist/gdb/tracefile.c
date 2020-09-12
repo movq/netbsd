@@ -1,6 +1,6 @@
 /* Trace file support in GDB.
 
-   Copyright (C) 1997-2019 Free Software Foundation, Inc.
+   Copyright (C) 1997-2015 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,7 +22,6 @@
 #include "ctf.h"
 #include "exec.h"
 #include "regcache.h"
-#include "common/byte-vector.h"
 
 /* Helper macros.  */
 
@@ -37,21 +36,16 @@
 #define TRACE_WRITE_V_BLOCK(writer, num, val)	\
   writer->ops->frame_ops->write_v_block ((writer), (num), (val))
 
-/* A unique pointer policy class for trace_file_writer.  */
+/* Free trace file writer.  */
 
-struct trace_file_writer_deleter
+static void
+trace_file_writer_xfree (void *arg)
 {
-  void operator() (struct trace_file_writer *writer)
-  {
-    writer->ops->dtor (writer);
-    xfree (writer);
-  }
-};
+  struct trace_file_writer *writer = arg;
 
-/* A unique_ptr specialization for trace_file_writer.  */
-
-typedef std::unique_ptr<trace_file_writer, trace_file_writer_deleter>
-    trace_file_writer_up;
+  writer->ops->dtor (writer);
+  xfree (writer);
+}
 
 /* Save tracepoint data to file named FILENAME through WRITER.  WRITER
    determines the trace file format.  If TARGET_DOES_SAVE is non-zero,
@@ -63,12 +57,14 @@ trace_save (const char *filename, struct trace_file_writer *writer,
 	    int target_does_save)
 {
   struct trace_status *ts = current_trace_status ();
+  int status;
   struct uploaded_tp *uploaded_tps = NULL, *utp;
   struct uploaded_tsv *uploaded_tsvs = NULL, *utsv;
 
   ULONGEST offset = 0;
 #define MAX_TRACE_UPLOAD 2000
-  gdb::byte_vector buf (std::max (MAX_TRACE_UPLOAD, trace_regblock_size));
+  gdb_byte buf[MAX_TRACE_UPLOAD];
+  int written;
   enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
 
   /* If the target is to save the data to a file on its own, then just
@@ -82,10 +78,8 @@ trace_save (const char *filename, struct trace_file_writer *writer,
     }
 
   /* Get the trace status first before opening the file, so if the
-     target is losing, we can get out without touching files.  Since
-     we're just calling this for side effects, we ignore the
-     result.  */
-  target_get_trace_status (ts);
+     target is losing, we can get out without touching files.  */
+  status = target_get_trace_status (ts);
 
   writer->ops->start (writer, filename);
 
@@ -95,9 +89,6 @@ trace_save (const char *filename, struct trace_file_writer *writer,
 
   /* Write out the size of a register block.  */
   writer->ops->write_regblock_type (writer, trace_regblock_size);
-
-  /* Write out the target description info.  */
-  writer->ops->write_tdesc (writer);
 
   /* Write out status of the tracing run (aka "tstatus" info).  */
   writer->ops->write_status (writer, ts);
@@ -145,7 +136,7 @@ trace_save (const char *filename, struct trace_file_writer *writer,
 	  /* We ask for big blocks, in the hopes of efficiency, but
 	     will take less if the target has packet size limitations
 	     or some such.  */
-	  gotten = target_get_raw_trace_data (buf.data (), offset,
+	  gotten = target_get_raw_trace_data (buf, offset,
 					      MAX_TRACE_UPLOAD);
 	  if (gotten < 0)
 	    error (_("Failure to get requested trace buffer data"));
@@ -153,7 +144,7 @@ trace_save (const char *filename, struct trace_file_writer *writer,
 	  if (gotten == 0)
 	    break;
 
-	  writer->ops->write_trace_buffer (writer, buf.data (), gotten);
+	  writer->ops->write_trace_buffer (writer, buf, gotten);
 
 	  offset += gotten;
 	}
@@ -164,7 +155,7 @@ trace_save (const char *filename, struct trace_file_writer *writer,
 	  /* Parse the trace buffers according to how data are stored
 	     in trace buffer in GDBserver.  */
 
-	  gotten = target_get_raw_trace_data (buf.data (), offset, 6);
+	  gotten = target_get_raw_trace_data (buf, offset, 6);
 
 	  if (gotten == 0)
 	    break;
@@ -172,10 +163,10 @@ trace_save (const char *filename, struct trace_file_writer *writer,
 	  /* Read the first six bytes in, which is the tracepoint
 	     number and trace frame size.  */
 	  tp_num = (uint16_t)
-	    extract_unsigned_integer (&((buf.data ())[0]), 2, byte_order);
+	    extract_unsigned_integer (&buf[0], 2, byte_order);
 
 	  tf_size = (uint32_t)
-	    extract_unsigned_integer (&((buf.data ())[2]), 4, byte_order);
+	    extract_unsigned_integer (&buf[2], 4, byte_order);
 
 	  writer->ops->frame_ops->start (writer, tp_num);
 	  gotten = 6;
@@ -193,8 +184,7 @@ trace_save (const char *filename, struct trace_file_writer *writer,
 		  /* We'll fetch one block each time, in order to
 		     handle the extremely large 'M' block.  We first
 		     fetch one byte to get the type of the block.  */
-		  gotten = target_get_raw_trace_data (buf.data (),
-						      offset, 1);
+		  gotten = target_get_raw_trace_data (buf, offset, 1);
 		  if (gotten < 1)
 		    error (_("Failure to get requested trace buffer data"));
 
@@ -207,13 +197,13 @@ trace_save (const char *filename, struct trace_file_writer *writer,
 		    {
 		    case 'R':
 		      gotten
-			= target_get_raw_trace_data (buf.data (), offset,
+			= target_get_raw_trace_data (buf, offset,
 						     trace_regblock_size);
 		      if (gotten < trace_regblock_size)
 			error (_("Failure to get requested trace"
 				 " buffer data"));
 
-		      TRACE_WRITE_R_BLOCK (writer, buf.data (),
+		      TRACE_WRITE_R_BLOCK (writer, buf,
 					   trace_regblock_size);
 		      break;
 		    case 'M':
@@ -223,8 +213,7 @@ trace_save (const char *filename, struct trace_file_writer *writer,
 			LONGEST t;
 			int j;
 
-			t = target_get_raw_trace_data (buf.data (),
-						       offset, 10);
+			t = target_get_raw_trace_data (buf,offset, 10);
 			if (t < 10)
 			  error (_("Failure to get requested trace"
 				   " buffer data"));
@@ -234,10 +223,10 @@ trace_save (const char *filename, struct trace_file_writer *writer,
 
 			gotten = 0;
 			addr = (ULONGEST)
-			  extract_unsigned_integer (buf.data (), 8,
+			  extract_unsigned_integer (buf, 8,
 						    byte_order);
 			mlen = (unsigned short)
-			  extract_unsigned_integer (&((buf.data ())[8]), 2,
+			  extract_unsigned_integer (&buf[8], 2,
 						    byte_order);
 
 			TRACE_WRITE_M_BLOCK_HEADER (writer, addr,
@@ -255,15 +244,14 @@ trace_save (const char *filename, struct trace_file_writer *writer,
 			    else
 			      read_length = mlen - j;
 
-			    t = target_get_raw_trace_data (buf.data (),
+			    t = target_get_raw_trace_data (buf,
 							   offset + j,
 							   read_length);
 			    if (t < read_length)
 			      error (_("Failure to get requested"
 				       " trace buffer data"));
 
-			    TRACE_WRITE_M_BLOCK_MEMORY (writer,
-							buf.data (),
+			    TRACE_WRITE_M_BLOCK_MEMORY (writer, buf,
 							read_length);
 
 			    j += read_length;
@@ -278,18 +266,18 @@ trace_save (const char *filename, struct trace_file_writer *writer,
 			LONGEST val;
 
 			gotten
-			  = target_get_raw_trace_data (buf.data (),
-						       offset, 12);
+			  = target_get_raw_trace_data (buf, offset,
+						       12);
 			if (gotten < 12)
 			  error (_("Failure to get requested"
 				   " trace buffer data"));
 
-			vnum  = (int) extract_signed_integer (buf.data (),
+			vnum  = (int) extract_signed_integer (buf,
 							      4,
 							      byte_order);
 			val
-			  = extract_signed_integer (&((buf.data ())[4]),
-						    8, byte_order);
+			  = extract_signed_integer (&buf[4], 8,
+						    byte_order);
 
 			TRACE_WRITE_V_BLOCK (writer, vnum, val);
 		      }
@@ -315,24 +303,26 @@ trace_save (const char *filename, struct trace_file_writer *writer,
 }
 
 static void
-tsave_command (const char *args, int from_tty)
+trace_save_command (char *args, int from_tty)
 {
   int target_does_save = 0;
   char **argv;
   char *filename = NULL;
+  struct cleanup *back_to;
   int generate_ctf = 0;
+  struct trace_file_writer *writer = NULL;
 
   if (args == NULL)
     error_no_arg (_("file in which to save trace data"));
 
-  gdb_argv built_argv (args);
-  argv = built_argv.get ();
+  argv = gdb_buildargv (args);
+  back_to = make_cleanup_freeargv (argv);
 
   for (; *argv; ++argv)
     {
       if (strcmp (*argv, "-r") == 0)
 	target_does_save = 1;
-      else if (strcmp (*argv, "-ctf") == 0)
+      if (strcmp (*argv, "-ctf") == 0)
 	generate_ctf = 1;
       else if (**argv == '-')
 	error (_("unknown option `%s'"), *argv);
@@ -344,13 +334,19 @@ tsave_command (const char *args, int from_tty)
     error_no_arg (_("file in which to save trace data"));
 
   if (generate_ctf)
-    trace_save_ctf (filename, target_does_save);
+    writer = ctf_trace_file_writer_new ();
   else
-    trace_save_tfile (filename, target_does_save);
+    writer = tfile_trace_file_writer_new ();
+
+  make_cleanup (trace_file_writer_xfree, writer);
+
+  trace_save (filename, writer, target_does_save);
 
   if (from_tty)
     printf_filtered (_("Trace data saved to %s '%s'.\n"),
 		     generate_ctf ? "directory" : "file", filename);
+
+  do_cleanups (back_to);
 }
 
 /* Save the trace data to file FILENAME of tfile format.  */
@@ -358,8 +354,13 @@ tsave_command (const char *args, int from_tty)
 void
 trace_save_tfile (const char *filename, int target_does_save)
 {
-  trace_file_writer_up writer (tfile_trace_file_writer_new ());
-  trace_save (filename, writer.get (), target_does_save);
+  struct trace_file_writer *writer;
+  struct cleanup *back_to;
+
+  writer = tfile_trace_file_writer_new ();
+  back_to = make_cleanup (trace_file_writer_xfree, writer);
+  trace_save (filename, writer, target_does_save);
+  do_cleanups (back_to);
 }
 
 /* Save the trace data to dir DIRNAME of ctf format.  */
@@ -367,8 +368,14 @@ trace_save_tfile (const char *filename, int target_does_save)
 void
 trace_save_ctf (const char *dirname, int target_does_save)
 {
-  trace_file_writer_up writer (ctf_trace_file_writer_new ());
-  trace_save (dirname, writer.get (), target_does_save);
+  struct trace_file_writer *writer;
+  struct cleanup *back_to;
+
+  writer = ctf_trace_file_writer_new ();
+  back_to = make_cleanup (trace_file_writer_xfree, writer);
+
+  trace_save (dirname, writer, target_does_save);
+  do_cleanups (back_to);
 }
 
 /* Fetch register data from tracefile, shared for both tfile and
@@ -377,54 +384,72 @@ trace_save_ctf (const char *dirname, int target_does_save)
 void
 tracefile_fetch_registers (struct regcache *regcache, int regno)
 {
-  struct gdbarch *gdbarch = regcache->arch ();
-  struct tracepoint *tp = get_tracepoint (get_tracepoint_number ());
-  int regn;
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  int regn, pc_regno;
 
   /* We get here if no register data has been found.  Mark registers
      as unavailable.  */
   for (regn = 0; regn < gdbarch_num_regs (gdbarch); regn++)
-    regcache->raw_supply (regn, NULL);
+    regcache_raw_supply (regcache, regn, NULL);
 
   /* We can often usefully guess that the PC is going to be the same
      as the address of the tracepoint.  */
-  if (tp == NULL || tp->loc == NULL)
+  pc_regno = gdbarch_pc_regnum (gdbarch);
+
+  /* XXX This guessing code below only works if the PC register isn't
+     a pseudo-register.  The value of a pseudo-register isn't stored
+     in the (non-readonly) regcache -- instead it's recomputed
+     (probably from some other cached raw register) whenever the
+     register is read.  This guesswork should probably move to some
+     higher layer.  */
+  if (pc_regno < 0 || pc_regno >= gdbarch_num_regs (gdbarch))
     return;
 
-  /* But don't try to guess if tracepoint is multi-location...  */
-  if (tp->loc->next)
+  if (regno == -1 || regno == pc_regno)
     {
-      warning (_("Tracepoint %d has multiple "
-		 "locations, cannot infer $pc"),
-	       tp->number);
-      return;
-    }
-  /* ... or does while-stepping.  */
-  else if (tp->step_count > 0)
-    {
-      warning (_("Tracepoint %d does while-stepping, "
-		 "cannot infer $pc"),
-	       tp->number);
-      return;
-    }
+      struct tracepoint *tp = get_tracepoint (get_tracepoint_number ());
+      gdb_byte *regs;
 
-  /* Guess what we can from the tracepoint location.  */
-  gdbarch_guess_tracepoint_registers (gdbarch, regcache,
-				      tp->loc->address);
+      if (tp && tp->base.loc)
+	{
+	  /* But don't try to guess if tracepoint is multi-location...  */
+	  if (tp->base.loc->next)
+	    {
+	      warning (_("Tracepoint %d has multiple "
+			 "locations, cannot infer $pc"),
+		       tp->base.number);
+	      return;
+	    }
+	  /* ... or does while-stepping.  */
+	  if (tp->step_count > 0)
+	    {
+	      warning (_("Tracepoint %d does while-stepping, "
+			 "cannot infer $pc"),
+		       tp->base.number);
+	      return;
+	    }
+
+	  regs = alloca (register_size (gdbarch, pc_regno));
+	  store_unsigned_integer (regs, register_size (gdbarch, pc_regno),
+				  gdbarch_byte_order (gdbarch),
+				  tp->base.loc->address);
+	  regcache_raw_supply (regcache, pc_regno, regs);
+	}
+    }
 }
 
 /* This is the implementation of target_ops method to_has_all_memory.  */
 
-bool
-tracefile_target::has_all_memory ()
+static int
+tracefile_has_all_memory (struct target_ops *ops)
 {
   return 1;
 }
 
 /* This is the implementation of target_ops method to_has_memory.  */
 
-bool
-tracefile_target::has_memory ()
+static int
+tracefile_has_memory (struct target_ops *ops)
 {
   return 1;
 }
@@ -433,8 +458,8 @@ tracefile_target::has_memory ()
    The target has a stack when GDB has already selected one trace
    frame.  */
 
-bool
-tracefile_target::has_stack ()
+static int
+tracefile_has_stack (struct target_ops *ops)
 {
   return get_traceframe_number () != -1;
 }
@@ -443,8 +468,8 @@ tracefile_target::has_stack ()
    The target has registers when GDB has already selected one trace
    frame.  */
 
-bool
-tracefile_target::has_registers ()
+static int
+tracefile_has_registers (struct target_ops *ops)
 {
   return get_traceframe_number () != -1;
 }
@@ -452,8 +477,8 @@ tracefile_target::has_registers ()
 /* This is the implementation of target_ops method to_thread_alive.
    tracefile has one thread faked by GDB.  */
 
-bool
-tracefile_target::thread_alive (ptid_t ptid)
+static int
+tracefile_thread_alive (struct target_ops *ops, ptid_t ptid)
 {
   return 1;
 }
@@ -461,8 +486,8 @@ tracefile_target::thread_alive (ptid_t ptid)
 /* This is the implementation of target_ops method to_get_trace_status.
    The trace status for a file is that tracing can never be run.  */
 
-int
-tracefile_target::get_trace_status (struct trace_status *ts)
+static int
+tracefile_get_trace_status (struct target_ops *self, struct trace_status *ts)
 {
   /* Other bits of trace status were collected as part of opening the
      trace files, so nothing to do here.  */
@@ -470,10 +495,27 @@ tracefile_target::get_trace_status (struct trace_status *ts)
   return -1;
 }
 
+/* Initialize OPS for tracefile related targets.  */
+
+void
+init_tracefile_ops (struct target_ops *ops)
+{
+  ops->to_stratum = process_stratum;
+  ops->to_get_trace_status = tracefile_get_trace_status;
+  ops->to_has_all_memory = tracefile_has_all_memory;
+  ops->to_has_memory = tracefile_has_memory;
+  ops->to_has_stack = tracefile_has_stack;
+  ops->to_has_registers = tracefile_has_registers;
+  ops->to_thread_alive = tracefile_thread_alive;
+  ops->to_magic = OPS_MAGIC;
+}
+
+extern initialize_file_ftype _initialize_tracefile;
+
 void
 _initialize_tracefile (void)
 {
-  add_com ("tsave", class_trace, tsave_command, _("\
+  add_com ("tsave", class_trace, trace_save_command, _("\
 Save the trace data to a file.\n\
 Use the '-ctf' option to save the data to CTF format.\n\
 Use the '-r' option to direct the target to save directly to the file,\n\

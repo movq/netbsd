@@ -1,6 +1,6 @@
 /* Generic streaming support for various data types.
 
-   Copyright (C) 2011-2019 Free Software Foundation, Inc.
+   Copyright (C) 2011-2013 Free Software Foundation, Inc.
    Contributed by Diego Novillo <dnovillo@google.com>
 
 This file is part of GCC.
@@ -22,6 +22,7 @@ along with GCC; see the file COPYING3.  If not see
 #ifndef GCC_DATA_STREAMER_H
 #define GCC_DATA_STREAMER_H
 
+#include "vec.h"
 #include "lto-streamer.h"
 
 /* Data structures used to pack values and bitflags into a vector of
@@ -43,6 +44,15 @@ struct bitpack_d
   void *stream;
 };
 
+
+/* String hashing.  */
+struct string_slot
+{
+  const char *s;
+  int len;
+  unsigned int slot_num;
+};
+
 /* In data-streamer.c  */
 void bp_pack_var_len_unsigned (struct bitpack_d *, unsigned HOST_WIDE_INT);
 void bp_pack_var_len_int (struct bitpack_d *, HOST_WIDE_INT);
@@ -53,9 +63,10 @@ HOST_WIDE_INT bp_unpack_var_len_int (struct bitpack_d *);
 void streamer_write_zero (struct output_block *);
 void streamer_write_uhwi (struct output_block *, unsigned HOST_WIDE_INT);
 void streamer_write_hwi (struct output_block *, HOST_WIDE_INT);
-void streamer_write_gcov_count (struct output_block *, gcov_type);
 void streamer_write_string (struct output_block *, struct lto_output_stream *,
 			    const char *, bool);
+unsigned streamer_string_index (struct output_block *, const char *,
+				unsigned int, bool);
 void streamer_write_string_with_length (struct output_block *,
 					struct lto_output_stream *,
 					const char *, unsigned int, bool);
@@ -66,13 +77,9 @@ void bp_pack_string (struct output_block *, struct bitpack_d *,
 void streamer_write_uhwi_stream (struct lto_output_stream *,
 				 unsigned HOST_WIDE_INT);
 void streamer_write_hwi_stream (struct lto_output_stream *, HOST_WIDE_INT);
-void streamer_write_gcov_count_stream (struct lto_output_stream *, gcov_type);
-void streamer_write_data_stream (struct lto_output_stream *, const void *,
-				 size_t);
-void streamer_write_wide_int (struct output_block *, const wide_int &);
-void streamer_write_widest_int (struct output_block *, const widest_int &);
 
 /* In data-streamer-in.c  */
+const char *string_for_index (struct data_in *, unsigned int, unsigned int *);
 const char *streamer_read_string (struct data_in *, struct lto_input_block *);
 const char *streamer_read_indexed_string (struct data_in *,
 					  struct lto_input_block *,
@@ -82,9 +89,35 @@ const char *bp_unpack_indexed_string (struct data_in *, struct bitpack_d *,
 const char *bp_unpack_string (struct data_in *, struct bitpack_d *);
 unsigned HOST_WIDE_INT streamer_read_uhwi (struct lto_input_block *);
 HOST_WIDE_INT streamer_read_hwi (struct lto_input_block *);
-gcov_type streamer_read_gcov_count (struct lto_input_block *);
-wide_int streamer_read_wide_int (struct lto_input_block *);
-widest_int streamer_read_widest_int (struct lto_input_block *);
+
+/* Returns a hash code for P.  Adapted from libiberty's htab_hash_string
+   to support strings that may not end in '\0'.  */
+
+static inline hashval_t
+hash_string_slot_node (const void *p)
+{
+  const struct string_slot *ds = (const struct string_slot *) p;
+  hashval_t r = ds->len;
+  int i;
+
+  for (i = 0; i < ds->len; i++)
+     r = r * 67 + (unsigned)ds->s[i] - 113;
+  return r;
+}
+
+/* Returns nonzero if P1 and P2 are equal.  */
+
+static inline int
+eq_string_slot_node (const void *p1, const void *p2)
+{
+  const struct string_slot *ds1 = (const struct string_slot *) p1;
+  const struct string_slot *ds2 = (const struct string_slot *) p2;
+
+  if (ds1->len == ds2->len)
+    return memcmp (ds1->s, ds2->s, ds1->len) == 0;
+
+  return 0;
+}
 
 /* Returns a new bit-packing context for bit-packing into S.  */
 static inline struct bitpack_d
@@ -124,17 +157,6 @@ bp_pack_value (struct bitpack_d *bp, bitpack_word_t val, unsigned nbits)
     }
   bp->word = word;
   bp->pos = pos;
-}
-
-/* Pack VAL into the bit-packing context BP, using NBITS for each
-   coefficient.  */
-static inline void
-bp_pack_poly_value (struct bitpack_d *bp,
-		    const poly_int<NUM_POLY_INT_COEFFS, bitpack_word_t> &val,
-		    unsigned nbits)
-{
-  for (int i = 0; i < NUM_POLY_INT_COEFFS; ++i)
-    bp_pack_value (bp, val.coeffs[i], nbits);
 }
 
 /* Finishes bit-packing of BP.  */
@@ -185,17 +207,6 @@ bp_unpack_value (struct bitpack_d *bp, unsigned nbits)
   return val & mask;
 }
 
-/* Unpacks a polynomial value from the bit-packing context BP in which each
-   coefficient has NBITS bits.  */
-static inline poly_int<NUM_POLY_INT_COEFFS, bitpack_word_t>
-bp_unpack_poly_value (struct bitpack_d *bp, unsigned nbits)
-{
-  poly_int_pod<NUM_POLY_INT_COEFFS, bitpack_word_t> x;
-  for (int i = 0; i < NUM_POLY_INT_COEFFS; ++i)
-    x.coeffs[i] = bp_unpack_value (bp, nbits);
-  return x;
-}
-
 
 /* Write a character to the output block.  */
 
@@ -207,9 +218,8 @@ streamer_write_char_stream (struct lto_output_stream *obs, char c)
     lto_append_block (obs);
 
   /* Write the actual character.  */
-  char *current_pointer = obs->current_pointer;
-  *(current_pointer++) = c;
-  obs->current_pointer = current_pointer;
+  *obs->current_pointer = c;
+  obs->current_pointer++;
   obs->total_size++;
   obs->left_in_block--;
 }
@@ -241,7 +251,13 @@ streamer_write_hwi_in_range (struct lto_output_stream *obs,
 		       && range < 0x7fffffff);
 
   val -= min;
-  streamer_write_uhwi_stream (obs, (unsigned HOST_WIDE_INT) val);
+  streamer_write_char_stream (obs, val & 255);
+  if (range >= 0xff)
+    streamer_write_char_stream (obs, (val >> 8) & 255);
+  if (range >= 0xffff)
+    streamer_write_char_stream (obs, (val >> 16) & 255);
+  if (range >= 0xffffff)
+    streamer_write_char_stream (obs, (val >> 24) & 255);
 }
 
 /* Input VAL into OBS and verify it is in range MIN...MAX that is supposed
@@ -254,11 +270,17 @@ streamer_read_hwi_in_range (struct lto_input_block *ib,
 				 HOST_WIDE_INT max)
 {
   HOST_WIDE_INT range = max - min;
-  unsigned HOST_WIDE_INT uval = streamer_read_uhwi (ib);
+  HOST_WIDE_INT val = streamer_read_uchar (ib);
 
   gcc_checking_assert (range > 0 && range < 0x7fffffff);
 
-  HOST_WIDE_INT val = (HOST_WIDE_INT) (uval + (unsigned HOST_WIDE_INT) min);
+  if (range >= 0xff)
+    val |= ((HOST_WIDE_INT)streamer_read_uchar (ib)) << 8;
+  if (range >= 0xffff)
+    val |= ((HOST_WIDE_INT)streamer_read_uchar (ib)) << 16;
+  if (range >= 0xffffff)
+    val |= ((HOST_WIDE_INT)streamer_read_uchar (ib)) << 24;
+  val += min;
   if (val < min || val > max)
     lto_value_range_error (purpose, val, min, max);
   return val;

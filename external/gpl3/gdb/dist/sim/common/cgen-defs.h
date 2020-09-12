@@ -1,5 +1,6 @@
 /* General Cpu tools GENerated simulator support.
-   Copyright (C) 1996-2019 Free Software Foundation, Inc.
+   Copyright (C) 1996, 1997, 1998, 1999, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
    Contributed by Cygnus Support.
 
 This file is part of GDB, the GNU debugger.
@@ -140,10 +141,24 @@ typedef enum {
 
 /* Simulator state.  */
 
+/* Records simulator descriptor so utilities like @cpu@_dump_regs can be
+   called from gdb.  */
+extern SIM_DESC current_state;
+
+/* Simulator state.  */
+
 /* CGEN_STATE contains additional state information not present in
    sim_state_base.  */
 
 typedef struct cgen_state {
+  /* FIXME: Moved to sim_state_base.  */
+  /* argv, env */
+  char **argv;
+#define STATE_ARGV(s) ((s) -> cgen_state.argv)
+  /* FIXME: Move to sim_state_base.  */
+  char **envp;
+#define STATE_ENVP(s) ((s) -> cgen_state.envp)
+
   /* Non-zero if no tracing or profiling is selected.  */
   int run_fast_p;
 #define STATE_RUN_FAST_P(sd) ((sd) -> cgen_state.run_fast_p)

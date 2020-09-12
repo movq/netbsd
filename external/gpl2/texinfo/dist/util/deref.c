@@ -1,4 +1,4 @@
-/*	$NetBSD: deref.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: deref.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /*
  * deref.c

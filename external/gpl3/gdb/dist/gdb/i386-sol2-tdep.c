@@ -1,6 +1,7 @@
 /* Target-dependent code for Solaris x86.
 
-   Copyright (C) 2002-2019 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2004, 2006, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,6 +21,8 @@
 #include "defs.h"
 #include "value.h"
 #include "osabi.h"
+
+#include "gdb_string.h"
 
 #include "sol2-tdep.h"
 #include "i386-tdep.h"
@@ -53,12 +56,11 @@ static int
 i386_sol2_sigtramp_p (struct frame_info *this_frame)
 {
   CORE_ADDR pc = get_frame_pc (this_frame);
-  const char *name;
+  char *name;
 
   find_pc_partial_function (pc, &name, NULL, NULL);
   return (name && (strcmp ("sigacthandler", name) == 0
-		   || strcmp (name, "ucbsigvechandler") == 0
-		   || strcmp (name, "__sighndlr") == 0));
+		   || strcmp (name, "ucbsigvechandler") == 0));
 }
 
 /* Solaris doesn't have a `struct sigcontext', but it does have a
@@ -78,13 +80,12 @@ i386_sol2_mcontext_addr (struct frame_info *this_frame)
 /* SunPRO encodes the static variables.  This is not related to C++
    mangling, it is done for C too.  */
 
-static const char *
-i386_sol2_static_transform_name (const char *name)
+static char *
+i386_sol2_static_transform_name (char *name)
 {
+  char *p;
   if (name[0] == '.')
     {
-      const char *p;
-
       /* For file-local statics there will be a period, a bunch of
          junk (the contents of which match a string given in the
          N_OPT), a period and the name.  For function-local statics
@@ -150,6 +151,9 @@ i386_sol2_osabi_sniffer (bfd *abfd)
 
   return GDB_OSABI_UNKNOWN;
 }
+
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+void _initialize_i386_sol2_tdep (void);
 
 void
 _initialize_i386_sol2_tdep (void)

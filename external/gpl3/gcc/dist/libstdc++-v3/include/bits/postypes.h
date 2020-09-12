@@ -1,6 +1,8 @@
 // Position types -*- C++ -*-
 
-// Copyright (C) 1997-2019 Free Software Foundation, Inc.
+// Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+// 2006, 2007, 2008, 2009
+// Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,9 +24,9 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file bits/postypes.h
+/** @file postypes.h
  *  This is an internal header file, included by other library headers.
- *  Do not attempt to use it directly. @headername{iosfwd}
+ *  You should not attempt to use it directly.
  */
 
 //
@@ -41,7 +43,7 @@
 
 // XXX If <stdint.h> is really needed, make sure to define the macros
 // before including it, in order not to break <tr1/cstdint> (and <cstdint>
-// in C++11).  Reconsider all this as soon as possible...
+// in C++0x).  Reconsider all this as soon as possible...
 #if (defined(_GLIBCXX_HAVE_INT64_T) && !defined(_GLIBCXX_HAVE_INT64_T_LONG) \
      && !defined(_GLIBCXX_HAVE_INT64_T_LONG_LONG))
 
@@ -65,9 +67,7 @@
 
 #endif
 
-namespace std _GLIBCXX_VISIBILITY(default)
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(std)
 
   // The types streamoff, streampos and wstreampos and the class
   // template fpos<> are described in clauses 21.1.2, 21.1.3, 27.1.2,
@@ -132,12 +132,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       /// Construct position from offset.
       fpos(streamoff __off)
       : _M_off(__off), _M_state() { }
-
-#if __cplusplus >= 201103L
-      fpos(const fpos&) = default;
-      fpos& operator=(const fpos&) = default;
-      ~fpos() = default;
-#endif
 
       /// Convert to streamoff.
       operator streamoff() const { return _M_off; }
@@ -235,19 +229,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   /// File position for wchar_t streams.
   typedef fpos<mbstate_t> wstreampos;
 
-#ifdef _GLIBCXX_USE_CHAR8_T
-  /// File position for char8_t streams.
-  typedef fpos<mbstate_t> u8streampos;
-#endif
-
-#if __cplusplus >= 201103L
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
   /// File position for char16_t streams.
   typedef fpos<mbstate_t> u16streampos;
   /// File position for char32_t streams.
   typedef fpos<mbstate_t> u32streampos;
 #endif
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 #endif

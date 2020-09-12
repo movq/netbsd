@@ -1,5 +1,5 @@
 /* MI Command Set - information commands.
-   Copyright (C) 2011-2019 Free Software Foundation, Inc.
+   Copyright (C) 2011-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,85 +19,17 @@
 #include "defs.h"
 #include "osdata.h"
 #include "mi-cmds.h"
-#include "ada-lang.h"
-#include "arch-utils.h"
-
-/* Implement the "-info-ada-exceptions" GDB/MI command.  */
 
 void
-mi_cmd_info_ada_exceptions (const char *command, char **argv, int argc)
-{
-  struct ui_out *uiout = current_uiout;
-  struct gdbarch *gdbarch = get_current_arch ();
-  char *regexp;
-
-  switch (argc)
-    {
-    case 0:
-      regexp = NULL;
-      break;
-    case 1:
-      regexp = argv[0];
-      break;
-    default:
-      error (_("Usage: -info-ada-exceptions [REGEXP]"));
-      break;
-    }
-
-  std::vector<ada_exc_info> exceptions = ada_exceptions_list (regexp);
-
-  ui_out_emit_table table_emitter (uiout, 2,
-				   exceptions.size (),
-				   "ada-exceptions");
-  uiout->table_header (1, ui_left, "name", "Name");
-  uiout->table_header (1, ui_left, "address", "Address");
-  uiout->table_body ();
-
-  for (const ada_exc_info &info : exceptions)
-    {
-      ui_out_emit_tuple tuple_emitter (uiout, NULL);
-      uiout->field_string ("name", info.name);
-      uiout->field_core_addr ("address", gdbarch, info.addr);
-    }
-}
-
-/* Implement the "-info-gdb-mi-command" GDB/MI command.  */
-
-void
-mi_cmd_info_gdb_mi_command (const char *command, char **argv, int argc)
-{
-  const char *cmd_name;
-  struct mi_cmd *cmd;
-  struct ui_out *uiout = current_uiout;
-
-  /* This command takes exactly one argument.  */
-  if (argc != 1)
-    error (_("Usage: -info-gdb-mi-command MI_COMMAND_NAME"));
-  cmd_name = argv[0];
-
-  /* Normally, the command name (aka the "operation" in the GDB/MI
-     grammar), does not include the leading '-' (dash).  But for
-     the user's convenience, allow the user to specify the command
-     name to be with or without that leading dash.  */
-  if (cmd_name[0] == '-')
-    cmd_name++;
-
-  cmd = mi_lookup (cmd_name);
-
-  ui_out_emit_tuple tuple_emitter (uiout, "command");
-  uiout->field_string ("exists", cmd != NULL ? "true" : "false");
-}
-
-void
-mi_cmd_info_os (const char *command, char **argv, int argc)
+mi_cmd_info_os (char *command, char **argv, int argc)
 {
   switch (argc)
     {
     case 0:
-      info_osdata (NULL);
+      info_osdata_command ("", 0);
       break;
     case 1:
-      info_osdata (argv[0]);
+      info_osdata_command (argv[0], 0);
       break;
     default:
       error (_("Usage: -info-os [INFOTYPE]"));

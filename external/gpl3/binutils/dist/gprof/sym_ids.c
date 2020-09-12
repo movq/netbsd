@@ -1,6 +1,6 @@
 /* sym_ids.c
 
-   Copyright (C) 1999-2020 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001, 2002, 2004, 2007 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -29,25 +29,23 @@
 #include "sym_ids.h"
 #include "corefile.h"
 
-struct match
-  {
-    int prev_index;	/* Index of prev match.  */
-    Sym *prev_match;	/* Previous match.  */
-    Sym *first_match;	/* Chain of all matches.  */
-    Sym sym;
-  };
-
-struct sym_id
+static struct sym_id
   {
     struct sym_id *next;
     char *spec;			/* Parsing modifies this.  */
     Table_Id which_table;
     bfd_boolean has_right;
 
-    struct match left, right;
-  };
-
-static struct sym_id  *id_list;
+    struct match
+      {
+	int prev_index;		/* Index of prev match.  */
+	Sym *prev_match;	/* Previous match.  */
+	Sym *first_match;	/* Chain of all matches.  */
+	Sym sym;
+      }
+    left, right;
+  }
+ *id_list;
 
 static void parse_spec
   (char *, Sym *);
@@ -273,7 +271,7 @@ extend_match (struct match *m, Sym *sym, Sym_Table *tab, bfd_boolean second_pass
    requests---you get what you ask for!  */
 
 void
-sym_id_parse (void)
+sym_id_parse ()
 {
   Sym *sym, *left, *right;
   struct sym_id *id;

@@ -1,5 +1,5 @@
 # Type printer commands.
-# Copyright (C) 2010-2019 Free Software Foundation, Inc.
+# Copyright (C) 2010-2013 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -22,7 +22,8 @@ import gdb
 class InfoTypePrinter(gdb.Command):
     """GDB command to list all registered type-printers.
 
-Usage: info type-printers"""
+    Usage: info type-printers
+    """
 
     def __init__ (self):
         super(InfoTypePrinter, self).__init__("info type-printers",
@@ -46,7 +47,7 @@ Usage: info type-printers"""
         sep = ''
         for objfile in gdb.objfiles():
             if objfile.type_printers:
-                print ("%sType printers for %s:" % (sep, objfile.filename))
+                print ("%sType printers for %s:" % (sep, objfile.name))
                 self.list_type_printers(objfile.type_printers)
                 sep = '\n'
         if gdb.current_progspace().type_printers:
@@ -100,9 +101,10 @@ class _EnableOrDisableCommand(gdb.Command):
 class EnableTypePrinter(_EnableOrDisableCommand):
     """GDB command to enable the specified type printer.
 
-Usage: enable type-printer NAME
+    Usage: enable type-printer NAME
 
-NAME is the name of the type-printer."""
+    NAME is the name of the type-printer.
+    """
 
     def __init__(self):
         super(EnableTypePrinter, self).__init__(True, "enable type-printer")
@@ -110,9 +112,10 @@ NAME is the name of the type-printer."""
 class DisableTypePrinter(_EnableOrDisableCommand):
     """GDB command to disable the specified type-printer.
 
-Usage: disable type-printer NAME
+    Usage: disable type-printer NAME
 
-NAME is the name of the type-printer."""
+    NAME is the name of the type-printer.
+    """
 
     def __init__(self):
         super(DisableTypePrinter, self).__init__(False, "disable type-printer")

@@ -1,5 +1,6 @@
 /* BFD support for the Alpha architecture.
-   Copyright (C) 1992-2019 Free Software Foundation, Inc.
+   Copyright 1992, 1993, 1998, 2000, 2002, 2003, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -33,9 +34,8 @@
     PRINT,						\
     3,							\
     DEFAULT,						\
-    bfd_default_compatible,				\
+    bfd_default_compatible, 				\
     bfd_default_scan,					\
-    bfd_arch_default_fill,				\
     NEXT,						\
   }
 

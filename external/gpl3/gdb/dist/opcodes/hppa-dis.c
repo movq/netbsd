@@ -1,5 +1,6 @@
 /* Disassembler for the PA-RISC. Somewhat derived from sparc-pinsn.c.
-   Copyright (C) 1989-2019 Free Software Foundation, Inc.
+   Copyright 1989, 1990, 1992, 1993, 1994, 1995, 1998, 1999, 2000, 2001, 2003,
+   2005, 2007  Free Software Foundation, Inc.
 
    Contributed by the Center for Software Science at the
    University of Utah (pa-gdb-bugs@cs.utah.edu).
@@ -22,7 +23,7 @@
    MA 02110-1301, USA.  */
 
 #include "sysdep.h"
-#include "disassemble.h"
+#include "dis-asm.h"
 #include "libhppa.h"
 #include "opcode/hppa.h"
 
@@ -175,13 +176,13 @@ static const char *const add_compl_names[] = { 0, "", ",l", ",tsv" };
 static void
 fput_reg (unsigned reg, disassemble_info *info)
 {
-  (*info->fprintf_func) (info->stream, "%s", reg ? reg_names[reg] : "r0");
+  (*info->fprintf_func) (info->stream, reg ? reg_names[reg] : "r0");
 }
 
 static void
 fput_fp_reg (unsigned reg, disassemble_info *info)
 {
-  (*info->fprintf_func) (info->stream, "%s", reg ? fp_reg_names[reg] : "fr0");
+  (*info->fprintf_func) (info->stream, reg ? fp_reg_names[reg] : "fr0");
 }
 
 static void
@@ -198,7 +199,7 @@ fput_fp_reg_r (unsigned reg, disassemble_info *info)
 static void
 fput_creg (unsigned reg, disassemble_info *info)
 {
-  (*info->fprintf_func) (info->stream, "%s", control_reg[reg]);
+  (*info->fprintf_func) (info->stream, control_reg[reg]);
 }
 
 /* Print constants with sign.  */
@@ -425,7 +426,7 @@ print_insn_hppa (bfd_vma memaddr, disassemble_info *info)
 			fput_fp_reg (GET_FIELD (insn, 6, 10), info);
 		      break;
 
-		      /* 'fA' will not generate a space before the register
+		      /* 'fA' will not generate a space before the regsiter
 			 name.  Normally that is fine.  Except that it
 			 causes problems with xmpyu which has no FP format
 			 completer.  */
@@ -1103,7 +1104,7 @@ print_insn_hppa (bfd_vma memaddr, disassemble_info *info)
 		    int disp;
 
 		    if (sign)
-		      disp = (-1U << 10) | imm10;
+		      disp = (-1 << 10) | imm10;
 		    else
 		      disp = imm10;
 
@@ -1119,7 +1120,7 @@ print_insn_hppa (bfd_vma memaddr, disassemble_info *info)
 		    int disp;
 
 		    if (sign)
-		      disp = (-1U << 11) | imm11;
+		      disp = (-1 << 11) | imm11;
 		    else
 		      disp = imm11;
 

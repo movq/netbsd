@@ -1,4 +1,5 @@
-#   Copyright 1997-2019 Free Software Foundation, Inc.
+#   Copyright 1997, 1998, 1999, 2000, 2001, 2003, 2007, 2008, 2009, 2010, 2011
+#   Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,11 +17,22 @@
 # display.exp   Test display commands
 #               Also do some printing stuff for coverage's sake.
 #
-standard_testfile
+if $tracelevel then {
+	strace $tracelevel
+}
 
-if {[prepare_for_testing "failed to prepare" $testfile $srcfile \
-	 {debug nowarnings}]} {
+set testfile display
+set srcfile  ${testfile}.c
+set binfile  ${objdir}/${subdir}/${testfile}
+
+
+
+if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug nowarnings}] != "" } {
+    untested display.exp
     return -1
+}
+if [target_info exists gdb_stub] {
+    gdb_step_for_stub;
 }
 
 # Preserve the old timeout, and set a new one that should be
@@ -32,9 +44,14 @@ verbose "Timeout is now $timeout seconds" 2
 # use this to debug:
 #log_user 1
 
+gdb_exit
+gdb_start
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
+
 # Some coverage stuff
 #
-if !$use_gdb_stub {
+if ![target_info exists use_gdb_stub] {
     gdb_test "kill" ".*The program is not being run.*"
     gdb_test "detach" ".*"
     gdb_test "run" ".*"
@@ -52,7 +69,7 @@ if !$use_gdb_stub {
 # Ok, on to real life
 #
 if ![runto_main] then {
-    fail "could not run to main - other tests will fail."
+    fail "Could not run to main - other tests will fail."
     continue
 }
 
@@ -82,23 +99,8 @@ gdb_test "disp/s &sum" ".*5: x/s &sum  $hex.*sum.:.*" "display/s &sum"
 
 # Hit the displays
 #
-gdb_test "cont" [multi_line \
-		     ".*\[Ww\]atchpoint 3: sum.*" \
-		     "\[1-9\]*: i = 0.*" \
-		     "\[1-9\]*: /x j = 0x0" \
-		     "\[1-9\]*: x/i &k.*" \
-		     "\[1-9\]*: /f f = 3.1415" \
-		     "\[1-9\]*: x/s &sum.*" \
-		    ] "first disp"
-
-gdb_test "cont" [multi_line \
-		     ".*\[Ww\]atchpoint 3: sum.*" \
-		     "\[1-9\]*: i = 0.*" \
-		     "\[1-9\]*: /x j = 0x0.*" \
-		     "\[1-9\]*: x/i &k.*" \
-		     "\[1-9\]*: /f f = 4.1415" \
-		     "\[1-9\]*: x/s &sum.*" \
-		    ] "second disp"
+gdb_test "cont" ".*\[Ww\]atchpoint 3: sum.*\[1-9\]*: x/s &sum.*\[1-9\]*: /f f = 3.1415\r\n\[1-9\]*: x/i &k.*\r\n\[1-9\]*: /x j = 0x0\r\n\[1-9\]*: i = 0.*" "first disp"
+gdb_test "cont" ".*\[Ww\]atchpoint 3: sum.*\[1-9\]*: x/s &sum.*\[1-9\]*: /f f = 4.1415\r\n\[1-9\]*: x/i &k.*\r\n\[1-9\]*: /x j = 0x0.*\[1-9\]*: i = 0.*" "second disp"
 
 gdb_test "enab  disp 6" ".*No display number 6..*" "catch err"
 gdb_test_no_output "disab disp 1" "disab disp 1"
@@ -106,19 +108,9 @@ gdb_test_no_output "disab disp 2" "disab disp 2"
 gdb_test_no_output "enab disp 1"  "re-enab"
 gdb_test_no_output "enab disp 1"  "re-enab of enab"
 gdb_test_no_output "undisp 5"     "undisp"
-gdb_test "info disp" [multi_line \
-			  "Auto-display expressions now in effect.*" \
-			  ".*y  i" \
-			  ".*n  /x j" \
-			  ".*y  /1bi &k" \
-			  ".*y  /f f" \
-			 ] "info disp"
+gdb_test "info disp"    ".*Auto-display expressions now in effect.*y  /f f.*y  /1bi &k.*n  /x j.*y  i.*" "info disp"
 
-gdb_test "cont" [multi_line \
-		     ".*\[Ww\]atch.*" \
-		     ".*i = 0" \
-		     ".*5.1415" \
-		    ] "next hit"
+gdb_test "cont" ".*\[Ww\]atch.*5.1415.*.*i = 0.*" "next hit"
 
 gdb_test "undisp" \
     "" \
@@ -126,25 +118,6 @@ gdb_test "undisp" \
     ".*Delete all auto-display expressions.*y or n. $" \
     "y"
 
-
-# Test displaying a variable that is temporarily at a bad address.
-# But if we can examine what's at memory address 0, then we'll also be
-# able to display it without error.  Don't run the test in that case.
-set can_read_0 [is_address_zero_readable]
-
-if { !$can_read_0 } {
-    gdb_test "disp *p_i" ".*: \\*p_i = 0"
-    gdb_test "p p_i = 0x0" " = \\(int \\*\\) 0x0"
-    gdb_test "display" ".*: \\*p_i = <error: .*>" "display bad address"
-    gdb_test "p p_i = &i" " = \\(int \\*\\) $hex"
-    gdb_test "display" ".*: \\*p_i = 0" "display good address"
-
-    gdb_test "undisp" \
-	"" \
-	"undisp all again" \
-	".*Delete all auto-display expressions.*y or n. $" \
-	"y"
-}
 
 gdb_test "disab 3" ".*.*" "disab 3"
 gdb_test "cont" ".*Breakpoint 4.*" "watch off"
@@ -185,7 +158,7 @@ gdb_test "printf \"%p\\n\", 1" "0x1"
 
 # play with "print", too
 #
-gdb_test "print/k j" ".*Undefined output format.*"
+gdb_test "print/z j" ".*Undefined output format.*"
 gdb_test "print/d j" " = 0\[\\r\\n\]+"   "debug test output 1"
 gdb_test "print/r j" " = 0\[\\r\\n\]+"   "debug test output 1a"
 gdb_test "print/x j" " = 0x0\[\\r\\n\]+" "debug test output 2"
@@ -193,8 +166,15 @@ gdb_test "print/r j" " = 0x0\[\\r\\n\]+" "debug test output 2a"
 gdb_test "print j"   " = 0\[\\r\\n\]+"   "debug test output 3"
 
 # x/0 j doesn't produce any output and terminates PA64 process when testing
-gdb_test_no_output "x/0 j"
-
+if [istarget "hppa2.0w-hp-hpux11*"] {
+    xfail "'x/0 j' terminates PA64 process - skipped test point"
+} else {
+    gdb_test_no_output "x/0 j"
+}
+if [istarget "hppa*-hp-hpux*"] {
+    # on HP-UX you could access the first page without getting an error
+    gdb_test "x/rx j" ".*(Cannot access|Error accessing) memory.*|.*0xa:\[ \t\]*\[0-9\]+.*"
+}
 gdb_test "print/0 j" ".*Item count other than 1 is meaningless.*" "print/0 j"
 gdb_test "print/s sum" " = 1000" "ignored s"
 gdb_test "print/i sum" ".*Format letter.*is meaningless.*.*" "no i"

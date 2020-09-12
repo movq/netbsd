@@ -1,5 +1,6 @@
 /* <proc_service.h> replacement for systems that don't have it.
-   Copyright (C) 2000-2019 Free Software Foundation, Inc.
+   Copyright (C) 2000, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,15 +20,64 @@
 #ifndef GDB_PROC_SERVICE_H
 #define GDB_PROC_SERVICE_H
 
-#include "common/gdb_proc_service.h"
+#include <sys/types.h>
 
-struct thread_info;
+#ifdef HAVE_PROC_SERVICE_H
+#include <proc_service.h>
+#else
 
-/* GDB specific structure that identifies the target process.  */
+#ifdef HAVE_SYS_PROCFS_H
+#include <sys/procfs.h>
+#endif
+
+#include "gregset.h"
+
+typedef enum
+{
+  PS_OK,			/* Success.  */
+  PS_ERR,			/* Generic error.  */
+  PS_BADPID,			/* Bad process handle.  */
+  PS_BADLID,			/* Bad LWP id.  */
+  PS_BADADDR,			/* Bad address.  */
+  PS_NOSYM,			/* Symbol not found.  */
+  PS_NOFREGS			/* FPU register set not available.  */
+} ps_err_e;
+
+#ifndef HAVE_LWPID_T
+typedef unsigned int lwpid_t;
+#endif
+
+#ifndef HAVE_PSADDR_T
+typedef void *psaddr_t;
+#endif
+
+#ifndef HAVE_PRGREGSET_T
+typedef gdb_gregset_t prgregset_t;
+#endif
+
+#ifndef HAVE_PRFPREGSET_T
+typedef gdb_fpregset_t prfpregset_t;
+#endif
+
+#endif /* HAVE_PROC_SERVICE_H */
+
+/* Fix-up some broken systems.  */
+
+/* Unfortunately glibc 2.1.3 was released with a broken prfpregset_t
+   type.  We let configure check for this lossage, and make
+   appropriate typedefs here.  */
+
+#ifdef PRFPREGSET_T_BROKEN
+typedef gdb_fpregset_t gdb_prfpregset_t;
+#else
+typedef prfpregset_t gdb_prfpregset_t;
+#endif
+
+/* Structure that identifies the target process.  */
 struct ps_prochandle
 {
   /* The LWP we use for memory reads.  */
-  thread_info *thread;
+  ptid_t ptid;
 };
 
 #endif /* gdb_proc_service.h */

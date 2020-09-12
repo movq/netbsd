@@ -8,7 +8,6 @@
 // Common getauxval() guards and definitions.
 // getauxval() is not defined until glibc version 2.16, or until API level 21
 // for Android.
-// Implement the getauxval() compat function for NetBSD.
 //
 //===----------------------------------------------------------------------===//
 
@@ -42,23 +41,6 @@ extern "C" SANITIZER_WEAK_ATTRIBUTE
 unsigned long getauxval(unsigned long type);  // NOLINT
 # endif
 
-#elif SANITIZER_NETBSD
-
-#define SANITIZER_USE_GETAUXVAL 1
-
-#include <dlfcn.h>
-#include <elf.h>
-
-static inline decltype(AuxInfo::a_v) getauxval(decltype(AuxInfo::a_type) type) {
-  for (const AuxInfo *aux = (const AuxInfo *)_dlauxinfo();
-       aux->a_type != AT_NULL; ++aux) {
-    if (type == aux->a_type)
-      return aux->a_v;
-  }
-
-  return 0;
-}
-
-#endif
+#endif // SANITIZER_LINUX || SANITIZER_FUCHSIA
 
 #endif // SANITIZER_GETAUXVAL_H

@@ -1,8 +1,7 @@
-/* Copyright (C) 2005-2019 Free Software Foundation, Inc.
+/* Copyright (C) 2005, 2006, 2009 Free Software Foundation, Inc.
    Contributed by Richard Henderson <rth@redhat.com>.
 
-   This file is part of the GNU Offloading and Multi Processing Library
-   (libgomp).
+   This file is part of the GNU OpenMP Library (libgomp).
 
    Libgomp is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by

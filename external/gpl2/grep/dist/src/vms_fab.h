@@ -1,4 +1,4 @@
-/*	$NetBSD: vms_fab.h,v 1.1.1.1 2016/01/10 21:36:21 christos Exp $	*/
+/*	$NetBSD: vms_fab.h,v 1.1 2016/01/10 21:36:21 christos Exp $	*/
 
 /*
    This file includes the setup for the file access block for VMS.

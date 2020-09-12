@@ -32,54 +32,33 @@ class FlagHandler : public FlagHandlerBase {
   bool Parse(const char *value) final;
 };
 
-inline bool ParseBool(const char *value, bool *b) {
+template <>
+inline bool FlagHandler<bool>::Parse(const char *value) {
   if (internal_strcmp(value, "0") == 0 ||
       internal_strcmp(value, "no") == 0 ||
       internal_strcmp(value, "false") == 0) {
-    *b = false;
+    *t_ = false;
     return true;
   }
   if (internal_strcmp(value, "1") == 0 ||
       internal_strcmp(value, "yes") == 0 ||
       internal_strcmp(value, "true") == 0) {
-    *b = true;
+    *t_ = true;
     return true;
   }
-  return false;
-}
-
-template <>
-inline bool FlagHandler<bool>::Parse(const char *value) {
-  if (ParseBool(value, t_)) return true;
   Printf("ERROR: Invalid value for bool option: '%s'\n", value);
   return false;
 }
 
 template <>
-inline bool FlagHandler<HandleSignalMode>::Parse(const char *value) {
-  bool b;
-  if (ParseBool(value, &b)) {
-    *t_ = b ? kHandleSignalYes : kHandleSignalNo;
-    return true;
-  }
-  if (internal_strcmp(value, "2") == 0 ||
-      internal_strcmp(value, "exclusive") == 0) {
-    *t_ = kHandleSignalExclusive;
-    return true;
-  }
-  Printf("ERROR: Invalid value for signal handler option: '%s'\n", value);
-  return false;
-}
-
-template <>
 inline bool FlagHandler<const char *>::Parse(const char *value) {
-  *t_ = value;
+  *t_ = internal_strdup(value);
   return true;
 }
 
 template <>
 inline bool FlagHandler<int>::Parse(const char *value) {
-  const char *value_end;
+  char *value_end;
   *t_ = internal_simple_strtoll(value, &value_end, 10);
   bool ok = *value_end == 0;
   if (!ok) Printf("ERROR: Invalid value for int option: '%s'\n", value);
@@ -88,7 +67,7 @@ inline bool FlagHandler<int>::Parse(const char *value) {
 
 template <>
 inline bool FlagHandler<uptr>::Parse(const char *value) {
-  const char *value_end;
+  char *value_end;
   *t_ = internal_simple_strtoll(value, &value_end, 10);
   bool ok = *value_end == 0;
   if (!ok) Printf("ERROR: Invalid value for uptr option: '%s'\n", value);

@@ -1,6 +1,7 @@
 /* rclex.c -- lexer for Windows rc files parser  */
 
-/* Copyright (C) 1997-2020 Free Software Foundation, Inc.
+/* Copyright 1997, 1998, 1999, 2001, 2002, 2003, 2005, 2006, 2007
+   Free Software Foundation, Inc.
 
    Written by Kai Tietz, Onevision.
 
@@ -40,7 +41,7 @@
 
 static int rcdata_mode;
 
-/* Whether we are suppressing lines from cpp (including windows.h or
+/* Whether we are supressing lines from cpp (including windows.h or
    headers from your C sources may bring in externs and typedefs).
    When active, we return IGNORED_TOKEN, which lets us ignore these
    outside of resource constructs.  Thus, it isn't required to protect
@@ -147,7 +148,7 @@ cpp_line (void)
   ++s;
   while (ISSPACE (*s))
     ++s;
-
+  
   /* Check for #pragma code_page ( DEFAULT | <nr>).  */
   len = strlen (s);
   mlen = strlen ("pragma");
@@ -389,9 +390,9 @@ handle_quotes (rc_uint_type *len)
 	}
       else
 	{
+	  rcparse_warning ("unexpected character after '\"'");
 	  ++t;
-	  if (! ISSPACE (*t))
-	    rcparse_warning ("unexpected character after '\"'");
+	  assert (ISSPACE (*t));
 	  while (ISSPACE (*t))
 	    {
 	      if ((*t) == '\n')
@@ -678,7 +679,7 @@ static void
 rclex_string (void)
 {
   int c;
-
+  
   while ((c = rclex_peekch ()) != -1)
     {
       if (c == '\n')
@@ -692,18 +693,6 @@ rclex_string (void)
         }
       else if (rclex_readch () == '"')
 	{
-	  /* PR 6714
-	     Skip any whitespace after the end of the double quotes.  */
-	  do
-	    {
-	      c = rclex_peekch ();
-	      if (ISSPACE (c))
-		rclex_readch ();
-	      else
-		c = -1;
-	    }
-	  while (c != -1);
-
 	  if (rclex_peekch () == '"')
 	    rclex_readch ();
 	  else
@@ -781,7 +770,7 @@ yylex (void)
 	  /* Clear token.  */
 	  rclex_tok_pos = 0;
 	  rclex_tok[0] = 0;
-
+	  
 	  if ((ch = rclex_readch ()) == -1)
 	    return -1;
 	  if (ch == '\n')
@@ -797,15 +786,15 @@ yylex (void)
 	  cpp_line ();
 	  ch = IGNORED_TOKEN;
 	  break;
-
+	
 	case '{':
 	  ch = IGNORE_CPP (BEG);
 	  break;
-
+	
 	case '}':
 	  ch = IGNORE_CPP (END);
 	  break;
-
+	
 	case '0': case '1': case '2': case '3': case '4':
 	case '5': case '6': case '7': case '8': case '9':
 	  yylval.i.val = read_digit (ch);

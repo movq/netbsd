@@ -1,5 +1,7 @@
 /* tc-vax.c - vax-specific -
-   Copyright (C) 1987-2020 Free Software Foundation, Inc.
+   Copyright 1987, 1991, 1992, 1993, 1994, 1995, 1998, 2000, 2001, 2002,
+   2003, 2004, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -22,7 +24,6 @@
 
 #include "vax-inst.h"
 #include "obstack.h"		/* For FRAG_APPEND_1_CHAR macro in "frags.h" */
-#include "dw2gencfi.h"
 #include "subsegs.h"
 #include "safe-ctype.h"
 
@@ -128,7 +129,7 @@ int flag_want_pic;		/* -k */
  bbsc		e4
  bbcc		e5
  Always, you complement 0th bit to reverse condition.
- Always, 1-byte opcode, longword-address, byte-address, 1-byte-displacement
+ Always, 1-byte opcde, longword-address, byte-address, 1-byte-displacement
 
  2c.	J<cond> where cond tests low-order memory bit
  length of byte,word,long.
@@ -189,7 +190,7 @@ int flag_want_pic;		/* -k */
 #define BB (1+-128)
 #define WF (2+ 32767)
 #define WB (2+-32768)
-/* Don't need LF, LB because they always reach. [They are coded as 0.]  */
+/* Dont need LF, LB because they always reach. [They are coded as 0.]  */
 
 #define C(a,b) ENCODE_RELAX(a,b)
 /* This macro has no side-effects.  */
@@ -237,7 +238,7 @@ const relax_typeS md_relax_table[] =
 #undef WB
 
 void float_cons (int);
-int flonum_gen2vax (int, FLONUM_TYPE *, LITTLENUM_TYPE *);
+int flonum_gen2vax (char, FLONUM_TYPE *, LITTLENUM_TYPE *);
 
 const pseudo_typeS md_pseudo_table[] =
 {
@@ -279,21 +280,15 @@ md_apply_fix (fixS *fixP, valueT *valueP, segT seg ATTRIBUTE_UNUSED)
 {
   valueT value = * valueP;
 
-  if (fixP->fx_subsy != (symbolS *) NULL)
-    as_bad_where (fixP->fx_file, fixP->fx_line, _("expression too complex"));
-
-  if (fixP->fx_addsy == NULL)
-    fixP->fx_done = 1;
-
-  if (fixP->fx_done)
+  if (((fixP->fx_addsy == NULL && fixP->fx_subsy == NULL)
+       && fixP->fx_r_type != BFD_RELOC_32_PLT_PCREL
+       && fixP->fx_r_type != BFD_RELOC_32_GOT_PCREL)
+      || fixP->fx_r_type == NO_RELOC)
     number_to_chars_littleendian (fixP->fx_where + fixP->fx_frag->fr_literal,
 				  value, fixP->fx_size);
-  else
-    /* Initialise the part of an instruction frag covered by the
-       relocation.  (Many occurrences of frag_more followed by fix_new
-       lack any init of the frag.)  Since VAX uses RELA relocs the
-       value we write into this field doesn't really matter.  */
-    memset (fixP->fx_where + fixP->fx_frag->fr_literal, 0, fixP->fx_size);
+
+  if (fixP->fx_addsy == NULL && fixP->fx_pcrel == 0)
+    fixP->fx_done = 1;
 }
 
 /* Convert a number from VAX byte order (little endian)
@@ -397,27 +392,27 @@ md_estimate_size_before_relax (fragS *fragP, segT segment)
 	      && (PLT_symbol == NULL || fragP->fr_symbol != PLT_symbol)
 	      && fragP->fr_symbol != NULL
 	      && flag_want_pic
-#ifdef OBJ_ELF
-	      && ELF_ST_VISIBILITY (S_GET_OTHER (fragP->fr_symbol)) != STV_HIDDEN
-#endif
 	      && (!S_IS_DEFINED (fragP->fr_symbol)
 	          || S_IS_WEAK (fragP->fr_symbol)
 	          || S_IS_EXTERNAL (fragP->fr_symbol)))
 	    {
-	      /* Indirect references cannot go through the GOT or PLT,
-	         let's hope they'll become local in the final link.  */
-	      if ((ELF_ST_VISIBILITY (S_GET_OTHER (fragP->fr_symbol))
-		   != STV_DEFAULT)
-		  || (p[0] & 0x10))
-		reloc_type = BFD_RELOC_32_PCREL;
-	      else if (((unsigned char *) fragP->fr_opcode)[0] == VAX_CALLS
-		       || ((unsigned char *) fragP->fr_opcode)[0] == VAX_CALLG
-		       || ((unsigned char *) fragP->fr_opcode)[0] == VAX_JSB
-		       || ((unsigned char *) fragP->fr_opcode)[0] == VAX_JMP
-		       || S_IS_FUNCTION (fragP->fr_symbol))
-		reloc_type = BFD_RELOC_32_PLT_PCREL;
+	      if (p[0] & 0x10)
+		{
+		  if (flag_want_pic)
+		    as_fatal ("PIC reference to %s is indirect.\n",
+			      S_GET_NAME (fragP->fr_symbol));
+		}
 	      else
-		reloc_type = BFD_RELOC_32_GOT_PCREL;
+		{
+		  if (((unsigned char *) fragP->fr_opcode)[0] == VAX_CALLS
+		      || ((unsigned char *) fragP->fr_opcode)[0] == VAX_CALLG
+		      || ((unsigned char *) fragP->fr_opcode)[0] == VAX_JSB
+		      || ((unsigned char *) fragP->fr_opcode)[0] == VAX_JMP
+		      || S_IS_FUNCTION (fragP->fr_symbol))
+		    reloc_type = BFD_RELOC_32_PLT_PCREL;
+		  else
+		    reloc_type = BFD_RELOC_32_GOT_PCREL;
+		}
 	    }
 #endif
 	  switch (RELAX_STATE (fragP->fr_subtype))
@@ -787,11 +782,11 @@ static const short int vax_operand_width_size[256] =
    ban these opcodes. They are mnemonics for "elastic" instructions
    that are supposed to assemble into the fewest bytes needed to do a
    branch, or to do a conditional branch, or whatever.
-
+  
    The opcode is in the usual place [low-order n*8 bits]. This means
    that if you mask off the bucky bits, the usual rules apply about
    how long the opcode is.
-
+  
    All VAX branch displacements come at the end of the instruction.
    For simple branches (1-byte opcode + 1-byte displacement) the last
    operand is coded 'b?' where the "data type" '?' is a clue that we
@@ -799,14 +794,14 @@ static const short int vax_operand_width_size[256] =
    and branch around a jump. This is by far the most common case.
    That is why the VIT_OPCODE_SYNTHETIC bit is set: it says this is
    a 0-byte op-code followed by 2 or more bytes of operand address.
-
+  
    If the op-code has VIT_OPCODE_SPECIAL set, then we have a more unusual
    case.
-
+  
    For JBSB & JBR the treatment is the similar, except (1) we have a 'bw'
    option before (2) we can directly JSB/JMP because there is no condition.
    These operands have 'b-' as their access/data type.
-
+  
    That leaves a bunch of random opcodes: JACBx, JxOBxxx. In these
    cases, we do the same idea. JACBxxx are all marked with a 'b!'
    JAOBxxx & JSOBxxx are marked with a 'b:'.  */
@@ -857,8 +852,6 @@ static const struct vot
   {"jbcs",	{"rlvbb?", 0x800000e3}},
   {"jbsc",	{"rlvbb?", 0x800000e4}},
   {"jbcc",	{"rlvbb?", 0x800000e5}},
-  {"jbssi",	{"rlvbb?", 0x800000e6}},
-  {"jbcci",	{"rlvbb?", 0x800000e7}},
   {"jlbs",	{"rlb?", 0x800000e8}},
   {"jlbc",	{"rlb?", 0x800000e9}},
 
@@ -981,14 +974,14 @@ vip_begin (int synthetic_too,		/* 1 means include jXXX op-codes.  */
 
 /* Take 3 char.s, the last of which may be `\0` (non-existent)
    and return the VAX register number that they represent.
-
+  
    Return -1 if they don't form a register name. Good names return
    a number from 0:15 inclusive.
-
+  
    Case is not important in a name.
-
+  
    Register names understood are:
-
+  
   	R0
   	R1
   	R2
@@ -1081,172 +1074,24 @@ vax_reg_parse (char c1, char c2, char c3, char c4)
   return retval;
 }
 
-#ifdef OBJ_AOUT
-#ifndef BFD_ASSEMBLER
-void
-tc_aout_fix_to_chars (where, fixP, segment_address_in_file)
-     char *where;
-     fixS *fixP;
-     relax_addressT segment_address_in_file;
-{
-  /*
-   * In: length of relocation (or of address) in chars: 1, 2 or 4.
-   * Out: GNU LD relocation length code: 0, 1, or 2.
-   */
-
-  static const unsigned char nbytes_r_length[] = {42, 0, 1, 42, 2};
-  int r_symbolnum;
-  int r_flags;
-
-  know (fixP->fx_addsy != NULL);
-
-  md_number_to_chars (where,
-       fixP->fx_frag->fr_address + fixP->fx_where - segment_address_in_file,
-		      4);
-
-  r_symbolnum = (S_IS_DEFINED (fixP->fx_addsy)
-		 ? S_GET_TYPE (fixP->fx_addsy)
-		 : fixP->fx_addsy->sy_number);
-  r_flags = (fixP->fx_pcrel ? 1 : 0)
-      | (!S_IS_DEFINED (fixP->fx_addsy) ? 8 : 0)	/* extern */
-      | ((nbytes_r_length[fixP->fx_size] & 3) << 1);
-
-#if 0
-  r_flags |= ((!S_IS_DEFINED(fixP->fx_addsy)
-      && fixP->fx_pcrel
-      && fixP->fx_addsy != GOT_symbol
-      && fixP->fx_addsy != PLT_symbol
-      && flags_want_pic) ? 0x10 : 0);
-#endif
-	
-  switch (fixP->fx_r_type) {
-	case NO_RELOC:
-		break;
-	case NO_RELOC2:
-		if (r_flags & 8)
-		    r_flags |= 0x80;		/* setting the copy bit */
-						/*   says we can convert */
-						/*   to gotslot if needed */
-		break;
-	case RELOC_32:
-		if (flag_want_pic && S_IS_EXTERNAL(fixP->fx_addsy)) {
-			r_symbolnum = fixP->fx_addsy->sy_number;  
-			r_flags |= 8;		/* set extern bit */
-		}
-		break;
-	case RELOC_JMP_SLOT:
-		if (flag_want_pic) {
-			r_flags |= 0x20;	/* set jmptable */
-			r_flags &= ~0x08;	/* clear extern bit */
-		}
-		break;
-	case RELOC_JMP_TBL:
-		if (flag_want_pic) {
-			r_flags |= 0x20;	/* set jmptable */
-			r_flags |= 0x08;	/* set extern bit */
-		}
-		break;
-	case RELOC_GLOB_DAT:
-		if (flag_want_pic) {
-			r_flags |= 0x10;	/* set baserel bit */
-			r_symbolnum = fixP->fx_addsy->sy_number;
-			if (S_IS_EXTERNAL(fixP->fx_addsy))
-				r_flags |= 8;	/* set extern bit */
-		}
-		break;
-  }
-
-  where[4] = (r_symbolnum >>  0) & 0xff;
-  where[5] = (r_symbolnum >>  8) & 0xff;
-  where[6] = (r_symbolnum >> 16) & 0xff;
-  where[7] = r_flags;
-}
-#endif /* !BFD_ASSEMBLER */
-#endif /* OBJ_AOUT */
-
-/*
- *       BUGS, GRIPES,  APOLOGIA, etc.
- *
- * The opcode table 'votstrs' needs to be sorted on opcode frequency.
- * That is, AFTER we hash it with hash_...(), we want most-used opcodes
- * to come out of the hash table faster.
- *
- * I am sorry to inflict yet another VAX assembler on the world, but
- * RMS says we must do everything from scratch, to prevent pin-heads
- * restricting this software.
- */
-
-/*
- * This is a vaguely modular set of routines in C to parse VAX
- * assembly code using DEC mnemonics. It is NOT un*x specific.
- *
- * The idea here is that the assembler has taken care of all:
- *   labels
- *   macros
- *   listing
- *   pseudo-ops
- *   line continuation
- *   comments
- *   condensing any whitespace down to exactly one space
- * and all we have to do is parse 1 line into a vax instruction
- * partially formed. We will accept a line, and deliver:
- *   an error message (hopefully empty)
- *   a skeleton VAX instruction (tree structure)
- *   textual pointers to all the operand expressions
- *   a warning message that notes a silly operand (hopefully empty)
- */
-
-/*
- *		E D I T   H I S T O R Y
- *
- * 17may86 Dean Elsner. Bug if line ends immediately after opcode.
- * 30apr86 Dean Elsner. New vip_op() uses arg block so change call.
- *  6jan86 Dean Elsner. Crock vip_begin() to call vip_op_defaults().
- *  2jan86 Dean Elsner. Invent synthetic opcodes.
- *	Widen vax_opcodeT to 32 bits. Use a bit for VIT_OPCODE_SYNTHETIC,
- *	which means this is not a real opcode, it is like a macro; it will
- *	be relax()ed into 1 or more instructions.
- *	Use another bit for VIT_OPCODE_SPECIAL if the op-code is not optimised
- *	like a regular branch instruction. Option added to vip_begin():
- *	exclude	synthetic opcodes. Invent synthetic_votstrs[].
- * 31dec85 Dean Elsner. Invent vit_opcode_nbytes.
- *	Also make vit_opcode into a char[]. We now have n-byte vax opcodes,
- *	so caller's don't have to know the difference between a 1-byte & a
- *	2-byte op-code. Still need vax_opcodeT concept, so we know how
- *	big an object must be to hold an op.code.
- * 30dec85 Dean Elsner. Widen typedef vax_opcodeT in "vax-inst.h"
- *	because vax opcodes may be 16 bits. Our crufty C compiler was
- *	happily initialising 8-bit vot_codes with 16-bit numbers!
- *	(Wouldn't the 'phone company like to compress data so easily!)
- * 29dec85 Dean Elsner. New static table vax_operand_width_size[].
- *	Invented so we know hw many bytes a "I^#42" needs in its immediate
- *	operand. Revised struct vop in "vax-inst.h": explicitly include
- *	byte length of each operand, and it's letter-code datum type.
- * 17nov85 Dean Elsner. Name Change.
- *	Due to ar(1) truncating names, we learned the hard way that
- *	"vax-inst-parse.c" -> "vax-inst-parse." dropping the "o" off
- *	the archived object name. SO... we shortened the name of this
- *	source file, and changed the makefile.
- */
-
 /* Parse a vax operand in DEC assembler notation.
    For speed, expect a string of whitespace to be reduced to a single ' '.
    This is the case for GNU AS, and is easy for other DEC-compatible
    assemblers.
-
+  
    Knowledge about DEC VAX assembler operand notation lives here.
    This doesn't even know what a register name is, except it believes
    all register names are 2 or 3 characters, and lets vax_reg_parse() say
    what number each name represents.
    It does, however, know that PC, SP etc are special registers so it can
    detect addressing modes that are silly for those registers.
-
+  
    Where possible, it delivers 1 fatal or 1 warning message if the operand
    is suspect. Exactly what we test for is still evolving.
 
    ---
   	Arg block.
-
+  
    There were a number of 'mismatched argument type' bugs to vip_op.
    The most general solution is to typedef each (of many) arguments.
    We used instead a typedef'd argument block. This is less modular
@@ -1254,7 +1099,7 @@ tc_aout_fix_to_chars (where, fixP, segment_address_in_file)
    on most engines, and seems to keep programmers happy. It will have
    to be done properly if we ever want to use vip_op as a general-purpose
    module (it was designed to be).
-
+  
  	G^
 
    Doesn't support DEC "G^" format operands. These always take 5 bytes
@@ -1265,14 +1110,14 @@ tc_aout_fix_to_chars (where, fixP, segment_address_in_file)
    If there is some other use for "G^", feel free to code it in!
 
   	speed
-
+  
    If I nested if()s more, I could avoid testing (*err) which would save
    time, space and page faults. I didn't nest all those if()s for clarity
    and because I think the mode testing can be re-arranged 1st to test the
-   commoner constructs 1st. Does anybody have statistics on this?
-
+   commoner constructs 1st. Does anybody have statistics on this?  
+  
   	error messages
-
+  
    In future, we should be able to 'compose' error messages in a scratch area
    and give the user MUCH more informative error messages. Although this takes
    a little more code at run-time, it will make this module much more self-
@@ -1281,18 +1126,18 @@ tc_aout_fix_to_chars (where, fixP, segment_address_in_file)
    the Un*x characters "$`*", that most users will expect from this AS.
 
    ----
-
+   
    The input is a string, ending with '\0'.
-
+  
    We also require a 'hint' of what kind of operand is expected: so
    we can remind caller not to write into literals for instance.
-
+  
    The output is a skeletal instruction.
-
+  
    The algorithm has two parts.
    1. extract the syntactic features (parse off all the @^#-()+[] mode crud);
    2. express the @^#-()+[] as some parameters suited to further analysis.
-
+  
    2nd step is where we detect the googles of possible invalid combinations
    a human (or compiler) might write. Note that if we do a half-way
    decent assembler, we don't know how long to make (eg) displacement
@@ -1309,19 +1154,19 @@ tc_aout_fix_to_chars (where, fixP, segment_address_in_file)
     -  error text(s)            why we couldn't understand the operand
 
    ----
-
+    
    To decode output of this, test errtxt. If errtxt[0] == '\0', then
    we had no errors that prevented parsing. Also, if we ever report
    an internal bug, errtxt[0] is set non-zero. So one test tells you
    if the other outputs are to be taken seriously.
 
    ----
-
+   
    Dec defines the semantics of address modes (and values)
    by a two-letter code, explained here.
-
+  
      letter 1:   access type
-
+  
        a         address calculation - no data access, registers forbidden
        b         branch displacement
        m         read - let go of bus - write back    "modify"
@@ -1329,9 +1174,9 @@ tc_aout_fix_to_chars (where, fixP, segment_address_in_file)
        v         bit field address: like 'a' but registers are OK
        w         write
        space	 no operator (eg ".long foo") [our convention]
-
+  
      letter 2:   data type (i.e. width, alignment)
-
+  
        b         byte
        d         double precision floating point (D format)
        f         single precision floating point (F format)
@@ -1344,11 +1189,11 @@ tc_aout_fix_to_chars (where, fixP, segment_address_in_file)
        ?	 simple synthetic branch operand
        -	 unconditional synthetic JSB/JSR operand
        !	 complex synthetic branch operand
-
+  
    The '-?!' letter 2's are not for external consumption. They are used
    for various assemblers. Generally, all unknown widths are assumed 0.
    We don't limit your choice of width character.
-
+  
    DEC operands are hard work to parse. For example, '@' as the first
    character means indirect (deferred) mode but elsewhere it is a shift
    operator.
@@ -1357,9 +1202,9 @@ tc_aout_fix_to_chars (where, fixP, segment_address_in_file)
    We try hard not to parse anything that MIGHT be part of the expression
    buried in that syntax. For example if we see @...(Rn) we don't check
    for '-' before the '(' because mode @-(Rn) does not exist.
-
+  
    After parsing we have:
-
+  
    at                     1 if leading '@' (or Un*x '*')
    len                    takes one value from " bilsw". eg B^ -> 'b'.
    hash                   1 if leading '#' (or Un*x '$')
@@ -1370,7 +1215,7 @@ tc_aout_fix_to_chars (where, fixP, segment_address_in_file)
    paren                  1 if () are around register
    reg                    major register number 0:15    -1 means absent
    ndx                    index register number 0:15    -1 means absent
-
+  
    Again, I dare not explain it: just trace ALL the code!
 
    Summary of vip_op outputs.
@@ -1427,8 +1272,10 @@ vip_op (char *optext, struct vop *vopP)
      get the types wrong below, we lose at compile time rather than at
      lint or run time.  */
   char access_mode;		/* vop_access.  */
+  char width;			/* vop_width.  */
 
   access_mode = vopP->vop_access;
+  width = vopP->vop_width;
   /* None of our code bugs (yet), no user text errors, no warnings
      even.  */
   err = wrn = 0;
@@ -1468,7 +1315,7 @@ vip_op (char *optext, struct vop *vopP)
   /* p points to what may be the beginning of an expression.
      We have peeled off the front all that is peelable.
      We know at, len, hash.
-
+    
      Lets point q at the end of the text and parse that (backwards).  */
 
   for (q = p; *q; q++)
@@ -1643,7 +1490,7 @@ vip_op (char *optext, struct vop *vopP)
      We will deliver a 4-bit reg, and a 4-bit mode.  */
 
   /* Case of branch operand. Different. No L^B^W^I^S^ allowed for instance.
-
+    
      in:  at	?
           len	?
           hash	?
@@ -1652,7 +1499,7 @@ vip_op (char *optext, struct vop *vopP)
           paren	?
           reg   ?
           ndx   ?
-
+    
      out: mode  0
           reg   -1
           len	' '
@@ -1671,7 +1518,7 @@ vip_op (char *optext, struct vop *vopP)
   /* Since nobody seems to use it: comment this 'feature'(?) out for now.  */
 #ifdef NEVER
   /* Case of stand-alone operand. e.g. ".long foo"
-
+    
      in:  at	?
           len	?
           hash	?
@@ -1680,7 +1527,7 @@ vip_op (char *optext, struct vop *vopP)
           paren	?
           reg   ?
           ndx   ?
-
+    
      out: mode  0
           reg   -1
           len	' '
@@ -1717,7 +1564,7 @@ vip_op (char *optext, struct vop *vopP)
 #endif
 
   /* Case of S^#.
-
+    
      in:  at       0
           len      's'               definition
           hash     1              demand
@@ -1726,7 +1573,7 @@ vip_op (char *optext, struct vop *vopP)
           paren    0             by "()" scan logic because "S^" seen
           reg      -1                or nn by mistake
           ndx      -1
-
+    
      out: mode     0
           reg      -1
           len      's'
@@ -1758,9 +1605,9 @@ vip_op (char *optext, struct vop *vopP)
 	    err = _("S^# may only read-access");
 	}
     }
-
+  
   /* Case of -(Rn), which is weird case.
-
+    
      in:  at       0
           len      '
           hash     0
@@ -1769,7 +1616,7 @@ vip_op (char *optext, struct vop *vopP)
           paren    1              by definition
           reg      present           by definition
           ndx      optional
-
+    
      out: mode     7
           reg      present
           len      ' '
@@ -1800,7 +1647,7 @@ vip_op (char *optext, struct vop *vopP)
     }
 
   /* Case of (Rn)+, which is slightly different.
-
+    
      in:  at
           len      ' '
           hash     0
@@ -1809,7 +1656,7 @@ vip_op (char *optext, struct vop *vopP)
           paren    1              by definition
           reg      present           by definition
           ndx      optional
-
+    
      out: mode     8+@
           reg      present
           len      ' '
@@ -1831,7 +1678,7 @@ vip_op (char *optext, struct vop *vopP)
     }
 
   /* Case of #, without S^.
-
+    
      in:  at
           len      ' ' or 'i'
           hash     1              by definition
@@ -1840,7 +1687,7 @@ vip_op (char *optext, struct vop *vopP)
           paren    0
           reg      absent
           ndx      optional
-
+    
      out: mode     8+@
           reg      PC
           len      ' ' or 'i'
@@ -1879,7 +1726,7 @@ vip_op (char *optext, struct vop *vopP)
 
   /* Case of Rn. We separate this one because it has a few special
      errors the remaining modes lack.
-
+    
      in:  at       optional
           len      ' '
           hash     0             by program logic
@@ -1888,7 +1735,7 @@ vip_op (char *optext, struct vop *vopP)
           paren    0             by definition
           reg      present           by definition
           ndx      optional
-
+    
      out: mode     5+@
           reg      present
           len      ' '               enforce no length
@@ -1925,7 +1772,7 @@ vip_op (char *optext, struct vop *vopP)
                       paren == 1  OR reg==-1  */
 
   /* Rest of cases fit into one bunch.
-
+    
      in:  at       optional
           len      ' ' or 'b' or 'w' or 'l'
           hash     0             by program logic
@@ -1934,7 +1781,7 @@ vip_op (char *optext, struct vop *vopP)
           paren    optional
           reg      optional
           ndx      optional
-
+    
      out: mode     10 + @ + len
           reg      optional
           len      ' ' or 'b' or 'w' or 'l'
@@ -1948,10 +1795,8 @@ vip_op (char *optext, struct vop *vopP)
 	{
 	case 'l':
 	  mode += 2;
-	  /* Fall through.  */
 	case 'w':
 	  mode += 2;
-	  /* Fall through.  */
 	case ' ':	/* Assumed B^ until our caller changes it.  */
 	case 'b':
 	  break;
@@ -1986,15 +1831,15 @@ vip_op (char *optext, struct vop *vopP)
    knowledge of how you parse (or evaluate) your expressions.
    We do however strip off and decode addressing modes and operation
    mnemonic.
-
+  
    The exploded instruction is returned to a struct vit of your choice.
    #include "vax-inst.h" to know what a struct vit is.
-
+  
    This function's value is a string. If it is not "" then an internal
    logic error was found: read this code to assign meaning to the string.
    No argument string should generate such an error string:
    it means a bug in our code, not in the user's text.
-
+  
    You MUST have called vip_begin() once before using this function.  */
 
 static void
@@ -2019,7 +1864,7 @@ vip (struct vit *vitP,		/* We build an exploded instruction here.  */
 
   if (*instring == ' ')
     ++instring;
-
+  
   /* MUST end in end-of-string or exactly 1 space.  */
   for (p = instring; *p && *p != ' '; p++)
     ;
@@ -2265,7 +2110,7 @@ main (void)
 
 	default:
 	  my_operand_length = 2;
-	  printf ("I don't understand access width %c\n", mywidth);
+	  printf ("I dn't understand access width %c\n", mywidth);
 	  break;
 	}
       printf ("VAX assembler instruction operand: ");
@@ -2364,7 +2209,7 @@ struct option md_longopts[] =
 size_t md_longopts_size = sizeof (md_longopts);
 
 int
-md_parse_option (int c, const char *arg)
+md_parse_option (int c, char *arg)
 {
   switch (c)
     {
@@ -2496,7 +2341,7 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
   if (fixp->fx_tcbit)
     abort ();
 
-  if (fixp->fx_r_type != NO_RELOC)
+  if (fixp->fx_r_type != BFD_RELOC_NONE)
     {
       code = fixp->fx_r_type;
 
@@ -2542,8 +2387,8 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
 #undef F
 #undef MAP
 
-  reloc = XNEW (arelent);
-  reloc->sym_ptr_ptr = XNEW (asymbol *);
+  reloc = xmalloc (sizeof (arelent));
+  reloc->sym_ptr_ptr = xmalloc (sizeof (asymbol *));
   *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixp->fx_addsy);
   reloc->address = fixp->fx_frag->fr_address + fixp->fx_where;
 #ifndef OBJ_ELF
@@ -2556,7 +2401,7 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
 #endif
 
   reloc->howto = bfd_reloc_type_lookup (stdoutput, code);
-  gas_assert (reloc->howto != 0);
+  assert (reloc->howto != 0);
 
   return reloc;
 }
@@ -2869,7 +2714,6 @@ md_assemble (char *instruction_string)
   if (need_pass_2 || goofed)
     return;
 
-  dwarf2_emit_insn (0);
   /* Emit op-code.  */
   /* Remember where it is, in case we want to modify the op-code later.  */
   opcode_low_byteP = frag_more (v.vit_opcode_nbytes);
@@ -3281,9 +3125,9 @@ md_assemble (char *instruction_string)
 			  || operandP->vop_access == 'a')
 			{
 			  if (operandP->vop_access == 'v')
-			    as_warn (_("Invalid operand: immediate value used as base address."));
+			    as_warn (_("Invalid operand:  immediate value used as base address."));
 			  else
-			    as_warn (_("Invalid operand: immediate value used as address."));
+			    as_warn (_("Invalid operand:  immediate value used as address."));
 			  /* gcc 2.6.3 is known to generate these in at least
 			     one case.  */
 			}
@@ -3308,8 +3152,7 @@ md_assemble (char *instruction_string)
 			  if (flag_want_pic && operandP->vop_mode == 8
 				&& this_add_symbol != NULL)
 			    {
-			      as_warn (_("Symbol '%s' used as immediate operand in PIC mode."),
-				       S_GET_NAME (this_add_symbol));
+			      as_warn (_("Symbol used as immediate operand in PIC mode."));
 			    }
 #endif
 			  p[0] = (operandP->vop_mode << 4) | 0xF;
@@ -3325,8 +3168,7 @@ md_assemble (char *instruction_string)
 						  min (sizeof (valueT),
 						       (size_t) nbytes));
 			      if ((size_t) nbytes > sizeof (valueT))
-				memset (p + 1 + sizeof (valueT),
-				        '\0', nbytes - sizeof (valueT));
+				memset (p + 5, '\0', nbytes - sizeof (valueT));
 			    }
 			  else
 			    {
@@ -3384,15 +3226,7 @@ md_assemble (char *instruction_string)
 			      length = 4;
 			    }
 			}
-#ifdef OBJ_ELF
-		      if (flag_want_pic && this_add_symbol != NULL)
-		        {
-			  as_warn (_("Symbol '%s' used as displacement in PIC mode."),
-			       S_GET_NAME (this_add_symbol));
-		        }
-#endif
 		      p = frag_more (1 + length);
-		      know (operandP->vop_reg != 0xf);
 		      know (operandP->vop_reg >= 0);
 		      p[0] = operandP->vop_reg
 			| ((at | "?\12\14?\16"[length]) << 4);
@@ -3432,11 +3266,12 @@ md_begin (void)
     }
 }
 
-bfd_reloc_code_real_type
+static char *vax_cons_special_reloc;
+
+void
 vax_cons (expressionS *exp, int size)
 {
   char *save;
-  const char *vax_cons_special_reloc;
 
   SKIP_WHITESPACE ();
   vax_cons_special_reloc = NULL;
@@ -3540,66 +3375,39 @@ vax_cons (expressionS *exp, int size)
     }
   if (vax_cons_special_reloc == NULL)
     expression (exp);
-  else
-    switch (size)
-      {
-      case 1: return BFD_RELOC_8_PCREL;
-      case 2: return BFD_RELOC_16_PCREL;
-      case 4: return BFD_RELOC_32_PCREL;
-      }
-  return NO_RELOC;
 }
 
 /* This is called by emit_expr via TC_CONS_FIX_NEW when creating a
    reloc for a cons.  */
 
 void
-vax_cons_fix_new (fragS *frag, int where, unsigned int nbytes, expressionS *exp,
-		  bfd_reloc_code_real_type r)
+vax_cons_fix_new (fragS *frag, int where, unsigned int nbytes, expressionS *exp)
 {
-  if (r == NO_RELOC)
-    r = (nbytes == 1 ? BFD_RELOC_8
-	 : nbytes == 2 ? BFD_RELOC_16
-	 : BFD_RELOC_32);
+  bfd_reloc_code_real_type r;
+
+  r = (nbytes == 1 ? BFD_RELOC_8 :
+       (nbytes == 2 ? BFD_RELOC_16 : BFD_RELOC_32));
+
+  if (vax_cons_special_reloc)
+    {
+      if (*vax_cons_special_reloc == 'p')
+	{
+	  switch (nbytes)
+	    {
+	    case 1: r = BFD_RELOC_8_PCREL; break;
+	    case 2: r = BFD_RELOC_16_PCREL; break;
+	    case 4: r = BFD_RELOC_32_PCREL; break;
+	    default: abort ();
+	    }
+	}
+    }
 
   fix_new_exp (frag, where, (int) nbytes, exp, 0, r);
+  vax_cons_special_reloc = NULL;
 }
 
-const char *
+char *
 md_atof (int type, char * litP, int * sizeP)
 {
   return vax_md_atof (type, litP, sizeP);
-}
-
-void
-vax_cfi_frame_initial_instructions (void)
-{
-  cfi_add_CFA_def_cfa (14, 0);
-}
-
-int
-tc_vax_regname_to_dw2regnum (char *regname)
-{
-  unsigned int i;
-  static const struct { char *name; int dw2regnum; } regnames[] =
-    {
-      { "r0",   0 }, { "r1",  1 }, { "r2",   2 }, { "r3",   3 },
-      { "r4",   4 }, { "r5",  5 }, { "r6",   6 }, { "r7",   7 },
-      { "r8",   8 }, { "r9",  9 }, { "r10", 10 }, { "r11", 11 },
-      { "ap",  12 }, { "fp", 13 }, { "sp",  14 }, { "pc",  15 },
-      { "psw", 16 },
-    };
-
-  for (i = 0; i < ARRAY_SIZE (regnames); ++i)
-    if (strcmp (regnames[i].name, regname) == 0)
-      return regnames[i].dw2regnum;
-
-  return -1;
-}
-
-void
-vax_cfi_emit_pcrel_expr (expressionS *expP, unsigned int nbytes)
-{
-  expP->X_add_number += nbytes;
-  emit_expr (expP, nbytes);
 }

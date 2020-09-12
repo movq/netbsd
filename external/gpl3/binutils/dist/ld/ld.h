@@ -1,5 +1,7 @@
 /* ld.h -- general linker header file
-   Copyright (C) 1991-2020 Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
+   2001, 2002, 2003, 2004, 2005, 2006, 2007
+   Free Software Foundation, Inc.
 
    This file is part of the GNU Binutils.
 
@@ -30,6 +32,24 @@
 #define SEEK_END 2
 #endif
 
+#if defined(__GNUC__) && !defined(C_ALLOCA)
+# undef alloca
+# define alloca __builtin_alloca
+#else
+# if defined(HAVE_ALLOCA_H) && !defined(C_ALLOCA)
+#  include <alloca.h>
+# else
+#  ifndef alloca /* predefined by HP cc +Olibcalls */
+#   if !defined (__STDC__) && !defined (__hpux)
+char *alloca ();
+#   else
+void *alloca ();
+#   endif /* __STDC__, __hpux */
+#  endif /* alloca */
+# endif /* HAVE_ALLOCA_H */
+#endif
+
+
 #ifdef HAVE_LOCALE_H
 # ifndef ENABLE_NLS
    /* The Solaris version of locale.h always includes libintl.h.  If we have
@@ -55,14 +75,8 @@
 # define gettext(Msgid) (Msgid)
 # define dgettext(Domainname, Msgid) (Msgid)
 # define dcgettext(Domainname, Msgid, Category) (Msgid)
-# define ngettext(Msgid1, Msgid2, n) \
-  (n == 1 ? Msgid1 : Msgid2)
-# define dngettext(Domainname, Msgid1, Msgid2, n) \
-  (n == 1 ? Msgid1 : Msgid2)
-# define dcngettext(Domainname, Msgid1, Msgid2, n, Category) \
-  (n == 1 ? Msgid1 : Msgid2)
-# define textdomain(Domainname) do {} while (0)
-# define bindtextdomain(Domainname, Dirname) do {} while (0)
+# define textdomain(Domainname) while (0) /* nothing */
+# define bindtextdomain(Domainname, Dirname) while (0) /* nothing */
 # define _(String) (String)
 # define N_(String) (String)
 #endif
@@ -78,51 +92,62 @@
    discarded.  */
 #define DISCARD_SECTION_NAME "/DISCARD/"
 
-/* A file name list.  */
-typedef struct name_list
-{
+/* A file name list */
+typedef struct name_list {
   const char *name;
   struct name_list *next;
 }
 name_list;
 
 typedef enum {sort_none, sort_ascending, sort_descending} sort_order;
-
+  
 /* A wildcard specification.  */
 
-typedef enum
-{
-  none, by_name, by_alignment, by_name_alignment, by_alignment_name,
-  by_none, by_init_priority
+typedef enum {
+  none, by_name, by_alignment, by_name_alignment, by_alignment_name
 } sort_type;
 
 extern sort_type sort_section;
 
-struct wildcard_spec
-{
+struct wildcard_spec {
   const char *name;
   struct name_list *exclude_name_list;
   sort_type sorted;
-  struct flag_info *section_flag_list;
 };
 
-struct wildcard_list
-{
+struct wildcard_list {
   struct wildcard_list *next;
   struct wildcard_spec spec;
 };
+
+struct map_symbol_def {
+  struct bfd_link_hash_entry *entry;
+  struct map_symbol_def *next;
+};
+
+/* The initial part of fat_user_section_struct has to be idential with
+   lean_user_section_struct.  */
+typedef struct fat_user_section_struct {
+  /* For input sections, when writing a map file: head / tail of a linked
+     list of hash table entries for symbols defined in this section.  */
+  struct map_symbol_def *map_symbol_def_head;
+  struct map_symbol_def **map_symbol_def_tail;
+} fat_section_userdata_type;
+
+#define get_userdata(x) ((x)->userdata)
 
 #define BYTE_SIZE	(1)
 #define SHORT_SIZE	(2)
 #define LONG_SIZE	(4)
 #define QUAD_SIZE	(8)
 
-enum endian_enum { ENDIAN_UNSET = 0, ENDIAN_BIG, ENDIAN_LITTLE };
-
-typedef struct
-{
+typedef struct {
   /* 1 => assign space to common symbols even if `relocatable_output'.  */
   bfd_boolean force_common_definition;
+
+  /* 1 => do not assign addresses to common symbols.  */
+  bfd_boolean inhibit_common_definition;
+  bfd_boolean relax;
 
   /* If TRUE, build MIPS embedded PIC relocation tables in the output
      file.  */
@@ -142,9 +167,10 @@ typedef struct
      search.  */
   bfd_boolean warn_search_mismatch;
 
-  /* If non-zero check section addresses, once computed,
-     for overlaps.  Relocatable links only check when this is > 0.  */
-  signed char check_section_addresses;
+
+  /* If TRUE (the default) check section addresses, once compute,
+     fpor overlaps.  */
+  bfd_boolean check_section_addresses;
 
   /* If TRUE allow the linking of input files in an unknown architecture
      assuming that the user knows what they are doing.  This was the old
@@ -152,27 +178,30 @@ typedef struct
      input files.  */
   bfd_boolean accept_unknown_input_arch;
 
-  /* Name of the import library to generate.  */
-  char *out_implib_filename;
-
-  /* If TRUE we'll just print the default output on stdout.  */
-  bfd_boolean print_output_format;
-
-  /* If set, display the target memory usage (per memory region).  */
-  bfd_boolean print_memory_usage;
-
-  /* Should we force section groups to be resolved?  Controlled with
-     --force-group-allocation on the command line or FORCE_GROUP_ALLOCATION
-     in the linker script.  */
-  bfd_boolean force_group_allocation;
-
   /* Big or little endian as set on command line.  */
-  enum endian_enum endian;
+  enum { ENDIAN_UNSET = 0, ENDIAN_BIG, ENDIAN_LITTLE } endian;
+
+  /* -Bsymbolic and -Bsymbolic-functions, as set on command line.  */
+  enum
+    {
+      symbolic_unset = 0,
+      symbolic,
+      symbolic_functions,
+    } symbolic;
+
+  /* --dynamic-list, --dynamic-list-cpp-new, --dynamic-list-cpp-typeinfo
+     and --dynamic-list FILE, as set on command line.  */
+  enum
+    {
+      dynamic_list_unset = 0,
+      dynamic_list_data,
+      dynamic_list
+    } dynamic_list;
 
   /* Name of runtime interpreter to invoke.  */
   char *interpreter;
 
-  /* Name to give runtime library from the -soname argument.  */
+  /* Name to give runtime libary from the -soname argument.  */
   char *soname;
 
   /* Runtime library search path from the -rpath argument.  */
@@ -202,30 +231,12 @@ extern args_type command_line;
 
 typedef int token_code_type;
 
-/* Different ways we can handle orphan sections.  */
-
-enum orphan_handling_enum
-{
-  /* The classic strategy, find a suitable section to place the orphan
-     into.  */
-  orphan_handling_place = 0,
-
-  /* Discard any orphan sections as though they were assign to the section
-     /DISCARD/.  */
-  orphan_handling_discard,
-
-  /* Find somewhere to place the orphan section, as with
-     ORPHAN_HANDLING_PLACE, but also issue a warning.  */
-  orphan_handling_warn,
-
-  /* Issue a fatal error if any orphan sections are found.  */
-  orphan_handling_error,
-};
-
-typedef struct
-{
+typedef struct {
   bfd_boolean magic_demand_paged;
   bfd_boolean make_executable;
+
+  /* If TRUE, doing a dynamic link.  */
+  bfd_boolean dynamic_link;
 
   /* If TRUE, -shared is supported.  */
   /* ??? A better way to do this is perhaps to define this in the
@@ -244,9 +255,6 @@ typedef struct
 
   /* If TRUE, only warn once about a particular undefined symbol.  */
   bfd_boolean warn_once;
-
-  /* How should we deal with orphan sections.  */
-  enum orphan_handling_enum orphan_handling;
 
   /* If TRUE, warn if multiple global-pointers are needed (Alpha
      only).  */
@@ -273,13 +281,6 @@ typedef struct
      on the command line.  */
   bfd_boolean only_cmd_line_lib_dirs;
 
-  /* If set, numbers and absolute symbols are simply treated as
-     numbers everywhere.  */
-  bfd_boolean sane_expr;
-
-  /* If set, code and non-code sections should never be in one segment.  */
-  bfd_boolean separate_code;
-
   /* The rpath separation character.  Usually ':'.  */
   char rpath_separator;
 
@@ -289,23 +290,25 @@ typedef struct
   unsigned int split_by_reloc;
   bfd_size_type split_by_file;
 
+  bfd_size_type specified_data_size;
+
   /* The size of the hash table to use.  */
-  unsigned long hash_table_size;
+  bfd_size_type hash_table_size;
 
   /* The maximum page size for ELF.  */
   bfd_vma maxpagesize;
 
   /* The common page size for ELF.  */
   bfd_vma commonpagesize;
-
-  /* If set, print discarded sections in map file output.  */
-  bfd_boolean print_map_discarded;
 } ld_config_type;
 
 extern ld_config_type config;
 
 extern FILE * saved_script_handle;
 extern bfd_boolean force_make_executable;
+
+/* Non-zero if we are processing a --defsym from the command line.  */
+extern int parsing_defsym;
 
 extern int yyparse (void);
 extern void add_cref (const char *, bfd *, asection *, bfd_vma);

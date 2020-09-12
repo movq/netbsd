@@ -1,27 +1,30 @@
-<section xmlns="http://docbook.org/ns/docbook" version="5.0" 
-	 xml:id="std.localization.facet.messages" xreflabel="Messages">
+<section id="manual.localization.facet.messages" xreflabel="Messages">
 <?dbhtml filename="messages.html"?>
 
-<info><title>messages</title>
+<sectioninfo>
   <keywordset>
-    <keyword>ISO C++</keyword>
-    <keyword>messages</keyword>
+    <keyword>
+      ISO C++
+    </keyword>
+    <keyword>
+      messages
+    </keyword>
   </keywordset>
-</info>
+</sectioninfo>
 
-
+<title>messages</title>
 
 <para>
-The <classname>std::messages</classname> facet implements message retrieval functionality
-equivalent to Java's <classname>java.text.MessageFormat</classname> using either GNU <function>gettext</function>
+The std::messages facet implements message retrieval functionality
+equivalent to Java's java.text.MessageFormat .using either GNU gettext
 or IEEE 1003.1-200 functions.
 </para>
 
-<section xml:id="facet.messages.req"><info><title>Requirements</title></info>
-
+<section id="facet.messages.req">
+<title>Requirements</title>
 
 <para>
-The <classname>std::messages</classname> facet is probably the most vaguely defined facet in
+The std::messages facet is probably the most vaguely defined facet in
 the standard library. It's assumed that this facility was built into
 the standard library in order to convert string literals from one
 locale to the other. For instance, converting the "C" locale's
@@ -61,42 +64,42 @@ While the virtual functions are:
 </para>
 
 <para>
-<code>catalog do_open(const string&amp; name, const locale&amp; loc) const</code>
+<code>catalog do_open(const string&amp;, const locale&amp;) const</code>
 </para>
 <blockquote>
 <para>
 <emphasis>
--1- Returns: A value that may be passed to <code>get()</code> to retrieve a
-message, from the message catalog identified by the string <code>name</code>
+-1- Returns: A value that may be passed to get() to retrieve a
+message, from the message catalog identified by the string name
 according to an implementation-defined mapping. The result can be used
-until it is passed to <code>close()</code>.  Returns a value less than 0 if no such
+until it is passed to close().  Returns a value less than 0 if no such
 catalog can be opened.
 </emphasis>
 </para>
 </blockquote>
 
 <para>
-<code>string_type do_get(catalog cat, int set , int msgid, const string_type&amp; dfault) const</code>
+<code>string_type do_get(catalog, int, int, const string_type&amp;) const</code>
 </para>
 <blockquote>
 <para>
 <emphasis>
--3- Requires: A catalog <code>cat</code> obtained from <code>open()</code> and not yet closed.
--4- Returns: A message identified by arguments <code>set</code>, <code>msgid</code>, and <code>dfault</code>,
+-3- Requires: A catalog cat obtained from open() and not yet closed.
+-4- Returns: A message identified by arguments set, msgid, and dfault,
 according to an implementation-defined mapping. If no such message can
-be found, returns <code>dfault</code>.
+be found, returns dfault.
 </emphasis>
 </para>
 </blockquote>
 
 <para>
-<code>void do_close(catalog cat) const</code>
+<code>void do_close(catalog) const</code>
 </para>
 <blockquote>
 <para>
 <emphasis>
--5- Requires: A catalog cat obtained from <code>open()</code> and not yet closed.
--6- Effects: Releases unspecified resources associated with <code>cat</code>.
+-5- Requires: A catalog cat obtained from open() and not yet closed.
+-6- Effects: Releases unspecified resources associated with cat.
 -7- Notes: The limit on such resources, if any, is implementation-defined.
 </emphasis>
 </para>
@@ -105,8 +108,8 @@ be found, returns <code>dfault</code>.
 
 </section>
 
-<section xml:id="facet.messages.design"><info><title>Design</title></info>
-
+<section id="facet.messages.design">
+<title>Design</title>
 
 <para>
 A couple of notes on the standard.
@@ -115,9 +118,8 @@ A couple of notes on the standard.
 <para>
 First, why is <code>messages_base::catalog</code> specified as a typedef
 to int? This makes sense for implementations that use
-<code>catopen</code> and define <code>nl_catd</code> as int, but not for
-others. Fortunately, it's not heavily used and so only a minor irritant. 
-This has been reported as a possible defect in the standard (LWG 2028).
+<code>catopen</code>, but not for others. Fortunately, it's not heavily
+used and so only a minor irritant.
 </para>
 
 <para>
@@ -155,11 +157,11 @@ other, explicitly named locales.
 
 </section>
 
-<section xml:id="facet.messages.impl"><info><title>Implementation</title></info>
+<section id="facet.messages.impl">
+<title>Implementation</title>
 
-
-  <section xml:id="messages.impl.models"><info><title>Models</title></info>
-  
+  <section id="messages.impl.models">
+  <title>Models</title>
   <para>
     This is a relatively simple class, on the face of it. The standard
     specifies very little in concrete terms, so generic
@@ -226,8 +228,8 @@ model.
 
   </section>
 
-  <section xml:id="messages.impl.gnu"><info><title>The GNU Model</title></info>
-  
+  <section id="messages.impl.gnu">
+  <title>The GNU Model</title>
 
   <para>
     The messages facet, because it is retrieving and converting
@@ -319,8 +321,8 @@ model.
   </section>
 </section>
 
-<section xml:id="facet.messages.use"><info><title>Use</title></info>
-
+<section id="facet.messages.use">
+<title>Use</title>
  <para>
    A simple example using the GNU model of message conversion.
  </para>
@@ -349,8 +351,8 @@ void test01()
 
 </section>
 
-<section xml:id="facet.messages.future"><info><title>Future</title></info>
-
+<section id="facet.messages.future">
+<title>Future</title>
 
 <itemizedlist>
 <listitem>
@@ -436,15 +438,21 @@ void test01()
 
 </section>
 
-<bibliography xml:id="facet.messages.biblio"><info><title>Bibliography</title></info>
-
+<bibliography id="facet.messages.biblio">
+<title>Bibliography</title>
 
   <biblioentry>
-    <citetitle>
+    <title>
       The GNU C Library
-    </citetitle>
-    <author><personname><surname>McGrath</surname><firstname>Roland</firstname></personname></author>
-    <author><personname><surname>Drepper</surname><firstname>Ulrich</firstname></personname></author>
+    </title>
+    <author>
+      <surname>McGrath</surname>
+      <firstname>Roland</firstname>
+    </author>
+    <author>
+      <surname>Drepper</surname>
+      <firstname>Ulrich</firstname>
+    </author>
     <copyright>
       <year>2007</year>
       <holder>FSF</holder>
@@ -454,20 +462,23 @@ void test01()
   </biblioentry>
 
   <biblioentry>
-    <citetitle>
+    <title>
       Correspondence
-    </citetitle>
-    <author><personname><surname>Drepper</surname><firstname>Ulrich</firstname></personname></author>
+    </title>
+    <author>
+      <surname>Drepper</surname>
+      <firstname>Ulrich</firstname>
+    </author>
     <copyright>
       <year>2002</year>
-      <holder/>
+      <holder></holder>
     </copyright>
   </biblioentry>
 
   <biblioentry>
-    <citetitle>
+    <title>
       ISO/IEC 14882:1998 Programming languages - C++
-    </citetitle>
+    </title>
     <copyright>
       <year>1998</year>
       <holder>ISO</holder>
@@ -475,9 +486,9 @@ void test01()
   </biblioentry>
 
   <biblioentry>
-    <citetitle>
+    <title>
       ISO/IEC 9899:1999 Programming languages - C
-    </citetitle>
+    </title>
 
     <copyright>
       <year>1999</year>
@@ -486,13 +497,14 @@ void test01()
   </biblioentry>
 
   <biblioentry>
-      <title>
-	<link xmlns:xlink="http://www.w3.org/1999/xlink"
-	      xlink:href="http://pubs.opengroup.org/onlinepubs/9699919799/">
-      System Interface Definitions, Issue 7 (IEEE Std. 1003.1-2008)
-	</link>
-      </title>
-        <copyright>
+    <biblioid class="uri">
+      <ulink url="http://www.opengroup.org/austin/">
+	<citetitle>
+	  System Interface Definitions, Issue 7 (IEEE Std. 1003.1-2008)
+	</citetitle>
+      </ulink>
+    </biblioid>
+    <copyright>
       <year>2008</year>
       <holder>
 	The Open Group/The Institute of Electrical and Electronics
@@ -502,10 +514,13 @@ void test01()
   </biblioentry>
 
   <biblioentry>
-    <citetitle>
+    <title>
       The C++ Programming Language, Special Edition
-    </citetitle>
-    <author><personname><surname>Stroustrup</surname><firstname>Bjarne</firstname></personname></author>
+    </title>
+    <author>
+      <surname>Stroustrup</surname>
+      <firstname>Bjarne</firstname>
+    </author>
     <copyright>
       <year>2000</year>
       <holder>Addison Wesley, Inc.</holder>
@@ -519,14 +534,20 @@ void test01()
   </biblioentry>
 
   <biblioentry>
-    <citetitle>
+    <title>
       Standard C++ IOStreams and Locales
-    </citetitle>
+    </title>
     <subtitle>
       Advanced Programmer's Guide and Reference
     </subtitle>
-    <author><personname><surname>Langer</surname><firstname>Angelika</firstname></personname></author>
-    <author><personname><surname>Kreft</surname><firstname>Klaus</firstname></personname></author>
+    <author>
+      <surname>Langer</surname>
+      <firstname>Angelika</firstname>
+    </author>
+    <author>
+      <surname>Kreft</surname>
+      <firstname>Klaus</firstname>
+    </author>
     <copyright>
       <year>2000</year>
       <holder>Addison Wesley Longman, Inc.</holder>
@@ -539,28 +560,27 @@ void test01()
   </biblioentry>
 
   <biblioentry>
-      <title>
-	<link xmlns:xlink="http://www.w3.org/1999/xlink"
-	      xlink:href="https://www.oracle.com/technetwork/java/api/index.html">
-	API Specifications, Java Platform
-	</link>
-      </title>
-
+    <biblioid class="uri">
+      <ulink url="http://java.sun.com/reference/api/index.html">
+	<citetitle>
+	  API Specifications, Java Platform
+	</citetitle>
+      </ulink>
+    </biblioid>
     <pagenums>java.util.Properties, java.text.MessageFormat,
 java.util.Locale, java.util.ResourceBundle
     </pagenums>
   </biblioentry>
 
-
   <biblioentry>
-      <title>
-	<link xmlns:xlink="http://www.w3.org/1999/xlink"
-	      xlink:href="https://www.gnu.org/software/gettext/">
-      GNU gettext tools, version 0.10.38, Native Language Support
-      Library and Tools.
-	</link>
-      </title>
-
+    <biblioid class="uri">
+      <ulink url="http://www.gnu.org/software/gettext/">
+	<citetitle>
+	  GNU gettext tools, version 0.10.38, Native Language Support
+Library and Tools.
+	</citetitle>
+      </ulink>
+    </biblioid>
   </biblioentry>
 
 </bibliography>

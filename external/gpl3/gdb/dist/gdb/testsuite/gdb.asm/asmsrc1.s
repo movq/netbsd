@@ -34,7 +34,6 @@
 
 	.global main
 	gdbasm_declare main
-	comment "mark: main enter"
 	gdbasm_enter
 
 	comment "Call a macro that consists of several lines of assembler code."

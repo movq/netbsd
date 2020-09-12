@@ -15,9 +15,16 @@
 #define SANITIZER_PLACEMENT_NEW_H
 
 #include "sanitizer_internal_defs.h"
-#include <cstddef>
 
-inline void *operator new(__sanitizer::operator_new_size_type sz, void *p) {
+namespace __sanitizer {
+#if (SANITIZER_WORDSIZE == 64) || defined(__APPLE__)
+typedef uptr operator_new_ptr_type;
+#else
+typedef u32 operator_new_ptr_type;
+#endif
+}  // namespace __sanitizer
+
+inline void *operator new(__sanitizer::operator_new_ptr_type sz, void *p) {
   return p;
 }
 

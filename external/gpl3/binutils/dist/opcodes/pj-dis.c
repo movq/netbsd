@@ -1,5 +1,5 @@
 /* pj-dis.c -- Disassemble picoJava instructions.
-   Copyright (C) 1999-2020 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001, 2002, 2005, 2007 Free Software Foundation, Inc.
    Contributed by Steve Chamberlain, of Transmeta (sac@pobox.com).
 
    This file is part of the GNU opcodes library.
@@ -19,10 +19,10 @@
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
-#include "sysdep.h"
 #include <stdio.h>
+#include "sysdep.h"
 #include "opcode/pj.h"
-#include "disassemble.h"
+#include "dis-asm.h"
 
 extern const pj_opc_info_t pj_opc_info[512];
 
@@ -32,10 +32,10 @@ get_int (bfd_vma memaddr, int *iptr, struct disassemble_info *info)
   unsigned char ival[4];
   int status = info->read_memory_func (memaddr, ival, 4, info);
 
-  *iptr = (((unsigned) ival[0] << 24)
-	   | (ival[1] << 16)
-	   | (ival[2] << 8)
-	   | (ival[3] << 0));
+  *iptr = (ival[0] << 24)
+    | (ival[1] << 16)
+    | (ival[2] << 8)
+    | (ival[3] << 0);
 
   return status;
 }

@@ -8,7 +8,6 @@
 .include "testutils.inc"
 
 	.data
-	.align 4
 fm1:
 	.word 3212836864
 fmax:

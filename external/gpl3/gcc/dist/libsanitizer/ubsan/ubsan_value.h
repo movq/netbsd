@@ -12,6 +12,12 @@
 #ifndef UBSAN_VALUE_H
 #define UBSAN_VALUE_H
 
+// For now, only support Linux, FreeBSD and Darwin. Other platforms should
+// be easy to add, and probably work as-is.
+#if !defined(__linux__) && !defined(__FreeBSD__) && !defined(__APPLE__)
+#error "UBSan not supported for this platform!"
+#endif
+
 #include "sanitizer_common/sanitizer_atomic.h"
 #include "sanitizer_common/sanitizer_common.h"
 
@@ -23,6 +29,7 @@ __extension__ typedef unsigned __int128 u128;
 #else
 #define HAVE_INT128_T 0
 #endif
+
 
 namespace __ubsan {
 

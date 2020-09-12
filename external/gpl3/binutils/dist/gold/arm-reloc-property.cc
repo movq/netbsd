@@ -1,6 +1,6 @@
 // arm-reloc-property.cc -- ARM relocation property.
 
-// Copyright (C) 2010-2020 Free Software Foundation, Inc.
+// Copyright 2010 Free Software Foundation, Inc.
 // Written by Doug Kwan <dougkwan@google.com>.
 
 // This file is part of gold.
@@ -259,7 +259,7 @@ Arm_reloc_property::Arm_reloc_property(
 
 Arm_reloc_property_table::Arm_reloc_property_table()
 {
-  // These appear in arm-reloc.def.  Do not rename them.
+  // These appers in arm-reloc.def.  Do not rename them.
   Parse_expression A("A"), GOT_ORG("GOT_ORG"), NONE("NONE"), P("P"),
 		   Pa("Pa"), S("S"), T("T"), TLS("TLS"), tp("tp");
   const bool Y(true), N(false);

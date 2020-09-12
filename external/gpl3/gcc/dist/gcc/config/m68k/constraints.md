@@ -1,5 +1,5 @@
 ;; Constraint definitions for m68k
-;; Copyright (C) 2007-2019 Free Software Foundation, Inc.
+;; Copyright (C) 2007 Free Software Foundation, Inc.
 
 ;; This file is part of GCC.
 
@@ -94,8 +94,7 @@
 (define_constraint "T"
   "Used for operands that satisfy 's' when -mpcrel is not in effect."
   (and (match_code "symbol_ref,label_ref,const")
-       (match_test "!TARGET_PCREL")
-       (match_test "!flag_pic || LEGITIMATE_PIC_OPERAND_P (op)")))
+       (match_test "!flag_pic")))
 
 (define_memory_constraint "Q"
   "Means address register indirect addressing mode."

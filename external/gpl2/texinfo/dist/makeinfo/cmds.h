@@ -1,4 +1,4 @@
-/*	$NetBSD: cmds.h,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: cmds.h,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* cmds.h -- declarations for cmds.c.
    Id: cmds.h,v 1.9 2004/11/26 00:48:35 karl Exp 

@@ -1,5 +1,6 @@
 /* GNU/Linux/CRIS specific low level interface, for the remote server for GDB.
-   Copyright (C) 1995-2019 Free Software Foundation, Inc.
+   Copyright (C) 1995, 1996, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+   2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,18 +19,13 @@
 
 #include "server.h"
 #include "linux-low.h"
-#include "nat/gdb_ptrace.h"
+#include <sys/ptrace.h>
 
 /* Defined in auto-generated file reg-crisv32.c.  */
 void init_registers_crisv32 (void);
-extern const struct target_desc *tdesc_crisv32;
 
 /* CRISv32 */
 #define cris_num_regs 49
-
-#ifndef PTRACE_GET_THREAD_AREA
-#define PTRACE_GET_THREAD_AREA 25
-#endif
 
 /* Note: Ignoring USP (having the stack pointer in two locations causes trouble
    without any significant gain).  */
@@ -55,17 +51,27 @@ static int cris_regmap[] = {
 
 };
 
+extern int debug_threads;
+
+static CORE_ADDR
+cris_get_pc (struct regcache *regcache)
+{
+  unsigned long pc;
+  collect_register_by_name (regcache, "pc", &pc);
+  if (debug_threads)
+    fprintf (stderr, "stop pc is %08lx\n", pc);
+  return pc;
+}
+
+static void
+cris_set_pc (struct regcache *regcache, CORE_ADDR pc)
+{
+  unsigned long newpc = pc;
+  supply_register_by_name (regcache, "pc", &newpc);
+}
+
 static const unsigned short cris_breakpoint = 0xe938;
 #define cris_breakpoint_len 2
-
-/* Implementation of linux_target_ops method "sw_breakpoint_from_kind".  */
-
-static const gdb_byte *
-cris_sw_breakpoint_from_kind (int kind, int *size)
-{
-  *size = cris_breakpoint_len;
-  return (const gdb_byte *) &cris_breakpoint;
-}
 
 static int
 cris_breakpoint_at (CORE_ADDR where)
@@ -80,6 +86,23 @@ cris_breakpoint_at (CORE_ADDR where)
   /* If necessary, recognize more trap instructions here.  GDB only uses the
      one.  */
   return 0;
+}
+
+/* We only place breakpoints in empty marker functions, and thread locking
+   is outside of the function.  So rather than importing software single-step,
+   we can just run until exit.  */
+
+/* FIXME: This function should not be needed, since we have PTRACE_SINGLESTEP
+   for CRISv32.  Without it, td_ta_event_getmsg in thread_db_create_event
+   will fail when debugging multi-threaded applications.  */
+
+static CORE_ADDR
+cris_reinsert_addr (void)
+{
+  struct regcache *regcache = get_thread_regcache (current_inferior, 1);
+  unsigned long pc;
+  collect_register_by_name (regcache, "srp", &pc);
+  return pc;
 }
 
 static void
@@ -116,22 +139,7 @@ cris_write_data_breakpoint (struct regcache *regcache,
 }
 
 static int
-cris_supports_z_point_type (char z_type)
-{
-  switch (z_type)
-    {
-    case Z_PACKET_WRITE_WP:
-    case Z_PACKET_READ_WP:
-    case Z_PACKET_ACCESS_WP:
-      return 1;
-    default:
-      return 0;
-    }
-}
-
-static int
-cris_insert_point (enum raw_bkpt_type type, CORE_ADDR addr,
-		   int len, struct raw_breakpoint *bp)
+cris_insert_point (char type, CORE_ADDR addr, int len)
 {
   int bp;
   unsigned long bp_ctrl;
@@ -139,12 +147,26 @@ cris_insert_point (enum raw_bkpt_type type, CORE_ADDR addr,
   unsigned long ccs;
   struct regcache *regcache;
 
-  regcache = get_thread_regcache (current_thread, 1);
+  /* Breakpoint/watchpoint types (GDB terminology):
+     0 = memory breakpoint for instructions
+     (not supported; done via memory write instead)
+     1 = hardware breakpoint for instructions (not supported)
+     2 = write watchpoint (supported)
+     3 = read watchpoint (supported)
+     4 = access watchpoint (supported).  */
+
+  if (type < '2' || type > '4')
+    {
+      /* Unsupported.  */
+      return 1;
+    }
+
+  regcache = get_thread_regcache (current_inferior, 1);
 
   /* Read watchpoints are set as access watchpoints, because of GDB's
      inability to deal with pure read watchpoints.  */
-  if (type == raw_bkpt_type_read_wp)
-    type = raw_bkpt_type_access_wp;
+  if (type == '3')
+    type = '4';
 
   /* Get the configuration register.  */
   collect_register_by_name (regcache, "s0", &bp_ctrl);
@@ -173,12 +195,12 @@ cris_insert_point (enum raw_bkpt_type type, CORE_ADDR addr,
     }
 
   /* Configure the control register first.  */
-  if (type == raw_bkpt_type_read_wp || type == raw_bkpt_type_access_wp)
+  if (type == '3' || type == '4')
     {
       /* Trigger on read.  */
       bp_ctrl |= (1 << (2 + bp * 4));
     }
-  if (type == raw_bkpt_type_write_wp || type == raw_bkpt_type_access_wp)
+  if (type == '2' || type == '4')
     {
       /* Trigger on write.  */
       bp_ctrl |= (2 << (2 + bp * 4));
@@ -203,21 +225,29 @@ cris_insert_point (enum raw_bkpt_type type, CORE_ADDR addr,
 }
 
 static int
-cris_remove_point (enum raw_bkpt_type type, CORE_ADDR addr, int len,
-		   struct raw_breakpoint *bp)
+cris_remove_point (char type, CORE_ADDR addr, int len)
 {
   int bp;
   unsigned long bp_ctrl;
   unsigned long start, end;
   struct regcache *regcache;
-  unsigned long bp_d_regs[12];
 
-  regcache = get_thread_regcache (current_thread, 1);
+  /* Breakpoint/watchpoint types:
+     0 = memory breakpoint for instructions
+     (not supported; done via memory write instead)
+     1 = hardware breakpoint for instructions (not supported)
+     2 = write watchpoint (supported)
+     3 = read watchpoint (supported)
+     4 = access watchpoint (supported).  */
+  if (type < '2' || type > '4')
+    return -1;
+
+  regcache = get_thread_regcache (current_inferior, 1);
 
   /* Read watchpoints are set as access watchpoints, because of GDB's
      inability to deal with pure read watchpoints.  */
-  if (type == raw_bkpt_type_read_wp)
-    type = raw_bkpt_type_access_wp;
+  if (type == '3')
+    type = '4';
 
   /* Get the configuration register.  */
   collect_register_by_name (regcache, "s0", &bp_ctrl);
@@ -228,6 +258,8 @@ cris_remove_point (enum raw_bkpt_type type, CORE_ADDR addr, int len,
   /* Ugly pointer arithmetic, since I cannot rely on a
      single switch (addr) as there may be several watchpoints with
      the same start address for example.  */
+
+  unsigned long bp_d_regs[12];
 
   /* Get all range registers to simplify search.  */
   collect_register_by_name (regcache, "s3", &bp_d_regs[0]);
@@ -254,9 +286,9 @@ cris_remove_point (enum raw_bkpt_type type, CORE_ADDR addr, int len,
 	/* Read/write bits for this BP.  */
 	rw_bits = (bp_ctrl & (0x3 << bitpos)) >> bitpos;
 
-	if ((type == raw_bkpt_type_read_wp && rw_bits == 0x1)
-	    || (type == raw_bkpt_type_write_wp && rw_bits == 0x2)
-	    || (type == raw_bkpt_type_access_wp && rw_bits == 0x3))
+	if ((type == '3' && rw_bits == 0x1)
+	    || (type == '2' && rw_bits == 0x2)
+	    || (type == '4' && rw_bits == 0x3))
 	  {
 	    /* Read/write matched.  */
 	    break;
@@ -289,9 +321,8 @@ static int
 cris_stopped_by_watchpoint (void)
 {
   unsigned long exs;
-  struct regcache *regcache = get_thread_regcache (current_thread, 1);
 
-  collect_register_by_name (regcache, "exs", &exs);
+  collect_register_by_name ("exs", &exs);
 
   return (((exs & 0xff00) >> 8) == 0xc);
 }
@@ -300,141 +331,60 @@ static CORE_ADDR
 cris_stopped_data_address (void)
 {
   unsigned long eda;
-  struct regcache *regcache = get_thread_regcache (current_thread, 1);
 
-  collect_register_by_name (regcache, "eda", &eda);
+  collect_register_by_name ("eda", &eda);
 
   /* FIXME: Possibly adjust to match watched range.  */
   return eda;
 }
 
-ps_err_e
-ps_get_thread_area (struct ps_prochandle *ph,
-                    lwpid_t lwpid, int idx, void **base)
-{
-  if (ptrace (PTRACE_GET_THREAD_AREA, lwpid, NULL, base) != 0)
-    return PS_ERR;
-
-  /* IDX is the bias from the thread pointer to the beginning of the
-     thread descriptor.  It has to be subtracted due to implementation
-     quirks in libthread_db.  */
-  *base = (void *) ((char *) *base - idx);
-  return PS_OK;
-}
-
 static void
-cris_fill_gregset (struct regcache *regcache, void *buf)
+cris_fill_gregset (void *buf)
 {
   int i;
 
   for (i = 0; i < cris_num_regs; i++)
     {
       if (cris_regmap[i] != -1)
-	collect_register (regcache, i, ((char *) buf) + cris_regmap[i]);
+	collect_register (i, ((char *) buf) + cris_regmap[i]);
     }
 }
 
 static void
-cris_store_gregset (struct regcache *regcache, const void *buf)
+cris_store_gregset (const void *buf)
 {
   int i;
 
   for (i = 0; i < cris_num_regs; i++)
     {
       if (cris_regmap[i] != -1)
-	supply_register (regcache, i, ((char *) buf) + cris_regmap[i]);
+	supply_register (i, ((char *) buf) + cris_regmap[i]);
     }
 }
 
-static void
-cris_arch_setup (void)
-{
-  current_process ()->tdesc = tdesc_crisv32;
-}
+typedef unsigned long elf_gregset_t[cris_num_regs];
 
-/* Support for hardware single step.  */
-
-static int
-cris_supports_hardware_single_step (void)
-{
-  return 1;
-}
-
-static struct regset_info cris_regsets[] = {
-  { PTRACE_GETREGS, PTRACE_SETREGS, 0, cris_num_regs * 4,
+struct regset_info target_regsets[] = {
+  { PTRACE_GETREGS, PTRACE_SETREGS, 0, sizeof (elf_gregset_t),
     GENERAL_REGS, cris_fill_gregset, cris_store_gregset },
-  NULL_REGSET
+  { 0, 0, 0, -1, -1, NULL, NULL }
 };
 
-
-static struct regsets_info cris_regsets_info =
-  {
-    cris_regsets, /* regsets */
-    0, /* num_regsets */
-    NULL, /* disabled_regsets */
-  };
-
-static struct usrregs_info cris_usrregs_info =
-  {
-    cris_num_regs,
-    cris_regmap,
-  };
-
-static struct regs_info regs_info =
-  {
-    NULL, /* regset_bitmap */
-    &cris_usrregs_info,
-    &cris_regsets_info
-  };
-
-static const struct regs_info *
-cris_regs_info (void)
-{
-  return &regs_info;
-}
-
 struct linux_target_ops the_low_target = {
-  cris_arch_setup,
-  cris_regs_info,
+  init_register_crisv32,
+  -1,
   NULL,
   NULL,
-  NULL, /* fetch_register */
-  linux_get_pc_32bit,
-  linux_set_pc_32bit,
-  NULL, /* breakpoint_kind_from_pc */
-  cris_sw_breakpoint_from_kind,
-  NULL, /* get_next_pcs */
+  NULL,
+  cris_get_pc,
+  cris_set_pc,
+  (const unsigned char *) &cris_breakpoint,
+  cris_breakpoint_len,
+  cris_reinsert_addr,
   0,
   cris_breakpoint_at,
-  cris_supports_z_point_type,
   cris_insert_point,
   cris_remove_point,
   cris_stopped_by_watchpoint,
   cris_stopped_data_address,
-  NULL, /* collect_ptrace_register */
-  NULL, /* supply_ptrace_register */
-  NULL, /* siginfo_fixup */
-  NULL, /* new_process */
-  NULL, /* delete_process */
-  NULL, /* new_thread */
-  NULL, /* delete_thread */
-  NULL, /* new_fork */
-  NULL, /* prepare_to_resume */
-  NULL, /* process_qsupported */
-  NULL, /* supports_tracepoints */
-  NULL, /* get_thread_area */
-  NULL, /* install_fast_tracepoint_jump_pad */
-  NULL, /* emit_ops */
-  NULL, /* get_min_fast_tracepoint_insn_len */
-  NULL, /* supports_range_stepping */
-  NULL, /* breakpoint_kind_from_current_state */
-  cris_supports_hardware_single_step,
 };
-
-void
-initialize_low_arch (void)
-{
-  init_registers_crisv32 ();
-
-  initialize_regsets_info (&cris_regsets_info);
-}

@@ -1,4 +1,4 @@
-/*	$NetBSD: vms_fab.c,v 1.1.1.1 2016/01/10 21:36:21 christos Exp $	*/
+/*	$NetBSD: vms_fab.c,v 1.1 2016/01/10 21:36:21 christos Exp $	*/
 
      /*
         <vms_fab>

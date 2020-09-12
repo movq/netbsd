@@ -1,6 +1,6 @@
 /* Template argument tests.
 
-   Copyright 2010-2019 Free Software Foundation, Inc.
+   Copyright 2010, 2011 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -23,7 +23,6 @@ int a_global;
 struct S
 {
   int f;
-  void somefunc() { }
 };
 
 template<typename T, int I, int *P, int S::*MP>
@@ -56,15 +55,6 @@ void func ()
   // Breakpoint 3.
 }
 
-template<void (S::*F) ()>
-struct K2
-{
-  void k2_m ()
-  {
-    // Breakpoint 5.
-  }
-};
-
 // GCC PR debug/49546
 struct S3
 {
@@ -80,36 +70,12 @@ struct K3
   }
 };
 
-namespace pr24470
-{
-// From PR c++/24470
-// This caused a gdb crash during startup.
-
-template <int a> struct b {};
-template <typename, typename> struct c {
-  template <long d> using e = b<d>;
-  void k(e<0>);
-};
-template <typename, template <typename, typename> class, unsigned long...>
-struct m;
-template <typename g, template <typename, typename> class h, unsigned long i>
-struct m<g, h, i> {
-  using j = b<i>;
-};
-struct n {
-  template <typename g> using f = typename m<g, c, 0>::j;
-};
-
-n::f<int> l;
-}
-
 int main ()
 {
   Base<double, 23, &a_global, &S::f> base;
   // Note that instantiating with P==0 does not work with g++.
   // That would be worth testing, once g++ is fixed.
   Base<long, 47, &a_global, &S::f>::Inner<float> inner;
-  K2<&S::somefunc> k2;
   K3<&S3::m> k3;
 // or: K3<S3::m> k3;
 
@@ -117,7 +83,6 @@ int main ()
   inner.inner_m ();
   func<unsigned char, 91, &a_global, &S::f> ();
   base.templ_m<short> ();
-  k2.k2_m ();
   k3.k3_m ();
 
   return 0;

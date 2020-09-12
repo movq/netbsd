@@ -1,5 +1,7 @@
 /* Check calls to formatted I/O functions (-Wformat).
-   Copyright (C) 1992-2019 Free Software Foundation, Inc.
+   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
+   2001, 2002, 2003, 2004, 2005, 2007, 2008, 2010
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -17,15 +19,19 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-#define IN_TARGET_CODE 1
-
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
-#include "c-family/c-common.h"
+#include "tree.h"
+#include "flags.h"
+#include "c-common.h"
+#include "toplev.h"
 #include "intl.h"
-#include "c-family/c-format.h"
+#include "diagnostic.h"
+#include "langhooks.h"
+#include "c-format.h"
+#include "alloc-pool.h"
 
 /* Mingw specific format attributes ms_printf, ms_scanf, and ms_strftime.  */
 
@@ -41,16 +47,16 @@ static format_length_info ms_printf_length_specs[] =
 
 static const format_flag_spec ms_printf_flag_specs[] =
 {
-  { ' ',  0, 0, 0, N_("' ' flag"),        N_("the ' ' printf flag"),              STD_C89 },
-  { '+',  0, 0, 0, N_("'+' flag"),        N_("the '+' printf flag"),              STD_C89 },
-  { '#',  0, 0, 0, N_("'#' flag"),        N_("the '#' printf flag"),              STD_C89 },
-  { '0',  0, 0, 0, N_("'0' flag"),        N_("the '0' printf flag"),              STD_C89 },
-  { '-',  0, 0, 0, N_("'-' flag"),        N_("the '-' printf flag"),              STD_C89 },
-  { '\'', 0, 0, 0, N_("''' flag"),        N_("the ''' printf flag"),              STD_EXT },
-  { 'w',  0, 0, 0, N_("field width"),     N_("field width in printf format"),     STD_C89 },
-  { 'p',  0, 0, 0, N_("precision"),       N_("precision in printf format"),       STD_C89 },
-  { 'L',  0, 0, 0, N_("length modifier"), N_("length modifier in printf format"), STD_C89 },
-  { 0, 0, 0, 0, NULL, NULL, STD_C89 }
+  { ' ',  0, 0, N_("' ' flag"),        N_("the ' ' printf flag"),              STD_C89 },
+  { '+',  0, 0, N_("'+' flag"),        N_("the '+' printf flag"),              STD_C89 },
+  { '#',  0, 0, N_("'#' flag"),        N_("the '#' printf flag"),              STD_C89 },
+  { '0',  0, 0, N_("'0' flag"),        N_("the '0' printf flag"),              STD_C89 },
+  { '-',  0, 0, N_("'-' flag"),        N_("the '-' printf flag"),              STD_C89 },
+  { '\'', 0, 0, N_("''' flag"),        N_("the ''' printf flag"),              STD_EXT },
+  { 'w',  0, 0, N_("field width"),     N_("field width in printf format"),     STD_C89 },
+  { 'p',  0, 0, N_("precision"),       N_("precision in printf format"),       STD_C89 },
+  { 'L',  0, 0, N_("length modifier"), N_("length modifier in printf format"), STD_C89 },
+  { 0, 0, 0, NULL, NULL, STD_C89 }
 };
 
 static const format_flag_pair ms_printf_flag_pairs[] =
@@ -62,12 +68,12 @@ static const format_flag_pair ms_printf_flag_pairs[] =
 
 static const format_flag_spec ms_scanf_flag_specs[] =
 {
-  { '*',  0, 0, 0, N_("assignment suppression"), N_("the assignment suppression scanf feature"), STD_C89 },
-  { 'a',  0, 0, 0, N_("'a' flag"),               N_("the 'a' scanf flag"),                       STD_EXT },
-  { 'w',  0, 0, 0, N_("field width"),            N_("field width in scanf format"),              STD_C89 },
-  { 'L',  0, 0, 0, N_("length modifier"),        N_("length modifier in scanf format"),          STD_C89 },
-  { '\'', 0, 0, 0, N_("''' flag"),               N_("the ''' scanf flag"),                       STD_EXT },
-  { 0, 0, 0, 0, NULL, NULL, STD_C89 }
+  { '*',  0, 0, N_("assignment suppression"), N_("the assignment suppression scanf feature"), STD_C89 },
+  { 'a',  0, 0, N_("'a' flag"),               N_("the 'a' scanf flag"),                       STD_EXT },
+  { 'w',  0, 0, N_("field width"),            N_("field width in scanf format"),              STD_C89 },
+  { 'L',  0, 0, N_("length modifier"),        N_("length modifier in scanf format"),          STD_C89 },
+  { '\'', 0, 0, N_("''' flag"),               N_("the ''' scanf flag"),                       STD_EXT },
+  { 0, 0, 0, NULL, NULL, STD_C89 }
 };
 
 static const format_flag_pair ms_scanf_flag_pairs[] =
@@ -78,8 +84,8 @@ static const format_flag_pair ms_scanf_flag_pairs[] =
 
 static const format_flag_spec ms_strftime_flag_specs[] =
 {
-  { '#', 0,   0, 0, N_("'#' flag"),     N_("the '#' strftime flag"),          STD_EXT },
-  { 0, 0, 0, 0, NULL, NULL, STD_C89 }
+  { '#', 0,   0, N_("'#' flag"),     N_("the '#' strftime flag"),          STD_EXT },
+  { 0, 0, 0, NULL, NULL, STD_C89 }
 };
 
 static const format_flag_pair ms_strftime_flag_pairs[] =

@@ -1,7 +1,8 @@
 /* Generate from machine description:
    - some flags HAVE_... saying which simple standard instructions are
    available for this machine.
-   Copyright (C) 1987-2019 Free Software Foundation, Inc.
+   Copyright (C) 1987, 1991, 1995, 1998, 1999, 2000, 2003, 2004, 2007
+   Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -27,7 +28,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "rtl.h"
 #include "obstack.h"
 #include "errors.h"
-#include "read-md.h"
 #include "gensupport.h"
 
 /* Obstack to remember insns with.  */
@@ -42,6 +42,8 @@ static int max_opno;
 static void max_operand_1 (rtx);
 static int num_operands (rtx);
 static void gen_proto (rtx);
+static void gen_macro (const char *, int, int);
+static void gen_insn (int, rtx);
 
 /* Count the number of match_operand's found.  */
 
@@ -91,6 +93,32 @@ num_operands (rtx insn)
   return max_opno + 1;
 }
 
+/* Print out a wrapper macro for a function which corrects the number
+   of arguments it takes.  Any missing arguments are assumed to be at
+   the end.  */
+static void
+gen_macro (const char *name, int real, int expect)
+{
+  int i;
+
+  gcc_assert (real <= expect);
+  gcc_assert (real);
+
+  /* #define GEN_CALL(A, B, C, D) gen_call((A), (B)) */
+  fputs ("#define GEN_", stdout);
+  for (i = 0; name[i]; i++)
+    putchar (TOUPPER (name[i]));
+
+  putchar('(');
+  for (i = 0; i < expect - 1; i++)
+    printf ("%c, ", i + 'A');
+  printf ("%c) gen_%s (", i + 'A', name);
+
+  for (i = 0; i < real - 1; i++)
+    printf ("(%c), ", i + 'A');
+  printf ("(%c))\n", i + 'A');
+}
+
 /* Print out prototype information for a generator function.  If the
    insn pattern has been elided, print out a dummy generator that
    does nothing.  */
@@ -102,6 +130,25 @@ gen_proto (rtx insn)
   int i;
   const char *name = XSTR (insn, 0);
   int truth = maybe_eval_c_test (XSTR (insn, 2));
+
+  /* Many md files don't refer to the last two operands passed to the
+     call patterns.  This means their generator functions will be two
+     arguments too short.  Instead of changing every md file to touch
+     those operands, we wrap the prototypes in macros that take the
+     correct number of arguments.  */
+  if (name[0] == 'c' || name[0] == 's')
+    {
+      if (!strcmp (name, "call")
+	  || !strcmp (name, "call_pop")
+	  || !strcmp (name, "sibcall")
+	  || !strcmp (name, "sibcall_pop"))
+	gen_macro (name, num, 4);
+      else if (!strcmp (name, "call_value")
+	       || !strcmp (name, "call_value_pop")
+	       || !strcmp (name, "sibcall_value")
+	       || !strcmp (name, "sibcall_value_pop"))
+	gen_macro (name, num, 5);
+    }
 
   if (truth != 0)
     printf ("extern rtx        gen_%-*s (", max_id_len, name);
@@ -140,9 +187,8 @@ gen_proto (rtx insn)
 }
 
 static void
-gen_insn (md_rtx_info *info)
+gen_insn (int line_no, rtx insn)
 {
-  rtx insn = info->def;
   const char *name = XSTR (insn, 0);
   const char *p;
   const char *lt, *gt;
@@ -152,15 +198,18 @@ gen_insn (md_rtx_info *info)
   lt = strchr (name, '<');
   if (lt && strchr (lt + 1, '>'))
     {
-      error_at (info->loc, "unresolved iterator");
+      message_with_line (line_no, "unresolved iterator");
+      have_error = 1;
       return;
     }
 
   gt = strchr (name, '>');
   if (lt || gt)
     {
-      error_at (info->loc, "unmatched angle brackets, likely "
-		"an error in iterator syntax");
+      message_with_line (line_no,
+			 "unmatched angle brackets, likely "
+			 "an error in iterator syntax");
+      have_error = 1;
       return;
     }
 
@@ -198,8 +247,9 @@ gen_insn (md_rtx_info *info)
 }
 
 int
-main (int argc, const char **argv)
+main (int argc, char **argv)
 {
+  rtx desc;
   rtx dummy;
   rtx *insns;
   rtx *insn_ptr;
@@ -211,7 +261,7 @@ main (int argc, const char **argv)
      direct calls to their generators in C code.  */
   insn_elision = 0;
 
-  if (!init_rtx_reader_args (argc, argv))
+  if (init_md_reader_args (argc, argv) != SUCCESS_EXIT_CODE)
     return (FATAL_EXIT_CODE);
 
   puts ("/* Generated automatically by the program `genflags'");
@@ -221,18 +271,16 @@ main (int argc, const char **argv)
 
   /* Read the machine description.  */
 
-  md_rtx_info info;
-  while (read_md_rtx (&info))
-    switch (GET_CODE (info.def))
-      {
-      case DEFINE_INSN:
-      case DEFINE_EXPAND:
-	gen_insn (&info);
-	break;
+  while (1)
+    {
+      int line_no, insn_code_number = 0;
 
-      default:
+      desc = read_md_rtx (&line_no, &insn_code_number);
+      if (desc == NULL)
 	break;
-      }
+      if (GET_CODE (desc) == DEFINE_INSN || GET_CODE (desc) == DEFINE_EXPAND)
+	gen_insn (line_no, desc);
+    }
 
   /* Print out the prototypes now.  */
   dummy = (rtx) 0;
@@ -242,7 +290,7 @@ main (int argc, const char **argv)
   for (insn_ptr = insns; *insn_ptr; insn_ptr++)
     gen_proto (*insn_ptr);
 
-  puts ("\n#endif /* GCC_INSN_FLAGS_H */");
+  puts("\n#endif /* GCC_INSN_FLAGS_H */");
 
   if (have_error || ferror (stdout) || fflush (stdout) || fclose (stdout))
     return FATAL_EXIT_CODE;

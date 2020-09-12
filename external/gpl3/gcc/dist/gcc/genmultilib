@@ -1,6 +1,7 @@
 #!/bin/sh 
 # Generates multilib.h.
-#   Copyright (C) 1994-2019 Free Software Foundation, Inc.
+#   Copyright (C) 1994, 1995, 1996, 1997, 1999, 2002, 2007
+#   Free Software Foundation, Inc.
 
 #This file is part of GCC.
 
@@ -72,22 +73,6 @@
 # the os directory names are used exclusively.  Use the mapping when
 # there is no one-to-one equivalence between GCC levels and the OS.
 
-# The optional eighth argument which intends to reduce the effort to write
-# so many MULTILIB_EXCEPTIONS rules. This option defines a series of option
-# combinations that we actually required.
-# For some cases, the generated option combinations are far more than what
-# we need, we have to write a lot of rules to screen out combinations we
-# don't need. If we missed some rules, the unexpected libraries will be built.
-# Now with this argument, one can simply give what combinations are needed.
-# It is pretty straigtforward.
-# This argument can be used together with MULTILIB_EXCEPTIONS and will take
-# effect after the MULTILIB_EXCEPTIONS.
-
-# The optional ninth argument is the multiarch name.
-
-# The optional tenth argument specifies how to reuse multilib for different
-# option sets.
-
 # The last option should be "yes" if multilibs are enabled.  If it is not
 # "yes", all GCC multilib dir names will be ".".
 
@@ -108,7 +93,7 @@
 #   genmultilib 'm64/m32 mno-app-regs|mcmodel=medany' '64 32 alt'
 #		'mcmodel?medany=mcmodel?medmid' 'm32/mno-app-regs* m32/mcmodel=*'
 #		'' 'm32/!m64/mno-app-regs m32/!m64/mcmodel=medany'
-#		'../lib64 ../lib32 alt' '' '' '' yes
+#		'../lib64 ../lib32 alt' yes
 # This produces:
 #   ". !m64 !m32 !mno-app-regs !mcmodel=medany;",
 #   "64:../lib64 m64 !m32 !mno-app-regs !mcmodel=medany;",
@@ -136,10 +121,7 @@ exceptions=$4
 extra=$5
 exclusions=$6
 osdirnames=$7
-multilib_required=$8
-multiarch=$9
-multilib_reuse=${10}
-enable_multilib=${11}
+enable_multilib=$8
 
 echo "static const char *const multilib_raw[] = {"
 
@@ -154,10 +136,8 @@ cd ./tmpmultilib.$$ || exit 1
 # Since not all versions of sh support functions, we achieve recursion
 # by creating a temporary shell script which invokes itself.
 rm -f tmpmultilib
-cat >tmpmultilib <<EOF
-#!${CONFIG_SHELL:-/bin/sh}
-EOF
-cat >>tmpmultilib <<\EOF
+cat >tmpmultilib <<\EOF
+#!/bin/sh
 # This recursive script basically outputs all combinations of its
 # input arguments, handling mutually exclusive sets of options by
 # repetition.  When the script is called, ${initial} is the list of
@@ -192,10 +172,8 @@ combinations=`initial=/ ./tmpmultilib ${options}`
 
 # If there exceptions, weed them out now
 if [ -n "${exceptions}" ]; then
-  cat >tmpmultilib2 <<EOF
-#!${CONFIG_SHELL:-/bin/sh}
-EOF
-  cat >>tmpmultilib2 <<\EOF
+  cat >tmpmultilib2 <<\EOF
+#!/bin/sh
 # This recursive script weeds out any combination of multilib
 # switches that should not be generated.  The output looks like
 # a list of subdirectory names with leading and trailing slashes.
@@ -215,33 +193,6 @@ cat >>tmpmultilib2 <<\EOF
 EOF
   chmod +x tmpmultilib2
   combinations=`./tmpmultilib2 ${combinations}`
-fi
-
-# If the MULTILIB_REQUIRED list are provided,
-# filter out combinations not in this list.
-if [ -n "${multilib_required}" ]; then
-  cat >tmpmultilib2 <<\EOF
-#!/bin/sh
-# This recursive script weeds out any combination of multilib
-# switches that not in the expected list.
-
-  for opt in $@; do
-    case "$opt" in
-EOF
-
-  for expect in ${multilib_required}; do
-    echo "      /${expect}/) echo \${opt};;" >> tmpmultilib2
-  done
-
-cat >>tmpmultilib2 <<\EOF
-      *) ;;
-    esac
-  done
-EOF
-
-   chmod +x tmpmultilib2
-   combinations=`./tmpmultilib2 ${combinations}`
-
 fi
 
 # Construct a sed pattern which will convert option names to directory
@@ -271,10 +222,6 @@ fi
 # names.
 toosdirnames=
 defaultosdirname=
-defaultosdirname2=
-if [ -n "${multiarch}" ]; then
-  defaultosdirname=::${multiarch}
-fi
 if [ -n "${osdirnames}" ]; then
   set x ${osdirnames}
   shift
@@ -282,16 +229,6 @@ if [ -n "${osdirnames}" ]; then
     case "$1" in
       .=*)
         defaultosdirname=`echo $1 | sed 's|^.=|:|'`
-	if [ -n "${multiarch}" ]; then
-	  defaultosdirname=${defaultosdirname}:${multiarch}
-	fi
-	case "$defaultosdirname" in
-	  ::*) ;;
-	  *)
-	    defaultosdirname2=${defaultosdirname}
-	    defaultosdirname=
-	    ;;
-	esac
 	shift
 	;;
       *=*)
@@ -334,10 +271,8 @@ fi
 #   opt1/opt2 nopt1 nopt2
 # In other words, we must output all combinations of matches.
 rm -f tmpmultilib2
-cat >tmpmultilib2 <<EOF
-#!${CONFIG_SHELL:-/bin/sh}
-EOF
-cat >>tmpmultilib2 <<\EOF
+cat >tmpmultilib2 <<\EOF
+#!/bin/sh
 # The positional parameters are a list of matches to consider.
 # ${dirout} is the directory name and ${optout} is the current list of
 # options.
@@ -366,84 +301,6 @@ for set in ${options}; do
 done
 optout=`echo ${optout} | sed -e 's/^ //'`
 echo "\".${defaultosdirname} ${optout};\","
-[ -n "${defaultosdirname2}" ] && echo "\".${defaultosdirname2} ${optout};\","
-
-# This part of code convert an option combination to
-# its corresponding directory names.
-# The directory names will be deduced from MULTILIB_DIRNAMES,
-# MULTILIB_OSDIRNAMES or the option combination itself.
-rm -rf tmpmultilib3
-cat >tmpmultilib3 <<\EOF
-#!/bin/sh
-
-dirout=
-combo=$1
-todirnames=$2
-toosdirnames=$3
-enable_multilib=$4
-
-if [ -n "${todirnames}" ]; then
-  dirout=`echo ${combo} | sed ${todirnames}`
-else
-  dirout=`echo ${combo} | sed -e 's/=/-/g'`
-fi
-# Remove the leading and trailing slashes.
-dirout=`echo ${dirout} | sed -e 's|^/||' -e 's|/*:/*|:|' -e 's|/$||g'`
-
-# Use the OS directory names rather than the option names.
-if [ -n "${toosdirnames}" ]; then
-  osdirout=`echo ${combo} | sed ${toosdirnames}`
-  # Remove the leading and trailing slashes.
-  osdirout=`echo ${osdirout} | sed -e 's|^/||' -e 's|/*:/*|:|' -e 's|/$||g'`
-  if [ "x${enable_multilib}" != xyes ]; then
-    dirout=".:${osdirout}"
-    disable_multilib=yes
-  else
-    case "${osdirout}" in
-      !*)
-	dirout=`echo ${osdirout} | sed 's/^!//'`
-	;;
-       *)
-	dirout="${dirout}:${osdirout}"
-	;;
-    esac
-  fi
-else
-  if [ "x${enable_multilib}" != xyes ]; then
-    # genmultilib with --disable-multilib should be
-    # called with '' '' '' '' '' '' '' no
-    # if MULTILIB_OSDIRNAMES is empty.
-    exit 1
-  fi
-fi
-echo "${dirout}"
-EOF
-chmod +x tmpmultilib3
-
-# Script to look through the options and output each option that is present,
-# and negate each option that is not present.
-rm -rf tmpmultilib4
-cat > tmpmultilib4 <<\EOF
-#!/bin/sh
-
-optout=
-combo=$1
-options=$2
-
-for set in ${options}; do
-  setopts=`echo ${set} | sed -e 's_[/|]_ _g'`
-  for opt in ${setopts}; do
-    if expr "${combo} " : ".*/${opt}/.*" > /dev/null; then
-      optout="${optout} ${opt}"
-    else
-      optout="${optout} !${opt}"
-    fi
-  done
-done
-optout=`echo ${optout} | sed -e 's/^ //'`
-echo "${optout}"
-EOF
-chmod +x tmpmultilib4
 
 # Work over the list of combinations.  We have to translate each one
 # to use the directory names rather than the option names, we have to
@@ -451,57 +308,58 @@ chmod +x tmpmultilib4
 # correct list of options and negations.
 for combo in ${combinations}; do
   # Use the directory names rather than the option names.
-  dirout=`./tmpmultilib3 "${combo}" "${todirnames}" "${toosdirnames}" "${enable_multilib}"`
+  if [ -n "${todirnames}" ]; then
+    dirout=`echo ${combo} | sed ${todirnames}`
+  else
+    dirout=`echo ${combo} | sed -e 's/=/-/g'`
+  fi
+  # Remove the leading and trailing slashes.
+  dirout=`echo ${dirout} | sed -e 's|^/||' -e 's|/$||g'`
+
+  # Use the OS directory names rather than the option names.
+  if [ -n "${toosdirnames}" ]; then
+    osdirout=`echo ${combo} | sed ${toosdirnames}`
+    # Remove the leading and trailing slashes.
+    osdirout=`echo ${osdirout} | sed -e 's|^/||' -e 's|/$||g'`
+    if [ "x${enable_multilib}" != xyes ]; then
+      dirout=".:${osdirout}"
+      disable_multilib=yes
+    else
+      case "${osdirout}" in
+        !*)
+	  dirout=`echo ${osdirout} | sed 's/^!//'`
+	  ;;
+	*)
+	  dirout="${dirout}:${osdirout}"
+	  ;;
+      esac
+    fi
+  else
+    if [ "x${enable_multilib}" != xyes ]; then
+      # genmultilib with --disable-multilib should be
+      # called with '' '' '' '' '' '' '' no
+      # if MULTILIB_OSDIRNAMES is empty.
+      exit 1
+    fi
+  fi
 
   # Look through the options.  We must output each option that is
   # present, and negate each option that is not present.
-  optout=`./tmpmultilib4 "${combo}" "${options}"`
+  optout=
+  for set in ${options}; do
+    setopts=`echo ${set} | sed -e 's_[/|]_ _g'`
+    for opt in ${setopts}; do
+      if expr "${combo} " : ".*/${opt}/.*" > /dev/null; then
+	optout="${optout} ${opt}"
+      else
+	optout="${optout} !${opt}"
+      fi
+    done
+  done
+  optout=`echo ${optout} | sed -e 's/^ //'`
 
   # Output the line with all appropriate matches.
   dirout="${dirout}" optout="${optout}" ./tmpmultilib2
-done
-
-# Terminate the list of string.
-echo "NULL"
-echo "};"
-
-# Generate a regular expression to validate option combinations.
-options_re=
-for set in ${options}; do
-  for opt in `echo ${set} | sed -e 's_[/|]_ _g' -e 's/+/./g' `; do
-    options_re="${options_re}${options_re:+|}${opt}"
-  done
-done
-options_re="^/((${options_re})/)*\$"
-
-# Output rules used for multilib reuse.
-echo ""
-echo "static const char *const multilib_reuse_raw[] = {"
-for rrule in ${multilib_reuse}; do
-  # The left part of the rule are the options we used to build multilib.
-  # The right part of the rule are the options that can reuse this multilib.
-  combo=`echo ${rrule} | sed -e 's/=.*$//' -e 's/\([^\\]\)\./\1=/g' -e 's/\\\././g'`
-  copts=`echo ${rrule} | sed -e 's/^.*=//' -e 's/\([^\\]\)\./\1=/g' -e 's/\\\././g'`
-  # The variable ${combinations} are the option combinations we will build
-  # multilib from.  If the combination in the left part of reuse rule isn't
-  # in this variable, it means no multilib will be built for current reuse
-  # rule.  Thus the reuse purpose specified by current rule is meaningless.
-  if expr "${combinations} " : ".*/${combo}/.*" > /dev/null; then
-    if echo "/${copts}/" | grep -E "${options_re}" > /dev/null; then
-      combo="/${combo}/"
-      dirout=`./tmpmultilib3 "${combo}" "${todirnames}" "${toosdirnames}" "${enable_multilib}"`
-      copts="/${copts}/"
-      optout=`./tmpmultilib4 "${copts}" "${options}"`
-      # Output the line with all appropriate matches.
-      dirout="${dirout}" optout="${optout}" ./tmpmultilib2
-    else
-      echo "The rule ${rrule} contains an option absent from MULTILIB_OPTIONS." >&2
-      exit 1
-    fi
-  else
-    echo "The rule ${rrule} is trying to reuse nonexistent multilib." >&2
-    exit 1
-  fi
 done
 
 # Terminate the list of string.

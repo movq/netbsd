@@ -58,7 +58,7 @@ print_name_only (Sym *self)
 	}
       printf ("%s", name);
       size = strlen (name);
-      if ((line_granularity || inline_file_names) && self->file)
+      if (line_granularity && self->file)
 	{
 	  filename = self->file->name;
 	  if (!print_path)
@@ -73,15 +73,8 @@ print_name_only (Sym *self)
 		  filename = self->file->name;
 		}
 	    }
-	  if (line_granularity)
-	    {
-	      sprintf (buf, " (%s:%d @ %lx)", filename, self->line_num,
-		       (unsigned long) self->addr);
-	    }
-	  else
-	    {
-	      sprintf (buf, " (%s:%d)", filename, self->line_num);
-	    }
+	  sprintf (buf, " (%s:%d @ %lx)", filename, self->line_num,
+		   (unsigned long) self->addr);
 	  printf ("%s", buf);
 	  size += strlen (buf);
 	}

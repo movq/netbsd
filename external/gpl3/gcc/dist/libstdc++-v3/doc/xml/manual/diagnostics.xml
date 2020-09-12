@@ -1,25 +1,33 @@
-<chapter xmlns="http://docbook.org/ns/docbook" version="5.0" 
-	 xml:id="std.diagnostics" xreflabel="Diagnostics">
+<?xml version='1.0'?>
+<!DOCTYPE chapter PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
+ "http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd"
+[ ]>
+
+<chapter id="std.diagnostics" xreflabel="Diagnostics">
 <?dbhtml filename="diagnostics.html"?>
 
-<info><title>
+<chapterinfo>
+  <keywordset>
+    <keyword>
+      ISO C++
+    </keyword>
+    <keyword>
+      library
+    </keyword>
+  </keywordset>
+</chapterinfo>
+
+<title>
   Diagnostics
   <indexterm><primary>Diagnostics</primary></indexterm>
 </title>
-  <keywordset>
-    <keyword>ISO C++</keyword>
-    <keyword>library</keyword>
-  </keywordset>
-</info>
 
-
-
-<section xml:id="std.diagnostics.exceptions" xreflabel="Exceptions"><info><title>Exceptions</title></info>
+<sect1 id="std.diagnostics.exceptions" xreflabel="Exceptions">
   <?dbhtml filename="exceptions.html"?>
-  
+  <title>Exceptions</title>
 
-  <section xml:id="std.diagnostics.exceptions.api"><info><title>API Reference</title></info>
-    
+  <sect2 id="std.diagnostics.exceptions.api">
+    <title>API Reference</title>
     <para>
       All exception objects are defined in one of the standard header
       files: <filename>exception</filename>,
@@ -45,9 +53,9 @@
     
     <!-- Doxygen XML: api/group__exceptions.xml -->
       
-  </section>
-  <section xml:id="std.diagnostics.exceptions.data" xreflabel="Adding Data to Exceptions"><info><title>Adding Data to <classname>exception</classname></title></info>
-    
+  </sect2>
+  <sect2 id="std.diagnostics.exceptions.data" xreflabel="Adding Data to Exceptions">
+    <title>Adding Data to <classname>exception</classname></title>
     <para>
       The standard exception classes carry with them a single string as
       data (usually describing what went wrong or where the 'throw' took
@@ -68,45 +76,11 @@
    };
    </programlisting>
 
-  </section>
-</section>
+  </sect2>
+</sect1>
 
-<section xml:id="std.diagnostics.errno" xreflabel="errno"><info><title>Use of errno by the library</title></info>
-  <?dbhtml filename="errno.html"?>
-
-  <para>
-    The C and POSIX standards guarantee that <varname>errno</varname>
-    is never set to zero by any library function.
-    The C++ standard has less to say about when <varname>errno</varname>
-    is or isn't set, but libstdc++ follows the same rule and never sets
-    it to zero.
-  </para>
-
-  <para>
-    On the other hand, there are few guarantees about when the C++ library
-    sets <varname>errno</varname> on error, beyond what is specified for
-    functions that come from the C library.
-    For example, when <function>std::stoi</function> throws an exception of
-    type <classname>std::out_of_range</classname>, <varname>errno</varname>
-    may or may not have been set to <constant>ERANGE</constant>.
-  </para>
-
-  <para>
-    Parts of the C++ library may be implemented in terms of C library
-    functions, which may result in <varname>errno</varname> being set
-    with no explicit call to a C function. For example, on a target where
-    <function>operator new</function> uses <function>malloc</function>
-    a failed memory allocation with <function>operator new</function> might
-    set <varname>errno</varname> to <constant>ENOMEM</constant>.
-    Which C++ library functions can set <varname>errno</varname> in this way
-    is unspecified because it may vary between platforms and between releases.
-  </para>
-
-</section>
-
-<section xml:id="std.diagnostics.concept_checking" xreflabel="Concept Checking"><info><title>Concept Checking</title></info>
-  <?dbhtml filename="concept_checking.html"?>
-  
+<sect1 id="std.diagnostics.concept_checking" xreflabel="Concept Checking">
+  <title>Concept Checking</title>
   <para>
     In 1999, SGI added <quote>concept checkers</quote> to their
     implementation of the STL: code which checked the template
@@ -114,7 +88,7 @@
     that the parameters being used met the requirements of the
     standard.  For example, the Standard requires that types passed as
     template parameters to <classname>vector</classname> be
-    "Assignable" (which means what you think it means).  The
+    &quot;Assignable&quot; (which means what you think it means).  The
     checking was done during compilation, and none of the code was
     executed at runtime.
    </para>
@@ -125,10 +99,10 @@
    </para>
    <para>
      The primary author of the checking code, Jeremy Siek, had already
-     started work on a replacement implementation.  The new code was
+     started work on a replacement implementation.  The new code has been
      formally reviewed and accepted into
-   <link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="http://www.boost.org/libs/concept_check/concept_check.htm">the
-   Boost libraries</link>, and we are pleased to incorporate it into the
+   <ulink url="http://www.boost.org/libs/concept_check/concept_check.htm">the
+   Boost libraries</ulink>, and we are pleased to incorporate it into the
    GNU C++ library.
  </para>
  <para>
@@ -146,15 +120,12 @@
  </para>
 
  <para>
-   Please note that the checks are based on the requirements in the original
-   C++ standard, many of which were relaxed in the C++11 standard and so valid
-   C++11 code may be incorrectly rejected by the concept checks.  Additionally,
-   some correct C++03 code might be rejected by the concept checks,
-   for example template argument types may need to be complete when used in
-   a template definition, rather than at the point of instantiation.
-   There are no plans to address these shortcomings.
+   Please note that the upcoming C++ standard has first-class
+   support for template parameter constraints based on concepts in the core
+   language. This will obviate the need for the library-simulated concept
+   checking described above.
  </para>
 
-</section>
+</sect1>
 
 </chapter>

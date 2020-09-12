@@ -1,4 +1,4 @@
-# Copyright (C) 2010-2019 Free Software Foundation, Inc.
+# Copyright (C) 2010, 2011 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,6 +16,10 @@
 # This file is part of the GDB testsuite.  It tests Python-based
 # pretty-printing for the CLI.
 
+if $tracelevel then {
+    strace $tracelevel
+}
+
 if [is_remote host] {
     untested "py-pp-maint.exp can only be run locally"
     return -1
@@ -23,17 +27,27 @@ if [is_remote host] {
 
 load_lib gdb-python.exp
 
-standard_testfile
+set testfile "py-pp-maint"
+set srcfile ${testfile}.c
+set binfile ${objdir}/${subdir}/${testfile}
 
-if {[prepare_for_testing "failed to prepare" $testfile $srcfile debug]} {
-    return -1
-}
+# Start with a fresh gdb.
+gdb_exit
+gdb_start
 
 # Skip all tests if Python scripting is not enabled.
 if { [skip_python_tests] } { continue }
 
+if { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable "debug"] != "" } {
+    untested "Couldn't compile ${srcfile}"
+    return -1
+}
+
+gdb_reinitialize_dir $srcdir/$subdir
+gdb_load ${binfile}
+
 if ![runto_main ] then {
-    fail "can't run to main"
+    fail "Can't run to main"
     return -1
 }
 
@@ -43,7 +57,7 @@ gdb_test "continue" ".*Breakpoint.*"
 
 set python_file ${srcdir}/${subdir}/${testfile}.py
 
-gdb_test_no_output "source ${python_file}" "load python file"
+gdb_test_no_output "python execfile ('${python_file}')" ""
 
 gdb_test "info pretty-printer" \
     {.*function_lookup_test.*pp-test.*struct ss.*}
@@ -60,25 +74,23 @@ gdb_test "print flt" " = x=<42> y=<43>" \
 gdb_test "print ss" " = a=<a=<1> b=<$hex>> b=<a=<2> b=<$hex>>" \
     "print ss enabled #1"
 
-set num_pp 7
-
 gdb_test "disable pretty-printer" \
-    "$num_pp printers disabled.*0 of $num_pp printers enabled"
+    "5 printers disabled.*0 of 5 printers enabled"
 
 gdb_test "enable pretty-printer" \
-    "$num_pp printers enabled.*$num_pp of $num_pp printers enabled"
+    "5 printers enabled.*5 of 5 printers enabled"
 
 gdb_test "disable pretty-printer global" \
-    "$num_pp printers disabled.*0 of $num_pp printers enabled"
+    "5 printers disabled.*0 of 5 printers enabled"
 
 gdb_test "enable pretty-printer" \
-    "$num_pp printers enabled.*$num_pp of $num_pp printers enabled"
+    "5 printers enabled.*5 of 5 printers enabled"
 
 gdb_test "disable pretty-printer global lookup_function_lookup_test" \
-    "1 printer disabled.*[expr $num_pp - 1] of $num_pp printers enabled"
+    "1 printer disabled.*4 of 5 printers enabled"
 
 gdb_test "disable pretty-printer global pp-test;.*" \
-    "[expr $num_pp - 2] printers disabled.*1 of $num_pp printers enabled"
+    "4 printers disabled.*0 of 5 printers enabled"
 
 gdb_test "info pretty-printer global .*function" \
     {.*function_lookup_test \[disabled\].*}
@@ -93,22 +105,19 @@ gdb_test "print ss" " = {a = {a = 1, b = $hex}, b = {a = 2, b = $hex}}" \
     "print ss disabled"
 
 gdb_test "enable pretty-printer global lookup_function_lookup_test" \
-    "1 printer enabled.*2 of $num_pp printers enabled"
+    "1 printer enabled.*1 of 5 printers enabled"
 
 # This doesn't enable any printers because each subprinter in the collection
 # is still individually disabled.  But this is still needed, to enable the
 # collection itself.
 gdb_test "enable pretty-printer global pp-test" \
-    "0 printers enabled.*2 of $num_pp printers enabled"
+    "0 printers enabled.*1 of 5 printers enabled"
 
 gdb_test "enable pretty-printer global pp-test;.*ss.*" \
-    "2 printers enabled.*[expr $num_pp - 3] of $num_pp printers enabled"
+    "2 printers enabled.*3 of 5 printers enabled"
 
 gdb_test "enable pretty-printer global pp-test;.*s.*" \
-    "2 printers enabled.*[expr $num_pp - 1] of $num_pp printers enabled"
-
-gdb_test "enable pretty-printer global pp-test;.*" \
-    "1 printer enabled.*$num_pp of $num_pp printers enabled"
+    "2 printers enabled.*5 of 5 printers enabled"
 
 gdb_test "info pretty-printer" \
     {.*function_lookup_test.*pp-test.*struct ss.*}
@@ -118,24 +127,3 @@ gdb_test "print flt" " = x=<42> y=<43>" \
 
 gdb_test "print ss" " = a=<a=<1> b=<$hex>> b=<a=<2> b=<$hex>>" \
     "print ss re-enabled"
-
-gdb_test_exact "print (enum flag_enum) (FOO_1)" \
-    { = 0x1 [FOO_1]}
-
-gdb_test_exact "print (enum flag_enum) (BAR_3)" \
-    { = 0x40 [BAR_3]}
-
-gdb_test_exact "print (enum flag_enum) (BAR_2 | FOO_2)" \
-    { = 0x22 [FOO_2 | BAR_2]}
-
-gdb_test_exact "print (enum flag_enum) (FOO_1 | FOO_2 | FOO_3)" \
-    { = 0x7 [FOO_1 | FOO_2 | FOO_3]}
-
-gdb_test_exact "print (enum flag_enum) (FOO_MASK)" \
-    { = 0x7 [FOO_1 | FOO_2 | FOO_3]}
-
-gdb_test_exact "print (enum flag_enum) (FOO_MASK | (BAR_MASK & ~BAR_2))" \
-    { = 0x57 [FOO_1 | FOO_2 | FOO_3 | BAR_1 | BAR_3]}
-
-gdb_test_exact "print (enum flag_enum) (0x4 + 0x8)" \
-    { = 0xc [FOO_3 | <unknown: 0x8>]}

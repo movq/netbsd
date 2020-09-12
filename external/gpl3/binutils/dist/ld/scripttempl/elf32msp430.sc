@@ -1,14 +1,10 @@
-# Copyright (C) 2014-2020 Free Software Foundation, Inc.
-#
-# Copying and distribution of this file, with or without modification,
-# are permitted in any medium without royalty provided the copyright
-# notice and this notice are preserved.
+#!/bin/sh
 
 HEAP_SECTION_MSP430=" "
 HEAP_MEMORY_MSP430=" "
 
-if test ${GOT_HEAP_MSP-0} -ne 0
-then
+if test ${GOT_HEAP_MSP-0} -ne 0 
+then 
 HEAP_SECTION_MSP430=".heap ${RELOCATING-0} :
   {
     ${RELOCATING+ PROVIDE (__heap_data_start = .) ; }
@@ -18,64 +14,27 @@ HEAP_SECTION_MSP430=".heap ${RELOCATING-0} :
     ${RELOCATING+ PROVIDE (__heap_bottom = .) ; }
     ${RELOCATING+ PROVIDE (__heap_top = ${HEAP_START} + ${HEAP_LENGTH}) ; }
   } ${RELOCATING+ > heap}"
-HEAP_MEMORY_MSP430="heap(rwx)		: ORIGIN = $HEAP_START,	LENGTH = $HEAP_LENGTH"
+HEAP_MEMORY_MSP430="heap(rwx) 		: ORIGIN = $HEAP_START,	LENGTH = $HEAP_LENGTH"
 fi
 
 
 cat <<EOF
-/* Copyright (C) 2014-2020 Free Software Foundation, Inc.
-
-   Copying and distribution of this script, with or without modification,
-   are permitted in any medium without royalty provided the copyright
-   notice and this notice are preserved.  */
-
 OUTPUT_FORMAT("${OUTPUT_FORMAT}","${OUTPUT_FORMAT}","${OUTPUT_FORMAT}")
 OUTPUT_ARCH(${ARCH})
 
-EOF
-
-test -n "${RELOCATING}" && cat <<EOF
 MEMORY
 {
-  text   (rx)		: ORIGIN = $ROM_START,  LENGTH = $ROM_SIZE
-  data   (rwx)		: ORIGIN = $RAM_START,	LENGTH = $RAM_SIZE
-  vectors (rw)		: ORIGIN = 0xffe0,      LENGTH = 0x20
+  text   (rx)   	: ORIGIN = $ROM_START,  LENGTH = $ROM_SIZE
+  data   (rwx)  	: ORIGIN = $RAM_START, 	LENGTH = $RAM_SIZE
+  vectors (rw)  	: ORIGIN = 0xffe0,      LENGTH = 0x20
   bootloader(rx)	: ORIGIN = 0x0c00,	LENGTH = 1K
   infomem(rx)		: ORIGIN = 0x1000,	LENGTH = 256
   infomemnobits(rx)	: ORIGIN = 0x1000,      LENGTH = 256
   ${HEAP_MEMORY_MSP430}
 }
 
-EOF
-
-cat <<EOF
 SECTIONS
 {
-  /* Bootloader.  */
-  .bootloader ${RELOCATING-0} :
-  {
-    ${RELOCATING+ PROVIDE (__boot_start = .) ; }
-    *(.bootloader)
-    ${RELOCATING+. = ALIGN(2);}
-    ${RELOCATING+*(.bootloader.*)}
-  } ${RELOCATING+ > bootloader}
-
-  /* Information memory.  */
-  .infomem ${RELOCATING-0} :
-  {
-    *(.infomem)
-    ${RELOCATING+. = ALIGN(2);}
-    ${RELOCATING+*(.infomem.*)}
-  } ${RELOCATING+ > infomem}
-
-  /* Information memory (not loaded into MPU).  */
-  .infomemnobits ${RELOCATING-0} :
-  {
-    *(.infomemnobits)
-    ${RELOCATING+. = ALIGN(2);}
-    ${RELOCATING+*(.infomemnobits.*)}
-  } ${RELOCATING+ > infomemnobits}
-
   /* Read-only sections, merged into text segment.  */
   ${TEXT_DYNAMIC+${DYNAMIC}}
   .hash        ${RELOCATING-0} : { *(.hash)             }
@@ -137,20 +96,20 @@ SECTIONS
   .rela.plt    ${RELOCATING-0} : { *(.rela.plt)         }
 
   /* Internal text space.  */
-  .text ${RELOCATING-0} :
+  .text :
   {
-    ${RELOCATING+. = ALIGN(2);
-    *(SORT_NONE(.init))
-    *(SORT_NONE(.init0))  /* Start here after reset.  */
-    *(SORT_NONE(.init1))
-    *(SORT_NONE(.init2))  /* Copy data loop  */
-    *(SORT_NONE(.init3))
-    *(SORT_NONE(.init4))  /* Clear bss  */
-    *(SORT_NONE(.init5))
-    *(SORT_NONE(.init6))  /* C++ constructors.  */
-    *(SORT_NONE(.init7))
-    *(SORT_NONE(.init8))
-    *(SORT_NONE(.init9))  /* Call main().  */}
+    ${RELOCATING+. = ALIGN(2);}
+    *(.init)
+    *(.init0)  /* Start here after reset.  */
+    *(.init1)
+    *(.init2)  /* Copy data loop  */
+    *(.init3)
+    *(.init4)  /* Clear bss  */
+    *(.init5)
+    *(.init6)  /* C++ constructors.  */
+    *(.init7)
+    *(.init8)
+    *(.init9)  /* Call main().  */
 
     ${CONSTRUCTING+ __ctors_start = . ; }
     ${CONSTRUCTING+ *(.ctors) }
@@ -159,185 +118,126 @@ SECTIONS
     ${CONSTRUCTING+ *(.dtors) }
     ${CONSTRUCTING+ __dtors_end = . ; }
 
-    ${RELOCATING+. = ALIGN(2);
-    *(.lower.text.* .lower.text)
-
-    . = ALIGN(2);}
-    *(.text)
-    ${RELOCATING+. = ALIGN(2);
-    *(.text.*)
-    . = ALIGN(2);
-    *(.text:*)
-
-    *(.either.text.* .either.text)
-
-    *(.upper.text.* .upper.text)
-
-    . = ALIGN(2);
-    *(SORT_NONE(.fini9))
-    *(SORT_NONE(.fini8))
-    *(SORT_NONE(.fini7))
-    *(SORT_NONE(.fini6))  /* C++ destructors.  */
-    *(SORT_NONE(.fini5))
-    *(SORT_NONE(.fini4))
-    *(SORT_NONE(.fini3))
-    *(SORT_NONE(.fini2))
-    *(SORT_NONE(.fini1))
-    *(SORT_NONE(.fini0))  /* Infinite loop after program termination.  */
-    *(SORT_NONE(.fini))
-
-    _etext = .;}
-  } ${RELOCATING+ > text}
-
-  .rodata ${RELOCATING-0} :
-  {
-    ${RELOCATING+. = ALIGN(2);
-    *(.lower.rodata.* .lower.rodata)
-
-    . = ALIGN(2);
-    *(.plt)}
-    *(.rodata${RELOCATING+ .rodata.* .gnu.linkonce.r.* .const .const:*})
-    ${RELOCATING+*(.rodata1)
-
-    *(.either.rodata.*) *(.either.rodata)
-
-    *(.upper.rodata.* .upper.rodata)
-
-    *(.eh_frame_hdr)
-    KEEP (*(.eh_frame))
-
-    KEEP (*(.gcc_except_table)) *(.gcc_except_table.*)
-
-    PROVIDE (__preinit_array_start = .);
-    KEEP (*(.preinit_array))
-    PROVIDE (__preinit_array_end = .);
-
-    PROVIDE (__init_array_start = .);
-    KEEP (*(SORT(.init_array.*)))
-    KEEP (*(.init_array))
-    PROVIDE (__init_array_end = .);
-
-    PROVIDE (__fini_array_start = .);
-    KEEP (*(.fini_array))
-    KEEP (*(SORT(.fini_array.*)))
-    PROVIDE (__fini_array_end = .);
-
-    /* gcc uses crtbegin.o to find the start of the constructors, so
-       we make sure it is first.  Because this is a wildcard, it
-       doesn't matter if the user does not actually link against
-       crtbegin.o; the linker won't look for a file to match a
-       wildcard.  The wildcard also means that it doesn't matter which
-       directory crtbegin.o is in.  */
-    KEEP (*crtbegin*.o(.ctors))
-
-    /* We don't want to include the .ctor section from from the
-       crtend.o file until after the sorted ctors.  The .ctor section
-       from the crtend file contains the end of ctors marker and it
-       must be last */
-    KEEP (*(EXCLUDE_FILE (*crtend*.o ) .ctors))
-    KEEP (*(SORT(.ctors.*)))
-    KEEP (*(.ctors))
-
-    KEEP (*crtbegin*.o(.dtors))
-    KEEP (*(EXCLUDE_FILE (*crtend*.o ) .dtors))
-    KEEP (*(SORT(.dtors.*)))
-    KEEP (*(.dtors))}
-  } ${RELOCATING+ > text}
-
-  .vectors ${RELOCATING-0} :
-  {
-    ${RELOCATING+ PROVIDE (__vectors_start = .) ; }
-    *(.vectors${RELOCATING+*})
-    ${RELOCATING+ _vectors_end = . ; }
-  } ${RELOCATING+ > vectors}
-
-  .data ${RELOCATING-0} :
-  {
-    ${RELOCATING+ PROVIDE (__data_start = .) ; }
-    ${RELOCATING+ PROVIDE (__datastart = .) ; }
-    ${RELOCATING+. = ALIGN(2);
-
-    KEEP (*(.jcr))
-    *(.data.rel.ro.local) *(.data.rel.ro*)
-    *(.dynamic)
-
-    . = ALIGN(2);
-    *(.lower.data.* .lower.data)}
-
-    *(.data)
-    ${RELOCATING+*(.data.*)
-    *(.gnu.linkonce.d*)
-    KEEP (*(.gnu.linkonce.d.*personality*))
-    *(.data1)
-
-    *(.either.data.* .either.data)
-
-    *(.upper.data.* .upper.data)
-
-    *(.got.plt) *(.got)
-    . = ALIGN(2);
-    *(.sdata .sdata.* .gnu.linkonce.s.*)
-    . = ALIGN(2);
-    _edata = .;}
-  } ${RELOCATING+ > data AT> text}
-
-  ${RELOCATING+__romdatastart = LOADADDR(.data);
-  __romdatacopysize = SIZEOF(.data);}
-
-  .bss ${RELOCATING-0}${RELOCATING+SIZEOF(.data) + ADDR(.data)} :
-  {
     ${RELOCATING+. = ALIGN(2);}
-    ${RELOCATING+ PROVIDE (__bss_start = .); }
-    ${RELOCATING+ PROVIDE (__bssstart = .);
-    *(.lower.bss.* .lower.bss)
-    . = ALIGN(2);}
-    *(.bss)
-    ${RELOCATING+*(.either.bss.* .either.bss)
-    *(.upper.bss.* .upper.bss)
-    *(COMMON)
-    PROVIDE (__bss_end = .);}
-  } ${RELOCATING+ > data}
-  ${RELOCATING+ PROVIDE (__bsssize = SIZEOF(.bss)); }
+    *(.text)
+    ${RELOCATING+. = ALIGN(2);}
+    *(.text.*)
 
-  .noinit ${RELOCATING-0}${RELOCATING+SIZEOF(.bss) + ADDR(.bss)} :
+    ${RELOCATING+. = ALIGN(2);}
+    *(.fini9)  /*   */
+    *(.fini8)
+    *(.fini7)
+    *(.fini6)  /* C++ destructors.  */
+    *(.fini5)
+    *(.fini4)
+    *(.fini3)
+    *(.fini2)
+    *(.fini1)
+    *(.fini0)  /* Infinite loop after program termination.  */
+    *(.fini)
+
+    _etext = .;
+  } ${RELOCATING+ > text}
+
+  .data ${RELOCATING-0} : ${RELOCATING+AT (ADDR (.text) + SIZEOF (.text))}
+  {  
+    ${RELOCATING+ PROVIDE (__data_start = .) ; }
+    ${RELOCATING+. = ALIGN(2);}
+    *(.data)
+    ${RELOCATING+. = ALIGN(2);}
+    *(.gnu.linkonce.d*)
+    ${RELOCATING+. = ALIGN(2);}
+    ${RELOCATING+ _edata = . ; }
+  } ${RELOCATING+ > data}
+  
+  /* Bootloader.  */
+  .bootloader ${RELOCATING-0} :
+  {
+    ${RELOCATING+ PROVIDE (__boot_start = .) ; }
+    *(.bootloader)
+    ${RELOCATING+. = ALIGN(2);}
+    *(.bootloader.*)
+  } ${RELOCATING+ > bootloader}
+  
+  /* Information memory.  */
+  .infomem ${RELOCATING-0} :
+  {
+    *(.infomem)
+    ${RELOCATING+. = ALIGN(2);}
+    *(.infomem.*)
+  } ${RELOCATING+ > infomem}
+
+  /* Information memory (not loaded into MPU).  */
+  .infomemnobits ${RELOCATING-0} :
+  {
+    *(.infomemnobits)
+    ${RELOCATING+. = ALIGN(2);}
+    *(.infomemnobits.*)
+  } ${RELOCATING+ > infomemnobits}
+
+  .bss ${RELOCATING+ SIZEOF(.data) + ADDR(.data)} :
+  {
+    ${RELOCATING+ PROVIDE (__bss_start = .) ; }
+    *(.bss)
+    *(COMMON)
+    ${RELOCATING+ PROVIDE (__bss_end = .) ; }
+    ${RELOCATING+ _end = . ;  }
+  } ${RELOCATING+ > data}
+
+  .noinit ${RELOCATING+ SIZEOF(.bss) + ADDR(.bss)} :
   {
     ${RELOCATING+ PROVIDE (__noinit_start = .) ; }
     *(.noinit)
+    *(COMMON)
     ${RELOCATING+ PROVIDE (__noinit_end = .) ; }
+    ${RELOCATING+ _end = . ;  }
   } ${RELOCATING+ > data}
 
-  .persistent ${RELOCATING-0}${RELOCATING+SIZEOF(.noinit) + ADDR(.noinit)} :
+  .vectors ${RELOCATING-0}:
   {
-    ${RELOCATING+ PROVIDE (__persistent_start = .) ; }
-    *(.persistent)
-    ${RELOCATING+ PROVIDE (__persistent_end = .) ; }
-  } ${RELOCATING+ > data}
+    ${RELOCATING+ PROVIDE (__vectors_start = .) ; }
+    *(.vectors*)
+    ${RELOCATING+ _vectors_end = . ; }
+  } ${RELOCATING+ > vectors}
 
-  ${RELOCATING+ _end = . ;  }
   ${HEAP_SECTION_MSP430}
 
   /* Stabs for profiling information*/
   .profiler 0 : { *(.profiler) }
-
+  
   /* Stabs debugging sections.  */
-  .stab 0 : { *(.stab) }
+  .stab 0 : { *(.stab) } 
   .stabstr 0 : { *(.stabstr) }
   .stab.excl 0 : { *(.stab.excl) }
   .stab.exclstr 0 : { *(.stab.exclstr) }
   .stab.index 0 : { *(.stab.index) }
   .stab.indexstr 0 : { *(.stab.indexstr) }
   .comment 0 : { *(.comment) }
-EOF
+ 
+  /* DWARF debug sections.
+     Symbols in the DWARF debugging sections are relative to the beginning
+     of the section so we begin them at 0.  */
 
-. $srcdir/scripttempl/DWARF.sc
+  /* DWARF 1 */
+  .debug          0 : { *(.debug) }
+  .line           0 : { *(.line) }
 
-test -n "${RELOCATING}" && cat <<EOF
-  .MSP430.attributes 0 :
-  {
-    KEEP (*(.MSP430.attributes))
-    KEEP (*(.gnu.attributes))
-    KEEP (*(__TI_build_attributes))
-  }
+  /* GNU DWARF 1 extensions */
+  .debug_srcinfo  0 : { *(.debug_srcinfo) }
+  .debug_sfnames  0 : { *(.debug_sfnames) }
+
+  /* DWARF 1.1 and DWARF 2 */
+  .debug_aranges  0 : { *(.debug_aranges) }
+  .debug_pubnames 0 : { *(.debug_pubnames) }
+
+  /* DWARF 2 */
+  .debug_info     0 : { *(.debug_info) *(.gnu.linkonce.wi.*) }
+  .debug_abbrev   0 : { *(.debug_abbrev) }
+  .debug_line     0 : { *(.debug_line) }
+  .debug_frame    0 : { *(.debug_frame) }
+  .debug_str      0 : { *(.debug_str) }
+  .debug_loc      0 : { *(.debug_loc) }
+  .debug_macinfo  0 : { *(.debug_macinfo) }
 
   PROVIDE (__stack = ${STACK}) ;
   PROVIDE (__data_start_rom = _etext) ;
@@ -345,8 +245,5 @@ test -n "${RELOCATING}" && cat <<EOF
   PROVIDE (__noinit_start_rom = _etext + SIZEOF (.data)) ;
   PROVIDE (__noinit_end_rom = _etext + SIZEOF (.data) + SIZEOF (.noinit)) ;
   PROVIDE (__subdevice_has_heap = ${GOT_HEAP_MSP-0}) ;
-EOF
-
-cat <<EOF
 }
 EOF

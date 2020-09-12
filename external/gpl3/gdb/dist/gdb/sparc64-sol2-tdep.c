@@ -1,6 +1,7 @@
 /* Target-dependent code for Solaris UltraSPARC.
 
-   Copyright (C) 2003-2019 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2006, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,14 +26,15 @@
 #include "objfiles.h"
 #include "osabi.h"
 #include "trad-frame.h"
-#include "regset.h"
+
+#include "gdb_assert.h"
 
 #include "sol2-tdep.h"
 #include "sparc64-tdep.h"
 #include "solib-svr4.h"
 
 /* From <sys/regset.h>.  */
-const struct sparc_gregmap sparc64_sol2_gregmap =
+const struct sparc_gregset sparc64_sol2_gregset =
 {
   32 * 8,			/* "tstate" */
   33 * 8,			/* %pc */
@@ -44,58 +46,6 @@ const struct sparc_gregmap sparc64_sol2_gregmap =
   16 * 8,			/* %l0 */
   8				/* sizeof (%y) */
 };
-
-const struct sparc_fpregmap sparc64_sol2_fpregmap =
-{
-  0 * 8,			/* %f0 */
-  33 * 8,			/* %fsr */
-};
-
-static void
-sparc64_sol2_supply_core_gregset (const struct regset *regset,
-				  struct regcache *regcache,
-				  int regnum, const void *gregs, size_t len)
-{
-  sparc64_supply_gregset (&sparc64_sol2_gregmap, regcache, regnum, gregs);
-}
-
-static void
-sparc64_sol2_collect_core_gregset (const struct regset *regset,
-				   const struct regcache *regcache,
-				   int regnum, void *gregs, size_t len)
-{
-  sparc64_collect_gregset (&sparc64_sol2_gregmap, regcache, regnum, gregs);
-}
-
-static void
-sparc64_sol2_supply_core_fpregset (const struct regset *regset,
-				   struct regcache *regcache,
-				   int regnum, const void *fpregs, size_t len)
-{
-  sparc64_supply_fpregset (&sparc64_sol2_fpregmap, regcache, regnum, fpregs);
-}
-
-static void
-sparc64_sol2_collect_core_fpregset (const struct regset *regset,
-				    const struct regcache *regcache,
-				    int regnum, void *fpregs, size_t len)
-{
-  sparc64_collect_fpregset (&sparc64_sol2_fpregmap, regcache, regnum, fpregs);
-}
-
-static const struct regset sparc64_sol2_gregset =
-  {
-    NULL,
-    sparc64_sol2_supply_core_gregset,
-    sparc64_sol2_collect_core_gregset
-  };
-
-static const struct regset sparc64_sol2_fpregset =
-  {
-    NULL,
-    sparc64_sol2_supply_core_fpregset,
-    sparc64_sol2_collect_core_fpregset
-  };
 
 
 static struct sparc_frame_cache *
@@ -107,7 +57,7 @@ sparc64_sol2_sigtramp_frame_cache (struct frame_info *this_frame,
   int regnum;
 
   if (*this_cache)
-    return (struct sparc_frame_cache *) *this_cache;
+    return *this_cache;
 
   cache = sparc_frame_cache (this_frame, this_cache);
   gdb_assert (cache == *this_cache);
@@ -117,8 +67,7 @@ sparc64_sol2_sigtramp_frame_cache (struct frame_info *this_frame,
   /* The third argument is a pointer to an instance of `ucontext_t',
      which has a member `uc_mcontext' that contains the saved
      registers.  */
-  regnum =
-    (cache->copied_regs_mask & 0x04) ? SPARC_I2_REGNUM : SPARC_O2_REGNUM;
+  regnum = (cache->frameless_p ? SPARC_O2_REGNUM : SPARC_I2_REGNUM);
   mcontext_addr = get_frame_register_unsigned (this_frame, regnum) + 64;
 
   cache->saved_regs[SPARC64_CCR_REGNUM].addr = mcontext_addr + 0 * 8;
@@ -181,7 +130,7 @@ sparc64_sol2_sigtramp_frame_sniffer (const struct frame_unwind *self,
 				     void **this_cache)
 {
   CORE_ADDR pc = get_frame_pc (this_frame);
-  const char *name;
+  char *name;
 
   find_pc_partial_function (pc, &name, NULL, NULL);
   if (sparc_sol2_pc_in_sigtramp (pc, name))
@@ -205,12 +154,6 @@ void
 sparc64_sol2_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-
-  tdep->gregset = &sparc64_sol2_gregset;
-  tdep->sizeof_gregset = 304;
-
-  tdep->fpregset = &sparc64_sol2_fpregset;
-  tdep->sizeof_fpregset = 544;
 
   frame_unwind_append_unwinder (gdbarch, &sparc64_sol2_sigtramp_frame_unwind);
 
@@ -242,6 +185,10 @@ sparc64_sol2_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   /* How to print LWP PTIDs from core files.  */
   set_gdbarch_core_pid_to_str (gdbarch, sol2_core_pid_to_str);
 }
+
+
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+void _initialize_sparc64_sol2_tdep (void);
 
 void
 _initialize_sparc64_sol2_tdep (void)

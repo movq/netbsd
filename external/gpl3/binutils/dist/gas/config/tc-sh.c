@@ -1,5 +1,6 @@
 /* tc-sh.c -- Assemble code for the Renesas / SuperH SH
-   Copyright (C) 1993-2020 Free Software Foundation, Inc.
+   Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
+   2003, 2004, 2005, 2006, 2007  Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -25,6 +26,7 @@
 #define DEFINE_TABLE
 #include "opcodes/sh-opc.h"
 #include "safe-ctype.h"
+#include "struc-symbol.h"
 
 #ifdef OBJ_ELF
 #include "elf/sh.h"
@@ -105,6 +107,18 @@ const pseudo_typeS md_pseudo_table[] =
   {"2byte", s_uacons, 2},
   {"4byte", s_uacons, 4},
   {"8byte", s_uacons, 8},
+#ifdef HAVE_SH64
+  {"mode", s_sh64_mode, 0 },
+
+  /* Have the old name too.  */
+  {"isa", s_sh64_mode, 0 },
+
+  /* Assert that the right ABI is used.  */
+  {"abi", s_sh64_abi, 0 },
+
+  { "vtable_inherit", sh64_vtable_inherit, 0 },
+  { "vtable_entry", sh64_vtable_entry, 0 },
+#endif /* HAVE_SH64 */
   {0, 0, 0}
 };
 
@@ -130,11 +144,6 @@ static unsigned int preset_target_arch;
    accommodate the insns seen so far.  */
 static unsigned int valid_arch;
 
-#ifdef OBJ_ELF
-/* Whether --fdpic was given.  */
-static int sh_fdpic;
-#endif
-
 const char EXP_CHARS[] = "eE";
 
 /* Chars that mean this number is a floating point constant.  */
@@ -154,7 +163,30 @@ const char FLT_CHARS[] = "rRsSfFdDxXpP";
 #define COND_JUMP_DELAY 2
 #define UNCOND_JUMP  3
 
+#ifdef HAVE_SH64
+
+/* A 16-bit (times four) pc-relative operand, at most expanded to 32 bits.  */
+#define SH64PCREL16_32 4
+/* A 16-bit (times four) pc-relative operand, at most expanded to 64 bits.  */
+#define SH64PCREL16_64 5
+
+/* Variants of the above for adjusting the insn to PTA or PTB according to
+   the label.  */
+#define SH64PCREL16PT_32 6
+#define SH64PCREL16PT_64 7
+
+/* A MOVI expansion, expanding to at most 32 or 64 bits.  */
+#define MOVI_IMM_32 8
+#define MOVI_IMM_32_PCREL 9
+#define MOVI_IMM_64 10
+#define MOVI_IMM_64_PCREL 11
+#define END 12
+
+#else  /* HAVE_SH64 */
+
 #define END 4
+
+#endif /* HAVE_SH64 */
 
 #define UNDEF_DISP 0
 #define COND8  1
@@ -164,6 +196,24 @@ const char FLT_CHARS[] = "rRsSfFdDxXpP";
 
 #define UNCOND12 1
 #define UNCOND32 2
+
+#ifdef HAVE_SH64
+#define UNDEF_SH64PCREL 0
+#define SH64PCREL16 1
+#define SH64PCREL32 2
+#define SH64PCREL48 3
+#define SH64PCREL64 4
+#define SH64PCRELPLT 5
+
+#define UNDEF_MOVI 0
+#define MOVI_16 1
+#define MOVI_32 2
+#define MOVI_48 3
+#define MOVI_64 4
+#define MOVI_PLT 5
+#define MOVI_GOTOFF 6
+#define MOVI_GOTPC 7
+#endif /* HAVE_SH64 */
 
 /* Branch displacements are from the address of the branch plus
    four, thus all minimum and maximum values have 4 added to them.  */
@@ -194,6 +244,85 @@ const char FLT_CHARS[] = "rRsSfFdDxXpP";
 #define UNCOND32_F (1<<30)
 #define UNCOND32_M -(1<<30)
 #define UNCOND32_LENGTH 14
+
+#ifdef HAVE_SH64
+/* The trivial expansion of a SH64PCREL16 relaxation is just a "PT label,
+   TRd" as is the current insn, so no extra length.  Note that the "reach"
+   is calculated from the address *after* that insn, but the offset in the
+   insn is calculated from the beginning of the insn.  We also need to
+   take into account the implicit 1 coded as the "A" in PTA when counting
+   forward.  If PTB reaches an odd address, we trap that as an error
+   elsewhere, so we don't have to have different relaxation entries.  We
+   don't add a one to the negative range, since PTB would then have the
+   farthest backward-reaching value skipped, not generated at relaxation.  */
+#define SH64PCREL16_F (32767 * 4 - 4 + 1)
+#define SH64PCREL16_M (-32768 * 4 - 4)
+#define SH64PCREL16_LENGTH 0
+
+/* The next step is to change that PT insn into
+     MOVI ((label - datalabel Ln) >> 16) & 65535, R25
+     SHORI (label - datalabel Ln) & 65535, R25
+    Ln:
+     PTREL R25,TRd
+   which means two extra insns, 8 extra bytes.  This is the limit for the
+   32-bit ABI.
+
+   The expressions look a bit bad since we have to adjust this to avoid overflow on a
+   32-bit host.  */
+#define SH64PCREL32_F ((((long) 1 << 30) - 1) * 2 + 1 - 4)
+#define SH64PCREL32_LENGTH (2 * 4)
+
+/* Similarly, we just change the MOVI and add a SHORI for the 48-bit
+   expansion.  */
+#if BFD_HOST_64BIT_LONG
+/* The "reach" type is long, so we can only do this for a 64-bit-long
+   host.  */
+#define SH64PCREL32_M (((long) -1 << 30) * 2 - 4)
+#define SH64PCREL48_F ((((long) 1 << 47) - 1) - 4)
+#define SH64PCREL48_M (((long) -1 << 47) - 4)
+#define SH64PCREL48_LENGTH (3 * 4)
+#else
+/* If the host does not have 64-bit longs, just make this state identical
+   in reach to the 32-bit state.  Note that we have a slightly incorrect
+   reach, but the correct one above will overflow a 32-bit number.  */
+#define SH64PCREL32_M (((long) -1 << 30) * 2)
+#define SH64PCREL48_F SH64PCREL32_F
+#define SH64PCREL48_M SH64PCREL32_M
+#define SH64PCREL48_LENGTH (3 * 4)
+#endif /* BFD_HOST_64BIT_LONG */
+
+/* And similarly for the 64-bit expansion; a MOVI + SHORI + SHORI + SHORI
+   + PTREL sequence.  */
+#define SH64PCREL64_LENGTH (4 * 4)
+
+/* For MOVI, we make the MOVI + SHORI... expansion you can see in the
+   SH64PCREL expansions.  The PCREL one is similar, but the other has no
+   pc-relative reach; it must be fully expanded in
+   shmedia_md_estimate_size_before_relax.  */
+#define MOVI_16_LENGTH 0
+#define MOVI_16_F (32767 - 4)
+#define MOVI_16_M (-32768 - 4)
+#define MOVI_32_LENGTH 4
+#define MOVI_32_F ((((long) 1 << 30) - 1) * 2 + 1 - 4)
+#define MOVI_48_LENGTH 8
+
+#if BFD_HOST_64BIT_LONG
+/* The "reach" type is long, so we can only do this for a 64-bit-long
+   host.  */
+#define MOVI_32_M (((long) -1 << 30) * 2 - 4)
+#define MOVI_48_F ((((long) 1 << 47) - 1) - 4)
+#define MOVI_48_M (((long) -1 << 47) - 4)
+#else
+/* If the host does not have 64-bit longs, just make this state identical
+   in reach to the 32-bit state.  Note that we have a slightly incorrect
+   reach, but the correct one above will overflow a 32-bit number.  */
+#define MOVI_32_M (((long) -1 << 30) * 2)
+#define MOVI_48_F MOVI_32_F
+#define MOVI_48_M MOVI_32_M
+#endif /* BFD_HOST_64BIT_LONG */
+
+#define MOVI_64_LENGTH 12
+#endif /* HAVE_SH64 */
 
 #define EMPTY { 0, 0, 0, 0 }
 
@@ -236,6 +365,117 @@ const relax_typeS md_relax_table[C (END, 0)] = {
   EMPTY, EMPTY, EMPTY,
   EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY,
 
+#ifdef HAVE_SH64
+  /* C (SH64PCREL16_32, SH64PCREL16) */
+  EMPTY,
+  { SH64PCREL16_F, SH64PCREL16_M, SH64PCREL16_LENGTH, C (SH64PCREL16_32, SH64PCREL32) },
+  /* C (SH64PCREL16_32, SH64PCREL32) */
+  { 0, 0, SH64PCREL32_LENGTH, 0 },
+  EMPTY, EMPTY,
+  /* C (SH64PCREL16_32, SH64PCRELPLT) */
+  { 0, 0, SH64PCREL32_LENGTH, 0 },
+  EMPTY, EMPTY,
+  EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY,
+
+  /* C (SH64PCREL16_64, SH64PCREL16) */
+  EMPTY,
+  { SH64PCREL16_F, SH64PCREL16_M, SH64PCREL16_LENGTH, C (SH64PCREL16_64, SH64PCREL32) },
+  /* C (SH64PCREL16_64, SH64PCREL32) */
+  { SH64PCREL32_F, SH64PCREL32_M, SH64PCREL32_LENGTH, C (SH64PCREL16_64, SH64PCREL48) },
+  /* C (SH64PCREL16_64, SH64PCREL48) */
+  { SH64PCREL48_F, SH64PCREL48_M, SH64PCREL48_LENGTH, C (SH64PCREL16_64, SH64PCREL64) },
+  /* C (SH64PCREL16_64, SH64PCREL64) */
+  { 0, 0, SH64PCREL64_LENGTH, 0 },
+  /* C (SH64PCREL16_64, SH64PCRELPLT) */
+  { 0, 0, SH64PCREL64_LENGTH, 0 },
+  EMPTY, EMPTY,
+  EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY,
+
+  /* C (SH64PCREL16PT_32, SH64PCREL16) */
+  EMPTY,
+  { SH64PCREL16_F, SH64PCREL16_M, SH64PCREL16_LENGTH, C (SH64PCREL16PT_32, SH64PCREL32) },
+  /* C (SH64PCREL16PT_32, SH64PCREL32) */
+  { 0, 0, SH64PCREL32_LENGTH, 0 },
+  EMPTY, EMPTY,
+  /* C (SH64PCREL16PT_32, SH64PCRELPLT) */
+  { 0, 0, SH64PCREL32_LENGTH, 0 },
+  EMPTY, EMPTY,
+  EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY,
+
+  /* C (SH64PCREL16PT_64, SH64PCREL16) */
+  EMPTY,
+  { SH64PCREL16_F, SH64PCREL16_M, SH64PCREL16_LENGTH, C (SH64PCREL16PT_64, SH64PCREL32) },
+  /* C (SH64PCREL16PT_64, SH64PCREL32) */
+  { SH64PCREL32_F,
+    SH64PCREL32_M,
+    SH64PCREL32_LENGTH,
+    C (SH64PCREL16PT_64, SH64PCREL48) },
+  /* C (SH64PCREL16PT_64, SH64PCREL48) */
+  { SH64PCREL48_F, SH64PCREL48_M, SH64PCREL48_LENGTH, C (SH64PCREL16PT_64, SH64PCREL64) },
+  /* C (SH64PCREL16PT_64, SH64PCREL64) */
+  { 0, 0, SH64PCREL64_LENGTH, 0 },
+  /* C (SH64PCREL16PT_64, SH64PCRELPLT) */
+  { 0, 0, SH64PCREL64_LENGTH, 0},
+  EMPTY, EMPTY,
+  EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY,
+
+  /* C (MOVI_IMM_32, UNDEF_MOVI) */
+  { 0, 0, MOVI_32_LENGTH, 0 },
+  /* C (MOVI_IMM_32, MOVI_16) */
+  { MOVI_16_F, MOVI_16_M, MOVI_16_LENGTH, C (MOVI_IMM_32, MOVI_32) },
+  /* C (MOVI_IMM_32, MOVI_32) */
+  { MOVI_32_F, MOVI_32_M, MOVI_32_LENGTH, 0 },
+  EMPTY, EMPTY, EMPTY,
+  /* C (MOVI_IMM_32, MOVI_GOTOFF) */
+  { 0, 0, MOVI_32_LENGTH, 0 },
+  EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY,
+
+  /* C (MOVI_IMM_32_PCREL, MOVI_16) */
+  EMPTY,
+  { MOVI_16_F, MOVI_16_M, MOVI_16_LENGTH, C (MOVI_IMM_32_PCREL, MOVI_32) },
+  /* C (MOVI_IMM_32_PCREL, MOVI_32) */
+  { 0, 0, MOVI_32_LENGTH, 0 },
+  EMPTY, EMPTY,
+  /* C (MOVI_IMM_32_PCREL, MOVI_PLT) */
+  { 0, 0, MOVI_32_LENGTH, 0 },
+  EMPTY,
+  /* C (MOVI_IMM_32_PCREL, MOVI_GOTPC) */
+  { 0, 0, MOVI_32_LENGTH, 0 },
+  EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY,
+
+  /* C (MOVI_IMM_64, UNDEF_MOVI) */
+  { 0, 0, MOVI_64_LENGTH, 0 },
+  /* C (MOVI_IMM_64, MOVI_16) */
+  { MOVI_16_F, MOVI_16_M, MOVI_16_LENGTH, C (MOVI_IMM_64, MOVI_32) },
+  /* C (MOVI_IMM_64, MOVI_32) */
+  { MOVI_32_F, MOVI_32_M, MOVI_32_LENGTH, C (MOVI_IMM_64, MOVI_48) },
+  /* C (MOVI_IMM_64, MOVI_48) */
+  { MOVI_48_F, MOVI_48_M, MOVI_48_LENGTH, C (MOVI_IMM_64, MOVI_64) },
+  /* C (MOVI_IMM_64, MOVI_64) */
+  { 0, 0, MOVI_64_LENGTH, 0 },
+  EMPTY,
+  /* C (MOVI_IMM_64, MOVI_GOTOFF) */
+  { 0, 0, MOVI_64_LENGTH, 0 },
+  EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY,
+
+  /* C (MOVI_IMM_64_PCREL, MOVI_16) */
+  EMPTY,
+  { MOVI_16_F, MOVI_16_M, MOVI_16_LENGTH, C (MOVI_IMM_64_PCREL, MOVI_32) },
+  /* C (MOVI_IMM_64_PCREL, MOVI_32) */
+  { MOVI_32_F, MOVI_32_M, MOVI_32_LENGTH, C (MOVI_IMM_64_PCREL, MOVI_48) },
+  /* C (MOVI_IMM_64_PCREL, MOVI_48) */
+  { MOVI_48_F, MOVI_48_M, MOVI_48_LENGTH, C (MOVI_IMM_64_PCREL, MOVI_64) },
+  /* C (MOVI_IMM_64_PCREL, MOVI_64) */
+  { 0, 0, MOVI_64_LENGTH, 0 },
+  /* C (MOVI_IMM_64_PCREL, MOVI_PLT) */
+  { 0, 0, MOVI_64_LENGTH, 0 },
+  EMPTY,
+  /* C (MOVI_IMM_64_PCREL, MOVI_GOTPC) */
+  { 0, 0, MOVI_64_LENGTH, 0 },
+  EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY,
+
+#endif /* HAVE_SH64 */
+
 };
 
 #undef EMPTY
@@ -244,7 +484,7 @@ static struct hash_control *opcode_hash_control;	/* Opcode mnemonics */
 
 
 #ifdef OBJ_ELF
-/* Determine whether the symbol needs any kind of PIC relocation.  */
+/* Determinet whether the symbol needs any kind of PIC relocation.  */
 
 inline static int
 sh_PIC_related_p (symbolS *sym)
@@ -256,6 +496,11 @@ sh_PIC_related_p (symbolS *sym)
 
   if (sym == GOT_symbol)
     return 1;
+
+#ifdef HAVE_SH64
+  if (sh_PIC_related_p (*symbol_get_tc (sym)))
+    return 1;
+#endif
 
   exp = symbol_get_value_expression (sym);
 
@@ -318,11 +563,47 @@ sh_check_fixup (expressionS *main_exp, bfd_reloc_code_real_type *r_type_p)
 
   if (exp->X_op == O_symbol || exp->X_op == O_add || exp->X_op == O_subtract)
     {
+#ifdef HAVE_SH64
+      if (exp->X_add_symbol
+	  && (exp->X_add_symbol == GOT_symbol
+	      || (GOT_symbol
+		  && *symbol_get_tc (exp->X_add_symbol) == GOT_symbol)))
+	{
+	  switch (*r_type_p)
+	    {
+	    case BFD_RELOC_SH_IMM_LOW16:
+	      *r_type_p = BFD_RELOC_SH_GOTPC_LOW16;
+	      break;
+
+	    case BFD_RELOC_SH_IMM_MEDLOW16:
+	      *r_type_p = BFD_RELOC_SH_GOTPC_MEDLOW16;
+	      break;
+
+	    case BFD_RELOC_SH_IMM_MEDHI16:
+	      *r_type_p = BFD_RELOC_SH_GOTPC_MEDHI16;
+	      break;
+
+	    case BFD_RELOC_SH_IMM_HI16:
+	      *r_type_p = BFD_RELOC_SH_GOTPC_HI16;
+	      break;
+
+	    case BFD_RELOC_NONE:
+	    case BFD_RELOC_UNUSED:
+	      *r_type_p = BFD_RELOC_SH_GOTPC;
+	      break;
+
+	    default:
+	      abort ();
+	    }
+	  return 0;
+	}
+#else
       if (exp->X_add_symbol && exp->X_add_symbol == GOT_symbol)
 	{
 	  *r_type_p = BFD_RELOC_SH_GOTPC;
 	  return 0;
 	}
+#endif
       exp = symbol_get_value_expression (exp->X_add_symbol);
       if (! exp)
 	return 0;
@@ -330,6 +611,7 @@ sh_check_fixup (expressionS *main_exp, bfd_reloc_code_real_type *r_type_p)
 
   if (exp->X_op == O_PIC_reloc)
     {
+#ifdef HAVE_SH64
       switch (*r_type_p)
 	{
 	case BFD_RELOC_NONE:
@@ -337,23 +619,95 @@ sh_check_fixup (expressionS *main_exp, bfd_reloc_code_real_type *r_type_p)
 	  *r_type_p = exp->X_md;
 	  break;
 
-	case BFD_RELOC_SH_DISP20:
+	case BFD_RELOC_SH_IMM_LOW16:
 	  switch (exp->X_md)
 	    {
-	    case BFD_RELOC_32_GOT_PCREL:
-	      *r_type_p = BFD_RELOC_SH_GOT20;
-	      break;
-
 	    case BFD_RELOC_32_GOTOFF:
-	      *r_type_p = BFD_RELOC_SH_GOTOFF20;
+	      *r_type_p = BFD_RELOC_SH_GOTOFF_LOW16;
 	      break;
 
-	    case BFD_RELOC_SH_GOTFUNCDESC:
-	      *r_type_p = BFD_RELOC_SH_GOTFUNCDESC20;
+	    case BFD_RELOC_SH_GOTPLT32:
+	      *r_type_p = BFD_RELOC_SH_GOTPLT_LOW16;
 	      break;
 
-	    case BFD_RELOC_SH_GOTOFFFUNCDESC:
-	      *r_type_p = BFD_RELOC_SH_GOTOFFFUNCDESC20;
+	    case BFD_RELOC_32_GOT_PCREL:
+	      *r_type_p = BFD_RELOC_SH_GOT_LOW16;
+	      break;
+
+	    case BFD_RELOC_32_PLT_PCREL:
+	      *r_type_p = BFD_RELOC_SH_PLT_LOW16;
+	      break;
+
+	    default:
+	      abort ();
+	    }
+	  break;
+
+	case BFD_RELOC_SH_IMM_MEDLOW16:
+	  switch (exp->X_md)
+	    {
+	    case BFD_RELOC_32_GOTOFF:
+	      *r_type_p = BFD_RELOC_SH_GOTOFF_MEDLOW16;
+	      break;
+
+	    case BFD_RELOC_SH_GOTPLT32:
+	      *r_type_p = BFD_RELOC_SH_GOTPLT_MEDLOW16;
+	      break;
+
+	    case BFD_RELOC_32_GOT_PCREL:
+	      *r_type_p = BFD_RELOC_SH_GOT_MEDLOW16;
+	      break;
+
+	    case BFD_RELOC_32_PLT_PCREL:
+	      *r_type_p = BFD_RELOC_SH_PLT_MEDLOW16;
+	      break;
+
+	    default:
+	      abort ();
+	    }
+	  break;
+
+	case BFD_RELOC_SH_IMM_MEDHI16:
+	  switch (exp->X_md)
+	    {
+	    case BFD_RELOC_32_GOTOFF:
+	      *r_type_p = BFD_RELOC_SH_GOTOFF_MEDHI16;
+	      break;
+
+	    case BFD_RELOC_SH_GOTPLT32:
+	      *r_type_p = BFD_RELOC_SH_GOTPLT_MEDHI16;
+	      break;
+
+	    case BFD_RELOC_32_GOT_PCREL:
+	      *r_type_p = BFD_RELOC_SH_GOT_MEDHI16;
+	      break;
+
+	    case BFD_RELOC_32_PLT_PCREL:
+	      *r_type_p = BFD_RELOC_SH_PLT_MEDHI16;
+	      break;
+
+	    default:
+	      abort ();
+	    }
+	  break;
+
+	case BFD_RELOC_SH_IMM_HI16:
+	  switch (exp->X_md)
+	    {
+	    case BFD_RELOC_32_GOTOFF:
+	      *r_type_p = BFD_RELOC_SH_GOTOFF_HI16;
+	      break;
+
+	    case BFD_RELOC_SH_GOTPLT32:
+	      *r_type_p = BFD_RELOC_SH_GOTPLT_HI16;
+	      break;
+
+	    case BFD_RELOC_32_GOT_PCREL:
+	      *r_type_p = BFD_RELOC_SH_GOT_HI16;
+	      break;
+
+	    case BFD_RELOC_32_PLT_PCREL:
+	      *r_type_p = BFD_RELOC_SH_PLT_HI16;
 	      break;
 
 	    default:
@@ -364,6 +718,9 @@ sh_check_fixup (expressionS *main_exp, bfd_reloc_code_real_type *r_type_p)
 	default:
 	  abort ();
 	}
+#else
+      *r_type_p = exp->X_md;
+#endif
       if (exp == main_exp)
 	exp->X_op = O_symbol;
       else
@@ -382,10 +739,9 @@ sh_check_fixup (expressionS *main_exp, bfd_reloc_code_real_type *r_type_p)
 /* Add expression EXP of SIZE bytes to offset OFF of fragment FRAG.  */
 
 void
-sh_cons_fix_new (fragS *frag, int off, int size, expressionS *exp,
-		 bfd_reloc_code_real_type r_type)
+sh_cons_fix_new (fragS *frag, int off, int size, expressionS *exp)
 {
-  r_type = BFD_RELOC_UNUSED;
+  bfd_reloc_code_real_type r_type = BFD_RELOC_UNUSED;
 
   if (sh_check_fixup (exp, &r_type))
     as_bad (_("Invalid PIC expression."));
@@ -405,9 +761,11 @@ sh_cons_fix_new (fragS *frag, int off, int size, expressionS *exp,
 	r_type = BFD_RELOC_32;
 	break;
 
+#ifdef HAVE_SH64
       case 8:
 	r_type = BFD_RELOC_64;
 	break;
+#endif
 
       default:
 	goto error;
@@ -428,9 +786,19 @@ sh_cons_fix_new (fragS *frag, int off, int size, expressionS *exp,
 /* Clobbers input_line_pointer, checks end-of-line.  */
 /* NBYTES 1=.byte, 2=.word, 4=.long */
 static void
-sh_elf_cons (int nbytes)
+sh_elf_cons (register int nbytes)
 {
   expressionS exp;
+
+#ifdef HAVE_SH64
+
+  /* Update existing range to include a previous insn, if there was one.  */
+  sh64_update_contents_mark (TRUE);
+
+  /* We need to make sure the contents type is set to data.  */
+  sh64_flag_output ();
+
+#endif /* HAVE_SH64 */
 
   if (is_it_end_of_statement ())
     {
@@ -537,11 +905,10 @@ sh_optimize_expr (expressionS *l, operatorT op, expressionS *r)
 					 symbol_get_frag (r->X_add_symbol),
 					 &frag_off))
     {
-      offsetT symval_diff = S_GET_VALUE (l->X_add_symbol)
-			    - S_GET_VALUE (r->X_add_symbol);
-      subtract_from_result (l, r->X_add_number, r->X_extrabit);
-      subtract_from_result (l, frag_off / OCTETS_PER_BYTE, 0);
-      add_to_result (l, symval_diff, symval_diff < 0);
+      l->X_add_number -= r->X_add_number;
+      l->X_add_number -= frag_off / OCTETS_PER_BYTE;
+      l->X_add_number += (S_GET_VALUE (l->X_add_symbol)
+			  - S_GET_VALUE (r->X_add_symbol));
       l->X_op = O_constant;
       l->X_add_symbol = 0;
       return 1;
@@ -557,12 +924,16 @@ void
 md_begin (void)
 {
   const sh_opcode_info *opcode;
-  const char *prev_name = "";
+  char *prev_name = "";
   unsigned int target_arch;
 
   target_arch
     = preset_target_arch ? preset_target_arch : arch_sh_up & ~arch_sh_has_dsp;
   valid_arch = target_arch;
+
+#ifdef HAVE_SH64
+  shmedia_md_begin ();
+#endif
 
   opcode_hash_control = hash_new ();
 
@@ -590,7 +961,7 @@ static int reg_b;
 /* Try to parse a reg name.  Return the number of chars consumed.  */
 
 static unsigned int
-parse_reg_without_prefix (char *src, sh_arg_type *mode, int *reg)
+parse_reg_without_prefix (char *src, int *mode, int *reg)
 {
   char l0 = TOLOWER (src[0]);
   char l1 = l0 ? TOLOWER (src[1]) : 0;
@@ -949,7 +1320,7 @@ parse_reg_without_prefix (char *src, sh_arg_type *mode, int *reg)
    $-prefixed register names if enabled by the user.  */
 
 static unsigned int
-parse_reg (char *src, sh_arg_type *mode, int *reg)
+parse_reg (char *src, int *mode, int *reg)
 {
   unsigned int prefix;
   unsigned int consumed;
@@ -966,7 +1337,7 @@ parse_reg (char *src, sh_arg_type *mode, int *reg)
     }
   else
     prefix = 0;
-
+  
   consumed = parse_reg_without_prefix (src, mode, reg);
 
   if (consumed == 0)
@@ -979,16 +1350,22 @@ static char *
 parse_exp (char *s, sh_operand_info *op)
 {
   char *save;
-  char *new_pointer;
+  char *new;
 
   save = input_line_pointer;
   input_line_pointer = s;
   expression (&op->immediate);
   if (op->immediate.X_op == O_absent)
     as_bad (_("missing operand"));
-  new_pointer = input_line_pointer;
+#ifdef OBJ_ELF
+  else if (op->immediate.X_op == O_PIC_reloc
+	   || sh_PIC_related_p (op->immediate.X_add_symbol)
+	   || sh_PIC_related_p (op->immediate.X_op_symbol))
+    as_bad (_("misplaced PIC operand"));
+#endif
+  new = input_line_pointer;
   input_line_pointer = save;
-  return new_pointer;
+  return new;
 }
 
 /* The many forms of operand:
@@ -1014,7 +1391,7 @@ static char *
 parse_at (char *src, sh_operand_info *op)
 {
   int len;
-  sh_arg_type mode;
+  int mode;
   src++;
   if (src[0] == '@')
     {
@@ -1186,7 +1563,7 @@ static void
 get_operand (char **ptr, sh_operand_info *op)
 {
   char *src = *ptr;
-  sh_arg_type mode = (sh_arg_type) -1;
+  int mode = -1;
   unsigned int len;
 
   if (src[0] == '#')
@@ -1280,7 +1657,7 @@ static sh_opcode_info *
 get_specific (sh_opcode_info *opcode, sh_operand_info *operands)
 {
   sh_opcode_info *this_try = opcode;
-  const char *name = opcode->name;
+  char *name = opcode->name;
   int n = 0;
 
   while (opcode->name)
@@ -1302,6 +1679,36 @@ get_specific (sh_opcode_info *opcode, sh_operand_info *operands)
 	  sh_operand_info *user = operands + n;
 	  sh_arg_type arg = this_try->arg[n];
 
+	  if (SH_MERGE_ARCH_SET_VALID (valid_arch, arch_sh2a_nofpu_up)
+	      && (   arg == A_DISP_REG_M
+		  || arg == A_DISP_REG_N))
+	    {
+	      /* Check a few key IMM* fields for overflow.  */
+	      int opf;
+	      long val = user->immediate.X_add_number;
+
+	      for (opf = 0; opf < 4; opf ++)
+		switch (this_try->nibbles[opf])
+		  {
+		  case IMM0_4:
+		  case IMM1_4:
+		    if (val < 0 || val > 15)
+		      goto fail;
+		    break;
+		  case IMM0_4BY2:
+		  case IMM1_4BY2:
+		    if (val < 0 || val > 15 * 2)
+		      goto fail;
+		    break;
+		  case IMM0_4BY4:
+		  case IMM1_4BY4:
+		    if (val < 0 || val > 15 * 4)
+		      goto fail;
+		    break;
+		  default:
+		    break;
+		  }
+	    }
 	  switch (arg)
 	    {
 	    case A_DISP_PC:
@@ -1795,36 +2202,6 @@ get_specific (sh_opcode_info *opcode, sh_operand_info *operands)
 	      printf (_("unhandled %d\n"), arg);
 	      goto fail;
 	    }
-	  if (SH_MERGE_ARCH_SET_VALID (valid_arch, arch_sh2a_nofpu_up)
-	      && (   arg == A_DISP_REG_M
-		  || arg == A_DISP_REG_N))
-	    {
-	      /* Check a few key IMM* fields for overflow.  */
-	      int opf;
-	      long val = user->immediate.X_add_number;
-
-	      for (opf = 0; opf < 4; opf ++)
-		switch (this_try->nibbles[opf])
-		  {
-		  case IMM0_4:
-		  case IMM1_4:
-		    if (val < 0 || val > 15)
-		      goto fail;
-		    break;
-		  case IMM0_4BY2:
-		  case IMM1_4BY2:
-		    if (val < 0 || val > 15 * 2)
-		      goto fail;
-		    break;
-		  case IMM0_4BY4:
-		  case IMM1_4BY4:
-		    if (val < 0 || val > 15 * 4)
-		      goto fail;
-		    break;
-		  default:
-		    break;
-		  }
-	    }
 	}
       if ( !SH_MERGE_ARCH_SET_VALID (valid_arch, this_try->arch))
 	goto fail;
@@ -1838,8 +2215,7 @@ get_specific (sh_opcode_info *opcode, sh_operand_info *operands)
 }
 
 static void
-insert (char *where, bfd_reloc_code_real_type how, int pcrel,
-       	sh_operand_info *op)
+insert (char *where, int how, int pcrel, sh_operand_info *op)
 {
   fix_new_exp (frag_now,
 	       where - frag_now->fr_literal,
@@ -1850,8 +2226,7 @@ insert (char *where, bfd_reloc_code_real_type how, int pcrel,
 }
 
 static void
-insert4 (char * where, bfd_reloc_code_real_type how, int pcrel,
-	 sh_operand_info * op)
+insert4 (char * where, int how, int pcrel, sh_operand_info * op)
 {
   fix_new_exp (frag_now,
 	       where - frag_now->fr_literal,
@@ -1897,6 +2272,7 @@ build_relax (sh_opcode_info *opcode, sh_operand_info *op)
 static char *
 insert_loop_bounds (char *output, sh_operand_info *operand)
 {
+  char *name;
   symbolS *end_sym;
 
   /* Since the low byte of the opcode will be overwritten by the reloc, we
@@ -1909,8 +2285,6 @@ insert_loop_bounds (char *output, sh_operand_info *operand)
   if (sh_relax)
     {
       static int count = 0;
-      char name[11];
-      expressionS *symval;
 
       /* If the last loop insn is a two-byte-insn, it is in danger of being
 	 swapped with the insn after it.  To prevent this, create a new
@@ -1919,6 +2293,7 @@ insert_loop_bounds (char *output, sh_operand_info *operand)
 	 right in the middle, but four byte insns are not swapped anyways.  */
       /* A REPEAT takes 6 bytes.  The SH has a 32 bit address space.
 	 Hence a 9 digit number should be enough to count all REPEATs.  */
+      name = alloca (11);
       sprintf (name, "_R%x", count++ & 0x3fffffff);
       end_sym = symbol_new (name, undefined_section, 0, &zero_address_frag);
       /* Make this a local symbol.  */
@@ -1926,9 +2301,8 @@ insert_loop_bounds (char *output, sh_operand_info *operand)
       SF_SET_LOCAL (end_sym);
 #endif /* OBJ_COFF */
       symbol_table_insert (end_sym);
-      symval = symbol_get_value_expression (end_sym);
-      *symval = operand[1].immediate;
-      symval->X_add_number += 2;
+      end_sym->sy_value = operand[1].immediate;
+      end_sym->sy_value.X_add_number += 2;
       fix_new (frag_now, frag_now_fix (), 2, end_sym, 0, 1, BFD_RELOC_SH_LABEL);
     }
 
@@ -1946,16 +2320,12 @@ insert_loop_bounds (char *output, sh_operand_info *operand)
 static unsigned int
 build_Mytes (sh_opcode_info *opcode, sh_operand_info *operand)
 {
-  int indx;
+  int index;
   char nbuf[8];
   char *output;
   unsigned int size = 2;
   int low_byte = target_big_endian ? 1 : 0;
   int max_index = 4;
-  bfd_reloc_code_real_type r_type;
-#ifdef OBJ_ELF
-  int unhandled_pic = 0;
-#endif
 
   nbuf[0] = 0;
   nbuf[1] = 0;
@@ -1966,16 +2336,6 @@ build_Mytes (sh_opcode_info *opcode, sh_operand_info *operand)
   nbuf[6] = 0;
   nbuf[7] = 0;
 
-#ifdef OBJ_ELF
-  for (indx = 0; indx < 3; indx++)
-    if (opcode->arg[indx] == A_IMM
-	&& operand[indx].type == A_IMM
-	&& (operand[indx].immediate.X_op == O_PIC_reloc
-	    || sh_PIC_related_p (operand[indx].immediate.X_add_symbol)
-	    || sh_PIC_related_p (operand[indx].immediate.X_op_symbol)))
-      unhandled_pic = 1;
-#endif
-
   if (SH_MERGE_ARCH_SET (opcode->arch, arch_op32))
     {
       output = frag_more (4);
@@ -1985,12 +2345,12 @@ build_Mytes (sh_opcode_info *opcode, sh_operand_info *operand)
   else
     output = frag_more (2);
 
-  for (indx = 0; indx < max_index; indx++)
+  for (index = 0; index < max_index; index++)
     {
-      sh_nibble_type i = opcode->nibbles[indx];
+      sh_nibble_type i = opcode->nibbles[index];
       if (i < 16)
 	{
-	  nbuf[indx] = i;
+	  nbuf[index] = i;
 	}
       else
 	{
@@ -1998,34 +2358,32 @@ build_Mytes (sh_opcode_info *opcode, sh_operand_info *operand)
 	    {
 	    case REG_N:
 	    case REG_N_D:
-	      nbuf[indx] = reg_n;
+	      nbuf[index] = reg_n;
 	      break;
 	    case REG_M:
-	      nbuf[indx] = reg_m;
+	      nbuf[index] = reg_m;
 	      break;
 	    case SDT_REG_N:
 	      if (reg_n < 2 || reg_n > 5)
 		as_bad (_("Invalid register: 'r%d'"), reg_n);
-	      nbuf[indx] = (reg_n & 3) | 4;
+	      nbuf[index] = (reg_n & 3) | 4;
 	      break;
 	    case REG_NM:
-	      nbuf[indx] = reg_n | (reg_m >> 2);
+	      nbuf[index] = reg_n | (reg_m >> 2);
 	      break;
 	    case REG_B:
-	      nbuf[indx] = reg_b | 0x08;
+	      nbuf[index] = reg_b | 0x08;
 	      break;
 	    case REG_N_B01:
-	      nbuf[indx] = reg_n | 0x01;
+	      nbuf[index] = reg_n | 0x01;
 	      break;
 	    case IMM0_3s:
-	      nbuf[indx] |= 0x08;
-	      /* Fall through.  */
+	      nbuf[index] |= 0x08;
 	    case IMM0_3c:
 	      insert (output + low_byte, BFD_RELOC_SH_IMM3, 0, operand);
 	      break;
 	    case IMM0_3Us:
-	      nbuf[indx] |= 0x80;
-	      /* Fall through.  */
+	      nbuf[index] |= 0x80;
 	    case IMM0_3Uc:
 	      insert (output + low_byte, BFD_RELOC_SH_IMM3U, 0, operand);
 	      break;
@@ -2056,13 +2414,7 @@ build_Mytes (sh_opcode_info *opcode, sh_operand_info *operand)
 	    case IMM0_20_4:
 	      break;
 	    case IMM0_20:
-	      r_type = BFD_RELOC_SH_DISP20;
-#ifdef OBJ_ELF
-	      if (sh_check_fixup (&operand->immediate, &r_type))
-		as_bad (_("Invalid PIC expression."));
-	      unhandled_pic = 0;
-#endif
-	      insert4 (output, r_type, 0, operand);
+	      insert4 (output, BFD_RELOC_SH_DISP20, 0, operand);
 	      break;
 	    case IMM0_20BY8:
 	      insert4 (output, BFD_RELOC_SH_DISP20BY8, 0, operand);
@@ -2113,7 +2465,7 @@ build_Mytes (sh_opcode_info *opcode, sh_operand_info *operand)
 	      break;
 	    case REPEAT:
 	      output = insert_loop_bounds (output, operand);
-	      nbuf[indx] = opcode->nibbles[3];
+	      nbuf[index] = opcode->nibbles[3];
 	      operand += 2;
 	      break;
 	    default:
@@ -2121,10 +2473,6 @@ build_Mytes (sh_opcode_info *opcode, sh_operand_info *operand)
 	    }
 	}
     }
-#ifdef OBJ_ELF
-  if (unhandled_pic)
-    as_bad (_("misplaced PIC operand"));
-#endif
   if (!target_big_endian)
     {
       output[1] = (nbuf[0] << 4) | (nbuf[1]);
@@ -2161,7 +2509,7 @@ find_cooked_opcode (char **str_p)
   unsigned char *op_start;
   unsigned char *op_end;
   char name[20];
-  unsigned int nlen = 0;
+  int nlen = 0;
 
   /* Drop leading whitespace.  */
   while (*str == ' ')
@@ -2173,7 +2521,7 @@ find_cooked_opcode (char **str_p)
      assemble_ppi, so the opcode might be terminated by an '@'.  */
   for (op_start = op_end = (unsigned char *) str;
        *op_end
-       && nlen < sizeof (name) - 1
+       && nlen < 20
        && !is_end_of_line[*op_end] && *op_end != ' ' && *op_end != '@';
        op_end++)
     {
@@ -2511,6 +2859,26 @@ md_assemble (char *str)
   unsigned int size = 0;
   char *initial_str = str;
 
+#ifdef HAVE_SH64
+  if (sh64_isa_mode == sh64_isa_shmedia)
+    {
+      shmedia_md_assemble (str);
+      return;
+    }
+  else
+    {
+      /* If we've seen pseudo-directives, make sure any emitted data or
+	 frags are marked as data.  */
+      if (!seen_insn)
+	{
+	  sh64_update_contents_mark (TRUE);
+	  sh64_set_contents_type (CRT_SH5_ISA16);
+	}
+
+      seen_insn = TRUE;
+    }
+#endif /* HAVE_SH64 */
+
   opcode = find_cooked_opcode (&str);
   op_end = str;
 
@@ -2525,31 +2893,37 @@ md_assemble (char *str)
       char *name = initial_str;
       int name_length = 0;
       const sh_opcode_info *op;
-      bfd_boolean found = FALSE;
+      int found = 0;
 
-      /* Identify opcode in string.  */
+      /* identify opcode in string */
       while (ISSPACE (*name))
-	name++;
+	{
+	  name++;
+	}
+      while (!ISSPACE (name[name_length]))
+	{
+	  name_length++;
+	}
 
-      while (name[name_length] != '\0' && !ISSPACE (name[name_length]))
-	name_length++;
-
-      /* Search for opcode in full list.  */
+      /* search for opcode in full list */
       for (op = sh_table; op->name; op++)
 	{
 	  if (strncasecmp (op->name, name, name_length) == 0
 	      && op->name[name_length] == '\0')
 	    {
-	      found = TRUE;
+	      found = 1;
 	      break;
 	    }
 	}
 
-      if (found)
-	as_bad (_("opcode not valid for this cpu variant"));
+      if ( found )
+	{
+	  as_bad (_("opcode not valid for this cpu variant"));
+	}
       else
-	as_bad (_("unknown opcode"));
-
+	{
+	  as_bad (_("unknown opcode"));
+	}
       return;
     }
 
@@ -2672,7 +3046,7 @@ md_undefined_symbol (char *name ATTRIBUTE_UNUSED)
 
 /* Various routines to kill one day.  */
 
-const char *
+char *
 md_atof (int type, char *litP, int *sizeP)
 {
   return ieee_md_atof (type, litP, sizeP, target_big_endian);
@@ -2715,10 +3089,14 @@ enum options
   OPTION_ISA,
   OPTION_RENESAS,
   OPTION_ALLOW_REG_PREFIX,
-  OPTION_H_TICK_HEX,
-#ifdef OBJ_ELF
-  OPTION_FDPIC,
+#ifdef HAVE_SH64
+  OPTION_ABI,
+  OPTION_NO_MIX,
+  OPTION_SHCOMPACT_CONST_CRANGE,
+  OPTION_NO_EXPAND,
+  OPTION_PT32,
 #endif
+  OPTION_H_TICK_HEX,
   OPTION_DUMMY  /* Not used.  This is just here to make it easy to add and subtract options from this enum.  */
 };
 
@@ -2738,18 +3116,21 @@ struct option md_longopts[] =
   {"renesas", no_argument, NULL, OPTION_RENESAS},
   {"allow-reg-prefix", no_argument, NULL, OPTION_ALLOW_REG_PREFIX},
 
+#ifdef HAVE_SH64
+  {"abi",                    required_argument, NULL, OPTION_ABI},
+  {"no-mix",                 no_argument, NULL, OPTION_NO_MIX},
+  {"shcompact-const-crange", no_argument, NULL, OPTION_SHCOMPACT_CONST_CRANGE},
+  {"no-expand",              no_argument, NULL, OPTION_NO_EXPAND},
+  {"expand-pt32",            no_argument, NULL, OPTION_PT32},
+#endif /* HAVE_SH64 */
   { "h-tick-hex", no_argument,	      NULL, OPTION_H_TICK_HEX  },
-
-#ifdef OBJ_ELF
-  {"fdpic", no_argument, NULL, OPTION_FDPIC},
-#endif
 
   {NULL, no_argument, NULL, 0}
 };
 size_t md_longopts_size = sizeof (md_longopts);
 
 int
-md_parse_option (int c, const char *arg ATTRIBUTE_UNUSED)
+md_parse_option (int c, char *arg ATTRIBUTE_UNUSED)
 {
   switch (c)
     {
@@ -2788,6 +3169,22 @@ md_parse_option (int c, const char *arg ATTRIBUTE_UNUSED)
 	preset_target_arch = arch_sh_up & ~arch_sh_has_dsp;
       else if (strcasecmp (arg, "any") == 0)
 	preset_target_arch = arch_sh_up;
+#ifdef HAVE_SH64
+      else if (strcasecmp (arg, "shmedia") == 0)
+	{
+	  if (sh64_isa_mode == sh64_isa_shcompact)
+	    as_bad (_("Invalid combination: --isa=SHcompact with --isa=SHmedia"));
+	  sh64_isa_mode = sh64_isa_shmedia;
+	}
+      else if (strcasecmp (arg, "shcompact") == 0)
+	{
+	  if (sh64_isa_mode == sh64_isa_shmedia)
+	    as_bad (_("Invalid combination: --isa=SHmedia with --isa=SHcompact"));
+	  if (sh64_abi == sh64_abi_64)
+	    as_bad (_("Invalid combination: --abi=64 with --isa=SHcompact"));
+	  sh64_isa_mode = sh64_isa_shcompact;
+	}
+#endif /* HAVE_SH64 */
       else
 	{
 	  extern const bfd_arch_info_type bfd_sh_arch;
@@ -2797,7 +3194,10 @@ md_parse_option (int c, const char *arg ATTRIBUTE_UNUSED)
 	  for (; bfd_arch; bfd_arch=bfd_arch->next)
 	    {
 	      int len = strlen(bfd_arch->printable_name);
-
+	      
+	      if (bfd_arch->mach == bfd_mach_sh5)
+		continue;
+	      
 	      if (strncasecmp (bfd_arch->printable_name, arg, len) != 0)
 		continue;
 
@@ -2811,21 +3211,52 @@ md_parse_option (int c, const char *arg ATTRIBUTE_UNUSED)
 		continue;
 	      break;
 	    }
-
+	  
 	  if (!preset_target_arch)
-	    as_bad (_("Invalid argument to --isa option: %s"), arg);
+	    as_bad ("Invalid argument to --isa option: %s", arg);
 	}
       break;
+
+#ifdef HAVE_SH64
+    case OPTION_ABI:
+      if (strcmp (arg, "32") == 0)
+	{
+	  if (sh64_abi == sh64_abi_64)
+	    as_bad (_("Invalid combination: --abi=32 with --abi=64"));
+	  sh64_abi = sh64_abi_32;
+	}
+      else if (strcmp (arg, "64") == 0)
+	{
+	  if (sh64_abi == sh64_abi_32)
+	    as_bad (_("Invalid combination: --abi=64 with --abi=32"));
+	  if (sh64_isa_mode == sh64_isa_shcompact)
+	    as_bad (_("Invalid combination: --isa=SHcompact with --abi=64"));
+	  sh64_abi = sh64_abi_64;
+	}
+      else
+	as_bad ("Invalid argument to --abi option: %s", arg);
+      break;
+
+    case OPTION_NO_MIX:
+      sh64_mix = FALSE;
+      break;
+
+    case OPTION_SHCOMPACT_CONST_CRANGE:
+      sh64_shcompact_const_crange = TRUE;
+      break;
+
+    case OPTION_NO_EXPAND:
+      sh64_expand = FALSE;
+      break;
+
+    case OPTION_PT32:
+      sh64_pt32 = TRUE;
+      break;
+#endif /* HAVE_SH64 */
 
     case OPTION_H_TICK_HEX:
       enable_h_tick_hex = 1;
       break;
-
-#ifdef OBJ_ELF
-    case OPTION_FDPIC:
-      sh_fdpic = TRUE;
-      break;
-#endif /* OBJ_ELF */
 
     default:
       return 0;
@@ -2855,16 +3286,30 @@ SH options:\n\
     bfd_arch_info_type const *bfd_arch = &bfd_sh_arch;
 
     for (; bfd_arch; bfd_arch=bfd_arch->next)
-      {
-	fprintf (stream, "\n    | %s", bfd_arch->printable_name);
-	fprintf (stream, "\n    | %s-up", bfd_arch->printable_name);
-      }
+      if (bfd_arch->mach != bfd_mach_sh5)
+	{
+	  fprintf (stream, "\n    | %s", bfd_arch->printable_name);
+	  fprintf (stream, "\n    | %s-up", bfd_arch->printable_name);
+	}
   }
   fprintf (stream, "]\n");
-#ifdef OBJ_ELF
+#ifdef HAVE_SH64
   fprintf (stream, _("\
---fdpic			generate an FDPIC object file\n"));
-#endif /* OBJ_ELF */
+--isa=[shmedia		set as the default instruction set for SH64\n\
+    | SHmedia\n\
+    | shcompact\n\
+    | SHcompact]\n"));
+  fprintf (stream, _("\
+--abi=[32|64]		set size of expanded SHmedia operands and object\n\
+			file type\n\
+--shcompact-const-crange  emit code-range descriptors for constants in\n\
+			SHcompact code sections\n\
+--no-mix		disallow SHmedia code in the same section as\n\
+			constants and SHcompact code\n\
+--no-expand		do not expand MOVI, PT, PTA or PTB instructions\n\
+--expand-pt32		with -abi=64, expand PT, PTA and PTB instructions\n\
+			to 32 bits only\n"));
+#endif /* HAVE_SH64 */
 }
 
 /* This struct is used to pass arguments to sh_count_relocs through
@@ -2917,6 +3362,21 @@ sh_frob_section (bfd *abfd ATTRIBUTE_UNUSED, segT sec,
   seginfo = seg_info (sec);
   if (seginfo == NULL)
     return;
+
+  for (fix = seginfo->fix_root; fix != NULL; fix = fix->fx_next)
+    {
+      symbolS *sym;
+
+      sym = fix->fx_addsy;
+      /* Check for a local_symbol.  */
+      if (sym && sym->bsym == NULL)
+	{
+	  struct local_symbol *ls = (struct local_symbol *)sym;
+	  /* See if it's been converted.  If so, canonicalize.  */
+	  if (local_symbol_converted_p (ls))
+	    fix->fx_addsy = local_symbol_get_real_symbol (ls);
+	}
+    }
 
   for (fix = seginfo->fix_root; fix != NULL; fix = fix->fx_next)
     {
@@ -3013,6 +3473,10 @@ sh_frob_section (bfd *abfd ATTRIBUTE_UNUSED, segT sec,
 void
 sh_frob_file (void)
 {
+#ifdef HAVE_SH64
+  shmedia_frob_file_before_adjust ();
+#endif
+
   if (! sh_relax)
     return;
 
@@ -3145,7 +3609,11 @@ md_convert_frag (bfd *headers ATTRIBUTE_UNUSED, segT seg, fragS *fragP)
       break;
 
     default:
+#ifdef HAVE_SH64
+      shmedia_md_convert_frag (headers, seg, fragP, TRUE);
+#else
       abort ();
+#endif
     }
 
   if (donerelax && !sh_relax)
@@ -3162,8 +3630,8 @@ md_section_align (segT seg ATTRIBUTE_UNUSED, valueT size)
 #ifdef OBJ_ELF
   return size;
 #else /* ! OBJ_ELF */
-  return ((size + (1 << bfd_section_alignment (seg)) - 1)
-	  & -(1 << bfd_section_alignment (seg)));
+  return ((size + (1 << bfd_get_section_alignment (stdoutput, seg)) - 1)
+	  & (-1 << bfd_get_section_alignment (stdoutput, seg)));
 #endif /* ! OBJ_ELF */
 }
 
@@ -3194,6 +3662,7 @@ void
 sh_cons_align (int nbytes)
 {
   int nalign;
+  char *p;
 
   if (sh_no_align_cons)
     {
@@ -3219,8 +3688,8 @@ sh_cons_align (int nbytes)
       return;
     }
 
-  frag_var (rs_align_test, 1, 1, (relax_substateT) 0,
-	    (symbolS *) NULL, (offsetT) nalign, (char *) NULL);
+  p = frag_var (rs_align_test, 1, 1, (relax_substateT) 0,
+		(symbolS *) NULL, (offsetT) nalign, (char *) NULL);
 
   record_alignment (now_seg, nalign);
 }
@@ -3322,6 +3791,9 @@ sh_force_relocation (fixS *fix)
 	  || fix->fx_r_type == BFD_RELOC_SH_ALIGN
 	  || fix->fx_r_type == BFD_RELOC_SH_CODE
 	  || fix->fx_r_type == BFD_RELOC_SH_DATA
+#ifdef HAVE_SH64
+	  || fix->fx_r_type == BFD_RELOC_SH_SHMEDIA_CODE
+#endif
 	  || fix->fx_r_type == BFD_RELOC_SH_LABEL);
 }
 
@@ -3331,13 +3803,7 @@ sh_fix_adjustable (fixS *fixP)
 {
   if (fixP->fx_r_type == BFD_RELOC_32_PLT_PCREL
       || fixP->fx_r_type == BFD_RELOC_32_GOT_PCREL
-      || fixP->fx_r_type == BFD_RELOC_SH_GOT20
       || fixP->fx_r_type == BFD_RELOC_SH_GOTPC
-      || fixP->fx_r_type == BFD_RELOC_SH_GOTFUNCDESC
-      || fixP->fx_r_type == BFD_RELOC_SH_GOTFUNCDESC20
-      || fixP->fx_r_type == BFD_RELOC_SH_GOTOFFFUNCDESC
-      || fixP->fx_r_type == BFD_RELOC_SH_GOTOFFFUNCDESC20
-      || fixP->fx_r_type == BFD_RELOC_SH_FUNCDESC
       || ((fixP->fx_r_type == BFD_RELOC_32) && dont_adjust_reloc_32)
       || fixP->fx_r_type == BFD_RELOC_RVA)
     return 0;
@@ -3357,26 +3823,25 @@ sh_elf_final_processing (void)
 
   /* Set file-specific flags to indicate if this code needs
      a processor with the sh-dsp / sh2e ISA to execute.  */
-  val = sh_find_elf_flags (valid_arch);
+#ifdef HAVE_SH64
+  /* SH5 and above don't know about the valid_arch arch_sh* bits defined
+     in sh-opc.h, so check SH64 mode before checking valid_arch.  */
+  if (sh64_isa_mode != sh64_isa_unspecified)
+    val = EF_SH5;
+  else
+#elif defined TARGET_SYMBIAN
+    if (1)
+      {
+	extern int sh_symbian_find_elf_flags (unsigned int);
+
+	val = sh_symbian_find_elf_flags (valid_arch);
+      }
+    else
+#endif /* HAVE_SH64 */
+    val = sh_find_elf_flags (valid_arch);
 
   elf_elfheader (stdoutput)->e_flags &= ~EF_SH_MACH_MASK;
   elf_elfheader (stdoutput)->e_flags |= val;
-
-  if (sh_fdpic)
-    elf_elfheader (stdoutput)->e_flags |= EF_SH_FDPIC;
-}
-#endif
-
-#ifdef TE_UCLINUX
-/* Return the target format for uClinux.  */
-
-const char *
-sh_uclinux_target_format (void)
-{
-  if (sh_fdpic)
-    return (!target_big_endian ? "elf32-sh-fdpic" : "elf32-shbig-fdpic");
-  else
-    return (!target_big_endian ? "elf32-shl" : "elf32-sh");
 }
 #endif
 
@@ -3685,13 +4150,7 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
       S_SET_THREAD_LOCAL (fixP->fx_addsy);
       /* Fallthrough */
     case BFD_RELOC_32_GOT_PCREL:
-    case BFD_RELOC_SH_GOT20:
     case BFD_RELOC_SH_GOTPLT32:
-    case BFD_RELOC_SH_GOTFUNCDESC:
-    case BFD_RELOC_SH_GOTFUNCDESC20:
-    case BFD_RELOC_SH_GOTOFFFUNCDESC:
-    case BFD_RELOC_SH_GOTOFFFUNCDESC20:
-    case BFD_RELOC_SH_FUNCDESC:
       * valP = 0; /* Fully resolved at runtime.  No addend.  */
       apply_full_field_fix (fixP, buf, 0, 4);
       break;
@@ -3701,13 +4160,17 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
       S_SET_THREAD_LOCAL (fixP->fx_addsy);
       /* Fallthrough */
     case BFD_RELOC_32_GOTOFF:
-    case BFD_RELOC_SH_GOTOFF20:
       apply_full_field_fix (fixP, buf, val, 4);
       break;
 #endif
 
     default:
+#ifdef HAVE_SH64
+      shmedia_md_apply_fix (fixP, valP);
+      return;
+#else
       abort ();
+#endif
     }
 
   if (shift != 0)
@@ -3720,13 +4183,10 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 	val = ((val >> shift)
 	       | ((long) -1 & ~ ((long) -1 >> shift)));
     }
-
-  /* Extend sign for 64-bit host.  */
-  val = ((val & 0xffffffff) ^ 0x80000000) - 0x80000000;
   if (max != 0 && (val < min || val > max))
     as_bad_where (fixP->fx_file, fixP->fx_line, _("offset out of range"));
   else if (max != 0)
-    /* Stop the generic code from trying to overflow check the value as well.
+    /* Stop the generic code from trying to overlow check the value as well.
        It may not have the correct value anyway, as we do not store val back
        into *valP.  */
     fixP->fx_no_overflow = 1;
@@ -3746,7 +4206,12 @@ md_estimate_size_before_relax (fragS *fragP, segT segment_type)
   switch (fragP->fr_subtype)
     {
     default:
+#ifdef HAVE_SH64
+      return shmedia_md_estimate_size_before_relax (fragP, segment_type);
+#else
       abort ();
+#endif
+
 
     case C (UNCOND_JUMP, UNDEF_DISP):
       /* Used to be a branch to somewhere which was unknown.  */
@@ -3777,7 +4242,7 @@ md_estimate_size_before_relax (fragS *fragP, segT segment_type)
 	}
       else if (fragP->fr_symbol)
 	{
-	  /* It's got a segment, but it's not ours, so it will always be long.  */
+	  /* Its got a segment, but its not ours, so it will always be long.  */
 	  fragP->fr_subtype = C (what, UNDEF_WORD_DISP);
 	}
       else
@@ -3812,6 +4277,11 @@ md_estimate_size_before_relax (fragS *fragP, segT segment_type)
 void
 md_number_to_chars (char *ptr, valueT use, int nbytes)
 {
+#ifdef HAVE_SH64
+  /* We might need to set the contents type to data.  */
+  sh64_flag_output ();
+#endif
+
   if (! target_big_endian)
     number_to_chars_littleendian (ptr, use, nbytes);
   else
@@ -3852,8 +4322,8 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
   arelent *rel;
   bfd_reloc_code_real_type r_type;
 
-  rel = XNEW (arelent);
-  rel->sym_ptr_ptr = XNEW (asymbol *);
+  rel = (arelent *) xmalloc (sizeof (arelent));
+  rel->sym_ptr_ptr = (asymbol **) xmalloc (sizeof (asymbol *));
   *rel->sym_ptr_ptr = symbol_get_bfdsym (fixp->fx_addsy);
   rel->address = fixp->fx_frag->fr_address + fixp->fx_where;
 
@@ -3862,7 +4332,7 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
   if (SWITCH_TABLE (fixp))
     {
       *rel->sym_ptr_ptr = symbol_get_bfdsym (fixp->fx_subsy);
-      rel->addend = rel->address - S_GET_VALUE(fixp->fx_subsy);
+      rel->addend = 0;
       if (r_type == BFD_RELOC_16)
 	r_type = BFD_RELOC_SH_SWITCH16;
       else if (r_type == BFD_RELOC_8)
@@ -3889,6 +4359,10 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
       rel->addend = 0;
       rel->address = rel->addend = fixp->fx_offset;
     }
+#ifdef HAVE_SH64
+  else if (shmedia_init_reloc (rel, fixp))
+    ;
+#endif
   else
     rel->addend = fixp->fx_addnumber;
 
@@ -3901,7 +4375,7 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
 		    bfd_get_reloc_code_name (r_type));
       /* Set howto to a garbage value so that we can keep going.  */
       rel->howto = bfd_reloc_type_lookup (stdoutput, BFD_RELOC_32);
-      gas_assert (rel->howto != NULL);
+      assert (rel->howto != NULL);
     }
 #ifdef OBJ_ELF
   else if (rel->howto->type == R_SH_IND12W)
@@ -3913,7 +4387,7 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
 
 #ifdef OBJ_ELF
 inline static char *
-sh_end_of_match (char *cont, const char *what)
+sh_end_of_match (char *cont, char *what)
 {
   int len = strlen (what);
 
@@ -3990,14 +4464,6 @@ sh_parse_name (char const *name,
     reloc_type = BFD_RELOC_SH_TLS_LE_32;
   else if ((next_end = sh_end_of_match (next + 1, "DTPOFF")))
     reloc_type = BFD_RELOC_SH_TLS_LDO_32;
-  else if ((next_end = sh_end_of_match (next + 1, "PCREL")))
-    reloc_type = BFD_RELOC_32_PCREL;
-  else if ((next_end = sh_end_of_match (next + 1, "GOTFUNCDESC")))
-    reloc_type = BFD_RELOC_SH_GOTFUNCDESC;
-  else if ((next_end = sh_end_of_match (next + 1, "GOTOFFFUNCDESC")))
-    reloc_type = BFD_RELOC_SH_GOTOFFFUNCDESC;
-  else if ((next_end = sh_end_of_match (next + 1, "FUNCDESC")))
-    reloc_type = BFD_RELOC_SH_FUNCDESC;
   else
     goto no_suffix;
 
@@ -4026,7 +4492,7 @@ sh_regname_to_dw2regnum (char *regname)
   unsigned int i;
   const char *p;
   char *q;
-  static struct { const char *name; int dw2regnum; } regnames[] =
+  static struct { char *name; int dw2regnum; } regnames[] =
     {
       { "pr", 17 }, { "t", 18 }, { "gbr", 19 }, { "mach", 20 },
       { "macl", 21 }, { "fpul", 23 }

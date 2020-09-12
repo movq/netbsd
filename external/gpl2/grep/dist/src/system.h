@@ -1,4 +1,4 @@
-/*	$NetBSD: system.h,v 1.1.1.1 2016/01/10 21:36:21 christos Exp $	*/
+/*	$NetBSD: system.h,v 1.1 2016/01/10 21:36:21 christos Exp $	*/
 
 /* Portability cruft.  Include after config.h and sys/types.h.
    Copyright 1996, 1998, 1999, 2000 Free Software Foundation, Inc.

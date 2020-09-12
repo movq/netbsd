@@ -1,5 +1,5 @@
-/* tc-dlx.c -- Assemble for the DLX
-   Copyright (C) 2002-2020 Free Software Foundation, Inc.
+/* tc-ldx.c -- Assemble for the DLX
+   Copyright 2002, 2003, 2004, 2005, 2007 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -20,12 +20,10 @@
 
 /* Initially created by Kuang Hwa Lin, 3/20/2002.  */
 
-#include "as.h"
 #include "safe-ctype.h"
+#include "as.h"
 #include "tc-dlx.h"
 #include "opcode/dlx.h"
-#include "elf/dlx.h"
-#include "bfd/elf32-dlx.h"
 
 /* Make it easier to clone this machine desc into another one.  */
 #define	machine_opcode      dlx_opcode
@@ -54,7 +52,7 @@ struct machine_it
   int pcrel;
   int size;
   int reloc_offset;		/* Offset of reloc within insn.  */
-  bfd_reloc_code_real_type reloc;
+  int reloc;
   int HI;
   int LO;
 }
@@ -86,7 +84,7 @@ const char EXP_CHARS[] = "eE";
 const char FLT_CHARS[] = "rRsSfFdDxXpP";
 
 static void
-insert_sreg (const char *regname, int regnum)
+insert_sreg (char *regname, int regnum)
 {
   /* Must be large enough to hold the names of the special registers.  */
   char buf[80];
@@ -155,7 +153,7 @@ match_sft_register (char *name)
 #define MAX_REG_NO  35
 /* Currently we have 35 software registers defined -
    we borrowed from MIPS.   */
-  static const char *soft_reg[] =
+  static char *soft_reg[] =
     {
       "zero", "at", "v0", "v1", "a0", "a1", "a2", "a3",
       "t0", "t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8", "t9",
@@ -232,10 +230,11 @@ s_proc (int end_p)
 	  return;
 	}
 
-      delim1 = get_symbol_name (&name);
+      name = input_line_pointer;
+      delim1 = get_symbol_end ();
       name = xstrdup (name);
       *input_line_pointer = delim1;
-      SKIP_WHITESPACE_AFTER_NAME ();
+      SKIP_WHITESPACE ();
 
       if (*input_line_pointer != ',')
 	{
@@ -245,12 +244,7 @@ s_proc (int end_p)
 	  /* Missing entry point, use function's name with the leading
 	     char prepended.  */
 	  if (leading_char)
-	    {
-	      unsigned len = strlen (name) + 1;
-	      label = XNEWVEC (char, len + 1);
-	      label[0] = leading_char;
-	      memcpy (label + 1, name, len);
-	    }
+	    asprintf (&label, "%c%s", leading_char, name);
 	  else
 	    label = name;
 	}
@@ -258,9 +252,10 @@ s_proc (int end_p)
 	{
 	  ++input_line_pointer;
 	  SKIP_WHITESPACE ();
-	  delim2 = get_symbol_name (&label);
+	  label = input_line_pointer;
+	  delim2 = get_symbol_end ();
 	  label = xstrdup (label);
-	  (void) restore_line_pointer (delim2);
+	  *input_line_pointer = delim2;
 	}
 
       current_name = name;
@@ -599,7 +594,7 @@ static char *
 parse_operand (char *s, expressionS *operandp)
 {
   char *save = input_line_pointer;
-  char *new_pos;
+  char *new;
 
   the_insn.HI = the_insn.LO = 0;
 
@@ -646,9 +641,9 @@ parse_operand (char *s, expressionS *operandp)
       (void) expression (operandp);
     }
 
-  new_pos = input_line_pointer;
+  new = input_line_pointer;
   input_line_pointer = save;
-  return new_pos;
+  return new;
 }
 
 /* Instruction parsing.  Takes a string containing the opcode.
@@ -661,13 +656,11 @@ machine_ip (char *str)
   char *s;
   const char *args;
   struct machine_opcode *insn;
+  char *argsStart;
   unsigned long opcode;
   expressionS the_operand;
   expressionS *operand = &the_operand;
   unsigned int reg, reg_shift = 0;
-
-  memset (&the_insn, '\0', sizeof (the_insn));
-  the_insn.reloc = NO_RELOC;
 
   /* Fixup the opcode string to all lower cases, and also
      allow numerical digits.  */
@@ -693,19 +686,30 @@ machine_ip (char *str)
       return;
     }
 
-  /* Hash the opcode, insn will have the string from opcode table.  */
+  /* Hash the opcode, insn will have the string from opcode table.
+     also initialized the_insn struct.  */
   if ((insn = (struct machine_opcode *) hash_find (op_hash, str)) == NULL)
     {
       /* Handle the ret and return macro here.  */
       if ((strcmp (str, "ret") == 0) || (strcmp (str, "return") == 0))
-	the_insn.opcode = JROP | 0x03e00000;    /* 0x03e00000 = r31 << 21 */
+	{
+	  memset (&the_insn, '\0', sizeof (the_insn));
+	  the_insn.reloc = NO_RELOC;
+	  the_insn.pcrel = 0;
+	  the_insn.opcode =
+	    (unsigned long)(JROP | 0x03e00000);    /* 0x03e00000 = r31 << 21 */
+	}
       else
 	as_bad (_("Unknown opcode `%s'."), str);
 
       return;
     }
 
+  argsStart = s;
   opcode = insn->opcode;
+  memset (&the_insn, '\0', sizeof (the_insn));
+  the_insn.reloc = NO_RELOC;
+  the_insn.pcrel = 0;
 
   /* Set the sip reloc HI16 flag.  */
   if (!set_dlx_skip_hi16_flag (1))
@@ -776,11 +780,10 @@ machine_ip (char *str)
 	  /* Macro move operand/reg.  */
 	  if (operand->X_op == O_register)
 	    {
-	      /* It's a register.  */
+	      /* Its a register.  */
 	      reg_shift = 21;
 	      goto general_reg;
 	    }
-	  /* Fall through.  */
 
 	  /* The immediate 16 bits literal, bit 0-15.  */
 	case 'i':
@@ -804,7 +807,7 @@ machine_ip (char *str)
 	      continue;
 	    }
 
-	  the_insn.reloc        = (the_insn.HI) ? RELOC_DLX_HI16
+	  the_insn.reloc        = (the_insn.HI) ? RELOC_DLX_HI16 
 	    : (the_insn.LO ? RELOC_DLX_LO16 : RELOC_DLX_16);
 	  the_insn.reloc_offset = 2;
 	  the_insn.size         = 2;
@@ -905,8 +908,6 @@ md_assemble (char *str)
   know (str);
   machine_ip (str);
   toP = frag_more (4);
-  dwarf2_emit_insn (4);
-
   /* Put out the opcode.  */
   md_number_to_chars (toP, the_insn.opcode, 4);
 
@@ -933,7 +934,7 @@ md_assemble (char *str)
       switch (fixP->fx_r_type)
 	{
 	case RELOC_DLX_REL26:
-	  bitP = XNEW (bit_fixS);
+	  bitP = malloc (sizeof (bit_fixS));
 	  bitP->fx_bit_size = 26;
 	  bitP->fx_bit_offset = 25;
 	  bitP->fx_bit_base = the_insn.opcode & 0xFC000000;
@@ -945,7 +946,7 @@ md_assemble (char *str)
 	  break;
 	case RELOC_DLX_LO16:
 	case RELOC_DLX_REL16:
-	  bitP = XNEW (bit_fixS);
+	  bitP = malloc (sizeof (bit_fixS));
 	  bitP->fx_bit_size = 16;
 	  bitP->fx_bit_offset = 15;
 	  bitP->fx_bit_base = the_insn.opcode & 0xFFFF0000;
@@ -956,7 +957,7 @@ md_assemble (char *str)
 	  fixP->fx_bit_fixP = bitP;
 	  break;
 	case RELOC_DLX_HI16:
-	  bitP = XNEW (bit_fixS);
+	  bitP = malloc (sizeof (bit_fixS));
 	  bitP->fx_bit_size = 16;
 	  bitP->fx_bit_offset = 15;
 	  bitP->fx_bit_base = the_insn.opcode & 0xFFFF0000;
@@ -977,7 +978,7 @@ md_assemble (char *str)
    but I'm not sure.  Dlx will not use it anyway, so I just leave it
    here for now.  */
 
-const char *
+char *
 md_atof (int type, char *litP, int *sizeP)
 {
   return ieee_md_atof (type, litP, sizeP, TRUE);
@@ -1014,6 +1015,10 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 	  free (fixP->fx_bit_fixP);
 	  fixP->fx_bit_fixP = NULL;
 	}
+#ifdef DEBUG
+      else
+	know ((fixP->fx_bit_fixP != NULL));
+#endif
       break;
 
     case RELOC_DLX_HI16:
@@ -1023,6 +1028,10 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 	  free (fixP->fx_bit_fixP);
 	  fixP->fx_bit_fixP = NULL;
 	}
+#ifdef DEBUG
+      else
+	know ((fixP->fx_bit_fixP != NULL));
+#endif
       break;
 
     case RELOC_DLX_REL26:
@@ -1032,6 +1041,10 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 	  free (fixP->fx_bit_fixP);
 	  fixP->fx_bit_fixP = NULL;
 	}
+#ifdef DEBUG
+      else
+	know ((fixP->fx_bit_fixP != NULL));
+#endif
       break;
 
     case BFD_RELOC_VTABLE_INHERIT:
@@ -1054,8 +1067,6 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
   number_to_chars_bigendian (place, val, fixP->fx_size);
   if (fixP->fx_addsy == NULL)
     fixP->fx_done = 1;
-  if (fixP->fx_bit_fixP != NULL)
-    fixP->fx_no_overflow = 1;
 }
 
 const char *md_shortopts = "";
@@ -1069,7 +1080,7 @@ size_t md_longopts_size = sizeof (md_longopts);
 
 int
 md_parse_option (int c     ATTRIBUTE_UNUSED,
-		 const char *arg ATTRIBUTE_UNUSED)
+		 char *arg ATTRIBUTE_UNUSED)
 {
   return 0;
 }
@@ -1180,7 +1191,7 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED,
 {
   arelent * reloc;
 
-  reloc = XNEW (arelent);
+  reloc = xmalloc (sizeof (arelent));
   reloc->howto = bfd_reloc_type_lookup (stdoutput, fixP->fx_r_type);
 
   if (reloc->howto == NULL)
@@ -1192,9 +1203,9 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED,
       return NULL;
     }
 
-  gas_assert (!fixP->fx_pcrel == !reloc->howto->pc_relative);
+  assert (!fixP->fx_pcrel == !reloc->howto->pc_relative);
 
-  reloc->sym_ptr_ptr = XNEW (asymbol *);
+  reloc->sym_ptr_ptr = xmalloc (sizeof (asymbol *));
   *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixP->fx_addsy);
   reloc->address = fixP->fx_frag->fr_address + fixP->fx_where;
 
@@ -1224,3 +1235,4 @@ dlx_pop_insert (void)
   pop_insert (dlx_pseudo_table);
   return ;
 }
+

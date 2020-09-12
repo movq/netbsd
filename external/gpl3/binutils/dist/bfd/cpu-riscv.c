@@ -1,7 +1,7 @@
 /* BFD backend for RISC-V
-   Copyright (C) 2011-2020 Free Software Foundation, Inc.
+   Copyright 2011-2014 Free Software Foundation, Inc.
 
-   Contributed by Andrew Waterman (andrew@sifive.com).
+   Contributed by Andrew Waterman (waterman@cs.berkeley.edu) at UC Berkeley.
    Based on MIPS target.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -17,15 +17,19 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; see the file COPYING3. If not,
-   see <http://www.gnu.org/licenses/>.  */
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
+   MA 02110-1301, USA.  */
 
 #include "sysdep.h"
 #include "bfd.h"
 #include "libbfd.h"
 
-/* This routine is provided two arch_infos and returns an arch_info
-   that is compatible with both, or NULL if none exists.  */
+static const bfd_arch_info_type *riscv_compatible
+  (const bfd_arch_info_type *, const bfd_arch_info_type *);
+
+/* The default routine tests bits_per_word, which is wrong on RISC-V, as
+   RISC-V word size doesn't correlate with reloc size.  */
 
 static const bfd_arch_info_type *
 riscv_compatible (const bfd_arch_info_type *a, const bfd_arch_info_type *b)
@@ -39,25 +43,23 @@ riscv_compatible (const bfd_arch_info_type *a, const bfd_arch_info_type *b)
   return a;
 }
 
-#define N(BITS, NUMBER, PRINT, DEFAULT, NEXT)			\
-  {								\
-    BITS,      /* Bits in a word.  */				\
-    BITS,      /* Bits in an address.  */			\
-    8,	       /* Bits in a byte.  */				\
-    bfd_arch_riscv,						\
-    NUMBER,							\
-    "riscv",							\
-    PRINT,							\
-    3,								\
-    DEFAULT,							\
-    riscv_compatible,						\
-    bfd_default_scan,						\
-    bfd_arch_default_fill,					\
-    NEXT,							\
-    0 /* Maximum offset of a reloc from the start of an insn.  */\
+#define N(BITS_WORD, BITS_ADDR, NUMBER, PRINT, DEFAULT, NEXT)		\
+  {							\
+    BITS_WORD, /*  bits in a word */			\
+    BITS_ADDR, /* bits in an address */			\
+    8,	/* 8 bits in a byte */				\
+    bfd_arch_riscv,					\
+    NUMBER,						\
+    "riscv",						\
+    PRINT,						\
+    3,							\
+    DEFAULT,						\
+    riscv_compatible,					\
+    bfd_default_scan,					\
+    bfd_arch_default_fill,				\
+    NEXT,						\
   }
 
-/* This enum must be kept in the same order as arch_info_struct.  */
 enum
 {
   I_riscv64,
@@ -66,15 +68,13 @@ enum
 
 #define NN(index) (&arch_info_struct[(index) + 1])
 
-/* This array must be kept in the same order as the anonymous enum above,
-   and each entry except the last should end with NN (my enum value).  */
 static const bfd_arch_info_type arch_info_struct[] =
 {
-  N (64, bfd_mach_riscv64, "riscv:rv64", FALSE, NN (I_riscv64)),
-  N (32, bfd_mach_riscv32, "riscv:rv32", FALSE, NULL)
+  N (64, 64, bfd_mach_riscv64, "riscv:rv64", FALSE, NN(I_riscv64)),
+  N (32, 32, bfd_mach_riscv32, "riscv:rv32", FALSE, 0)
 };
 
-/* The default architecture is riscv:rv64.  */
+/* The default architecture is riscv:rv64. */
 
 const bfd_arch_info_type bfd_riscv_arch =
-  N (64, 0, "riscv", TRUE, &arch_info_struct[0]);
+N (64, 64, 0, "riscv", TRUE, &arch_info_struct[0]);

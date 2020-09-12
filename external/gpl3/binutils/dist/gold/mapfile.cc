@@ -1,6 +1,6 @@
 // mapfile.cc -- map file generation for gold
 
-// Copyright (C) 2008-2020 Free Software Foundation, Inc.
+// Copyright 2008 Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -202,7 +202,7 @@ Mapfile::print_memory_map_header()
 template<int size, bool big_endian>
 void
 Mapfile::print_input_section_symbols(
-    const Sized_relobj_file<size, big_endian>* relobj,
+    const Sized_relobj<size, big_endian>* relobj,
     unsigned int shndx)
 {
   unsigned int symcount = relobj->symbol_count();
@@ -253,16 +253,13 @@ Mapfile::print_input_section(Relobj* relobj, unsigned int shndx)
     {
       os = relobj->output_section(shndx);
       addr = relobj->output_section_offset(shndx);
-      if (addr != -1ULL)
+      if (addr != -1U)
 	addr += os->address();
     }
 
   char sizebuf[50];
-  section_size_type size;
-  if (!relobj->section_is_compressed(shndx, &size))
-    size = relobj->section_size(shndx);
   snprintf(sizebuf, sizeof sizebuf, "0x%llx",
-	   static_cast<unsigned long long>(size));
+	   static_cast<unsigned long long>(relobj->section_size(shndx)));
 
   fprintf(this->map_file_, "0x%0*llx %10s %s\n",
 	  parameters->target().get_size() / 4,
@@ -276,8 +273,8 @@ Mapfile::print_input_section(Relobj* relobj, unsigned int shndx)
 #ifdef HAVE_TARGET_32_LITTLE
 	case Parameters::TARGET_32_LITTLE:
 	  {
-	    const Sized_relobj_file<32, false>* sized_relobj =
-	      static_cast<Sized_relobj_file<32, false>*>(relobj);
+	    const Sized_relobj<32, false>* sized_relobj =
+	      static_cast<Sized_relobj<32, false>*>(relobj);
 	    this->print_input_section_symbols(sized_relobj, shndx);
 	  }
 	  break;
@@ -285,8 +282,8 @@ Mapfile::print_input_section(Relobj* relobj, unsigned int shndx)
 #ifdef HAVE_TARGET_32_BIG
 	case Parameters::TARGET_32_BIG:
 	  {
-	    const Sized_relobj_file<32, true>* sized_relobj =
-	      static_cast<Sized_relobj_file<32, true>*>(relobj);
+	    const Sized_relobj<32, true>* sized_relobj =
+	      static_cast<Sized_relobj<32, true>*>(relobj);
 	    this->print_input_section_symbols(sized_relobj, shndx);
 	  }
 	  break;
@@ -294,8 +291,8 @@ Mapfile::print_input_section(Relobj* relobj, unsigned int shndx)
 #ifdef HAVE_TARGET_64_LITTLE
 	case Parameters::TARGET_64_LITTLE:
 	  {
-	    const Sized_relobj_file<64, false>* sized_relobj =
-	      static_cast<Sized_relobj_file<64, false>*>(relobj);
+	    const Sized_relobj<64, false>* sized_relobj =
+	      static_cast<Sized_relobj<64, false>*>(relobj);
 	    this->print_input_section_symbols(sized_relobj, shndx);
 	  }
 	  break;
@@ -303,8 +300,8 @@ Mapfile::print_input_section(Relobj* relobj, unsigned int shndx)
 #ifdef HAVE_TARGET_64_BIG
 	case Parameters::TARGET_64_BIG:
 	  {
-	    const Sized_relobj_file<64, true>* sized_relobj =
-	      static_cast<Sized_relobj_file<64, true>*>(relobj);
+	    const Sized_relobj<64, true>* sized_relobj =
+	      static_cast<Sized_relobj<64, true>*>(relobj);
 	    this->print_input_section_symbols(sized_relobj, shndx);
 	  }
 	  break;
@@ -331,13 +328,11 @@ Mapfile::print_output_data(const Output_data* od, const char* name)
 
   char sizebuf[50];
   snprintf(sizebuf, sizeof sizebuf, "0x%llx",
-	   static_cast<unsigned long long>(od->current_data_size()));
+	   static_cast<unsigned long long>(od->data_size()));
 
   fprintf(this->map_file_, "0x%0*llx %10s\n",
 	  parameters->target().get_size() / 4,
-	  (od->is_address_valid()
-	   ? static_cast<unsigned long long>(od->address())
-	   : 0),
+	  static_cast<unsigned long long>(od->address()),
 	  sizebuf);
 }
 
@@ -352,12 +347,6 @@ Mapfile::print_discarded_sections(const Input_objects* input_objects)
        ++p)
     {
       Relobj* relobj = *p;
-      // Lock the object so we can read from it.  This is only called
-      // single-threaded from Layout_task_runner, so it is OK to lock.
-      // Unfortunately we have no way to pass in a Task token.
-      const Task* dummy_task = reinterpret_cast<const Task*>(-1);
-      Task_lock_obj<Object> tl(dummy_task, relobj);
-
       unsigned int shnum = relobj->shnum();
       for (unsigned int i = 0; i < shnum; ++i)
 	{
@@ -392,7 +381,7 @@ Mapfile::print_output_section(const Output_section* os)
 
   char sizebuf[50];
   snprintf(sizebuf, sizeof sizebuf, "0x%llx",
-	   static_cast<unsigned long long>(os->current_data_size()));
+	   static_cast<unsigned long long>(os->data_size()));
 
   fprintf(this->map_file_, "0x%0*llx %10s",
 	  parameters->target().get_size() / 4,
@@ -402,9 +391,6 @@ Mapfile::print_output_section(const Output_section* os)
     fprintf(this->map_file_, " load address 0x%-*llx",
 	    parameters->target().get_size() / 4,
 	    static_cast<unsigned long long>(os->load_address()));
-
-  if (os->requires_postprocessing())
-    fprintf(this->map_file_, " (before compression)");
 
   putc('\n', this->map_file_);
 }

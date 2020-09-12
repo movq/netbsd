@@ -1,6 +1,6 @@
 // Verbose terminate_handler -*- C++ -*-
 
-// Copyright (C) 2001-2019 Free Software Foundation, Inc.
+// Copyright (C) 2001, 2002, 2004, 2005, 2009 Free Software Foundation
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -27,16 +27,14 @@
 #if _GLIBCXX_HOSTED
 #include <cstdlib>
 #include <exception>
-#include <bits/exception_defines.h>
+#include <exception_defines.h>
 #include <cxxabi.h>
 # include <cstdio>
 
 using namespace std;
 using namespace abi;
 
-namespace __gnu_cxx
-{
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
+_GLIBCXX_BEGIN_NAMESPACE(__gnu_cxx)
 
   // A replacement for the standard terminate_handler which prints
   // more information about the terminating exception (if any) on
@@ -78,7 +76,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	// If the exception is derived from std::exception, we can
 	// give more information.
 	__try { __throw_exception_again; }
-#if __cpp_exceptions
+#ifdef __EXCEPTIONS
 	__catch(const exception& exc)
 	  {
 	    char const *w = exc.what();
@@ -95,7 +93,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     abort();
   }
 
-_GLIBCXX_END_NAMESPACE_VERSION
-} // namespace
+_GLIBCXX_END_NAMESPACE
 
 #endif

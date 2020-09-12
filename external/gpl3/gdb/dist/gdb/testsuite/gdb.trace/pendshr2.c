@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2011-2019 Free Software Foundation, Inc.
+   Copyright 2011-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,10 +15,26 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "trace-common.h"
+#ifdef SYMBOL_PREFIX
+#define SYMBOL(str)     SYMBOL_PREFIX #str
+#else
+#define SYMBOL(str)     #str
+#endif
+
+static void
+foo ()
+{}
 
 void
 pendfunc2 (int x)
 {
-  FAST_TRACEPOINT_LABEL(set_point2);
+  /* `set_point2' is the label where we'll set multiple tracepoints and
+     breakpoints at.  The insn at the label must the large enough to
+     fit a fast tracepoint jump.  */
+  asm ("    .global " SYMBOL(set_point2) "\n"
+       SYMBOL(set_point2) ":\n"
+#if (defined __x86_64__ || defined __i386__)
+       "    call " SYMBOL(foo) "\n"
+#endif
+       );
 }

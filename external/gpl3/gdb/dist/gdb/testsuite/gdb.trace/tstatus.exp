@@ -1,4 +1,4 @@
-# Copyright 2011-2019 Free Software Foundation, Inc.
+# Copyright 2011-2013 Free Software Foundation, Inc.
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 3 of the License, or
@@ -18,18 +18,14 @@ standard_testfile actions.c
 set executable $testfile
 set expfile tstatus.exp
 
-if ![gdb_trace_common_supports_arch] {
-    unsupported "no trace-common.h support for arch"
-    return -1
-}
-
-if [prepare_for_testing "failed to prepare" $executable $srcfile \
+if [prepare_for_testing $expfile $executable $srcfile \
 	[list debug]] {
+    untested "failed to prepare for trace tests"
     return -1
 }
 
 if ![runto_main] {
-    fail "can't run to main to check for trace support"
+    fail "Can't run to main to check for trace support"
     return -1
 }
 
@@ -38,12 +34,9 @@ if ![gdb_target_supports_trace] {
     return -1
 }
 
-set tstatus_output ""
-
 proc run_trace_experiment {} {
     global gdb_prompt
     global decimal
-    global tstatus_output
 
 #    gdb_test_no_output "set debug remote 1" ""
 
@@ -100,12 +93,10 @@ proc run_trace_experiment {} {
 
     set test "tstatus reports trace stop reason"
     gdb_test_multiple "tstatus" $test {
-	-re "(Trace stopped by a tstop command \\(because I can\\)\..*Trace will stop if GDB disconnects\.\[\r\n\]+Trace user is me me me\.\[\r\n\]+Trace notes: different note\.\[\r\n\]+Not looking at any trace frame\.).*\r\n$gdb_prompt $" {
-	    set tstatus_output $expect_out(1,string)
+	-re "Trace stopped by a tstop command \\(because I can\\)\..*Trace will stop if GDB disconnects\.\[\r\n\]+Trace user is me me me\.\[\r\n\]+Trace notes: different note\.\[\r\n\]+Not looking at any trace frame\..*\r\n$gdb_prompt $" {
 	    pass $test
 	}
-	-re "(Trace stopped by a tstop command\.).*\r\n$gdb_prompt $" {
-	    set tstatus_output $expect_out(1,string)
+	-re "Trace stopped by a tstop command\..*\r\n$gdb_prompt $" {
 	    unsupported $test
 	}
     }
@@ -124,9 +115,9 @@ proc run_trace_experiment {} {
 proc test_tracepoints {} {
     global gdb_prompt
 
-    gdb_breakpoint "begin" qualified
+    gdb_test "break begin" ".*" ""
 
-    gdb_breakpoint "end" qualified
+    gdb_test "break end" ".*" ""
 
     gdb_test "trace gdb_c_test" "Tracepoint .*" \
 	"tracepoint at gdb_c_test"
@@ -140,43 +131,3 @@ proc test_tracepoints {} {
 }
 
 test_tracepoints
-
-set tracefile [standard_output_file ${testfile}]
-# Save trace frames to tfile.
-gdb_test "tsave ${tracefile}.tf" \
-    "Trace data saved to file '${tracefile}.tf'.*" \
-    "save tfile trace file"
-# Save trace frames to CTF.
-gdb_test "tsave -ctf ${tracefile}.ctf" \
-    "Trace data saved to directory '${tracefile}.ctf'.*" \
-    "save ctf trace file"
-
-# Change target to tfile.
-set test "change to tfile target"
-gdb_test_multiple "target tfile ${tracefile}.tf" "$test" {
-    -re "A program is being debugged already.  Kill it. .y or n. " {
-	send_gdb "y\n"
-	exp_continue
-    }
-    -re "$gdb_prompt $" {
-	pass "$test"
-    }
-}
-
-# Convert "(because I can) to "\(because I can\)"
-set tstatus_output [string map {\( \\(} $tstatus_output]
-set tstatus_output [string map {\) \\)} $tstatus_output]
-
-# The status should be identical to the status of live inferior.
-gdb_test "tstatus" "Using a trace file\.\r\n${tstatus_output}.*" \
-    "tstatus on tfile target"
-
-# Change target to ctf if GDB supports.
-gdb_test_multiple "target ctf ${tracefile}.ctf" "" {
-    -re "Undefined target command: \"ctf ${tracefile}.ctf\"\.  Try \"help target\"\.\r\n$gdb_prompt $" {
-    }
-    -re ".*\r\n$gdb_prompt $" {
-	gdb_test "tstatus" "Using a trace file\.\r\n${tstatus_output}.*" \
-	    "tstatus on ctf target"
-    }
-}

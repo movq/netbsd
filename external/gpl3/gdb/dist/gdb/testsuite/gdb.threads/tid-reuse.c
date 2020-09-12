@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2015-2019 Free Software Foundation, Inc.
+   Copyright 2015 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -21,7 +21,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdio.h>
-#include <string.h>
 #include <limits.h>
 
 /* How many threads fit in the target's thread number space.  */
@@ -35,28 +34,14 @@ unsigned long thread_counter;
    incremented, this is enough for the tid numbers to wrap around.  On
    targets that randomize thread IDs, this is enough time to give each
    number in the thread number space some chance of reuse.  It'll be
-   capped to a lower value if we can't compute it.  REUSE_TIME_CAP
-   is the max value, and the default value if ever the program
-   has problem to compute it.  */
-#define REUSE_TIME_CAP 60
-unsigned int reuse_time = REUSE_TIME_CAP;
+   capped to a lower value if we can't compute it.  */
+unsigned int reuse_time = -1;
 
 void *
 do_nothing_thread_func (void *arg)
 {
   usleep (1);
   return NULL;
-}
-
-static void
-check_rc (int rc, const char *what)
-{
-  if (rc != 0)
-    {
-      fprintf (stderr, "unexpected error from %s: %s (%d)\n",
-	       what, strerror (rc), rc);
-      assert (0);
-    }
 }
 
 void *
@@ -70,10 +55,10 @@ spawner_thread_func (void *arg)
       thread_counter++;
 
       rc = pthread_create (&child, NULL, do_nothing_thread_func, NULL);
-      check_rc (rc, "pthread_create");
+      assert (rc == 0);
 
       rc = pthread_join (child, NULL);
-      check_rc (rc, "pthread_join");
+      assert (rc == 0);
     }
 
   return NULL;
@@ -130,7 +115,7 @@ main (int argc, char *argv[])
   unsigned int reuse_time_raw = 0;
 
   rc = pthread_create (&child, NULL, spawner_thread_func, NULL);
-  check_rc (rc, "pthread_create spawner_thread");
+  assert (rc == 0);
 
 #define COUNT_TIME 2
   sleep (COUNT_TIME);
@@ -153,8 +138,8 @@ main (int argc, char *argv[])
      pid_max=32768.  Going forward, as machines get faster, this will
      need less time, unless pid_max is set to a very high number.  To
      avoid unreasonably long test time, cap to an upper bound.  */
-  if (reuse_time > REUSE_TIME_CAP)
-    reuse_time = REUSE_TIME_CAP;
+  if (reuse_time > 60)
+    reuse_time = 60;
   printf ("thread_counter=%lu, tid_max = %ld, reuse_time_raw=%u, reuse_time=%u\n",
 	  thread_counter, tid_max, reuse_time_raw, reuse_time);
   after_count ();

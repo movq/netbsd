@@ -1,6 +1,6 @@
 /* GNU/Linux native-dependent code for debugging multiple forks.
 
-   Copyright (C) 2005-2019 Free Software Foundation, Inc.
+   Copyright 2005, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,16 +17,14 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef LINUX_FORK_H
-#define LINUX_FORK_H
-
 struct fork_info;
 extern struct fork_info *add_fork (pid_t);
 extern struct fork_info *find_fork_pid (pid_t);
 extern void linux_fork_killall (void);
 extern void linux_fork_mourn_inferior (void);
-extern void linux_fork_detach (int);
+extern void linux_fork_detach (char *, int);
 extern int forks_exist_p (void);
 extern int linux_fork_checkpointing_p (int);
 
-#endif /* LINUX_FORK_H */
+extern int detach_fork;
+

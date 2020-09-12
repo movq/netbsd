@@ -1,4 +1,4 @@
-/*	$NetBSD: filesys.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: filesys.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* filesys.c -- filesystem specific functions.
    Id: filesys.c,v 1.6 2004/07/30 17:17:40 karl Exp 

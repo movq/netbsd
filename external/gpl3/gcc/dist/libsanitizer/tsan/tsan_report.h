@@ -11,37 +11,29 @@
 #ifndef TSAN_REPORT_H
 #define TSAN_REPORT_H
 
-#include "sanitizer_common/sanitizer_symbolizer.h"
-#include "sanitizer_common/sanitizer_vector.h"
 #include "tsan_defs.h"
+#include "tsan_vector.h"
 
 namespace __tsan {
 
 enum ReportType {
   ReportTypeRace,
-  ReportTypeVptrRace,
   ReportTypeUseAfterFree,
-  ReportTypeVptrUseAfterFree,
-  ReportTypeExternalRace,
   ReportTypeThreadLeak,
   ReportTypeMutexDestroyLocked,
-  ReportTypeMutexDoubleLock,
-  ReportTypeMutexInvalidAccess,
-  ReportTypeMutexBadUnlock,
-  ReportTypeMutexBadReadLock,
-  ReportTypeMutexBadReadUnlock,
   ReportTypeSignalUnsafe,
-  ReportTypeErrnoInSignal,
-  ReportTypeDeadlock
+  ReportTypeErrnoInSignal
 };
 
 struct ReportStack {
-  SymbolizedStack *frames;
-  bool suppressable;
-  static ReportStack *New();
-
- private:
-  ReportStack();
+  ReportStack *next;
+  char *module;
+  uptr offset;
+  uptr pc;
+  char *func;
+  char *file;
+  int line;
+  int col;
 };
 
 struct ReportMopMutex {
@@ -55,7 +47,6 @@ struct ReportMop {
   int size;
   bool write;
   bool atomic;
-  uptr external_tag;
   Vector<ReportMopMutex> mset;
   ReportStack *stack;
 
@@ -72,33 +63,29 @@ enum ReportLocationType {
 
 struct ReportLocation {
   ReportLocationType type;
-  DataInfo global;
-  uptr heap_chunk_start;
-  uptr heap_chunk_size;
-  uptr external_tag;
+  uptr addr;
+  uptr size;
+  char *module;
+  uptr offset;
   int tid;
   int fd;
-  bool suppressable;
+  char *name;
+  char *file;
+  int line;
   ReportStack *stack;
-
-  static ReportLocation *New(ReportLocationType type);
- private:
-  explicit ReportLocation(ReportLocationType type);
 };
 
 struct ReportThread {
   int id;
-  tid_t os_id;
+  uptr pid;
   bool running;
-  bool workerthread;
   char *name;
-  u32 parent_tid;
+  int parent_tid;
   ReportStack *stack;
 };
 
 struct ReportMutex {
   u64 id;
-  uptr addr;
   bool destroyed;
   ReportStack *stack;
 };
@@ -106,15 +93,12 @@ struct ReportMutex {
 class ReportDesc {
  public:
   ReportType typ;
-  uptr tag;
   Vector<ReportStack*> stacks;
   Vector<ReportMop*> mops;
   Vector<ReportLocation*> locs;
   Vector<ReportMutex*> mutexes;
   Vector<ReportThread*> threads;
-  Vector<int> unique_tids;
   ReportStack *sleep;
-  int count;
 
   ReportDesc();
   ~ReportDesc();

@@ -1,5 +1,5 @@
 /* Agent expression code for remote server.
-   Copyright (C) 2009-2019 Free Software Foundation, Inc.
+   Copyright (C) 2009-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,9 +18,7 @@
 
 #include "server.h"
 #include "ax.h"
-#include "common/format.h"
-#include "tracepoint.h"
-#include "common/rsp-low.h"
+#include "format.h"
 
 static void ax_vdebug (const char *, ...) ATTRIBUTE_PRINTF (1, 2);
 
@@ -56,7 +54,7 @@ enum gdb_agent_op
   {
 #define DEFOP(NAME, SIZE, DATA_SIZE, CONSUMED, PRODUCED, VALUE)  \
     gdb_agent_op_ ## NAME = VALUE,
-#include "common/ax.def"
+#include "ax.def"
 #undef DEFOP
     gdb_agent_op_last
   };
@@ -65,19 +63,17 @@ static const char *gdb_agent_op_names [gdb_agent_op_last] =
   {
     "?undef?"
 #define DEFOP(NAME, SIZE, DATA_SIZE, CONSUMED, PRODUCED, VALUE)  , # NAME
-#include "common/ax.def"
+#include "ax.def"
 #undef DEFOP
   };
 
-#ifndef IN_PROCESS_AGENT
 static const unsigned char gdb_agent_op_sizes [gdb_agent_op_last] =
   {
     0
 #define DEFOP(NAME, SIZE, DATA_SIZE, CONSUMED, PRODUCED, VALUE)  , SIZE
-#include "common/ax.def"
+#include "ax.def"
 #undef DEFOP
   };
-#endif
 
 /* A wrapper for gdb_agent_op_names that does some bounds-checking.  */
 
@@ -95,31 +91,21 @@ gdb_agent_op_name (int op)
    of bytes in expression, a comma, and then the bytes.  */
 
 struct agent_expr *
-gdb_parse_agent_expr (const char **actparm)
+gdb_parse_agent_expr (char **actparm)
 {
-  const char *act = *actparm;
+  char *act = *actparm;
   ULONGEST xlen;
   struct agent_expr *aexpr;
 
   ++act;  /* skip the X */
   act = unpack_varlen_hex (act, &xlen);
   ++act;  /* skip a comma */
-  aexpr = XNEW (struct agent_expr);
+  aexpr = xmalloc (sizeof (struct agent_expr));
   aexpr->length = xlen;
-  aexpr->bytes = (unsigned char *) xmalloc (xlen);
-  hex2bin (act, aexpr->bytes, xlen);
+  aexpr->bytes = xmalloc (xlen);
+  convert_ascii_to_int (act, aexpr->bytes, xlen);
   *actparm = act + (xlen * 2);
   return aexpr;
-}
-
-void
-gdb_free_agent_expr (struct agent_expr *aexpr)
-{
-  if (aexpr != NULL)
-    {
-      free (aexpr->bytes);
-      free (aexpr);
-    }
 }
 
 /* Convert the bytes of an agent expression back into hex digits, so
@@ -131,8 +117,8 @@ gdb_unparse_agent_expr (struct agent_expr *aexpr)
 {
   char *rslt;
 
-  rslt = (char *) xmalloc (2 * aexpr->length + 1);
-  bin2hex (aexpr->bytes, rslt, aexpr->length);
+  rslt = xmalloc (2 * aexpr->length + 1);
+  convert_int_to_ascii (aexpr->bytes, rslt, aexpr->length);
   return rslt;
 }
 
@@ -375,7 +361,7 @@ emit_le_goto (int *offset_p, int *size_p)
 /* Scan an agent expression for any evidence that the given PC is the
    target of a jump bytecode in the expression.  */
 
-static int
+int
 is_goto_target (struct agent_expr *aexpr, int pc)
 {
   int i;
@@ -432,7 +418,7 @@ compile_bytecodes (struct agent_expr *aexpr)
 
       /* Record the compiled-code address of the bytecode, for use by
 	 jump instructions.  */
-      aentry = XNEW (struct bytecode_address);
+      aentry = xmalloc (sizeof (struct bytecode_address));
       aentry->pc = pc;
       aentry->address = current_insn_ptr;
       aentry->goto_pc = -1;
@@ -816,29 +802,30 @@ ax_printf (CORE_ADDR fn, CORE_ADDR chan, const char *format,
 	   int nargs, ULONGEST *args)
 {
   const char *f = format;
-  int i;
-  const char *current_substring;
+  struct format_piece *fpieces;
+  int i, fp;
+  char *current_substring;
   int nargs_wanted;
 
   ax_debug ("Printf of \"%s\" with %d args", format, nargs);
 
-  format_pieces fpieces (&f);
+  fpieces = parse_format_string (&f);
 
   nargs_wanted = 0;
-  for (auto &&piece : fpieces)
-    if (piece.argclass != literal_piece)
+  for (fp = 0; fpieces[fp].string != NULL; fp++)
+    if (fpieces[fp].argclass != literal_piece)
       ++nargs_wanted;
 
   if (nargs != nargs_wanted)
     error (_("Wrong number of arguments for specified format-string"));
 
   i = 0;
-  for (auto &&piece : fpieces)
+  for (fp = 0; fpieces[fp].string != NULL; fp++)
     {
-      current_substring = piece.string;
+      current_substring = fpieces[fp].string;
       ax_debug ("current substring is '%s', class is %d",
-		current_substring, piece.argclass);
-      switch (piece.argclass)
+		current_substring, fpieces[fp].argclass);
+      switch (fpieces[fp].argclass)
 	{
 	case string_arg:
 	  {
@@ -847,11 +834,6 @@ ax_printf (CORE_ADDR fn, CORE_ADDR chan, const char *format,
 	    int j;
 
 	    tem = args[i];
-	    if (tem == 0)
-	      {
-		printf (current_substring, "(null)");
-		break;
-	      }
 
 	    /* This is a %s argument.  Find the length of the string.  */
 	    for (j = 0;; j++)
@@ -918,10 +900,11 @@ ax_printf (CORE_ADDR fn, CORE_ADDR chan, const char *format,
 	}
 
       /* Maybe advance to the next argument.  */
-      if (piece.argclass != literal_piece)
+      if (fpieces[fp].argclass != literal_piece)
 	++i;
     }
 
+  free_format_pieces (fpieces);
   fflush (stdout);
 }
 
@@ -1179,7 +1162,7 @@ gdb_eval_agent_expr (struct eval_agent_expr_context *ctx,
 	    int regnum = arg;
 	    struct regcache *regcache = ctx->regcache;
 
-	    switch (register_size (regcache->tdesc, regnum))
+	    switch (register_size (regnum))
 	      {
 	      case 8:
 		collect_register (regcache, regnum, cnv.u64.bytes);
@@ -1337,7 +1320,7 @@ gdb_eval_agent_expr (struct eval_agent_expr_context *ctx,
 		    op);
 	  /* If ever GDB generates any of these, we don't have the
 	     option of ignoring.  */
-	  return expr_eval_unhandled_opcode;
+	  return 1;
 
 	default:
 	  ax_debug ("Agent expression op 0x%x not recognized", op);

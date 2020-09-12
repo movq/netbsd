@@ -2,7 +2,7 @@
 
 THIS FILE IS MACHINE GENERATED WITH CGEN.
 
-Copyright 1996-2019 Free Software Foundation, Inc.
+Copyright 1996-2010 Free Software Foundation, Inc.
 
 This file is part of the GNU simulators.
 
@@ -17,7 +17,8 @@ This file is part of the GNU simulators.
    License for more details.
 
    You should have received a copy of the GNU General Public License along
-   with this program; if not, see <http://www.gnu.org/licenses/>.
+   with this program; if not, write to the Free Software Foundation, Inc.,
+   51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.
 
 */
 
@@ -2509,7 +2510,7 @@ iq2000_model_init (SIM_CPU *cpu)
 #define TIMING_DATA(td) 0
 #endif
 
-static const SIM_MODEL iq2000_models[] =
+static const MODEL iq2000_models[] =
 {
   { "iq2000", & iq2000_mach, MODEL_IQ2000, TIMING_DATA (& iq2000_timing[0]), iq2000_model_init },
   { 0 }
@@ -2517,7 +2518,7 @@ static const SIM_MODEL iq2000_models[] =
 
 /* The properties of this cpu's implementation.  */
 
-static const SIM_MACH_IMP_PROPERTIES iq2000bf_imp_properties =
+static const MACH_IMP_PROPERTIES iq2000bf_imp_properties =
 {
   sizeof (SIM_CPU),
 #if WITH_SCACHE
@@ -2559,7 +2560,7 @@ iq2000_init_cpu (SIM_CPU *cpu)
 #endif
 }
 
-const SIM_MACH iq2000_mach =
+const MACH iq2000_mach =
 {
   "iq2000", "iq2000", MACH_IQ2000,
   32, 32, & iq2000_models[0], & iq2000bf_imp_properties,

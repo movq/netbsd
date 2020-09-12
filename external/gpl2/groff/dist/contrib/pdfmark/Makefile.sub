@@ -62,8 +62,6 @@ PDFROFF=\
 
 all: pdfroff $(make_pdfdoc)
 
-$(PDFDOCFILES): pdfroff
-
 pdfdoc: gnu.eps $(PDFDOCFILES)
 
 gnu.eps:

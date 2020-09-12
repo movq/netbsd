@@ -1,4 +1,4 @@
-/*	$NetBSD: localcharset.h,v 1.1.1.1 2016/01/14 00:11:28 christos Exp $	*/
+/*	$NetBSD: localcharset.h,v 1.1 2016/01/14 00:11:28 christos Exp $	*/
 
 /* Determine a canonical name for the current locale's character encoding.
    Copyright (C) 2000-2003 Free Software Foundation, Inc.
