@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.26 2020/09/17 16:06:27 christos Exp $
+#	$NetBSD: Makefile,v 1.27 2020/09/17 16:36:38 christos Exp $
 
 NOCTF=
 HOSTPROG_CXX=   1
@@ -26,7 +26,7 @@ CPPFLAGS+=	-I${.CURDIR} \
 		-I${DIST}/readline \
 		-I${DIST}/libdecnumber \
 		-I${.CURDIR}/../libgnulib/arch/${GDB_MACHINE_ARCH} \
-		-I${.CURDIR}/../libgnulib/arch/${GDB_MACHINE_ARCH}/import \
+		-I${.CURDIR}/../libgnulib/arch/${GDB_MACHINE_ARCH}/gnulib/import \
 		-I${.CURDIR}/../libgdbsupport/arch/${GDB_MACHINE_ARCH} \
 		-I${.CURDIR}/../libbfd/arch/${GDB_MACHINE_ARCH} \
 		-I${.CURDIR}/../libdecnumber/arch/${GDB_MACHINE_ARCH} \
