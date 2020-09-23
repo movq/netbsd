@@ -1,4 +1,4 @@
-# $NetBSD: deptgt-end.mk,v 1.4 2020/09/22 19:41:09 rillig Exp $
+# $NetBSD: deptgt-end.mk,v 1.5 2020/09/23 03:06:38 rillig Exp $
 #
 # Tests for the special target .END in dependency declarations,
 # which is run after making the desired targets.
@@ -11,6 +11,7 @@ VAR=	Should not be expanded.
 	: $@ '$${VAR}' deferred
 # Oops: The deferred command must not be expanded twice.
 # The Var_Subst in Compat_RunCommand looks suspicious.
+# The Var_Subst in JobSaveCommand looks suspicious.
 
 .END:
 	: $@ '$${VAR}'
@@ -23,6 +24,7 @@ all:
 	: $@ '$${VAR}' deferred
 # Oops: The deferred command must not be expanded twice.
 # The Var_Subst in Compat_RunCommand looks suspicious.
+# The Var_Subst in JobSaveCommand looks suspicious.
 
 # The deferred commands are run in the order '.END .BEGIN all'.
 # This may be unexpected at first since the natural order would be
