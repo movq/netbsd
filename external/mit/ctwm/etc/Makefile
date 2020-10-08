@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2020/09/28 06:04:08 nia Exp $
+#	$NetBSD: Makefile,v 1.2.2.2 2020/10/08 16:04:07 martin Exp $
 
 FILESDIR=	${X11ETCDIR}/ctwm
 FILESMODE=	644
