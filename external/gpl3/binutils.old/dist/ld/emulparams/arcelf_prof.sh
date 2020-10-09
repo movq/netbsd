@@ -1,4 +1,3 @@
-. ${srcdir}/emulparams/arc-endianness.sh
 SCRIPT_NAME=elfarc
 TEMPLATE_NAME=elf32
 if [ "x${ARC_ENDIAN}" = "xbig" ]; then

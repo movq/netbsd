@@ -1,5 +1,6 @@
 /* Print TI TMS320C80 (MVP) instructions
-   Copyright (C) 1996-2018 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 2000, 2005, 2007, 2012
+   Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -21,7 +22,7 @@
 #include "sysdep.h"
 #include <stdio.h>
 #include "opcode/tic80.h"
-#include "disassemble.h"
+#include "dis-asm.h"
 
 static int length;
 
