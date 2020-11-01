@@ -1,4 +1,0 @@
-make: "suff-transform-select.mk" line 28: prevent endless loop
-
-make: stopped in unit-tests
-exit status 1
