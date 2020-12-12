@@ -1,4 +1,4 @@
-/*	$NetBSD: bsd-getline.c,v 1.1.1.1 2020/03/03 00:11:47 christos Exp $	*/
+/*	$NetBSD: bsd-getline.c,v 1.1 2020/03/03 00:11:47 christos Exp $	*/
 
 /*	NetBSD: getline.c,v 1.2 2014/09/16 17:23:50 christos Exp 	*/
 

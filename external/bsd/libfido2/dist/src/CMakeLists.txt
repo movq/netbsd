@@ -37,22 +37,17 @@ if(FUZZ)
 endif()
 
 if(USE_HIDAPI)
-	list(APPEND FIDO_SOURCES hid_hidapi.c)
+	list(APPEND COMPAT_SOURCES hid_hidapi.c)
 elseif(WIN32)
-	list(APPEND FIDO_SOURCES hid_win.c)
+	list(APPEND COMPAT_SOURCES hid_win.c)
 elseif(APPLE)
-	list(APPEND FIDO_SOURCES hid_osx.c)
+	list(APPEND COMPAT_SOURCES hid_osx.c)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-	list(APPEND FIDO_SOURCES hid_linux.c)
+	list(APPEND COMPAT_SOURCES hid_linux.c)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "OpenBSD")
-	list(APPEND FIDO_SOURCES hid_openbsd.c)
+	list(APPEND COMPAT_SOURCES hid_openbsd.c)
 else()
 	message(FATAL_ERROR "please define a hid backend for your platform")
-endif()
-
-if(NOT MSVC)
-	set_source_files_properties(${FIDO_SOURCES} PROPERTIES COMPILE_FLAGS
-	    "-Wconversion -Wsign-conversion")
 endif()
 
 list(APPEND COMPAT_SOURCES
@@ -99,7 +94,7 @@ elseif(APPLE)
 		"-framework IOKit")
 endif()
 set_target_properties(fido2_shared PROPERTIES OUTPUT_NAME fido2
-	VERSION ${FIDO_VERSION} SOVERSION ${FIDO_MAJOR})
+	VERSION ${LIB_VERSION} SOVERSION ${LIB_SOVERSION})
 install(TARGETS fido2_shared
 	ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
 	LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
