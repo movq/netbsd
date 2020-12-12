@@ -37,7 +37,7 @@ credman_get_metadata(fido_dev_t *dev, const char *path)
 
 	printf("existing rk(s): %u\n",
 	    (unsigned)fido_credman_rk_existing(metadata));
-	printf("remaining rk(s): %u\n",
+	printf("possible rk(s): %u\n",
 	    (unsigned)fido_credman_rk_remaining(metadata));
 
 	fido_credman_metadata_free(&metadata);
@@ -101,7 +101,6 @@ print_rk(const fido_credman_rk_t *rk, size_t idx)
 	char *id = NULL;
 	char *user_id = NULL;
 	const char *type;
-	const char *prot;
 
 	if ((cred = fido_credman_rk(rk, idx)) == NULL)
 		errx(1, "fido_credman_rk");
@@ -110,11 +109,23 @@ print_rk(const fido_credman_rk_t *rk, size_t idx)
 	    fido_cred_user_id_len(cred), &user_id) < 0)
 		errx(1, "output error");
 
-	type = cose_string(fido_cred_type(cred));
-	prot = prot_string(fido_cred_prot(cred));
+	switch (fido_cred_type(cred)) {
+	case COSE_EDDSA:
+		type = "eddsa";
+		break;
+	case COSE_ES256:
+		type = "es256";
+		break;
+	case COSE_RS256:
+		type = "rs256";
+		break;
+	default:
+		type = "unknown";
+		break;
+	}
 
-	printf("%02u: %s %s %s %s %s\n", (unsigned)idx, id,
-	    fido_cred_display_name(cred), user_id, type, prot);
+	printf("%02u: %s %s (%s) %s\n", (unsigned)idx, id,
+	    fido_cred_display_name(cred), user_id, type);
 
 	free(user_id);
 	free(id);

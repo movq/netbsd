@@ -8,7 +8,6 @@ list(APPEND COMPAT_SOURCES
 )
 
 list(APPEND COMMON_SOURCES
-	libfuzzer.c
 	mutator_aux.c
 )
 

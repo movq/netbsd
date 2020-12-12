@@ -4,12 +4,15 @@
  * license that can be found in the LICENSE file.
  */
 
+#include <openssl/ec.h>
+
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "fido.h"
 #include "../openbsd-compat/openbsd-compat.h"
+
+#include "fido.h"
 
 int
 main(void)

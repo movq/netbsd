@@ -50,14 +50,8 @@
 /* HID Broadcast channel ID. */
 #define CTAP_CID_BROADCAST		0xffffffff
 
-#define CTAP_INIT_HEADER_LEN		7
-#define CTAP_CONT_HEADER_LEN		5
-
-/* Maximum length of a CTAP HID report in bytes. */
-#define CTAP_MAX_REPORT_LEN		64
-
-/* Minimum length of a CTAP HID report in bytes. */
-#define CTAP_MIN_REPORT_LEN		(CTAP_INIT_HEADER_LEN + 1)
+/* Expected size of a HID report in bytes. */
+#define CTAP_RPT_SIZE			64
 
 /* Randomness device on UNIX-like platforms. */
 #ifndef FIDO_RANDOM_DEV
@@ -66,7 +60,7 @@
 
 /* Maximum message size in bytes. */
 #ifndef FIDO_MAXMSG
-#define FIDO_MAXMSG	2048
+#define FIDO_MAXMSG	1200
 #endif
 
 /* CTAP capability bits. */

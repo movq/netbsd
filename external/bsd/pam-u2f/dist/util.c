@@ -236,7 +236,7 @@ int get_devices_from_authfile(const char *authfile, const char *username,
       *n_devs = 0;
 
       i = 0;
-      while ((s_token = strtok_r(NULL, ",", &saveptr)) != NULL) {
+      while ((s_token = strtok_r(NULL, ",", &saveptr))) {
         if ((*n_devs)++ > max_devs - 1) {
           *n_devs = max_devs;
           if (verbose)
@@ -1131,7 +1131,7 @@ static int _converse(pam_handle_t *pamh, int nargs,
 
 char *converse(pam_handle_t *pamh, int echocode, const char *prompt) {
   const struct pam_message msg = {.msg_style = echocode,
-                                  .msg = (char *)(uintptr_t)prompt};
+                                  .msg = (char *) prompt};
   const struct pam_message *msgs = &msg;
   struct pam_response *resp = NULL;
   int retval = _converse(pamh, 1, &msgs, &resp);
@@ -1163,7 +1163,7 @@ void _debug(FILE *debug_file, const char *file, int line, const char *func,
             const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-#ifdef LOG_DEBUG
+#ifdef __linux__
   if (debug_file == (FILE *) -1) {
     syslog(LOG_AUTHPRIV | LOG_DEBUG, DEBUG_STR, file, line, func);
     vsyslog(LOG_AUTHPRIV | LOG_DEBUG, fmt, ap);

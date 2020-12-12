@@ -160,7 +160,7 @@ free_rs256_pk(rs256_pk_t *pk)
 }
 
 static void
-empty_assert(fido_dev_t *d, fido_assert_t *a, size_t idx)
+empty_assert(fido_dev_t *d, fido_assert_t *a, int idx)
 {
 	es256_pk_t *es256;
 	rs256_pk_t *rs256;
@@ -187,21 +187,21 @@ empty_assert(fido_dev_t *d, fido_assert_t *a, size_t idx)
 	fido_dev_force_u2f(d);
 	assert(fido_dev_get_assert(d, a, NULL) == FIDO_ERR_INVALID_ARGUMENT);
 	assert(fido_dev_get_assert(d, a, "") == FIDO_ERR_INVALID_ARGUMENT);
-	assert(fido_assert_verify(a, idx, COSE_ES256,
+	assert(fido_assert_verify(a, COSE_ES256, idx,
 	    NULL) == FIDO_ERR_INVALID_ARGUMENT);
-	assert(fido_assert_verify(a, idx, COSE_ES256,
+	assert(fido_assert_verify(a, COSE_ES256, idx,
 	    es256) == FIDO_ERR_INVALID_ARGUMENT);
-	assert(fido_assert_verify(a, idx, COSE_RS256,
+	assert(fido_assert_verify(a, COSE_RS256, idx,
 	    rs256) == FIDO_ERR_INVALID_ARGUMENT);
 
 	fido_dev_force_fido2(d);
 	assert(fido_dev_get_assert(d, a, NULL) == FIDO_ERR_INVALID_ARGUMENT);
 	assert(fido_dev_get_assert(d, a, "") == FIDO_ERR_INVALID_ARGUMENT);
-	assert(fido_assert_verify(a, idx, COSE_ES256,
+	assert(fido_assert_verify(a, COSE_ES256, idx,
 	    NULL) == FIDO_ERR_INVALID_ARGUMENT);
-	assert(fido_assert_verify(a, idx, COSE_ES256,
+	assert(fido_assert_verify(a, COSE_ES256, idx,
 	    es256) == FIDO_ERR_INVALID_ARGUMENT);
-	assert(fido_assert_verify(a, idx, COSE_RS256,
+	assert(fido_assert_verify(a, COSE_RS256, idx,
 	    rs256) == FIDO_ERR_INVALID_ARGUMENT);
 
 	free_es256_pk(es256);
@@ -214,7 +214,7 @@ empty_assert_tests(void)
 	fido_assert_t *a;
 	fido_dev_t *d;
 	fido_dev_io_t io_f;
-	size_t i;
+	int i;
 
 	memset(&io_f, 0, sizeof(io_f));
 
