@@ -1,4 +1,4 @@
-/* $NetBSD: fdt_memory.c,v 1.1 2020/12/12 09:27:31 skrll Exp $ */
+/* $NetBSD: fdt_memory.c,v 1.1.2.2 2020/12/14 14:38:05 thorpej Exp $ */
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 #include "opt_fdt.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fdt_memory.c,v 1.1 2020/12/12 09:27:31 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fdt_memory.c,v 1.1.2.2 2020/12/14 14:38:05 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/queue.h>

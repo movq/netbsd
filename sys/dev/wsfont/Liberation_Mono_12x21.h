@@ -1,4 +1,4 @@
-/* 	$NetBSD: Liberation_Mono_12x21.h,v 1.1 2020/11/13 01:03:39 macallan Exp $	*/
+/* 	$NetBSD: Liberation_Mono_12x21.h,v 1.1.2.2 2020/12/14 14:38:10 thorpej Exp $	*/
 
 /*
 Digitized data copyright (c) 2010 Google Corporation

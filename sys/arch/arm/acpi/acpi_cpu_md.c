@@ -1,4 +1,4 @@
-/* $NetBSD: acpi_cpu_md.c,v 1.1 2020/12/07 10:57:41 jmcneill Exp $ */
+/* $NetBSD: acpi_cpu_md.c,v 1.1.2.2 2020/12/14 14:37:47 thorpej Exp $ */
 
 /*-
  * Copyright (c) 2020 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_cpu_md.c,v 1.1 2020/12/07 10:57:41 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_cpu_md.c,v 1.1.2.2 2020/12/14 14:37:47 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
