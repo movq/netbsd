@@ -1,4 +1,4 @@
-/*	$NetBSD: sleeptab.h,v 1.2 2020/11/01 21:00:20 christos Exp $	*/
+/*	$NetBSD: sleeptab.h,v 1.2.2.2 2020/12/14 14:38:17 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2006, 2007, 2008, 2009, 2019, 2020
