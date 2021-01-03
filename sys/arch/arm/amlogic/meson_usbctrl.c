@@ -1,4 +1,4 @@
-/* $NetBSD: meson_usbctrl.c,v 1.1 2021/01/01 07:21:58 ryo Exp $ */
+/* $NetBSD: meson_usbctrl.c,v 1.1.2.2 2021/01/03 16:34:50 thorpej Exp $ */
 
 /*
  * Copyright (c) 2021 Ryo Shimizu <ryo@nerv.org>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: meson_usbctrl.c,v 1.1 2021/01/01 07:21:58 ryo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: meson_usbctrl.c,v 1.1.2.2 2021/01/03 16:34:50 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

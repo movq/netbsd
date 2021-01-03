@@ -1,4 +1,4 @@
-/*	$NetBSD: i2cmuxvar.h,v 1.1 2020/12/28 20:29:57 thorpej Exp $	*/
+/*	$NetBSD: i2cmuxvar.h,v 1.1.2.2 2021/01/03 16:34:58 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.

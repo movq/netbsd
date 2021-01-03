@@ -1,4 +1,4 @@
-/*	$NetBSD: imx6_ccmvar.h,v 1.1 2020/12/23 14:42:38 skrll Exp $	*/
+/*	$NetBSD: imx6_ccmvar.h,v 1.1.2.2 2021/01/03 16:34:52 thorpej Exp $	*/
 /*
  * Copyright (c) 2012,2019  Genetec Corporation.  All rights reserved.
  * Written by Hashimoto Kenichi for Genetec Corporation.

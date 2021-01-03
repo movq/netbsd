@@ -1,4 +1,4 @@
-/* $NetBSD: mesong12_usb3pciephy.c,v 1.1 2021/01/01 07:21:58 ryo Exp $ */
+/* $NetBSD: mesong12_usb3pciephy.c,v 1.1.2.2 2021/01/03 16:34:51 thorpej Exp $ */
 
 /*
  * Copyright (c) 2021 Ryo Shimizu <ryo@nerv.org>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mesong12_usb3pciephy.c,v 1.1 2021/01/01 07:21:58 ryo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mesong12_usb3pciephy.c,v 1.1.2.2 2021/01/03 16:34:51 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
