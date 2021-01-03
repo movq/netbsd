@@ -1,4 +1,4 @@
-/* $NetBSD: pwmregulator.c,v 1.2 2021/01/01 03:07:51 ryo Exp $ */
+/* $NetBSD: pwmregulator.c,v 1.2.2.2 2021/01/03 16:34:57 thorpej Exp $ */
 
 /*
  * Copyright (c) 2020 Ryo Shimizu <ryo@nerv.org>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pwmregulator.c,v 1.2 2021/01/01 03:07:51 ryo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pwmregulator.c,v 1.2.2.2 2021/01/03 16:34:57 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

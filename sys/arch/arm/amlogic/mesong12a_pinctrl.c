@@ -1,4 +1,4 @@
-/* $NetBSD: mesong12a_pinctrl.c,v 1.1 2021/01/01 07:21:58 ryo Exp $ */
+/* $NetBSD: mesong12a_pinctrl.c,v 1.1.2.2 2021/01/03 16:34:51 thorpej Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mesong12a_pinctrl.c,v 1.1 2021/01/01 07:21:58 ryo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mesong12a_pinctrl.c,v 1.1.2.2 2021/01/03 16:34:51 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: pcai2cmux.c,v 1.1 2020/12/29 01:47:51 thorpej Exp $	*/
+/*	$NetBSD: pcai2cmux.c,v 1.1.2.2 2021/01/03 16:34:58 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcai2cmux.c,v 1.1 2020/12/29 01:47:51 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcai2cmux.c,v 1.1.2.2 2021/01/03 16:34:58 thorpej Exp $");
 
 /*
  * Driver for NXP PCA954x / PCA984x I2C switches and multiplexers.

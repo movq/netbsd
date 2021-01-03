@@ -1,4 +1,4 @@
-/*	$NetBSD: i2cmux.c,v 1.1 2020/12/28 20:29:57 thorpej Exp $	*/
+/*	$NetBSD: i2cmux.c,v 1.1.2.2 2021/01/03 16:34:58 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */     
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i2cmux.c,v 1.1 2020/12/28 20:29:57 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i2cmux.c,v 1.1.2.2 2021/01/03 16:34:58 thorpej Exp $");
 
 #include <sys/types.h>
 #include <sys/device.h>

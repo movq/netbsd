@@ -1,4 +1,4 @@
-/*	$NetBSD: imx6_iomuxreg.h,v 1.1 2020/12/23 14:42:38 skrll Exp $	*/
+/*	$NetBSD: imx6_iomuxreg.h,v 1.1.2.2 2021/01/03 16:34:52 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2014 Ryo Shimizu <ryo@nerv.org>

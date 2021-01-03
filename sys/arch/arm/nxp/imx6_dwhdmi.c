@@ -1,4 +1,4 @@
-/* $NetBSD: imx6_dwhdmi.c,v 1.1 2020/12/23 14:42:38 skrll Exp $ */
+/* $NetBSD: imx6_dwhdmi.c,v 1.1.2.2 2021/01/03 16:34:52 thorpej Exp $ */
 /*-
  * Copyright (c) 2020 Genetec Corporation.  All rights reserved.
  * Written by Hashimoto Kenichi for Genetec Corporation.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imx6_dwhdmi.c,v 1.1 2020/12/23 14:42:38 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imx6_dwhdmi.c,v 1.1.2.2 2021/01/03 16:34:52 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
