@@ -1,4 +1,4 @@
-/*	$NetBSD: calc_code_provides.tab.h,v 1.1 2021/02/20 20:30:12 christos Exp $	*/
+/*	$NetBSD: calc_code_provides.tab.h,v 1.1.1.1 2021/02/20 20:30:12 christos Exp $	*/
 
 #ifndef _calc_code_provides__defines_h_
 #define _calc_code_provides__defines_h_

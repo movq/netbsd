@@ -1,4 +1,4 @@
-/*	$NetBSD: calc_code_top.y,v 1.1 2021/02/20 20:30:07 christos Exp $	*/
+/*	$NetBSD: calc_code_top.y,v 1.1.1.1 2021/02/20 20:30:07 christos Exp $	*/
 
 %code top      { /* CODE-TOP */ }
 %code top      { /* CODE-TOP2 */ }

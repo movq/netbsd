@@ -1,4 +1,4 @@
-/*	$NetBSD: calc_code_all.tab.h,v 1.1 2021/02/20 20:30:13 christos Exp $	*/
+/*	$NetBSD: calc_code_all.tab.h,v 1.1.1.1 2021/02/20 20:30:13 christos Exp $	*/
 
 #ifndef _calc_code_all__defines_h_
 #define _calc_code_all__defines_h_

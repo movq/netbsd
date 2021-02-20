@@ -1,4 +1,4 @@
-/*	$NetBSD: calc_code_default.y,v 1.1 2021/02/20 20:30:07 christos Exp $	*/
+/*	$NetBSD: calc_code_default.y,v 1.1.1.1 2021/02/20 20:30:07 christos Exp $	*/
 
 %code          { /* CODE-DEFAULT */ }
 %code          { /* CODE-DEFAULT2 */ }
