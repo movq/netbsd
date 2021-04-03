@@ -1,4 +1,4 @@
-/*	$NetBSD: dht.h,v 1.1 2021/04/02 07:00:33 rin Exp $	*/
+/*	$NetBSD: dht.h,v 1.1.2.2 2021/04/03 21:44:43 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2021 The NetBSD Foundation, Inc.
