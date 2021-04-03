@@ -1,4 +1,4 @@
-# $NetBSD: md.evbppc,v 1.1 2021/03/07 10:42:26 rin Exp $
+# $NetBSD: md.evbppc,v 1.1.2.2 2021/04/03 22:43:41 thorpej Exp $
 ./usr/libdata/debug/usr/X11R7/bin/Xorg.debug		xdebug-xorg-server-debug	xorg,debug
 ./usr/libdata/debug/usr/X11R7/bin/Xorg.debug	xdebug-xorg-server-debug	xorg,debug
 ./usr/libdata/debug/usr/X11R7/bin/cvt.debug		xdebug-xorg-server-debug	xorg,debug

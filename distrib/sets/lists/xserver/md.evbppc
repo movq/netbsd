@@ -1,4 +1,4 @@
-#	$NetBSD: md.evbppc,v 1.4 2021/03/07 10:42:27 rin Exp $
+#	$NetBSD: md.evbppc,v 1.4.2.2 2021/04/03 22:43:42 thorpej Exp $
 ./usr/X11R7/bin/X					xserver-xorg-server-bin	xorg
 ./usr/X11R7/bin/Xorg					xserver-xorg-server-bin	xorg
 ./usr/X11R7/bin/cvt					xserver-xorg-server-bin	xorg
