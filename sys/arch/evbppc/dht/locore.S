@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.1 2021/04/02 07:00:33 rin Exp $	*/
+/*	$NetBSD: locore.S,v 1.1.2.2 2021/04/03 21:44:43 thorpej Exp $	*/
 
 /*
  * Taken from src/sys/arch/powerpc/ibm4xx/openbios/locore.s:

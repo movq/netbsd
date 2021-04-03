@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.dht.inc,v 1.1 2021/04/02 07:00:33 rin Exp $
+#	$NetBSD: Makefile.dht.inc,v 1.1.2.2 2021/04/03 21:44:42 thorpej Exp $
 
 CFLAGS+=-mcpu=405
 AFLAGS+=-mcpu=405
