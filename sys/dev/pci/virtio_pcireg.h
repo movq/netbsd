@@ -1,4 +1,4 @@
-/*	$NetBSD: virtio_pcireg.h,v 1.1 2021/01/20 19:46:48 reinoud Exp $	*/
+/*	$NetBSD: virtio_pcireg.h,v 1.1.4.2 2021/04/03 22:28:49 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2020 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.2 2021/02/15 22:39:46 reinoud Exp $ */
+/* $NetBSD: machdep.c,v 1.2.4.2 2021/04/03 22:28:23 thorpej Exp $ */
 
 /*-
  * Copyright (c) 2001,2021 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.2 2021/02/15 22:39:46 reinoud Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.2.4.2 2021/04/03 22:28:23 thorpej Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"

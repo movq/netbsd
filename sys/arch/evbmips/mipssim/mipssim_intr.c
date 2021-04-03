@@ -1,4 +1,4 @@
-/* $NetBSD: mipssim_intr.c,v 1.2 2021/02/15 22:39:46 reinoud Exp $ */
+/* $NetBSD: mipssim_intr.c,v 1.2.4.2 2021/04/03 22:28:23 thorpej Exp $ */
 
 /*-
  * Copyright (c) 2014 Michael Lorenz
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mipssim_intr.c,v 1.2 2021/02/15 22:39:46 reinoud Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mipssim_intr.c,v 1.2.4.2 2021/04/03 22:28:23 thorpej Exp $");
 
 #define __INTR_PRIVATE
 

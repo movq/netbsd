@@ -1,4 +1,4 @@
-# $NetBSD: files.mipssim,v 1.2 2021/02/16 10:58:33 reinoud Exp $
+# $NetBSD: files.mipssim,v 1.2.4.2 2021/04/03 22:28:23 thorpej Exp $
 
 file	arch/evbmips/mipssim/autoconf.c
 file	arch/evbmips/mipssim/machdep.c

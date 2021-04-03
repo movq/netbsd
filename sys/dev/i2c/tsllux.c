@@ -1,4 +1,4 @@
-/* $NetBSD: tsllux.c,v 1.3 2021/01/27 02:29:48 thorpej Exp $ */
+/* $NetBSD: tsllux.c,v 1.3.4.2 2021/04/03 22:28:44 thorpej Exp $ */
 
 /*-
  * Copyright (c) 2018 Jason R. Thorpe
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tsllux.c,v 1.3 2021/01/27 02:29:48 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tsllux.c,v 1.3.4.2 2021/04/03 22:28:44 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.h,v 1.1 2021/01/24 07:36:54 mrg Exp $ */
+/*	$NetBSD: locore.h,v 1.1.4.2 2021/04/03 22:28:38 thorpej Exp $ */
 
 /*
  * Copyright (c) 2021 Matthew R. Green

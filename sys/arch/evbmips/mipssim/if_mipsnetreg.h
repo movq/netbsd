@@ -1,4 +1,4 @@
-/* $NetBSD: if_mipsnetreg.h,v 1.1 2021/01/27 05:24:16 simonb Exp $ */
+/* $NetBSD: if_mipsnetreg.h,v 1.1.4.2 2021/04/03 22:28:23 thorpej Exp $ */
 
 /*-
  * Copyright (c) 2021 The NetBSD Foundation, Inc.

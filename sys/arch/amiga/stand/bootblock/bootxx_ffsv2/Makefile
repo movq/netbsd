@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2021/02/25 03:42:15 rin Exp $
+#	$NetBSD: Makefile,v 1.1.4.2 2021/04/03 22:28:15 thorpej Exp $
 
 BOOTXX_FFSV2=	defined
 

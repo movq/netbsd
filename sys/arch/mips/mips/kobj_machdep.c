@@ -1,4 +1,4 @@
-/*	$NetBSD: kobj_machdep.c,v 1.1 2021/03/23 13:22:40 simonb Exp $	*/
+/*	$NetBSD: kobj_machdep.c,v 1.1.4.2 2021/04/03 22:28:31 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 2021 The NetBSD Foundation, Inc.
