@@ -1,4 +1,4 @@
-/* $NetBSD: mipssimreg.h,v 1.3 2021/02/16 15:06:30 simonb Exp $ */
+/* $NetBSD: mipssimreg.h,v 1.3.4.2 2021/04/03 22:28:23 thorpej Exp $ */
 
 /*-
  * Copyright (c) 2021 The NetBSD Foundation, Inc.

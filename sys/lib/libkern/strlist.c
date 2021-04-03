@@ -1,4 +1,4 @@
-/*	$NetBSD: strlist.c,v 1.2 2021/01/23 19:41:16 thorpej Exp $	*/
+/*	$NetBSD: strlist.c,v 1.2.4.2 2021/04/03 22:29:00 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 2021 The NetBSD Foundation, Inc.

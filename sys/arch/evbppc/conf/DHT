@@ -1,4 +1,4 @@
-#	$NetBSD: DHT,v 1.1 2021/04/02 07:00:33 rin Exp $
+#	$NetBSD: DHT,v 1.1.4.2 2021/04/03 22:28:24 thorpej Exp $
 #
 #	DHT --- DHT Walnut 405GP Evaluation Board
 #		(Digital Home Technologies PCB 01070201 Rev. 1.1)
@@ -8,7 +8,7 @@ include 	"arch/evbppc/conf/std.dht"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"DHT-$Revision: 1.1 $"
+#ident 		"DHT-$Revision: 1.1.4.2 $"
 
 maxusers	32
 

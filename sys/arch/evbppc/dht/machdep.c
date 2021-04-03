@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.1 2021/04/02 07:00:33 rin Exp $	*/
+/*	$NetBSD: machdep.c,v 1.1.4.2 2021/04/03 22:28:24 thorpej Exp $	*/
 
 /*
  * Taken from src/sys/arch/evbppc/walnut/machdep.c:
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.1 2021/04/02 07:00:33 rin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.1.4.2 2021/04/03 22:28:24 thorpej Exp $");
 
 #include "opt_ddb.h"
 #include "opt_pci.h"

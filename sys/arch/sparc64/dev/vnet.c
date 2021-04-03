@@ -1,4 +1,4 @@
-/*	$NetBSD: vnet.c,v 1.5 2021/03/15 18:44:04 palle Exp $	*/
+/*	$NetBSD: vnet.c,v 1.5.4.2 2021/04/03 22:28:38 thorpej Exp $	*/
 /*	$OpenBSD: vnet.c,v 1.62 2020/07/10 13:26:36 patrick Exp $	*/
 /*
  * Copyright (c) 2009, 2015 Mark Kettenis

@@ -1,4 +1,4 @@
-/*	$NetBSD: ofw_i2c_subr.c,v 1.1 2021/02/04 20:19:09 thorpej Exp $	*/
+/*	$NetBSD: ofw_i2c_subr.c,v 1.1.4.2 2021/04/03 22:28:45 thorpej Exp $	*/
 
 /*
  * Copyright 1998
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofw_i2c_subr.c,v 1.1 2021/02/04 20:19:09 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofw_i2c_subr.c,v 1.1.4.2 2021/04/03 22:28:45 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

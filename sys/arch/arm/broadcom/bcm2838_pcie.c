@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2838_pcie.c,v 1.1 2021/03/08 13:49:01 mlelstv Exp $ */
+/*	$NetBSD: bcm2838_pcie.c,v 1.1.4.2 2021/04/03 22:28:16 thorpej Exp $ */
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm2838_pcie.c,v 1.1 2021/03/08 13:49:01 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm2838_pcie.c,v 1.1.4.2 2021/04/03 22:28:16 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: ofw_machdep.h,v 1.4 2021/03/02 02:28:45 thorpej Exp $ */
+/* $NetBSD: ofw_machdep.h,v 1.4.4.2 2021/04/03 22:28:34 thorpej Exp $ */
 
 /*-
  * Copyright (c) 2021 The NetBSD Foundation, Inc.

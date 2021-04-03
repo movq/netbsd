@@ -1,4 +1,4 @@
-/*	$NetBSD: loadfile_machdep.c,v 1.1 2021/02/28 20:27:40 thorpej Exp $	*/
+/*	$NetBSD: loadfile_machdep.c,v 1.1.4.2 2021/04/03 22:28:30 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 2021 The NetBSD Foundation, Inc.

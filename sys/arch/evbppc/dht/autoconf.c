@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.1 2021/04/02 07:00:33 rin Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.1.4.2 2021/04/03 22:28:24 thorpej Exp $	*/
 
 /*
  * Taken from src/sys/arch/evbppc/walnut/autoconf.c:
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.1 2021/04/02 07:00:33 rin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.1.4.2 2021/04/03 22:28:24 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

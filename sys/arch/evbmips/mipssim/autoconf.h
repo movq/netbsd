@@ -1,4 +1,4 @@
-/* $NetBSD: autoconf.h,v 1.2 2021/02/15 22:39:46 reinoud Exp $ */
+/* $NetBSD: autoconf.h,v 1.2.4.2 2021/04/03 22:28:23 thorpej Exp $ */
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
