@@ -3,7 +3,7 @@
 # cpudists - print CPU time distributions by Kernel/Idle/Processes.
 #            Written using DTrace (Solaris 10 3/05).
 #
-# $Id: cpudists,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+# $Id: cpudists,v 1.1 2015/09/30 22:01:07 christos Exp $
 #
 # USAGE:	cpudists [-ahV] [-t top] [interval [count]]
 #

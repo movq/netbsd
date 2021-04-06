@@ -3,7 +3,7 @@
  * setuids.d - snoop setuid calls. This can examine user logins.
  *             Written in DTrace (Solaris 10 3/05).
  *
- * $Id: setuids.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: setuids.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * USAGE:	setuids.d
  *

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ipwvar.h,v 1.19 2019/10/05 23:27:20 mrg Exp $	*/
+/*      Id: if_ipwvar.h,v 1.1.2.2 2004/08/19 16:28:26 damien Exp  */
 
 /*-
  * Copyright (c) 2004
@@ -27,17 +27,6 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/ioccom.h>
-
-struct ipw_firmware {
-	void	*main;
-	int	main_size;
-	void	*ucode;
-	int	ucode_size;
-};
-
-#define IPW_MAX_NSEG	1
-
 struct ipw_soft_bd {
 	struct ipw_bd	*bd;
 	int		type;
@@ -49,9 +38,8 @@ struct ipw_soft_bd {
 };
 
 struct ipw_soft_hdr {
-	struct ipw_hdr			*hdr;
-	bus_addr_t			addr;
-	bus_addr_t			offset;
+	struct ipw_hdr			hdr;
+	bus_dmamap_t			map;
 	TAILQ_ENTRY(ipw_soft_hdr)	next;
 };
 
@@ -62,50 +50,22 @@ struct ipw_soft_buf {
 	TAILQ_ENTRY(ipw_soft_buf)	next;
 };
 
-struct ipw_rx_radiotap_header {
-	struct ieee80211_radiotap_header wr_ihdr;
-	uint16_t	wr_chan_freq;
-	uint16_t	wr_chan_flags;
-	uint8_t		wr_antsignal;
-};
-
-#define IPW_RX_RADIOTAP_PRESENT						\
-	((1 << IEEE80211_RADIOTAP_CHANNEL) |				\
-	 (1 << IEEE80211_RADIOTAP_DB_ANTSIGNAL))
-
-struct ipw_tx_radiotap_header {
-	struct ieee80211_radiotap_header wt_ihdr;
-	uint16_t	wt_chan_freq;
-	uint16_t	wt_chan_flags;
-};
-
-#define IPW_TX_RADIOTAP_PRESENT						\
-	((1 << IEEE80211_RADIOTAP_CHANNEL))
-
 struct ipw_softc {
-	device_t			sc_dev;
+	struct device			sc_dev;
 
-	struct ethercom			sc_ec;
-	struct ieee80211com		sc_ic;
+        struct ieee80211com		sc_ic;
 	int				(*sc_newstate)(struct ieee80211com *,
 					    enum ieee80211_state, int);
 
-	struct ipw_firmware		fw;
-	const char			*sc_fwname;
-	uint32_t			flags;
-#define IPW_FLAG_FW_CACHED		(1 << 0)
-#define IPW_FLAG_FW_INITED		(1 << 1)
-#define IPW_FLAG_HAS_RADIO_SWITCH	(1 << 2)
-#define	IPW_FLAG_FW_WARNED		(1 << 3)
+	u_int32_t			flags;
+#define IPW_FLAG_FW_INITED	(1 << 0)
 
 	struct resource			*irq;
 	struct resource			*mem;
 	bus_space_tag_t			sc_st;
 	bus_space_handle_t		sc_sh;
-	void				*sc_ih;
-	void				*sc_soft_ih;
+	void 				*sc_ih;
 	pci_chipset_tag_t		sc_pct;
-	pcitag_t			sc_pcitag;
 	bus_size_t			sc_sz;
 
 	int				sc_tx_timer;
@@ -116,57 +76,35 @@ struct ipw_softc {
 	bus_dmamap_t			rbd_map;
 	bus_dmamap_t			status_map;
 	bus_dmamap_t			cmd_map;
-	bus_dmamap_t			hdr_map;
 
 	bus_dma_segment_t		tbd_seg;
 	bus_dma_segment_t		rbd_seg;
 	bus_dma_segment_t		status_seg;
 	bus_dma_segment_t		cmd_seg;
-	bus_dma_segment_t		hdr_seg;
 
 	struct ipw_bd			*tbd_list;
 	struct ipw_bd			*rbd_list;
 	struct ipw_status		*status_list;
-	struct ipw_hdr			*hdr_list;
 
-	struct ipw_cmd			cmd;
-	struct ipw_soft_bd		stbd_list[IPW_NTBD];
-	struct ipw_soft_buf		tx_sbuf_list[IPW_NDATA];
-	struct ipw_soft_bd		srbd_list[IPW_NRBD];
-	struct ipw_soft_buf		rx_sbuf_list[IPW_NRBD];
-	struct ipw_soft_hdr		shdr_list[IPW_NDATA];
+	struct ipw_cmd			*cmd;
+	struct ipw_soft_bd		*stbd_list;
+	struct ipw_soft_bd		*srbd_list;
+	struct ipw_soft_hdr		*shdr_list;
+	struct ipw_soft_buf		*tx_sbuf_list;
+	struct ipw_soft_buf		*rx_sbuf_list;
 
 	TAILQ_HEAD(, ipw_soft_hdr)	sc_free_shdr;
 	TAILQ_HEAD(, ipw_soft_buf)	sc_free_sbuf;
 
-	uint32_t			table1_base;
-	uint32_t			table2_base;
+	u_int32_t			table1_base;
+	u_int32_t			table2_base;
 
-	uint32_t			txcur;
-	uint32_t			txold;
-	uint32_t			rxcur;
-	int				txfree;
-
-	int				dwelltime;
-
-	struct bpf_if			*sc_drvbpf;
-
-	union {
-		struct ipw_rx_radiotap_header th;
-		uint8_t	pad[64];
-	} sc_rxtapu;
-#define sc_rxtap	sc_rxtapu.th
-	int				sc_rxtap_len;
-
-	union {
-		struct ipw_tx_radiotap_header th;
-		uint8_t	pad[64];
-	} sc_txtapu;
-#define sc_txtap	sc_txtapu.th
-	int				sc_txtap_len;
+	u_int32_t			txcur;
+	u_int32_t			txold;
+	u_int32_t			rxcur;
 };
 
-#define	sc_if	sc_ec.ec_if
-
+#define SIOCSLOADFW	 _IOW('i', 137, struct ifreq)
+#define SIOCSKILLFW	 _IOW('i', 138, struct ifreq)
 #define SIOCGRADIO	_IOWR('i', 139, struct ifreq)
 #define SIOCGTABLE1	_IOWR('i', 140, struct ifreq)

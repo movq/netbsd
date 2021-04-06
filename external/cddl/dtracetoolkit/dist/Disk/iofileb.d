@@ -9,7 +9,7 @@
  * I/O wait time is a better metric for understanding performance issues.
  * Both disk and NFS I/O are measured.
  *
- * $Id: iofileb.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: iofileb.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE:	iofileb.d	# wait several seconds, then hit Ctrl-C
  *

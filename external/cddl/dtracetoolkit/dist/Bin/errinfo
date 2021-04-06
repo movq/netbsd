@@ -9,7 +9,7 @@
 # and prints details for all syscall failures along with their message,
 # whether the failing program is already printing this info or not.
 #
-# $Id: errinfo,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+# $Id: errinfo,v 1.1 2015/09/30 22:01:07 christos Exp $
 #
 # USAGE:	errinfo [-ch] [-p PID] [-n name]
 #

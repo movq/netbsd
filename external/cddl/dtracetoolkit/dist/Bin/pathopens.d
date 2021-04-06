@@ -7,7 +7,7 @@
  * successfully opened. This is somewhat special in that the full pathname
  * is calculated, even if the file open referred to a relative pathname.
  *
- * $Id: pathopens.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: pathopens.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE:	fileopens.d
  *

@@ -3,7 +3,7 @@
  * php_cpudist.d - measure PHP on-CPU times for functions.
  *                 Written for the PHP DTrace provider.
  *
- * $Id: php_cpudist.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: php_cpudist.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * This traces PHP activity from all programs running on the system with
  * PHP provider support.

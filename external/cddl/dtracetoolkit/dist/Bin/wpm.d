@@ -3,7 +3,7 @@
  * wpm.d - Measure words per minute of typing.
  *         Written in DTrace (Solaris 10 3/05).
  *
- * $Id: wpm.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: wpm.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE:       wpm.d commandname
  *   eg,

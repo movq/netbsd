@@ -3,7 +3,7 @@
  * rb_objcpu.d - measure Ruby object creation on-CPU time using DTrace.
  *               Written for the Ruby DTrace provider.
  *
- * $Id: rb_objcpu.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: rb_objcpu.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * This traces Ruby activity from all programs running on the system with
  * Ruby provider support.

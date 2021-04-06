@@ -1,7 +1,5 @@
-/*	$NetBSD: if_ath_pci.c,v 1.50 2018/12/09 10:38:53 jdolecek Exp $	*/
-
 /*-
- * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
+ * Copyright (c) 2002, 2003 Sam Leffler, Errno Consulting
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,305 +33,271 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGES.
  */
-/*
- * Copyright (c) 2003
- *	Ichiro FUKUHARA <ichiro@ichiro.org>.
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL ICHIRO FUKUHARA OR THE VOICES IN HIS HEAD BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ath_pci.c,v 1.50 2018/12/09 10:38:53 jdolecek Exp $");
+__FBSDID("$FreeBSD: src/sys/dev/ath/if_ath_pci.c,v 1.3 2003/08/13 21:29:35 sam Exp $");
 
 /*
  * PCI/Cardbus front-end for the Atheros Wireless LAN controller driver.
  */
 
+#include "opt_inet.h"
+
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/kernel.h>
-#include <sys/errno.h>
-#include <sys/device.h>
+#include <sys/systm.h> 
+#include <sys/mbuf.h>   
+#include <sys/malloc.h>
 #include <sys/module.h>
+#include <sys/kernel.h>
+#include <sys/lock.h>
+#include <sys/mutex.h>
+#include <sys/socket.h>
+#include <sys/sockio.h>
+#include <sys/errno.h>
 
-#include <external/isc/atheros_hal/dist/ah.h>
+#include <machine/bus.h>
+#include <machine/resource.h>
+#include <sys/bus.h>
+#include <sys/rman.h>
+ 
+#include <net/if.h>
+#include <net/if_dl.h>
+#include <net/if_media.h>
+#include <net/ethernet.h>
+#include <net/if_llc.h>
+#include <net/if_arp.h>
 
-#include <dev/ic/ath_netbsd.h>
-#include <dev/ic/athvar.h>
+#include <net80211/ieee80211.h>
+#include <net80211/ieee80211_crypto.h>
+#include <net80211/ieee80211_node.h>
+#include <net80211/ieee80211_proto.h>
+#include <net80211/ieee80211_var.h>
+
+#ifdef INET
+#include <netinet/in.h> 
+#include <netinet/if_ether.h>
+#endif
+
+#include <dev/ath/if_athvar.h>
+#include <contrib/dev/ath/ah.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
-#include <dev/pci/pcidevs.h>
 
 /*
- * PCI configuration space registers
+ * PCI glue.
  */
-#define ATH_PCI_MMBA PCI_BAR(0)	/* memory mapped base */
 
 struct ath_pci_softc {
 	struct ath_softc	sc_sc;
-	pci_chipset_tag_t	sc_pc;
-	pcitag_t		sc_tag;
-	pci_intr_handle_t	sc_pih;
-	void			*sc_ih;
-	bus_space_tag_t		sc_iot;
-	bus_space_handle_t	sc_ioh;
-	bus_size_t		sc_mapsz;
+	struct resource		*sc_sr;		/* memory resource */
+	struct resource		*sc_irq;	/* irq resource */
+	void			*sc_ih;		/* intererupt handler */
+	u_int8_t		sc_saved_intline;
+	u_int8_t		sc_saved_cachelinesz;
+	u_int8_t		sc_saved_lattimer;
 };
 
-static void	ath_pci_attach(device_t, device_t, void *);
-static int	ath_pci_detach(device_t, int);
-static int	ath_pci_match(device_t, cfdata_t, void *);
-static bool	ath_pci_setup(struct ath_pci_softc *);
-
-CFATTACH_DECL_NEW(ath_pci, sizeof(struct ath_pci_softc),
-    ath_pci_match, ath_pci_attach, ath_pci_detach, NULL);
+#define	BS_BAR	0x10
 
 static int
-ath_pci_match(device_t parent, cfdata_t match, void *aux)
+ath_pci_probe(device_t dev)
 {
-	const char *devname;
-	struct pci_attach_args *pa = aux;
+	const char* devname;
 
-	devname = ath_hal_probe(PCI_VENDOR(pa->pa_id), PCI_PRODUCT(pa->pa_id));
-	return (devname != NULL) ? 1 : 0;
-}
-
-static bool
-ath_pci_suspend(device_t self, const pmf_qual_t *qual)
-{
-	struct ath_pci_softc *sc = device_private(self);
-
-	ath_suspend(&sc->sc_sc);
-	if (sc->sc_ih != NULL) {
-		pci_intr_disestablish(sc->sc_pc, sc->sc_ih);
-		sc->sc_ih = NULL;
+	devname = ath_hal_probe(pci_get_vendor(dev), pci_get_device(dev));
+	if (devname) {
+		device_set_desc(dev, devname);
+		return 0;
 	}
-	return true;
+	return ENXIO;
 }
 
-static bool
-ath_pci_resume(device_t self, const pmf_qual_t *qual)
+static int
+ath_pci_attach(device_t dev)
 {
-	struct ath_pci_softc *sc = device_private(self);
-
-	/* XXX re-establishing interrupt shouldn't be needed */
-	sc->sc_ih = pci_intr_establish_xname(sc->sc_pc, sc->sc_pih, IPL_NET,
-	    ath_intr, &sc->sc_sc, device_xname(self));
-	if (sc->sc_ih == NULL) {
-		aprint_error_dev(self, "couldn't map interrupt\n");
-		return false;
-	}
-	return ath_resume(&sc->sc_sc);
-}
-
-static void
-ath_pci_attach(device_t parent, device_t self, void *aux)
-{
-	struct ath_pci_softc *psc = device_private(self);
+	struct ath_pci_softc *psc = device_get_softc(dev);
 	struct ath_softc *sc = &psc->sc_sc;
-	struct pci_attach_args *pa = aux;
-	pci_chipset_tag_t pc = pa->pa_pc;
-	const char *intrstr = NULL;
-	const char *devname;
-	pcireg_t mem_type;
-	char intrbuf[PCI_INTRSTR_LEN];
+	u_int32_t cmd;
+	int error = ENXIO;
+	int rid;
 
-	sc->sc_dev = self;
-	sc->sc_dmat = pa->pa_dmat;
-	psc->sc_pc = pc;
-	psc->sc_tag = pa->pa_tag;
+	bzero(psc, sizeof (*psc));
+	sc->sc_dev = dev;
+ 
+	cmd = pci_read_config(dev, PCIR_COMMAND, 4);
+	cmd |= PCIM_CMD_MEMEN | PCIM_CMD_BUSMASTEREN;
+	pci_write_config(dev, PCIR_COMMAND, cmd, 4);
+	cmd = pci_read_config(dev, PCIR_COMMAND, 4);
 
-	devname = ath_hal_probe(PCI_VENDOR(pa->pa_id), PCI_PRODUCT(pa->pa_id));
-	aprint_normal(": %s\n", devname);
-
-	if (!ath_pci_setup(psc))
+	if ((cmd & PCIM_CMD_MEMEN) == 0) {
+		device_printf(dev, "failed to enable memory mapping\n");
 		goto bad;
+	}
 
-	/*
+	if ((cmd & PCIM_CMD_BUSMASTEREN) == 0) {
+		device_printf(dev, "failed to enable bus mastering\n");
+		goto bad;
+	}
+
+	/* 
 	 * Setup memory-mapping of PCI registers.
 	 */
-	mem_type = pci_mapreg_type(pc, pa->pa_tag, ATH_PCI_MMBA);
-	if (mem_type != PCI_MAPREG_TYPE_MEM &&
-	    mem_type != PCI_MAPREG_MEM_TYPE_64BIT) {
-		aprint_error_dev(self, "bad pci register type %d\n",
-		    (int)mem_type);
+	rid = BS_BAR;
+	psc->sc_sr = bus_alloc_resource(dev, SYS_RES_MEMORY, &rid,
+				        0, ~0, 1, RF_ACTIVE);
+	if (psc->sc_sr == NULL) {
+		device_printf(dev, "cannot map register space\n");
 		goto bad;
 	}
-	if (pci_mapreg_map(pa, ATH_PCI_MMBA, mem_type, 0, &psc->sc_iot,
-		&psc->sc_ioh, NULL, &psc->sc_mapsz) != 0) {
-		aprint_error_dev(self, "cannot map register space\n");
-		goto bad;
-	}
-
-	sc->sc_st = HALTAG(psc->sc_iot);
-	sc->sc_sh = HALHANDLE(psc->sc_ioh);
+	sc->sc_st = rman_get_bustag(psc->sc_sr);
+	sc->sc_sh = rman_get_bushandle(psc->sc_sr);
+	/*
+	 * Mark device invalid so any interrupts (shared or otherwise)
+	 * that arrive before the HAL is setup are discarded.
+	 */
+	sc->sc_invalid = 1;
 
 	/*
 	 * Arrange interrupt line.
 	 */
-	if (pci_intr_map(pa, &psc->sc_pih)) {
-		aprint_error("couldn't map interrupt\n");
+	rid = 0;
+	psc->sc_irq = bus_alloc_resource(dev, SYS_RES_IRQ, &rid,
+					 0, ~0, 1, RF_SHAREABLE|RF_ACTIVE);
+	if (psc->sc_irq == NULL) {
+		device_printf(dev, "could not map interrupt\n");
 		goto bad1;
 	}
-
-	intrstr = pci_intr_string(pc, psc->sc_pih, intrbuf, sizeof(intrbuf));
-	psc->sc_ih = pci_intr_establish_xname(pc, psc->sc_pih, IPL_NET,
-	    ath_intr, sc, device_xname(self));
-	if (psc->sc_ih == NULL) {
-		aprint_error("couldn't map interrupt\n");
-		goto bad1;
+	if (bus_setup_intr(dev, psc->sc_irq,
+			   INTR_TYPE_NET | INTR_MPSAFE,
+			   ath_intr, sc, &psc->sc_ih)) {
+		device_printf(dev, "could not establish interrupt\n");
+		goto bad2;
 	}
 
-	aprint_verbose_dev(self, "interrupting at %s\n", intrstr);
-
-	if (ath_attach(PCI_PRODUCT(pa->pa_id), sc) != 0)
+	/*
+	 * Setup DMA descriptor area.
+	 */
+	if (bus_dma_tag_create(NULL,			/* parent */
+			       1, 0,			/* alignment, bounds */
+			       BUS_SPACE_MAXADDR_32BIT,	/* lowaddr */
+			       BUS_SPACE_MAXADDR,	/* highaddr */
+			       NULL, NULL,		/* filter, filterarg */
+			       0x3ffff,			/* maxsize XXX */
+			       ATH_MAX_SCATTER,		/* nsegments */
+			       0xffff,			/* maxsegsize XXX */
+			       BUS_DMA_ALLOCNOW,	/* flags */
+			       NULL,			/* lockfunc */
+			       NULL,			/* lockarg */
+			       &sc->sc_dmat)) {
+		device_printf(dev, "cannot allocate DMA tag\n");
 		goto bad3;
+	}
 
-	if (pmf_device_register(self, ath_pci_suspend, ath_pci_resume)) {
-		pmf_class_network_register(self, &sc->sc_if);
-		pmf_device_suspend(self, &sc->sc_qual);
-	} else
-		aprint_error_dev(self, "couldn't establish power handler\n");
-	return;
+	mtx_init(&sc->sc_mtx, device_get_nameunit(dev),
+		 MTX_NETWORK_LOCK, MTX_DEF | MTX_RECURSE);
+
+	error = ath_attach(pci_get_device(dev), sc);
+	if (error == 0)
+		return error;
+
+	mtx_destroy(&sc->sc_mtx);
+	bus_dma_tag_destroy(sc->sc_dmat);
 bad3:
-	pci_intr_disestablish(pc, psc->sc_ih);
-	psc->sc_ih = NULL;
+	bus_teardown_intr(dev, psc->sc_irq, psc->sc_ih);
+bad2:
+	bus_release_resource(dev, SYS_RES_IRQ, 0, psc->sc_irq);
 bad1:
-	bus_space_unmap(psc->sc_iot, psc->sc_ioh, psc->sc_mapsz);
-	psc->sc_mapsz = 0;
+	bus_release_resource(dev, SYS_RES_MEMORY, BS_BAR, psc->sc_sr);
 bad:
-	return;
+	return (error);
 }
 
 static int
-ath_pci_detach(device_t self, int flags)
+ath_pci_detach(device_t dev)
 {
-	struct ath_pci_softc *psc = device_private(self);
-	int rv;
+	struct ath_pci_softc *psc = device_get_softc(dev);
+	struct ath_softc *sc = &psc->sc_sc;
 
-	if ((rv = ath_detach(&psc->sc_sc)) != 0)
-		return rv;
+	/* check if device was removed */
+	sc->sc_invalid = !bus_child_present(dev);
 
-	pmf_device_deregister(self);
+	ath_detach(sc);
 
-	if (psc->sc_ih != NULL) {
-		pci_intr_disestablish(psc->sc_pc, psc->sc_ih);
-		psc->sc_ih = NULL;
-	}
+	bus_generic_detach(dev);
+	bus_teardown_intr(dev, psc->sc_irq, psc->sc_ih);
+	bus_release_resource(dev, SYS_RES_IRQ, 0, psc->sc_irq);
 
-	if (psc->sc_mapsz != 0) {
-		bus_space_unmap(psc->sc_iot, psc->sc_ioh, psc->sc_mapsz);
-		psc->sc_mapsz = 0;
-	}
+	bus_dma_tag_destroy(sc->sc_dmat);
+	bus_release_resource(dev, SYS_RES_MEMORY, BS_BAR, psc->sc_sr);
 
-	return 0;
+	mtx_destroy(&sc->sc_mtx);
+
+	return (0);
 }
-
-static bool
-ath_pci_setup(struct ath_pci_softc *sc)
-{
-	int rc;
-	pcireg_t bhlc, csr, icr, lattimer;
-
-	if ((rc = pci_set_powerstate(sc->sc_pc, sc->sc_tag, PCI_PWR_D0)) != 0)
-		aprint_debug("%s: pci_set_powerstate %d\n", __func__, rc);
-	/*
-	 * Enable memory mapping and bus mastering.
-	 */
-	csr = pci_conf_read(sc->sc_pc, sc->sc_tag, PCI_COMMAND_STATUS_REG);
-	csr |= PCI_COMMAND_MASTER_ENABLE | PCI_COMMAND_MEM_ENABLE;
-	pci_conf_write(sc->sc_pc, sc->sc_tag, PCI_COMMAND_STATUS_REG, csr);
-	csr = pci_conf_read(sc->sc_pc, sc->sc_tag, PCI_COMMAND_STATUS_REG);
-
-	if ((csr & PCI_COMMAND_MEM_ENABLE) == 0) {
-		aprint_error_dev(sc->sc_sc.sc_dev,
-		    "couldn't enable memory mapping\n");
-		return false;
-	}
-	if ((csr & PCI_COMMAND_MASTER_ENABLE) == 0) {
-		aprint_error_dev(sc->sc_sc.sc_dev,
-		    "couldn't enable bus mastering\n");
-		return false;
-	}
-
-	/*
-	 * XXX Both this comment and code are replicated in
-	 * XXX cardbus_rescan().
-	 *
-	 * Make sure the latency timer is set to some reasonable
-	 * value.
-	 *
-	 * I will set the initial value of the Latency Timer here.
-	 *
-	 * While a PCI device owns the bus, its Latency Timer counts
-	 * down bus cycles from its initial value to 0.  Minimum
-	 * Grant tells for how long the device wants to own the
-	 * bus once it gets access, in units of 250ns.
-	 *
-	 * On a 33 MHz bus, there are 8 cycles per 250ns.  So I
-	 * multiply the Minimum Grant by 8 to find out the initial
-	 * value of the Latency Timer.
-	 *
-	 * I never set a Latency Timer less than 0x10, since that
-	 * is what the old code did.
-	 */
-	bhlc = pci_conf_read(sc->sc_pc, sc->sc_tag, PCI_BHLC_REG);
-	icr = pci_conf_read(sc->sc_pc, sc->sc_tag, PCI_INTERRUPT_REG);
-	lattimer = MAX(0x10, MIN(0xf8, 8 * PCI_MIN_GNT(icr)));
-	if (PCI_LATTIMER(bhlc) < lattimer) {
-		bhlc &= ~(PCI_LATTIMER_MASK << PCI_LATTIMER_SHIFT);
-		bhlc |= (lattimer << PCI_LATTIMER_SHIFT);
-		pci_conf_write(sc->sc_pc, sc->sc_tag, PCI_BHLC_REG, bhlc);
-	}
-	return true;
-}
-
-MODULE(MODULE_CLASS_DRIVER, if_ath_pci, "ath,pci");
-
-#ifdef _MODULE
-#include "ioconf.c"
-#endif
 
 static int
-if_ath_pci_modcmd(modcmd_t cmd, void *opaque)
+ath_pci_shutdown(device_t dev)
 {
-	int error = 0;
+	struct ath_pci_softc *psc = device_get_softc(dev);
 
-	switch (cmd) {
-	case MODULE_CMD_INIT:
-#ifdef _MODULE
-		error = config_init_component(cfdriver_ioconf_if_ath_pci,
-		    cfattach_ioconf_if_ath_pci, cfdata_ioconf_if_ath_pci);
-#endif
-		return error;
-	case MODULE_CMD_FINI:
-#ifdef _MODULE
-		error = config_fini_component(cfdriver_ioconf_if_ath_pci,
-		    cfattach_ioconf_if_ath_pci, cfdata_ioconf_if_ath_pci);
-#endif
-		return error;
-	default:
-		return ENOTTY;
-	}
+	ath_shutdown(&psc->sc_sc);
+	return (0);
 }
+
+static int
+ath_pci_suspend(device_t dev)
+{
+	struct ath_pci_softc *psc = device_get_softc(dev);
+
+	ath_suspend(&psc->sc_sc);
+
+	psc->sc_saved_intline	= pci_read_config(dev, PCIR_INTLINE, 1);
+	psc->sc_saved_cachelinesz= pci_read_config(dev, PCIR_CACHELNSZ, 1);
+	psc->sc_saved_lattimer	= pci_read_config(dev, PCIR_LATTIMER, 1);
+
+	return (0);
+}
+
+static int
+ath_pci_resume(device_t dev)
+{
+	struct ath_pci_softc *psc = device_get_softc(dev);
+	u_int16_t cmd;
+
+	pci_write_config(dev, PCIR_INTLINE,	psc->sc_saved_intline, 1);
+	pci_write_config(dev, PCIR_CACHELNSZ,	psc->sc_saved_cachelinesz, 1);
+	pci_write_config(dev, PCIR_LATTIMER,	psc->sc_saved_lattimer, 1);
+
+	/* re-enable mem-map and busmastering */
+	cmd = pci_read_config(dev, PCIR_COMMAND, 2);
+	cmd |= PCIM_CMD_MEMEN | PCIM_CMD_BUSMASTEREN;
+	pci_write_config(dev, PCIR_COMMAND, cmd, 2);
+
+	ath_resume(&psc->sc_sc);
+
+	return (0);
+}
+
+static device_method_t ath_pci_methods[] = {
+	/* Device interface */
+	DEVMETHOD(device_probe,		ath_pci_probe),
+	DEVMETHOD(device_attach,	ath_pci_attach),
+	DEVMETHOD(device_detach,	ath_pci_detach),
+	DEVMETHOD(device_shutdown,	ath_pci_shutdown),
+	DEVMETHOD(device_suspend,	ath_pci_suspend),
+	DEVMETHOD(device_resume,	ath_pci_resume),
+
+	{ 0,0 }
+};
+static driver_t ath_pci_driver = {
+	"ath",
+	ath_pci_methods,
+	sizeof (struct ath_pci_softc)
+};
+static	devclass_t ath_devclass;
+DRIVER_MODULE(if_ath, pci, ath_pci_driver, ath_devclass, 0, 0);
+DRIVER_MODULE(if_ath, cardbus, ath_pci_driver, ath_devclass, 0, 0);
+MODULE_VERSION(if_ath, 1);
+MODULE_DEPEND(if_ath, ath_hal, 1, 1, 1);	/* Atheros HAL */
+MODULE_DEPEND(if_ath, wlan, 1, 1, 1);		/* 802.11 media layer */

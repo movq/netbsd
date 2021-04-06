@@ -3,7 +3,7 @@
  * sh_pidcolors.d - Demonstration of deeper DTrace Bourne shell analysis.
  *                  Written for the sh DTrace provider.
  *
- * $Id: sh_pidcolors.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: sh_pidcolors.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE: sh_pidcolors.d { -p PID | -c cmd }	# hit Ctrl-C to end
  *

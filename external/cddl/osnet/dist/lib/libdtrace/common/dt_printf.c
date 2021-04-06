@@ -20,27 +20,20 @@
  */
 
 /*
- * Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2013, Joyent, Inc. All rights reserved.
- * Copyright (c) 2013 by Delphix. All rights reserved.
+ * Copyright 2006 Sun Microsystems, Inc.  All rights reserved.
+ * Use is subject to license terms.
  */
 
+#pragma ident	"%Z%%M%	%I%	%E% SMI"
+
 #include <sys/sysmacros.h>
-#include <string.h>
 #include <strings.h>
 #include <stdlib.h>
-#ifdef illumos
 #include <alloca.h>
-#endif
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
 #include <limits.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <arpa/nameser.h>
 
 #include <dt_printf.h>
 #include <dt_string.h>
@@ -158,7 +151,7 @@ static int
 pfcheck_dint(dt_pfargv_t *pfv, dt_pfargd_t *pfd, dt_node_t *dnp)
 {
 	if (dnp->dn_flags & DT_NF_SIGNED)
-		pfd->pfd_fmt[strlen(pfd->pfd_fmt) - 1] = 'i';
+		pfd->pfd_flags |= DT_PFCONV_SIGNED;
 	else
 		pfd->pfd_fmt[strlen(pfd->pfd_fmt) - 1] = 'u';
 
@@ -297,10 +290,7 @@ pfprint_fp(dtrace_hdl_t *dtp, FILE *fp, const char *format,
     const dt_pfargd_t *pfd, const void *addr, size_t size, uint64_t normal)
 {
 	double n = (double)normal;
-#if !defined(__arm__) && !defined(__powerpc__) && \
-    !defined(__mips__) && !defined(__riscv__)
 	long double ldn = (long double)normal;
-#endif
 
 	switch (size) {
 	case sizeof (float):
@@ -309,12 +299,9 @@ pfprint_fp(dtrace_hdl_t *dtp, FILE *fp, const char *format,
 	case sizeof (double):
 		return (dt_printf(dtp, fp, format,
 		    *((double *)addr) / n));
-#if !defined(__arm__) && !defined(__powerpc__) && \
-    !defined(__mips__) && !defined(__riscv__)
 	case sizeof (long double):
 		return (dt_printf(dtp, fp, format,
 		    *((long double *)addr) / ldn));
-#endif
 	default:
 		return (dt_set_errno(dtp, EDT_DMISMATCH));
 	}
@@ -343,7 +330,7 @@ pfprint_addr(dtrace_hdl_t *dtp, FILE *fp, const char *format,
 	do {
 		n = len;
 		s = alloca(n);
-	} while ((len = dtrace_addr2str(dtp, val, s, n)) > n);
+	} while ((len = dtrace_addr2str(dtp, val, s, n)) >= n);
 
 	return (dt_printf(dtp, fp, format, s));
 }
@@ -396,7 +383,7 @@ pfprint_uaddr(dtrace_hdl_t *dtp, FILE *fp, const char *format,
 	do {
 		n = len;
 		s = alloca(n);
-	} while ((len = dtrace_uaddr2str(dtp, pid, val, s, n)) > n);
+	} while ((len = dtrace_uaddr2str(dtp, pid, val, s, n)) >= n);
 
 	return (dt_printf(dtp, fp, format, s));
 }
@@ -467,11 +454,7 @@ pfprint_time(dtrace_hdl_t *dtp, FILE *fp, const char *format,
 	 * Below, we turn this into the canonical adb/mdb /[yY] format,
 	 * "1973 Dec  3 17:20:00".
 	 */
-#ifdef illumos
 	(void) ctime_r(&sec, src, sizeof (src));
-#else
-	(void) ctime_r(&sec, src);
-#endif
 
 	/*
 	 * Place the 4-digit year at the head of the string...
@@ -507,81 +490,6 @@ pfprint_time822(dtrace_hdl_t *dtp, FILE *fp, const char *format,
 	(void) localtime_r(&sec, &tm);
 	(void) strftime(buf, sizeof (buf), "%a, %d %b %G %T %Z", &tm);
 	return (dt_printf(dtp, fp, format, buf));
-}
-
-/*ARGSUSED*/
-static int
-pfprint_port(dtrace_hdl_t *dtp, FILE *fp, const char *format,
-    const dt_pfargd_t *pfd, const void *addr, size_t size, uint64_t normal)
-{
-	uint16_t port = htons(*((uint16_t *)addr));
-	char buf[256];
-#if defined(illumos) || defined(__FreeBSD__)
-	struct servent *sv, res;
-#endif
-
-#ifdef illumos
-	if ((sv = getservbyport_r(port, NULL, &res, buf, sizeof (buf))) != NULL)
-		return (dt_printf(dtp, fp, format, sv->s_name));
-#elif defined(__FreeBSD__)
-	if (getservbyport_r(port, NULL, &res, buf, sizeof (buf), &sv) > 0)
-		return (dt_printf(dtp, fp, format, sv->s_name));
-#else
-	struct sockaddr_in sin;
-	memset(&sin, 0, sizeof(sin));
-	sin.sin_family = AF_INET;
-	sin.sin_port = port;
-	if (getnameinfo((const struct sockaddr *)&sin, sizeof(sin), NULL, 0,
-	    buf, sizeof(buf), 0) > 0)
-		return (dt_printf(dtp, fp, format, buf));
-#endif
-
-	(void) snprintf(buf, sizeof (buf), "%d", *((uint16_t *)addr));
-	return (dt_printf(dtp, fp, format, buf));
-}
-
-/*ARGSUSED*/
-static int
-pfprint_inetaddr(dtrace_hdl_t *dtp, FILE *fp, const char *format,
-    const dt_pfargd_t *pfd, const void *addr, size_t size, uint64_t normal)
-{
-	char *s = alloca(size + 1);
-	char inetaddr[NS_IN6ADDRSZ];
-	char buf[1024];
-#if defined(illumos) || defined(__FreeBSD__)
-	struct hostent *host, res;
-	int e;
-#endif
-
-	bcopy(addr, s, size);
-	s[size] = '\0';
-
-	if (strchr(s, ':') == NULL && inet_pton(AF_INET, s, inetaddr) != -1) {
-#ifdef illumos
-		if ((host = gethostbyaddr_r(inetaddr, NS_INADDRSZ,
-		    AF_INET, &res, buf, sizeof (buf), &e)) != NULL)
-#elif defined(__FreeBSD__)
-		if (gethostbyaddr_r(inetaddr, NS_INADDRSZ,
-		    AF_INET, &res, buf, sizeof (buf), &host, &e) > 0)
-			return (dt_printf(dtp, fp, format, host->h_name));
-#else
-		if (getnameinfo((const struct sockaddr *)inetaddr, NS_INADDRSZ,
-		    buf, sizeof(buf), NULL, 0, 0) > 0)
-			return (dt_printf(dtp, fp, format, buf));
-#endif
-	} else if (inet_pton(AF_INET6, s, inetaddr) != -1) {
-#if defined(__FreeBSD__)
-		if ((host = getipnodebyaddr(inetaddr, NS_IN6ADDRSZ,
-		    AF_INET6, &e)) != NULL)
-			return (dt_printf(dtp, fp, format, host->h_name));
-#else
-		if (getnameinfo((const struct sockaddr *)inetaddr, NS_INADDRSZ,
-		    buf, sizeof(buf), NULL, 0, 0) > 0)
-			return (dt_printf(dtp, fp, format, buf));
-#endif
-	}
-
-	return (dt_printf(dtp, fp, format, s));
 }
 
 /*ARGSUSED*/
@@ -688,8 +596,7 @@ static const dt_pfconv_t _dtrace_conversions[] = {
 { "hu", "u", "unsigned short", pfcheck_type, pfprint_uint },
 { "hx", "x", "short", pfcheck_xshort, pfprint_uint },
 { "hX", "X", "short", pfcheck_xshort, pfprint_uint },
-{ "i", "i", pfproto_xint, pfcheck_xint, pfprint_sint },
-{ "I", "s", pfproto_cstr, pfcheck_str, pfprint_inetaddr },
+{ "i", "i", pfproto_xint, pfcheck_dint, pfprint_dint },
 { "k", "s", "stack", pfcheck_stack, pfprint_stack },
 { "lc", "lc", "int", pfcheck_type, pfprint_sint }, /* a.k.a. wint_t */
 { "ld",	"d", "long", pfcheck_type, pfprint_sint },
@@ -712,18 +619,12 @@ static const dt_pfconv_t _dtrace_conversions[] = {
 { "LG",	"G", "long double", pfcheck_type, pfprint_fp },
 { "o", "o", pfproto_xint, pfcheck_xint, pfprint_uint },
 { "p", "x", pfproto_addr, pfcheck_addr, pfprint_uint },
-{ "P", "s", "uint16_t", pfcheck_type, pfprint_port },
 { "s", "s", "char [] or string (or use stringof)", pfcheck_str, pfprint_cstr },
 { "S", "s", pfproto_cstr, pfcheck_str, pfprint_estr },
 { "T", "s", "int64_t", pfcheck_time, pfprint_time822 },
 { "u", "u", pfproto_xint, pfcheck_xint, pfprint_uint },
-#ifdef illumos
 { "wc",	"wc", "int", pfcheck_type, pfprint_sint }, /* a.k.a. wchar_t */
 { "ws", "ws", pfproto_wstr, pfcheck_wstr, pfprint_wstr },
-#else
-{ "wc", "lc", "int", pfcheck_type, pfprint_sint }, /* a.k.a. wchar_t */
-{ "ws", "ls", pfproto_wstr, pfcheck_wstr, pfprint_wstr },
-#endif
 { "x", "x", pfproto_xint, pfcheck_xint, pfprint_uint },
 { "X", "X", pfproto_xint, pfcheck_xint, pfprint_uint },
 { "Y", "s", "int64_t", pfcheck_time, pfprint_time },
@@ -911,7 +812,7 @@ dt_printf_create(dtrace_hdl_t *dtp, const char *s)
 				goto fmt_switch;
 			}
 
-			for (n = 0; isdigit((unsigned char)c); c = *++p)
+			for (n = 0; isdigit(c); c = *++p)
 				n = n * 10 + c - '0';
 
 			if (dot)
@@ -1098,7 +999,7 @@ dt_printf_validate(dt_pfargv_t *pfv, uint_t flags,
 		xyerror(D_TYPE_ERR, "failed to lookup agg type %s\n", aggtype);
 
 	bzero(&aggnode, sizeof (aggnode));
-	dt_node_type_assign(&aggnode, dtt.dtt_ctfp, dtt.dtt_type, B_FALSE);
+	dt_node_type_assign(&aggnode, dtt.dtt_ctfp, dtt.dtt_type);
 
 	for (i = 0, j = 0; i < pfv->pfv_argc; i++, pfd = pfd->pfd_next) {
 		const dt_pfconv_t *pfc = pfd->pfd_conv;
@@ -1161,7 +1062,6 @@ dt_printf_validate(dt_pfargv_t *pfv, uint_t flags,
 			    sizeof (vname));
 			vnp = &aggnode;
 		} else if (dnp == NULL) {
-			vnp = NULL;
 			xyerror(D_PRINTF_ARG_PROTO,
 			    "%s( ) prototype mismatch: conversion #%d (%%"
 			    "%s) is missing a corresponding value argument\n",
@@ -1325,20 +1225,6 @@ pfprint_average(dtrace_hdl_t *dtp, FILE *fp, const char *format,
 
 /*ARGSUSED*/
 static int
-pfprint_stddev(dtrace_hdl_t *dtp, FILE *fp, const char *format,
-    const dt_pfargd_t *pfd, const void *addr, size_t size, uint64_t normal)
-{
-	const uint64_t *data = addr;
-
-	if (size != sizeof (uint64_t) * 4)
-		return (dt_set_errno(dtp, EDT_DMISMATCH));
-
-	return (dt_printf(dtp, fp, format,
-	    dt_stddev((uint64_t *)data, normal)));
-}
-
-/*ARGSUSED*/
-static int
 pfprint_quantize(dtrace_hdl_t *dtp, FILE *fp, const char *format,
     const dt_pfargd_t *pfd, const void *addr, size_t size, uint64_t normal)
 {
@@ -1353,14 +1239,6 @@ pfprint_lquantize(dtrace_hdl_t *dtp, FILE *fp, const char *format,
 	return (dt_print_lquantize(dtp, fp, addr, size, normal));
 }
 
-/*ARGSUSED*/
-static int
-pfprint_llquantize(dtrace_hdl_t *dtp, FILE *fp, const char *format,
-    const dt_pfargd_t *pfd, const void *addr, size_t size, uint64_t normal)
-{
-	return (dt_print_llquantize(dtp, fp, addr, size, normal));
-}
-
 static int
 dt_printf_format(dtrace_hdl_t *dtp, FILE *fp, const dt_pfargv_t *pfv,
     const dtrace_recdesc_t *recs, uint_t nrecs, const void *buf,
@@ -1368,12 +1246,11 @@ dt_printf_format(dtrace_hdl_t *dtp, FILE *fp, const dt_pfargv_t *pfv,
 {
 	dt_pfargd_t *pfd = pfv->pfv_argv;
 	const dtrace_recdesc_t *recp = recs;
-	const dtrace_aggdata_t *aggdata = NULL;	// XXX: gcc
+	const dtrace_aggdata_t *aggdata;
 	dtrace_aggdesc_t *agg;
 	caddr_t lim = (caddr_t)buf + len, limit;
 	char format[64] = "%";
-	size_t ret;
-	int i, aggrec = 0, curagg = -1;	// XXX: gcc
+	int i, aggrec, curagg = -1;
 	uint64_t normal;
 
 	/*
@@ -1404,14 +1281,12 @@ dt_printf_format(dtrace_hdl_t *dtp, FILE *fp, const dt_pfargv_t *pfv,
 		int prec = pfd->pfd_prec;
 		int rval;
 
-		const char *start;
 		char *f = format + 1; /* skip initial '%' */
-		size_t fmtsz = sizeof(format) - 1;
 		const dtrace_recdesc_t *rec;
 		dt_pfprint_f *func;
 		caddr_t addr;
 		size_t size;
-		uint32_t flags = 0;	// XXX: gcc
+		uint32_t flags;
 
 		if (pfd->pfd_preflen != 0) {
 			char *tmp = alloca(pfd->pfd_preflen + 1);
@@ -1540,17 +1415,11 @@ dt_printf_format(dtrace_hdl_t *dtp, FILE *fp, const dt_pfargv_t *pfv,
 		case DTRACEAGG_AVG:
 			func = pfprint_average;
 			break;
-		case DTRACEAGG_STDDEV:
-			func = pfprint_stddev;
-			break;
 		case DTRACEAGG_QUANTIZE:
 			func = pfprint_quantize;
 			break;
 		case DTRACEAGG_LQUANTIZE:
 			func = pfprint_lquantize;
-			break;
-		case DTRACEAGG_LLQUANTIZE:
-			func = pfprint_llquantize;
 			break;
 		case DTRACEACT_MOD:
 			func = pfprint_mod;
@@ -1563,7 +1432,6 @@ dt_printf_format(dtrace_hdl_t *dtp, FILE *fp, const dt_pfargv_t *pfv,
 			break;
 		}
 
-		start = f;
 		if (pfd->pfd_flags & DT_PFCONV_ALT)
 			*f++ = '#';
 		if (pfd->pfd_flags & DT_PFCONV_ZPAD)
@@ -1576,7 +1444,6 @@ dt_printf_format(dtrace_hdl_t *dtp, FILE *fp, const dt_pfargv_t *pfv,
 			*f++ = '\'';
 		if (pfd->pfd_flags & DT_PFCONV_SPACE)
 			*f++ = ' ';
-		fmtsz -= f - start;
 
 		/*
 		 * If we're printing a stack and DT_PFCONV_LEFT is set, we
@@ -1587,20 +1454,13 @@ dt_printf_format(dtrace_hdl_t *dtp, FILE *fp, const dt_pfargv_t *pfv,
 		if (func == pfprint_stack && (pfd->pfd_flags & DT_PFCONV_LEFT))
 			width = 0;
 
-		if (width != 0) {
-			ret = snprintf(f, fmtsz, "%d", ABS(width));
-			f += ret;
-			fmtsz = MAX(0, fmtsz - ret);
-		}
+		if (width != 0)
+			f += snprintf(f, sizeof (format), "%d", ABS(width));
 
-		if (prec > 0) {
-			ret = snprintf(f, fmtsz, ".%d", prec);
-			f += ret;
-			fmtsz = MAX(0, fmtsz - ret);
-		}
+		if (prec > 0)
+			f += snprintf(f, sizeof (format), ".%d", prec);
 
-		if (strlcpy(f, pfd->pfd_fmt, fmtsz) >= fmtsz)
-			return (dt_set_errno(dtp, EDT_COMPILER));
+		(void) strcpy(f, pfd->pfd_fmt);
 		pfd->pfd_rec = rec;
 
 		if (func(dtp, fp, format, pfd, addr, size, normal) < 0)
@@ -1624,7 +1484,7 @@ dt_printf_format(dtrace_hdl_t *dtp, FILE *fp, const dt_pfargv_t *pfv,
 	return ((int)(recp - recs));
 }
 
-static int
+int
 dtrace_sprintf(dtrace_hdl_t *dtp, FILE *fp, void *fmtdata,
     const dtrace_recdesc_t *recp, uint_t nrecs, const void *buf, size_t len)
 {
@@ -1682,9 +1542,7 @@ dtrace_freopen(dtrace_hdl_t *dtp, FILE *fp, void *fmtdata,
     const dtrace_probedata_t *data, const dtrace_recdesc_t *recp,
     uint_t nrecs, const void *buf, size_t len)
 {
-#ifdef illumos
 	char selfbuf[40], restorebuf[40], *filename;
-#endif
 	FILE *nfp;
 	int rval, errval;
 	dt_pfargv_t *pfv = fmtdata;
@@ -1695,7 +1553,6 @@ dtrace_freopen(dtrace_hdl_t *dtp, FILE *fp, void *fmtdata,
 	if (rval == -1 || fp == NULL)
 		return (rval);
 
-#ifdef illumos
 	if (pfd->pfd_preflen != 0 &&
 	    strcmp(pfd->pfd_prefix, DT_FREOPEN_RESTORE) == 0) {
 		/*
@@ -1740,8 +1597,7 @@ dtrace_freopen(dtrace_hdl_t *dtp, FILE *fp, void *fmtdata,
 	 * fails, we can fail the operation without destroying stdout.
 	 */
 	if ((nfp = fopen(filename, "aF")) == NULL) {
-		char *msg = strerror(errno);
-		char *faultstr;
+		char *msg = strerror(errno), *faultstr;
 		int len = 80;
 
 		len += strlen(msg) + strlen(filename);
@@ -1777,82 +1633,6 @@ dtrace_freopen(dtrace_hdl_t *dtp, FILE *fp, void *fmtdata,
 	}
 
 	(void) fclose(nfp);
-#else	/* !illumos */
-	/*
-	 * The 'standard output' (which is not necessarily stdout)
-	 * treatment on FreeBSD is implemented differently than on
-	 * Solaris because FreeBSD's freopen() will attempt to re-use
-	 * the current file descriptor, causing the previous file to
-	 * be closed and thereby preventing it from be re-activated
-	 * later.
-	 *
-	 * For FreeBSD we use the concept of setting an output file
-	 * pointer in the DTrace handle if a dtrace_freopen() has 
-	 * enabled another output file and we leave the caller's
-	 * file pointer untouched. If it was actually stdout, then
-	 * stdout remains open. If it was another file, then that
-	 * file remains open. While a dtrace_freopen() has activated
-	 * another file, we keep a pointer to that which we use in
-	 * the output functions by preference and only use the caller's
-	 * file pointer if no dtrace_freopen() call has been made.
-	 *
-	 * The check to see if we're re-activating the caller's
-	 * output file is much the same as on Solaris.
-	 */
-	if (pfd->pfd_preflen != 0 &&
-	    strcmp(pfd->pfd_prefix, DT_FREOPEN_RESTORE) == 0) {
-		/*
-		 * The only way to have the format string set to the value
-		 * DT_FREOPEN_RESTORE is via the empty freopen() string --
-		 * denoting that we should restore the old stdout.
-		 */
-		assert(strcmp(dtp->dt_sprintf_buf, DT_FREOPEN_RESTORE) == 0);
-
-		if (dtp->dt_freopen_fp == NULL) {
-			/*
-			 * We could complain here by generating an error,
-			 * but it seems like overkill:  it seems that calling
-			 * freopen() to restore stdout when freopen() has
-			 * never before been called should just be a no-op,
-			 * so we just return in this case.
-			 */
-			return (rval);
-		}
-
-		/*
-		 * At this point, to re-active the original output file,
-		 * on FreeBSD we only code the current file that this
-		 * function opened previously.
-		 */
-		(void) fclose(dtp->dt_freopen_fp);
-		dtp->dt_freopen_fp = NULL;
-
-		return (rval);
-	}
-
-	if ((nfp = fopen(dtp->dt_sprintf_buf, "a")) == NULL) {
-		char *msg = strerror(errno);
-		char *faultstr;
-		int len = 80;
-
-		len += strlen(msg) + strlen(dtp->dt_sprintf_buf);
-		faultstr = alloca(len);
-
-		(void) snprintf(faultstr, len, "couldn't freopen() \"%s\": %s",
-		    dtp->dt_sprintf_buf, strerror(errno));
-
-		if ((errval = dt_handle_liberr(dtp, data, faultstr)) == 0)
-			return (rval);
-
-		return (errval);
-	}
-
-	if (dtp->dt_freopen_fp != NULL)
-		(void) fclose(dtp->dt_freopen_fp);
-
-	/* Remember that the output has been redirected to the new file. */
-	dtp->dt_freopen_fp = nfp;
-#endif	/* illumos */
 
 	return (rval);
 }

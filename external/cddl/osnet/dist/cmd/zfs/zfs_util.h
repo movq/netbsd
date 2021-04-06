@@ -19,11 +19,14 @@
  * CDDL HEADER END
  */
 /*
- * Copyright (c) 2005, 2010, Oracle and/or its affiliates. All rights reserved.
+ * Copyright 2006 Sun Microsystems, Inc.  All rights reserved.
+ * Use is subject to license terms.
  */
 
 #ifndef	_ZFS_UTIL_H
 #define	_ZFS_UTIL_H
+
+#pragma ident	"%Z%%M%	%I%	%E% SMI"
 
 #include <libzfs.h>
 
@@ -32,7 +35,6 @@ extern "C" {
 #endif
 
 void * safe_malloc(size_t size);
-void nomem(void);
 libzfs_handle_t *g_zfs;
 
 #ifdef	__cplusplus

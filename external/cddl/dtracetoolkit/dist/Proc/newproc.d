@@ -4,7 +4,7 @@
  *
  * This is a DTrace OneLiner from the DTraceToolkit.
  *
- * $Id: newproc.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: newproc.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  */
 
 proc:::exec-success { trace(curpsinfo->pr_psargs); }

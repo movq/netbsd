@@ -2,7 +2,7 @@
 /*
  * guess.d - guessing game in D (DTrace)
  *
- * $Id: guess.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: guess.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE: guess.d
  *

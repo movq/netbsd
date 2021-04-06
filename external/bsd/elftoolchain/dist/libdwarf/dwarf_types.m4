@@ -1,5 +1,3 @@
-/*	$NetBSD: dwarf_types.m4,v 1.3 2016/02/20 02:43:41 christos Exp $	*/
-
 /*-
  * Copyright (c) 2009 Kai Wang
  * All rights reserved.
@@ -28,7 +26,6 @@
 
 #include "_libdwarf.h"
 
-__RCSID("$NetBSD: dwarf_types.m4,v 1.3 2016/02/20 02:43:41 christos Exp $");
 ELFTC_VCSID("Id: dwarf_types.m4 2697 2012-11-24 17:12:36Z kaiwang27 ");
 
 /* WARNING: GENERATED FROM __file__. */

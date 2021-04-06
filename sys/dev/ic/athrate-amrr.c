@@ -1,5 +1,3 @@
-/*	$NetBSD: athrate-amrr.c,v 1.13 2019/11/10 21:16:35 chs Exp $ */
-
 /*-
  * Copyright (c) 2004 INRIA
  * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
@@ -39,12 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-#ifdef __FreeBSD__
-__FBSDID("$FreeBSD: src/sys/dev/ath/ath_rate/amrr/amrr.c,v 1.10 2005/08/09 10:19:43 rwatson Exp $");
-#endif
-#ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: athrate-amrr.c,v 1.13 2019/11/10 21:16:35 chs Exp $");
-#endif
+__FBSDID("$FreeBSD: src/sys/dev/ath/ath_rate/amrr/amrr.c,v 1.7 2005/04/02 18:54:30 sam Exp $");
 
 /*
  * AMRR rate control. See:
@@ -57,15 +50,22 @@ __KERNEL_RCSID(0, "$NetBSD: athrate-amrr.c,v 1.13 2019/11/10 21:16:35 chs Exp $"
 #include <sys/param.h>
 #include <sys/systm.h> 
 #include <sys/sysctl.h>
+#include <sys/module.h>
 #include <sys/kernel.h>
+#include <sys/lock.h>
+#include <sys/mutex.h>
 #include <sys/errno.h>
+
+#include <machine/bus.h>
+#include <machine/resource.h>
 #include <sys/bus.h>
+
 #include <sys/socket.h>
  
 #include <net/if.h>
 #include <net/if_media.h>
 #include <net/if_arp.h>
-#include <net/if_ether.h>		/* XXX for ether_sprintf */
+#include <net/ethernet.h>		/* XXX for ether_sprintf */
 
 #include <net80211/ieee80211_var.h>
 
@@ -73,12 +73,12 @@ __KERNEL_RCSID(0, "$NetBSD: athrate-amrr.c,v 1.13 2019/11/10 21:16:35 chs Exp $"
 
 #ifdef INET
 #include <netinet/in.h> 
+#include <netinet/if_ether.h>
 #endif
 
-#include <dev/ic/athvar.h>
-#include <dev/ic/athrate-amrr.h>
-
-#include <external/isc/atheros_hal/dist/ah.h>
+#include <dev/ath/if_athvar.h>
+#include <dev/ath/ath_rate/amrr/amrr.h>
+#include <contrib/dev/ath/ah_desc.h>
 
 #define	AMRR_DEBUG
 #ifdef AMRR_DEBUG
@@ -202,7 +202,7 @@ ath_rate_update(struct ath_softc *sc, struct ieee80211_node *ni, int rate)
 	const HAL_RATE_TABLE *rt = sc->sc_currates;
 	u_int8_t rix;
 
-	KASSERTMSG(rt != NULL, "no rate table, mode %u", sc->sc_curmode);
+	KASSERT(rt != NULL, ("no rate table, mode %u", sc->sc_curmode));
 
 	DPRINTF(sc, "%s: set xmit rate for %s to %dM\n",
 	    __func__, ether_sprintf(ni->ni_macaddr),
@@ -210,6 +210,9 @@ ath_rate_update(struct ath_softc *sc, struct ieee80211_node *ni, int rate)
 		(ni->ni_rates.rs_rates[rate] & IEEE80211_RATE_VAL) / 2 : 0);
 
 	ni->ni_txrate = rate;
+	/* XXX management/control frames always go at the lowest speed */
+	an->an_tx_mgtrate = rt->info[0].rateCode;
+	an->an_tx_mgtratesp = an->an_tx_mgtrate | rt->info[0].shortPreamble;
 	/*
 	 * Before associating a node has no rate set setup
 	 * so we can't calculate any transmit codes to use.
@@ -250,7 +253,7 @@ ath_rate_update(struct ath_softc *sc, struct ieee80211_node *ni, int rate)
 				/* NB: only do this if we didn't already do it above */
 				amn->amn_tx_rate3 = rt->info[0].rateCode;
 				amn->amn_tx_rate3sp =
-					an->an_tx_rate3 | rt->info[0].shortPreamble;
+					an->an_tx_mgtrate | rt->info[0].shortPreamble;
 			} else {
 				amn->amn_tx_rate3 = amn->amn_tx_rate3sp = 0;
 			}
@@ -280,8 +283,8 @@ ath_rate_ctl_start(struct ath_softc *sc, struct ieee80211_node *ni)
 	struct ieee80211com *ic = &sc->sc_ic;
 	int srate;
 
-	KASSERTMSG(ni->ni_rates.rs_nrates > 0, "no rates");
-	if (ic->ic_fixed_rate == IEEE80211_FIXED_RATE_NONE) {
+	KASSERT(ni->ni_rates.rs_nrates > 0, ("no rates"));
+	if (ic->ic_fixed_rate == -1) {
 		/*
 		 * No fixed rate is requested. For 11b start with
 		 * the highest negotiated rate; otherwise, for 11g
@@ -296,7 +299,7 @@ ath_rate_ctl_start(struct ath_softc *sc, struct ieee80211_node *ni)
 			/* NB: the rate set is assumed sorted */
 			for (; srate >= 0 && RATE(srate) > 72; srate--)
 				;
-			KASSERTMSG(srate >= 0, "bogus rate set");
+			KASSERT(srate >= 0, ("bogus rate set"));
 		}
 	} else {
 		/*
@@ -313,8 +316,8 @@ ath_rate_ctl_start(struct ath_softc *sc, struct ieee80211_node *ni)
 		srate = ni->ni_rates.rs_nrates - 1;
 		for (; srate >= 0 && RATE(srate) != r; srate--)
 			;
-		KASSERTMSG(srate >= 0,
-			"fixed rate %d not in rate set", ic->ic_fixed_rate);
+		KASSERT(srate >= 0,
+			("fixed rate %d not in rate set", ic->ic_fixed_rate));
 	}
 	ath_rate_update(sc, ni, srate);
 #undef RATE
@@ -363,8 +366,7 @@ ath_rate_newstate(struct ath_softc *sc, enum ieee80211_state state)
 		ieee80211_iterate_nodes(&ic->ic_sta, ath_rate_cb, sc);
 		ath_rate_update(sc, ic->ic_bss, 0);
 	}
-	if (ic->ic_fixed_rate == IEEE80211_FIXED_RATE_NONE &&
-	    state == IEEE80211_S_RUN) {
+	if (ic->ic_fixed_rate == -1 && state == IEEE80211_S_RUN) {
 		int interval;
 		/*
 		 * Start the background rate control thread if we
@@ -461,7 +463,7 @@ ath_ratectl(void *arg)
 	struct ieee80211com *ic = &sc->sc_ic;
 	int interval;
 
-	if (ifp->if_drv_flags & IFF_DRV_RUNNING) {
+	if (ifp->if_flags & IFF_RUNNING) {
 		sc->sc_stats.ast_rate_calls++;
 
 		if (ic->ic_opmode == IEEE80211_M_STA)
@@ -499,7 +501,9 @@ ath_rate_attach(struct ath_softc *sc)
 {
 	struct amrr_softc *asc;
 
-	asc = malloc(sizeof(struct amrr_softc), M_DEVBUF, M_WAITOK|M_ZERO);
+	asc = malloc(sizeof(struct amrr_softc), M_DEVBUF, M_NOWAIT|M_ZERO);
+	if (asc == NULL)
+		return NULL;
 	asc->arc.arc_space = sizeof(struct amrr_node);
 	callout_init(&asc->timer, debug_mpsafenet ? CALLOUT_MPSAFE : 0);
 	ath_rate_sysctlattach(sc);
@@ -515,3 +519,29 @@ ath_rate_detach(struct ath_ratectrl *arc)
 	callout_drain(&asc->timer);
 	free(asc, M_DEVBUF);
 }
+
+/*
+ * Module glue.
+ */
+static int
+amrr_modevent(module_t mod, int type, void *unused)
+{
+	switch (type) {
+	case MOD_LOAD:
+		if (bootverbose)
+			printf("ath_rate: <AMRR rate control algorithm> version 0.1\n");
+		return 0;
+	case MOD_UNLOAD:
+		return 0;
+	}
+	return EINVAL;
+}
+
+static moduledata_t amrr_mod = {
+	"ath_rate",
+	amrr_modevent,
+	0
+};
+DECLARE_MODULE(ath_rate, amrr_mod, SI_SUB_DRIVERS, SI_ORDER_FIRST);
+MODULE_VERSION(ath_rate, 1);
+MODULE_DEPEND(ath_rate, wlan, 1, 1, 1);

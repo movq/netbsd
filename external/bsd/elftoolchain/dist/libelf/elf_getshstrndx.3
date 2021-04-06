@@ -1,5 +1,3 @@
-.\"	$NetBSD: elf_getshstrndx.3,v 1.4 2021/03/08 20:55:06 jkoshy Exp $
-.\"
 .\" Copyright (c) 2006,2008 Joseph Koshy.  All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -23,11 +21,11 @@
 .\" out of the use of this software, even if advised of the possibility of
 .\" such damage.
 .\"
-.\" Id: elf_getshstrndx.3 3928 2021-03-07 19:47:55Z jkoshy
+.\" Id: elf_getshstrndx.3 467 2009-08-05 18:18:49Z jkoshy 
 .\"
-.Dd July 25, 2018
-.Dt ELF_GETSHSTRNDX 3
+.Dd August 5, 2009
 .Os
+.Dt ELF_GETSHSTRNDX 3
 .Sh NAME
 .Nm elf_getshstrndx ,
 .Nm elf_setshstrndx
@@ -43,18 +41,17 @@
 .Sh DESCRIPTION
 Function
 .Fn elf_getshstrndx
-is deprecated.
-Please use
-.Xr elf_getshdrstrndx 3
-instead.
-.Pp
-Function
-.Fn elf_getshstrndx
 retrieves the section index of the string table containing section
 names from descriptor
 .Ar elf
 and stores it into the location pointed to by argument
 .Ar ndxptr .
+Function
+.Fn elf_getshstrndx
+is deprecated.
+Please use
+.Xr elf_getshdrstrndx 3
+instead.
 .Pp
 Function
 .Fn elf_setshstrndx
@@ -63,6 +60,7 @@ sets the index of the section name string table to argument
 .Pp
 These routines allow applications to process both normal ELF
 objects and ELF objects that use extended section numbering uniformly.
+.Pp
 .Sh RETURN VALUES
 These functions return a non-zero value if successful, or zero in case
 of an error.
@@ -70,9 +68,7 @@ of an error.
 These functions can fail with the following errors:
 .Bl -tag -width "[ELF_E_RESOURCE]"
 .It Bq Er ELF_E_ARGUMENT
-A
-.Dv NULL
-value was passed in for argument
+A NULL value was passed in for argument
 .Ar elf .
 .It Bq Er ELF_E_ARGUMENT
 Argument

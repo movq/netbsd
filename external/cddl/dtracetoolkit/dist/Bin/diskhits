@@ -3,7 +3,7 @@
 # diskhits - disk access by file offset.
 #            Written using DTrace (Solaris 10 3/05).
 #
-# $Id: diskhits,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+# $Id: diskhits,v 1.1 2015/09/30 22:01:07 christos Exp $
 #
 # This prints how a file was accessed, the locations on a distribution plot.
 # This is for the cache misses only - the file activity that resulted in

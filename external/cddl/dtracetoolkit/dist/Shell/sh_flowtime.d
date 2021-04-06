@@ -3,7 +3,7 @@
  * sh_flowtime.d - snoop Bourne shell execution with flow and delta times.
  *                 Written for the sh DTrace provider.
  *
- * $Id: sh_flowtime.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: sh_flowtime.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * This traces shell activity from all Bourne shells on the system that are
  * running with sh provider support.

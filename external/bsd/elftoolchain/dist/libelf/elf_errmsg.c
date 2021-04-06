@@ -1,5 +1,3 @@
-/*	$NetBSD: elf_errmsg.c,v 1.3 2016/02/20 02:43:42 christos Exp $	*/
-
 /*-
  * Copyright (c) 2006,2008,2011 Joseph Koshy
  * All rights reserved.
@@ -26,14 +24,15 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+
 #include <libelf.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "_libelf.h"
 
-__RCSID("$NetBSD: elf_errmsg.c,v 1.3 2016/02/20 02:43:42 christos Exp $");
-ELFTC_VCSID("Id: elf_errmsg.c 3174 2015-03-27 17:13:41Z emaste ");
+ELFTC_VCSID("Id: elf_errmsg.c 2225 2011-11-26 18:55:54Z jkoshy ");
 
 /*
  * Retrieve a human readable translation for an error message.
@@ -77,7 +76,7 @@ elf_errmsg(int error)
 	if (error < ELF_E_NONE || error >= ELF_E_NUM)
 		return _libelf_errors[ELF_E_NUM];
 	if (oserr) {
-		(void) snprintf((char *) LIBELF_PRIVATE(msg),
+		(void) snprintf(LIBELF_PRIVATE(msg),
 		    sizeof(LIBELF_PRIVATE(msg)), "%s: %s",
 		    _libelf_errors[error], strerror(oserr));
 		return (const char *)&LIBELF_PRIVATE(msg);

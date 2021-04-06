@@ -3,7 +3,7 @@
 # cputimes - print CPU time consumed by Kernel/Idle/Processes.
 #            Written using DTrace (Solaris 10 3/05).
 #
-# $Id: cputimes,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+# $Id: cputimes,v 1.1 2015/09/30 22:01:09 christos Exp $
 #
 # This program accurately measures time consumed by the kernel, but in
 # doing so creates extra kernel load of it's own. The extra kernel

@@ -4,7 +4,7 @@
  *
  * This prints UDP statistics every second, retrieved from the MIB provider.
  *
- * $Id: udpstat.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: udpstat.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE:	udpstat.d
  *

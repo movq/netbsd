@@ -1,5 +1,3 @@
-/*	$NetBSD: gelf_ehdr.c,v 1.3 2016/02/20 02:43:42 christos Exp $	*/
-
 /*-
  * Copyright (c) 2006,2008 Joseph Koshy
  * All rights reserved.
@@ -26,23 +24,17 @@
  * SUCH DAMAGE.
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-# include "nbtool_config.h"
-#endif
-
 #include <sys/cdefs.h>
 
 #include <assert.h>
 #include <gelf.h>
 #include <libelf.h>
 #include <limits.h>
-#include <stdint.h>
 #include <string.h>
 
 #include "_libelf.h"
 
-__RCSID("$NetBSD: gelf_ehdr.c,v 1.3 2016/02/20 02:43:42 christos Exp $");
-ELFTC_VCSID("Id: gelf_ehdr.c 3177 2015-03-30 18:19:41Z emaste ");
+ELFTC_VCSID("Id: gelf_ehdr.c 2268 2011-12-03 17:05:11Z jkoshy ");
 
 Elf32_Ehdr *
 elf32_getehdr(Elf *e)

@@ -1,5 +1,3 @@
-/*	$NetBSD: map.h,v 1.7 2019/06/30 11:38:16 sevan Exp $	*/
-
 /*-
  * Copyright (c) 2002 Marcel Moolenaar
  * All rights reserved.
@@ -31,7 +29,7 @@
 #ifndef _MAP_H_
 #define	_MAP_H_
 
-struct map {
+typedef struct map {
 	off_t	map_start;
 	off_t	map_size;
 	struct map *map_next;
@@ -48,18 +46,18 @@ struct map {
 #define	MAP_TYPE_PMBR		8
 	unsigned int map_index;
 	void 	*map_data;
-	int	map_alloc;
-};
+} map_t;
 
-struct gpt;
+extern int lbawidth;
 
-struct map *map_add(struct gpt *, off_t, off_t, int, void *, int);
-struct map *map_alloc(struct gpt *, off_t, off_t, off_t);
-struct map *map_find(struct gpt *, int);
-struct map *map_first(struct gpt *);
-struct map *map_last(struct gpt *);
-off_t map_resize(struct gpt *, struct map *, off_t, off_t);
-off_t map_free(struct gpt *, off_t, off_t);
-int map_init(struct gpt *, off_t);
+map_t *map_add(off_t, off_t, int, void*);
+map_t *map_alloc(off_t, off_t);
+map_t *map_find(int);
+map_t *map_first(void);
+map_t *map_last(void);
+
+off_t map_free(off_t, off_t);
+
+void map_init(off_t);
 
 #endif /* _MAP_H_ */

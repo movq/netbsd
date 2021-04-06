@@ -6,7 +6,7 @@
  * This prints a context switch count and consumed time for context
  * switching every second.
  *
- * $Id: cswstat.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: cswstat.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * USAGE:	cswstat.d
  *

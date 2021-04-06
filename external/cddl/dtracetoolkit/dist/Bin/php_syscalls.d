@@ -5,7 +5,7 @@
  *
  * This traces syscalls that occured during a PHP function call.
  *
- * $Id: php_syscalls.d,v 1.1.1.1 2015/09/30 22:01:06 christos Exp $
+ * $Id: php_syscalls.d,v 1.1 2015/09/30 22:01:06 christos Exp $
  *
  * USAGE: php_syscalls.d 	# hit Ctrl-C to end
  *

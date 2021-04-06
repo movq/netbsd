@@ -27,9 +27,7 @@
 #ifndef	_CTF_H
 #define	_CTF_H
 
-#ifdef illumos
 #pragma ident	"%Z%%M%	%I%	%E% SMI"
-#endif
 
 #include <sys/types.h>
 

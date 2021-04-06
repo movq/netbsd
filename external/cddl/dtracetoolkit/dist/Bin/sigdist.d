@@ -7,7 +7,7 @@
  * recieved by process and signal number. This script is also available
  * as /usr/demo/dtrace/sig.d, where it originates.
  *
- * $Id: sigdist.d,v 1.1.1.1 2015/09/30 22:01:06 christos Exp $
+ * $Id: sigdist.d,v 1.1 2015/09/30 22:01:06 christos Exp $
  *
  * USAGE: 	sigdist.d	# hit Ctrl-C to end
  *

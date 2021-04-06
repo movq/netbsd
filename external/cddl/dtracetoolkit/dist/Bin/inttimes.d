@@ -3,7 +3,7 @@
  * inttimes.d - print interrupt on-cpu time.
  *              Written using DTrace (Solaris 10 3/05)
  *
- * $Id: inttimes.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: inttimes.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE:       inttimes.d      # wait several seconds, then hit Ctrl-C
  *

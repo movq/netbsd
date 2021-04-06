@@ -1,5 +1,3 @@
-/*	$NetBSD: libelf_xlate.c,v 1.3 2016/02/20 02:43:42 christos Exp $	*/
-
 /*-
  * Copyright (c) 2006,2008 Joseph Koshy
  * All rights reserved.
@@ -26,10 +24,6 @@
  * SUCH DAMAGE.
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-# include "nbtool_config.h"
-#endif
-
 #include <sys/cdefs.h>
 
 #include <assert.h>
@@ -37,8 +31,7 @@
 
 #include "_libelf.h"
 
-__RCSID("$NetBSD: libelf_xlate.c,v 1.3 2016/02/20 02:43:42 christos Exp $");
-ELFTC_VCSID("Id: libelf_xlate.c 3174 2015-03-27 17:13:41Z emaste ");
+ELFTC_VCSID("Id: libelf_xlate.c 2225 2011-11-26 18:55:54Z jkoshy ");
 
 /*
  * Translate to/from the file representation of ELF objects.
@@ -61,7 +54,7 @@ _libelf_xlate(Elf_Data *dst, const Elf_Data *src, unsigned int encoding,
 	uintptr_t sb, se, db, de;
 
 	if (encoding == ELFDATANONE)
-		encoding = _libelf_host_byteorder();
+		encoding = LIBELF_PRIVATE(byteorder);
 
 	if ((encoding != ELFDATA2LSB && encoding != ELFDATA2MSB) ||
 	    dst == NULL || src == NULL || dst == src)	{
@@ -106,10 +99,10 @@ _libelf_xlate(Elf_Data *dst, const Elf_Data *src, unsigned int encoding,
 	 * buffer.
 	 */
 	if (direction == ELF_TOMEMORY) {
-		cnt = (size_t) src->d_size / fsz;
+		cnt = src->d_size / fsz;
 		dsz = cnt * msz;
 	} else {
-		cnt = (size_t) src->d_size / msz;
+		cnt = src->d_size / msz;
 		dsz = cnt * fsz;
 	}
 
@@ -119,9 +112,9 @@ _libelf_xlate(Elf_Data *dst, const Elf_Data *src, unsigned int encoding,
 	}
 
 	sb = (uintptr_t) src->d_buf;
-	se = sb + (size_t) src->d_size;
+	se = sb + src->d_size;
 	db = (uintptr_t) dst->d_buf;
-	de = db + (size_t) dst->d_size;
+	de = db + dst->d_size;
 
 	/*
 	 * Check for overlapping buffers.  Note that db == sb is
@@ -141,7 +134,7 @@ _libelf_xlate(Elf_Data *dst, const Elf_Data *src, unsigned int encoding,
 	dst->d_type = src->d_type;
 	dst->d_size = dsz;
 
-	byteswap = encoding != _libelf_host_byteorder();
+	byteswap = encoding != LIBELF_PRIVATE(byteorder);
 
 	if (src->d_size == 0 ||
 	    (db == sb && !byteswap && fsz == msz))

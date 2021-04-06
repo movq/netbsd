@@ -44,9 +44,7 @@ static int LZ4_compressCtx(void *ctx, const char *source, char *dest,
 static int LZ4_compress64kCtx(void *ctx, const char *source, char *dest,
     int isize, int osize);
 
-#ifdef __FreeBSD__
 static kmem_cache_t *lz4_ctx_cache;
-#endif
 
 /*ARGSUSED*/
 size_t
@@ -841,11 +839,7 @@ static int
 real_LZ4_compress(const char *source, char *dest, int isize, int osize)
 {
 #if HEAPMODE
-#ifdef __FreeBSD__
 	void *ctx = kmem_cache_alloc(lz4_ctx_cache, KM_NOSLEEP);
-#else
-	void *ctx = kmem_zalloc(sizeof (struct refTables), KM_NOSLEEP);
-#endif
 	int result;
 
 	/*
@@ -861,11 +855,7 @@ real_LZ4_compress(const char *source, char *dest, int isize, int osize)
 	else
 		result = LZ4_compressCtx(ctx, source, dest, isize, osize);
 
-#ifdef __FreeBSD__
 	kmem_cache_free(lz4_ctx_cache, ctx);
-#else
-	kmem_free(ctx, sizeof (struct refTables));
-#endif
 	return (result);
 #else
 	if (isize < (int)LZ4_64KLIMIT)
@@ -1015,8 +1005,6 @@ LZ4_uncompress_unknownOutputSize(const char *source, char *dest, int isize,
 	return (int)(-(((char *)ip) - source));
 }
 
-#ifdef __FreeBSD__
-
 extern void
 lz4_init(void)
 {
@@ -1035,5 +1023,3 @@ lz4_fini(void)
 	kmem_cache_destroy(lz4_ctx_cache);
 #endif
 }
-
-#endif /* __FreeBSD__ */

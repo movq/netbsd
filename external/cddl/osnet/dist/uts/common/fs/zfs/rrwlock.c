@@ -19,12 +19,11 @@
  * CDDL HEADER END
  */
 /*
- * Copyright 2009 Sun Microsystems, Inc.  All rights reserved.
+ * Copyright 2007 Sun Microsystems, Inc.  All rights reserved.
  * Use is subject to license terms.
  */
-/*
- * Copyright (c) 2012 by Delphix. All rights reserved.
- */
+
+#pragma ident	"%Z%%M%	%I%	%E% SMI"
 
 #include <sys/refcount.h>
 #include <sys/rrwlock.h>
@@ -75,9 +74,8 @@
 uint_t rrw_tsd_key;
 
 typedef struct rrw_node {
-	struct rrw_node *rn_next;
-	rrwlock_t *rn_rrl;
-	void *rn_tag;
+	struct rrw_node	*rn_next;
+	rrwlock_t	*rn_rrl;
 } rrw_node_t;
 
 static rrw_node_t *
@@ -99,14 +97,13 @@ rrn_find(rrwlock_t *rrl)
  * Add a node to the head of the singly linked list.
  */
 static void
-rrn_add(rrwlock_t *rrl, void *tag)
+rrn_add(rrwlock_t *rrl)
 {
 	rrw_node_t *rn;
 
 	rn = kmem_alloc(sizeof (*rn), KM_SLEEP);
 	rn->rn_rrl = rrl;
 	rn->rn_next = tsd_get(rrw_tsd_key);
-	rn->rn_tag = tag;
 	VERIFY(tsd_set(rrw_tsd_key, rn) == 0);
 }
 
@@ -115,16 +112,16 @@ rrn_add(rrwlock_t *rrl, void *tag)
  * thread's list and return TRUE; otherwise return FALSE.
  */
 static boolean_t
-rrn_find_and_remove(rrwlock_t *rrl, void *tag)
+rrn_find_and_remove(rrwlock_t *rrl)
 {
 	rrw_node_t *rn;
 	rrw_node_t *prev = NULL;
 
 	if (refcount_count(&rrl->rr_linked_rcount) == 0)
-		return (B_FALSE);
+		return (NULL);
 
 	for (rn = tsd_get(rrw_tsd_key); rn != NULL; rn = rn->rn_next) {
-		if (rn->rn_rrl == rrl && rn->rn_tag == tag) {
+		if (rn->rn_rrl == rrl) {
 			if (prev)
 				prev->rn_next = rn->rn_next;
 			else
@@ -138,7 +135,7 @@ rrn_find_and_remove(rrwlock_t *rrl, void *tag)
 }
 
 void
-rrw_init(rrwlock_t *rrl, boolean_t track_all)
+rrw_init(rrwlock_t *rrl)
 {
 	mutex_init(&rrl->rr_lock, NULL, MUTEX_DEFAULT, NULL);
 	cv_init(&rrl->rr_cv, NULL, CV_DEFAULT, NULL);
@@ -146,7 +143,6 @@ rrw_init(rrwlock_t *rrl, boolean_t track_all)
 	refcount_create(&rrl->rr_anon_rcount);
 	refcount_create(&rrl->rr_linked_rcount);
 	rrl->rr_writer_wanted = B_FALSE;
-	rrl->rr_track_all = track_all;
 }
 
 void
@@ -160,29 +156,20 @@ rrw_destroy(rrwlock_t *rrl)
 }
 
 static void
-rrw_enter_read_impl(rrwlock_t *rrl, boolean_t prio, void *tag)
+rrw_enter_read(rrwlock_t *rrl, void *tag)
 {
 	mutex_enter(&rrl->rr_lock);
-#if !defined(DEBUG) && defined(_KERNEL)
-	if (rrl->rr_writer == NULL && !rrl->rr_writer_wanted &&
-	    !rrl->rr_track_all) {
-		rrl->rr_anon_rcount.rc_count++;
-		mutex_exit(&rrl->rr_lock);
-		return;
-	}
-	DTRACE_PROBE(zfs__rrwfastpath__rdmiss);
-#endif
 	ASSERT(rrl->rr_writer != curthread);
 	ASSERT(refcount_count(&rrl->rr_anon_rcount) >= 0);
 
-	while (rrl->rr_writer != NULL || (rrl->rr_writer_wanted &&
-	    refcount_is_zero(&rrl->rr_anon_rcount) && !prio &&
+	while (rrl->rr_writer || (rrl->rr_writer_wanted &&
+	    refcount_is_zero(&rrl->rr_anon_rcount) &&
 	    rrn_find(rrl) == NULL))
 		cv_wait(&rrl->rr_cv, &rrl->rr_lock);
 
-	if (rrl->rr_writer_wanted || rrl->rr_track_all) {
+	if (rrl->rr_writer_wanted) {
 		/* may or may not be a re-entrant enter */
-		rrn_add(rrl, tag);
+		rrn_add(rrl);
 		(void) refcount_add(&rrl->rr_linked_rcount, tag);
 	} else {
 		(void) refcount_add(&rrl->rr_anon_rcount, tag);
@@ -191,26 +178,7 @@ rrw_enter_read_impl(rrwlock_t *rrl, boolean_t prio, void *tag)
 	mutex_exit(&rrl->rr_lock);
 }
 
-void
-rrw_enter_read(rrwlock_t *rrl, void *tag)
-{
-	rrw_enter_read_impl(rrl, B_FALSE, tag);
-}
-
-/*
- * take a read lock even if there are pending write lock requests. if we want
- * to take a lock reentrantly, but from different threads (that have a
- * relationship to each other), the normal detection mechanism to overrule
- * the pending writer does not work, so we have to give an explicit hint here.
- */
-void
-rrw_enter_read_prio(rrwlock_t *rrl, void *tag)
-{
-	rrw_enter_read_impl(rrl, B_TRUE, tag);
-}
-
-
-void
+static void
 rrw_enter_write(rrwlock_t *rrl)
 {
 	mutex_enter(&rrl->rr_lock);
@@ -240,30 +208,19 @@ void
 rrw_exit(rrwlock_t *rrl, void *tag)
 {
 	mutex_enter(&rrl->rr_lock);
-#if !defined(DEBUG) && defined(_KERNEL)
-	if (!rrl->rr_writer && rrl->rr_linked_rcount.rc_count == 0) {
-		rrl->rr_anon_rcount.rc_count--;
-		if (rrl->rr_anon_rcount.rc_count == 0)
-			cv_broadcast(&rrl->rr_cv);
-		mutex_exit(&rrl->rr_lock);
-		return;
-	}
-	DTRACE_PROBE(zfs__rrwfastpath__exitmiss);
-#endif
 	ASSERT(!refcount_is_zero(&rrl->rr_anon_rcount) ||
 	    !refcount_is_zero(&rrl->rr_linked_rcount) ||
 	    rrl->rr_writer != NULL);
 
 	if (rrl->rr_writer == NULL) {
-		int64_t count;
-		if (rrn_find_and_remove(rrl, tag)) {
-			count = refcount_remove(&rrl->rr_linked_rcount, tag);
+		if (rrn_find_and_remove(rrl)) {
+			if (refcount_remove(&rrl->rr_linked_rcount, tag) == 0)
+				cv_broadcast(&rrl->rr_cv);
+
 		} else {
-			ASSERT(!rrl->rr_track_all);
-			count = refcount_remove(&rrl->rr_anon_rcount, tag);
+			if (refcount_remove(&rrl->rr_anon_rcount, tag) == 0)
+				cv_broadcast(&rrl->rr_cv);
 		}
-		if (count == 0)
-			cv_broadcast(&rrl->rr_cv);
 	} else {
 		ASSERT(rrl->rr_writer == curthread);
 		ASSERT(refcount_is_zero(&rrl->rr_anon_rcount) &&
@@ -274,11 +231,6 @@ rrw_exit(rrwlock_t *rrl, void *tag)
 	mutex_exit(&rrl->rr_lock);
 }
 
-/*
- * If the lock was created with track_all, rrw_held(RW_READER) will return
- * B_TRUE iff the current thread has the lock for reader.  Otherwise it may
- * return B_TRUE if any thread has the lock for reader.
- */
 boolean_t
 rrw_held(rrwlock_t *rrl, krw_t rw)
 {
@@ -289,107 +241,9 @@ rrw_held(rrwlock_t *rrl, krw_t rw)
 		held = (rrl->rr_writer == curthread);
 	} else {
 		held = (!refcount_is_zero(&rrl->rr_anon_rcount) ||
-		    rrn_find(rrl) != NULL);
+		    !refcount_is_zero(&rrl->rr_linked_rcount));
 	}
 	mutex_exit(&rrl->rr_lock);
 
 	return (held);
-}
-
-void
-rrw_tsd_destroy(void *arg)
-{
-	rrw_node_t *rn = arg;
-	if (rn != NULL) {
-		panic("thread %p terminating with rrw lock %p held",
-		    (void *)curthread, (void *)rn->rn_rrl);
-	}
-}
-
-/*
- * A reader-mostly lock implementation, tuning above reader-writer locks
- * for hightly parallel read acquisitions, while pessimizing writes.
- *
- * The idea is to split single busy lock into array of locks, so that
- * each reader can lock only one of them for read, depending on result
- * of simple hash function.  That proportionally reduces lock congestion.
- * Writer same time has to sequentially aquire write on all the locks.
- * That makes write aquisition proportionally slower, but in places where
- * it is used (filesystem unmount) performance is not critical.
- *
- * All the functions below are direct wrappers around functions above.
- */
-void
-rrm_init(rrmlock_t *rrl, boolean_t track_all)
-{
-	int i;
-
-	for (i = 0; i < RRM_NUM_LOCKS; i++)
-		rrw_init(&rrl->locks[i], track_all);
-}
-
-void
-rrm_destroy(rrmlock_t *rrl)
-{
-	int i;
-
-	for (i = 0; i < RRM_NUM_LOCKS; i++)
-		rrw_destroy(&rrl->locks[i]);
-}
-
-void
-rrm_enter(rrmlock_t *rrl, krw_t rw, void *tag)
-{
-	if (rw == RW_READER)
-		rrm_enter_read(rrl, tag);
-	else
-		rrm_enter_write(rrl);
-}
-
-/*
- * This maps the current thread to a specific lock.  Note that the lock
- * must be released by the same thread that acquired it.  We do this
- * mapping by taking the thread pointer mod a prime number.  We examine
- * only the low 32 bits of the thread pointer, because 32-bit division
- * is faster than 64-bit division, and the high 32 bits have little
- * entropy anyway.
- */
-#define	RRM_TD_LOCK()	(((uint32_t)(uintptr_t)(curthread)) % RRM_NUM_LOCKS)
-
-void
-rrm_enter_read(rrmlock_t *rrl, void *tag)
-{
-	rrw_enter_read(&rrl->locks[RRM_TD_LOCK()], tag);
-}
-
-void
-rrm_enter_write(rrmlock_t *rrl)
-{
-	int i;
-
-	for (i = 0; i < RRM_NUM_LOCKS; i++)
-		rrw_enter_write(&rrl->locks[i]);
-}
-
-void
-rrm_exit(rrmlock_t *rrl, void *tag)
-{
-	int i;
-
-	if (rrl->locks[0].rr_writer == curthread) {
-		for (i = 0; i < RRM_NUM_LOCKS; i++)
-			rrw_exit(&rrl->locks[i], tag);
-	} else {
-		rrw_exit(&rrl->locks[RRM_TD_LOCK()], tag);
-	}
-}
-
-boolean_t
-rrm_held(rrmlock_t *rrl, krw_t rw)
-{
-	if (rw == RW_WRITER) {
-		return (rrw_held(&rrl->locks[0], rw));
-	} else {
-		return (rrw_held(&rrl->locks[RRM_TD_LOCK()], rw));
-	}
 }

@@ -3,7 +3,7 @@
  * intoncpu.d - print interrupt on-cpu usage.
  *              Written using DTrace (Solaris 10 3/05)
  *
- * $Id: intoncpu.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: intoncpu.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE:       intoncpu.d      # wait several seconds, then hit Ctrl-C
  *

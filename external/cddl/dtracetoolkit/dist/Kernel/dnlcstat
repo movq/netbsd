@@ -7,7 +7,7 @@
 # return a hit from here, before needing to traverse the regular file
 # system cache or go to disk.
 #
-# $Id: dnlcstat,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+# $Id: dnlcstat,v 1.1 2015/09/30 22:01:09 christos Exp $
 #
 # USAGE:	dnlcstat [interval [count]]
 #

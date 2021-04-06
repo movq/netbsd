@@ -23,8 +23,6 @@
  * Copyright (c) 2013 Martin Matuska <mm@FreeBSD.org>. All rights reserved.
  */
 
-#include <err.h>
-
 #include "libzfs_compat.h"
 
 int zfs_ioctl_version = ZFS_IOCVER_UNDEF;
@@ -40,8 +38,7 @@ get_zfs_ioctl_version(void)
 	int ver = ZFS_IOCVER_NONE;
 
 	ver_size = sizeof(ver);
-	if (sysctlbyname("vfs.zfs.version.ioctl", &ver, &ver_size, NULL, 0) < 0)
-		err(1, "sysctl vfs.zfs.version.ioctl failed");
+	sysctlbyname("vfs.zfs.version.ioctl", &ver, &ver_size, NULL, 0);
 
 	return (ver);
 }
@@ -56,8 +53,7 @@ get_zfs_spa_version(void)
 	int ver = 0;
 
 	ver_size = sizeof(ver);
-	if (sysctlbyname("vfs.zfs.version.spa", &ver, &ver_size, NULL, 0) < 0)
-		err(1, "sysctl vfs.zfs.version.spa failed");
+	sysctlbyname("vfs.zfs.version.spa", &ver, &ver_size, NULL, 0);
 
 	return (ver);
 }

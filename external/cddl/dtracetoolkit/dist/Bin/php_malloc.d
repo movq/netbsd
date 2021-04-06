@@ -3,7 +3,7 @@
  * php_malloc.d - PHP libc malloc analysis.
  *                Written for the PHP DTrace provider.
  *
- * $Id: php_malloc.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: php_malloc.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * This is an expiremental script to identify who is calling malloc() for
  * memory allocation, and to print distribution plots of the requested bytes.

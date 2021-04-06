@@ -7,7 +7,7 @@
 # by process name, and refreshes the display every 1 second or as specified
 # at the command line. Similar data can be fetched with "prstat -m".
 #
-# $Id: topsysproc,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+# $Id: topsysproc,v 1.1 2015/09/30 22:01:07 christos Exp $
 #
 # USAGE:        topsysproc [interval]
 #

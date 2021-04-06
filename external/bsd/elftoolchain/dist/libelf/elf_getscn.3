@@ -1,6 +1,4 @@
-.\"	$NetBSD: elf_getscn.3,v 1.4 2021/03/08 20:55:06 jkoshy Exp $
-.\"
-.\" Copyright (c) 2006-2008,2018 Joseph Koshy.  All rights reserved.
+.\" Copyright (c) 2006-2008 Joseph Koshy.  All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -23,11 +21,11 @@
 .\" out of the use of this software, even if advised of the possibility of
 .\" such damage.
 .\"
-.\" Id: elf_getscn.3 3928 2021-03-07 19:47:55Z jkoshy
+.\" Id: elf_getscn.3 189 2008-07-20 10:38:08Z jkoshy 
 .\"
-.Dd September 24, 2018
-.Dt ELF_GETSCN 3
+.Dd October 22, 2007
 .Os
+.Dt ELF_GETSCN 3
 .Sh NAME
 .Nm elf_getscn ,
 .Nm elf_ndxscn ,
@@ -88,21 +86,13 @@ takes a section descriptor
 .Ar scn
 and returns a pointer to the section descriptor at the next higher
 index.
-As a consequence,
-.Fn elf_nextscn
-will never return a pointer to the empty section at index zero
-.Dv ( SHN_UNDEF ) .
 Argument
 .Ar scn
-is allowed to be
-.Dv NULL ,
-in which case this function will return a pointer to the section
-descriptor at index 1.
+is allowed to be NULL, in which case this function will return a
+pointer to the section descriptor at index 1.
 If no further sections are present, function
 .Fn elf_nextscn
-will return a
-.Dv NULL
-pointer.
+will return a NULL pointer.
 .Sh RETURN VALUES
 Functions
 .Fn elf_getscn ,
@@ -110,8 +100,7 @@ Functions
 and
 .Fn elf_nextscn
 return a valid pointer to a section descriptor if successful, or
-.Dv NULL
-if an error occurs.
+NULL if an error occurs.
 .Pp
 Function
 .Fn elf_ndxscn
@@ -126,8 +115,7 @@ Arguments
 .Ar elf
 or
 .Ar scn
-were
-.Dv NULL .
+were NULL.
 .It Bq Er ELF_E_ARGUMENT
 Argument
 .Ar index

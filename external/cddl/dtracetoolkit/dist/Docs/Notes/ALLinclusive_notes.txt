@@ -2,7 +2,7 @@
 * Notes for all scripts that print inclusive function times (or method,
 * or subroutine).
 *
-* $Id: ALLinclusive_notes.txt,v 1.1.1.1 2015/09/30 22:01:08 christos Exp $
+* $Id: ALLinclusive_notes.txt,v 1.1 2015/09/30 22:01:08 christos Exp $
 *
 * COPYRIGHT: Copyright (c) 2007 Brendan Gregg.
 **************************************************************************

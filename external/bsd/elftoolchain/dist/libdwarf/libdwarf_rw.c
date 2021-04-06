@@ -1,5 +1,3 @@
-/*	$NetBSD: libdwarf_rw.c,v 1.3 2016/02/20 02:43:41 christos Exp $	*/
-
 /*-
  * Copyright (c) 2007 John Birrell (jb@freebsd.org)
  * Copyright (c) 2010 Kai Wang
@@ -29,8 +27,7 @@
 
 #include "_libdwarf.h"
 
-__RCSID("$NetBSD: libdwarf_rw.c,v 1.3 2016/02/20 02:43:41 christos Exp $");
-ELFTC_VCSID("Id: libdwarf_rw.c 3286 2015-12-31 16:45:46Z emaste ");
+ELFTC_VCSID("Id: libdwarf_rw.c 2952 2013-06-26 19:09:40Z kaiwang27 ");
 
 uint64_t
 _dwarf_read_lsb(uint8_t *data, uint64_t *offsetp, int bytes_to_read)
@@ -45,13 +42,10 @@ _dwarf_read_lsb(uint8_t *data, uint64_t *offsetp, int bytes_to_read)
 	case 8:
 		ret |= ((uint64_t) src[4]) << 32 | ((uint64_t) src[5]) << 40;
 		ret |= ((uint64_t) src[6]) << 48 | ((uint64_t) src[7]) << 56;
-		/* FALLTHROUGH */
 	case 4:
 		ret |= ((uint64_t) src[2]) << 16 | ((uint64_t) src[3]) << 24;
-		/* FALLTHROUGH */
 	case 2:
 		ret |= ((uint64_t) src[1]) << 8;
-		/* FALLTHROUGH */
 	case 1:
 		ret |= src[0];
 		break;
@@ -77,13 +71,10 @@ _dwarf_decode_lsb(uint8_t **data, int bytes_to_read)
 	case 8:
 		ret |= ((uint64_t) src[4]) << 32 | ((uint64_t) src[5]) << 40;
 		ret |= ((uint64_t) src[6]) << 48 | ((uint64_t) src[7]) << 56;
-		/* FALLTHROUGH */
 	case 4:
 		ret |= ((uint64_t) src[2]) << 16 | ((uint64_t) src[3]) << 24;
-		/* FALLTHROUGH */
 	case 2:
 		ret |= ((uint64_t) src[1]) << 8;
-		/* FALLTHROUGH */
 	case 1:
 		ret |= src[0];
 		break;
@@ -180,14 +171,11 @@ _dwarf_write_lsb(uint8_t *data, uint64_t *offsetp, uint64_t value,
 		dst[6] = (value >> 48) & 0xff;
 		dst[5] = (value >> 40) & 0xff;
 		dst[4] = (value >> 32) & 0xff;
-		/* FALLTHROUGH */
 	case 4:
 		dst[3] = (value >> 24) & 0xff;
 		dst[2] = (value >> 16) & 0xff;
-		/* FALLTHROUGH */
 	case 2:
 		dst[1] = (value >> 8) & 0xff;
-		/* FALLTHROUGH */
 	case 1:
 		dst[0] = value & 0xff;
 		break;
@@ -234,16 +222,13 @@ _dwarf_write_msb(uint8_t *data, uint64_t *offsetp, uint64_t value,
 		dst[5] = (value >> 16) & 0xff;
 		dst[4] = (value >> 24) & 0xff;
 		value >>= 32;
-		/* FALLTHROUGH */
 	case 4:
 		dst[3] = value & 0xff;
 		dst[2] = (value >> 8) & 0xff;
 		value >>= 16;
-		/* FALLTHROUGH */
 	case 2:
 		dst[1] = value & 0xff;
 		value >>= 8;
-		/* FALLTHROUGH */
 	case 1:
 		dst[0] = value & 0xff;
 		break;

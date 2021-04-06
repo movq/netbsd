@@ -3,7 +3,7 @@
  * rb_calltime.d - measure Ruby elapsed times for types of operation.
  *                 Written for the Ruby DTrace provider.
  *
- * $Id: rb_calltime.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: rb_calltime.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * This traces Ruby activity from all programs running on the system with
  * Ruby provider support.

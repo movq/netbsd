@@ -8,7 +8,7 @@
  * This is intended as a starting point for other DTrace scripts, by
  * beginning with familiar statistics.
  *
- * $Id: uname-a.d,v 1.1.1.1 2015/09/30 22:01:06 christos Exp $
+ * $Id: uname-a.d,v 1.1 2015/09/30 22:01:06 christos Exp $
  *
  * USAGE:	uname-a.d
  *

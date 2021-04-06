@@ -1,7 +1,7 @@
 /*
  * tostr.h - DTrace To-String include file.
  *
- * $Id: tostr.h,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: tostr.h,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * COPYRIGHT: Copyright (c) 2007 Brendan Gregg.
  *

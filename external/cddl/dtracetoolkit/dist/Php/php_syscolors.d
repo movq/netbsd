@@ -3,7 +3,7 @@
  * php_syscolors.d - trace PHP function flow plus syscalls, in color.
  *                   Written for the PHP DTrace provider.
  *
- * $Id: php_syscolors.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: php_syscolors.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * USAGE: php_syscolors.d	# hit Ctrl-C to end
  *

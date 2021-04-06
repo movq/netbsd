@@ -3,7 +3,7 @@
  * pl_cputime.d - measure Perl on-CPU times for subroutines.
  *                Written for the Perl DTrace provider.
  *
- * $Id: pl_cputime.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: pl_cputime.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * This traces Perl activity from all programs running on the system with
  * Perl provider support.

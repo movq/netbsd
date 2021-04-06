@@ -3,7 +3,7 @@
  * cputypes.d - list CPU type info.
  *              Written using DTrace (Solaris 10 3/05).
  *
- * $Id: cputypes.d,v 1.1.1.1 2015/09/30 22:01:06 christos Exp $
+ * $Id: cputypes.d,v 1.1 2015/09/30 22:01:06 christos Exp $
  *
  * USAGE:	cputypes.d
  *

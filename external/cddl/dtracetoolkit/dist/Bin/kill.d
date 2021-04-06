@@ -3,7 +3,7 @@
  * kill.d - watch process signals as they are sent (eg, kill -9).
  *          Written in DTrace (Solaris 10 3/05).
  *
- * $Id: kill.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: kill.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE:       kill.d
  *

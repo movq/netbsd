@@ -1,5 +1,3 @@
-.\"	$NetBSD: dwarf_get_fde_info_for_reg.3,v 1.4 2020/11/26 22:51:35 jkoshy Exp $
-.\"
 .\" Copyright (c) 2011 Kai Wang
 .\" All rights reserved.
 .\"
@@ -24,11 +22,11 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\" Id: dwarf_get_fde_info_for_reg.3 3644 2018-10-15 19:55:01Z jkoshy
+.\" Id: dwarf_get_fde_info_for_reg.3 2071 2011-10-27 03:20:00Z jkoshy 
 .\"
 .Dd June 4, 2011
-.Dt DWARF_GET_FDE_INFO_FOR_REG 3
 .Os
+.Dt DWARF_GET_FDE_INFO_FOR_REG 3
 .Sh NAME
 .Nm dwarf_get_fde_info_for_reg
 .Nd retrieve register rule
@@ -101,7 +99,7 @@ counter address associated with the register rule found.
 If argument
 .Ar err
 is not NULL, it will be used to return an error descriptor in case
-of an error.
+of an error. 
 .Ss COMPATIBILITY
 Function
 .Fn dwarf_get_fde_info_for_reg
@@ -152,7 +150,7 @@ did not fall in the range covered by argument
 .Xr dwarf_get_fde_info_for_reg3 3 ,
 .Xr dwarf_get_fde_n 3 ,
 .Xr dwarf_set_frame_cfa_value 3 ,
-.Xr dwarf_set_frame_rule_initial_value 3 ,
 .Xr dwarf_set_frame_rule_table_size 3 ,
+.Xr dwarf_set_frame_rule_initial_value 3 ,
 .Xr dwarf_set_frame_same_value 3 ,
 .Xr dwarf_set_frame_undefined_value 3

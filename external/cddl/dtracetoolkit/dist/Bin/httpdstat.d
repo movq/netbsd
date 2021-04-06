@@ -2,7 +2,7 @@
 /*
  * httpdstat.d - realtime httpd statistics. Uses DTrace.
  *
- * $Id: httpdstat.d,v 1.1.1.1 2015/09/30 22:01:06 christos Exp $
+ * $Id: httpdstat.d,v 1.1 2015/09/30 22:01:06 christos Exp $
  *
  * USAGE:	httpdstat.d [interval [count]]
  *

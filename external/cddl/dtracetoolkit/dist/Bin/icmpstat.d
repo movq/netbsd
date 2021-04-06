@@ -5,7 +5,7 @@
  * This prints ICMP statistics every second, retrieved from the MIB provider.
  * This is a simple script to demonstrate the ability to trace ICMP events.
  *
- * $Id: icmpstat.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: icmpstat.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE:	icmpstat.d
  *

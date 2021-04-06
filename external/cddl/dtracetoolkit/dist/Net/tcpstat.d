@@ -4,7 +4,7 @@
  *
  * This prints TCP statistics every second, retrieved from the MIB provider.
  *
- * $Id: tcpstat.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: tcpstat.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * USAGE:	tcpstat.d
  *

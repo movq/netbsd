@@ -3,7 +3,7 @@
  * sh_lines.d - trace Bourne shell line execution using DTrace.
  *              Written for the sh DTrace provider.
  *
- * $Id: sh_lines.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: sh_lines.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * This traces shell activity from all Bourne shells on the system that are
  * running with sh provider support.

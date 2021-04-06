@@ -3,7 +3,7 @@
  * pl_syscolors.d - trace Perl subroutine flow plus syscalls, in color.
  *                  Written for the Perl DTrace provider.
  *
- * $Id: pl_syscolors.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: pl_syscolors.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE: pl_syscolors.d { -p PID | -c cmd }	# hit Ctrl-C to end
  *

@@ -5,7 +5,7 @@
  *
  * This script prints the number of new processes created per second.
  *
- * $Id: pidpersec.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: pidpersec.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE: pidpersec.d
  *

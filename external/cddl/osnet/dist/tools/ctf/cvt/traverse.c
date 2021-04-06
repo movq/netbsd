@@ -30,10 +30,6 @@
  * as the tree is traversed.
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-# include "nbtool_config.h"
-#endif
-
 #include <stdio.h>
 #include <assert.h>
 
@@ -41,8 +37,10 @@
 #include "traverse.h"
 #include "memory.h"
 
-static int (*tddescenders[])(tdesc_t *, tdtrav_data_t *);
-static tdtrav_cb_f tdnops[];
+int (*tddescenders[])();
+int (*tdnops[])();
+
+int tdtraverse(tdesc_t *, tdesc_t **, tdtrav_data_t *);
 
 void
 tdtrav_init(tdtrav_data_t *tdtd, int *vgenp, tdtrav_cb_f *firstops,
@@ -70,7 +68,7 @@ tdtrav_func(tdesc_t *this, tdtrav_data_t *tdtd)
 	if ((rc = tdtraverse(fn->fn_ret, &fn->fn_ret, tdtd)) < 0)
 		return (rc);
 
-	for (i = 0; i < (int) fn->fn_nargs; i++) {
+	for (i = 0; i < fn->fn_nargs; i++) {
 		if ((rc = tdtraverse(fn->fn_args[i], &fn->fn_args[i],
 		    tdtd)) < 0)
 			return (rc);
@@ -108,23 +106,21 @@ tdtrav_su(tdesc_t *this, tdtrav_data_t *tdtd)
 
 /*ARGSUSED*/
 int
-tdtrav_assert(tdesc_t *node __unused, tdesc_t **nodep __unused, void *private __unused)
+tdtrav_assert(tdesc_t *node, tdesc_t **nodep, void *private)
 {
 	assert(1 == 0);
 
 	return (-1);
 }
 
-static tdtrav_cb_f tdnops[] = {
+tdtrav_cb_f tdnops[] = {
 	NULL,
 	NULL,			/* intrinsic */
 	NULL,			/* pointer */
-	NULL,			/* reference */
 	NULL,			/* array */
 	NULL,			/* function */
 	NULL,			/* struct */
 	NULL,			/* union */
-	NULL,			/* class */
 	NULL,			/* enum */
 	NULL,			/* forward */
 	NULL,			/* typedef */
@@ -134,16 +130,14 @@ static tdtrav_cb_f tdnops[] = {
 	NULL			/* restrict */
 };
 
-static int (*tddescenders[])(tdesc_t *, tdtrav_data_t *) = {
+int (*tddescenders[])(tdesc_t *, tdtrav_data_t *) = {
 	NULL,
 	NULL,			/* intrinsic */
 	tdtrav_plain,		/* pointer */
-	tdtrav_plain,		/* reference */
 	tdtrav_array,		/* array */
 	tdtrav_func,		/* function */
 	tdtrav_su,		/* struct */
 	tdtrav_su,		/* union */
-	tdtrav_su,		/* class */
 	NULL,			/* enum */
 	NULL,			/* forward */
 	tdtrav_plain,		/* typedef */
@@ -157,7 +151,7 @@ int
 tdtraverse(tdesc_t *this, tdesc_t **thisp, tdtrav_data_t *tdtd)
 {
 	tdtrav_cb_f travcb;
-	int (*descender)(tdesc_t *, tdtrav_data_t *);
+	int (*descender)();
 	int descend = 1;
 	int rc;
 
@@ -193,10 +187,8 @@ tdtraverse(tdesc_t *this, tdesc_t **thisp, tdtrav_data_t *tdtd)
 }
 
 int
-iitraverse_td(void *arg1, void *arg2)
+iitraverse_td(iidesc_t *ii, tdtrav_data_t *tdtd)
 {
-	iidesc_t *ii = arg1;
-	tdtrav_data_t *tdtd = arg2;
 	int i, rc;
 
 	if ((rc = tdtraverse(ii->ii_dtype, &ii->ii_dtype, tdtd)) < 0)
@@ -230,5 +222,5 @@ iitraverse_hash(hash_t *iihash, int *vgenp, tdtrav_cb_f *firstops,
 
 	tdtrav_init(&tdtd, vgenp, firstops, preops, postops, private);
 
-	return (hash_iter(iihash, iitraverse_td, &tdtd));
+	return (hash_iter(iihash, (int (*)())iitraverse_td, &tdtd));
 }

@@ -6,7 +6,7 @@
 # In particular, the time break down during read() and write() events is
 # measured.
 #
-# $Id: pfilestat,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+# $Id: pfilestat,v 1.1 2015/09/30 22:01:07 christos Exp $
 #
 # USAGE:        pfilestat [-r|-w] pid
 #

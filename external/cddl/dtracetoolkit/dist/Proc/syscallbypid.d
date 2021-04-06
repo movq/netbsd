@@ -3,7 +3,7 @@
  * syscallbypid.d - report on syscalls by PID.
  *                  Written using DTrace (Solaris 10 3/05)
  *
- * $Id: syscallbypid.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: syscallbypid.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * USAGE:	syscallbypid.d			# hit Ctrl-C to end sample
  *

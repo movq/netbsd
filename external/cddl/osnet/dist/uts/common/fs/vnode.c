@@ -72,7 +72,6 @@ xva_getxoptattr(xvattr_t *xvap)
 	return (xoap);
 }
 
-#ifdef __FreeBSD__
 static void
 vn_rele_inactive(vnode_t *vp)
 {
@@ -103,4 +102,3 @@ vn_rele_async(vnode_t *vp, taskq_t *taskq)
 	refcount_release(&vp->v_usecount);
 	vdropl(vp);
 }
-#endif /* __FreeBSD__ */

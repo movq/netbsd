@@ -3,7 +3,7 @@
  * intbycpu.d - interrupts by CPU.
  *              Written using DTrace (Solaris 10 3/05).
  *
- * $Id: intbycpu.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: intbycpu.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE:	intbycpu.d		# hit Ctrl-C to end sample
  *

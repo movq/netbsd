@@ -3,7 +3,7 @@
  * py_mallocstk.d - Python libc malloc analysis with full stack traces.
  *                  Written for the Python DTrace provider.
  *
- * $Id: py_mallocstk.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: py_mallocstk.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * USAGE: py_mallocstk.d { -p PID | -c cmd }	# hit Ctrl-C to end
  *

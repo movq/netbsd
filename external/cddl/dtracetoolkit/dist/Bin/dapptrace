@@ -6,7 +6,7 @@
 # The default output traces user functions as they are called. Options
 #  can be used to examine libraries and timestamps.
 #
-# $Id: dapptrace,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+# $Id: dapptrace,v 1.1 2015/09/30 22:01:07 christos Exp $
 #
 # USAGE: dapptrace [-acdeFlhoU] [-u lib] { -p PID | command }
 #

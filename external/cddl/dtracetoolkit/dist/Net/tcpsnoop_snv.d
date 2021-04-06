@@ -16,7 +16,7 @@
  * versions of this script in the /Net directory, and read the
  * Notes/ALLfbt_notes.txt for more background on fbt.
  *
- * $Id: tcpsnoop_snv.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: tcpsnoop_snv.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * USAGE:       tcpsnoop.d
  *

@@ -3,7 +3,7 @@
  * tcl_cpudist.d - measure Tcl on-CPU time for different types of operation.
  *                 Written for the Tcl DTrace provider.
  *
- * $Id: tcl_cpudist.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: tcl_cpudist.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * USAGE: tcl_cpudist.d [top]	# hit Ctrl-C to end
  *    eg,

@@ -19,10 +19,8 @@
  * CDDL HEADER END
  */
 /*
- * Copyright (c) 2007, 2010, Oracle and/or its affiliates. All rights reserved.
- * Copyright 2011 Nexenta Systems, Inc. All rights reserved.
- * Copyright (c) 2012, 2014 by Delphix. All rights reserved.
- * Copyright (c) 2014 Integros [integros.com]
+ * Copyright 2008 Sun Microsystems, Inc.  All rights reserved.
+ * Use is subject to license terms.
  */
 
 #include <sys/zio.h>
@@ -66,70 +64,47 @@ zpool_prop_init(void)
 	};
 
 	/* string properties */
-	zprop_register_string(ZPOOL_PROP_ALTROOT, "altroot", NULL, PROP_DEFAULT,
+	register_string(ZPOOL_PROP_ALTROOT, "altroot", NULL, PROP_DEFAULT,
 	    ZFS_TYPE_POOL, "<path>", "ALTROOT");
-	zprop_register_string(ZPOOL_PROP_BOOTFS, "bootfs", NULL, PROP_DEFAULT,
+	register_string(ZPOOL_PROP_BOOTFS, "bootfs", NULL, PROP_DEFAULT,
 	    ZFS_TYPE_POOL, "<filesystem>", "BOOTFS");
-	zprop_register_string(ZPOOL_PROP_CACHEFILE, "cachefile", NULL,
-	    PROP_DEFAULT, ZFS_TYPE_POOL, "<file> | none", "CACHEFILE");
-	zprop_register_string(ZPOOL_PROP_COMMENT, "comment", NULL,
-	    PROP_DEFAULT, ZFS_TYPE_POOL, "<comment-string>", "COMMENT");
+	register_string(ZPOOL_PROP_CACHEFILE, "cachefile", NULL, PROP_DEFAULT,
+	    ZFS_TYPE_POOL, "<file> | none", "CACHEFILE");
 
 	/* readonly number properties */
-	zprop_register_number(ZPOOL_PROP_SIZE, "size", 0, PROP_READONLY,
+	register_number(ZPOOL_PROP_SIZE, "size", 0, PROP_READONLY,
 	    ZFS_TYPE_POOL, "<size>", "SIZE");
-	zprop_register_number(ZPOOL_PROP_FREE, "free", 0, PROP_READONLY,
-	    ZFS_TYPE_POOL, "<size>", "FREE");
-	zprop_register_number(ZPOOL_PROP_FREEING, "freeing", 0, PROP_READONLY,
-	    ZFS_TYPE_POOL, "<size>", "FREEING");
-	zprop_register_number(ZPOOL_PROP_LEAKED, "leaked", 0, PROP_READONLY,
-	    ZFS_TYPE_POOL, "<size>", "LEAKED");
-	zprop_register_number(ZPOOL_PROP_ALLOCATED, "allocated", 0,
-	    PROP_READONLY, ZFS_TYPE_POOL, "<size>", "ALLOC");
-	zprop_register_number(ZPOOL_PROP_EXPANDSZ, "expandsize", 0,
-	    PROP_READONLY, ZFS_TYPE_POOL, "<size>", "EXPANDSZ");
-	zprop_register_number(ZPOOL_PROP_FRAGMENTATION, "fragmentation", 0,
-	    PROP_READONLY, ZFS_TYPE_POOL, "<percent>", "FRAG");
-	zprop_register_number(ZPOOL_PROP_CAPACITY, "capacity", 0, PROP_READONLY,
+	register_number(ZPOOL_PROP_USED, "used", 0, PROP_READONLY,
+	    ZFS_TYPE_POOL, "<size>", "USED");
+	register_number(ZPOOL_PROP_AVAILABLE, "available", 0, PROP_READONLY,
+	    ZFS_TYPE_POOL, "<size>", "AVAIL");
+	register_number(ZPOOL_PROP_CAPACITY, "capacity", 0, PROP_READONLY,
 	    ZFS_TYPE_POOL, "<size>", "CAP");
-	zprop_register_number(ZPOOL_PROP_GUID, "guid", 0, PROP_READONLY,
+	register_number(ZPOOL_PROP_GUID, "guid", 0, PROP_READONLY,
 	    ZFS_TYPE_POOL, "<guid>", "GUID");
-	zprop_register_number(ZPOOL_PROP_HEALTH, "health", 0, PROP_READONLY,
+	register_number(ZPOOL_PROP_HEALTH, "health", 0, PROP_READONLY,
 	    ZFS_TYPE_POOL, "<state>", "HEALTH");
-	zprop_register_number(ZPOOL_PROP_DEDUPRATIO, "dedupratio", 0,
-	    PROP_READONLY, ZFS_TYPE_POOL, "<1.00x or higher if deduped>",
-	    "DEDUP");
 
 	/* default number properties */
-	zprop_register_number(ZPOOL_PROP_VERSION, "version", SPA_VERSION,
+	register_number(ZPOOL_PROP_VERSION, "version", SPA_VERSION,
 	    PROP_DEFAULT, ZFS_TYPE_POOL, "<version>", "VERSION");
-	zprop_register_number(ZPOOL_PROP_DEDUPDITTO, "dedupditto", 0,
-	    PROP_DEFAULT, ZFS_TYPE_POOL, "<threshold (min 100)>", "DEDUPDITTO");
 
 	/* default index (boolean) properties */
-	zprop_register_index(ZPOOL_PROP_DELEGATION, "delegation", 1,
-	    PROP_DEFAULT, ZFS_TYPE_POOL, "on | off", "DELEGATION",
-	    boolean_table);
-	zprop_register_index(ZPOOL_PROP_AUTOREPLACE, "autoreplace", 0,
-	    PROP_DEFAULT, ZFS_TYPE_POOL, "on | off", "REPLACE", boolean_table);
-	zprop_register_index(ZPOOL_PROP_LISTSNAPS, "listsnapshots", 0,
-	    PROP_DEFAULT, ZFS_TYPE_POOL, "on | off", "LISTSNAPS",
-	    boolean_table);
-	zprop_register_index(ZPOOL_PROP_AUTOEXPAND, "autoexpand", 0,
-	    PROP_DEFAULT, ZFS_TYPE_POOL, "on | off", "EXPAND", boolean_table);
-	zprop_register_index(ZPOOL_PROP_READONLY, "readonly", 0,
-	    PROP_DEFAULT, ZFS_TYPE_POOL, "on | off", "RDONLY", boolean_table);
+	register_index(ZPOOL_PROP_DELEGATION, "delegation", 1, PROP_DEFAULT,
+	    ZFS_TYPE_POOL, "on | off", "DELEGATION", boolean_table);
+	register_index(ZPOOL_PROP_AUTOREPLACE, "autoreplace", 0, PROP_DEFAULT,
+	    ZFS_TYPE_POOL, "on | off", "REPLACE", boolean_table);
+	register_index(ZPOOL_PROP_LISTSNAPS, "listsnapshots", 0, PROP_DEFAULT,
+	    ZFS_TYPE_POOL, "on | off", "LISTSNAPS", boolean_table);
 
 	/* default index properties */
-	zprop_register_index(ZPOOL_PROP_FAILUREMODE, "failmode",
+	register_index(ZPOOL_PROP_FAILUREMODE, "failmode",
 	    ZIO_FAILURE_MODE_WAIT, PROP_DEFAULT, ZFS_TYPE_POOL,
 	    "wait | continue | panic", "FAILMODE", failuremode_table);
 
 	/* hidden properties */
-	zprop_register_hidden(ZPOOL_PROP_NAME, "name", PROP_TYPE_STRING,
+	register_hidden(ZPOOL_PROP_NAME, "name", PROP_TYPE_STRING,
 	    PROP_READONLY, ZFS_TYPE_POOL, "NAME");
-	zprop_register_hidden(ZPOOL_PROP_MAXBLOCKSIZE, "maxblocksize",
-	    PROP_TYPE_NUMBER, PROP_READONLY, ZFS_TYPE_POOL, "MAXBLOCKSIZE");
 }
 
 /*
@@ -175,26 +150,6 @@ zpool_prop_default_numeric(zpool_prop_t prop)
 	return (zpool_prop_table[prop].pd_numdefault);
 }
 
-/*
- * Returns true if this is a valid feature@ property.
- */
-boolean_t
-zpool_prop_feature(const char *name)
-{
-	static const char *prefix = "feature@";
-	return (strncmp(name, prefix, strlen(prefix)) == 0);
-}
-
-/*
- * Returns true if this is a valid unsupported@ property.
- */
-boolean_t
-zpool_prop_unsupported(const char *name)
-{
-	static const char *prefix = "unsupported@";
-	return (strncmp(name, prefix, strlen(prefix)) == 0);
-}
-
 int
 zpool_prop_string_to_index(zpool_prop_t prop, const char *string,
     uint64_t *index)
@@ -207,12 +162,6 @@ zpool_prop_index_to_string(zpool_prop_t prop, uint64_t index,
     const char **string)
 {
 	return (zprop_index_to_string(prop, index, string, ZFS_TYPE_POOL));
-}
-
-uint64_t
-zpool_prop_random_value(zpool_prop_t prop, uint64_t seed)
-{
-	return (zprop_random_value(prop, seed, ZFS_TYPE_POOL));
 }
 
 #ifndef _KERNEL

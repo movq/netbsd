@@ -3,7 +3,7 @@
  * tcl_syscolors.d - trace Tcl program flow plus syscalls, in color.
  *                   Written for the Tcl DTrace provider.
  *
- * $Id: tcl_syscolors.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: tcl_syscolors.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * This traces activity from all Tcl processes on the system with DTrace
  * provider support (tcl8.4.16).

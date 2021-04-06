@@ -6,7 +6,7 @@
 # This is measuring reads and writes at the application level. This matches
 # the syscalls read, and write.
 #
-# $Id: rwsnoop,v 1.1.1.1 2015/09/30 22:01:06 christos Exp $
+# $Id: rwsnoop,v 1.1 2015/09/30 22:01:06 christos Exp $
 #
 # USAGE:	rwsnoop [-jPtvZ] [-n name] [-p pid]
 # 

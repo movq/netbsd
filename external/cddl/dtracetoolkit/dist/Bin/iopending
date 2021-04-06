@@ -7,7 +7,7 @@
 # By plotting a distribution graph of the number of pending events, the
 # "serialness" or "parallelness" of disk behaviour can be distinguished.
 #
-# $Id: iopending,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+# $Id: iopending,v 1.1 2015/09/30 22:01:07 christos Exp $
 #
 # USAGE:	iopending [-c] [-d device] [-f filename] 
 #		          [-m mount_point] [interval [count]]

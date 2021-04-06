@@ -20,9 +20,6 @@
  * CDDL HEADER END
  */
 
-#ifdef HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
-#endif
 /*
  * Copyright 2006 Sun Microsystems, Inc.  All rights reserved.
  * Use is subject to license terms.
@@ -93,7 +90,7 @@ ctf_lookup_by_name(ctf_file_t *fp, const char *name)
 		return (ctf_set_errno(fp, EINVAL));
 
 	for (p = name, end = name + strlen(name); *p != '\0'; p = q) {
-		while (isspace((unsigned char)*p))
+		while (isspace(*p))
 			p++; /* skip leading ws */
 
 		if (p == end)
@@ -135,13 +132,13 @@ ctf_lookup_by_name(ctf_file_t *fp, const char *name)
 		for (lp = fp->ctf_lookups; lp->ctl_prefix != NULL; lp++) {
 			if (lp->ctl_prefix[0] == '\0' ||
 			    strncmp(p, lp->ctl_prefix, (size_t)(q - p)) == 0) {
-				for (p += lp->ctl_len; isspace((unsigned char)*p); p++)
+				for (p += lp->ctl_len; isspace(*p); p++)
 					continue; /* skip prefix and next ws */
 
 				if ((q = strchr(p, '*')) == NULL)
 					q = end;  /* compare until end */
 
-				while (isspace((unsigned char)q[-1]))
+				while (isspace(q[-1]))
 					q--;	  /* exclude trailing ws */
 
 				if ((hp = ctf_hash_lookup(lp->ctl_hash, fp, p,

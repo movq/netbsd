@@ -7,7 +7,7 @@
 # configurable rate. This can be used as an estimate for which process
 # is consuming the most CPU time.
 #
-# $Id: sampleproc,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+# $Id: sampleproc,v 1.1 2015/09/30 22:01:07 christos Exp $
 # 
 # USAGE:	sampleproc [hertz]	# hit Ctrl-C to end sample
 #

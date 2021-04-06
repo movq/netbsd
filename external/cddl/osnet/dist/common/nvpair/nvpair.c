@@ -20,10 +20,16 @@
  */
 
 /*
- * Copyright (c) 2000, 2010, Oracle and/or its affiliates. All rights reserved.
+ * Copyright 2008 Sun Microsystems, Inc.  All rights reserved.
+ * Use is subject to license terms.
  */
 
+#pragma ident	"%Z%%M%	%I%	%E% SMI"
+
+#include <sys/stropts.h>
 #include <sys/debug.h>
+#include <sys/isa_defs.h>
+#include <sys/int_limits.h>
 #include <sys/nvpair.h>
 #include <sys/nvpair_impl.h>
 #include <rpc/types.h>
@@ -31,6 +37,7 @@
 
 #if defined(_KERNEL) && !defined(_BOOT)
 #include <sys/varargs.h>
+#include <sys/ddi.h>
 #include <sys/sunddi.h>
 #else
 #include <stdarg.h>
@@ -43,14 +50,6 @@
 #define	offsetof(s, m)		((size_t)(&(((s *)0)->m)))
 #endif
 #define	skip_whitespace(p)	while ((*(p) == ' ') || (*(p) == '\t')) p++
-
-#if !defined(illumos) && !defined(_KERNEL)
-/*
- * libnvpair is the lowest commen denominator for ZFS related libraries,
- * defining aok here makes it usable by all ZFS related libraries
- */
-int aok;
-#endif
 
 /*
  * nvpair.c - Provides kernel & userland interfaces for manipulating
@@ -538,7 +537,8 @@ nvpair_free(nvpair_t *nvp)
 		int i;
 
 		for (i = 0; i < NVP_NELEM(nvp); i++)
-			nvlist_free(nvlp[i]);
+			if (nvlp[i] != NULL)
+				nvlist_free(nvlp[i]);
 		break;
 	}
 	default:
@@ -690,18 +690,6 @@ nvlist_remove(nvlist_t *nvl, const char *name, data_type_t type)
 	}
 
 	return (ENOENT);
-}
-
-int
-nvlist_remove_nvpair(nvlist_t *nvl, nvpair_t *nvp)
-{
-	if (nvl == NULL || nvp == NULL)
-		return (EINVAL);
-
-	nvp_buf_unlink(nvl, nvp);
-	nvpair_free(nvp);
-	nvp_buf_free(nvl, nvp);
-	return (0);
 }
 
 /*
@@ -1174,42 +1162,6 @@ nvlist_next_nvpair(nvlist_t *nvl, nvpair_t *nvp)
 	return (curr != NULL ? &curr->nvi_nvp : NULL);
 }
 
-nvpair_t *
-nvlist_prev_nvpair(nvlist_t *nvl, nvpair_t *nvp)
-{
-	nvpriv_t *priv;
-	i_nvp_t *curr;
-
-	if (nvl == NULL ||
-	    (priv = (nvpriv_t *)(uintptr_t)nvl->nvl_priv) == NULL)
-		return (NULL);
-
-	curr = NVPAIR2I_NVP(nvp);
-
-	if (nvp == NULL)
-		curr = priv->nvp_last;
-	else if (priv->nvp_curr == curr || nvlist_contains_nvp(nvl, nvp))
-		curr = curr->nvi_prev;
-	else
-		curr = NULL;
-
-	priv->nvp_curr = curr;
-
-	return (curr != NULL ? &curr->nvi_nvp : NULL);
-}
-
-boolean_t
-nvlist_empty(nvlist_t *nvl)
-{
-	nvpriv_t *priv;
-
-	if (nvl == NULL ||
-	    (priv = (nvpriv_t *)(uintptr_t)nvl->nvl_priv) == NULL)
-		return (B_TRUE);
-
-	return (priv->nvp_list == NULL);
-}
-
 char *
 nvpair_name(nvpair_t *nvp)
 {
@@ -1228,7 +1180,6 @@ nvpair_type_is_array(nvpair_t *nvp)
 	data_type_t type = NVP_TYPE(nvp);
 
 	if ((type == DATA_TYPE_BYTE_ARRAY) ||
-	    (type == DATA_TYPE_INT8_ARRAY) ||
 	    (type == DATA_TYPE_UINT8_ARRAY) ||
 	    (type == DATA_TYPE_INT16_ARRAY) ||
 	    (type == DATA_TYPE_UINT16_ARRAY) ||
@@ -1623,8 +1574,6 @@ nvlist_lookup_nvpair_ei_sep(nvlist_t *nvl, const char *name, const char sep,
 	if ((nvl == NULL) || (name == NULL))
 		return (EINVAL);
 
-	sepp = NULL;
-	idx = 0;
 	/* step through components of name */
 	for (np = name; np && *np; np = sepp) {
 		/* ensure unique names */
@@ -2382,7 +2331,7 @@ nvlist_xpack(nvlist_t *nvl, char **bufp, size_t *buflen, int encoding,
 	 */
 	nv_priv_init(&nvpriv, nva, 0);
 
-	if ((err = nvlist_size(nvl, &alloc_size, encoding)))
+	if (err = nvlist_size(nvl, &alloc_size, encoding))
 		return (err);
 
 	if ((buf = nv_mem_zalloc(&nvpriv, alloc_size)) == NULL)
@@ -2586,8 +2535,7 @@ nvpair_native_embedded(nvstream_t *nvs, nvpair_t *nvp)
 		 * structure. The address may not be aligned, so we have
 		 * to use bzero.
 		 */
-		bzero((char *)packed + offsetof(nvlist_t, nvl_priv),
-		    sizeof (uint64_t));
+		bzero(&packed->nvl_priv, sizeof (packed->nvl_priv));
 	}
 
 	return (nvs_embedded(nvs, EMBEDDED_NVL(nvp)));
@@ -2615,8 +2563,7 @@ nvpair_native_embedded_array(nvstream_t *nvs, nvpair_t *nvp)
 			 * packed structure. The address may not be aligned,
 			 * so we have to use bzero.
 			 */
-			bzero((char *)packed + offsetof(nvlist_t, nvl_priv),
-			    sizeof (uint64_t));
+			bzero(&packed->nvl_priv, sizeof (packed->nvl_priv));
 	}
 
 	return (nvs_embedded_nvl_array(nvs, nvp, NULL));
@@ -3015,12 +2962,10 @@ nvs_xdr_nvp_op(nvstream_t *nvs, nvpair_t *nvp)
 		 */
 		ret = xdr_longlong_t(xdr, (void *)buf);
 		break;
-#ifndef __NetBSD__
 #if !defined(_KERNEL)
 	case DATA_TYPE_DOUBLE:
 		ret = xdr_double(xdr, (void *)buf);
 		break;
-#endif
 #endif
 	case DATA_TYPE_STRING:
 		ret = xdr_string(xdr, &buf, buflen - 1);

@@ -3,7 +3,7 @@
  * j_calldist.d - measure Java elapsed times for different types of operation.
  *                Written for the Java hotspot DTrace provider.
  *
- * $Id: j_calldist.d,v 1.1.1.1 2015/09/30 22:01:06 christos Exp $
+ * $Id: j_calldist.d,v 1.1 2015/09/30 22:01:06 christos Exp $
  *
  * This traces activity from all Java processes on the system with hotspot
  * provider support (1.6.0). Method calls are only visible when using the

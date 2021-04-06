@@ -3,7 +3,7 @@
 # lastwords - print last few syscalls for dying processes.
 #             Written using DTrace (Solaris 10 3/05).
 #
-# $Id: lastwords,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+# $Id: lastwords,v 1.1 2015/09/30 22:01:09 christos Exp $
 #
 # This prints the last few system calls for processes matching
 # the given name, when they exit. This makes use of a ring buffer

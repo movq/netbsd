@@ -23,10 +23,8 @@
  * Copyright 2006 Sun Microsystems, Inc.  All rights reserved.
  * Use is subject to license terms.
  */
-/*
- * Copyright (c) 2012 by Delphix. All rights reserved.
- * Copyright (c) 2013, Joyent, Inc. All rights reserved.
- */
+
+#pragma ident	"%Z%%M%	%I%	%E% SMI"
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -36,23 +34,15 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <string.h>
 #include <strings.h>
 #include <unistd.h>
 #include <limits.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <signal.h>
-#ifdef illumos
 #include <alloca.h>
-#endif
 #include <libgen.h>
-#ifdef illumos
 #include <libproc.h>
-#endif
-#ifdef __FreeBSD__
-#include <spawn.h>
-#endif
 
 typedef struct dtrace_cmd {
 	void (*dc_func)(struct dtrace_cmd *);	/* function to compile arg */
@@ -93,9 +83,6 @@ static int g_flowindent;
 static int g_intr;
 static int g_impatient;
 static int g_newline;
-#if defined(__FreeBSD__) || defined(__NetBSD__)
-static int g_siginfo;
-#endif
 static int g_total;
 static int g_cflags;
 static int g_oflags;
@@ -105,9 +92,8 @@ static int g_mode = DMODE_EXEC;
 static int g_status = E_SUCCESS;
 static int g_grabanon = 0;
 static const char *g_ofile = NULL;
-static FILE *g_ofp;
+static FILE *g_ofp = stdout;
 static dtrace_hdl_t *g_dtp;
-#ifdef illumos
 static char *g_etcfile = "/etc/system";
 static const char *g_etcbegin = "* vvvv Added by DTrace";
 static const char *g_etcend = "* ^^^^ Added by DTrace";
@@ -122,7 +108,6 @@ static const char *g_etc[] =  {
 "* chapter of the Solaris Dynamic Tracing Guide for details.",
 "*",
 NULL };
-#endif
 
 static int
 usage(FILE *fp)
@@ -181,7 +166,7 @@ usage(FILE *fp)
 	return (E_USAGE);
 }
 
-static void __printflike(1, 0)
+static void
 verror(const char *fmt, va_list ap)
 {
 	int error = errno;
@@ -194,7 +179,7 @@ verror(const char *fmt, va_list ap)
 }
 
 /*PRINTFLIKE1*/
-static void __printflike(1, 2) __dead
+static void
 fatal(const char *fmt, ...)
 {
 	va_list ap;
@@ -203,24 +188,13 @@ fatal(const char *fmt, ...)
 	verror(fmt, ap);
 	va_end(ap);
 
-	/*
-	 * Close the DTrace handle to ensure that any controlled processes are
-	 * correctly restored and continued.
-	 */
-	if (g_dtp)
-		dtrace_close(g_dtp);
-
 	exit(E_ERROR);
 }
 
 /*PRINTFLIKE1*/
-static void __printflike(1, 2) __dead
+static void
 dfatal(const char *fmt, ...)
 {
-#if !defined(illumos) && defined(NEED_ERRLOC)
-	char *p_errfile = NULL;
-	int errline = 0;
-#endif
 	va_list ap;
 
 	va_start(ap, fmt);
@@ -238,11 +212,6 @@ dfatal(const char *fmt, ...)
 		(void) fprintf(stderr, "%s\n",
 		    dtrace_errmsg(g_dtp, dtrace_errno(g_dtp)));
 	}
-#if !defined(illumos) && defined(NEED_ERRLOC)
-	dt_get_errloc(g_dtp, &p_errfile, &errline);
-	if (p_errfile != NULL)
-		printf("File '%s', line %d\n", p_errfile, errline);
-#endif
 
 	/*
 	 * Close the DTrace handle to ensure that any controlled processes are
@@ -254,7 +223,7 @@ dfatal(const char *fmt, ...)
 }
 
 /*PRINTFLIKE1*/
-static void __printflike(1, 2)
+static void
 error(const char *fmt, ...)
 {
 	va_list ap;
@@ -265,7 +234,7 @@ error(const char *fmt, ...)
 }
 
 /*PRINTFLIKE1*/
-static void __printflike(1, 2)
+static void
 notice(const char *fmt, ...)
 {
 	va_list ap;
@@ -279,7 +248,7 @@ notice(const char *fmt, ...)
 }
 
 /*PRINTFLIKE1*/
-static void __printflike(1, 2)
+static void
 oprintf(const char *fmt, ...)
 {
 	va_list ap;
@@ -403,42 +372,6 @@ dof_prune(const char *fname)
 	free(buf);
 }
 
-#ifdef __FreeBSD__
-/*
- * Use nextboot(8) to tell the loader to load DTrace kernel modules during
- * the next boot of the system. The nextboot(8) configuration is removed during
- * boot, so it will not persist indefinitely.
- */
-static void
-bootdof_add(void)
-{
-	char * const nbargv[] = {
-		"nextboot", "-a",
-		"-e", "dtraceall_load=\"YES\"",
-		"-e", "dtrace_dof_load=\"YES\"",
-		"-e", "dtrace_dof_name=\"/boot/dtrace.dof\"",
-		"-e", "dtrace_dof_type=\"dtrace_dof\"",
-		NULL,
-	};
-	pid_t child;
-	int err, status;
-
-	err = posix_spawnp(&child, "nextboot", NULL, NULL, nbargv,
-	    NULL);
-	if (err != 0) {
-		error("failed to execute nextboot: %s", strerror(err));
-		exit(E_ERROR);
-	}
-
-	if (waitpid(child, &status, 0) != child)
-		fatal("waiting for nextboot");
-	if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-		error("nextboot returned with status %d", status);
-		exit(E_ERROR);
-	}
-}
-#endif
-#ifdef illumos
 static void
 etcsystem_prune(void)
 {
@@ -549,13 +482,11 @@ etcsystem_add(void)
 
 	error("added forceload directives to %s\n", g_ofile);
 }
-#endif /* illumos__ */
 
 static void
 print_probe_info(const dtrace_probeinfo_t *p)
 {
 	char buf[BUFSIZ];
-	char *user;
 	int i;
 
 	oprintf("\n\tProbe Description Attributes\n");
@@ -579,14 +510,10 @@ print_probe_info(const dtrace_probeinfo_t *p)
 	oprintf("\n\tArgument Types\n");
 
 	for (i = 0; i < p->dtp_argc; i++) {
-		if (p->dtp_argv[i].dtt_flags & DTT_FL_USER)
-			user = "userland ";
-		else
-			user = "";
 		if (ctf_type_name(p->dtp_argv[i].dtt_ctfp,
 		    p->dtp_argv[i].dtt_type, buf, sizeof (buf)) == NULL)
 			(void) strlcpy(buf, "(unknown)", sizeof (buf));
-		oprintf("\t\targs[%d]: %s%s\n", i, user, buf);
+		oprintf("\t\targs[%d]: %s\n", i, buf);
 	}
 
 	if (p->dtp_argc == 0)
@@ -684,27 +611,12 @@ anon_prog(const dtrace_cmd_t *dcp, dof_hdr_t *dof, int n)
 	p = (uchar_t *)dof;
 	q = p + dof->dofh_loadsz;
 
-#ifdef __FreeBSD__
-	/*
-	 * On FreeBSD, the DOF file is read directly during boot - just write
-	 * two hex characters per byte.
-	 */
-	oprintf("dof-data-%d=", n);
-
-	while (p < q)
-		oprintf("%02x", *p++);
-
-	oprintf("\n");
-#endif
-#ifdef illumos
 	oprintf("dof-data-%d=0x%x", n, *p++);
 
 	while (p < q)
 		oprintf(",0x%x", *p++);
 
 	oprintf(";\n");
-#endif
-
 	dtrace_dof_destroy(g_dtp, dof);
 }
 
@@ -727,12 +639,9 @@ link_prog(dtrace_cmd_t *dcp)
 		p[0] = '\0'; /* strip .d suffix */
 		(void) snprintf(dcp->dc_ofile, sizeof (dcp->dc_ofile),
 		    "%s.o", basename(dcp->dc_arg));
-	} else if (g_cmdc > 1) {
-		(void) snprintf(dcp->dc_ofile, sizeof (dcp->dc_ofile),
-		    "d.out.%td", dcp - g_cmdv);
 	} else {
 		(void) snprintf(dcp->dc_ofile, sizeof (dcp->dc_ofile),
-		    "d.out");
+		    g_cmdc > 1 ?  "%s.%d" : "%s", "d.out", (int)(dcp - g_cmdv));
 	}
 
 	if (dtrace_program_link(g_dtp, dcp->dc_prog, DTRACE_D_PROBES,
@@ -751,9 +660,6 @@ list_probe(dtrace_hdl_t *dtp, const dtrace_probedesc_t *pdp, void *arg)
 
 	if (g_verbose && dtrace_probe_info(dtp, pdp, &p) == 0)
 		print_probe_info(&p);
-
-	if (g_intr != 0)
-		return (1);
 
 	return (0);
 }
@@ -835,27 +741,17 @@ compile_str(dtrace_cmd_t *dcp)
 static void
 prochandler(struct ps_prochandle *P, const char *msg, void *arg)
 {
-#ifdef illumos
 	const psinfo_t *prp = Ppsinfo(P);
 	int pid = Pstatus(P)->pr_pid;
 	char name[SIG2STR_MAX];
-#else
-	int wstatus = proc_getwstat(P);
-	int pid = proc_getpid(P);
-#endif
 
 	if (msg != NULL) {
 		notice("pid %d: %s\n", pid, msg);
 		return;
 	}
 
-#ifdef illumos
 	switch (Pstate(P)) {
-#else
-	switch (proc_state(P)) {
-#endif
 	case PS_UNDEAD:
-#ifdef illumos
 		/*
 		 * Ideally we would like to always report pr_wstat here, but it
 		 * isn't possible given current /proc semantics.  If we grabbed
@@ -868,20 +764,9 @@ prochandler(struct ps_prochandle *P, const char *msg, void *arg)
 			notice("pid %d terminated by %s\n", pid,
 			    proc_signame(WTERMSIG(prp->pr_wstat),
 			    name, sizeof (name)));
-#else
-		if (WIFSIGNALED(wstatus)) {
-			notice("pid %d terminated by %d\n", pid,
-			    WTERMSIG(wstatus));
-#endif
-#ifdef illumos
 		} else if (prp != NULL && WEXITSTATUS(prp->pr_wstat) != 0) {
 			notice("pid %d exited with status %d\n",
 			    pid, WEXITSTATUS(prp->pr_wstat));
-#else
-		} else if (WEXITSTATUS(wstatus) != 0) {
-			notice("pid %d exited with status %d\n",
-			    pid, WEXITSTATUS(wstatus));
-#endif
 		} else {
 			notice("pid %d has exited\n", pid);
 		}
@@ -899,7 +784,7 @@ prochandler(struct ps_prochandle *P, const char *msg, void *arg)
 static int
 errhandler(const dtrace_errdata_t *data, void *arg)
 {
-	error("%s", data->dteda_msg);
+	error(data->dteda_msg);
 	return (DTRACE_HANDLE_OK);
 }
 
@@ -907,7 +792,7 @@ errhandler(const dtrace_errdata_t *data, void *arg)
 static int
 drophandler(const dtrace_dropdata_t *data, void *arg)
 {
-	error("%s", data->dtdda_msg);
+	error(data->dtdda_msg);
 	return (DTRACE_HANDLE_OK);
 }
 
@@ -1265,56 +1150,18 @@ intr(int signo)
 		g_impatient = 1;
 }
 
-#ifdef __FreeBSD__
-static void
-siginfo(int signo __unused)
-{
-
-	g_siginfo++;
-	g_newline = 1;
-}
-#endif
-
-static void
-installsighands(void)
-{
-	struct sigaction act, oact;
-
-	(void) sigemptyset(&act.sa_mask);
-	act.sa_flags = 0;
-	act.sa_handler = intr;
-
-	if (sigaction(SIGINT, NULL, &oact) == 0 && oact.sa_handler != SIG_IGN)
-		(void) sigaction(SIGINT, &act, NULL);
-
-	if (sigaction(SIGTERM, NULL, &oact) == 0 && oact.sa_handler != SIG_IGN)
-		(void) sigaction(SIGTERM, &act, NULL);
-
-#ifdef __FreeBSD__
-	if (sigaction(SIGPIPE, NULL, &oact) == 0 && oact.sa_handler != SIG_IGN)
-		(void) sigaction(SIGPIPE, &act, NULL);
-
-	if (sigaction(SIGUSR1, NULL, &oact) == 0 && oact.sa_handler != SIG_IGN)
-		(void) sigaction(SIGUSR1, &act, NULL);
-
-	act.sa_handler = siginfo;
-	if (sigaction(SIGINFO, NULL, &oact) == 0 && oact.sa_handler != SIG_IGN)
-		(void) sigaction(SIGINFO, &act, NULL);
-#endif
-}
-
 int
 main(int argc, char *argv[])
 {
 	dtrace_bufdesc_t buf;
+	struct sigaction act, oact;
 	dtrace_status_t status[2];
 	dtrace_optval_t opt;
 	dtrace_cmd_t *dcp;
 
-	g_ofp = stdout;
 	int done = 0, mode = 0;
-	int err, i, c;
-	char *p, **v;
+	int err, i;
+	char c, *p, **v;
 	struct ps_prochandle *P;
 	pid_t pid;
 
@@ -1341,7 +1188,7 @@ main(int argc, char *argv[])
 	 * options into g_argv[], and abort if any invalid options are found.
 	 */
 	for (optind = 1; optind < argc; optind++) {
-		while ((c = getopt(argc, argv, DTRACE_OPTSTR)) != -1) {
+		while ((c = getopt(argc, argv, DTRACE_OPTSTR)) != EOF) {
 			switch (c) {
 			case '3':
 				if (strcmp(optarg, "2") != 0) {
@@ -1490,15 +1337,8 @@ main(int argc, char *argv[])
 		    dtrace_errmsg(NULL, err));
 	}
 
-#if defined(__i386__)
-	/* XXX The 32-bit seems to need more buffer space by default -sson */
-	(void) dtrace_setopt(g_dtp, "bufsize", "12m");
-	(void) dtrace_setopt(g_dtp, "aggsize", "12m");
-#else
 	(void) dtrace_setopt(g_dtp, "bufsize", "4m");
 	(void) dtrace_setopt(g_dtp, "aggsize", "4m");
-#endif
-	(void) dtrace_setopt(g_dtp, "temporal", "yes");
 
 	/*
 	 * If -G is specified, enable -xlink=dynamic and -xunodefs to permit
@@ -1531,7 +1371,7 @@ main(int argc, char *argv[])
 	 * this time; these will compiled as part of the fourth processing pass.
 	 */
 	for (optind = 1; optind < argc; optind++) {
-		while ((c = getopt(argc, argv, DTRACE_OPTSTR)) != -1) {
+		while ((c = getopt(argc, argv, DTRACE_OPTSTR)) != EOF) {
 			switch (c) {
 			case 'a':
 				if (dtrace_setopt(g_dtp, "grabanon", 0) != 0)
@@ -1688,13 +1528,13 @@ main(int argc, char *argv[])
 	 * may been affected by any library options set by the second pass.
 	 */
 	for (optind = 1; optind < argc; optind++) {
-		while ((c = getopt(argc, argv, DTRACE_OPTSTR)) != -1) {
+		while ((c = getopt(argc, argv, DTRACE_OPTSTR)) != EOF) {
 			switch (c) {
 			case 'c':
 				if ((v = make_argv(optarg)) == NULL)
 					fatal("failed to allocate memory");
 
-				P = dtrace_proc_create(g_dtp, v[0], v, NULL, NULL);
+				P = dtrace_proc_create(g_dtp, v[0], v);
 				if (P == NULL)
 					dfatal(NULL); /* dtrace_errmsg() only */
 
@@ -1776,21 +1616,10 @@ main(int argc, char *argv[])
 
 	case DMODE_ANON:
 		if (g_ofile == NULL)
-#ifdef illumos
 			g_ofile = "/kernel/drv/dtrace.conf";
-#endif
-#ifdef __FreeBSD__
-			/*
-			 * On FreeBSD, anonymous DOF data is written to
-			 * the DTrace DOF file.
-			 */
-			g_ofile = "/boot/dtrace.dof";
-#endif
 
 		dof_prune(g_ofile); /* strip out any old DOF directives */
-#ifdef illumos
 		etcsystem_prune(); /* string out any forceload directives */
-#endif
 
 		if (g_cmdc == 0) {
 			dtrace_close(g_dtp);
@@ -1821,14 +1650,8 @@ main(int argc, char *argv[])
 		 * that itself contains a #pragma D option quiet.
 		 */
 		error("saved anonymous enabling in %s\n", g_ofile);
-
-#ifdef __FreeBSD__
-		bootdof_add();
-#endif
-#ifdef illumos
 		etcsystem_add();
 		error("run update_drv(1M) or reboot to enable changes\n");
-#endif
 
 		dtrace_close(g_dtp);
 		return (g_status);
@@ -1861,8 +1684,6 @@ main(int argc, char *argv[])
 	case DMODE_LIST:
 		if (g_ofile != NULL && (g_ofp = fopen(g_ofile, "a")) == NULL)
 			fatal("failed to open output file '%s'", g_ofile);
-
-		installsighands();
 
 		oprintf("%5s %10s %17s %33s %s\n",
 		    "ID", "PROVIDER", "MODULE", "FUNCTION", "NAME");
@@ -1949,7 +1770,15 @@ main(int argc, char *argv[])
 	if (opt != DTRACEOPT_UNSET)
 		notice("allowing destructive actions\n");
 
-	installsighands();
+	(void) sigemptyset(&act.sa_mask);
+	act.sa_flags = 0;
+	act.sa_handler = intr;
+
+	if (sigaction(SIGINT, NULL, &oact) == 0 && oact.sa_handler != SIG_IGN)
+		(void) sigaction(SIGINT, &act, NULL);
+
+	if (sigaction(SIGTERM, NULL, &oact) == 0 && oact.sa_handler != SIG_IGN)
+		(void) sigaction(SIGTERM, &act, NULL);
 
 	/*
 	 * Now that tracing is active and we are ready to consume trace data,
@@ -1964,13 +1793,6 @@ main(int argc, char *argv[])
 	do {
 		if (!g_intr && !done)
 			dtrace_sleep(g_dtp);
-
-#if defined(__FreeBSD__) || defined(__NetBSD__)
-		if (g_siginfo) {
-			(void)dtrace_aggregate_print(g_dtp, g_ofp, NULL);
-			g_siginfo = 0;
-		}
-#endif
 
 		if (g_newline) {
 			/*

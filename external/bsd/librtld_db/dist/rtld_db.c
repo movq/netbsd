@@ -27,23 +27,19 @@
  * SUCH DAMAGE. 
  */ 
 #include <sys/cdefs.h>
-#ifdef __FBSDID
 __FBSDID("$FreeBSD: head/lib/librtld_db/rtld_db.c 272488 2014-10-03 23:20:37Z markj $");
-#else
-__RCSID("$NetBSD: rtld_db.c,v 1.3 2016/04/26 14:26:49 chs Exp $");
-#endif
 
+#include <machine/_inttypes.h>
 #include <sys/types.h>
-#include <sys/sysctl.h>
+#include <sys/user.h>
 
-#include <inttypes.h>
 #include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
 #include <libproc.h>
-#include <util.h>
+#include <libutil.h>
 
 #include "rtld_db.h"
 
@@ -150,7 +146,7 @@ rd_init(int version)
 rd_err_e
 rd_loadobj_iter(rd_agent_t *rdap, rl_iter_f *cb, void *clnt_data)
 {
-	size_t cnt, i, lastvn = 0;
+	int cnt, i, lastvn = 0;
 	rd_loadobj_t rdl;
 	struct kinfo_vmentry *kves, *kve;
 
@@ -240,17 +236,17 @@ rd_reset(rd_agent_t *rdap)
 {
 	GElf_Sym sym;
 
-	/*
-	 * preinit and dlactivity events are not supported yet.
-	 */
-
-	rdap->rda_preinit_addr = (uintptr_t)-1;
-	rdap->rda_dlactivity_addr = (uintptr_t)-1;
-
-	if (proc_name2sym(rdap->rda_php, "ld.elf_so", "_rtld_debug_state",
+	if (proc_name2sym(rdap->rda_php, "ld-elf.so.1", "r_debug_state",
 	    &sym, NULL) < 0)
 		return (RD_ERR);
-	DPRINTF("found _rtld_debug_state at 0x%lx\n",
+	DPRINTF("found r_debug_state at 0x%lx\n", (unsigned long)sym.st_value);
+	rdap->rda_preinit_addr = sym.st_value;
+	rdap->rda_dlactivity_addr = sym.st_value;
+
+	if (proc_name2sym(rdap->rda_php, "ld-elf.so.1", "_r_debug_postinit",
+	    &sym, NULL) < 0)
+		return (RD_ERR);
+	DPRINTF("found _r_debug_postinit at 0x%lx\n",
 	    (unsigned long)sym.st_value);
 	rdap->rda_postinit_addr = sym.st_value;
 

@@ -9,7 +9,7 @@
 # the hottest. See Notes/ALLexclusive_notes.txt for an explanation of
 # exclusive time.
 #
-# $Id: hotkernel,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+# $Id: hotkernel,v 1.1 2015/09/30 22:01:07 christos Exp $
 #
 # USAGE:        hotkernel [-hm]
 #

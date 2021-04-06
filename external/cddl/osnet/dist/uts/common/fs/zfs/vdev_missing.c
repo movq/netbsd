@@ -19,12 +19,8 @@
  * CDDL HEADER END
  */
 /*
- * Copyright 2010 Sun Microsystems, Inc.  All rights reserved.
+ * Copyright 2008 Sun Microsystems, Inc.  All rights reserved.
  * Use is subject to license terms.
- */
-
-/*
- * Copyright (c) 2012, 2014 by Delphix. All rights reserved.
  */
 
 /*
@@ -44,8 +40,7 @@
 
 /* ARGSUSED */
 static int
-vdev_missing_open(vdev_t *vd, uint64_t *psize, uint64_t *max_psize,
-    uint64_t *logical_ashift, uint64_t *physical_ashift)
+vdev_missing_open(vdev_t *vd, uint64_t *psize, uint64_t *ashift)
 {
 	/*
 	 * Really this should just fail.  But then the root vdev will be in the
@@ -53,10 +48,8 @@ vdev_missing_open(vdev_t *vd, uint64_t *psize, uint64_t *max_psize,
 	 * VDEV_AUX_BAD_GUID_SUM.  So we pretend to succeed, knowing that we
 	 * will fail the GUID sum check before ever trying to open the pool.
 	 */
-	*psize = 0;
-	*max_psize = 0;
-	*logical_ashift = 0;
-	*physical_ashift = 0;
+	*psize = SPA_MINDEVSIZE;
+	*ashift = SPA_MINBLOCKSHIFT;
 	return (0);
 }
 
@@ -67,11 +60,11 @@ vdev_missing_close(vdev_t *vd)
 }
 
 /* ARGSUSED */
-static void
+static int
 vdev_missing_io_start(zio_t *zio)
 {
-	zio->io_error = SET_ERROR(ENOTSUP);
-	zio_execute(zio);
+	zio->io_error = ENOTSUP;
+	return (ZIO_PIPELINE_CONTINUE);
 }
 
 /* ARGSUSED */
@@ -87,21 +80,6 @@ vdev_ops_t vdev_missing_ops = {
 	vdev_missing_io_start,
 	vdev_missing_io_done,
 	NULL,
-	NULL,
-	NULL,
 	VDEV_TYPE_MISSING,	/* name of this vdev type */
-	B_TRUE			/* leaf vdev */
-};
-
-vdev_ops_t vdev_hole_ops = {
-	vdev_missing_open,
-	vdev_missing_close,
-	vdev_default_asize,
-	vdev_missing_io_start,
-	vdev_missing_io_done,
-	NULL,
-	NULL,
-	NULL,
-	VDEV_TYPE_HOLE,		/* name of this vdev type */
 	B_TRUE			/* leaf vdev */
 };

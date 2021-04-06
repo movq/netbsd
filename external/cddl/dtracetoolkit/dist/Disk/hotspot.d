@@ -8,7 +8,7 @@
  * of a disk, it does not imply that the existance or not of a hotspot is
  * good or bad (often may be good, less seeking).
  *
- * $Id: hotspot.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: hotspot.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE:       hotspot.d       # hit Ctrl-C to end
  *

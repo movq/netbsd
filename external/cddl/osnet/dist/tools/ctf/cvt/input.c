@@ -29,10 +29,6 @@
  * Routines for retrieving CTF data from a .SUNW_ctf ELF section
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-# include "nbtool_config.h"
-#endif
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -75,7 +71,6 @@ built_source_types(Elf *elf, char const *file)
 			/* ignore */
 			break;
 		case 's':
-		case 'S':
 			types |= SOURCE_S;
 			break;
 		default:
@@ -92,7 +87,7 @@ read_file(Elf *elf, char *file, char *label, read_cb_f *func, void *arg,
     int require_ctf)
 {
 	Elf_Scn *ctfscn;
-	Elf_Data *ctfdata = NULL;
+	Elf_Data *ctfdata;
 	symit_data_t *si = NULL;
 	int ctfscnidx;
 	tdata_t *td;
@@ -225,7 +220,7 @@ read_ctf_common(char *file, char *label, read_cb_f *func, void *arg,
 
 /*ARGSUSED*/
 int
-read_ctf_save_cb(tdata_t *td, char *name __unused, void *retp)
+read_ctf_save_cb(tdata_t *td, char *name, void *retp)
 {
 	tdata_t **tdp = retp;
 
@@ -391,7 +386,6 @@ GElf_Sym *
 symit_next(symit_data_t *si, int type)
 {
 	GElf_Sym sym;
-	char *bname;
 	int check_sym = (type == STT_OBJECT || type == STT_FUNC);
 
 	for (; si->si_next < si->si_nument; si->si_next++) {
@@ -399,10 +393,8 @@ symit_next(symit_data_t *si, int type)
 		gelf_getsym(si->si_symd, si->si_next, &sym);
 		si->si_curname = (caddr_t)si->si_strd->d_buf + sym.st_name;
 
-		if (GELF_ST_TYPE(sym.st_info) == STT_FILE) {
-			bname = strrchr(si->si_curname, '/');
-			si->si_curfile = bname == NULL ? si->si_curname : bname + 1;
-		}
+		if (GELF_ST_TYPE(sym.st_info) == STT_FILE)
+			si->si_curfile = si->si_curname;
 
 		if (GELF_ST_TYPE(sym.st_info) != type ||
 		    sym.st_shndx == SHN_UNDEF)

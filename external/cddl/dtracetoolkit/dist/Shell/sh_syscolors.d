@@ -3,7 +3,7 @@
  * sh_syscolors.d - trace Bourne shell flow plus syscalls, in color.
  *                  Written for the sh DTrace provider.
  *
- * $Id: sh_syscolors.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: sh_syscolors.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * USAGE: sh_syscolors.d { -p PID | -c cmd }	# hit Ctrl-C to end
  *

@@ -55,8 +55,6 @@ typedef unsigned short ush;
 typedef ush FAR ushf;
 typedef unsigned long  ulg;
 
-#define z_errmsg opensolaris_z_errmsg
-
 extern const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
 /* (size given to avoid silly warnings with Visual C++) */
 

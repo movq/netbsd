@@ -3,7 +3,7 @@
  * rb_syscolors.d - trace Ruby method flow plus syscalls, in color.
  *                  Written for the Ruby DTrace provider.
  *
- * $Id: rb_syscolors.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: rb_syscolors.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * USAGE: rb_syscolors.d { -p PID | -c cmd }	# hit Ctrl-C to end
  *

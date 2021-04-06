@@ -5,7 +5,7 @@
 #
 # This program must be run from the global zone as root.
 #
-# $Id: zvmstat,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+# $Id: zvmstat,v 1.1 2015/09/30 22:01:09 christos Exp $
 #
 # USAGE: 	zvmstat [-ht] [interval [count]]
 #
