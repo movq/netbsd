@@ -22,9 +22,6 @@
 /*
  * Copyright 2005 Sun Microsystems, Inc.  All rights reserved.
  * Use is subject to license terms.
- * Copyright 2014 Howard Su
- * Copyright 2015 George V. Neville-Neil
- *
  */
 
 #pragma ident	"%Z%%M%	%I%	%E% SMI"
@@ -38,10 +35,6 @@
 
 #include <dt_impl.h>
 #include <dt_pid.h>
-
-#ifndef illumos
-#include <libproc_compat.h>
-#endif
 
 #define	OP(x)		((x) >> 30)
 #define	OP2(x)		(((x) >> 22) & 0x07)
@@ -92,12 +85,13 @@ dt_pid_create_return_probe(struct ps_prochandle *P, dtrace_hdl_t *dtp,
 		dt_dprintf("mr sparkle: malloc() failed\n");
 		return (DT_PROC_ERR);
 	}
-
+#ifdef DOODAD
 	if (Pread(P, text, symp->st_size, symp->st_value) != symp->st_size) {
 		dt_dprintf("mr sparkle: Pread() failed\n");
 		free(text);
 		return (DT_PROC_ERR);
 	}
+#endif
 
 	/*
 	 * Leave a dummy instruction in the last slot to simplify edge
@@ -173,7 +167,7 @@ dt_pid_create_glob_offset_probes(struct ps_prochandle *P, dtrace_hdl_t *dtp,
 		char name[sizeof (i) * 2 + 1];
 
 		for (i = 0; i < symp->st_size; i += 4) {
-			(void) snprintf(name, sizeof(name), "%lx", i);
+			(void) sprintf(name, "%lx", i);
 			if (gmatch(name, pattern))
 				ftp->ftps_offs[ftp->ftps_noffs++] = i;
 		}
@@ -187,3 +181,4 @@ dt_pid_create_glob_offset_probes(struct ps_prochandle *P, dtrace_hdl_t *dtp,
 
 	return (ftp->ftps_noffs);
 }
+

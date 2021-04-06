@@ -6,7 +6,7 @@
  * This program identifies the vnode type of read/write activity - whether
  * that is for regular files, sockets, character special devices, etc.
  *
- * $Id: rwbytype.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: rwbytype.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE:       rwbytype.d    # hit Ctrl-C to end sample
  *

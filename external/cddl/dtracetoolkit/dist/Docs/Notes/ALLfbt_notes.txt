@@ -3,7 +3,7 @@
 * To identify these scripts, check the "STABILITY" section of the script's
 * man page, or try grepping for "fbt" on the script.
 *
-* $Id: ALLfbt_notes.txt,v 1.1.1.1 2015/09/30 22:01:08 christos Exp $
+* $Id: ALLfbt_notes.txt,v 1.1 2015/09/30 22:01:08 christos Exp $
 *
 * COPYRIGHT: Copyright (c) 2007 Brendan Gregg.
 **************************************************************************

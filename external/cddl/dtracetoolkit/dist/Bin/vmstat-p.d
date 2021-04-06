@@ -7,7 +7,7 @@
  * from DTrace. This program is intended as a starting point for other
  * DTrace scripts, by beginning with familiar statistics.
  *
- * $Id: vmstat-p.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: vmstat-p.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE:	vmstat-p.d
  *

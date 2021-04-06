@@ -3,7 +3,7 @@
  * py_syscalls.d - count Python function calls and syscalls using DTrace.
  *                 Written for the Python DTrace provider.
  *
- * $Id: py_syscalls.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: py_syscalls.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE: py_syscalls.d { -p PID | -c cmd }	# hit Ctrl-C to end
  *

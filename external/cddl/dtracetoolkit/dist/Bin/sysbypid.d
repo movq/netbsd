@@ -3,7 +3,7 @@
  * sysbypid.d - print sysinfo events by process.
  *		Uses DTrace (Solaris 10 3/05).
  *
- * $Id: sysbypid.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: sysbypid.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE: sysbypid.d
  *

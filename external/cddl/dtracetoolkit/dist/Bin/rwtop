@@ -6,7 +6,7 @@
 # This is measuring reads and writes at the application level. This matches
 # read and write system calls.
 #
-# $Id: rwtop,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+# $Id: rwtop,v 1.1 2015/09/30 22:01:07 christos Exp $
 #
 # USAGE:	rwtop [-cC] [-j|-Z] [-n name] [-p pid]
 #		      [-t top] [interval [count]]

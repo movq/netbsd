@@ -22,11 +22,9 @@
  * Copyright 2007 Sun Microsystems, Inc.  All rights reserved.
  * Use is subject to license terms.
  */
-/*
- * Copyright 2016 Igor Kozhukhov <ikozhukhov@gmail.com>.
- */
 
-#include <solaris.h>
+#pragma ident	"%Z%%M%	%I%	%E% SMI"
+
 #include <libintl.h>
 #include <libuutil.h>
 #include <stddef.h>
@@ -133,8 +131,7 @@ pool_list_get(int argc, char **argv, zprop_list_t **proplist, int *err)
 		for (i = 0; i < argc; i++) {
 			zpool_handle_t *zhp;
 
-			if ((zhp = zpool_open_canfail(g_zfs, argv[i])) !=
-			    NULL) {
+			if (zhp = zpool_open_canfail(g_zfs, argv[i])) {
 				if (add_pool(zhp, zlp) != 0)
 					*err = B_TRUE;
 			} else {

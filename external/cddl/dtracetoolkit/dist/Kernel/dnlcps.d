@@ -9,7 +9,7 @@
  *
  * dnlcps.d prints DNLC statistics by process.
  *
- * $Id: dnlcps.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: dnlcps.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * USAGE:	dnlcps.d        # wait several seconds, then hit Ctrl-C
  *

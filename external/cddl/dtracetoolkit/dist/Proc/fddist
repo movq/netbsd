@@ -7,7 +7,7 @@
 # by process. This can be used to determine which file descriptor a 
 # process is doing the most I/O with.
 #
-# $Id: fddist,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+# $Id: fddist,v 1.1 2015/09/30 22:01:09 christos Exp $
 #
 # USAGE:        fddist [-r|-w]      # hit Ctrl-C to end sample
 #

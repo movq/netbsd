@@ -9,7 +9,7 @@
  * The value is similar to that seen in "sar -q", however this is
  * calculated in a more accurate manner - sampling at 1000 Hertz.
  *
- * $Id: runocc.d,v 1.1.1.1 2015/09/30 22:01:06 christos Exp $
+ * $Id: runocc.d,v 1.1 2015/09/30 22:01:06 christos Exp $
  *
  * USAGE:	runocc.d
  *

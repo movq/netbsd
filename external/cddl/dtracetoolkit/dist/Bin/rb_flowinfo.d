@@ -3,7 +3,7 @@
  * rb_flowinfo.d - snoop Ruby function (method) flow with info using DTrace.
  *                 Written for the Ruby DTrace provider.
  *
- * $Id: rb_flowinfo.d,v 1.1.1.1 2015/09/30 22:01:06 christos Exp $
+ * $Id: rb_flowinfo.d,v 1.1 2015/09/30 22:01:06 christos Exp $
  *
  * This traces activity from all Ruby programs on the system that are
  * running with Ruby provider support.

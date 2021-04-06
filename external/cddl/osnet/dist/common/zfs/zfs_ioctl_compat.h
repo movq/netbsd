@@ -28,7 +28,6 @@
 #define	_SYS_ZFS_IOCTL_COMPAT_H
 
 #include <sys/cred.h>
-#include <sys/sunddi.h>
 #include <sys/dmu.h>
 #include <sys/zio.h>
 #include <sys/dsl_deleg.h>
@@ -402,7 +401,7 @@ typedef struct zfs_cmd_inlanes {
 } zfs_cmd_inlanes_t;
 
 #ifdef _KERNEL
-static unsigned long zfs_ioctl_v15_to_v28[] = {
+unsigned static long zfs_ioctl_v15_to_v28[] = {
 	0,	/*  0 ZFS_IOC_POOL_CREATE */
 	1,	/*  1 ZFS_IOC_POOL_DESTROY */
 	2,	/*  2 ZFS_IOC_POOL_IMPORT */
@@ -460,7 +459,7 @@ static unsigned long zfs_ioctl_v15_to_v28[] = {
 };
 
 #else	/* KERNEL */
-static unsigned long zfs_ioctl_v28_to_v15[] = {
+unsigned static long zfs_ioctl_v28_to_v15[] = {
 	0,	/*  0 ZFS_IOC_POOL_CREATE */
 	1,	/*  1 ZFS_IOC_POOL_DESTROY */
 	2,	/*  2 ZFS_IOC_POOL_IMPORT */

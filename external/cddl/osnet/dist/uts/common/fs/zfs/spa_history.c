@@ -20,10 +20,11 @@
  */
 
 /*
- * Copyright (c) 2006, 2010, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2011, 2015 by Delphix. All rights reserved.
- * Copyright (c) 2014 Integros [integros.com]
+ * Copyright 2008 Sun Microsystems, Inc.  All rights reserved.
+ * Use is subject to license terms.
  */
+
+#pragma ident	"%Z%%M%	%I%	%E% SMI"
 
 #include <sys/spa.h>
 #include <sys/spa_impl.h>
@@ -31,14 +32,10 @@
 #include <sys/dsl_synctask.h>
 #include <sys/dmu_tx.h>
 #include <sys/dmu_objset.h>
-#include <sys/dsl_dataset.h>
-#include <sys/dsl_dir.h>
 #include <sys/utsname.h>
-#include <sys/sunddi.h>
-#include <sys/cred.h>
-#include "zfs_comutil.h"
-#ifdef _KERNEL
 #include <sys/cmn_err.h>
+#include <sys/sunddi.h>
+#ifdef _KERNEL
 #include <sys/zone.h>
 #endif
 
@@ -91,7 +88,7 @@ spa_history_create_obj(spa_t *spa, dmu_tx_t *tx)
 
 	ASSERT(spa->spa_history == 0);
 	spa->spa_history = dmu_object_alloc(mos, DMU_OT_SPA_HISTORY,
-	    SPA_OLD_MAXBLOCKSIZE, DMU_OT_SPA_HISTORY_OFFSETS,
+	    SPA_MAXBLOCKSIZE, DMU_OT_SPA_HISTORY_OFFSETS,
 	    sizeof (spa_history_phys_t), tx);
 
 	VERIFY(zap_add(mos, DMU_POOL_DIRECTORY_OBJECT,
@@ -106,11 +103,10 @@ spa_history_create_obj(spa_t *spa, dmu_tx_t *tx)
 
 	/*
 	 * Figure out maximum size of history log.  We set it at
-	 * 0.1% of pool size, with a max of 1G and min of 128KB.
+	 * 1% of pool size, with a max of 32MB and min of 128KB.
 	 */
-	shpp->sh_phys_max_off =
-	    metaslab_class_get_dspace(spa_normal_class(spa)) / 1000;
-	shpp->sh_phys_max_off = MIN(shpp->sh_phys_max_off, 1<<30);
+	shpp->sh_phys_max_off = spa_get_dspace(spa) / 100;
+	shpp->sh_phys_max_off = MIN(shpp->sh_phys_max_off, 32<<20);
 	shpp->sh_phys_max_off = MAX(shpp->sh_phys_max_off, 128<<10);
 
 	dmu_buf_rele(dbp, FTAG);
@@ -131,12 +127,12 @@ spa_history_advance_bof(spa_t *spa, spa_history_phys_t *shpp)
 	firstread = MIN(sizeof (reclen), shpp->sh_phys_max_off - phys_bof);
 
 	if ((err = dmu_read(mos, spa->spa_history, phys_bof, firstread,
-	    buf, DMU_READ_PREFETCH)) != 0)
+	    buf)) != 0)
 		return (err);
 	if (firstread != sizeof (reclen)) {
 		if ((err = dmu_read(mos, spa->spa_history,
 		    shpp->sh_pool_create_len, sizeof (reclen) - firstread,
-		    buf + firstread, DMU_READ_PREFETCH)) != 0)
+		    buf + firstread)) != 0)
 			return (err);
 	}
 
@@ -180,32 +176,30 @@ spa_history_write(spa_t *spa, void *buf, uint64_t len, spa_history_phys_t *shpp,
 }
 
 static char *
-spa_history_zone(void)
+spa_history_zone()
 {
 #ifdef _KERNEL
-#ifdef __FreeBSD__
-	/* XXX: pr_hostname can be changed by default from within a jail! */
-	if (jailed(curthread->td_ucred))
-		return (curthread->td_ucred->cr_prison->pr_hostname);
+	return (curproc->p_zone->zone_name);
+#else
+	return ("global");
 #endif
-#endif
-	return (NULL);
 }
 
 /*
  * Write out a history event.
  */
-/*ARGSUSED*/
 static void
-spa_history_log_sync(void *arg, dmu_tx_t *tx)
+spa_history_log_sync(void *arg1, void *arg2, cred_t *cr, dmu_tx_t *tx)
 {
-	nvlist_t	*nvl = arg;
-	spa_t		*spa = dmu_tx_pool(tx)->dp_spa;
+	spa_t		*spa = arg1;
+	history_arg_t	*hap = arg2;
+	const char	*history_str = hap->ha_history_str;
 	objset_t	*mos = spa->spa_meta_objset;
 	dmu_buf_t	*dbp;
 	spa_history_phys_t *shpp;
 	size_t		reclen;
 	uint64_t	le_len;
+	nvlist_t	*nvrecord;
 	char		*record_packed = NULL;
 	int		ret;
 
@@ -222,7 +216,7 @@ spa_history_log_sync(void *arg, dmu_tx_t *tx)
 	 * Get the offset of where we need to write via the bonus buffer.
 	 * Update the offset when the write completes.
 	 */
-	VERIFY0(dmu_bonus_hold(mos, spa->spa_history, FTAG, &dbp));
+	VERIFY(0 == dmu_bonus_hold(mos, spa->spa_history, FTAG, &dbp));
 	shpp = dbp->db_data;
 
 	dmu_buf_will_dirty(dbp, tx);
@@ -235,35 +229,40 @@ spa_history_log_sync(void *arg, dmu_tx_t *tx)
 	}
 #endif
 
-	fnvlist_add_uint64(nvl, ZPOOL_HIST_TIME, gethrestime_sec());
+	VERIFY(nvlist_alloc(&nvrecord, NV_UNIQUE_NAME, KM_SLEEP) == 0);
+	VERIFY(nvlist_add_uint64(nvrecord, ZPOOL_HIST_TIME,
+	    gethrestime_sec()) == 0);
+	VERIFY(nvlist_add_uint64(nvrecord, ZPOOL_HIST_WHO,
+	    (uint64_t)crgetuid(cr)) == 0);
+	if (hap->ha_zone[0] != '\0')
+		VERIFY(nvlist_add_string(nvrecord, ZPOOL_HIST_ZONE,
+		    hap->ha_zone) == 0);
 #ifdef _KERNEL
-	fnvlist_add_string(nvl, ZPOOL_HIST_HOST, utsname.nodename);
+	VERIFY(nvlist_add_string(nvrecord, ZPOOL_HIST_HOST,
+	    utsname.nodename) == 0);
 #endif
-	if (nvlist_exists(nvl, ZPOOL_HIST_CMD)) {
-		zfs_dbgmsg("command: %s",
-		    fnvlist_lookup_string(nvl, ZPOOL_HIST_CMD));
-	} else if (nvlist_exists(nvl, ZPOOL_HIST_INT_NAME)) {
-		if (nvlist_exists(nvl, ZPOOL_HIST_DSNAME)) {
-			zfs_dbgmsg("txg %lld %s %s (id %llu) %s",
-			    fnvlist_lookup_uint64(nvl, ZPOOL_HIST_TXG),
-			    fnvlist_lookup_string(nvl, ZPOOL_HIST_INT_NAME),
-			    fnvlist_lookup_string(nvl, ZPOOL_HIST_DSNAME),
-			    fnvlist_lookup_uint64(nvl, ZPOOL_HIST_DSID),
-			    fnvlist_lookup_string(nvl, ZPOOL_HIST_INT_STR));
-		} else {
-			zfs_dbgmsg("txg %lld %s %s",
-			    fnvlist_lookup_uint64(nvl, ZPOOL_HIST_TXG),
-			    fnvlist_lookup_string(nvl, ZPOOL_HIST_INT_NAME),
-			    fnvlist_lookup_string(nvl, ZPOOL_HIST_INT_STR));
-		}
-	} else if (nvlist_exists(nvl, ZPOOL_HIST_IOCTL)) {
-		zfs_dbgmsg("ioctl %s",
-		    fnvlist_lookup_string(nvl, ZPOOL_HIST_IOCTL));
+	if (hap->ha_log_type == LOG_CMD_POOL_CREATE ||
+	    hap->ha_log_type == LOG_CMD_NORMAL) {
+		VERIFY(nvlist_add_string(nvrecord, ZPOOL_HIST_CMD,
+		    history_str) == 0);
+	} else {
+		VERIFY(nvlist_add_uint64(nvrecord, ZPOOL_HIST_INT_EVENT,
+		    hap->ha_event) == 0);
+		VERIFY(nvlist_add_uint64(nvrecord, ZPOOL_HIST_TXG,
+		    tx->tx_txg) == 0);
+		VERIFY(nvlist_add_string(nvrecord, ZPOOL_HIST_INT_STR,
+		    history_str) == 0);
 	}
 
-	record_packed = fnvlist_pack(nvl, &reclen);
+	VERIFY(nvlist_size(nvrecord, &reclen, NV_ENCODE_XDR) == 0);
+	record_packed = kmem_alloc(reclen, KM_SLEEP);
+
+	VERIFY(nvlist_pack(nvrecord, &record_packed, &reclen,
+	    NV_ENCODE_XDR, KM_SLEEP) == 0);
 
 	mutex_enter(&spa->spa_history_lock);
+	if (hap->ha_log_type == LOG_CMD_POOL_CREATE)
+		VERIFY(shpp->sh_eof == shpp->sh_pool_create_len);
 
 	/* write out the packed length as little endian */
 	le_len = LE_64((uint64_t)reclen);
@@ -271,68 +270,37 @@ spa_history_log_sync(void *arg, dmu_tx_t *tx)
 	if (!ret)
 		ret = spa_history_write(spa, record_packed, reclen, shpp, tx);
 
-	/* The first command is the create, which we keep forever */
-	if (ret == 0 && shpp->sh_pool_create_len == 0 &&
-	    nvlist_exists(nvl, ZPOOL_HIST_CMD)) {
-		shpp->sh_pool_create_len = shpp->sh_bof = shpp->sh_eof;
+	if (!ret && hap->ha_log_type == LOG_CMD_POOL_CREATE) {
+		shpp->sh_pool_create_len += sizeof (le_len) + reclen;
+		shpp->sh_bof = shpp->sh_pool_create_len;
 	}
 
 	mutex_exit(&spa->spa_history_lock);
-	fnvlist_pack_free(record_packed, reclen);
+	nvlist_free(nvrecord);
+	kmem_free(record_packed, reclen);
 	dmu_buf_rele(dbp, FTAG);
-	fnvlist_free(nvl);
+
+	if (hap->ha_log_type == LOG_INTERNAL) {
+		kmem_free((void*)hap->ha_history_str, HIS_MAX_RECORD_LEN);
+		kmem_free(hap, sizeof (history_arg_t));
+	}
 }
 
 /*
  * Write out a history event.
  */
 int
-spa_history_log(spa_t *spa, const char *msg)
+spa_history_log(spa_t *spa, const char *history_str, history_log_type_t what)
 {
-	int err;
-	nvlist_t *nvl = fnvlist_alloc();
+	history_arg_t ha;
 
-	fnvlist_add_string(nvl, ZPOOL_HIST_CMD, msg);
-	err = spa_history_log_nvl(spa, nvl);
-	fnvlist_free(nvl);
-	return (err);
-}
+	ASSERT(what != LOG_INTERNAL);
 
-int
-spa_history_log_nvl(spa_t *spa, nvlist_t *nvl)
-{
-	int err = 0;
-	dmu_tx_t *tx;
-	nvlist_t *nvarg;
-
-	if (spa_version(spa) < SPA_VERSION_ZPOOL_HISTORY)
-		return (EINVAL);
-
-	if (spa_version(spa) < SPA_VERSION_ZPOOL_HISTORY || !spa_writeable(spa))
-		return (SET_ERROR(EINVAL));
-
-	tx = dmu_tx_create_dd(spa_get_dsl(spa)->dp_mos_dir);
-	err = dmu_tx_assign(tx, TXG_WAIT);
-	if (err) {
-		dmu_tx_abort(tx);
-		return (err);
-	}
-
-	nvarg = fnvlist_dup(nvl);
-	if (spa_history_zone() != NULL) {
-		fnvlist_add_string(nvarg, ZPOOL_HIST_ZONE,
-		    spa_history_zone());
-	}
-	fnvlist_add_uint64(nvarg, ZPOOL_HIST_WHO, crgetruid(CRED()));
-
-	/* Kick this off asynchronously; errors are ignored. */
-	dsl_sync_task_nowait(spa_get_dsl(spa), spa_history_log_sync,
-	    nvarg, 0, ZFS_SPACE_CHECK_NONE, tx);
-	dmu_tx_commit(tx);
-
-	/* spa_history_log_sync will free nvl */
-	return (err);
-
+	ha.ha_history_str = history_str;
+	ha.ha_log_type = what;
+	(void) strlcpy(ha.ha_zone, spa_history_zone(), sizeof (ha.ha_zone));
+	return (dsl_sync_task_do(spa_get_dsl(spa), NULL, spa_history_log_sync,
+	    spa, &ha, 0));
 }
 
 /*
@@ -349,19 +317,11 @@ spa_history_get(spa_t *spa, uint64_t *offp, uint64_t *len, char *buf)
 	int err;
 
 	/*
-	 * If the command history doesn't exist (older pool),
+	 * If the command history  doesn't exist (older pool),
 	 * that's ok, just return ENOENT.
 	 */
 	if (!spa->spa_history)
-		return (SET_ERROR(ENOENT));
-
-	/*
-	 * The history is logged asynchronously, so when they request
-	 * the first chunk of history, make sure everything has been
-	 * synced to disk so that we get it.
-	 */
-	if (*offp == 0 && spa_writeable(spa))
-		txg_wait_synced(spa_get_dsl(spa), 0);
+		return (ENOENT);
 
 	if ((err = dmu_bonus_hold(mos, spa->spa_history, FTAG, &dbp)) != 0)
 		return (err);
@@ -420,11 +380,10 @@ spa_history_get(spa_t *spa, uint64_t *offp, uint64_t *len, char *buf)
 		return (0);
 	}
 
-	err = dmu_read(mos, spa->spa_history, phys_read_off, read_len, buf,
-	    DMU_READ_PREFETCH);
+	err = dmu_read(mos, spa->spa_history, phys_read_off, read_len, buf);
 	if (leftover && err == 0) {
 		err = dmu_read(mos, spa->spa_history, shpp->sh_pool_create_len,
-		    leftover, buf + read_len, DMU_READ_PREFETCH);
+		    leftover, buf + read_len);
 	}
 	mutex_exit(&spa->spa_history_lock);
 
@@ -432,125 +391,38 @@ spa_history_get(spa_t *spa, uint64_t *offp, uint64_t *len, char *buf)
 	return (err);
 }
 
-/*
- * The nvlist will be consumed by this call.
- */
-static void
-log_internal(nvlist_t *nvl, const char *operation, spa_t *spa,
-    dmu_tx_t *tx, const char *fmt, va_list adx)
+void
+spa_history_internal_log(history_internal_events_t event, spa_t *spa,
+    dmu_tx_t *tx, cred_t *cr, const char *fmt, ...)
 {
-	char *msg;
-	va_list adx2;
+	history_arg_t *hap;
+	char *str;
+	va_list adx;
 
 	/*
 	 * If this is part of creating a pool, not everything is
 	 * initialized yet, so don't bother logging the internal events.
-	 * Likewise if the pool is not writeable.
 	 */
-	if (tx->tx_txg == TXG_INITIAL || !spa_writeable(spa)) {
-		fnvlist_free(nvl);
+	if (tx->tx_txg == TXG_INITIAL)
 		return;
-	}
 
-	va_copy(adx2, adx);
+	hap = kmem_alloc(sizeof (history_arg_t), KM_SLEEP);
+	str = kmem_alloc(HIS_MAX_RECORD_LEN, KM_SLEEP);
 
-	msg = kmem_alloc(vsnprintf(NULL, 0, fmt, adx) + 1, KM_SLEEP);
-	(void) vsprintf(msg, fmt, adx2);
-	fnvlist_add_string(nvl, ZPOOL_HIST_INT_STR, msg);
-	strfree(msg);
+	va_start(adx, fmt);
+	(void) vsnprintf(str, HIS_MAX_RECORD_LEN, fmt, adx);
+	va_end(adx);
 
-	va_end(adx2);
-
-	fnvlist_add_string(nvl, ZPOOL_HIST_INT_NAME, operation);
-	fnvlist_add_uint64(nvl, ZPOOL_HIST_TXG, tx->tx_txg);
+	hap->ha_log_type = LOG_INTERNAL;
+	hap->ha_history_str = str;
+	hap->ha_event = event;
+	hap->ha_zone[0] = '\0';
 
 	if (dmu_tx_is_syncing(tx)) {
-		spa_history_log_sync(nvl, tx);
+		spa_history_log_sync(spa, hap, cr, tx);
 	} else {
-		dsl_sync_task_nowait(spa_get_dsl(spa),
-		    spa_history_log_sync, nvl, 0, ZFS_SPACE_CHECK_NONE, tx);
+		dsl_sync_task_do_nowait(spa_get_dsl(spa), NULL,
+		    spa_history_log_sync, spa, hap, 0, tx);
 	}
-	/* spa_history_log_sync() will free nvl */
-}
-
-void
-spa_history_log_internal(spa_t *spa, const char *operation,
-    dmu_tx_t *tx, const char *fmt, ...)
-{
-	dmu_tx_t *htx = tx;
-	va_list adx;
-
-	/* create a tx if we didn't get one */
-	if (tx == NULL) {
-		htx = dmu_tx_create_dd(spa_get_dsl(spa)->dp_mos_dir);
-		if (dmu_tx_assign(htx, TXG_WAIT) != 0) {
-			dmu_tx_abort(htx);
-			return;
-		}
-	}
-
-	va_start(adx, fmt);
-	log_internal(fnvlist_alloc(), operation, spa, htx, fmt, adx);
-	va_end(adx);
-
-	/* if we didn't get a tx from the caller, commit the one we made */
-	if (tx == NULL)
-		dmu_tx_commit(htx);
-}
-
-void
-spa_history_log_internal_ds(dsl_dataset_t *ds, const char *operation,
-    dmu_tx_t *tx, const char *fmt, ...)
-{
-	va_list adx;
-	char namebuf[ZFS_MAX_DATASET_NAME_LEN];
-	nvlist_t *nvl = fnvlist_alloc();
-
-	ASSERT(tx != NULL);
-
-	dsl_dataset_name(ds, namebuf);
-	fnvlist_add_string(nvl, ZPOOL_HIST_DSNAME, namebuf);
-	fnvlist_add_uint64(nvl, ZPOOL_HIST_DSID, ds->ds_object);
-
-	va_start(adx, fmt);
-	log_internal(nvl, operation, dsl_dataset_get_spa(ds), tx, fmt, adx);
-	va_end(adx);
-}
-
-void
-spa_history_log_internal_dd(dsl_dir_t *dd, const char *operation,
-    dmu_tx_t *tx, const char *fmt, ...)
-{
-	va_list adx;
-	char namebuf[ZFS_MAX_DATASET_NAME_LEN];
-	nvlist_t *nvl = fnvlist_alloc();
-
-	ASSERT(tx != NULL);
-
-	dsl_dir_name(dd, namebuf);
-	fnvlist_add_string(nvl, ZPOOL_HIST_DSNAME, namebuf);
-	fnvlist_add_uint64(nvl, ZPOOL_HIST_DSID,
-	    dsl_dir_phys(dd)->dd_head_dataset_obj);
-
-	va_start(adx, fmt);
-	log_internal(nvl, operation, dd->dd_pool->dp_spa, tx, fmt, adx);
-	va_end(adx);
-}
-
-void
-spa_history_log_version(spa_t *spa, const char *operation)
-{
-#ifdef __NetBSD__
-	spa_history_log_internal(spa, operation, NULL,
-	    "pool version %llu; software version %llu/%d; %s %s %s %s %s",
-	    (u_longlong_t)spa_version(spa), SPA_VERSION, ZPL_VERSION,
-	    utsname.sysname, utsname.nodename, utsname.release, utsname.version,
-	    utsname.machine);
-#else
-	spa_history_log_internal(spa, operation, NULL,
-	    "pool version %llu; software version %llu/%d; uts %s %s %s %s",
-	    (u_longlong_t)spa_version(spa), SPA_VERSION, ZPL_VERSION,
-	    utsname.nodename, utsname.release, utsname.version,
-	    utsname.machine);
-#endif
+	/* spa_history_log_sync() will free hap and str */
 }

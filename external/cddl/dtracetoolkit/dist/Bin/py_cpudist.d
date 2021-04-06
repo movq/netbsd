@@ -3,7 +3,7 @@
  * py_cpudist.d - measure Python on-CPU times for functions.
  *                Written for the Python DTrace provider.
  *
- * $Id: py_cpudist.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: py_cpudist.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * This traces Python activity from all programs running on the system with
  * Python provider support.

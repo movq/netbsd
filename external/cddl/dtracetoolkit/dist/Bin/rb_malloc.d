@@ -3,7 +3,7 @@
  * rb_malloc.d - Ruby operations and libc malloc statistics.
  *               Written for the Ruby DTrace provider.
  *
- * $Id: rb_malloc.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: rb_malloc.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * WARNING: This script is not 100% accurate; This prints libc malloc() byte
  * distributions by "recent" Ruby operation, which we hope will be usually

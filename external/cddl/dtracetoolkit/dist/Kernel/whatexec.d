@@ -11,7 +11,7 @@
  * "blue screen of death" was displayed for "MZ" files (although I
  * haven't seen the script or the demo).
  *
- * $Id: whatexec.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: whatexec.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * USAGE:	whatexec.d	(early release, check for updates)
  *

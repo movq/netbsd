@@ -7,7 +7,7 @@
  * by processes, printing the totals in a report. This matches reads
  * and writes whether they succeed or not.
  *
- * $Id: rwbypid.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: rwbypid.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * USAGE:	rwbypid.d			# hit Ctrl-C to end sample
  *

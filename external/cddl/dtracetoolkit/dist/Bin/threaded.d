@@ -9,7 +9,7 @@
  * serialised. See the example file in Docs/Examples/threaded_example.txt
  * for a demonstration.
  *
- * $Id: threaded.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: threaded.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE:	threaded.d
  *

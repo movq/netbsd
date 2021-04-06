@@ -8,7 +8,7 @@
  * identifying which file they are waiting on, and the total times.
  * Both disk and NFS I/O are measured.
  *
- * $Id: iofile.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: iofile.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE:	iofile.d	# wait, then hit Ctrl-C to end
  *

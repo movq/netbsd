@@ -3,7 +3,7 @@
  * woof.d - Bark whenever new processes appear. Needs /dev/audio.
  *          Written in DTrace (Solaris 10 3/05).
  *
- * $Id: woof.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: woof.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * USAGE:       woof.d &
  *

@@ -3,7 +3,7 @@
  * js_who.d - trace JavaScript function execution by process using DTrace.
  *            Written for the JavaScript DTrace provider.
  *
- * $Id: js_who.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: js_who.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * This traces JavaScript activity from all browsers on the system that are
  * running with JavaScript provider support.

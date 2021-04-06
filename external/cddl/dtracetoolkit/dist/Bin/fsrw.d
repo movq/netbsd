@@ -9,7 +9,7 @@
  * interface to what the disk is doing. Behaviour such as read-ahead, and
  * max I/O size breakup can be observed.
  *
- * $Id: fsrw.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: fsrw.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE:	fsrw.d
  *

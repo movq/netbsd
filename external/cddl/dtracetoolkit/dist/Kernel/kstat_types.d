@@ -8,7 +8,7 @@
  * kstat_types.d is tracing - you should see details of the kstat
  * reads performed.
  *
- * $Id: kstat_types.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: kstat_types.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * USAGE:	kstat_types.d	(early release, check for updates)
  *

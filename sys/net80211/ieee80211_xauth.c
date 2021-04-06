@@ -31,12 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-#ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/sys/net80211/ieee80211_xauth.c,v 1.2 2004/12/31 22:42:38 sam Exp $");
-#endif
-#ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_xauth.c,v 1.5 2006/02/27 01:08:28 dyoung Exp $");
-#endif
 
 /*
  * External authenticator placeholder module.
@@ -54,12 +49,13 @@ __KERNEL_RCSID(0, "$NetBSD: ieee80211_xauth.c,v 1.5 2006/02/27 01:08:28 dyoung E
 #include <sys/kernel.h>
 #include <sys/systm.h> 
 #include <sys/mbuf.h>   
+#include <sys/module.h>
 
 #include <sys/socket.h>
 
 #include <net/if.h>
 #include <net/if_media.h>
-#include <net/if_ether.h>
+#include <net/ethernet.h>
 #include <net/route.h>
 
 #include <net80211/ieee80211_var.h>
@@ -76,8 +72,30 @@ static const struct ieee80211_authenticator xauth = {
 	.ia_node_leave	= NULL,
 };
 
-IEEE80211_CRYPTO_SETUP(ieee80211_external_auth_setup)
+/*
+ * Module glue.
+ */
+static int
+wlan_xauth_modevent(module_t mod, int type, void *unused)
 {
-	ieee80211_authenticator_register(IEEE80211_AUTH_8021X, &xauth);
-	ieee80211_authenticator_register(IEEE80211_AUTH_WPA, &xauth);
+	switch (type) {
+	case MOD_LOAD:
+		ieee80211_authenticator_register(IEEE80211_AUTH_8021X, &xauth);
+		ieee80211_authenticator_register(IEEE80211_AUTH_WPA, &xauth);
+		return 0;
+	case MOD_UNLOAD:
+		ieee80211_authenticator_unregister(IEEE80211_AUTH_8021X);
+		ieee80211_authenticator_unregister(IEEE80211_AUTH_WPA);
+		return 0;
+	}
+	return EINVAL;
 }
+
+static moduledata_t wlan_xauth_mod = {
+	"wlan_xauth",
+	wlan_xauth_modevent,
+	0
+};
+DECLARE_MODULE(wlan_xauth, wlan_xauth_mod, SI_SUB_DRIVERS, SI_ORDER_FIRST);
+MODULE_VERSION(wlan_xauth, 1);
+MODULE_DEPEND(wlan_xauth, wlan, 1, 1, 1);

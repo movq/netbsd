@@ -3,7 +3,7 @@
 # opensnoop - snoop file opens as they occur.
 #             Written using DTrace (Solaris 10 3/05).
 #
-# $Id: opensnoop,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+# $Id: opensnoop,v 1.1 2015/09/30 22:01:07 christos Exp $
 #
 # USAGE:	opensnoop [-a|-A|-ceghsvxZ] [-f pathname] [-n name] [-p PID]
 #

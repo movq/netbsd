@@ -1,5 +1,3 @@
-/*	$NetBSD: eventvar.h,v 1.8 2008/03/21 21:53:35 ad Exp $	*/
-
 /*-
  * Copyright (c) 1999,2000 Jonathan Lemon <jlemon@FreeBSD.org>
  * All rights reserved.
@@ -25,33 +23,24 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * FreeBSD: src/sys/sys/eventvar.h,v 1.4 2000/07/18 19:31:48 jlemon Exp
- */
-
-/*
- * This header is provided for the kqueue implementation and kmem
- * grovellers, and is not expected to be used elsewhere.
+ *	$FreeBSD: src/sys/sys/eventvar.h,v 1.4 2000/07/18 19:31:48 jlemon Exp $
  */
 
 #ifndef _SYS_EVENTVAR_H_
-#define	_SYS_EVENTVAR_H_
+#define _SYS_EVENTVAR_H_
 
-#include <sys/mutex.h>
-#include <sys/selinfo.h>
-#include <sys/filedesc.h>
-
-#define	KQ_NEVENTS	8		/* minimize copy{in,out} calls */
-#define	KQ_EXTENT	256		/* linear growth by this amount */
-#define	KFILTER_MAXNAME	256		/* maximum size of a filter name */
-#define	KFILTER_EXTENT	8		/* grow user_kfilters by this amt */
+#define KQ_NEVENTS	8		/* minimize copy{in,out} calls */
+#define KQEXTENT	256		/* linear growth by this amount */
 
 struct kqueue {
 	TAILQ_HEAD(kqlist, knote) kq_head;	/* list of pending event */
-	kmutex_t	kq_lock;		/* mutex for queue access */
-	filedesc_t	*kq_fdp;
-	struct selinfo	kq_sel;
-	kcondvar_t	kq_cv;
 	int		kq_count;		/* number of pending events */
+	struct		selinfo kq_sel;	
+	struct		filedesc *kq_fdp;
+	int		kq_state;
+#define KQ_SEL		0x01
+#define KQ_SLEEP	0x02
+	struct		kevent kq_kev[KQ_NEVENTS];
 };
 
 #endif /* !_SYS_EVENTVAR_H_ */

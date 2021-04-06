@@ -7,7 +7,7 @@
 # percentage of events that were of a random or sequential nature.
 # By default totals for all disks are printed.
 #
-# $Id: iopattern,v 1.1.1.1 2015/09/30 22:01:06 christos Exp $
+# $Id: iopattern,v 1.1 2015/09/30 22:01:06 christos Exp $
 #
 # USAGE:	iopattern [-v] [-d device] [-f filename] [-m mount_point] 
 #			  [interval [count]]

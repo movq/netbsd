@@ -3,7 +3,7 @@
  * js_stat.d - JavaScript operation stats using DTrace.
  *             Written for the JavaScript DTrace provider.
  *
- * $Id: js_stat.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: js_stat.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * This traces activity from all browsers on the system that are
  * running with JavaScript provider support.

@@ -3,7 +3,7 @@
  * dispqlen.d - dispatcher queue length by CPU.
  *              Written using DTrace (Solaris 10 3/05).
  *
- * $Id: dispqlen.d,v 1.1.1.1 2015/09/30 22:01:06 christos Exp $
+ * $Id: dispqlen.d,v 1.1 2015/09/30 22:01:06 christos Exp $
  *
  * USAGE:	dispqlen.d		# hit Ctrl-C to end sample
  *

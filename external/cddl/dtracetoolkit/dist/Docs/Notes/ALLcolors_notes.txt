@@ -2,7 +2,7 @@
 * The following are additional notes on all programs that print a colorized
 * ("colourised") output, *color*.d.
 *
-* $Id: ALLcolors_notes.txt,v 1.1.1.1 2015/09/30 22:01:08 christos Exp $
+* $Id: ALLcolors_notes.txt,v 1.1 2015/09/30 22:01:08 christos Exp $
 *
 * COPYRIGHT: Copyright (c) 2007 Brendan Gregg.
 **************************************************************************

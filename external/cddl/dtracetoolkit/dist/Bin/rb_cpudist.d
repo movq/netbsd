@@ -3,7 +3,7 @@
  * rb_cpudist.d - measure Ruby on-CPU times for types of operation.
  *                Written for the Ruby DTrace provider.
  *
- * $Id: rb_cpudist.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: rb_cpudist.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * This traces Ruby activity from all programs running on the system with
  * Ruby provider support.

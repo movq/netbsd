@@ -19,17 +19,15 @@
  * CDDL HEADER END
  */
 /*
- * Copyright 2009 Sun Microsystems, Inc.  All rights reserved.
+ * Copyright 2006 Sun Microsystems, Inc.  All rights reserved.
  * Use is subject to license terms.
  */
+
+#pragma ident	"%Z%%M%	%I%	%E% SMI"
 
 /*
  * Create and parse buffers containing CTF data.
  */
-
-#if HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
-#endif
 
 #include <sys/types.h>
 #include <stdio.h>
@@ -51,7 +49,7 @@
  *
  * The value is only valid during a call to ctf_load.
  */
-static char *curfile;
+char *curfile;
 
 #define	CTF_BUF_CHUNK_SIZE	(64 * 1024)
 #define	RES_BUF_CHUNK_SIZE	(64 * 1024)
@@ -66,21 +64,9 @@ struct ctf_buf {
 	int ntholes;		/* number of type holes */
 };
 
-/*
- * Macros to reverse byte order
- */
-#define	BSWAP_8(x)	((x) & 0xff)
-#define	BSWAP_16(x)	((BSWAP_8(x) << 8) | BSWAP_8((x) >> 8))
-#define	BSWAP_32(x)	((BSWAP_16(x) << 16) | BSWAP_16((x) >> 16))
-
-#define	SWAP_16(x)	(x) = BSWAP_16(x)
-#define	SWAP_32(x)	(x) = BSWAP_32(x)
-
-static int target_requires_swap;
-
 /*PRINTFLIKE1*/
-static void __printflike(1, 2) __dead
-parseterminate(const char *fmt, ...)
+static void
+parseterminate(char *fmt, ...)
 {
 	static char msgbuf[1024]; /* sigh */
 	va_list ap;
@@ -92,7 +78,7 @@ parseterminate(const char *fmt, ...)
 	terminate("%s: %s\n", curfile, msgbuf);
 }
 
-static void
+void
 ctf_buf_grow(ctf_buf_t *b)
 {
 	off_t ptroff = b->ctb_ptr - b->ctb_base;
@@ -103,7 +89,7 @@ ctf_buf_grow(ctf_buf_t *b)
 	b->ctb_ptr = b->ctb_base + ptroff;
 }
 
-static ctf_buf_t *
+ctf_buf_t *
 ctf_buf_new(void)
 {
 	ctf_buf_t *b = xcalloc(sizeof (ctf_buf_t));
@@ -114,7 +100,7 @@ ctf_buf_new(void)
 	return (b);
 }
 
-static void
+void
 ctf_buf_free(ctf_buf_t *b)
 {
 	strtab_destroy(&b->ctb_strtab);
@@ -122,14 +108,14 @@ ctf_buf_free(ctf_buf_t *b)
 	free(b);
 }
 
-static uint_t
+uint_t
 ctf_buf_cur(ctf_buf_t *b)
 {
 	return (b->ctb_ptr - b->ctb_base);
 }
 
-static void
-ctf_buf_write(ctf_buf_t *b, void const *p, size_t n)
+void
+ctf_buf_write(ctf_buf_t *b, const void *p, size_t n)
 {
 	size_t len;
 
@@ -141,25 +127,18 @@ ctf_buf_write(ctf_buf_t *b, void const *p, size_t n)
 		bcopy(p, b->ctb_ptr, len);
 		b->ctb_ptr += len;
 
-		p = (char const *)p + len;
+		p = (char *)p + len;
 		n -= len;
 	}
 }
 
 static int
-write_label(void *arg1, void *arg2)
+write_label(labelent_t *le, ctf_buf_t *b)
 {
-	labelent_t *le = arg1;
-	ctf_buf_t *b = arg2;
 	ctf_lblent_t ctl;
 
 	ctl.ctl_label = strtab_insert(&b->ctb_strtab, le->le_name);
 	ctl.ctl_typeidx = le->le_idx;
-
-	if (target_requires_swap) {
-		SWAP_32(ctl.ctl_label);
-		SWAP_32(ctl.ctl_typeidx);
-	}
 
 	ctf_buf_write(b, &ctl, sizeof (ctl));
 
@@ -170,10 +149,6 @@ static void
 write_objects(iidesc_t *idp, ctf_buf_t *b)
 {
 	ushort_t id = (idp ? idp->ii_dtype->t_id : 0);
-
-	if (target_requires_swap) {
-		SWAP_16(id);
-	}
 
 	ctf_buf_write(b, &id, sizeof (id));
 
@@ -197,29 +172,12 @@ write_functions(iidesc_t *idp, ctf_buf_t *b)
 	}
 
 	nargs = idp->ii_nargs + (idp->ii_vargs != 0);
-
-	if (nargs > CTF_MAX_VLEN) {
-		terminate("function %s has too many args: %d > %d\n",
-		    idp->ii_name, nargs, CTF_MAX_VLEN);
-	}
-
 	fdata[0] = CTF_TYPE_INFO(CTF_K_FUNCTION, 1, nargs);
 	fdata[1] = idp->ii_dtype->t_id;
-
-	if (target_requires_swap) {
-		SWAP_16(fdata[0]);
-		SWAP_16(fdata[1]);
-	}
-
 	ctf_buf_write(b, fdata, sizeof (fdata));
 
 	for (i = 0; i < idp->ii_nargs; i++) {
 		id = idp->ii_args[i]->t_id;
-
-		if (target_requires_swap) {
-			SWAP_16(id);
-		}
-
 		ctf_buf_write(b, &id, sizeof (id));
 	}
 
@@ -244,25 +202,11 @@ write_sized_type_rec(ctf_buf_t *b, ctf_type_t *ctt, size_t size)
 		ctt->ctt_size = CTF_LSIZE_SENT;
 		ctt->ctt_lsizehi = CTF_SIZE_TO_LSIZE_HI(size);
 		ctt->ctt_lsizelo = CTF_SIZE_TO_LSIZE_LO(size);
-		if (target_requires_swap) {
-			SWAP_32(ctt->ctt_name);
-			SWAP_16(ctt->ctt_info);
-			SWAP_16(ctt->ctt_size);
-			SWAP_32(ctt->ctt_lsizehi);
-			SWAP_32(ctt->ctt_lsizelo);
-		}
 		ctf_buf_write(b, ctt, sizeof (*ctt));
 	} else {
 		ctf_stype_t *cts = (ctf_stype_t *)ctt;
 
 		cts->ctt_size = (ushort_t)size;
-
-		if (target_requires_swap) {
-			SWAP_32(cts->ctt_name);
-			SWAP_16(cts->ctt_info);
-			SWAP_16(cts->ctt_size);
-		}
-
 		ctf_buf_write(b, cts, sizeof (*cts));
 	}
 }
@@ -272,20 +216,12 @@ write_unsized_type_rec(ctf_buf_t *b, ctf_type_t *ctt)
 {
 	ctf_stype_t *cts = (ctf_stype_t *)ctt;
 
-	if (target_requires_swap) {
-		SWAP_32(cts->ctt_name);
-		SWAP_16(cts->ctt_info);
-		SWAP_16(cts->ctt_size);
-	}
-
 	ctf_buf_write(b, cts, sizeof (*cts));
 }
 
 static int
-write_type(void *arg1, void *arg2)
+write_type(tdesc_t *tp, ctf_buf_t *b)
 {
-	tdesc_t *tp = arg1;
-	ctf_buf_t *b = arg2;
 	elist_t *ep;
 	mlist_t *mp;
 	intr_t *ip;
@@ -352,14 +288,10 @@ write_type(void *arg1, void *arg2)
 			encoding = ip->intr_fformat;
 
 		data = CTF_INT_DATA(encoding, ip->intr_offset, ip->intr_nbits);
-		if (target_requires_swap) {
-			SWAP_32(data);
-		}
 		ctf_buf_write(b, &data, sizeof (data));
 		break;
 
 	case POINTER:
-	case REFERENCE:	/* XXX: */
 		ctt.ctt_info = CTF_TYPE_INFO(CTF_K_POINTER, isroot, 0);
 		ctt.ctt_type = tp->t_tdesc->t_id;
 		write_unsized_type_rec(b, &ctt);
@@ -372,25 +304,13 @@ write_type(void *arg1, void *arg2)
 		cta.cta_contents = tp->t_ardef->ad_contents->t_id;
 		cta.cta_index = tp->t_ardef->ad_idxtype->t_id;
 		cta.cta_nelems = tp->t_ardef->ad_nelems;
-		if (target_requires_swap) {
-			SWAP_16(cta.cta_contents);
-			SWAP_16(cta.cta_index);
-			SWAP_32(cta.cta_nelems);
-		}
 		ctf_buf_write(b, &cta, sizeof (cta));
 		break;
 
 	case STRUCT:
 	case UNION:
-	case CLASS:
 		for (i = 0, mp = tp->t_members; mp != NULL; mp = mp->ml_next)
 			i++; /* count up struct or union members */
-
-		if (i > CTF_MAX_VLEN) {
-			warning("sou %s has too many members: %d > %d\n",
-			    tdesc_name(tp), i, CTF_MAX_VLEN);
-			i = CTF_MAX_VLEN;
-		}
 
 		if (tp->t_type == STRUCT)
 			ctt.ctt_info = CTF_TYPE_INFO(CTF_K_STRUCT, isroot, i);
@@ -400,8 +320,7 @@ write_type(void *arg1, void *arg2)
 		write_sized_type_rec(b, &ctt, tp->t_size);
 
 		if (tp->t_size < CTF_LSTRUCT_THRESH) {
-			for (mp = tp->t_members; mp != NULL && i > 0;
-			    mp = mp->ml_next) {
+			for (mp = tp->t_members; mp != NULL; mp = mp->ml_next) {
 				offset = strtab_insert(&b->ctb_strtab,
 				    mp->ml_name);
 
@@ -409,17 +328,10 @@ write_type(void *arg1, void *arg2)
 				    offset);
 				ctm.ctm_type = mp->ml_type->t_id;
 				ctm.ctm_offset = mp->ml_offset;
-				if (target_requires_swap) {
-					SWAP_32(ctm.ctm_name);
-					SWAP_16(ctm.ctm_type);
-					SWAP_16(ctm.ctm_offset);
-				}
 				ctf_buf_write(b, &ctm, sizeof (ctm));
-				i--;
 			}
 		} else {
-			for (mp = tp->t_members; mp != NULL && i > 0;
-			    mp = mp->ml_next) {
+			for (mp = tp->t_members; mp != NULL; mp = mp->ml_next) {
 				offset = strtab_insert(&b->ctb_strtab,
 				    mp->ml_name);
 
@@ -430,16 +342,7 @@ write_type(void *arg1, void *arg2)
 				    CTF_OFFSET_TO_LMEMHI(mp->ml_offset);
 				ctlm.ctlm_offsetlo =
 				    CTF_OFFSET_TO_LMEMLO(mp->ml_offset);
-
-				if (target_requires_swap) {
-					SWAP_32(ctlm.ctlm_name);
-					SWAP_16(ctlm.ctlm_type);
-					SWAP_32(ctlm.ctlm_offsethi);
-					SWAP_32(ctlm.ctlm_offsetlo);
-				}
-
 				ctf_buf_write(b, &ctlm, sizeof (ctlm));
-				i--;
 			}
 		}
 		break;
@@ -448,27 +351,14 @@ write_type(void *arg1, void *arg2)
 		for (i = 0, ep = tp->t_emem; ep != NULL; ep = ep->el_next)
 			i++; /* count up enum members */
 
-		if (i > CTF_MAX_VLEN) {
-			warning("enum %s has too many values: %d > %d\n",
-			    tdesc_name(tp), i, CTF_MAX_VLEN);
-			i = CTF_MAX_VLEN;
-		}
-
 		ctt.ctt_info = CTF_TYPE_INFO(CTF_K_ENUM, isroot, i);
 		write_sized_type_rec(b, &ctt, tp->t_size);
 
-		for (ep = tp->t_emem; ep != NULL && i > 0; ep = ep->el_next) {
+		for (ep = tp->t_emem; ep != NULL; ep = ep->el_next) {
 			offset = strtab_insert(&b->ctb_strtab, ep->el_name);
 			cte.cte_name = CTF_TYPE_NAME(CTF_STRTAB_0, offset);
 			cte.cte_value = ep->el_number;
-
-			if (target_requires_swap) {
-				SWAP_32(cte.cte_name);
-				SWAP_32(cte.cte_value);
-			}
-
 			ctf_buf_write(b, &cte, sizeof (cte));
-			i--;
 		}
 		break;
 
@@ -497,24 +387,13 @@ write_type(void *arg1, void *arg2)
 		break;
 
 	case FUNCTION:
-		i = tp->t_fndef->fn_nargs + tp->t_fndef->fn_vargs;
-
-		if (i > CTF_MAX_VLEN) {
-			terminate("function %s has too many args: %d > %d\n",
-			    tdesc_name(tp), i, CTF_MAX_VLEN);
-		}
-
-		ctt.ctt_info = CTF_TYPE_INFO(CTF_K_FUNCTION, isroot, i);
+		ctt.ctt_info = CTF_TYPE_INFO(CTF_K_FUNCTION, isroot,
+		    tp->t_fndef->fn_nargs + tp->t_fndef->fn_vargs);
 		ctt.ctt_type = tp->t_fndef->fn_ret->t_id;
 		write_unsized_type_rec(b, &ctt);
 
-		for (i = 0; i < (int) tp->t_fndef->fn_nargs; i++) {
+		for (i = 0; i < tp->t_fndef->fn_nargs; i++) {
 			id = tp->t_fndef->fn_args[i]->t_id;
-
-			if (target_requires_swap) {
-				SWAP_16(id);
-			}
-
 			ctf_buf_write(b, &id, sizeof (id));
 		}
 
@@ -578,14 +457,14 @@ compress_start(resbuf_t *rb)
 }
 
 static ssize_t
-compress_buffer(void *buf, size_t n, void *data)
+compress_buffer(const void *buf, size_t n, void *data)
 {
 	resbuf_t *rb = (resbuf_t *)data;
 	int rc;
 
 	rb->rb_zstr.next_out = (Bytef *)rb->rb_ptr;
 	rb->rb_zstr.avail_out = rb->rb_size - (rb->rb_ptr - rb->rb_base);
-	rb->rb_zstr.next_in = buf;
+	rb->rb_zstr.next_in = (Bytef *)buf;
 	rb->rb_zstr.avail_in = n;
 
 	while (rb->rb_zstr.avail_in) {
@@ -647,7 +526,7 @@ pad_buffer(ctf_buf_t *buf, int align)
 }
 
 static ssize_t
-bcopy_data(void *buf, size_t n, void *data)
+bcopy_data(const void *buf, size_t n, void *data)
 {
 	caddr_t *posp = (caddr_t *)data;
 	bcopy(buf, *posp, n);
@@ -708,9 +587,6 @@ ctf_gen(iiburst_t *iiburst, size_t *resszp, int do_compress)
 
 	int i;
 
-	target_requires_swap = do_compress & CTF_SWAP_BYTES;
-	do_compress &= ~CTF_SWAP_BYTES;
-
 	/*
 	 * Prepare the header, and create the CTF output buffers.  The data
 	 * object section and function section are both lists of 2-byte
@@ -725,7 +601,7 @@ ctf_gen(iiburst_t *iiburst, size_t *resszp, int do_compress)
 	    iiburst->iib_td->td_parname);
 
 	h.cth_lbloff = 0;
-	(void) list_iter(iiburst->iib_td->td_labels, write_label,
+	(void) list_iter(iiburst->iib_td->td_labels, (int (*)())write_label,
 	    buf);
 
 	pad_buffer(buf, 2);
@@ -740,24 +616,12 @@ ctf_gen(iiburst_t *iiburst, size_t *resszp, int do_compress)
 
 	pad_buffer(buf, 4);
 	h.cth_typeoff = ctf_buf_cur(buf);
-	(void) list_iter(iiburst->iib_types, write_type, buf);
+	(void) list_iter(iiburst->iib_types, (int (*)())write_type, buf);
 
 	debug(2, "CTF wrote %d types\n", list_count(iiburst->iib_types));
 
 	h.cth_stroff = ctf_buf_cur(buf);
 	h.cth_strlen = strtab_size(&buf->ctb_strtab);
-
-	if (target_requires_swap) {
-		SWAP_16(h.cth_preamble.ctp_magic);
-		SWAP_32(h.cth_parlabel);
-		SWAP_32(h.cth_parname);
-		SWAP_32(h.cth_lbloff);
-		SWAP_32(h.cth_objtoff);
-		SWAP_32(h.cth_funcoff);
-		SWAP_32(h.cth_typeoff);
-		SWAP_32(h.cth_stroff);
-		SWAP_32(h.cth_strlen);
-	}
 
 	/*
 	 * We only do compression for ctfmerge, as ctfconvert is only
@@ -773,7 +637,7 @@ ctf_gen(iiburst_t *iiburst, size_t *resszp, int do_compress)
 	return (outbuf);
 }
 
-static void
+void
 get_ctt_size(ctf_type_t *ctt, size_t *sizep, size_t *incrementp)
 {
 	if (ctt->ctt_size == CTF_LSIZE_SENT) {
@@ -793,8 +657,8 @@ count_types(ctf_header_t *h, caddr_t data)
 
 	dptr = data + h->cth_typeoff;
 	while (dptr < data + h->cth_stroff) {
-		void *v = (void *) dptr;
-		ctf_type_t *ctt = v;
+		/* LINTED - pointer alignment */
+		ctf_type_t *ctt = (ctf_type_t *)dptr;
 		size_t vlen = CTF_INFO_VLEN(ctt->ctt_info);
 		size_t size, increment;
 
@@ -830,9 +694,8 @@ count_types(ctf_header_t *h, caddr_t data)
 		case CTF_K_UNKNOWN:
 			break;
 		default:
-			parseterminate("Unknown CTF type %d (#%d) at %#jx",
-			    CTF_INFO_KIND(ctt->ctt_info), count,
-			    (intmax_t)(dptr - data));
+			parseterminate("Unknown CTF type %d (#%d) at %#x",
+			    CTF_INFO_KIND(ctt->ctt_info), count, dptr - data);
 		}
 
 		dptr += increment;
@@ -864,11 +727,11 @@ resurrect_labels(ctf_header_t *h, tdata_t *td, caddr_t ctfdata, char *matchlbl)
 	caddr_t sbuf = ctfdata + h->cth_stroff;
 	size_t bufsz = h->cth_objtoff - h->cth_lbloff;
 	int lastidx = 0, baseidx = -1;
-	char *baselabel = NULL;
+	char *baselabel;
 	ctf_lblent_t *ctl;
-	void *v = (void *) buf;
 
-	for (ctl = v; (caddr_t)ctl < buf + bufsz; ctl++) {
+	/* LINTED - pointer alignment */
+	for (ctl = (ctf_lblent_t *)buf; (caddr_t)ctl < buf + bufsz; ctl++) {
 		char *label = sbuf + ctl->ctl_label;
 
 		lastidx = ctl->ctl_typeidx;
@@ -912,15 +775,15 @@ resurrect_objects(ctf_header_t *h, tdata_t *td, tdesc_t **tdarr, int tdsize,
 
 	symit_reset(si);
 	for (dptr = buf; dptr < buf + bufsz; dptr += 2) {
-		void *v = (void *) dptr;
-		ushort_t id = *((ushort_t *)v);
+		/* LINTED - pointer alignment */
+		ushort_t id = *((ushort_t *)dptr);
 		iidesc_t *ii;
 		GElf_Sym *sym;
 
 		if (!(sym = symit_next(si, STT_OBJECT)) && id != 0) {
 			parseterminate(
-			    "Unexpected end of object symbols at %ju of %zu",
-			    (intmax_t)(dptr - buf), bufsz);
+			    "Unexpected end of object symbols at %x of %x",
+			    dptr - buf, bufsz);
 		}
 
 		if (id == 0) {
@@ -960,8 +823,8 @@ resurrect_functions(ctf_header_t *h, tdata_t *td, tdesc_t **tdarr, int tdsize,
 
 	symit_reset(si);
 	while (dptr < buf + bufsz) {
-		void *v = (void *) dptr;
-		info = *((ushort_t *)v);
+		/* LINTED - pointer alignment */
+		info = *((ushort_t *)dptr);
 		dptr += 2;
 
 		if (!(sym = symit_next(si, STT_FUNC)) && info != 0)
@@ -973,8 +836,8 @@ resurrect_functions(ctf_header_t *h, tdata_t *td, tdesc_t **tdarr, int tdsize,
 			continue;
 		}
 
-		v = (void *) dptr;
-		retid = *((ushort_t *)v);
+		/* LINTED - pointer alignment */
+		retid = *((ushort_t *)dptr);
 		dptr += 2;
 
 		if (retid >= tdsize)
@@ -993,8 +856,8 @@ resurrect_functions(ctf_header_t *h, tdata_t *td, tdesc_t **tdarr, int tdsize,
 			    xmalloc(sizeof (tdesc_t *) * ii->ii_nargs);
 
 		for (i = 0; i < ii->ii_nargs; i++, dptr += 2) {
-			v = (void *) dptr;
-			ushort_t id = *((ushort_t *)v);
+			/* LINTED - pointer alignment */
+			ushort_t id = *((ushort_t *)dptr);
 			if (id >= tdsize)
 				parseterminate("Reference to invalid type %d",
 				    id);
@@ -1054,8 +917,8 @@ resurrect_types(ctf_header_t *h, tdata_t *td, tdesc_t **tdarr, int tdsize,
 		if (tid >= tdsize)
 			parseterminate("Reference to invalid type %d", tid);
 
-		void *v = (void *) dptr;
-		ctt = v;
+		/* LINTED - pointer alignment */
+		ctt = (ctf_type_t *)dptr;
 
 		get_ctt_size(ctt, &size, &increment);
 		dptr += increment;
@@ -1064,7 +927,7 @@ resurrect_types(ctf_header_t *h, tdata_t *td, tdesc_t **tdarr, int tdsize,
 
 		if (CTF_NAME_STID(ctt->ctt_name) != CTF_STRTAB_0)
 			parseterminate(
-			    "Unable to cope with non-zero strtab id");
+				"Unable to cope with non-zero strtab id");
 		if (CTF_NAME_OFFSET(ctt->ctt_name) != 0) {
 			tdp->t_name =
 			    xstrdup(sbuf + CTF_NAME_OFFSET(ctt->ctt_name));
@@ -1079,8 +942,8 @@ resurrect_types(ctf_header_t *h, tdata_t *td, tdesc_t **tdarr, int tdsize,
 			tdp->t_type = INTRINSIC;
 			tdp->t_size = size;
 
-			v = (void *) dptr;
-			data = *((uint_t *)v);
+			/* LINTED - pointer alignment */
+			data = *((uint_t *)dptr);
 			dptr += sizeof (uint_t);
 			encoding = CTF_INT_ENCODING(data);
 
@@ -1106,8 +969,8 @@ resurrect_types(ctf_header_t *h, tdata_t *td, tdesc_t **tdarr, int tdsize,
 			tdp->t_type = INTRINSIC;
 			tdp->t_size = size;
 
-			v = (void *) dptr;
-			data = *((uint_t *)v);
+			/* LINTED - pointer alignment */
+			data = *((uint_t *)dptr);
 			dptr += sizeof (uint_t);
 
 			ip = xcalloc(sizeof (intr_t));
@@ -1127,8 +990,8 @@ resurrect_types(ctf_header_t *h, tdata_t *td, tdesc_t **tdarr, int tdsize,
 			tdp->t_type = ARRAY;
 			tdp->t_size = size;
 
-			v = (void *) dptr;
-			cta = v;
+			/* LINTED - pointer alignment */
+			cta = (ctf_array_t *)dptr;
 			dptr += sizeof (ctf_array_t);
 
 			tdp->t_ardef = xmalloc(sizeof (ardef_t));
@@ -1145,8 +1008,9 @@ resurrect_types(ctf_header_t *h, tdata_t *td, tdesc_t **tdarr, int tdsize,
 			if (size < CTF_LSTRUCT_THRESH) {
 				for (i = 0, mpp = &tdp->t_members; i < vlen;
 				    i++, mpp = &((*mpp)->ml_next)) {
-					v = (void *) dptr;
-					ctf_member_t *ctm = v;
+					/* LINTED - pointer alignment */
+					ctf_member_t *ctm = (ctf_member_t *)
+					    dptr;
 					dptr += sizeof (ctf_member_t);
 
 					*mpp = xmalloc(sizeof (mlist_t));
@@ -1159,8 +1023,9 @@ resurrect_types(ctf_header_t *h, tdata_t *td, tdesc_t **tdarr, int tdsize,
 			} else {
 				for (i = 0, mpp = &tdp->t_members; i < vlen;
 				    i++, mpp = &((*mpp)->ml_next)) {
-					v = (void *) dptr;
-					ctf_lmember_t *ctlm = v;
+					/* LINTED - pointer alignment */
+					ctf_lmember_t *ctlm = (ctf_lmember_t *)
+					    dptr;
 					dptr += sizeof (ctf_lmember_t);
 
 					*mpp = xmalloc(sizeof (mlist_t));
@@ -1183,8 +1048,8 @@ resurrect_types(ctf_header_t *h, tdata_t *td, tdesc_t **tdarr, int tdsize,
 
 			for (i = 0, epp = &tdp->t_emem; i < vlen;
 			    i++, epp = &((*epp)->el_next)) {
-				v = (void *) dptr;
-				cte = v;
+				/* LINTED - pointer alignment */
+				cte = (ctf_enum_t *)dptr;
 				dptr += sizeof (ctf_enum_t);
 
 				*epp = xmalloc(sizeof (elist_t));
@@ -1219,8 +1084,9 @@ resurrect_types(ctf_header_t *h, tdata_t *td, tdesc_t **tdarr, int tdsize,
 			tdp->t_fndef = xcalloc(sizeof (fndef_t));
 			tdp->t_fndef->fn_ret = tdarr[ctt->ctt_type];
 
-			v = (void *) (dptr + (sizeof (ushort_t) * (vlen - 1)));
-			if (vlen > 0 && *(ushort_t *)v == 0)
+			/* LINTED - pointer alignment */
+			if (vlen > 0 && *(ushort_t *)(dptr +
+			    (sizeof (ushort_t) * (vlen - 1))) == 0)
 				tdp->t_fndef->fn_vargs = 1;
 
 			tdp->t_fndef->fn_nargs = vlen - tdp->t_fndef->fn_vargs;
@@ -1228,8 +1094,8 @@ resurrect_types(ctf_header_t *h, tdata_t *td, tdesc_t **tdarr, int tdsize,
 			    vlen - tdp->t_fndef->fn_vargs);
 
 			for (i = 0; i < vlen; i++) {
-				v = (void *) dptr;
-				argid = *(ushort_t *)v;
+				/* LINTED - pointer alignment */
+				argid = *(ushort_t *)dptr;
 				dptr += sizeof (ushort_t);
 
 				if (argid != 0)
@@ -1330,12 +1196,11 @@ decompress_ctf(caddr_t cbuf, size_t cbufsz, caddr_t dbuf, size_t dbufsz)
 	    (rc = inflate(&zstr, Z_NO_FLUSH)) != Z_STREAM_END ||
 	    (rc = inflateEnd(&zstr)) != Z_OK) {
 		warning("CTF decompress zlib error %s\n", zError(rc));
-		return (0);
+		return (NULL);
 	}
 
-	debug(3, "reflated %lu bytes to %lu, pointer at 0x%jx\n",
-	    zstr.total_in, zstr.total_out,
-	    (intmax_t)((caddr_t)zstr.next_in - cbuf));
+	debug(3, "reflated %lu bytes to %lu, pointer at %d\n",
+	    zstr.total_in, zstr.total_out, (caddr_t)zstr.next_in - cbuf);
 
 	return (zstr.total_out);
 }
@@ -1360,8 +1225,8 @@ ctf_load(char *file, caddr_t buf, size_t bufsz, symit_data_t *si, char *label)
 	if (bufsz < sizeof (ctf_header_t))
 		parseterminate("Corrupt CTF - short header");
 
-	void *v = (void *) buf;
-	h = v;
+	/* LINTED - pointer alignment */
+	h = (ctf_header_t *)buf;
 	buf += sizeof (ctf_header_t);
 	bufsz -= sizeof (ctf_header_t);
 
@@ -1379,7 +1244,7 @@ ctf_load(char *file, caddr_t buf, size_t bufsz, symit_data_t *si, char *label)
 		if ((actual = decompress_ctf(buf, bufsz, ctfdata, ctfdatasz)) !=
 		    ctfdatasz) {
 			parseterminate("Corrupt CTF - short decompression "
-			    "(was %zu, expecting %zu)", actual, ctfdatasz);
+			    "(was %d, expecting %d)", actual, ctfdatasz);
 		}
 	} else {
 		ctfdata = buf;

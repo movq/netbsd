@@ -25,10 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-#ifdef __FBSDID
-__FBSDID("$FreeBSD: head/lib/libproc/tests/proc_test.c 286863 2015-08-17 23:19:36Z emaste $");
-#endif
-__RCSID("$NetBSD: proc_test.c,v 1.6 2018/07/20 20:50:34 christos Exp $");
+__FBSDID("$FreeBSD: head/lib/libproc/tests/proc_test.c 287333 2015-08-31 20:30:06Z emaste $");
 
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -43,28 +40,8 @@ __RCSID("$NetBSD: proc_test.c,v 1.6 2018/07/20 20:50:34 christos Exp $");
 #include <libproc.h>
 
 static const char *aout_object = "a.out";
-#if defined(__NetBSD__)
-static const char *r_debug_state = "_rtld_debug_state";
-#elif defined(__FreeBSD__)
-static const char *r_debug_state = "r_debug_state";
-#endif
-
-#if defined(__NetBSD__)
-static const char *ldelf_object = "ld.elf_so";
-#elif defined(__FreeBSD__)
 static const char *ldelf_object = "ld-elf.so.1";
-#endif
 static const char *target_prog_file = "target_prog";
-
-#ifdef __NetBSD__
-static char *
-basename_r(const char *path, char *buf)
-{
-	// XX: We know this works
-	strlcpy(buf, strrchr(path, '/') + 1, PATH_MAX);
-	return buf;
-}
-#endif
 
 /*
  * Run the test program. If the sig parameter is set to true, the test program
@@ -99,7 +76,7 @@ start_prog(const struct atf_tc *tc, bool sig)
 }
 
 static void
-set_bkpt(struct proc_handle *phdl, uintptr_t addr, proc_breakpoint_t *saved)
+set_bkpt(struct proc_handle *phdl, uintptr_t addr, u_long *saved)
 {
 	int error;
 
@@ -109,7 +86,7 @@ set_bkpt(struct proc_handle *phdl, uintptr_t addr, proc_breakpoint_t *saved)
 }
 
 static void
-remove_bkpt(struct proc_handle *phdl, uintptr_t addr, proc_breakpoint_t *val)
+remove_bkpt(struct proc_handle *phdl, uintptr_t addr, u_long val)
 {
 	int error;
 
@@ -164,8 +141,7 @@ verify_bkpt(struct proc_handle *phdl, GElf_Sym *sym, const char *symname,
 	error = proc_addr2sym(phdl, addr, name, namesz, &tsym);
 	ATF_REQUIRE_EQ_MSG(error, 0, "failed to look up symbol at 0x%lx", addr);
 	ATF_REQUIRE_EQ(memcmp(sym, &tsym, sizeof(*sym)), 0);
-	ATF_REQUIRE_EQ_MSG(strcmp(symname, name), 0,
-	    "expected symbol name '%s' doesn't match '%s'", symname, name);
+	ATF_REQUIRE_EQ(strcmp(symname, name), 0);
 	free(name);
 
 	map = proc_addr2map(phdl, addr);
@@ -203,7 +179,7 @@ ATF_TC_BODY(map_alias_obj2map, tc)
 	    aout_object);
 	ATF_CHECK_EQ(strcmp(map1->pr_mapname, map2->pr_mapname), 0);
 
-	ATF_CHECK_EQ_MSG(proc_detach(phdl, PRELEASE_HANG), 0, "failed to detach");
+	ATF_CHECK_EQ_MSG(proc_continue(phdl), 0, "failed to resume execution");
 
 	proc_free(phdl);
 }
@@ -235,7 +211,7 @@ ATF_TC_BODY(map_alias_name2map, tc)
 	    aout_object);
 	ATF_CHECK_EQ(strcmp(map1->pr_mapname, map2->pr_mapname), 0);
 
-	ATF_CHECK_EQ_MSG(proc_detach(phdl, PRELEASE_HANG), 0, "failed to detach");
+	ATF_CHECK_EQ_MSG(proc_continue(phdl), 0, "failed to resume execution");
 
 	proc_free(phdl);
 }
@@ -274,7 +250,7 @@ ATF_TC_BODY(map_alias_name2sym, tc)
 	ATF_CHECK_EQ(memcmp(&sym1, &sym2, sizeof(sym1)), 0);
 	ATF_CHECK_EQ(si1.prs_id, si2.prs_id);
 
-	ATF_CHECK_EQ_MSG(proc_detach(phdl, PRELEASE_HANG), 0, "failed to detach");
+	ATF_CHECK_EQ_MSG(proc_continue(phdl), 0, "failed to resume execution");
 
 	proc_free(phdl);
 }
@@ -292,7 +268,7 @@ ATF_TC_BODY(symbol_lookup, tc)
 {
 	GElf_Sym main_sym, r_debug_state_sym;
 	struct proc_handle *phdl;
-	proc_breakpoint_t saved;
+	u_long saved;
 	int error;
 
 	phdl = start_prog(tc, false);
@@ -300,21 +276,21 @@ ATF_TC_BODY(symbol_lookup, tc)
 	error = proc_name2sym(phdl, target_prog_file, "main", &main_sym, NULL);
 	ATF_REQUIRE_EQ_MSG(error, 0, "failed to look up 'main'");
 
-	error = proc_name2sym(phdl, ldelf_object, r_debug_state,
+	error = proc_name2sym(phdl, ldelf_object, "r_debug_state",
 	    &r_debug_state_sym, NULL);
-	ATF_REQUIRE_EQ_MSG(error, 0, "failed to look up '%s'", r_debug_state);
+	ATF_REQUIRE_EQ_MSG(error, 0, "failed to look up 'r_debug_state'");
 
-	set_bkpt(phdl, (uintptr_t)r_debug_state_sym.st_value, &saved);
+	set_bkpt(phdl, r_debug_state_sym.st_value, &saved);
 	ATF_CHECK_EQ_MSG(proc_continue(phdl), 0, "failed to resume execution");
-	verify_bkpt(phdl, &r_debug_state_sym, r_debug_state, ldelf_object);
-	remove_bkpt(phdl, (uintptr_t)r_debug_state_sym.st_value, &saved);
+	verify_bkpt(phdl, &r_debug_state_sym, "r_debug_state", ldelf_object);
+	remove_bkpt(phdl, r_debug_state_sym.st_value, saved);
 
-	set_bkpt(phdl, (uintptr_t)main_sym.st_value, &saved);
+	set_bkpt(phdl, main_sym.st_value, &saved);
 	ATF_CHECK_EQ_MSG(proc_continue(phdl), 0, "failed to resume execution");
 	verify_bkpt(phdl, &main_sym, "main", target_prog_file);
-	remove_bkpt(phdl, (uintptr_t)main_sym.st_value, &saved);
+	remove_bkpt(phdl, main_sym.st_value, saved);
 
-	ATF_CHECK_EQ_MSG(proc_detach(phdl, PRELEASE_HANG), 0, "failed to detach");
+	ATF_CHECK_EQ_MSG(proc_continue(phdl), 0, "failed to resume execution");
 
 	proc_free(phdl);
 }

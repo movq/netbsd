@@ -1,5 +1,3 @@
-/*	$NetBSD: dwarf_pro_expr.c,v 1.3 2016/02/20 02:43:41 christos Exp $	*/
-
 /*-
  * Copyright (c) 2010 Kai Wang
  * All rights reserved.
@@ -28,7 +26,6 @@
 
 #include "_libdwarf.h"
 
-__RCSID("$NetBSD: dwarf_pro_expr.c,v 1.3 2016/02/20 02:43:41 christos Exp $");
 ELFTC_VCSID("Id: dwarf_pro_expr.c 2074 2011-10-27 03:34:33Z jkoshy ");
 
 static struct _Dwarf_P_Expr_Entry *

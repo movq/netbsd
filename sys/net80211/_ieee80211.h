@@ -29,7 +29,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * $FreeBSD: src/sys/net80211/_ieee80211.h,v 1.3 2005/08/10 17:42:13 sam Exp $
+ * $FreeBSD: src/sys/net80211/_ieee80211.h,v 1.2 2004/12/31 22:42:38 sam Exp $
  */
 #ifndef _NET80211__IEEE80211_H_
 #define _NET80211__IEEE80211_H_
@@ -38,7 +38,7 @@ enum ieee80211_phytype {
 	IEEE80211_T_DS,			/* direct sequence spread spectrum */
 	IEEE80211_T_FH,			/* frequency hopping */
 	IEEE80211_T_OFDM,		/* frequency division multiplexing */
-	IEEE80211_T_TURBO		/* high rate OFDM, aka turbo mode */
+	IEEE80211_T_TURBO,		/* high rate OFDM, aka turbo mode */
 };
 #define	IEEE80211_T_CCK	IEEE80211_T_DS	/* more common nomenclature */
 
@@ -50,9 +50,9 @@ enum ieee80211_phymode {
 	IEEE80211_MODE_11G	= 3,	/* 2GHz, OFDM */
 	IEEE80211_MODE_FH	= 4,	/* 2GHz, GFSK */
 	IEEE80211_MODE_TURBO_A	= 5,	/* 5GHz, OFDM, 2x clock */
-	IEEE80211_MODE_TURBO_G	= 6	/* 2GHz, OFDM, 2x clock */
+	IEEE80211_MODE_TURBO_G	= 6,	/* 2GHz, OFDM, 2x clock */
 };
-#define	IEEE80211_MODE_MAX	((int)IEEE80211_MODE_TURBO_G + 1)
+#define	IEEE80211_MODE_MAX	(IEEE80211_MODE_TURBO_G+1)
 
 enum ieee80211_opmode {
 	IEEE80211_M_STA		= 1,	/* infrastructure station */
@@ -68,7 +68,7 @@ enum ieee80211_opmode {
 enum ieee80211_protmode {
 	IEEE80211_PROT_NONE	= 0,	/* no protection */
 	IEEE80211_PROT_CTSONLY	= 1,	/* CTS to self */
-	IEEE80211_PROT_RTSCTS	= 2	/* RTS-CTS */
+	IEEE80211_PROT_RTSCTS	= 2,	/* RTS-CTS */
 };
 
 /*
@@ -81,7 +81,7 @@ enum ieee80211_authmode {
 	IEEE80211_AUTH_8021X	= 3,		/* 802.1x */
 	IEEE80211_AUTH_AUTO	= 4,		/* auto-select/accept */
 	/* NB: these are used only for ioctls */
-	IEEE80211_AUTH_WPA	= 5		/* WPA/RSN w/ 802.1x/PSK */
+	IEEE80211_AUTH_WPA	= 5,		/* WPA/RSN w/ 802.1x/PSK */
 };
 
 /*
@@ -96,23 +96,22 @@ enum ieee80211_authmode {
 enum ieee80211_roamingmode {
 	IEEE80211_ROAMING_DEVICE= 0,	/* driver/hardware control */
 	IEEE80211_ROAMING_AUTO	= 1,	/* 802.11 layer control */
-	IEEE80211_ROAMING_MANUAL= 2	/* application control */
+	IEEE80211_ROAMING_MANUAL= 2,	/* application control */
 };
 
 /*
  * Channels are specified by frequency and attributes.
  */
 struct ieee80211_channel {
-	u_int16_t	ic_freq;	/* setting in MHz */
+	u_int16_t	ic_freq;	/* setting in Mhz */
 	u_int16_t	ic_flags;	/* see below */
 };
-
-extern const struct ieee80211_channel ieee80211_channel_anyc;
 
 #define	IEEE80211_CHAN_MAX	255
 #define	IEEE80211_CHAN_BYTES	32	/* howmany(IEEE80211_CHAN_MAX, NBBY) */
 #define	IEEE80211_CHAN_ANY	0xffff	/* token for ``any channel'' */
-#define	IEEE80211_CHAN_ANYC 	(__UNCONST(&ieee80211_channel_anyc))
+#define	IEEE80211_CHAN_ANYC \
+	((struct ieee80211_channel *) IEEE80211_CHAN_ANY)
 
 /* bits 0-3 are for private use by drivers */
 /* channel attributes */
@@ -124,9 +123,6 @@ extern const struct ieee80211_channel ieee80211_channel_anyc;
 #define	IEEE80211_CHAN_PASSIVE	0x0200	/* Only passive scan allowed */
 #define	IEEE80211_CHAN_DYN	0x0400	/* Dynamic CCK-OFDM channel */
 #define	IEEE80211_CHAN_GFSK	0x0800	/* GFSK channel (FHSS PHY) */
-#define	IEEE80211_CHAN_GSM	0x1000	/* 900 MHz spectrum channel */
-#define	IEEE80211_CHAN_HALF	0x4000	/* Half rate channel */
-#define	IEEE80211_CHAN_QUARTER	0x8000	/* Quarter rate channel */
 
 /*
  * Useful combinations of channel characteristics.
@@ -146,41 +142,31 @@ extern const struct ieee80211_channel ieee80211_channel_anyc;
 #define	IEEE80211_CHAN_108G \
 	(IEEE80211_CHAN_2GHZ | IEEE80211_CHAN_OFDM | IEEE80211_CHAN_TURBO)
 
-#define	IEEE80211_CHAN_ALL \
-	(IEEE80211_CHAN_2GHZ | IEEE80211_CHAN_5GHZ | IEEE80211_CHAN_GFSK | \
-	 IEEE80211_CHAN_CCK | IEEE80211_CHAN_OFDM | IEEE80211_CHAN_DYN)
-#define	IEEE80211_CHAN_ALLTURBO \
-	(IEEE80211_CHAN_ALL | IEEE80211_CHAN_TURBO)
+#define	IEEE80211_IS_CHAN_FHSS(_c) \
+	(((_c)->ic_flags & IEEE80211_CHAN_FHSS) == IEEE80211_CHAN_FHSS)
+#define	IEEE80211_IS_CHAN_A(_c) \
+	(((_c)->ic_flags & IEEE80211_CHAN_A) == IEEE80211_CHAN_A)
+#define	IEEE80211_IS_CHAN_B(_c) \
+	(((_c)->ic_flags & IEEE80211_CHAN_B) == IEEE80211_CHAN_B)
+#define	IEEE80211_IS_CHAN_PUREG(_c) \
+	(((_c)->ic_flags & IEEE80211_CHAN_PUREG) == IEEE80211_CHAN_PUREG)
+#define	IEEE80211_IS_CHAN_G(_c) \
+	(((_c)->ic_flags & IEEE80211_CHAN_G) == IEEE80211_CHAN_G)
+#define	IEEE80211_IS_CHAN_T(_c) \
+	(((_c)->ic_flags & IEEE80211_CHAN_T) == IEEE80211_CHAN_T)
+#define	IEEE80211_IS_CHAN_108G(_c) \
+	(((_c)->ic_flags & IEEE80211_CHAN_108G) == IEEE80211_CHAN_108G)
 
-#define IEEE80211_IS_CHAN_ANYC(_c) \
-	((_c) == IEEE80211_CHAN_ANYC)
-
-#define _IEEE80211_IS_CHAN(_c, _ch) \
-	(((_c)->ic_flags & IEEE80211_CHAN_ ## _ch) == IEEE80211_CHAN_ ## _ch)
-
-#define	IEEE80211_IS_CHAN_FHSS(_c)	_IEEE80211_IS_CHAN(_c, FHSS)
-#define	IEEE80211_IS_CHAN_A(_c)		_IEEE80211_IS_CHAN(_c, A)
-#define	IEEE80211_IS_CHAN_B(_c)		_IEEE80211_IS_CHAN(_c, B)
-#define	IEEE80211_IS_CHAN_PUREG(_c)	_IEEE80211_IS_CHAN(_c, PUREG)
-#define	IEEE80211_IS_CHAN_G(_c)		_IEEE80211_IS_CHAN(_c, G)
-#define	IEEE80211_IS_CHAN_ANYG(_c)	_IEEE80211_IS_CHAN(_c, ANYG)
-#define	IEEE80211_IS_CHAN_T(_c)		_IEEE80211_IS_CHAN(_c, T)
-#define	IEEE80211_IS_CHAN_108G(_c)	_IEEE80211_IS_CHAN(_c, 108G)
-
-#define	IEEE80211_IS_CHAN_2GHZ(_c) 	_IEEE80211_IS_CHAN(_c, 2GHZ)
-#define	IEEE80211_IS_CHAN_5GHZ(_c) 	_IEEE80211_IS_CHAN(_c, 5GHZ)
-#define	IEEE80211_IS_CHAN_OFDM(_c) 	_IEEE80211_IS_CHAN(_c, OFDM)
-#define	IEEE80211_IS_CHAN_CCK(_c) 	_IEEE80211_IS_CHAN(_c, CCK)
-#define	IEEE80211_IS_CHAN_GFSK(_c) 	_IEEE80211_IS_CHAN(_c, GFSK)
-#define	IEEE80211_IS_CHAN_HALF(_c) 	_IEEE80211_IS_CHAN(_c, HALF)
-#define	IEEE80211_IS_CHAN_QUARTER(_c) 	_IEEE80211_IS_CHAN(_c, QUARTER)
-#define	IEEE80211_IS_CHAN_FULL(_c) \
-	(!IEEE80211_IS_CHAN_ANYC(_c) && \
-	((_c)->ic_flags & (IEEE80211_CHAN_QUARTER | IEEE80211_CHAN_HALF)) == 0)
-
-#define	IEEE80211_IS_CHAN_GSM(_c) 	_IEEE80211_IS_CHAN(_c, GSM)
-#define	IEEE80211_IS_CHAN_PASSIVE(_c) 	_IEEE80211_IS_CHAN(_c, PASSIVE)
-
+#define	IEEE80211_IS_CHAN_2GHZ(_c) \
+	(((_c)->ic_flags & IEEE80211_CHAN_2GHZ) != 0)
+#define	IEEE80211_IS_CHAN_5GHZ(_c) \
+	(((_c)->ic_flags & IEEE80211_CHAN_5GHZ) != 0)
+#define	IEEE80211_IS_CHAN_OFDM(_c) \
+	(((_c)->ic_flags & IEEE80211_CHAN_OFDM) != 0)
+#define	IEEE80211_IS_CHAN_CCK(_c) \
+	(((_c)->ic_flags & IEEE80211_CHAN_CCK) != 0)
+#define	IEEE80211_IS_CHAN_GFSK(_c) \
+	(((_c)->ic_flags & IEEE80211_CHAN_GFSK) != 0)
 
 /* ni_chan encoding for FH phy */
 #define	IEEE80211_FH_CHANMOD	80
@@ -199,8 +185,4 @@ struct ieee80211_rateset {
 	u_int8_t		rs_rates[IEEE80211_RATE_MAXSIZE];
 };
 
-extern const struct ieee80211_rateset ieee80211_std_rateset_11a;
-extern const struct ieee80211_rateset ieee80211_std_rateset_11b;
-extern const struct ieee80211_rateset ieee80211_std_rateset_11g;
-
-#endif /* !_NET80211__IEEE80211_H_ */
+#endif /* _NET80211__IEEE80211_H_ */

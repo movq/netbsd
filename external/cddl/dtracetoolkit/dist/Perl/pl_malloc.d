@@ -3,7 +3,7 @@
  * pl_malloc.d - Perl libc malloc analysis.
  *               Written for the Perl DTrace provider.
  *
- * $Id: pl_malloc.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: pl_malloc.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * This is an expiremental script to identify who is calling malloc() for
  * memory allocation, and to print distribution plots of the requested bytes.

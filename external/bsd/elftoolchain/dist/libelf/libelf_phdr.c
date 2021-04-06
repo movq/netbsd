@@ -1,5 +1,3 @@
-/*	$NetBSD: libelf_phdr.c,v 1.3 2016/02/20 02:43:42 christos Exp $	*/
-
 /*-
  * Copyright (c) 2006,2008 Joseph Koshy
  * All rights reserved.
@@ -26,10 +24,6 @@
  * SUCH DAMAGE.
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-# include "nbtool_config.h"
-#endif
-
 #include <sys/cdefs.h>
 
 #include <assert.h>
@@ -39,8 +33,7 @@
 
 #include "_libelf.h"
 
-__RCSID("$NetBSD: libelf_phdr.c,v 1.3 2016/02/20 02:43:42 christos Exp $");
-ELFTC_VCSID("Id: libelf_phdr.c 3174 2015-03-27 17:13:41Z emaste ");
+ELFTC_VCSID("Id: libelf_phdr.c 2931 2013-03-23 11:41:07Z jkoshy ");
 
 void *
 _libelf_getphdr(Elf *e, int ec)
@@ -51,8 +44,7 @@ _libelf_getphdr(Elf *e, int ec)
 	Elf32_Ehdr *eh32;
 	Elf64_Ehdr *eh64;
 	void *ehdr, *phdr;
-	int (*xlator)(unsigned char *_d, size_t _dsz, unsigned char *_s,
-	    size_t _c, int _swap);
+	int (*xlator)(char *_d, size_t _dsz, char *_s, size_t _c, int _swap);
 
 	assert(ec == ELFCLASS32 || ec == ELFCLASS64);
 
@@ -109,7 +101,7 @@ _libelf_getphdr(Elf *e, int ec)
 
 	xlator = _libelf_get_translator(ELF_T_PHDR, ELF_TOMEMORY, ec);
 	(*xlator)(phdr, phnum * msz, e->e_rawfile + phoff, phnum,
-	    e->e_byteorder != _libelf_host_byteorder());
+	    e->e_byteorder != LIBELF_PRIVATE(byteorder));
 
 	return (phdr);
 }

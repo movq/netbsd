@@ -1,6 +1,4 @@
-/*	$NetBSD: ieee80211_crypto_wep.c,v 1.13 2020/11/03 15:06:50 mlelstv Exp $	*/
-
-/*
+/*-
  * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
  * All rights reserved.
  *
@@ -32,28 +30,24 @@
  */
 
 #include <sys/cdefs.h>
-#ifdef __FreeBSD__
-__FBSDID("$FreeBSD: src/sys/net80211/ieee80211_crypto_wep.c,v 1.7 2005/06/10 16:11:24 sam Exp $");
-#endif
-#ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_crypto_wep.c,v 1.13 2020/11/03 15:06:50 mlelstv Exp $");
-#endif
+__FBSDID("$FreeBSD: src/sys/net80211/ieee80211_crypto_wep.c,v 1.5 2004/12/31 22:42:38 sam Exp $");
 
 /*
  * IEEE 802.11 WEP crypto support.
  */
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/mbuf.h>
-#include <sys/kmem.h>
+#include <sys/systm.h> 
+#include <sys/mbuf.h>   
+#include <sys/malloc.h>
 #include <sys/kernel.h>
+#include <sys/module.h>
 #include <sys/endian.h>
 
 #include <sys/socket.h>
 
 #include <net/if.h>
-#include <net/if_ether.h>
 #include <net/if_media.h>
+#include <net/ethernet.h>
 
 #include <net80211/ieee80211_var.h>
 
@@ -61,11 +55,11 @@ static	void *wep_attach(struct ieee80211com *, struct ieee80211_key *);
 static	void wep_detach(struct ieee80211_key *);
 static	int wep_setkey(struct ieee80211_key *);
 static	int wep_encap(struct ieee80211_key *, struct mbuf *, u_int8_t keyid);
-static	int wep_decap(struct ieee80211_key *, struct mbuf *, int hdrlen);
-static	int wep_enmic(struct ieee80211_key *, struct mbuf *, int);
-static	int wep_demic(struct ieee80211_key *, struct mbuf *, int);
+static	int wep_decap(struct ieee80211_key *, struct mbuf *);
+static	int wep_enmic(struct ieee80211_key *, struct mbuf *);
+static	int wep_demic(struct ieee80211_key *, struct mbuf *);
 
-const struct ieee80211_cipher ieee80211_cipher_wep = {
+static const struct ieee80211_cipher wep = {
 	.ic_name	= "WEP",
 	.ic_cipher	= IEEE80211_CIPHER_WEP,
 	.ic_header	= IEEE80211_WEP_IVLEN + IEEE80211_WEP_KIDLEN,
@@ -80,8 +74,6 @@ const struct ieee80211_cipher ieee80211_cipher_wep = {
 	.ic_demic	= wep_demic,
 };
 
-#define	wep	ieee80211_cipher_wep
-
 static	int wep_encrypt(struct ieee80211_key *, struct mbuf *, int hdrlen);
 static	int wep_decrypt(struct ieee80211_key *, struct mbuf *, int hdrlen);
 
@@ -95,7 +87,8 @@ wep_attach(struct ieee80211com *ic, struct ieee80211_key *k)
 {
 	struct wep_ctx *ctx;
 
-	ctx = kmem_intr_zalloc(sizeof(struct wep_ctx), KM_NOSLEEP);
+	MALLOC(ctx, struct wep_ctx *, sizeof(struct wep_ctx),
+		M_DEVBUF, M_NOWAIT | M_ZERO);
 	if (ctx == NULL) {
 		ic->ic_stats.is_crypto_nomem++;
 		return NULL;
@@ -111,7 +104,7 @@ wep_detach(struct ieee80211_key *k)
 {
 	struct wep_ctx *ctx = k->wk_private;
 
-	kmem_intr_free(ctx, sizeof(struct wep_ctx));
+	FREE(ctx, M_DEVBUF);
 }
 
 static int
@@ -133,7 +126,16 @@ wep_encap(struct ieee80211_key *k, struct mbuf *m, u_int8_t keyid)
 	int hdrlen;
 
 	hdrlen = ieee80211_hdrspace(ic, mtod(m, void *));
-	ivp = mtod(m, u_int8_t *) + hdrlen;
+
+	/*
+	 * Copy down 802.11 header and add the IV + KeyID.
+	 */
+	M_PREPEND(m, wep.ic_header, M_NOWAIT);
+	if (m == NULL)
+		return 0;
+	ivp = mtod(m, u_int8_t *);
+	ovbcopy(ivp + wep.ic_header, ivp, hdrlen);
+	ivp += hdrlen;
 
 	/*
 	 * XXX
@@ -191,7 +193,7 @@ wep_encap(struct ieee80211_key *k, struct mbuf *m, u_int8_t keyid)
  * Add MIC to the frame as needed.
  */
 static int
-wep_enmic(struct ieee80211_key *k, struct mbuf *m, int force)
+wep_enmic(struct ieee80211_key *k, struct mbuf *m)
 {
 
 	return 1;
@@ -203,12 +205,14 @@ wep_enmic(struct ieee80211_key *k, struct mbuf *m, int force)
  * the specified key.
  */
 static int
-wep_decap(struct ieee80211_key *k, struct mbuf *m, int hdrlen)
+wep_decap(struct ieee80211_key *k, struct mbuf *m)
 {
 	struct wep_ctx *ctx = k->wk_private;
 	struct ieee80211_frame *wh;
+	int hdrlen;
 
 	wh = mtod(m, struct ieee80211_frame *);
+	hdrlen = ieee80211_hdrsize(wh);
 
 	/*
 	 * Check if the device handled the decrypt in hardware.
@@ -227,7 +231,7 @@ wep_decap(struct ieee80211_key *k, struct mbuf *m, int hdrlen)
 	/*
 	 * Copy up 802.11 header and strip crypto bits.
 	 */
-	memmove(mtod(m, u_int8_t *) + wep.ic_header, mtod(m, void *), hdrlen);
+	ovbcopy(mtod(m, void *), mtod(m, u_int8_t *) + wep.ic_header, hdrlen);
 	m_adj(m, wep.ic_header);
 	m_adj(m, -wep.ic_trailer);
 
@@ -238,8 +242,7 @@ wep_decap(struct ieee80211_key *k, struct mbuf *m, int hdrlen)
  * Verify and strip MIC from the frame.
  */
 static int
-wep_demic(struct ieee80211_key *k, struct mbuf *skb,
-    int force)
+wep_demic(struct ieee80211_key *k, struct mbuf *skb)
 {
 	return 1;
 }
@@ -315,10 +318,7 @@ wep_encrypt(struct ieee80211_key *key, struct mbuf *m0, int hdrlen)
 
 	ctx->wc_ic->ic_stats.is_crypto_wep++;
 
-	/*
-	 * NB: this assumes the header was pulled up; it was done in
-	 * ieee80211_crypto_encap().
-	 */
+	/* NB: this assumes the header was pulled up */
 	memcpy(rc4key, mtod(m, u_int8_t *) + hdrlen, IEEE80211_WEP_IVLEN);
 	memcpy(rc4key + IEEE80211_WEP_IVLEN, key->wk_key, key->wk_keylen);
 
@@ -415,7 +415,7 @@ wep_decrypt(struct ieee80211_key *key, struct mbuf *m0, int hdrlen)
 	}
 
 	off = hdrlen + wep.ic_header;
-	data_len = m->m_pkthdr.len - (off + wep.ic_trailer);
+	data_len = m->m_pkthdr.len - (off + wep.ic_trailer),
 
 	/* Compute CRC32 over unencrypted data and apply RC4 to data */
 	crc = ~0;
@@ -452,10 +452,8 @@ wep_decrypt(struct ieee80211_key *key, struct mbuf *m0, int hdrlen)
 	}
 	crc = ~crc;
 
-	/*
-	 * Encrypt little-endian CRC32 and verify that it matches with
-	 * received ICV
-	 */
+	/* Encrypt little-endian CRC32 and verify that it matches with
+	 * received ICV */
 	icv[0] = crc;
 	icv[1] = crc >> 8;
 	icv[2] = crc >> 16;
@@ -474,7 +472,28 @@ wep_decrypt(struct ieee80211_key *key, struct mbuf *m0, int hdrlen)
 #undef S_SWAP
 }
 
-IEEE80211_CRYPTO_SETUP(wep_register)
+/*
+ * Module glue.
+ */
+static int
+wep_modevent(module_t mod, int type, void *unused)
 {
-	ieee80211_crypto_register(&wep);
+	switch (type) {
+	case MOD_LOAD:
+		ieee80211_crypto_register(&wep);
+		return 0;
+	case MOD_UNLOAD:
+		ieee80211_crypto_unregister(&wep);
+		return 0;
+	}
+	return EINVAL;
 }
+
+static moduledata_t wep_mod = {
+	"wlan_wep",
+	wep_modevent,
+	0
+};
+DECLARE_MODULE(wlan_wep, wep_mod, SI_SUB_DRIVERS, SI_ORDER_FIRST);
+MODULE_VERSION(wlan_wep, 1);
+MODULE_DEPEND(wlan_wep, wlan, 1, 1, 1);

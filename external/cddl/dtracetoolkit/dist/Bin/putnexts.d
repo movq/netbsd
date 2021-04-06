@@ -7,7 +7,7 @@
  * for understanding streams based frameworks, such as areas of the Solaris
  * TCP/IP stack.
  *
- * $Id: putnexts.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: putnexts.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE:	putnext.d
  *

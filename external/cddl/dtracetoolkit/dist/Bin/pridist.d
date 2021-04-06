@@ -12,7 +12,7 @@
  * This idea came from the script /usr/demo/dtrace/profpri.d, which
  * produces similar output for one particular PID.
  *
- * $Id: pridist.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: pridist.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE:       pridist.d       # hit Ctrl-C to end sampling
  *

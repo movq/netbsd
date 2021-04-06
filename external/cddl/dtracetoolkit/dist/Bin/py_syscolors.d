@@ -3,7 +3,7 @@
  * py_syscolors.d - trace Python function flow plus syscalls, in color.
  *                  Written for the Python DTrace provider.
  *
- * $Id: py_syscolors.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: py_syscolors.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE: py_syscolors.d { -p PID | -c cmd }	# hit Ctrl-C to end
  *

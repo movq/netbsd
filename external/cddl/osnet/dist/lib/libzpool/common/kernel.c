@@ -923,7 +923,7 @@ ddi_strtoull(const char *str, char **nptr, int base, u_longlong_t *result)
 	return (0);
 }
 
-#ifndef __FreeBSD__
+#ifdef illumos
 /* ARGSUSED */
 cyclic_id_t
 cyclic_add(cyc_handler_t *hdlr, cyc_time_t *when)

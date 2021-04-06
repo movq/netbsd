@@ -3,7 +3,7 @@
  * crash.d - Crashed Application info.
  *           Written in DTrace (Solaris 10 3/05).
  *
- * $Id: crash.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: crash.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * When applications crash via a SIGSEGV or SIGBUS, a report of the
  * process state is printed out.

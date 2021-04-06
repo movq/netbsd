@@ -30,10 +30,6 @@
  * Routines for manipulating linked lists
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-# include "nbtool_config.h"
-#endif
-
 #include <stdio.h>
 #include <assert.h>
 #include <stdlib.h>
@@ -74,7 +70,7 @@ slist_add(list_t **list, void *data, int (*cmp)(void *, void *))
 
 /*ARGSUSED2*/
 static int
-list_defcmp(void *d1, void *d2, void *private __unused)
+list_defcmp(void *d1, void *d2, void *private)
 {
 	return (d1 != d2);
 }
@@ -139,7 +135,7 @@ list_iter(list_t *list, int (*func)(void *, void *), void *private)
 
 /*ARGSUSED*/
 static int
-list_count_cb(void *data __unused, void *private __unused)
+list_count_cb(void *data, void *private)
 {
 	return (1);
 }

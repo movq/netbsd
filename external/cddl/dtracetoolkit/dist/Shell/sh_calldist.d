@@ -3,7 +3,7 @@
  * sh_calldist.d - measure Bourne shell elapsed times for types of operation.
  *                 Written for the sh DTrace provider.
  *
- * $Id: sh_calldist.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: sh_calldist.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * This traces shell activity from all Bourne shells on the system that are
  * running with sh provider support.

@@ -3,7 +3,7 @@
  * j_profile.d - sample stack traces with Java translations using DTrace.
  *
  * USAGE: j_profile.d { -p PID | -c cmd }	# hit Ctrl-C to end
- * $Id: j_profile.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: j_profile.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  *
  * This samples stack traces for the process specified. This stack trace

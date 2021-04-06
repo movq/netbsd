@@ -1,5 +1,3 @@
-/*	$NetBSD: dwarf_pro_lineno.c,v 1.3 2016/02/20 02:43:41 christos Exp $	*/
-
 /*-
  * Copyright (c) 2010 Kai Wang
  * All rights reserved.
@@ -28,7 +26,6 @@
 
 #include "_libdwarf.h"
 
-__RCSID("$NetBSD: dwarf_pro_lineno.c,v 1.3 2016/02/20 02:43:41 christos Exp $");
 ELFTC_VCSID("Id: dwarf_pro_lineno.c 2973 2013-12-23 06:46:16Z kaiwang27 ");
 
 Dwarf_Unsigned

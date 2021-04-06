@@ -7,7 +7,7 @@
 # and refreshes the display every 1 second or as specified at the
 # command line.
 #
-# $Id: topsyscall,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+# $Id: topsyscall,v 1.1 2015/09/30 22:01:09 christos Exp $
 #
 # USAGE:        topsyscall [-Cs] [interval [count]]
 #

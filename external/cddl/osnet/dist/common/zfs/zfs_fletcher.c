@@ -22,9 +22,6 @@
  * Copyright 2009 Sun Microsystems, Inc.  All rights reserved.
  * Use is subject to license terms.
  */
-/*
- * Copyright 2013 Saso Kiselkov. All rights reserved.
- */
 
 /*
  * Fletcher Checksums
@@ -134,10 +131,8 @@
 #include <sys/zio.h>
 #include <sys/spa.h>
 
-/*ARGSUSED*/
 void
-fletcher_2_native(const void *buf, uint64_t size,
-    const void *ctx_template, zio_cksum_t *zcp)
+fletcher_2_native(const void *buf, uint64_t size, zio_cksum_t *zcp)
 {
 	const uint64_t *ip = buf;
 	const uint64_t *ipend = ip + (size / sizeof (uint64_t));
@@ -153,10 +148,8 @@ fletcher_2_native(const void *buf, uint64_t size,
 	ZIO_SET_CHECKSUM(zcp, a0, a1, b0, b1);
 }
 
-/*ARGSUSED*/
 void
-fletcher_2_byteswap(const void *buf, uint64_t size,
-    const void *ctx_template, zio_cksum_t *zcp)
+fletcher_2_byteswap(const void *buf, uint64_t size, zio_cksum_t *zcp)
 {
 	const uint64_t *ip = buf;
 	const uint64_t *ipend = ip + (size / sizeof (uint64_t));
@@ -172,10 +165,8 @@ fletcher_2_byteswap(const void *buf, uint64_t size,
 	ZIO_SET_CHECKSUM(zcp, a0, a1, b0, b1);
 }
 
-/*ARGSUSED*/
 void
-fletcher_4_native(const void *buf, uint64_t size,
-    const void *ctx_template, zio_cksum_t *zcp)
+fletcher_4_native(const void *buf, uint64_t size, zio_cksum_t *zcp)
 {
 	const uint32_t *ip = buf;
 	const uint32_t *ipend = ip + (size / sizeof (uint32_t));
@@ -191,10 +182,8 @@ fletcher_4_native(const void *buf, uint64_t size,
 	ZIO_SET_CHECKSUM(zcp, a, b, c, d);
 }
 
-/*ARGSUSED*/
 void
-fletcher_4_byteswap(const void *buf, uint64_t size,
-    const void *ctx_template, zio_cksum_t *zcp)
+fletcher_4_byteswap(const void *buf, uint64_t size, zio_cksum_t *zcp)
 {
 	const uint32_t *ip = buf;
 	const uint32_t *ipend = ip + (size / sizeof (uint32_t));

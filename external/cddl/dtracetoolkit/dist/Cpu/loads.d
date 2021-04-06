@@ -6,7 +6,7 @@
  * The purpose of this script is to demonstrate fetching these values
  * from the DTrace language.
  *
- * $Id: loads.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: loads.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE:	loads.d
  *

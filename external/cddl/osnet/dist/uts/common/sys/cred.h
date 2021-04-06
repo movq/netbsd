@@ -19,7 +19,7 @@
  * CDDL HEADER END
  */
 /*
- * Copyright 2009 Sun Microsystems, Inc.  All rights reserved.
+ * Copyright 2008 Sun Microsystems, Inc.  All rights reserved.
  * Use is subject to license terms.
  */
 
@@ -33,6 +33,8 @@
 
 #ifndef _SYS_CRED_H
 #define	_SYS_CRED_H
+
+#pragma ident	"%Z%%M%	%I%	%E% SMI"
 
 #include <sys/types.h>
 
@@ -56,7 +58,6 @@ struct prcred;
 struct ksid;
 struct ksidlist;
 struct credklpd;
-struct credgrp;
 
 struct auditinfo_addr;			/* cred.h is included in audit.h */
 
@@ -78,7 +79,6 @@ extern cred_t *crdup(cred_t *);
 extern void crdup_to(cred_t *, cred_t *);
 extern cred_t *crgetcred(void);
 extern void crset(struct proc *, cred_t *);
-extern void crset_zone_privall(cred_t *);
 extern int groupmember(gid_t, const cred_t *);
 extern int supgroupmember(gid_t, const cred_t *);
 extern int hasprocperm(const cred_t *, const cred_t *);
@@ -104,7 +104,6 @@ extern struct auditinfo_addr *crgetauinfo_modifiable(cred_t *);
 extern uint_t crgetref(const cred_t *);
 
 extern const gid_t *crgetgroups(const cred_t *);
-extern const gid_t *crgetggroups(const struct credgrp *);
 
 extern int crgetngroups(const cred_t *);
 
@@ -121,13 +120,7 @@ extern int crsetresgid(cred_t *, gid_t, gid_t, gid_t);
  */
 extern int crsetugid(cred_t *, uid_t, gid_t);
 
-/*
- * Functions to handle the supplemental group list.
- */
 extern int crsetgroups(cred_t *, int, gid_t *);
-extern struct credgrp *crgrpcopyin(int, gid_t *);
-extern void crgrprele(struct credgrp *);
-extern void crsetcredgrp(cred_t *, struct credgrp *);
 
 /*
  * Private interface for setting zone association of credential.

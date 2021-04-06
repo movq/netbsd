@@ -3,7 +3,7 @@
  * j_flow.d - snoop Java execution showing method flow using DTrace.
  *            Written for the Java hotspot DTrace provider.
  *
- * $Id: j_flow.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: j_flow.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * This traces activity from all Java processes on the system with hotspot
  * provider support (1.6.0) and the flag "+ExtendedDTraceProbes". eg,

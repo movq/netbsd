@@ -80,11 +80,7 @@ typedef struct dt_bkpt {
 	dt_bkpt_f *dbp_func;		/* callback function to execute */
 	void *dbp_data;			/* callback function private data */
 	uintptr_t dbp_addr;		/* virtual address of breakpoint */
-#ifdef __NetBSD__
-	proc_breakpoint_t dbp_instr;	/* saved instruction from breakpoint */
-#else
 	ulong_t dbp_instr;		/* saved instruction from breakpoint */
-#endif
 	ulong_t dbp_hits;		/* count of breakpoint hits for debug */
 	int dbp_active;			/* flag indicating breakpoint is on */
 } dt_bkpt_t;
@@ -101,7 +97,7 @@ typedef struct dt_proc_hash {
 } dt_proc_hash_t;
 
 extern struct ps_prochandle *dt_proc_create(dtrace_hdl_t *,
-    const char *, char *const *, proc_child_func *, void *);
+    const char *, char *const *);
 
 extern struct ps_prochandle *dt_proc_grab(dtrace_hdl_t *, pid_t, int, int);
 extern void dt_proc_release(dtrace_hdl_t *, struct ps_prochandle *);

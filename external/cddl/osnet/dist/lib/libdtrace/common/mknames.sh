@@ -26,11 +26,7 @@
 #
 #ident	"%Z%%M%	%I%	%E% SMI"
 
-if [ "x$(echo -e)" != "x-e" ]; then
-	BSDECHO=-e
-fi
-
-echo ${BSDECHO} "\
+echo "\
 /*\n\
  * Copyright 2005 Sun Microsystems, Inc.  All rights reserved.\n\
  * Use is subject to license terms.\n\
@@ -46,12 +42,12 @@ dtrace_subrstr(dtrace_hdl_t *dtp, int subr)\n\
 {\n\
 	switch (subr) {"
 
-${TOOL_AWK:-awk} '
+nawk '
 /^#define[ 	]*DIF_SUBR_/ && $2 != "DIF_SUBR_MAX" {
 	printf("\tcase %s: return (\"%s\");\n", $2, tolower(substr($2, 10)));
 }'
 
-echo ${BSDECHO} "\
+echo "\
 	default: return (\"unknown\");\n\
 	}\n\
 }"

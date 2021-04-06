@@ -2,8 +2,9 @@
  * CDDL HEADER START
  *
  * The contents of this file are subject to the terms of the
- * Common Development and Distribution License (the "License").
- * You may not use this file except in compliance with the License.
+ * Common Development and Distribution License, Version 1.0 only
+ * (the "License").  You may not use this file except in compliance
+ * with the License.
  *
  * You can obtain a copy of the license at usr/src/OPENSOLARIS.LICENSE
  * or http://www.opensolaris.org/os/licensing.
@@ -19,24 +20,23 @@
  * CDDL HEADER END
  */
 /*
- * Copyright 2008 Sun Microsystems, Inc.  All rights reserved.
- * Copyright 2013 Voxer Inc. All rights reserved.
+ * Copyright 2005 Sun Microsystems, Inc.  All rights reserved.
  * Use is subject to license terms.
  */
+
+#pragma ident	"%Z%%M%	%I%	%E% SMI"
 
 #include <unistd.h>
 #include <fcntl.h>
 #include <dlfcn.h>
 #include <link.h>
 #include <sys/dtrace.h>
-#include <sys/ioctl.h>
 
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include <libelf.h>
 
 /*
  * In Solaris 10 GA, the only mechanism for communicating helper information
@@ -55,22 +55,19 @@
  *	DTRACE_DOF_INIT_DEVNAME		set the path to the helper node
  */
 
-static const char *devnamep = "/dev/dtrace/helper";
-#ifdef illumos
+static const char *devname = "/dev/dtrace/helper";
 static const char *olddevname = "/devices/pseudo/dtrace@0:helper";
-#endif
 
 static const char *modname;	/* Name of this load object */
 static int gen;			/* DOF helper generation */
 extern dof_hdr_t __SUNW_dof;	/* DOF defined in the .SUNW_dof section */
-static boolean_t dof_init_debug = B_FALSE;	/* From DTRACE_DOF_INIT_DEBUG */
 
-static void __printflike(2,3)
-dbg_printf(int debug, const char *fmt, ...)
+static void
+dprintf(int debug, const char *fmt, ...)
 {
 	va_list ap;
 
-	if (debug && !dof_init_debug)
+	if (debug && getenv("DTRACE_DOF_INIT_DEBUG") == NULL)
 		return;
 
 	va_start(ap, fmt);
@@ -88,12 +85,7 @@ dbg_printf(int debug, const char *fmt, ...)
 	va_end(ap);
 }
 
-#ifdef illumos
 #pragma init(dtrace_dof_init)
-#else
-static void dtrace_dof_init(void) __attribute__ ((constructor));
-#endif
-
 static void
 dtrace_dof_init(void)
 {
@@ -104,32 +96,23 @@ dtrace_dof_init(void)
 	Elf32_Ehdr *elf;
 #endif
 	dof_helper_t dh;
-	Link_map *lmp = NULL;
-#ifdef illumos
+	Link_map *lmp;
 	Lmid_t lmid;
-#else
-	u_long lmid = 0;
-#endif
 	int fd;
 	const char *p;
 
 	if (getenv("DTRACE_DOF_INIT_DISABLE") != NULL)
 		return;
 
-	if (getenv("DTRACE_DOF_INIT_DEBUG") != NULL)
-		dof_init_debug = B_TRUE;
-
 	if (dlinfo(RTLD_SELF, RTLD_DI_LINKMAP, &lmp) == -1 || lmp == NULL) {
-		dbg_printf(1, "couldn't discover module name or address\n");
+		dprintf(1, "couldn't discover module name or address\n");
 		return;
 	}
 
-#ifdef illumos
 	if (dlinfo(RTLD_SELF, RTLD_DI_LMID, &lmid) == -1) {
-		dbg_printf(1, "couldn't discover link map ID\n");
+		dprintf(1, "couldn't discover link map ID\n");
 		return;
 	}
-#endif
 
 	if ((modname = strrchr(lmp->l_name, '/')) == NULL)
 		modname = lmp->l_name;
@@ -140,17 +123,14 @@ dtrace_dof_init(void)
 	    dof->dofh_ident[DOF_ID_MAG1] != DOF_MAG_MAG1 ||
 	    dof->dofh_ident[DOF_ID_MAG2] != DOF_MAG_MAG2 ||
 	    dof->dofh_ident[DOF_ID_MAG3] != DOF_MAG_MAG3) {
-		dbg_printf(0, ".SUNW_dof section corrupt\n");
+		dprintf(0, ".SUNW_dof section corrupt\n");
 		return;
 	}
 
 	elf = (void *)lmp->l_addr;
 
 	dh.dofhp_dof = (uintptr_t)dof;
-	dh.dofhp_addr = elf && elf->e_type == ET_DYN ? (uintptr_t) lmp->l_addr : 0;
-#if defined(__FreeBSD__) || defined(__NetBSD__)
-	dh.dofhp_pid = getpid();
-#endif
+	dh.dofhp_addr = elf->e_type == ET_DYN ? lmp->l_addr : 0;
 
 	if (lmid == 0) {
 		(void) snprintf(dh.dofhp_mod, sizeof (dh.dofhp_mod),
@@ -161,11 +141,11 @@ dtrace_dof_init(void)
 	}
 
 	if ((p = getenv("DTRACE_DOF_INIT_DEVNAME")) != NULL)
-		devnamep = p;
+		devname = p;
 
-	if ((fd = open64(devnamep, O_RDWR)) < 0) {
-		dbg_printf(1, "failed to open helper device %s", devnamep);
-#ifdef illumos
+	if ((fd = open64(devname, O_RDWR)) < 0) {
+		dprintf(1, "failed to open helper device %s", devname);
+
 		/*
 		 * If the device path wasn't explicitly set, try again with
 		 * the old device path.
@@ -173,48 +153,37 @@ dtrace_dof_init(void)
 		if (p != NULL)
 			return;
 
-		devnamep = olddevname;
+		devname = olddevname;
 
-		if ((fd = open64(devnamep, O_RDWR)) < 0) {
-			dbg_printf(1, "failed to open helper device %s", devnamep);
+		if ((fd = open64(devname, O_RDWR)) < 0) {
+			dprintf(1, "failed to open helper device %s", devname);
 			return;
 		}
-#else
-		return;
-#endif
 	}
+
 	if ((gen = ioctl(fd, DTRACEHIOC_ADDDOF, &dh)) == -1)
-		dbg_printf(1, "DTrace ioctl failed for DOF at %p", dof);
-	else {
-		dbg_printf(1, "DTrace ioctl succeeded for DOF at %p\n", dof);
-#if defined(__FreeBSD__) || defined(__NetBSD__)
-		gen = dh.dofhp_gen;
-#endif
-	}
+		dprintf(1, "DTrace ioctl failed for DOF at %p", dof);
+	else
+		dprintf(1, "DTrace ioctl succeeded for DOF at %p\n", dof);
 
 	(void) close(fd);
 }
 
-#ifdef illumos
 #pragma fini(dtrace_dof_fini)
-#else
-static void dtrace_dof_fini(void) __attribute__ ((destructor));
-#endif
-
 static void
 dtrace_dof_fini(void)
 {
 	int fd;
 
-	if ((fd = open64(devnamep, O_RDWR)) < 0) {
-		dbg_printf(1, "failed to open helper device %s", devnamep);
+	if ((fd = open64(devname, O_RDWR)) < 0) {
+		dprintf(1, "failed to open helper device %s", devname);
 		return;
 	}
 
-	if ((gen = ioctl(fd, DTRACEHIOC_REMOVE, &gen)) == -1)
-		dbg_printf(1, "DTrace ioctl failed to remove DOF (%d)\n", gen);
+	if ((gen = ioctl(fd, DTRACEHIOC_REMOVE, gen)) == -1)
+		dprintf(1, "DTrace ioctl failed to remove DOF (%d)\n", gen);
 	else
-		dbg_printf(1, "DTrace ioctl removed DOF (%d)\n", gen);
+		dprintf(1, "DTrace ioctl removed DOF (%d)\n", gen);
 
 	(void) close(fd);
 }

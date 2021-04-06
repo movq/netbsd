@@ -3,7 +3,7 @@
  * sh_flowinfo.d - snoop Bourne shell flow with additional info.
  *                 Written for the sh DTrace provider.
  *
- * $Id: sh_flowinfo.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: sh_flowinfo.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * This traces shell activity from all Bourne shells on the system that are
  * running with sh provider support.

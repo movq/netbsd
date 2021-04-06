@@ -2,8 +2,9 @@
  * CDDL HEADER START
  *
  * The contents of this file are subject to the terms of the
- * Common Development and Distribution License (the "License").
- * You may not use this file except in compliance with the License.
+ * Common Development and Distribution License, Version 1.0 only
+ * (the "License").  You may not use this file except in compliance
+ * with the License.
  *
  * You can obtain a copy of the license at usr/src/OPENSOLARIS.LICENSE
  * or http://www.opensolaris.org/os/licensing.
@@ -18,17 +19,14 @@
  *
  * CDDL HEADER END
  */
-
 /*
- * Copyright 2010 Sun Microsystems, Inc.  All rights reserved.
- * Copyright (c) 2012 by Delphix. All rights reserved.
+ * Copyright 2005 Sun Microsystems, Inc.  All rights reserved.
  * Use is subject to license terms.
  */
 
-#ifdef illumos
+#pragma ident	"%Z%%M%	%I%	%E% SMI"
+
 #include <sys/sysmacros.h>
-#endif
-#include <sys/isa_defs.h>
 
 #include <strings.h>
 #include <unistd.h>
@@ -38,17 +36,10 @@
 #include <stdio.h>
 #include <errno.h>
 #include <ctype.h>
-#ifdef illumos
 #include <alloca.h>
-#else
-#include <sys/sysctl.h>
-#include <sys/ioctl.h>
-#include <libproc_compat.h>
-#endif
 #include <assert.h>
 #include <libgen.h>
 #include <limits.h>
-#include <stdint.h>
 
 #include <dt_impl.h>
 
@@ -66,8 +57,8 @@ int
 dtrace_xstr2desc(dtrace_hdl_t *dtp, dtrace_probespec_t spec,
     const char *s, int argc, char *const argv[], dtrace_probedesc_t *pdp)
 {
-	size_t off, len, vlen, wlen;
-	const char *p, *q, *v, *w;
+	size_t off, len, vlen;
+	const char *p, *q, *v;
 
 	char buf[32]; /* for id_t as %d (see below) */
 
@@ -83,8 +74,6 @@ dtrace_xstr2desc(dtrace_hdl_t *dtp, dtrace_probespec_t spec,
 
 		q = p + 1;
 		vlen = 0;
-		w = NULL;
-		wlen = 0;
 
 		if ((v = strchr(q, '$')) != NULL && v < q + len) {
 			/*
@@ -108,15 +97,15 @@ dtrace_xstr2desc(dtrace_hdl_t *dtp, dtrace_probespec_t spec,
 				v++;
 			}
 
-			if (isdigit((unsigned char)v[1])) {
+			if (isdigit(v[1])) {
+				char *end;
 				long i;
 
 				errno = 0;
-				i = strtol(v + 1, (char **)&w, 10);
+				i = strtol(v + 1, &end, 10);
 
-				wlen = vlen - (w - v);
-
-				if (i < 0 || i >= argc || errno != 0)
+				if (i < 0 || i >= argc ||
+				    errno != 0 || end != v + vlen)
 					return (dt_set_errno(dtp, EDT_BADSPCV));
 
 				v = argv[i];
@@ -152,7 +141,7 @@ dtrace_xstr2desc(dtrace_hdl_t *dtp, dtrace_probespec_t spec,
 		off = dtrace_probespecs[spec--].dtps_offset;
 		bcopy(q, (char *)pdp + off, len);
 		bcopy(v, (char *)pdp + off + len, vlen);
-		bcopy(w, (char *)pdp + off + len + vlen, wlen);
+
 	} while (--p >= s);
 
 	pdp->dtpd_id = DTRACE_IDNONE;
@@ -393,7 +382,7 @@ dt_version_str2num(const char *s, dt_version_t *vp)
 	char c;
 
 	while ((c = *s++) != '\0') {
-		if (isdigit((unsigned char)c))
+		if (isdigit(c))
 			n[i] = n[i] * 10 + c - '0';
 		else if (c != '.' || i++ >= sizeof (n) / sizeof (n[0]) - 1)
 			return (-1);
@@ -478,18 +467,9 @@ dt_dprintf(const char *format, ...)
 }
 
 int
-#ifdef illumos
 dt_ioctl(dtrace_hdl_t *dtp, int val, void *arg)
-#else
-dt_ioctl(dtrace_hdl_t *dtp, u_long val, void *arg)
-#endif
 {
 	const dtrace_vector_t *v = dtp->dt_vector;
-
-#ifndef illumos
-	/* Avoid sign extension. */
-	val &= 0xffffffff;
-#endif
 
 	if (v != NULL)
 		return (v->dtv_ioctl(dtp->dt_varg, val, arg));
@@ -506,18 +486,8 @@ dt_status(dtrace_hdl_t *dtp, processorid_t cpu)
 {
 	const dtrace_vector_t *v = dtp->dt_vector;
 
-	if (v == NULL) {
-#ifdef illumos
+	if (v == NULL)
 		return (p_online(cpu, P_STATUS));
-#else
-		int maxid = 0;
-		size_t len = sizeof(maxid);
-		if (sysctlbyname("kern.smp.maxid", &maxid, &len, NULL, 0) != 0)
-			return (cpu == 0 ? 1 : -1);
-		else
-			return (cpu <= maxid ? 1 : -1);
-#endif
-	}
 
 	return (v->dtv_status(dtp->dt_varg, cpu));
 }
@@ -582,18 +552,7 @@ int
 dt_printf(dtrace_hdl_t *dtp, FILE *fp, const char *format, ...)
 {
 	va_list ap;
-	va_list ap2;
 	int n;
-
-#ifndef illumos
-	/*
-	 * On FreeBSD, check if output is currently being re-directed
-	 * to another file. If so, output to that file instead of the
-	 * one the caller has specified.
-	 */
-	if (dtp->dt_freopen_fp != NULL)
-		fp = dtp->dt_freopen_fp;
-#endif
 
 	va_start(ap, format);
 
@@ -607,13 +566,11 @@ dt_printf(dtrace_hdl_t *dtp, FILE *fp, const char *format, ...)
 		len = dtp->dt_sprintf_buflen - len;
 		assert(len >= 0);
 
-		va_copy(ap2, ap);
-		if ((n = vsnprintf(buf, len, format, ap2)) < 0)
+		if ((n = vsnprintf(buf, len, format, ap)) < 0)
 			n = dt_set_errno(dtp, errno);
 
-		va_end(ap2);
 		va_end(ap);
-		
+
 		return (n);
 	}
 
@@ -622,8 +579,8 @@ dt_printf(dtrace_hdl_t *dtp, FILE *fp, const char *format, ...)
 		size_t avail;
 
 		/*
-		 * Using buffered output is not allowed if a handler has
-		 * not been installed.
+		 * It's not legal to use buffered ouput if there is not a
+		 * handler for buffered output.
 		 */
 		if (dtp->dt_bufhdlr == NULL) {
 			va_end(ap);
@@ -644,14 +601,11 @@ dt_printf(dtrace_hdl_t *dtp, FILE *fp, const char *format, ...)
 			dtp->dt_buffered_buf[0] = '\0';
 		}
 
-		va_copy(ap2, ap);
-		if ((needed = vsnprintf(NULL, 0, format, ap2)) < 0) {
+		if ((needed = vsnprintf(NULL, 0, format, ap)) < 0) {
 			rval = dt_set_errno(dtp, errno);
-			va_end(ap2);
 			va_end(ap);
 			return (rval);
 		}
-		va_end(ap2);
 
 		if (needed == 0) {
 			va_end(ap);
@@ -677,26 +631,19 @@ dt_printf(dtrace_hdl_t *dtp, FILE *fp, const char *format, ...)
 			dtp->dt_buffered_size <<= 1;
 		}
 
-		va_copy(ap2, ap);
 		if (vsnprintf(&dtp->dt_buffered_buf[dtp->dt_buffered_offs],
-		    avail, format, ap2) < 0) {
+		    avail, format, ap) < 0) {
 			rval = dt_set_errno(dtp, errno);
-			va_end(ap2);
 			va_end(ap);
 			return (rval);
 		}
-		va_end(ap2);
 
 		dtp->dt_buffered_offs += needed;
 		assert(dtp->dt_buffered_buf[dtp->dt_buffered_offs] == '\0');
-		va_end(ap);
 		return (0);
 	}
 
-	va_copy(ap2, ap);
-	n = vfprintf(fp, format, ap2);
-	fflush(fp);
-	va_end(ap2);
+	n = vfprintf(fp, format, ap);
 	va_end(ap);
 
 	if (n < 0) {
@@ -817,14 +764,15 @@ dt_basename(char *str)
 ulong_t
 dt_popc(ulong_t x)
 {
-#if defined(_ILP32)
+#ifdef _ILP32
 	x = x - ((x >> 1) & 0x55555555UL);
 	x = (x & 0x33333333UL) + ((x >> 2) & 0x33333333UL);
 	x = (x + (x >> 4)) & 0x0F0F0F0FUL;
 	x = x + (x >> 8);
 	x = x + (x >> 16);
 	return (x & 0x3F);
-#elif defined(_LP64)
+#endif
+#ifdef _LP64
 	x = x - ((x >> 1) & 0x5555555555555555ULL);
 	x = (x & 0x3333333333333333ULL) + ((x >> 2) & 0x3333333333333333ULL);
 	x = (x + (x >> 4)) & 0x0F0F0F0F0F0F0F0FULL;
@@ -832,8 +780,6 @@ dt_popc(ulong_t x)
 	x = x + (x >> 16);
 	x = x + (x >> 32);
 	return (x & 0x7F);
-#else
-/* This should be a #warning but for now ignore error. Err: "need td_popc() implementation" */
 #endif
 }
 
@@ -857,7 +803,6 @@ dt_popcb(const ulong_t *bp, ulong_t n)
 	return (popc + dt_popc(bp[maxw] & ((1UL << maxb) - 1)));
 }
 
-#ifdef illumos
 struct _rwlock;
 struct _lwp_mutex;
 
@@ -874,17 +819,12 @@ dt_rw_write_held(pthread_rwlock_t *lock)
 	extern int _rw_write_held(struct _rwlock *);
 	return (_rw_write_held((struct _rwlock *)lock));
 }
-#endif
 
 int
 dt_mutex_held(pthread_mutex_t *lock)
 {
-#ifdef illumos
 	extern int _mutex_held(struct _lwp_mutex *);
 	return (_mutex_held((struct _lwp_mutex *)lock));
-#else
-	return (1);
-#endif
 }
 
 static int
@@ -956,7 +896,7 @@ int
 dtrace_uaddr2str(dtrace_hdl_t *dtp, pid_t pid,
     uint64_t addr, char *str, int nbytes)
 {
-	char name[PATH_MAX / 2], objname[PATH_MAX], c[PATH_MAX * 2];
+	char name[PATH_MAX], objname[PATH_MAX], c[PATH_MAX * 2];
 	struct ps_prochandle *P = NULL;
 	GElf_Sym sym;
 	char *obj;
@@ -965,7 +905,7 @@ dtrace_uaddr2str(dtrace_hdl_t *dtp, pid_t pid,
 		P = dt_proc_grab(dtp, pid, PGRAB_RDONLY | PGRAB_FORCE, 0);
 
 	if (P == NULL) {
-	  (void) snprintf(c, sizeof (c), "0x%jx", (uintmax_t)addr);
+		(void) snprintf(c, sizeof (c), "0x%llx", addr);
 		return (dt_string2str(c, str, nbytes));
 	}
 
@@ -977,16 +917,16 @@ dtrace_uaddr2str(dtrace_hdl_t *dtp, pid_t pid,
 		obj = dt_basename(objname);
 
 		if (addr > sym.st_value) {
-			(void) snprintf(c, sizeof (c), "%s`%s+0x%jx", obj,
-			    name, (uintmax_t)(addr - sym.st_value));
+			(void) snprintf(c, sizeof (c), "%s`%s+0x%llx", obj,
+			    name, (u_longlong_t)(addr - sym.st_value));
 		} else {
 			(void) snprintf(c, sizeof (c), "%s`%s", obj, name);
 		}
-	} else if (Pobjname(P, addr, objname, sizeof (objname)) != 0) {
-		(void) snprintf(c, sizeof (c), "%s`0x%jx",
-				dt_basename(objname), (uintmax_t)addr);
+	} else if (Pobjname(P, addr, objname, sizeof (objname)) != NULL) {
+		(void) snprintf(c, sizeof (c), "%s`0x%llx",
+		    dt_basename(objname), addr);
 	} else {
-	  (void) snprintf(c, sizeof (c), "0x%jx", (uintmax_t)addr);
+		(void) snprintf(c, sizeof (c), "0x%llx", addr);
 	}
 
 	dt_proc_unlock(dtp, P);

@@ -29,21 +29,14 @@
  */
 
 #include <sys/cdefs.h>
-#ifdef __FBSDID
 __FBSDID("$FreeBSD: head/lib/libproc/proc_sym.c 279946 2015-03-13 04:26:48Z stas $");
-#else
-__RCSID("$NetBSD: proc_sym.c,v 1.4 2017/06/15 23:44:58 kamil Exp $");
-#endif
 
 #include <sys/types.h>
 #ifndef NO_CTF
 #include <sys/ctf.h>
 #include <sys/ctf_api.h>
 #endif
-#if defined(__FreeBSD__)
 #include <sys/user.h>
-#endif
-#include <sys/sysctl.h>
 
 #include <assert.h>
 #include <err.h>
@@ -56,11 +49,9 @@ __RCSID("$NetBSD: proc_sym.c,v 1.4 2017/06/15 23:44:58 kamil Exp $");
 #ifndef NO_CTF
 #include <libctf.h>
 #endif
-#include <util.h>
+#include <libutil.h>
 
 #include "_libproc.h"
-
-#define DBG_PATH_FMT "/usr/libdata/debug/%s.debug"
 
 #ifdef NO_CTF
 typedef struct ctf_file ctf_file_t;
@@ -71,18 +62,6 @@ extern char *__cxa_demangle(const char *, char *, size_t *, int *);
 #endif /* NO_CXA_DEMANGLE */
 
 static void	proc_rdl2prmap(rd_loadobj_t *, prmap_t *);
-
-#ifdef __NetBSD__
-static char *basename_r(const char *path, char *buf)
-{
-	// We "know" this works.
-	if (path[0])
-		strlcpy(buf, strrchr(path, '/') + 1, PATH_MAX);
-	else
-		buf[0] = '\0';
-	return buf;
-}
-#endif
 
 static void
 demangle(const char *symbol, char *buf, size_t len)
@@ -109,7 +88,8 @@ find_dbg_obj(const char *path)
 	int fd;
 	char dbg_path[PATH_MAX];
 
-	snprintf(dbg_path, sizeof(dbg_path), DBG_PATH_FMT, path);
+	snprintf(dbg_path, sizeof(dbg_path),
+	    "/usr/lib/debug/%s.debug", path);
 	fd = open(dbg_path, O_RDONLY);
 	if (fd >= 0)
 		return (fd);
@@ -217,7 +197,8 @@ proc_iter_objs(struct proc_handle *p, proc_map_f *func, void *cd)
 prmap_t *
 proc_addr2map(struct proc_handle *p, uintptr_t addr)
 {
-	size_t i, cnt, lastvn = 0;
+	size_t i;
+	int cnt, lastvn = 0;
 	prmap_t *map;
 	rd_loadobj_t *rdl;
 	struct kinfo_vmentry *kves, *kve;
@@ -367,11 +348,9 @@ proc_addr2sym(struct proc_handle *p, uintptr_t addr, char *name,
 	 * First look up the symbol in the dynsymtab, and fall back to the
 	 * symtab if the lookup fails.
 	 */
-	if (dynsymscn) {
-		error = lookup_addr(e, dynsymscn, dynsymstridx, off, addr, &s, symcopy);
-		if (error == 0)
-			goto out;
-	}
+	error = lookup_addr(e, dynsymscn, dynsymstridx, off, addr, &s, symcopy);
+	if (error == 0)
+		goto out;
 
 	error = lookup_addr(e, symtabscn, symtabstridx, off, addr, &s, symcopy);
 	if (error != 0)
@@ -391,7 +370,8 @@ err0:
 prmap_t *
 proc_name2map(struct proc_handle *p, const char *name)
 {
-	size_t i, cnt;
+	size_t i;
+	int cnt;
 	prmap_t *map = NULL;
 	char tmppath[MAXPATHLEN];
 	struct kinfo_vmentry *kves, *kve;
@@ -513,11 +493,9 @@ proc_name2sym(struct proc_handle *p, const char *object, const char *symbol,
 	 * First look up the symbol in the dynsymtab, and fall back to the
 	 * symtab if the lookup fails.
 	 */
-	if (dynsymscn) {
-		error = lookup_name(e, dynsymscn, dynsymstridx, symbol, symcopy, si);
-		if (error == 0)
-			goto out;
-	}
+	error = lookup_name(e, dynsymscn, dynsymstridx, symbol, symcopy, si);
+	if (error == 0)
+		goto out;
 
 	error = lookup_name(e, symtabscn, symtabstridx, symbol, symcopy, si);
 	if (error == 0)

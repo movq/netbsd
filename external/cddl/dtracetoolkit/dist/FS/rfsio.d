@@ -9,7 +9,7 @@
  *
  * A total miss-rate is also provided for the file system cache.
  *
- * $Id: rfsio.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: rfsio.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * USAGE:	rfsio.d
  *

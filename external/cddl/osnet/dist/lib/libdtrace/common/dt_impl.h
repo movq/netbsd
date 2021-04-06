@@ -20,34 +20,21 @@
  */
 
 /*
- * Copyright 2010 Sun Microsystems, Inc.  All rights reserved.
+ * Copyright 2008 Sun Microsystems, Inc.  All rights reserved.
  * Use is subject to license terms.
- */
-
-/*
- * Copyright (c) 2013, Joyent, Inc. All rights reserved.
- * Copyright (c) 2011, 2016 by Delphix. All rights reserved.
  */
 
 #ifndef	_DT_IMPL_H
 #define	_DT_IMPL_H
 
+#pragma ident	"%Z%%M%	%I%	%E% SMI"
+
 #include <sys/param.h>
 #include <sys/objfs.h>
-#ifndef illumos
-#include <sys/bitmap.h>
-#include <sys/utsname.h>
-#include <sys/ioccom.h>
-#include <sys/time.h>
-#include <string.h>
-#endif
 #include <setjmp.h>
 #include <libctf.h>
 #include <dtrace.h>
 #include <gelf.h>
-#ifdef illumos
-#include <synch.h>
-#endif
 
 #ifdef	__cplusplus
 extern "C" {
@@ -64,7 +51,6 @@ extern "C" {
 #include <dt_proc.h>
 #include <dt_dof.h>
 #include <dt_pcb.h>
-#include <dt_pq.h>
 
 struct dt_module;		/* see below */
 struct dt_pfdict;		/* see <dt_printf.h> */
@@ -142,34 +128,11 @@ typedef struct dt_module {
 	GElf_Addr dm_bss_va;	/* virtual address of BSS */
 	GElf_Xword dm_bss_size;	/* size in bytes of BSS */
 	dt_idhash_t *dm_extern;	/* external symbol definitions */
-#ifndef illumos
-	caddr_t dm_reloc_offset;	/* Symbol relocation offset. */
-	uintptr_t *dm_sec_offsets;
-#endif
-	pid_t dm_pid;		/* pid for this module */
-	uint_t dm_nctflibs;	/* number of ctf children libraries */
-	ctf_file_t **dm_libctfp; /* process library ctf pointers */
-	char **dm_libctfn;	/* names of process ctf containers */
 } dt_module_t;
 
 #define	DT_DM_LOADED	0x1	/* module symbol and type data is loaded */
 #define	DT_DM_KERNEL	0x2	/* module is associated with a kernel object */
 #define	DT_DM_PRIMARY	0x4	/* module is a krtld primary kernel object */
-
-#if defined(__FreeBSD__) || defined(__NetBSD__)
-/*
- * A representation of a FreeBSD kernel module, used when checking module
- * dependencies.  This differs from dt_module_t, which refers to a KLD in the
- * case of kernel probes.  Since modules can be identified regardless of whether
- * they've been compiled into the kernel, we use them to identify DTrace
- * modules.
- */
-typedef struct dt_kmodule {
-	struct dt_kmodule *dkm_next;	/* hash table entry */
-	char *dkm_name;			/* string name of module */
-	dt_module_t *dkm_module;	/* corresponding KLD module */
-} dt_kmodule_t;
-#endif
 
 typedef struct dt_provmod {
 	char *dp_name;				/* name of provider module */
@@ -208,9 +171,6 @@ typedef struct dt_print_aggdata {
 	dtrace_aggvarid_t dtpa_id;	/* aggregation variable of interest */
 	FILE *dtpa_fp;			/* file pointer */
 	int dtpa_allunprint;		/* print only unprinted aggregations */
-	int dtpa_agghist;		/* print aggregation as histogram */
-	int dtpa_agghisthdr;		/* aggregation histogram hdr printed */
-	int dtpa_aggpack;		/* pack quantized aggregations */
 } dt_print_aggdata_t;
 
 typedef struct dt_dirpath {
@@ -250,9 +210,6 @@ struct dtrace_hdl {
 	dt_idhash_t *dt_tls;	/* hash table of thread-local identifiers */
 	dt_list_t dt_modlist;	/* linked list of dt_module_t's */
 	dt_module_t **dt_mods;	/* hash table of dt_module_t's */
-#if defined(__FreeBSD__) || defined(__NetBSD__)
-	dt_kmodule_t **dt_kmods; /* hash table of dt_kmodule_t's */
-#endif
 	uint_t dt_modbuckets;	/* number of module hash buckets */
 	uint_t dt_nmods;	/* number of modules in hash and list */
 	dt_provmod_t *dt_provmod; /* linked list of provider modules */
@@ -265,7 +222,6 @@ struct dtrace_hdl {
 	uint_t dt_provbuckets;	/* number of provider hash buckets */
 	uint_t dt_nprovs;	/* number of providers in hash and list */
 	dt_proc_hash_t *dt_procs; /* hash table of grabbed process handles */
-	char **dt_proc_env;	/* additional environment variables */
 	dt_intdesc_t dt_ints[6]; /* cached integer type descriptions */
 	ctf_id_t dt_type_func;	/* cached CTF identifier for function type */
 	ctf_id_t dt_type_fptr;	/* cached CTF identifier for function pointer */
@@ -281,10 +237,8 @@ struct dtrace_hdl {
 	dtrace_aggdesc_t **dt_aggdesc; /* aggregation descriptions */
 	int dt_maxformat;	/* max format ID */
 	void **dt_formats;	/* pointer to format array */
-	int dt_maxstrdata;	/* max strdata ID */
-	char **dt_strdata;	/* pointer to strdata array */
 	dt_aggregate_t dt_aggregate; /* aggregate */
-	dt_pq_t *dt_bufq;	/* CPU-specific data queue */
+	dtrace_bufdesc_t dt_buf; /* staging buffer */
 	struct dt_pfdict *dt_pfdict; /* dictionary of printf conversions */
 	dt_version_t dt_vmax;	/* optional ceiling on program API binding */
 	dtrace_attribute_t dt_amin; /* optional floor on program attributes */
@@ -293,9 +247,6 @@ struct dtrace_hdl {
 	int dt_cpp_argc;	/* count of initialized cpp(1) arguments */
 	int dt_cpp_args;	/* size of dt_cpp_argv[] array */
 	char *dt_ld_path;	/* pathname of ld(1) to invoke if needed */
-#if defined(__FreeBSD__) || defined(__NetBSD__)
-	char *dt_objcopy_path;	/* pathname of objcopy(1) to invoke if needed */
-#endif
 	dt_list_t dt_lib_path;	/* linked-list forming library search path */
 	uint_t dt_lazyload;	/* boolean:  set via -xlazyload */
 	uint_t dt_droptags;	/* boolean:  set via -xdroptags */
@@ -311,26 +262,17 @@ struct dtrace_hdl {
 	uint_t dt_linktype;	/* dtrace link output file type (see below) */
 	uint_t dt_xlatemode;	/* dtrace translator linking mode (see below) */
 	uint_t dt_stdcmode;	/* dtrace stdc compatibility mode (see below) */
-	uint_t dt_encoding;	/* dtrace output encoding (see below) */
 	uint_t dt_treedump;	/* dtrace tree debug bitmap (see below) */
 	uint64_t dt_options[DTRACEOPT_MAX]; /* dtrace run-time options */
 	int dt_version;		/* library version requested by client */
 	int dt_ctferr;		/* error resulting from last CTF failure */
 	int dt_errno;		/* error resulting from last failed operation */
-#ifndef illumos
-	const char *dt_errfile;
-	int dt_errline;
-#endif
 	int dt_fd;		/* file descriptor for dtrace pseudo-device */
 	int dt_ftfd;		/* file descriptor for fasttrap pseudo-device */
 	int dt_fterr;		/* saved errno from failed open of dt_ftfd */
 	int dt_cdefs_fd;	/* file descriptor for C CTF debugging cache */
 	int dt_ddefs_fd;	/* file descriptor for D CTF debugging cache */
-#ifdef illumos
 	int dt_stdout_fd;	/* file descriptor for saved stdout */
-#else
-	FILE *dt_freopen_fp;	/* file pointer for freopened stdout */
-#endif
 	dtrace_handle_err_f *dt_errhdlr; /* error handler, if any */
 	void *dt_errarg;	/* error handler argument */
 	dtrace_prog_t *dt_errprog; /* error handler program, if any */
@@ -357,12 +299,6 @@ struct dtrace_hdl {
 	struct utsname dt_uts;	/* uname(2) information for system */
 	dt_list_t dt_lib_dep;	/* scratch linked-list of lib dependencies */
 	dt_list_t dt_lib_dep_sorted;	/* dependency sorted library list */
-	dtrace_flowkind_t dt_flow;	/* flow kind */
-	const char *dt_prefix;	/* recommended flow prefix */
-	int dt_indent;		/* recommended flow indent */
-	dtrace_epid_t dt_last_epid;	/* most recently consumed EPID */
-	uint64_t dt_last_timestamp;	/* most recently consumed timestamp */
-	boolean_t dt_has_sugar;	/* syntactic sugar used? */
 };
 
 /*
@@ -402,14 +338,6 @@ struct dtrace_hdl {
 #define	DT_STDC_XC	1	/* Strict ISO C: __STDC__=1 */
 #define	DT_STDC_XS	2	/* K&R C: __STDC__ not defined */
 #define	DT_STDC_XT	3	/* ISO C + K&R C compat with ISO: __STDC__=0 */
-
-/*
- * Values for the dt_encoding property, which is used to force a particular
- * character encoding (overriding default behavior and/or automatic detection).
- */
-#define	DT_ENCODING_UNSET	0
-#define	DT_ENCODING_ASCII	1
-#define	DT_ENCODING_UTF8	2
 
 /*
  * Macro to test whether a given pass bit is set in the dt_treedump bit-vector.
@@ -486,8 +414,6 @@ struct dtrace_hdl {
 #define	DT_ACT_UMOD		DT_ACT(26)	/* umod() action */
 #define	DT_ACT_UADDR		DT_ACT(27)	/* uaddr() action */
 #define	DT_ACT_SETOPT		DT_ACT(28)	/* setopt() action */
-#define	DT_ACT_PRINT		DT_ACT(29)	/* print() action */
-#define	DT_ACT_PRINTM		DT_ACT(30)	/* printm() action */
 
 /*
  * Sentinel to tell freopen() to restore the saved stdout.  This must not
@@ -505,6 +431,7 @@ enum {
 	EDT_VERSREDUCED,	/* requested API version has been reduced */
 	EDT_CTF,		/* libctf called failed (dt_ctferr has more) */
 	EDT_COMPILER,		/* error in D program compilation */
+	EDT_NOREG,		/* register allocation failure */
 	EDT_NOTUPREG,		/* tuple register allocation failure */
 	EDT_NOMEM,		/* memory allocation failure */
 	EDT_INT2BIG,		/* integer limit exceeded */
@@ -571,10 +498,7 @@ enum {
 	EDT_BADSETOPT,		/* invalid setopt library action */
 	EDT_BADSTACKPC,		/* invalid stack program counter size */
 	EDT_BADAGGVAR,		/* invalid aggregation variable identifier */
-	EDT_OVERSION,		/* client is requesting deprecated version */
-	EDT_ENABLING_ERR,	/* failed to enable probe */
-	EDT_NOPROBES,		/* no probes sites for declared provider */
-	EDT_CANTLOAD		/* failed to load a module */
+	EDT_OVERSION		/* client is requesting deprecated version */
 };
 
 /*
@@ -617,21 +541,11 @@ extern int dt_version_defined(dt_version_t);
 extern char *dt_cpp_add_arg(dtrace_hdl_t *, const char *);
 extern char *dt_cpp_pop_arg(dtrace_hdl_t *);
 
-#ifdef illumos
 extern int dt_set_errno(dtrace_hdl_t *, int);
-#else
-int _dt_set_errno(dtrace_hdl_t *, int, const char *, int);
-void dt_get_errloc(dtrace_hdl_t *, const char **, int *);
-#define dt_set_errno(_a,_b)	_dt_set_errno(_a,_b,__FILE__,__LINE__)
-#endif
 extern void dt_set_errmsg(dtrace_hdl_t *, const char *, const char *,
     const char *, int, const char *, va_list);
 
-#ifdef illumos
 extern int dt_ioctl(dtrace_hdl_t *, int, void *);
-#else
-extern int dt_ioctl(dtrace_hdl_t *, u_long, void *);
-#endif
 extern int dt_status(dtrace_hdl_t *, processorid_t);
 extern long dt_sysconf(dtrace_hdl_t *, int);
 extern ssize_t dt_write(dtrace_hdl_t *, int, const void *, size_t);
@@ -654,17 +568,18 @@ extern int dt_buffered_flush(dtrace_hdl_t *, dtrace_probedata_t *,
 extern void dt_buffered_disable(dtrace_hdl_t *);
 extern void dt_buffered_destroy(dtrace_hdl_t *);
 
-extern uint64_t dt_stddev(uint64_t *, uint64_t);
-
 extern int dt_rw_read_held(pthread_rwlock_t *);
 extern int dt_rw_write_held(pthread_rwlock_t *);
 extern int dt_mutex_held(pthread_mutex_t *);
-extern int dt_options_load(dtrace_hdl_t *);
 
-#define DT_RW_READ_HELD(x)	dt_rw_read_held(x)	 
-#define DT_RW_WRITE_HELD(x)	dt_rw_write_held(x)	 
-#define DT_RW_LOCK_HELD(x)	(DT_RW_READ_HELD(x) || DT_RW_WRITE_HELD(x))
-#define DT_MUTEX_HELD(x)	dt_mutex_held(x)
+extern uint64_t dt_stddev(uint64_t *, uint64_t);
+
+#define	DT_RW_READ_HELD(x)	dt_rw_read_held(x)
+#define	DT_RW_WRITE_HELD(x)	dt_rw_write_held(x)
+#define	DT_RW_LOCK_HELD(x)	(DT_RW_READ_HELD(x) || DT_RW_WRITE_HELD(x))
+#define	DT_MUTEX_HELD(x)	dt_mutex_held(x)
+
+extern int dt_options_load(dtrace_hdl_t *);
 
 extern void dt_dprintf(const char *, ...);
 
@@ -690,14 +605,9 @@ extern void dt_aggid_destroy(dtrace_hdl_t *);
 extern void *dt_format_lookup(dtrace_hdl_t *, int);
 extern void dt_format_destroy(dtrace_hdl_t *);
 
-extern const char *dt_strdata_lookup(dtrace_hdl_t *, int);
-extern void dt_strdata_destroy(dtrace_hdl_t *);
-
 extern int dt_print_quantize(dtrace_hdl_t *, FILE *,
     const void *, size_t, uint64_t);
 extern int dt_print_lquantize(dtrace_hdl_t *, FILE *,
-    const void *, size_t, uint64_t);
-extern int dt_print_llquantize(dtrace_hdl_t *, FILE *,
     const void *, size_t, uint64_t);
 extern int dt_print_agg(const dtrace_aggdata_t *, void *);
 
@@ -743,17 +653,6 @@ extern int _dtrace_argmax;		/* default maximum probe arguments */
 
 extern const char *_dtrace_libdir;	/* default library directory */
 extern const char *_dtrace_moddir;	/* default kernel module directory */
-
-#if defined(__FreeBSD__) || defined(__NetBSD__)
-extern int gmatch(const char *, const char *);
-extern int yylex(void);
-#endif
-
-#ifdef __NetBSD__
-#define longlong_t long long
-#define u_longlong_t unsigned long long
-#define __DECONST(a, b) __UNCONST(b)
-#endif
 
 #ifdef	__cplusplus
 }

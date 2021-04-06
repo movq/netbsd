@@ -11,7 +11,7 @@
  *
  * This is a verbose version of fsrw.d, as this also traces paging activity.
  *
- * $Id: fspaging.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: fspaging.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE:	fspaging.d
  *

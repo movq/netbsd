@@ -20,9 +20,6 @@
  * CDDL HEADER END
  */
 
-#ifdef HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
-#endif
 /*
  * Copyright 2006 Sun Microsystems, Inc.  All rights reserved.
  * Use is subject to license terms.
@@ -46,7 +43,7 @@ ctf_hash_create(ctf_hash_t *hp, ulong_t nelems)
 	 */
 	if (nelems == 0) {
 		bzero(hp, sizeof (ctf_hash_t));
-		hp->h_buckets = __UNCONST(_CTF_EMPTY);
+		hp->h_buckets = (ushort_t *)_CTF_EMPTY;
 		hp->h_nbuckets = 1;
 		return (0);
 	}

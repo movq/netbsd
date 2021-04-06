@@ -1,6 +1,4 @@
-.\"	$NetBSD: dwarf_highpc.3,v 1.4 2020/11/26 22:51:35 jkoshy Exp $
-.\"
-.\" Copyright (c) 2010,2014 Kai Wang
+.\" Copyright (c) 2010 Kai Wang
 .\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -24,18 +22,17 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\" Id: dwarf_highpc.3 3644 2018-10-15 19:55:01Z jkoshy
+.\" Id: dwarf_highpc.3 2073 2011-10-27 03:30:47Z jkoshy 
 .\"
-.Dd July 22, 2014
-.Dt DWARF_HIGHPC 3
+.Dd April 7, 2010
 .Os
+.Dt DWARF_HIGHPC 3
 .Sh NAME
 .Nm dwarf_arrayorder ,
 .Nm dwarf_bitoffset ,
 .Nm dwarf_bitsize ,
 .Nm dwarf_bytesize ,
 .Nm dwarf_highpc ,
-.Nm dwarf_highpc_b ,
 .Nm dwarf_lowpc ,
 .Nm dwarf_srclang
 .Nd retrieve the value of a DWARF attribute
@@ -71,14 +68,6 @@
 .Fo dwarf_highpc
 .Fa "Dwarf_Die die"
 .Fa "Dwarf_Addr *ret_highpc"
-.Fa "Dwarf_Error *err"
-.Fc
-.Ft int
-.Fo dwarf_highpc_b
-.Fa "Dwarf_Die die"
-.Fa "Dwarf_Addr *ret_highpc"
-.Fa "Dwarf_Half *ret_form"
-.Fa "enum Dwarf_Form_Class *ret_class"
 .Fa "Dwarf_Error *err"
 .Fc
 .Ft int
@@ -125,10 +114,6 @@ attribute value.
 Retrieve the
 .Dv DW_AT_high_pc
 attribute value.
-.It Fn dwarf_highpc_b
-Retrieve the
-.Dv DW_AT_high_pc
-attribute value.
 .It Fn dwarf_lowpc
 Retrieve the
 .Dv DW_AT_low_pc
@@ -138,27 +123,9 @@ Retrieve the
 .Dv DW_AT_language
 attribute value.
 .El
-.Pp
-Function
-.Fn dwarf_highpc_b
-is an enhanced version of function
-.Fn dwarf_highpc .
-It sets the location specified by argument
-.Ar ret_form
-to the form code of the attribute
-.Dv DW_AT_high_pc ,
-and sets the location specified by argument
-.Ar ret_class
-to the class of that form.
-A value of NULL may be used for either of the arguments
-.Ar ret_form
-or
-.Ar ret_class
-if the caller is not interested in the respective value.
 .Sh RETURN VALUES
 These functions return
-.Dv DW_DLV_OK
-on success.
+.Dv DW_DLV_OK on success.
 .Pp
 If the debugging information entry descriptor denoted by argument
 .Ar die
@@ -192,5 +159,4 @@ had no requested attribute.
 .Xr dwarf 3 ,
 .Xr dwarf_attr 3 ,
 .Xr dwarf_attrlist 3 ,
-.Xr dwarf_get_form_class 3 ,
 .Xr dwarf_hasattr 3

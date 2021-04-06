@@ -3,7 +3,7 @@
  * js_objcpu.d - measure JavaScript object creation on-CPU time using DTrace.
  *               Written for the JavaScript DTrace provider.
  *
- * $Id: js_objcpu.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: js_objcpu.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * This traces JavaScript activity from all browsers running on the system
  * with JavaScript provider support.

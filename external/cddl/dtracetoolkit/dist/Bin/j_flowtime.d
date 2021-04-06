@@ -3,7 +3,7 @@
  * j_flowtime.d - snoop Java execution with method flow and delta times.
  *                Written for the Java hotspot DTrace provider.
  *
- * $Id: j_flowtime.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: j_flowtime.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * This traces activity from all Java processes on the system with hotspot
  * provider support (1.6.0) and the flag "+ExtendedDTraceProbes". eg,

@@ -31,9 +31,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <assert.h>
-#ifdef illumos
 #include <alloca.h>
-#endif
 
 #include <dt_impl.h>
 #include <dt_program.h>
@@ -249,7 +247,7 @@ dt_handle_liberr(dtrace_hdl_t *dtp, const dtrace_probedata_t *data,
 	err.dteda_action = -1;
 	err.dteda_offset = -1;
 	err.dteda_fault = DTRACEFLT_LIBRARY;
-	err.dteda_addr = 0;
+	err.dteda_addr = NULL;
 
 	len = strlen(faultstr) +
 	    strlen(errpd->dtpd_provider) + strlen(errpd->dtpd_mod) +
@@ -335,9 +333,8 @@ dt_handle_cpudrop(dtrace_hdl_t *dtp, processorid_t cpu,
 	}
 
 	(void) snprintf(s, size, "%llu %sdrop%s on CPU %d\n",
-	    (u_longlong_t)howmany,
-	    what == DTRACEDROP_PRINCIPAL ? "" : "aggregation ",
-	    howmany > 1 ? "s" : "", (int)cpu);
+	    howmany, what == DTRACEDROP_PRINCIPAL ? "" : "aggregation ",
+	    howmany > 1 ? "s" : "", cpu);
 
 	if (dtp->dt_drophdlr == NULL)
 		return (dt_set_errno(dtp, EDT_DROPABORT));
@@ -428,8 +425,7 @@ dt_handle_status(dtrace_hdl_t *dtp, dtrace_status_t *old, dtrace_status_t *new)
 			size = sizeof (str);
 		}
 
-		(void) snprintf(s, size, "%llu %s%s%s\n",
-		    (u_longlong_t)(nval - oval),
+		(void) snprintf(s, size, "%llu %s%s%s\n", nval - oval,
 		    _dt_droptab[i].dtdrt_str, (nval - oval > 1) ? "s" : "",
 		    _dt_droptab[i].dtdrt_msg != NULL ?
 		    _dt_droptab[i].dtdrt_msg : "");

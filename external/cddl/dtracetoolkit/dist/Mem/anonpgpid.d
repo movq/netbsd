@@ -7,7 +7,7 @@
  * with low memory, which is paging to the physical swap device. A report
  * of the process on the CPU when paging occured is printed.
  *
- * $Id: anonpgpid.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: anonpgpid.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * USAGE:	anonpgpid.d 	# hit Ctrl-C to end
  *

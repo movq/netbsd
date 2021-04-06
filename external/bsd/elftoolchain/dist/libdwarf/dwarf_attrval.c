@@ -1,5 +1,3 @@
-/*	$NetBSD: dwarf_attrval.c,v 1.10 2018/02/10 23:46:44 christos Exp $	*/
-
 /*-
  * Copyright (c) 2007 John Birrell (jb@freebsd.org)
  * All rights reserved.
@@ -28,8 +26,7 @@
 
 #include "_libdwarf.h"
 
-__RCSID("$NetBSD: dwarf_attrval.c,v 1.10 2018/02/10 23:46:44 christos Exp $");
-ELFTC_VCSID("Id: dwarf_attrval.c 3159 2015-02-15 21:43:27Z emaste ");
+ELFTC_VCSID("Id: dwarf_attrval.c 2072 2011-10-27 03:26:49Z jkoshy ");
 
 int
 dwarf_attrval_flag(Dwarf_Die die, Dwarf_Half attr, Dwarf_Bool *valp, Dwarf_Error *err)
@@ -128,7 +125,6 @@ dwarf_attrval_signed(Dwarf_Die die, Dwarf_Half attr, Dwarf_Signed *valp, Dwarf_E
 		break;
 	case DW_FORM_data4:
 		*valp = (int32_t) at->u[0].s64;
-		break;
 	case DW_FORM_data8:
 	case DW_FORM_sdata:
 		*valp = at->u[0].s64;
@@ -145,9 +141,9 @@ int
 dwarf_attrval_unsigned(Dwarf_Die die, Dwarf_Half attr, Dwarf_Unsigned *valp, Dwarf_Error *err)
 {
 	Dwarf_Attribute at;
-	Dwarf_Debug dbg;
 	Dwarf_Die die1;
-	int rv;
+	Dwarf_Unsigned val;
+	Dwarf_Debug dbg;
 
 	dbg = die != NULL ? die->die_dbg : NULL;
 
@@ -157,33 +153,34 @@ dwarf_attrval_unsigned(Dwarf_Die die, Dwarf_Half attr, Dwarf_Unsigned *valp, Dwa
 	}
 
 	*valp = 0;
-	if ((at = _dwarf_attr_find(die, attr)) == NULL &&
-	    ((at = _dwarf_attr_find(die, DW_AT_specification)) != NULL ||
-	    (at = _dwarf_attr_find(die, DW_AT_abstract_origin)) != NULL)) {
+
+	if ((at = _dwarf_attr_find(die, attr)) == NULL && attr != DW_AT_type) {
+		DWARF_SET_ERROR(dbg, err, DW_DLE_NO_ENTRY);
+		return (DW_DLV_NO_ENTRY);
+	}
+
+	die1 = NULL;
+	if (at == NULL &&
+	    (at = _dwarf_attr_find(die, DW_AT_abstract_origin)) != NULL) {
 		switch (at->at_form) {
 		case DW_FORM_ref1:
 		case DW_FORM_ref2:
 		case DW_FORM_ref4:
 		case DW_FORM_ref8:
 		case DW_FORM_ref_udata:
-			if ((die1 = _dwarf_die_find(die, at->u[0].u64)) == NULL)
-			{
-				at = NULL;
-				break;
+			val = at->u[0].u64;
+			if ((die1 = _dwarf_die_find(die, val)) == NULL ||
+			    (at = _dwarf_attr_find(die1, attr)) == NULL) {
+				if (die1 != NULL)
+					dwarf_dealloc(dbg, die1, DW_DLA_DIE);
+				DWARF_SET_ERROR(dbg, err, DW_DLE_NO_ENTRY);
+				return (DW_DLV_NO_ENTRY);
 			}
-			rv = dwarf_attrval_unsigned(die1, attr, valp, err);
-			if (die != die1)
-				dwarf_dealloc(dbg, die1, DW_DLA_DIE);
-			return rv;
+			break;
 		default:
 			DWARF_SET_ERROR(dbg, err, DW_DLE_ATTR_FORM_BAD);
 			return (DW_DLV_ERROR);
 		}
-	}
-
-	if (at == NULL)  {
-		DWARF_SET_ERROR(dbg, err, DW_DLE_NO_ENTRY);
-		return (DW_DLV_NO_ENTRY);
 	}
 
 	switch (at->at_form) {
@@ -201,9 +198,14 @@ dwarf_attrval_unsigned(Dwarf_Die die, Dwarf_Half attr, Dwarf_Unsigned *valp, Dwa
 		*valp = at->u[0].u64;
 		break;
 	default:
+		if (die1 != NULL)
+			dwarf_dealloc(dbg, die1, DW_DLA_DIE);
 		DWARF_SET_ERROR(dbg, err, DW_DLE_ATTR_FORM_BAD);
 		return (DW_DLV_ERROR);
 	}
+
+	if (die1 != NULL)
+		dwarf_dealloc(dbg, die1, DW_DLA_DIE);
 
 	return (DW_DLV_OK);
 }

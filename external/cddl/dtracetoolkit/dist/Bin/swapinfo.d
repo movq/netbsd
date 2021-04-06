@@ -6,7 +6,7 @@
  * Prints swap usage details for RAM and disk based swap.
  * This script is UNDER CONSTRUCTION, check for newer versions.
  *
- * $Id: swapinfo.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: swapinfo.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE:       swapinfo.d	(check for newer versions)
  *

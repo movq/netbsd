@@ -3,7 +3,7 @@
 # statsnoop - snoop file stats as they occur.
 #             Written using DTrace (Solaris 10 3/05).
 #
-# $Id: statsnoop,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+# $Id: statsnoop,v 1.1 2015/09/30 22:01:07 christos Exp $
 #
 # USAGE:	statsnoop [-a|-A|-ceghlsvxZ] [-f pathname] [-t syscall]
 #		          [-n name] [-p PID]

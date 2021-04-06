@@ -82,7 +82,6 @@ dtrace_sleep(dtrace_hdl_t *dtp)
 		return; /* sleep duration has already past */
 	}
 
-#ifdef illumos
 	tv.tv_sec = (earliest - now) / NANOSEC;
 	tv.tv_nsec = (earliest - now) % NANOSEC;
 
@@ -92,23 +91,6 @@ dtrace_sleep(dtrace_hdl_t *dtp)
 	 * awaken, iterate over any pending notifications and process them.
 	 */
 	(void) pthread_cond_reltimedwait_np(&dph->dph_cv, &dph->dph_lock, &tv);
-#else
-	earliest -= now;
-	clock_gettime(CLOCK_REALTIME,&tv);
-	tv.tv_sec += earliest / NANOSEC;
-	tv.tv_nsec += earliest % NANOSEC;
-	while (tv.tv_nsec > NANOSEC) {
-		tv.tv_sec += 1;
-		tv.tv_nsec -= NANOSEC;
-	}
-
-	/*
-	 * Wait for either 'tv' nanoseconds to pass or to receive notification
-	 * that a process is in an interesting state.  Regardless of why we
-	 * awaken, iterate over any pending notifications and process them.
-	 */
-	(void) pthread_cond_timedwait(&dph->dph_cv, &dph->dph_lock, &tv);
-#endif
 
 	while ((dprn = dph->dph_notify) != NULL) {
 		if (dtp->dt_prochdlr != NULL) {
@@ -182,9 +164,8 @@ dtrace_status(dtrace_hdl_t *dtp)
 int
 dtrace_go(dtrace_hdl_t *dtp)
 {
-	dtrace_enable_io_t args;
 	void *dof;
-	int error, r;
+	int err;
 
 	if (dtp->dt_active)
 		return (dt_set_errno(dtp, EINVAL));
@@ -204,14 +185,11 @@ dtrace_go(dtrace_hdl_t *dtp)
 	if ((dof = dtrace_getopt_dof(dtp)) == NULL)
 		return (-1); /* dt_errno has been set for us */
 
-	args.dof = dof;
-	args.n_matched = 0;
-	r = dt_ioctl(dtp, DTRACEIOC_ENABLE, &args);
-	error = errno;
+	err = dt_ioctl(dtp, DTRACEIOC_ENABLE, dof);
 	dtrace_dof_destroy(dtp, dof);
 
-	if (r == -1 && (error != ENOTTY || dtp->dt_vector == NULL))
-		return (dt_set_errno(dtp, error));
+	if (err == -1 && (errno != ENOTTY || dtp->dt_vector == NULL))
+		return (dt_set_errno(dtp, errno));
 
 	if (dt_ioctl(dtp, DTRACEIOC_GO, &dtp->dt_beganon) == -1) {
 		if (errno == EACCES)
@@ -273,7 +251,7 @@ dtrace_work(dtrace_hdl_t *dtp, FILE *fp,
 {
 	int status = dtrace_status(dtp);
 	dtrace_optval_t policy = dtp->dt_options[DTRACEOPT_BUFPOLICY];
-	dtrace_workstatus_t rval = 0;	// XXX: gcc
+	dtrace_workstatus_t rval;
 
 	switch (status) {
 	case DTRACE_STATUS_EXITED:

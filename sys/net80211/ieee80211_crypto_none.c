@@ -1,6 +1,4 @@
-/*	$NetBSD: ieee80211_crypto_none.c,v 1.8 2018/01/19 07:53:46 maxv Exp $	*/
-
-/*
+/*-
  * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
  * All rights reserved.
  *
@@ -32,25 +30,21 @@
  */
 
 #include <sys/cdefs.h>
-#ifdef __FreeBSD__
-__FBSDID("$FreeBSD: src/sys/net80211/ieee80211_crypto_none.c,v 1.5 2005/06/10 16:11:24 sam Exp $");
-#endif
-#ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_crypto_none.c,v 1.8 2018/01/19 07:53:46 maxv Exp $");
-#endif
+__FBSDID("$FreeBSD: src/sys/net80211/ieee80211_crypto_none.c,v 1.3 2004/12/31 22:42:38 sam Exp $");
 
 /*
  * IEEE 802.11 NULL crypto support.
  */
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/mbuf.h>
+#include <sys/systm.h> 
+#include <sys/mbuf.h>   
+#include <sys/module.h>
 
 #include <sys/socket.h>
 
 #include <net/if.h>
-#include <net/if_ether.h>
 #include <net/if_media.h>
+#include <net/ethernet.h>
 
 #include <net80211/ieee80211_var.h>
 
@@ -58,9 +52,9 @@ static	void *none_attach(struct ieee80211com *, struct ieee80211_key *);
 static	void none_detach(struct ieee80211_key *);
 static	int none_setkey(struct ieee80211_key *);
 static	int none_encap(struct ieee80211_key *, struct mbuf *, u_int8_t);
-static	int none_decap(struct ieee80211_key *, struct mbuf *, int);
-static	int none_enmic(struct ieee80211_key *, struct mbuf *, int);
-static	int none_demic(struct ieee80211_key *, struct mbuf *, int);
+static	int none_decap(struct ieee80211_key *, struct mbuf *);
+static	int none_enmic(struct ieee80211_key *, struct mbuf *);
+static	int none_demic(struct ieee80211_key *, struct mbuf *);
 
 const struct ieee80211_cipher ieee80211_cipher_none = {
 	.ic_name	= "NONE",
@@ -116,7 +110,7 @@ none_encap(struct ieee80211_key *k, struct mbuf *m, u_int8_t keyid)
 }
 
 static int
-none_decap(struct ieee80211_key *k, struct mbuf *m, int hdrlen)
+none_decap(struct ieee80211_key *k, struct mbuf *m)
 {
 	struct ieee80211com *ic = k->wk_private;
 #ifdef IEEE80211_DEBUG
@@ -137,7 +131,7 @@ none_decap(struct ieee80211_key *k, struct mbuf *m, int hdrlen)
 }
 
 static int
-none_enmic(struct ieee80211_key *k, struct mbuf *m, int force)
+none_enmic(struct ieee80211_key *k, struct mbuf *m)
 {
 	struct ieee80211com *ic = k->wk_private;
 
@@ -146,7 +140,7 @@ none_enmic(struct ieee80211_key *k, struct mbuf *m, int force)
 }
 
 static int
-none_demic(struct ieee80211_key *k, struct mbuf *m, int force)
+none_demic(struct ieee80211_key *k, struct mbuf *m)
 {
 	struct ieee80211com *ic = k->wk_private;
 

@@ -1,5 +1,3 @@
-/*	$NetBSD: dwarf_dealloc.c,v 1.3 2016/02/20 02:43:41 christos Exp $	*/
-
 /*-
  * Copyright (c) 2007 John Birrell (jb@freebsd.org)
  * All rights reserved.
@@ -28,7 +26,6 @@
 
 #include "_libdwarf.h"
 
-__RCSID("$NetBSD: dwarf_dealloc.c,v 1.3 2016/02/20 02:43:41 christos Exp $");
 ELFTC_VCSID("Id: dwarf_dealloc.c 2073 2011-10-27 03:30:47Z jkoshy ");
 
 void

@@ -3,7 +3,7 @@
  * py_cputime.d - measure Python on-CPU times for functions.
  *                Written for the Python DTrace provider.
  *
- * $Id: py_cputime.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: py_cputime.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * This traces Python activity from all programs running on the system with
  * Python provider support.

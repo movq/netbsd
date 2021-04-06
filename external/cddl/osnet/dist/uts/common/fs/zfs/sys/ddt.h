@@ -19,7 +19,8 @@
  * CDDL HEADER END
  */
 /*
- * Copyright (c) 2009, 2010, Oracle and/or its affiliates. All rights reserved.
+ * Copyright 2009 Sun Microsystems, Inc.  All rights reserved.
+ * Use is subject to license terms.
  */
 
 #ifndef _SYS_DDT_H
@@ -63,15 +64,16 @@ enum ddt_class {
  */
 typedef struct ddt_key {
 	zio_cksum_t	ddk_cksum;	/* 256-bit block checksum */
-	/*
-	 * Encoded with logical & physical size, and compression, as follows:
-	 *   +-------+-------+-------+-------+-------+-------+-------+-------+
-	 *   |   0   |   0   |   0   | comp  |     PSIZE     |     LSIZE     |
-	 *   +-------+-------+-------+-------+-------+-------+-------+-------+
-	 */
-	uint64_t	ddk_prop;
+	uint64_t	ddk_prop;	/* LSIZE, PSIZE, compression */
 } ddt_key_t;
 
+/*
+ * ddk_prop layout:
+ *
+ *	+-------+-------+-------+-------+-------+-------+-------+-------+
+ *	|   0	|   0	|   0	| comp	|     PSIZE	|     LSIZE	|
+ *	+-------+-------+-------+-------+-------+-------+-------+-------+
+ */
 #define	DDK_GET_LSIZE(ddk)	\
 	BF64_GET_SB((ddk)->ddk_prop, 0, 16, SPA_MINBLOCKSHIFT, 1)
 #define	DDK_SET_LSIZE(ddk, x)	\
@@ -99,7 +101,7 @@ enum ddt_phys_type {
 	DDT_PHYS_DOUBLE = 2,
 	DDT_PHYS_TRIPLE = 3,
 	DDT_PHYS_TYPES
-};
+} ddt_phys_type_t;
 
 /*
  * In-core ddt entry
@@ -130,8 +132,6 @@ struct ddt {
 	uint64_t	ddt_stat_object;
 	uint64_t	ddt_object[DDT_TYPES][DDT_CLASSES];
 	ddt_histogram_t	ddt_histogram[DDT_TYPES][DDT_CLASSES];
-	ddt_histogram_t	ddt_histogram_cache[DDT_TYPES][DDT_CLASSES];
-	ddt_object_t	ddt_object_stats[DDT_TYPES][DDT_CLASSES];
 	avl_node_t	ddt_node;
 };
 
@@ -154,29 +154,27 @@ typedef struct ddt_ops {
 	    boolean_t prehash);
 	int (*ddt_op_destroy)(objset_t *os, uint64_t object, dmu_tx_t *tx);
 	int (*ddt_op_lookup)(objset_t *os, uint64_t object, ddt_entry_t *dde);
-	void (*ddt_op_prefetch)(objset_t *os, uint64_t object,
-	    ddt_entry_t *dde);
 	int (*ddt_op_update)(objset_t *os, uint64_t object, ddt_entry_t *dde,
 	    dmu_tx_t *tx);
 	int (*ddt_op_remove)(objset_t *os, uint64_t object, ddt_entry_t *dde,
 	    dmu_tx_t *tx);
 	int (*ddt_op_walk)(objset_t *os, uint64_t object, ddt_entry_t *dde,
 	    uint64_t *walk);
-	int (*ddt_op_count)(objset_t *os, uint64_t object, uint64_t *count);
+	uint64_t (*ddt_op_count)(objset_t *os, uint64_t object);
 } ddt_ops_t;
 
 #define	DDT_NAMELEN	80
 
 extern void ddt_object_name(ddt_t *ddt, enum ddt_type type,
-    enum ddt_class cls, char *name);
+    enum ddt_class class, char *name);
 extern int ddt_object_walk(ddt_t *ddt, enum ddt_type type,
-    enum ddt_class cls, uint64_t *walk, ddt_entry_t *dde);
-extern int ddt_object_count(ddt_t *ddt, enum ddt_type type,
-    enum ddt_class cls, uint64_t *count);
+    enum ddt_class class, uint64_t *walk, ddt_entry_t *dde);
+extern uint64_t ddt_object_count(ddt_t *ddt, enum ddt_type type,
+    enum ddt_class class);
 extern int ddt_object_info(ddt_t *ddt, enum ddt_type type,
-    enum ddt_class cls, dmu_object_info_t *);
+    enum ddt_class class, dmu_object_info_t *);
 extern boolean_t ddt_object_exists(ddt_t *ddt, enum ddt_type type,
-    enum ddt_class cls);
+    enum ddt_class class);
 
 extern void ddt_bp_fill(const ddt_phys_t *ddp, blkptr_t *bp,
     uint64_t txg);
@@ -217,7 +215,6 @@ extern ddt_t *ddt_select(spa_t *spa, const blkptr_t *bp);
 extern void ddt_enter(ddt_t *ddt);
 extern void ddt_exit(ddt_t *ddt);
 extern ddt_entry_t *ddt_lookup(ddt_t *ddt, const blkptr_t *bp, boolean_t add);
-extern void ddt_prefetch(spa_t *spa, const blkptr_t *bp);
 extern void ddt_remove(ddt_t *ddt, ddt_entry_t *dde);
 
 extern boolean_t ddt_class_contains(spa_t *spa, enum ddt_class max_class,
@@ -233,8 +230,6 @@ extern int ddt_load(spa_t *spa);
 extern void ddt_unload(spa_t *spa);
 extern void ddt_sync(spa_t *spa, uint64_t txg);
 extern int ddt_walk(spa_t *spa, ddt_bookmark_t *ddb, ddt_entry_t *dde);
-extern int ddt_object_update(ddt_t *ddt, enum ddt_type type,
-    enum ddt_class cls, ddt_entry_t *dde, dmu_tx_t *tx);
 
 extern const ddt_ops_t ddt_zap_ops;
 

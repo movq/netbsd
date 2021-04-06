@@ -8,7 +8,7 @@
  * if processes are causing the disks to seek in a "random" or "sequential"
  * manner.
  *
- * $Id: seeksize.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: seeksize.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE:	seeksize.d		# wait several seconds, then hit Ctrl-C
  *

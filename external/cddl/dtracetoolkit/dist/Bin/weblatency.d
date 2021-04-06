@@ -3,7 +3,7 @@
  * weblatency.d - website latency statistics.
  *		  Written using DTrace (Solaris 10 3/05).
  *
- * $Id: weblatency.d,v 1.1.1.1 2015/09/30 22:01:06 christos Exp $
+ * $Id: weblatency.d,v 1.1 2015/09/30 22:01:06 christos Exp $
  *
  * USAGE:	weblatency.d 	# hit Ctrl-C to end sample
  *

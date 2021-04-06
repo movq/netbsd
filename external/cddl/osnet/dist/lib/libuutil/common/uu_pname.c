@@ -172,7 +172,9 @@ uu_setpname(char *arg0)
 	 * than in each of its consumers.
 	 */
 	if (arg0 == NULL) {
-		pname = "unknown_command";
+		pname = getexecname();
+		if (pname == NULL)
+			pname = "unknown_command";
 		return (pname);
 	}
 

@@ -3,7 +3,7 @@
  * j_events.d - count Java events using DTrace.
  *              Written for the Java hotspot DTrace provider.
  *
- * $Id: j_events.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: j_events.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * This traces activity from all Java processes on the system with hotspot
  * provider support (1.6.0). Some events such as method calls are only

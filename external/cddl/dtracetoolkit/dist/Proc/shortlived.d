@@ -3,7 +3,7 @@
  * shortlived.d - determine time spent by short lived processes.
  *                Written in DTrace (Solaris 10 3/05).
  *
- * $Id: shortlived.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: shortlived.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * USAGE:    shortlived.d	# wait, then hit Ctrl-C
  *

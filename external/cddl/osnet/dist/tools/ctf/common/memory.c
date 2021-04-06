@@ -30,18 +30,13 @@
  * Routines for memory management
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-# include "nbtool_config.h"
-#endif
-
 #include <sys/types.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
-#include "memory.h"
 
-static void __dead
+static void
 memory_bailout(void)
 {
 	(void) fprintf(stderr, "Out of memory\n");

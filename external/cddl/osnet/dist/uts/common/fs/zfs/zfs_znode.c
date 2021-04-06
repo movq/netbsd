@@ -19,13 +19,11 @@
  * CDDL HEADER END
  */
 /*
- * Copyright (c) 2005, 2010, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2012, 2014 by Delphix. All rights reserved.
- * Copyright (c) 2014 Integros [integros.com]
+ * Copyright 2008 Sun Microsystems, Inc.  All rights reserved.
+ * Use is subject to license terms.
  */
 
 /* Portions Copyright 2007 Jeremy Teo */
-/* Portions Copyright 2011 Martin Matuska <mm@FreeBSD.org> */
 
 #ifdef _KERNEL
 #include <sys/types.h>
@@ -35,52 +33,36 @@
 #include <sys/sysmacros.h>
 #include <sys/resource.h>
 #include <sys/mntent.h>
+#include <sys/mkdev.h>
 #include <sys/u8_textprep.h>
 #include <sys/dsl_dataset.h>
 #include <sys/vfs.h>
+#include <sys/vfs_opreg.h>
 #include <sys/vnode.h>
 #include <sys/file.h>
 #include <sys/kmem.h>
 #include <sys/errno.h>
 #include <sys/unistd.h>
+#include <sys/mode.h>
 #include <sys/atomic.h>
+#include <vm/pvn.h>
+#include "fs/fs_subr.h"
 #include <sys/zfs_dir.h>
 #include <sys/zfs_acl.h>
 #include <sys/zfs_ioctl.h>
 #include <sys/zfs_rlock.h>
 #include <sys/zfs_fuid.h>
-#include <sys/dnode.h>
 #include <sys/fs/zfs.h>
 #include <sys/kidmap.h>
-
-#ifdef __NetBSD__
-#include <sys/zfs_ctldir.h>
-#include <miscfs/specfs/specdev.h>
-
-extern int (**zfs_vnodeop_p)(void *);
-extern int (**zfs_fifoop_p)(void *);
-extern int (**zfs_specop_p)(void *);
-
-#endif
 #endif /* _KERNEL */
 
 #include <sys/dmu.h>
-#include <sys/dmu_objset.h>
 #include <sys/refcount.h>
 #include <sys/stat.h>
 #include <sys/zap.h>
 #include <sys/zfs_znode.h>
-#include <sys/sa.h>
-#include <sys/zfs_sa.h>
-#include <sys/zfs_stat.h>
-#include <sys/refcount.h>
 
 #include "zfs_prop.h"
-#include "zfs_comutil.h"
-
-/* Used by fstat(1). */
-SYSCTL_INT(_debug_sizeof, OID_AUTO, znode, CTLFLAG_RD,
-    SYSCTL_NULL_INT_PTR, sizeof(znode_t), "sizeof(znode_t)");
 
 /*
  * Define ZNODE_STATS to turn on statistic gathering. By default, it is only
@@ -96,18 +78,15 @@ SYSCTL_INT(_debug_sizeof, OID_AUTO, znode, CTLFLAG_RD,
 #define	ZNODE_STAT_ADD(stat)			/* nothing */
 #endif	/* ZNODE_STATS */
 
+#define	POINTER_IS_VALID(p)	(!((uintptr_t)(p) & 0x3))
+#define	POINTER_INVALIDATE(pp)	(*(pp) = (void *)((uintptr_t)(*(pp)) | 0x1))
+
 /*
  * Functions needed for userland (ie: libzpool) are not put under
  * #ifdef_KERNEL; the rest of the functions have dependencies
  * (such as VFS logic) that will not compile easily in userland.
  */
 #ifdef _KERNEL
-/*
- * Needed to close a small window in zfs_znode_move() that allows the zfsvfs to
- * be freed before it can be safely accessed.
- */
-krwlock_t zfsvfs_lock;
-
 static kmem_cache_t *znode_cache = NULL;
 
 /*ARGSUSED*/
@@ -121,28 +100,34 @@ znode_evict_error(dmu_buf_t *dbuf, void *user_ptr)
 	panic("evicting znode %p\n", user_ptr);
 }
 
-extern struct vop_vector zfs_vnodeops;
-extern struct vop_vector zfs_fifoops;
-extern struct vop_vector zfs_shareops;
-
+/*ARGSUSED*/
 static int
 zfs_znode_cache_constructor(void *buf, void *arg, int kmflags)
 {
 	znode_t *zp = buf;
 
-	POINTER_INVALIDATE(&zp->z_zfsvfs);
+	ASSERT(!POINTER_IS_VALID(zp->z_zfsvfs));
+
+	zp->z_vnode = vn_alloc(kmflags);
+	if (zp->z_vnode == NULL) {
+		return (-1);
+	}
+	ZTOV(zp)->v_data = zp;
 
 	list_link_init(&zp->z_link_node);
 
+	mutex_init(&zp->z_lock, NULL, MUTEX_DEFAULT, NULL);
+	rw_init(&zp->z_map_lock, NULL, RW_DEFAULT, NULL);
+	rw_init(&zp->z_parent_lock, NULL, RW_DEFAULT, NULL);
+	rw_init(&zp->z_name_lock, NULL, RW_DEFAULT, NULL);
 	mutex_init(&zp->z_acl_lock, NULL, MUTEX_DEFAULT, NULL);
 
 	mutex_init(&zp->z_range_lock, NULL, MUTEX_DEFAULT, NULL);
 	avl_create(&zp->z_range_avl, zfs_range_compare,
 	    sizeof (rl_t), offsetof(rl_t, r_node));
 
-	zp->z_acl_cached = NULL;
-	zp->z_vnode = NULL;
-	zp->z_moved = 0;
+	zp->z_dbuf = NULL;
+	zp->z_dirlocks = NULL;
 	return (0);
 }
 
@@ -153,31 +138,32 @@ zfs_znode_cache_destructor(void *buf, void *arg)
 	znode_t *zp = buf;
 
 	ASSERT(!POINTER_IS_VALID(zp->z_zfsvfs));
-	ASSERT(ZTOV(zp) == NULL);
-#ifndef __NetBSD__
+	ASSERT(ZTOV(zp)->v_data == zp);
 	vn_free(ZTOV(zp));
-#endif
 	ASSERT(!list_link_active(&zp->z_link_node));
+	mutex_destroy(&zp->z_lock);
+	rw_destroy(&zp->z_map_lock);
+	rw_destroy(&zp->z_parent_lock);
+	rw_destroy(&zp->z_name_lock);
 	mutex_destroy(&zp->z_acl_lock);
 	avl_destroy(&zp->z_range_avl);
 	mutex_destroy(&zp->z_range_lock);
 
-	ASSERT(zp->z_acl_cached == NULL);
+	ASSERT(zp->z_dbuf == NULL);
+	ASSERT(zp->z_dirlocks == NULL);
 }
 
 #ifdef	ZNODE_STATS
 static struct {
 	uint64_t zms_zfsvfs_invalid;
-	uint64_t zms_zfsvfs_recheck1;
 	uint64_t zms_zfsvfs_unmounted;
-	uint64_t zms_zfsvfs_recheck2;
+	uint64_t zms_zfsvfs_recheck_invalid;
 	uint64_t zms_obj_held;
 	uint64_t zms_vnode_locked;
 	uint64_t zms_not_only_dnlc;
 } znode_move_stats;
 #endif	/* ZNODE_STATS */
 
-#ifdef illumos
 static void
 zfs_znode_move_impl(znode_t *ozp, znode_t *nzp)
 {
@@ -202,28 +188,15 @@ zfs_znode_move_impl(znode_t *ozp, znode_t *nzp)
 	nzp->z_blksz = ozp->z_blksz;
 	nzp->z_seq = ozp->z_seq;
 	nzp->z_mapcnt = ozp->z_mapcnt;
+	nzp->z_last_itx = ozp->z_last_itx;
 	nzp->z_gen = ozp->z_gen;
 	nzp->z_sync_cnt = ozp->z_sync_cnt;
-	nzp->z_is_sa = ozp->z_is_sa;
-	nzp->z_sa_hdl = ozp->z_sa_hdl;
-	bcopy(ozp->z_atime, nzp->z_atime, sizeof (uint64_t) * 2);
-	nzp->z_links = ozp->z_links;
-	nzp->z_size = ozp->z_size;
-	nzp->z_pflags = ozp->z_pflags;
-	nzp->z_uid = ozp->z_uid;
-	nzp->z_gid = ozp->z_gid;
-	nzp->z_mode = ozp->z_mode;
+	nzp->z_phys = ozp->z_phys;
+	nzp->z_dbuf = ozp->z_dbuf;
 
-	/*
-	 * Since this is just an idle znode and kmem is already dealing with
-	 * memory pressure, release any cached ACL.
-	 */
-	if (ozp->z_acl_cached) {
-		zfs_acl_free(ozp->z_acl_cached);
-		ozp->z_acl_cached = NULL;
-	}
-
-	sa_set_userp(nzp->z_sa_hdl, nzp);
+	/* Update back pointers. */
+	(void) dmu_buf_update_user(nzp->z_dbuf, ozp, nzp, &nzp->z_phys,
+	    znode_evict_error);
 
 	/*
 	 * Invalidate the original znode by clearing fields that provide a
@@ -231,14 +204,19 @@ zfs_znode_move_impl(znode_t *ozp, znode_t *nzp)
 	 * ensure that zfs_znode_move() recognizes the znode as invalid in any
 	 * subsequent callback.
 	 */
-	ozp->z_sa_hdl = NULL;
+	ozp->z_dbuf = NULL;
 	POINTER_INVALIDATE(&ozp->z_zfsvfs);
+}
 
-	/*
-	 * Mark the znode.
-	 */
-	nzp->z_moved = 1;
-	ozp->z_moved = (uint8_t)-1;
+/*
+ * Wrapper function for ZFS_ENTER that returns 0 if successful and otherwise
+ * returns a non-zero error code.
+ */
+static int
+zfs_enter(zfsvfs_t *zfsvfs)
+{
+	ZFS_ENTER(zfsvfs);
+	return (0);
 }
 
 /*ARGSUSED*/
@@ -264,32 +242,12 @@ zfs_znode_move(void *buf, void *newbuf, size_t size, void *arg)
 	}
 
 	/*
-	 * Close a small window in which it's possible that the filesystem could
-	 * be unmounted and freed, and zfsvfs, though valid in the previous
-	 * statement, could point to unrelated memory by the time we try to
-	 * prevent the filesystem from being unmounted.
+	 * Ensure that the filesystem is not unmounted during the move.
 	 */
-	rw_enter(&zfsvfs_lock, RW_WRITER);
-	if (zfsvfs != ozp->z_zfsvfs) {
-		rw_exit(&zfsvfs_lock);
-		ZNODE_STAT_ADD(znode_move_stats.zms_zfsvfs_recheck1);
-		return (KMEM_CBRC_DONT_KNOW);
-	}
-
-	/*
-	 * If the znode is still valid, then so is the file system. We know that
-	 * no valid file system can be freed while we hold zfsvfs_lock, so we
-	 * can safely ensure that the filesystem is not and will not be
-	 * unmounted. The next statement is equivalent to ZFS_ENTER().
-	 */
-	rrm_enter(&zfsvfs->z_teardown_lock, RW_READER, FTAG);
-	if (zfsvfs->z_unmounted) {
-		ZFS_EXIT(zfsvfs);
-		rw_exit(&zfsvfs_lock);
+	if (zfs_enter(zfsvfs) != 0) {		/* ZFS_ENTER */
 		ZNODE_STAT_ADD(znode_move_stats.zms_zfsvfs_unmounted);
 		return (KMEM_CBRC_DONT_KNOW);
 	}
-	rw_exit(&zfsvfs_lock);
 
 	mutex_enter(&zfsvfs->z_znodes_lock);
 	/*
@@ -299,7 +257,7 @@ zfs_znode_move(void *buf, void *newbuf, size_t size, void *arg)
 	if (zfsvfs != ozp->z_zfsvfs) {
 		mutex_exit(&zfsvfs->z_znodes_lock);
 		ZFS_EXIT(zfsvfs);
-		ZNODE_STAT_ADD(znode_move_stats.zms_zfsvfs_recheck2);
+		ZNODE_STAT_ADD(znode_move_stats.zms_zfsvfs_recheck_invalid);
 		return (KMEM_CBRC_DONT_KNOW);
 	}
 
@@ -348,7 +306,6 @@ zfs_znode_move(void *buf, void *newbuf, size_t size, void *arg)
 
 	return (KMEM_CBRC_YES);
 }
-#endif /* illumos */
 
 void
 zfs_znode_init(void)
@@ -356,7 +313,6 @@ zfs_znode_init(void)
 	/*
 	 * Initialize zcache
 	 */
-	rw_init(&zfsvfs_lock, NULL, RW_DEFAULT, NULL);
 	ASSERT(znode_cache == NULL);
 	znode_cache = kmem_cache_create("zfs_znode_cache",
 	    sizeof (znode_t), 0, zfs_znode_cache_constructor,
@@ -367,12 +323,10 @@ zfs_znode_init(void)
 void
 zfs_znode_fini(void)
 {
-#ifdef illumos
 	/*
 	 * Cleanup vfs & vnode ops
 	 */
 	zfs_remove_op_tables();
-#endif
 
 	/*
 	 * Cleanup zcache
@@ -380,16 +334,13 @@ zfs_znode_fini(void)
 	if (znode_cache)
 		kmem_cache_destroy(znode_cache);
 	znode_cache = NULL;
-	rw_destroy(&zfsvfs_lock);
 }
 
-#ifdef illumos
 struct vnodeops *zfs_dvnodeops;
 struct vnodeops *zfs_fvnodeops;
 struct vnodeops *zfs_symvnodeops;
 struct vnodeops *zfs_xdvnodeops;
 struct vnodeops *zfs_evnodeops;
-struct vnodeops *zfs_sharevnodeops;
 
 void
 zfs_remove_op_tables()
@@ -414,15 +365,12 @@ zfs_remove_op_tables()
 		vn_freevnodeops(zfs_xdvnodeops);
 	if (zfs_evnodeops)
 		vn_freevnodeops(zfs_evnodeops);
-	if (zfs_sharevnodeops)
-		vn_freevnodeops(zfs_sharevnodeops);
 
 	zfs_dvnodeops = NULL;
 	zfs_fvnodeops = NULL;
 	zfs_symvnodeops = NULL;
 	zfs_xdvnodeops = NULL;
 	zfs_evnodeops = NULL;
-	zfs_sharevnodeops = NULL;
 }
 
 extern const fs_operation_def_t zfs_dvnodeops_template[];
@@ -430,7 +378,6 @@ extern const fs_operation_def_t zfs_fvnodeops_template[];
 extern const fs_operation_def_t zfs_xdvnodeops_template[];
 extern const fs_operation_def_t zfs_symvnodeops_template[];
 extern const fs_operation_def_t zfs_evnodeops_template[];
-extern const fs_operation_def_t zfs_sharevnodeops_template[];
 
 int
 zfs_create_op_tables()
@@ -467,53 +414,103 @@ zfs_create_op_tables()
 
 	error = vn_make_ops(MNTTYPE_ZFS, zfs_evnodeops_template,
 	    &zfs_evnodeops);
-	if (error)
-		return (error);
-
-	error = vn_make_ops(MNTTYPE_ZFS, zfs_sharevnodeops_template,
-	    &zfs_sharevnodeops);
 
 	return (error);
 }
-#endif	/* illumos */
 
+/*
+ * zfs_init_fs - Initialize the zfsvfs struct and the file system
+ *	incore "master" object.  Verify version compatibility.
+ */
 int
-zfs_create_share_dir(zfsvfs_t *zfsvfs, dmu_tx_t *tx)
+zfs_init_fs(zfsvfs_t *zfsvfs, znode_t **zpp)
 {
-	zfs_acl_ids_t acl_ids;
-	vattr_t vattr;
-	znode_t *sharezp;
-	znode_t *zp;
-	int error;
+	extern int zfsfstype;
 
-	vattr.va_mask = AT_MODE|AT_UID|AT_GID|AT_TYPE;
-	vattr.va_type = VDIR;
-	vattr.va_mode = S_IFDIR|0555;
-	vattr.va_uid = crgetuid(kcred);
-	vattr.va_gid = crgetgid(kcred);
+	objset_t	*os = zfsvfs->z_os;
+	int		i, error;
+	uint64_t fsid_guid;
+	uint64_t zval;
 
-	sharezp = kmem_cache_alloc(znode_cache, KM_SLEEP);
-	ASSERT(!POINTER_IS_VALID(sharezp->z_zfsvfs));
-	sharezp->z_moved = 0;
-	sharezp->z_unlinked = 0;
-	sharezp->z_atime_dirty = 0;
-	sharezp->z_zfsvfs = zfsvfs;
-	sharezp->z_is_sa = zfsvfs->z_use_sa;
+	*zpp = NULL;
 
-	VERIFY(0 == zfs_acl_ids_create(sharezp, IS_ROOT_NODE, &vattr,
-	    kcred, NULL, &acl_ids));
-	zfs_mknode(sharezp, &vattr, tx, kcred, IS_ROOT_NODE, &zp, &acl_ids);
-	ASSERT3P(zp, ==, sharezp);
-	POINTER_INVALIDATE(&sharezp->z_zfsvfs);
-	error = zap_add(zfsvfs->z_os, MASTER_NODE_OBJ,
-	    ZFS_SHARES_DIR, 8, 1, &sharezp->z_id, tx);
-	zfsvfs->z_shares_dir = sharezp->z_id;
+	error = zfs_get_zplprop(os, ZFS_PROP_VERSION, &zfsvfs->z_version);
+	if (error) {
+		return (error);
+	} else if (zfsvfs->z_version > ZPL_VERSION) {
+		(void) printf("Mismatched versions:  File system "
+		    "is version %llu on-disk format, which is "
+		    "incompatible with this software version %lld!",
+		    (u_longlong_t)zfsvfs->z_version, ZPL_VERSION);
+		return (ENOTSUP);
+	}
 
-	zfs_acl_ids_free(&acl_ids);
-	sa_handle_destroy(sharezp->z_sa_hdl);
-	kmem_cache_free(znode_cache, sharezp);
+	if ((error = zfs_get_zplprop(os, ZFS_PROP_NORMALIZE, &zval)) != 0)
+		return (error);
+	zfsvfs->z_norm = (int)zval;
+	if ((error = zfs_get_zplprop(os, ZFS_PROP_UTF8ONLY, &zval)) != 0)
+		return (error);
+	zfsvfs->z_utf8 = (zval != 0);
+	if ((error = zfs_get_zplprop(os, ZFS_PROP_CASE, &zval)) != 0)
+		return (error);
+	zfsvfs->z_case = (uint_t)zval;
+	/*
+	 * Fold case on file systems that are always or sometimes case
+	 * insensitive.
+	 */
+	if (zfsvfs->z_case == ZFS_CASE_INSENSITIVE ||
+	    zfsvfs->z_case == ZFS_CASE_MIXED)
+		zfsvfs->z_norm |= U8_TEXTPREP_TOUPPER;
 
-	return (error);
+	/*
+	 * The fsid is 64 bits, composed of an 8-bit fs type, which
+	 * separates our fsid from any other filesystem types, and a
+	 * 56-bit objset unique ID.  The objset unique ID is unique to
+	 * all objsets open on this system, provided by unique_create().
+	 * The 8-bit fs type must be put in the low bits of fsid[1]
+	 * because that's where other Solaris filesystems put it.
+	 */
+	fsid_guid = dmu_objset_fsid_guid(os);
+	ASSERT((fsid_guid & ~((1ULL<<56)-1)) == 0);
+	zfsvfs->z_vfs->vfs_fsid.val[0] = fsid_guid;
+	zfsvfs->z_vfs->vfs_fsid.val[1] = ((fsid_guid>>32) << 8) |
+	    zfsfstype & 0xFF;
+
+	error = zap_lookup(os, MASTER_NODE_OBJ, ZFS_ROOT_OBJ, 8, 1,
+	    &zfsvfs->z_root);
+	if (error)
+		return (error);
+	ASSERT(zfsvfs->z_root != 0);
+
+	error = zap_lookup(os, MASTER_NODE_OBJ, ZFS_UNLINKED_SET, 8, 1,
+	    &zfsvfs->z_unlinkedobj);
+	if (error)
+		return (error);
+
+	/*
+	 * Initialize zget mutex's
+	 */
+	for (i = 0; i != ZFS_OBJ_MTX_SZ; i++)
+		mutex_init(&zfsvfs->z_hold_mtx[i], NULL, MUTEX_DEFAULT, NULL);
+
+	error = zfs_zget(zfsvfs, zfsvfs->z_root, zpp);
+	if (error) {
+		/*
+		 * On error, we destroy the mutexes here since it's not
+		 * possible for the caller to determine if the mutexes were
+		 * initialized properly.
+		 */
+		for (i = 0; i != ZFS_OBJ_MTX_SZ; i++)
+			mutex_destroy(&zfsvfs->z_hold_mtx[i]);
+		return (error);
+	}
+	ASSERT3U((*zpp)->z_id, ==, zfsvfs->z_root);
+	error = zap_lookup(os, MASTER_NODE_OBJ, ZFS_FUID_TABLES, 8, 1,
+	    &zfsvfs->z_fuid_obj);
+	if (error == ENOENT)
+		error = 0;
+
+	return (0);
 }
 
 /*
@@ -541,8 +538,15 @@ zfs_create_share_dir(zfsvfs_t *zfsvfs, dmu_tx_t *tx)
 static uint64_t
 zfs_expldev(dev_t dev)
 {
-	return (((uint64_t)major(dev) << NBITSMINOR64) | minor(dev));
+#ifndef _LP64
+	major_t major = (major_t)dev >> NBITSMINOR32 & MAXMAJ32;
+	return (((uint64_t)major << NBITSMINOR64) |
+	    ((minor_t)dev & MAXMIN32));
+#else
+	return (dev);
+#endif
 }
+
 /*
  * Special cmpldev for ZFS private use.
  * Can't use standard cmpldev since it takes
@@ -553,61 +557,62 @@ zfs_expldev(dev_t dev)
 dev_t
 zfs_cmpldev(uint64_t dev)
 {
-	return (makedev((dev >> NBITSMINOR64), (dev & MAXMIN64)));
+#ifndef _LP64
+	minor_t minor = (minor_t)dev & MAXMIN64;
+	major_t major = (major_t)(dev >> NBITSMINOR64) & MAXMAJ64;
+
+	if (major > MAXMAJ32 || minor > MAXMIN32)
+		return (NODEV32);
+
+	return (((dev32_t)major << NBITSMINOR32) | minor);
+#else
+	return (dev);
+#endif
 }
 
 static void
-zfs_znode_sa_init(zfsvfs_t *zfsvfs, znode_t *zp,
-    dmu_buf_t *db, dmu_object_type_t obj_type, sa_handle_t *sa_hdl)
+zfs_znode_dmu_init(zfsvfs_t *zfsvfs, znode_t *zp, dmu_buf_t *db)
 {
+	znode_t		*nzp;
+
 	ASSERT(!POINTER_IS_VALID(zp->z_zfsvfs) || (zfsvfs == zp->z_zfsvfs));
 	ASSERT(MUTEX_HELD(ZFS_OBJ_MUTEX(zfsvfs, zp->z_id)));
 
-	ASSERT(zp->z_sa_hdl == NULL);
-	ASSERT(zp->z_acl_cached == NULL);
-	if (sa_hdl == NULL) {
-		VERIFY(0 == sa_handle_get_from_db(zfsvfs->z_os, db, zp,
-		    SA_HDL_SHARED, &zp->z_sa_hdl));
-	} else {
-		zp->z_sa_hdl = sa_hdl;
-		sa_set_userp(sa_hdl, zp);
-	}
+	mutex_enter(&zp->z_lock);
 
-	zp->z_is_sa = (obj_type == DMU_OT_SA) ? B_TRUE : B_FALSE;
+	ASSERT(zp->z_dbuf == NULL);
+	zp->z_dbuf = db;
+	nzp = dmu_buf_set_user_ie(db, zp, &zp->z_phys, znode_evict_error);
 
 	/*
-	 * Slap on VROOT if we are the root znode unless we are the root
-	 * node of a snapshot mounted under .zfs.
+	 * there should be no
+	 * concurrent zgets on this object.
 	 */
-	if (zp->z_id == zfsvfs->z_root && zfsvfs->z_parent == zfsvfs)
+	if (nzp != NULL)
+		panic("existing znode %p for dbuf %p", (void *)nzp, (void *)db);
+
+	/*
+	 * Slap on VROOT if we are the root znode
+	 */
+	if (zp->z_id == zfsvfs->z_root)
 		ZTOV(zp)->v_flag |= VROOT;
 
+	mutex_exit(&zp->z_lock);
 	vn_exists(ZTOV(zp));
 }
 
 void
 zfs_znode_dmu_fini(znode_t *zp)
 {
+	dmu_buf_t *db = zp->z_dbuf;
 	ASSERT(MUTEX_HELD(ZFS_OBJ_MUTEX(zp->z_zfsvfs, zp->z_id)) ||
 	    zp->z_unlinked ||
 	    RW_WRITE_HELD(&zp->z_zfsvfs->z_teardown_inactive_lock));
-
-	sa_handle_destroy(zp->z_sa_hdl);
-	zp->z_sa_hdl = NULL;
+	ASSERT(zp->z_dbuf != NULL);
+	zp->z_dbuf = NULL;
+	VERIFY(zp == dmu_buf_update_user(db, zp, NULL, NULL, NULL));
+	dmu_buf_rele(db, NULL);
 }
-
-#ifdef __FreeBSD__
-static void
-zfs_vnode_forget(vnode_t *vp)
-{
-
-	/* copied from insmntque_stddtr */
-	vp->v_data = NULL;
-	vp->v_op = &dead_vnodeops;
-	vgone(vp);
-	vput(vp);
-}
-#endif /* __FreeBSD__ */
 
 /*
  * Construct a new znode/vnode and intialize.
@@ -617,149 +622,71 @@ zfs_vnode_forget(vnode_t *vp)
  * return the znode
  */
 static znode_t *
-#ifdef __NetBSD__
-zfs_znode_alloc(zfsvfs_t *zfsvfs, dmu_buf_t *db, int blksz,
-    dmu_object_type_t obj_type, sa_handle_t *hdl, vnode_t *vp)
-#else
-zfs_znode_alloc(zfsvfs_t *zfsvfs, dmu_buf_t *db, int blksz,
-    dmu_object_type_t obj_type, sa_handle_t *hdl)
-#endif
+zfs_znode_alloc(zfsvfs_t *zfsvfs, dmu_buf_t *db, int blksz)
 {
 	znode_t	*zp;
-#ifndef __NetBSD__
 	vnode_t *vp;
-#endif
-	uint64_t mode;
-	uint64_t parent;
-	sa_bulk_attr_t bulk[9];
-	int count = 0;
-	int error;
 
 	zp = kmem_cache_alloc(znode_cache, KM_SLEEP);
 
-#ifndef __NetBSD__
-	KASSERT(curthread->td_vp_reserv > 0,
-	    ("zfs_znode_alloc: getnewvnode without any vnodes reserved"));
-	error = getnewvnode("zfs", zfsvfs->z_parent->z_vfs, &zfs_vnodeops, &vp);
-	if (error != 0) {
-		kmem_cache_free(znode_cache, zp);
-		return (NULL);
-	}
-#endif
-	zp->z_vnode = vp;
-	vp->v_data = zp;
-
+	ASSERT(zp->z_dirlocks == NULL);
+	ASSERT(zp->z_dbuf == NULL);
 	ASSERT(!POINTER_IS_VALID(zp->z_zfsvfs));
-	zp->z_moved = 0;
 
 	/*
 	 * Defer setting z_zfsvfs until the znode is ready to be a candidate for
 	 * the zfs_znode_move() callback.
 	 */
-	zp->z_sa_hdl = NULL;
+	zp->z_phys = NULL;
 	zp->z_unlinked = 0;
 	zp->z_atime_dirty = 0;
 	zp->z_mapcnt = 0;
+	zp->z_last_itx = 0;
 	zp->z_id = db->db_object;
 	zp->z_blksz = blksz;
 	zp->z_seq = 0x7A4653;
 	zp->z_sync_cnt = 0;
 
-#ifdef __NetBSD__
-	vp->v_op = zfs_vnodeop_p;
-	vp->v_tag = VT_ZFS;
-	zp->z_lockf = NULL;
-#endif
-
 	vp = ZTOV(zp);
+	vn_reinit(vp);
 
-	zfs_znode_sa_init(zfsvfs, zp, db, obj_type, hdl);
+	zfs_znode_dmu_init(zfsvfs, zp, db);
 
-	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_MODE(zfsvfs), NULL, &mode, 8);
-	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_GEN(zfsvfs), NULL, &zp->z_gen, 8);
-	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_SIZE(zfsvfs), NULL,
-	    &zp->z_size, 8);
-	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_LINKS(zfsvfs), NULL,
-	    &zp->z_links, 8);
-	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_FLAGS(zfsvfs), NULL,
-	    &zp->z_pflags, 8);
-	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_PARENT(zfsvfs), NULL, &parent, 8);
-	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_ATIME(zfsvfs), NULL,
-	    &zp->z_atime, 16);
-	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_UID(zfsvfs), NULL,
-	    &zp->z_uid, 8);
-	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_GID(zfsvfs), NULL,
-	    &zp->z_gid, 8);
+	zp->z_gen = zp->z_phys->zp_gen;
 
-	if (sa_bulk_lookup(zp->z_sa_hdl, bulk, count) != 0 || zp->z_gen == 0) {
-		if (hdl == NULL)
-			sa_handle_destroy(zp->z_sa_hdl);
-#ifndef __NetBSD__
-		zfs_vnode_forget(vp);
-#endif
-		zp->z_vnode = NULL;
-		kmem_cache_free(znode_cache, zp);
-		return (NULL);
-	}
-
-	zp->z_mode = mode;
-
-	vp->v_type = IFTOVT((mode_t)mode);
+	vp->v_vfsp = zfsvfs->z_parent->z_vfs;
+	vp->v_type = IFTOVT((mode_t)zp->z_phys->zp_mode);
 
 	switch (vp->v_type) {
 	case VDIR:
+		if (zp->z_phys->zp_flags & ZFS_XATTR) {
+			vn_setops(vp, zfs_xdvnodeops);
+			vp->v_flag |= V_XATTRDIR;
+		} else {
+			vn_setops(vp, zfs_dvnodeops);
+		}
 		zp->z_zn_prefetch = B_TRUE; /* z_prefetch default is enabled */
 		break;
-#if defined(illumos) || defined(__NetBSD__)
 	case VBLK:
 	case VCHR:
-		{
-			uint64_t rdev;
-			VERIFY(sa_lookup(zp->z_sa_hdl, SA_ZPL_RDEV(zfsvfs),
-			    &rdev, sizeof (rdev)) == 0);
-
-#ifdef illumos
-			vp->v_rdev = zfs_cmpldev(rdev);
-#else
-			vp->v_op = zfs_specop_p;
-	        	spec_node_init(vp, zfs_cmpldev(rdev));
-#endif
-		}
-		break;
-#endif
+		vp->v_rdev = zfs_cmpldev(zp->z_phys->zp_rdev);
+		/*FALLTHROUGH*/
 	case VFIFO:
-#ifdef __NetBSD__
-		vp->v_op = zfs_fifoop_p;
-		break;
-#else /* __NetBSD__ */
-#ifdef illumos
 	case VSOCK:
 	case VDOOR:
-#endif
-		vp->v_op = &zfs_fifoops;
+		vn_setops(vp, zfs_fvnodeops);
 		break;
 	case VREG:
-		if (parent == zfsvfs->z_shares_dir) {
-			ASSERT(zp->z_uid == 0 && zp->z_gid == 0);
-			vp->v_op = &zfs_shareops;
-		}
+		vp->v_flag |= VMODSORT;
+		vn_setops(vp, zfs_fvnodeops);
 		break;
-#ifdef illumos
 	case VLNK:
 		vn_setops(vp, zfs_symvnodeops);
 		break;
 	default:
 		vn_setops(vp, zfs_evnodeops);
 		break;
-#endif
-#endif /* __NetBSD__ */
 	}
-
-#ifdef __NetBSD__
-	extern const struct genfs_ops zfs_genfsops;
-	genfs_node_init(vp, &zfs_genfsops);
-	uvm_vnp_setsize(vp, zp->z_size);
-#endif
 
 	mutex_enter(&zfsvfs->z_znodes_lock);
 	list_insert_tail(&zfsvfs->z_all_znodes, zp);
@@ -771,25 +698,10 @@ zfs_znode_alloc(zfsvfs_t *zfsvfs, dmu_buf_t *db, int blksz,
 	zp->z_zfsvfs = zfsvfs;
 	mutex_exit(&zfsvfs->z_znodes_lock);
 
-#ifndef __NetBSD__
-	/*
-	 * Acquire vnode lock before making it available to the world.
-	 */
-	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
-	VN_LOCK_AREC(vp);
-	if (vp->v_type != VFIFO)
-		VN_LOCK_ASHARE(vp);
-#endif
-
-#if defined(illumos) || defined(__NetBSD__)
 	VFS_HOLD(zfsvfs->z_vfs);
-#endif
 	return (zp);
 }
 
-static uint64_t empty_xattr;
-static uint64_t pad[4];
-static zfs_acl_phys_t acl_phys;
 /*
  * Create a new DMU object to hold a zfs znode.
  *
@@ -800,6 +712,7 @@ static zfs_acl_phys_t acl_phys;
  *		flag	- flags:
  *			  IS_ROOT_NODE	- new object will be root
  *			  IS_XATTR	- new object is an attribute
+ *			  IS_REPLAY	- intent log replay
  *		bonuslen - length of bonus buffer
  *		setaclp  - File/Dir initial ACL
  *		fuidp	 - Tracks fuid allocation.
@@ -807,386 +720,139 @@ static zfs_acl_phys_t acl_phys;
  *	OUT:	zpp	- allocated znode
  *
  */
-#ifdef __NetBSD__
-struct zfs_newvnode_args {
-	dmu_tx_t *tx;
-	uint_t flag;
-	zfs_acl_ids_t *acl_ids;
-};
-
-static void
-zfs_mknode1(znode_t *, vattr_t *, dmu_tx_t *, cred_t *,
-    uint_t, znode_t **, zfs_acl_ids_t *, vnode_t *);
-
-int
-zfs_loadvnode(struct mount *mp, struct vnode *vp,
-    const void *key, size_t key_len, const void **new_key)
-{
-	int err, blksz;
-	uint64_t obj_num;
-	zfsvfs_t *zfsvfs;
-	dmu_buf_t *db;
-	dmu_object_info_t doi;
-	dmu_object_type_t obj_type;
-	sa_handle_t *hdl;
-	znode_t *zp;
-
-	if (key_len != sizeof(obj_num))
-		return zfsctl_loadvnode(mp, vp, key, key_len, new_key);
-
-	memcpy(&obj_num, key, key_len);
-
-	zfsvfs = mp->mnt_data;
-
-	ZFS_OBJ_HOLD_ENTER(zfsvfs, obj_num);
-
-	err = sa_buf_hold(zfsvfs->z_os, obj_num, NULL, &db);
-	if (err) {
-		ZFS_OBJ_HOLD_EXIT(zfsvfs, obj_num);
-		return (SET_ERROR(err));
-	}
-
-	dmu_object_info_from_db(db, &doi);
-	if (doi.doi_bonus_type != DMU_OT_SA &&
-	    (doi.doi_bonus_type != DMU_OT_ZNODE ||
-	    (doi.doi_bonus_type == DMU_OT_ZNODE &&
-	    doi.doi_bonus_size < sizeof (znode_phys_t)))) {
-		sa_buf_rele(db, NULL);
-		ZFS_OBJ_HOLD_EXIT(zfsvfs, obj_num);
-		return (SET_ERROR(EINVAL));
-	}
-	blksz = doi.doi_data_block_size;
-	obj_type = doi.doi_bonus_type;
-	hdl = dmu_buf_get_user(db);
-
-	if (hdl != NULL) {
-		sa_buf_rele(db, NULL);
-		ZFS_OBJ_HOLD_EXIT(zfsvfs, obj_num);
-		return (SET_ERROR(ENOENT));
-	}
-
-	zp = zfs_znode_alloc(zfsvfs, db, blksz, obj_type, hdl, vp);
-	if (zp == NULL) {
-		ZFS_OBJ_HOLD_EXIT(zfsvfs, obj_num);
-		return (SET_ERROR(ENOENT));
-	}
-	ASSERT(zp == VTOZ(vp));
-	cache_enter_id(vp, zp->z_mode, zp->z_uid, zp->z_gid, true);
-
-	ZFS_OBJ_HOLD_EXIT(zfsvfs, obj_num);
-
-	*new_key = &zp->z_id;
-
-	return 0;
-}
-
-int
-zfs_newvnode(struct mount *mp, vnode_t *dvp, vnode_t *vp, vattr_t *vap,
-    cred_t *cr, void *extra, size_t *key_len, const void **new_key)
-{
-	struct zfs_newvnode_args *args = extra;
-	znode_t *zp, *dzp = VTOZ(dvp);
-	dmu_tx_t *tx = args->tx;
-	uint_t flag = args->flag;
-	zfs_acl_ids_t *acl_ids = args->acl_ids;
-
-	zfs_mknode1(dzp, vap, tx, cr, flag, &zp, acl_ids, vp);
-	ASSERT(zp == VTOZ(vp));
-	cache_enter_id(vp, zp->z_mode, zp->z_uid, zp->z_gid, true);
-
-	*key_len = sizeof(zp->z_id);
-	*new_key = &zp->z_id;
-
-	return 0;
-}
-
 void
 zfs_mknode(znode_t *dzp, vattr_t *vap, dmu_tx_t *tx, cred_t *cr,
-    uint_t flag, znode_t **zpp, zfs_acl_ids_t *acl_ids)
+    uint_t flag, znode_t **zpp, int bonuslen, zfs_acl_t *setaclp,
+    zfs_fuid_info_t **fuidp)
 {
-	vnode_t *vp, *dvp = ZTOV(dzp);
-	zfsvfs_t *zfsvfs = dzp->z_zfsvfs;
-	struct zfs_newvnode_args args = { tx, flag, acl_ids };
-
-	if (flag & IS_ROOT_NODE)
-		return zfs_mknode1(dzp, vap, tx, cr, flag, zpp, acl_ids, NULL);
-
-	VERIFY(vcache_new(zfsvfs->z_vfs, dvp, vap, cr, &args, &vp) == 0);
-	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
-	*zpp = VTOZ(vp);
-}
-
-static void
-zfs_mknode1(znode_t *dzp, vattr_t *vap, dmu_tx_t *tx, cred_t *cr,
-    uint_t flag, znode_t **zpp, zfs_acl_ids_t *acl_ids, vnode_t *vp)
-#else
-void
-zfs_mknode(znode_t *dzp, vattr_t *vap, dmu_tx_t *tx, cred_t *cr,
-    uint_t flag, znode_t **zpp, zfs_acl_ids_t *acl_ids)
-#endif
-{
-	uint64_t	crtime[2], atime[2], mtime[2], ctime[2];
-	uint64_t	mode, size, links, parent, pflags;
-	uint64_t	dzp_pflags = 0;
-	uint64_t	rdev = 0;
-	zfsvfs_t	*zfsvfs = dzp->z_zfsvfs;
 	dmu_buf_t	*db;
+	znode_phys_t	*pzp;
+	zfsvfs_t	*zfsvfs = dzp->z_zfsvfs;
 	timestruc_t	now;
 	uint64_t	gen, obj;
 	int		err;
-	int		bonuslen;
-	sa_handle_t	*sa_hdl;
-	dmu_object_type_t obj_type;
-	sa_bulk_attr_t	sa_attrs[ZPL_END];
-	int		cnt = 0;
-	zfs_acl_locator_cb_t locate = { 0 };
 
 	ASSERT(vap && (vap->va_mask & (AT_TYPE|AT_MODE)) == (AT_TYPE|AT_MODE));
 
-	if (zfsvfs->z_replay) {
+	if (zfsvfs->z_assign >= TXG_INITIAL) {		/* ZIL replay */
 		obj = vap->va_nodeid;
+		flag |= IS_REPLAY;
 		now = vap->va_ctime;		/* see zfs_replay_create() */
 		gen = vap->va_nblocks;		/* ditto */
 	} else {
 		obj = 0;
-		vfs_timestamp(&now);
+		gethrestime(&now);
 		gen = dmu_tx_get_txg(tx);
 	}
-
-	obj_type = zfsvfs->z_use_sa ? DMU_OT_SA : DMU_OT_ZNODE;
-	bonuslen = (obj_type == DMU_OT_SA) ?
-	    DN_MAX_BONUSLEN : ZFS_OLD_ZNODE_PHYS_SIZE;
 
 	/*
 	 * Create a new DMU object.
 	 */
 	/*
 	 * There's currently no mechanism for pre-reading the blocks that will
-	 * be needed to allocate a new object, so we accept the small chance
+	 * be to needed allocate a new object, so we accept the small chance
 	 * that there will be an i/o error and we will fail one of the
 	 * assertions below.
 	 */
 	if (vap->va_type == VDIR) {
-		if (zfsvfs->z_replay) {
-			VERIFY0(zap_create_claim_norm(zfsvfs->z_os, obj,
+		if (flag & IS_REPLAY) {
+			err = zap_create_claim_norm(zfsvfs->z_os, obj,
 			    zfsvfs->z_norm, DMU_OT_DIRECTORY_CONTENTS,
-			    obj_type, bonuslen, tx));
+			    DMU_OT_ZNODE, sizeof (znode_phys_t) + bonuslen, tx);
+			ASSERT3U(err, ==, 0);
 		} else {
 			obj = zap_create_norm(zfsvfs->z_os,
 			    zfsvfs->z_norm, DMU_OT_DIRECTORY_CONTENTS,
-			    obj_type, bonuslen, tx);
+			    DMU_OT_ZNODE, sizeof (znode_phys_t) + bonuslen, tx);
 		}
 	} else {
-		if (zfsvfs->z_replay) {
-			VERIFY0(dmu_object_claim(zfsvfs->z_os, obj,
+		if (flag & IS_REPLAY) {
+			err = dmu_object_claim(zfsvfs->z_os, obj,
 			    DMU_OT_PLAIN_FILE_CONTENTS, 0,
-			    obj_type, bonuslen, tx));
+			    DMU_OT_ZNODE, sizeof (znode_phys_t) + bonuslen, tx);
+			ASSERT3U(err, ==, 0);
 		} else {
 			obj = dmu_object_alloc(zfsvfs->z_os,
 			    DMU_OT_PLAIN_FILE_CONTENTS, 0,
-			    obj_type, bonuslen, tx);
+			    DMU_OT_ZNODE, sizeof (znode_phys_t) + bonuslen, tx);
 		}
 	}
+	VERIFY(0 == dmu_bonus_hold(zfsvfs->z_os, obj, NULL, &db));
+	dmu_buf_will_dirty(db, tx);
 
-	ZFS_OBJ_HOLD_ENTER(zfsvfs, obj);
-	VERIFY(0 == sa_buf_hold(zfsvfs->z_os, obj, NULL, &db));
+	/*
+	 * Initialize the znode physical data to zero.
+	 */
+	ASSERT(db->db_size >= sizeof (znode_phys_t));
+	bzero(db->db_data, db->db_size);
+	pzp = db->db_data;
 
 	/*
 	 * If this is the root, fix up the half-initialized parent pointer
 	 * to reference the just-allocated physical data area.
 	 */
 	if (flag & IS_ROOT_NODE) {
+		dzp->z_dbuf = db;
+		dzp->z_phys = pzp;
 		dzp->z_id = obj;
-	} else {
-		dzp_pflags = dzp->z_pflags;
 	}
 
 	/*
 	 * If parent is an xattr, so am I.
 	 */
-	if (dzp_pflags & ZFS_XATTR) {
+	if (dzp->z_phys->zp_flags & ZFS_XATTR)
 		flag |= IS_XATTR;
+
+	if (vap->va_type == VBLK || vap->va_type == VCHR) {
+		pzp->zp_rdev = zfs_expldev(vap->va_rdev);
 	}
 
 	if (zfsvfs->z_use_fuids)
-		pflags = ZFS_ARCHIVE | ZFS_AV_MODIFIED;
-	else
-		pflags = 0;
+		pzp->zp_flags = ZFS_ARCHIVE | ZFS_AV_MODIFIED;
 
 	if (vap->va_type == VDIR) {
-		size = 2;		/* contents ("." and "..") */
-		links = (flag & (IS_ROOT_NODE | IS_XATTR)) ? 2 : 1;
-	} else {
-		size = links = 0;
+		pzp->zp_size = 2;		/* contents ("." and "..") */
+		pzp->zp_links = (flag & (IS_ROOT_NODE | IS_XATTR)) ? 2 : 1;
 	}
 
-	if (vap->va_type == VBLK || vap->va_type == VCHR) {
-		rdev = zfs_expldev(vap->va_rdev);
-	}
-
-	parent = dzp->z_id;
-	mode = acl_ids->z_mode;
+	pzp->zp_parent = dzp->z_id;
 	if (flag & IS_XATTR)
-		pflags |= ZFS_XATTR;
+		pzp->zp_flags |= ZFS_XATTR;
 
-	/*
-	 * No execs denied will be deterimed when zfs_mode_compute() is called.
-	 */
-	pflags |= acl_ids->z_aclp->z_hints &
-	    (ZFS_ACL_TRIVIAL|ZFS_INHERIT_ACE|ZFS_ACL_AUTO_INHERIT|
-	    ZFS_ACL_DEFAULTED|ZFS_ACL_PROTECTED);
+	pzp->zp_gen = gen;
 
-	ZFS_TIME_ENCODE(&now, crtime);
-	ZFS_TIME_ENCODE(&now, ctime);
+	ZFS_TIME_ENCODE(&now, pzp->zp_crtime);
+	ZFS_TIME_ENCODE(&now, pzp->zp_ctime);
 
 	if (vap->va_mask & AT_ATIME) {
-		ZFS_TIME_ENCODE(&vap->va_atime, atime);
+		ZFS_TIME_ENCODE(&vap->va_atime, pzp->zp_atime);
 	} else {
-		ZFS_TIME_ENCODE(&now, atime);
+		ZFS_TIME_ENCODE(&now, pzp->zp_atime);
 	}
 
 	if (vap->va_mask & AT_MTIME) {
-		ZFS_TIME_ENCODE(&vap->va_mtime, mtime);
+		ZFS_TIME_ENCODE(&vap->va_mtime, pzp->zp_mtime);
 	} else {
-		ZFS_TIME_ENCODE(&now, mtime);
+		ZFS_TIME_ENCODE(&now, pzp->zp_mtime);
 	}
 
-	/* Now add in all of the "SA" attributes */
-	VERIFY(0 == sa_handle_get_from_db(zfsvfs->z_os, db, NULL, SA_HDL_SHARED,
-	    &sa_hdl));
-
-	/*
-	 * Setup the array of attributes to be replaced/set on the new file
-	 *
-	 * order for  DMU_OT_ZNODE is critical since it needs to be constructed
-	 * in the old znode_phys_t format.  Don't change this ordering
-	 */
-
-	if (obj_type == DMU_OT_ZNODE) {
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_ATIME(zfsvfs),
-		    NULL, &atime, 16);
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_MTIME(zfsvfs),
-		    NULL, &mtime, 16);
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_CTIME(zfsvfs),
-		    NULL, &ctime, 16);
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_CRTIME(zfsvfs),
-		    NULL, &crtime, 16);
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_GEN(zfsvfs),
-		    NULL, &gen, 8);
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_MODE(zfsvfs),
-		    NULL, &mode, 8);
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_SIZE(zfsvfs),
-		    NULL, &size, 8);
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_PARENT(zfsvfs),
-		    NULL, &parent, 8);
-	} else {
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_MODE(zfsvfs),
-		    NULL, &mode, 8);
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_SIZE(zfsvfs),
-		    NULL, &size, 8);
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_GEN(zfsvfs),
-		    NULL, &gen, 8);
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_UID(zfsvfs), NULL,
-		    &acl_ids->z_fuid, 8);
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_GID(zfsvfs), NULL,
-		    &acl_ids->z_fgid, 8);
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_PARENT(zfsvfs),
-		    NULL, &parent, 8);
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_FLAGS(zfsvfs),
-		    NULL, &pflags, 8);
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_ATIME(zfsvfs),
-		    NULL, &atime, 16);
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_MTIME(zfsvfs),
-		    NULL, &mtime, 16);
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_CTIME(zfsvfs),
-		    NULL, &ctime, 16);
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_CRTIME(zfsvfs),
-		    NULL, &crtime, 16);
-	}
-
-	SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_LINKS(zfsvfs), NULL, &links, 8);
-
-	if (obj_type == DMU_OT_ZNODE) {
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_XATTR(zfsvfs), NULL,
-		    &empty_xattr, 8);
-	}
-	if (obj_type == DMU_OT_ZNODE ||
-	    (vap->va_type == VBLK || vap->va_type == VCHR)) {
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_RDEV(zfsvfs),
-		    NULL, &rdev, 8);
-
-	}
-	if (obj_type == DMU_OT_ZNODE) {
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_FLAGS(zfsvfs),
-		    NULL, &pflags, 8);
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_UID(zfsvfs), NULL,
-		    &acl_ids->z_fuid, 8);
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_GID(zfsvfs), NULL,
-		    &acl_ids->z_fgid, 8);
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_PAD(zfsvfs), NULL, pad,
-		    sizeof (uint64_t) * 4);
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_ZNODE_ACL(zfsvfs), NULL,
-		    &acl_phys, sizeof (zfs_acl_phys_t));
-	} else if (acl_ids->z_aclp->z_version >= ZFS_ACL_VERSION_FUID) {
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_DACL_COUNT(zfsvfs), NULL,
-		    &acl_ids->z_aclp->z_acl_count, 8);
-		locate.cb_aclp = acl_ids->z_aclp;
-		SA_ADD_BULK_ATTR(sa_attrs, cnt, SA_ZPL_DACL_ACES(zfsvfs),
-		    zfs_acl_data_locator, &locate,
-		    acl_ids->z_aclp->z_acl_bytes);
-		mode = zfs_mode_compute(mode, acl_ids->z_aclp, &pflags,
-		    acl_ids->z_fuid, acl_ids->z_fgid);
-	}
-
-	VERIFY(sa_replace_all_by_template(sa_hdl, sa_attrs, cnt, tx) == 0);
-
+	pzp->zp_mode = MAKEIMODE(vap->va_type, vap->va_mode);
 	if (!(flag & IS_ROOT_NODE)) {
-#ifdef __NetBSD__
-		*zpp = zfs_znode_alloc(zfsvfs, db, 0, obj_type, sa_hdl, vp);
-#else
-		*zpp = zfs_znode_alloc(zfsvfs, db, 0, obj_type, sa_hdl);
-#endif
-		ASSERT(*zpp != NULL);
+		ZFS_OBJ_HOLD_ENTER(zfsvfs, obj);
+		*zpp = zfs_znode_alloc(zfsvfs, db, 0);
+		ZFS_OBJ_HOLD_EXIT(zfsvfs, obj);
 	} else {
 		/*
 		 * If we are creating the root node, the "parent" we
 		 * passed in is the znode for the root.
 		 */
 		*zpp = dzp;
-
-		(*zpp)->z_sa_hdl = sa_hdl;
 	}
-
-	(*zpp)->z_pflags = pflags;
-	(*zpp)->z_mode = mode;
-
-	if (vap->va_mask & AT_XVATTR)
-		zfs_xvattr_set(*zpp, (xvattr_t *)vap, tx);
-
-	if (obj_type == DMU_OT_ZNODE ||
-	    acl_ids->z_aclp->z_version < ZFS_ACL_VERSION_FUID) {
-		VERIFY0(zfs_aclset_common(*zpp, acl_ids->z_aclp, cr, tx));
-	}
-#ifndef __NetBSD__
-	if (!(flag & IS_ROOT_NODE)) {
-		vnode_t *vp;
-
-		vp = ZTOV(*zpp);
-		vp->v_vflag |= VV_FORCEINSMQ;
-		err = insmntque(vp, zfsvfs->z_vfs);
-		vp->v_vflag &= ~VV_FORCEINSMQ;
-		KASSERT(err == 0, ("insmntque() failed: error %d", err));
-	}
-#endif
-	ZFS_OBJ_HOLD_EXIT(zfsvfs, obj);
+	zfs_perm_init(*zpp, dzp, flag, vap, tx, cr, setaclp, fuidp);
 }
 
-/*
- * Update in-core attributes.  It is assumed the caller will be doing an
- * sa_bulk_update to push the changes out.
- */
 void
-zfs_xvattr_set(znode_t *zp, xvattr_t *xvap, dmu_tx_t *tx)
+zfs_xvattr_set(znode_t *zp, xvattr_t *xvap)
 {
 	xoptattr_t *xoap;
 
@@ -1194,141 +860,61 @@ zfs_xvattr_set(znode_t *zp, xvattr_t *xvap, dmu_tx_t *tx)
 	ASSERT(xoap);
 
 	if (XVA_ISSET_REQ(xvap, XAT_CREATETIME)) {
-		uint64_t times[2];
-		ZFS_TIME_ENCODE(&xoap->xoa_createtime, times);
-		(void) sa_update(zp->z_sa_hdl, SA_ZPL_CRTIME(zp->z_zfsvfs),
-		    &times, sizeof (times), tx);
+		ZFS_TIME_ENCODE(&xoap->xoa_createtime, zp->z_phys->zp_crtime);
 		XVA_SET_RTN(xvap, XAT_CREATETIME);
 	}
 	if (XVA_ISSET_REQ(xvap, XAT_READONLY)) {
-		ZFS_ATTR_SET(zp, ZFS_READONLY, xoap->xoa_readonly,
-		    zp->z_pflags, tx);
+		ZFS_ATTR_SET(zp, ZFS_READONLY, xoap->xoa_readonly);
 		XVA_SET_RTN(xvap, XAT_READONLY);
 	}
 	if (XVA_ISSET_REQ(xvap, XAT_HIDDEN)) {
-		ZFS_ATTR_SET(zp, ZFS_HIDDEN, xoap->xoa_hidden,
-		    zp->z_pflags, tx);
+		ZFS_ATTR_SET(zp, ZFS_HIDDEN, xoap->xoa_hidden);
 		XVA_SET_RTN(xvap, XAT_HIDDEN);
 	}
 	if (XVA_ISSET_REQ(xvap, XAT_SYSTEM)) {
-		ZFS_ATTR_SET(zp, ZFS_SYSTEM, xoap->xoa_system,
-		    zp->z_pflags, tx);
+		ZFS_ATTR_SET(zp, ZFS_SYSTEM, xoap->xoa_system);
 		XVA_SET_RTN(xvap, XAT_SYSTEM);
 	}
 	if (XVA_ISSET_REQ(xvap, XAT_ARCHIVE)) {
-		ZFS_ATTR_SET(zp, ZFS_ARCHIVE, xoap->xoa_archive,
-		    zp->z_pflags, tx);
+		ZFS_ATTR_SET(zp, ZFS_ARCHIVE, xoap->xoa_archive);
 		XVA_SET_RTN(xvap, XAT_ARCHIVE);
 	}
 	if (XVA_ISSET_REQ(xvap, XAT_IMMUTABLE)) {
-		ZFS_ATTR_SET(zp, ZFS_IMMUTABLE, xoap->xoa_immutable,
-		    zp->z_pflags, tx);
+		ZFS_ATTR_SET(zp, ZFS_IMMUTABLE, xoap->xoa_immutable);
 		XVA_SET_RTN(xvap, XAT_IMMUTABLE);
 	}
 	if (XVA_ISSET_REQ(xvap, XAT_NOUNLINK)) {
-		ZFS_ATTR_SET(zp, ZFS_NOUNLINK, xoap->xoa_nounlink,
-		    zp->z_pflags, tx);
+		ZFS_ATTR_SET(zp, ZFS_NOUNLINK, xoap->xoa_nounlink);
 		XVA_SET_RTN(xvap, XAT_NOUNLINK);
 	}
 	if (XVA_ISSET_REQ(xvap, XAT_APPENDONLY)) {
-		ZFS_ATTR_SET(zp, ZFS_APPENDONLY, xoap->xoa_appendonly,
-		    zp->z_pflags, tx);
+		ZFS_ATTR_SET(zp, ZFS_APPENDONLY, xoap->xoa_appendonly);
 		XVA_SET_RTN(xvap, XAT_APPENDONLY);
 	}
 	if (XVA_ISSET_REQ(xvap, XAT_NODUMP)) {
-		ZFS_ATTR_SET(zp, ZFS_NODUMP, xoap->xoa_nodump,
-		    zp->z_pflags, tx);
+		ZFS_ATTR_SET(zp, ZFS_NODUMP, xoap->xoa_nodump);
 		XVA_SET_RTN(xvap, XAT_NODUMP);
 	}
 	if (XVA_ISSET_REQ(xvap, XAT_OPAQUE)) {
-		ZFS_ATTR_SET(zp, ZFS_OPAQUE, xoap->xoa_opaque,
-		    zp->z_pflags, tx);
+		ZFS_ATTR_SET(zp, ZFS_OPAQUE, xoap->xoa_opaque);
 		XVA_SET_RTN(xvap, XAT_OPAQUE);
 	}
 	if (XVA_ISSET_REQ(xvap, XAT_AV_QUARANTINED)) {
 		ZFS_ATTR_SET(zp, ZFS_AV_QUARANTINED,
-		    xoap->xoa_av_quarantined, zp->z_pflags, tx);
+		    xoap->xoa_av_quarantined);
 		XVA_SET_RTN(xvap, XAT_AV_QUARANTINED);
 	}
 	if (XVA_ISSET_REQ(xvap, XAT_AV_MODIFIED)) {
-		ZFS_ATTR_SET(zp, ZFS_AV_MODIFIED, xoap->xoa_av_modified,
-		    zp->z_pflags, tx);
+		ZFS_ATTR_SET(zp, ZFS_AV_MODIFIED, xoap->xoa_av_modified);
 		XVA_SET_RTN(xvap, XAT_AV_MODIFIED);
 	}
 	if (XVA_ISSET_REQ(xvap, XAT_AV_SCANSTAMP)) {
-		zfs_sa_set_scanstamp(zp, xvap, tx);
+		(void) memcpy(zp->z_phys + 1, xoap->xoa_av_scanstamp,
+		    sizeof (xoap->xoa_av_scanstamp));
+		zp->z_phys->zp_flags |= ZFS_BONUS_SCANSTAMP;
 		XVA_SET_RTN(xvap, XAT_AV_SCANSTAMP);
 	}
-	if (XVA_ISSET_REQ(xvap, XAT_REPARSE)) {
-		ZFS_ATTR_SET(zp, ZFS_REPARSE, xoap->xoa_reparse,
-		    zp->z_pflags, tx);
-		XVA_SET_RTN(xvap, XAT_REPARSE);
-	}
-	if (XVA_ISSET_REQ(xvap, XAT_OFFLINE)) {
-		ZFS_ATTR_SET(zp, ZFS_OFFLINE, xoap->xoa_offline,
-		    zp->z_pflags, tx);
-		XVA_SET_RTN(xvap, XAT_OFFLINE);
-	}
-	if (XVA_ISSET_REQ(xvap, XAT_SPARSE)) {
-		ZFS_ATTR_SET(zp, ZFS_SPARSE, xoap->xoa_sparse,
-		    zp->z_pflags, tx);
-		XVA_SET_RTN(xvap, XAT_SPARSE);
-	}
 }
-
-#ifdef __NetBSD__
-
-int
-zfs_zget(zfsvfs_t *zfsvfs, uint64_t obj_num, znode_t **zpp)
-{
-	int error;
-	vnode_t *vp;
-
-	error = vcache_get(zfsvfs->z_vfs, &obj_num, sizeof(obj_num), &vp);
-	if (error == 0)
-		*zpp = VTOZ(vp);
-
-	return error;
-}
-
-/*
- * Get a known cached znode, to be used from zil_commit()->zfs_get_data()
- * to resolve log entries.  Doesn't take a reference, will never fail and
- * depends on zfs_vnops.c::zfs_netbsd_reclaim() running a zil_commit()
- * before the znode gets freed.
- */
-int
-zfs_zget_cleaner(zfsvfs_t *zfsvfs, uint64_t obj_num, znode_t **zpp)
-{
-	dmu_buf_t *db;
-	sa_handle_t *hdl;
-	dmu_object_info_t doi;
-	znode_t *zp;
-
-	ZFS_OBJ_HOLD_ENTER(zfsvfs, obj_num);
-
-	VERIFY(0 == sa_buf_hold(zfsvfs->z_os, obj_num, NULL, &db));
-
-	dmu_object_info_from_db(db, &doi);
-	ASSERT(doi.doi_bonus_type == DMU_OT_SA ||
-	    (doi.doi_bonus_type == DMU_OT_ZNODE &&
-	    doi.doi_bonus_size >= sizeof (znode_phys_t)));
-
-	hdl = dmu_buf_get_user(db);
-	ASSERT3P(hdl, !=, NULL);
-
-	zp = sa_get_userdata(hdl);
-	ASSERT3U(zp->z_id, ==, obj_num);
-
-	sa_buf_rele(db, NULL);
-
-	ZFS_OBJ_HOLD_EXIT(zfsvfs, obj_num);
-
-	*zpp = zp;
-	return (0);
-}
-
-#else /* __NetBSD__ */
 
 int
 zfs_zget(zfsvfs_t *zfsvfs, uint64_t obj_num, znode_t **zpp)
@@ -1336,131 +922,58 @@ zfs_zget(zfsvfs_t *zfsvfs, uint64_t obj_num, znode_t **zpp)
 	dmu_object_info_t doi;
 	dmu_buf_t	*db;
 	znode_t		*zp;
-	vnode_t		*vp;
-	sa_handle_t	*hdl;
-	struct thread	*td;
-	int locked;
 	int err;
 
-	td = curthread;
-	getnewvnode_reserve(1);
-again:
 	*zpp = NULL;
+
 	ZFS_OBJ_HOLD_ENTER(zfsvfs, obj_num);
 
-	err = sa_buf_hold(zfsvfs->z_os, obj_num, NULL, &db);
+	err = dmu_bonus_hold(zfsvfs->z_os, obj_num, NULL, &db);
 	if (err) {
 		ZFS_OBJ_HOLD_EXIT(zfsvfs, obj_num);
-		getnewvnode_drop_reserve();
 		return (err);
 	}
 
 	dmu_object_info_from_db(db, &doi);
-	if (doi.doi_bonus_type != DMU_OT_SA &&
-	    (doi.doi_bonus_type != DMU_OT_ZNODE ||
-	    (doi.doi_bonus_type == DMU_OT_ZNODE &&
-	    doi.doi_bonus_size < sizeof (znode_phys_t)))) {
-		sa_buf_rele(db, NULL);
+	if (doi.doi_bonus_type != DMU_OT_ZNODE ||
+	    doi.doi_bonus_size < sizeof (znode_phys_t)) {
+		dmu_buf_rele(db, NULL);
 		ZFS_OBJ_HOLD_EXIT(zfsvfs, obj_num);
-#ifdef __FreeBSD__
-		getnewvnode_drop_reserve();
-#endif
-		return (SET_ERROR(EINVAL));
+		return (EINVAL);
 	}
 
-	hdl = dmu_buf_get_user(db);
-	if (hdl != NULL) {
-		zp  = sa_get_userdata(hdl);
+	zp = dmu_buf_get_user(db);
+	if (zp != NULL) {
+		mutex_enter(&zp->z_lock);
 
 		/*
-		 * Since "SA" does immediate eviction we
-		 * should never find a sa handle that doesn't
-		 * know about the znode.
+		 * Since we do immediate eviction of the z_dbuf, we
+		 * should never find a dbuf with a znode that doesn't
+		 * know about the dbuf.
 		 */
-		ASSERT3P(zp, !=, NULL);
+		ASSERT3P(zp->z_dbuf, ==, db);
 		ASSERT3U(zp->z_id, ==, obj_num);
-		*zpp = zp;
-		vp = ZTOV(zp);
-
-		/* Don't let the vnode disappear after ZFS_OBJ_HOLD_EXIT. */
-		VN_HOLD(vp);
-
-		sa_buf_rele(db, NULL);
-		ZFS_OBJ_HOLD_EXIT(zfsvfs, obj_num);
-
-		locked = VOP_ISLOCKED(vp);
-		VI_LOCK(vp);
-		if ((vp->v_iflag & VI_DOOMED) != 0 &&
-		    locked != LK_EXCLUSIVE) {
-			/*
-			 * The vnode is doomed and this thread doesn't
-			 * hold the exclusive lock on it, so the vnode
-			 * must be being reclaimed by another thread.
-			 * Otherwise the doomed vnode is being reclaimed
-			 * by this thread and zfs_zget is called from
-			 * ZIL internals.
-			 */
-			VI_UNLOCK(vp);
-
-			/*
-			 * XXX vrele() locks the vnode when the last reference
-			 * is dropped.  Although in this case the vnode is
-			 * doomed / dead and so no inactivation is required,
-			 * the vnode lock is still acquired.  That could result
-			 * in a LOR with z_teardown_lock if another thread holds
-			 * the vnode's lock and tries to take z_teardown_lock.
-			 * But that is only possible if the other thread peforms
-			 * a ZFS vnode operation on the vnode.  That either
-			 * should not happen if the vnode is dead or the thread
-			 * should also have a refrence to the vnode and thus
-			 * our reference is not last.
-			 */
-			VN_RELE(vp);
-			goto again;
+		if (zp->z_unlinked) {
+			err = ENOENT;
+		} else {
+			VN_HOLD(ZTOV(zp));
+			*zpp = zp;
+			err = 0;
 		}
-		VI_UNLOCK(vp);
-		getnewvnode_drop_reserve();
-		return (0);
+		dmu_buf_rele(db, NULL);
+		mutex_exit(&zp->z_lock);
+		ZFS_OBJ_HOLD_EXIT(zfsvfs, obj_num);
+		return (err);
 	}
 
 	/*
 	 * Not found create new znode/vnode
-	 * but only if file exists.
-	 *
-	 * There is a small window where zfs_vget() could
-	 * find this object while a file create is still in
-	 * progress.  This is checked for in zfs_znode_alloc()
-	 *
-	 * if zfs_znode_alloc() fails it will drop the hold on the
-	 * bonus buffer.
 	 */
-	zp = zfs_znode_alloc(zfsvfs, db, doi.doi_data_block_size,
-	    doi.doi_bonus_type, NULL);
-	if (zp == NULL) {
-		err = SET_ERROR(ENOENT);
-	} else {
-		*zpp = zp;
-	}
-	if (err == 0) {
-		vnode_t *vp = ZTOV(zp);
-
-		err = insmntque(vp, zfsvfs->z_vfs);
-		if (err == 0) {
-			vp->v_hash = obj_num;
-			VOP_UNLOCK(vp, 0);
-		} else {
-			zp->z_vnode = NULL;
-			zfs_znode_dmu_fini(zp);
-			zfs_znode_free(zp);
-			*zpp = NULL;
-		}
-	}
+	zp = zfs_znode_alloc(zfsvfs, db, doi.doi_data_block_size);
 	ZFS_OBJ_HOLD_EXIT(zfsvfs, obj_num);
-	getnewvnode_drop_reserve();
-	return (err);
+	*zpp = zp;
+	return (0);
 }
-
-#endif /* __NetBSD__ */
 
 int
 zfs_rezget(znode_t *zp)
@@ -1468,110 +981,35 @@ zfs_rezget(znode_t *zp)
 	zfsvfs_t *zfsvfs = zp->z_zfsvfs;
 	dmu_object_info_t doi;
 	dmu_buf_t *db;
-	vnode_t *vp;
 	uint64_t obj_num = zp->z_id;
-	uint64_t mode, size;
-	sa_bulk_attr_t bulk[8];
 	int err;
-	int count = 0;
-	uint64_t gen;
 
 	ZFS_OBJ_HOLD_ENTER(zfsvfs, obj_num);
 
-	mutex_enter(&zp->z_acl_lock);
-	if (zp->z_acl_cached) {
-		zfs_acl_free(zp->z_acl_cached);
-		zp->z_acl_cached = NULL;
-	}
-
-	mutex_exit(&zp->z_acl_lock);
-	ASSERT(zp->z_sa_hdl == NULL);
-	err = sa_buf_hold(zfsvfs->z_os, obj_num, NULL, &db);
+	err = dmu_bonus_hold(zfsvfs->z_os, obj_num, NULL, &db);
 	if (err) {
 		ZFS_OBJ_HOLD_EXIT(zfsvfs, obj_num);
 		return (err);
 	}
 
 	dmu_object_info_from_db(db, &doi);
-	if (doi.doi_bonus_type != DMU_OT_SA &&
-	    (doi.doi_bonus_type != DMU_OT_ZNODE ||
-	    (doi.doi_bonus_type == DMU_OT_ZNODE &&
-	    doi.doi_bonus_size < sizeof (znode_phys_t)))) {
-		sa_buf_rele(db, NULL);
+	if (doi.doi_bonus_type != DMU_OT_ZNODE ||
+	    doi.doi_bonus_size < sizeof (znode_phys_t)) {
+		dmu_buf_rele(db, NULL);
 		ZFS_OBJ_HOLD_EXIT(zfsvfs, obj_num);
-		return (SET_ERROR(EINVAL));
+		return (EINVAL);
 	}
 
-	zfs_znode_sa_init(zfsvfs, zp, db, doi.doi_bonus_type, NULL);
-	size = zp->z_size;
-
-	/* reload cached values */
-	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_GEN(zfsvfs), NULL,
-	    &gen, sizeof (gen));
-	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_SIZE(zfsvfs), NULL,
-	    &zp->z_size, sizeof (zp->z_size));
-	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_LINKS(zfsvfs), NULL,
-	    &zp->z_links, sizeof (zp->z_links));
-	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_FLAGS(zfsvfs), NULL,
-	    &zp->z_pflags, sizeof (zp->z_pflags));
-	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_ATIME(zfsvfs), NULL,
-	    &zp->z_atime, sizeof (zp->z_atime));
-	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_UID(zfsvfs), NULL,
-	    &zp->z_uid, sizeof (zp->z_uid));
-	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_GID(zfsvfs), NULL,
-	    &zp->z_gid, sizeof (zp->z_gid));
-	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_MODE(zfsvfs), NULL,
-	    &mode, sizeof (mode));
-
-	if (sa_bulk_lookup(zp->z_sa_hdl, bulk, count)) {
-		zfs_znode_dmu_fini(zp);
-		ZFS_OBJ_HOLD_EXIT(zfsvfs, obj_num);
-		return (SET_ERROR(EIO));
-	}
-
-	zp->z_mode = mode;
-
-	if (gen != zp->z_gen) {
-		zfs_znode_dmu_fini(zp);
-		ZFS_OBJ_HOLD_EXIT(zfsvfs, obj_num);
-		return (SET_ERROR(EIO));
-	}
-
-	/*
-	 * It is highly improbable but still quite possible that two
-	 * objects in different datasets are created with the same
-	 * object numbers and in transaction groups with the same
-	 * numbers.  znodes corresponding to those objects would
-	 * have the same z_id and z_gen, but their other attributes
-	 * may be different.
-	 * zfs recv -F may replace one of such objects with the other.
-	 * As a result file properties recorded in the replaced
-	 * object's vnode may no longer match the received object's
-	 * properties.  At present the only cached property is the
-	 * files type recorded in v_type.
-	 * So, handle this case by leaving the old vnode and znode
-	 * disassociated from the actual object.  A new vnode and a
-	 * znode will be created if the object is accessed
-	 * (e.g. via a look-up).  The old vnode and znode will be
-	 * recycled when the last vnode reference is dropped.
-	 */
-	vp = ZTOV(zp);
-	if (vp->v_type != IFTOVT((mode_t)zp->z_mode)) {
-		zfs_znode_dmu_fini(zp);
+	if (((znode_phys_t *)db->db_data)->zp_gen != zp->z_gen) {
+		dmu_buf_rele(db, NULL);
 		ZFS_OBJ_HOLD_EXIT(zfsvfs, obj_num);
 		return (EIO);
 	}
 
-	zp->z_unlinked = (zp->z_links == 0);
+	zfs_znode_dmu_init(zfsvfs, zp, db);
+	zp->z_unlinked = (zp->z_phys->zp_links == 0);
 	zp->z_blksz = doi.doi_data_block_size;
-#ifdef __NetBSD__
-	rw_enter(vp->v_uobj.vmobjlock, RW_WRITER);
-	(void)VOP_PUTPAGES(vp, 0, 0, PGO_ALLPAGES|PGO_FREE|PGO_SYNCIO);
-#else
-	vn_pages_remove(vp, 0, 0);
-#endif
-	if (zp->z_size != size)
-		vnode_pager_setsize(vp, zp->z_size);
+
 	ZFS_OBJ_HOLD_EXIT(zfsvfs, obj_num);
 
 	return (0);
@@ -1583,13 +1021,11 @@ zfs_znode_delete(znode_t *zp, dmu_tx_t *tx)
 	zfsvfs_t *zfsvfs = zp->z_zfsvfs;
 	objset_t *os = zfsvfs->z_os;
 	uint64_t obj = zp->z_id;
-	uint64_t acl_obj = zfs_external_acl(zp);
+	uint64_t acl_obj = zp->z_phys->zp_acl.z_acl_extern_obj;
 
 	ZFS_OBJ_HOLD_ENTER(zfsvfs, obj);
-	if (acl_obj) {
-		VERIFY(!zp->z_is_sa);
+	if (acl_obj)
 		VERIFY(0 == dmu_object_free(os, acl_obj, tx));
-	}
 	VERIFY(0 == dmu_object_free(os, obj, tx));
 	zfs_znode_dmu_fini(zp);
 	ZFS_OBJ_HOLD_EXIT(zfsvfs, obj);
@@ -1599,26 +1035,50 @@ zfs_znode_delete(znode_t *zp, dmu_tx_t *tx)
 void
 zfs_zinactive(znode_t *zp)
 {
+	vnode_t	*vp = ZTOV(zp);
 	zfsvfs_t *zfsvfs = zp->z_zfsvfs;
 	uint64_t z_id = zp->z_id;
 
-	ASSERT(zp->z_sa_hdl);
+	ASSERT(zp->z_dbuf && zp->z_phys);
 
 	/*
 	 * Don't allow a zfs_zget() while were trying to release this znode
 	 */
 	ZFS_OBJ_HOLD_ENTER(zfsvfs, z_id);
 
+	mutex_enter(&zp->z_lock);
+	mutex_enter(&vp->v_lock);
+	vp->v_count--;
+	if (vp->v_count > 0 || vn_has_cached_data(vp)) {
+		/*
+		 * If the hold count is greater than zero, somebody has
+		 * obtained a new reference on this znode while we were
+		 * processing it here, so we are done.  If we still have
+		 * mapped pages then we are also done, since we don't
+		 * want to inactivate the znode until the pages get pushed.
+		 *
+		 * XXX - if vn_has_cached_data(vp) is true, but count == 0,
+		 * this seems like it would leave the znode hanging with
+		 * no chance to go inactive...
+		 */
+		mutex_exit(&vp->v_lock);
+		mutex_exit(&zp->z_lock);
+		ZFS_OBJ_HOLD_EXIT(zfsvfs, z_id);
+		return;
+	}
+	mutex_exit(&vp->v_lock);
+
 	/*
 	 * If this was the last reference to a file with no links,
 	 * remove the file from the file system.
 	 */
 	if (zp->z_unlinked) {
+		mutex_exit(&zp->z_lock);
 		ZFS_OBJ_HOLD_EXIT(zfsvfs, z_id);
 		zfs_rmnode(zp);
 		return;
 	}
-
+	mutex_exit(&zp->z_lock);
 	zfs_znode_dmu_fini(zp);
 	ZFS_OBJ_HOLD_EXIT(zfsvfs, z_id);
 	zfs_znode_free(zp);
@@ -1629,70 +1089,71 @@ zfs_znode_free(znode_t *zp)
 {
 	zfsvfs_t *zfsvfs = zp->z_zfsvfs;
 
-#ifdef __NetBSD__
-	struct vnode *vp = ZTOV(zp);
+	vn_invalid(ZTOV(zp));
 
-	genfs_node_destroy(vp);
+	ASSERT(ZTOV(zp)->v_count == 0);
 
-	/*
-	 * Interlock with zfs_sync().
-	 */
-	mutex_enter(vp->v_interlock);
-	vp->v_data = NULL;
-	mutex_exit(vp->v_interlock);
-#endif
-
-	ASSERT(zp->z_sa_hdl == NULL);
-	zp->z_vnode = NULL;
 	mutex_enter(&zfsvfs->z_znodes_lock);
 	POINTER_INVALIDATE(&zp->z_zfsvfs);
 	list_remove(&zfsvfs->z_all_znodes, zp);
 	mutex_exit(&zfsvfs->z_znodes_lock);
 
-	if (zp->z_acl_cached) {
-		zfs_acl_free(zp->z_acl_cached);
-		zp->z_acl_cached = NULL;
-	}
-
 	kmem_cache_free(znode_cache, zp);
 
-#ifdef illumos
 	VFS_RELE(zfsvfs->z_vfs);
-#endif
 }
 
 void
-zfs_tstamp_update_setup(znode_t *zp, uint_t flag, uint64_t mtime[2],
-    uint64_t ctime[2], boolean_t have_tx)
+zfs_time_stamper_locked(znode_t *zp, uint_t flag, dmu_tx_t *tx)
 {
 	timestruc_t	now;
 
-	vfs_timestamp(&now);
+	ASSERT(MUTEX_HELD(&zp->z_lock));
 
-	if (have_tx) {	/* will sa_bulk_update happen really soon? */
+	gethrestime(&now);
+
+	if (tx) {
+		dmu_buf_will_dirty(zp->z_dbuf, tx);
 		zp->z_atime_dirty = 0;
 		zp->z_seq++;
 	} else {
 		zp->z_atime_dirty = 1;
 	}
 
-	if (flag & AT_ATIME) {
-		ZFS_TIME_ENCODE(&now, zp->z_atime);
-	}
+	if (flag & AT_ATIME)
+		ZFS_TIME_ENCODE(&now, zp->z_phys->zp_atime);
 
 	if (flag & AT_MTIME) {
-		ZFS_TIME_ENCODE(&now, mtime);
-		if (zp->z_zfsvfs->z_use_fuids) {
-			zp->z_pflags |= (ZFS_ARCHIVE |
-			    ZFS_AV_MODIFIED);
-		}
+		ZFS_TIME_ENCODE(&now, zp->z_phys->zp_mtime);
+		if (zp->z_zfsvfs->z_use_fuids)
+			zp->z_phys->zp_flags |= (ZFS_ARCHIVE | ZFS_AV_MODIFIED);
 	}
 
 	if (flag & AT_CTIME) {
-		ZFS_TIME_ENCODE(&now, ctime);
+		ZFS_TIME_ENCODE(&now, zp->z_phys->zp_ctime);
 		if (zp->z_zfsvfs->z_use_fuids)
-			zp->z_pflags |= ZFS_ARCHIVE;
+			zp->z_phys->zp_flags |= ZFS_ARCHIVE;
 	}
+}
+
+/*
+ * Update the requested znode timestamps with the current time.
+ * If we are in a transaction, then go ahead and mark the znode
+ * dirty in the transaction so the timestamps will go to disk.
+ * Otherwise, we will get pushed next time the znode is updated
+ * in a transaction, or when this znode eventually goes inactive.
+ *
+ * Why is this OK?
+ *  1 - Only the ACCESS time is ever updated outside of a transaction.
+ *  2 - Multiple consecutive updates will be collapsed into a single
+ *	znode update by the transaction grouping semantics of the DMU.
+ */
+void
+zfs_time_stamper(znode_t *zp, uint_t flag, dmu_tx_t *tx)
+{
+	mutex_enter(&zp->z_lock);
+	zfs_time_stamper_locked(zp, flag, tx);
+	mutex_exit(&zp->z_lock);
 }
 
 /*
@@ -1717,21 +1178,19 @@ zfs_grow_blocksize(znode_t *zp, uint64_t size, dmu_tx_t *tx)
 	 * we will not grow.  If there is more than one block in a file,
 	 * the blocksize cannot change.
 	 */
-	if (zp->z_blksz && zp->z_size > zp->z_blksz)
+	if (zp->z_blksz && zp->z_phys->zp_size > zp->z_blksz)
 		return;
 
 	error = dmu_object_set_blocksize(zp->z_zfsvfs->z_os, zp->z_id,
 	    size, 0, tx);
-
 	if (error == ENOTSUP)
 		return;
-	ASSERT0(error);
+	ASSERT3U(error, ==, 0);
 
 	/* What blocksize did we actually get? */
-	dmu_object_size_from_db(sa_get_db(zp->z_sa_hdl), &zp->z_blksz, &dummy);
+	dmu_object_size_from_db(zp->z_dbuf, &zp->z_blksz, &dummy);
 }
 
-#ifdef illumos
 /*
  * This is a dummy interface used when pvn_vplist_dirty() should *not*
  * be calling back into the fs for a putpage().  E.g.: when truncating
@@ -1745,7 +1204,6 @@ zfs_no_putpage(vnode_t *vp, page_t *pp, u_offset_t *offp, size_t *lenp,
 	ASSERT(0);
 	return (0);
 }
-#endif
 
 /*
  * Increase the file length
@@ -1753,7 +1211,8 @@ zfs_no_putpage(vnode_t *vp, page_t *pp, u_offset_t *offp, size_t *lenp,
  *	IN:	zp	- znode of file to free data in.
  *		end	- new end-of-file
  *
- *	RETURN:	0 on success, error code on failure
+ * 	RETURN:	0 if success
+ *		error code if failure
  */
 static int
 zfs_extend(znode_t *zp, uint64_t end)
@@ -1772,26 +1231,21 @@ zfs_extend(znode_t *zp, uint64_t end)
 	/*
 	 * Nothing to do if file already at desired length.
 	 */
-	if (end <= zp->z_size) {
+	if (end <= zp->z_phys->zp_size) {
 		zfs_range_unlock(rl);
 		return (0);
 	}
+top:
 	tx = dmu_tx_create(zfsvfs->z_os);
-	dmu_tx_hold_sa(tx, zp->z_sa_hdl, B_FALSE);
-	zfs_sa_upgrade_txholds(tx, zp);
+	dmu_tx_hold_bonus(tx, zp->z_id);
 	if (end > zp->z_blksz &&
 	    (!ISP2(zp->z_blksz) || zp->z_blksz < zfsvfs->z_max_blksz)) {
 		/*
 		 * We are growing the file past the current block size.
 		 */
 		if (zp->z_blksz > zp->z_zfsvfs->z_max_blksz) {
-			/*
-			 * File's blocksize is already larger than the
-			 * "recordsize" property.  Only let it grow to
-			 * the next power of 2.
-			 */
 			ASSERT(!ISP2(zp->z_blksz));
-			newblksz = MIN(end, 1 << highbit64(zp->z_blksz));
+			newblksz = MIN(end, SPA_MAXBLOCKSIZE);
 		} else {
 			newblksz = MIN(end, zp->z_zfsvfs->z_max_blksz);
 		}
@@ -1800,22 +1254,23 @@ zfs_extend(znode_t *zp, uint64_t end)
 		newblksz = 0;
 	}
 
-	error = dmu_tx_assign(tx, TXG_WAIT);
+	error = dmu_tx_assign(tx, zfsvfs->z_assign);
 	if (error) {
+		if (error == ERESTART && zfsvfs->z_assign == TXG_NOWAIT) {
+			dmu_tx_wait(tx);
+			dmu_tx_abort(tx);
+			goto top;
+		}
 		dmu_tx_abort(tx);
 		zfs_range_unlock(rl);
 		return (error);
 	}
+	dmu_buf_will_dirty(zp->z_dbuf, tx);
 
 	if (newblksz)
 		zfs_grow_blocksize(zp, newblksz, tx);
 
-	zp->z_size = end;
-
-	VERIFY(0 == sa_update(zp->z_sa_hdl, SA_ZPL_SIZE(zp->z_zfsvfs),
-	    &zp->z_size, sizeof (zp->z_size), tx));
-
-	vnode_pager_setsize(ZTOV(zp), end);
+	zp->z_phys->zp_size = end;
 
 	zfs_range_unlock(rl);
 
@@ -1831,7 +1286,8 @@ zfs_extend(znode_t *zp, uint64_t end)
  *		off	- start of section to free.
  *		len	- length of section to free.
  *
- *	RETURN:	0 on success, error code on failure
+ * 	RETURN:	0 if success
+ *		error code if failure
  */
 static int
 zfs_free_range(znode_t *zp, uint64_t off, uint64_t len)
@@ -1848,24 +1304,15 @@ zfs_free_range(znode_t *zp, uint64_t off, uint64_t len)
 	/*
 	 * Nothing to do if file already at desired length.
 	 */
-	if (off >= zp->z_size) {
+	if (off >= zp->z_phys->zp_size) {
 		zfs_range_unlock(rl);
 		return (0);
 	}
 
-	if (off + len > zp->z_size)
-		len = zp->z_size - off;
+	if (off + len > zp->z_phys->zp_size)
+		len = zp->z_phys->zp_size - off;
 
 	error = dmu_free_long_range(zfsvfs->z_os, zp->z_id, off, len);
-
-	if (error == 0) {
-		/*
-		 * In FreeBSD we cannot free block in the middle of a file,
-		 * but only at the end of a file, so this code path should
-		 * never happen.
-		 */
-		vnode_pager_setsize(ZTOV(zp), off);
-	}
 
 	zfs_range_unlock(rl);
 
@@ -1878,7 +1325,8 @@ zfs_free_range(znode_t *zp, uint64_t off, uint64_t len)
  *	IN:	zp	- znode of file to free data in.
  *		end	- new end-of-file.
  *
- *	RETURN:	0 on success, error code on failure
+ * 	RETURN:	0 if success
+ *		error code if failure
  */
 static int
 zfs_trunc(znode_t *zp, uint64_t end)
@@ -1888,8 +1336,6 @@ zfs_trunc(znode_t *zp, uint64_t end)
 	dmu_tx_t *tx;
 	rl_t *rl;
 	int error;
-	sa_bulk_attr_t bulk[2];
-	int count = 0;
 
 	/*
 	 * We will change zp_size, lock the whole file.
@@ -1899,7 +1345,7 @@ zfs_trunc(znode_t *zp, uint64_t end)
 	/*
 	 * Nothing to do if file already at desired length.
 	 */
-	if (end >= zp->z_size) {
+	if (end >= zp->z_phys->zp_size) {
 		zfs_range_unlock(rl);
 		return (0);
 	}
@@ -1909,29 +1355,27 @@ zfs_trunc(znode_t *zp, uint64_t end)
 		zfs_range_unlock(rl);
 		return (error);
 	}
+top:
 	tx = dmu_tx_create(zfsvfs->z_os);
-	dmu_tx_hold_sa(tx, zp->z_sa_hdl, B_FALSE);
-	zfs_sa_upgrade_txholds(tx, zp);
-	dmu_tx_mark_netfree(tx);
-	error = dmu_tx_assign(tx, TXG_WAIT);
+	dmu_tx_hold_bonus(tx, zp->z_id);
+	error = dmu_tx_assign(tx, zfsvfs->z_assign);
 	if (error) {
+		if (error == ERESTART && zfsvfs->z_assign == TXG_NOWAIT) {
+			dmu_tx_wait(tx);
+			dmu_tx_abort(tx);
+			goto top;
+		}
 		dmu_tx_abort(tx);
 		zfs_range_unlock(rl);
 		return (error);
 	}
+	dmu_buf_will_dirty(zp->z_dbuf, tx);
 
-	zp->z_size = end;
-	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_SIZE(zfsvfs),
-	    NULL, &zp->z_size, sizeof (zp->z_size));
-
-	if (end == 0) {
-		zp->z_pflags &= ~ZFS_SPARSE;
-		SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_FLAGS(zfsvfs),
-		    NULL, &zp->z_pflags, 8);
-	}
-	VERIFY(sa_bulk_update(zp->z_sa_hdl, bulk, count, tx) == 0);
+	zp->z_phys->zp_size = end;
 
 	dmu_tx_commit(tx);
+
+	zfs_range_unlock(rl);
 
 	/*
 	 * Clear any mapped pages in the truncated region.  This has to
@@ -1939,9 +1383,25 @@ zfs_trunc(znode_t *zp, uint64_t end)
 	 * a deadlock with someone trying to push a page that we are
 	 * about to invalidate.
 	 */
-	vnode_pager_setsize(vp, end);
+	rw_enter(&zp->z_map_lock, RW_WRITER);
+	if (vn_has_cached_data(vp)) {
+		page_t *pp;
+		uint64_t start = end & PAGEMASK;
+		int poff = end & PAGEOFFSET;
 
-	zfs_range_unlock(rl);
+		if (poff != 0 && (pp = page_lookup(vp, start, SE_SHARED))) {
+			/*
+			 * We need to zero a partial page.
+			 */
+			pagezero(pp, poff, PAGESIZE - poff);
+			start += PAGESIZE;
+			page_unlock(pp);
+		}
+		error = pvn_vplist_dirty(vp, start, zfs_no_putpage,
+		    B_INVAL | B_TRUNC, NULL);
+		ASSERT(error == 0);
+	}
+	rw_exit(&zp->z_map_lock);
 
 	return (0);
 }
@@ -1955,7 +1415,8 @@ zfs_trunc(znode_t *zp, uint64_t end)
  *		flag	- current file open mode flags.
  *		log	- TRUE if this action should be logged
  *
- *	RETURN:	0 on success, error code on failure
+ * 	RETURN:	0 if success
+ *		error code if failure
  */
 int
 zfs_freesp(znode_t *zp, uint64_t off, uint64_t len, int flag, boolean_t log)
@@ -1964,17 +1425,9 @@ zfs_freesp(znode_t *zp, uint64_t off, uint64_t len, int flag, boolean_t log)
 	dmu_tx_t *tx;
 	zfsvfs_t *zfsvfs = zp->z_zfsvfs;
 	zilog_t *zilog = zfsvfs->z_log;
-	uint64_t mode;
-	uint64_t mtime[2], ctime[2];
-	sa_bulk_attr_t bulk[3];
-	int count = 0;
 	int error;
 
-	if ((error = sa_lookup(zp->z_sa_hdl, SA_ZPL_MODE(zfsvfs), &mode,
-	    sizeof (mode))) != 0)
-		return (error);
-
-	if (off > zp->z_size) {
+	if (off > zp->z_phys->zp_size) {
 		error =  zfs_extend(zp, off+len);
 		if (error == 0 && log)
 			goto log;
@@ -1985,9 +1438,8 @@ zfs_freesp(znode_t *zp, uint64_t off, uint64_t len, int flag, boolean_t log)
 	/*
 	 * Check for any locks in the region to be freed.
 	 */
-
-	if (MANDLOCK(vp, (mode_t)mode)) {
-		uint64_t length = (len ? len : zp->z_size - off);
+	if (MANDLOCK(vp, (mode_t)zp->z_phys->zp_mode)) {
+		uint64_t length = (len ? len : zp->z_phys->zp_size - off);
 		if (error = chklock(vp, FWRITE, off, length, flag, NULL))
 			return (error);
 	}
@@ -1996,29 +1448,26 @@ zfs_freesp(znode_t *zp, uint64_t off, uint64_t len, int flag, boolean_t log)
 		error = zfs_trunc(zp, off);
 	} else {
 		if ((error = zfs_free_range(zp, off, len)) == 0 &&
-		    off + len > zp->z_size)
+		    off + len > zp->z_phys->zp_size)
 			error = zfs_extend(zp, off+len);
 	}
 	if (error || !log)
 		return (error);
 log:
 	tx = dmu_tx_create(zfsvfs->z_os);
-	dmu_tx_hold_sa(tx, zp->z_sa_hdl, B_FALSE);
-	zfs_sa_upgrade_txholds(tx, zp);
-	error = dmu_tx_assign(tx, TXG_WAIT);
+	dmu_tx_hold_bonus(tx, zp->z_id);
+	error = dmu_tx_assign(tx, zfsvfs->z_assign);
 	if (error) {
+		if (error == ERESTART && zfsvfs->z_assign == TXG_NOWAIT) {
+			dmu_tx_wait(tx);
+			dmu_tx_abort(tx);
+			goto log;
+		}
 		dmu_tx_abort(tx);
 		return (error);
 	}
 
-	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_MTIME(zfsvfs), NULL, mtime, 16);
-	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_CTIME(zfsvfs), NULL, ctime, 16);
-	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_FLAGS(zfsvfs),
-	    NULL, &zp->z_pflags, 8);
-	zfs_tstamp_update_setup(zp, CONTENT_MODIFIED, mtime, ctime, B_TRUE);
-	error = sa_bulk_update(zp->z_sa_hdl, bulk, count, tx);
-	ASSERT(error == 0);
-
+	zfs_time_stamper(zp, CONTENT_MODIFIED, tx);
 	zfs_log_truncate(zilog, tx, TX_TRUNCATE, zp, off, len);
 
 	dmu_tx_commit(tx);
@@ -2028,17 +1477,16 @@ log:
 void
 zfs_create_fs(objset_t *os, cred_t *cr, nvlist_t *zplprops, dmu_tx_t *tx)
 {
-	uint64_t	moid, obj, sa_obj, version;
+	zfsvfs_t	zfsvfs;
+	uint64_t	moid, doid, version;
 	uint64_t	sense = ZFS_CASE_SENSITIVE;
 	uint64_t	norm = 0;
 	nvpair_t	*elem;
 	int		error;
-	int		i;
 	znode_t		*rootzp = NULL;
-	zfsvfs_t	*zfsvfs;
+	vnode_t		*vp;
 	vattr_t		vattr;
 	znode_t		*zp;
-	zfs_acl_ids_t	acl_ids;
 
 	/*
 	 * First attempt to create master node.
@@ -2055,7 +1503,12 @@ zfs_create_fs(objset_t *os, cred_t *cr, nvlist_t *zplprops, dmu_tx_t *tx)
 	/*
 	 * Set starting attributes.
 	 */
-	version = zfs_zpl_version_map(spa_version(dmu_objset_spa(os)));
+	if (spa_version(dmu_objset_spa(os)) >= SPA_VERSION_FUID)
+		version = ZPL_VERSION;
+	else
+		version = ZPL_VERSION_FUID - 1;
+	error = zap_update(os, moid, ZPL_VERSION_STR,
+	    8, 1, &version, tx);
 	elem = NULL;
 	while ((elem = nvlist_next_nvpair(zplprops, elem)) != NULL) {
 		/* For the moment we expect all zpl props to be uint64_ts */
@@ -2066,8 +1519,9 @@ zfs_create_fs(objset_t *os, cred_t *cr, nvlist_t *zplprops, dmu_tx_t *tx)
 		VERIFY(nvpair_value_uint64(elem, &val) == 0);
 		name = nvpair_name(elem);
 		if (strcmp(name, zfs_prop_to_name(ZFS_PROP_VERSION)) == 0) {
-			if (val < version)
-				version = val;
+			version = val;
+			error = zap_update(os, moid, ZPL_VERSION_STR,
+			    8, 1, &version, tx);
 		} else {
 			error = zap_update(os, moid, name, 8, 1, &val, tx);
 		}
@@ -2078,243 +1532,106 @@ zfs_create_fs(objset_t *os, cred_t *cr, nvlist_t *zplprops, dmu_tx_t *tx)
 			sense = val;
 	}
 	ASSERT(version != 0);
-	error = zap_update(os, moid, ZPL_VERSION_STR, 8, 1, &version, tx);
 
-	/*
-	 * Create zap object used for SA attribute registration
-	 */
-
-	if (version >= ZPL_VERSION_SA) {
-		sa_obj = zap_create(os, DMU_OT_SA_MASTER_NODE,
-		    DMU_OT_NONE, 0, tx);
-		error = zap_add(os, moid, ZFS_SA_ATTRS, 8, 1, &sa_obj, tx);
-		ASSERT(error == 0);
-	} else {
-		sa_obj = 0;
-	}
 	/*
 	 * Create a delete queue.
 	 */
-	obj = zap_create(os, DMU_OT_UNLINKED_SET, DMU_OT_NONE, 0, tx);
+	doid = zap_create(os, DMU_OT_UNLINKED_SET, DMU_OT_NONE, 0, tx);
 
-	error = zap_add(os, moid, ZFS_UNLINKED_SET, 8, 1, &obj, tx);
+	error = zap_add(os, moid, ZFS_UNLINKED_SET, 8, 1, &doid, tx);
 	ASSERT(error == 0);
 
 	/*
 	 * Create root znode.  Create minimal znode/vnode/zfsvfs
 	 * to allow zfs_mknode to work.
 	 */
-	VATTR_NULL(&vattr);
 	vattr.va_mask = AT_MODE|AT_UID|AT_GID|AT_TYPE;
 	vattr.va_type = VDIR;
 	vattr.va_mode = S_IFDIR|0755;
 	vattr.va_uid = crgetuid(cr);
 	vattr.va_gid = crgetgid(cr);
 
-	zfsvfs = kmem_zalloc(sizeof (zfsvfs_t), KM_SLEEP);
-
 	rootzp = kmem_cache_alloc(znode_cache, KM_SLEEP);
-	ASSERT(!POINTER_IS_VALID(rootzp->z_zfsvfs));
-	rootzp->z_moved = 0;
 	rootzp->z_unlinked = 0;
 	rootzp->z_atime_dirty = 0;
-	rootzp->z_is_sa = USE_SA(version, os);
 
-	zfsvfs->z_os = os;
-	zfsvfs->z_parent = zfsvfs;
-	zfsvfs->z_version = version;
-	zfsvfs->z_use_fuids = USE_FUIDS(version, os);
-	zfsvfs->z_use_sa = USE_SA(version, os);
-	zfsvfs->z_norm = norm;
+	vp = ZTOV(rootzp);
+	vn_reinit(vp);
+	vp->v_type = VDIR;
 
-	error = sa_setup(os, sa_obj, zfs_attr_table, ZPL_END,
-	    &zfsvfs->z_attr_table);
+	bzero(&zfsvfs, sizeof (zfsvfs_t));
 
-	ASSERT(error == 0);
-
+	zfsvfs.z_os = os;
+	zfsvfs.z_assign = TXG_NOWAIT;
+	zfsvfs.z_parent = &zfsvfs;
+	zfsvfs.z_version = version;
+	zfsvfs.z_use_fuids = USE_FUIDS(version, os);
+	zfsvfs.z_norm = norm;
 	/*
 	 * Fold case on file systems that are always or sometimes case
 	 * insensitive.
 	 */
 	if (sense == ZFS_CASE_INSENSITIVE || sense == ZFS_CASE_MIXED)
-		zfsvfs->z_norm |= U8_TEXTPREP_TOUPPER;
+		zfsvfs.z_norm |= U8_TEXTPREP_TOUPPER;
 
-	mutex_init(&zfsvfs->z_znodes_lock, NULL, MUTEX_DEFAULT, NULL);
-	list_create(&zfsvfs->z_all_znodes, sizeof (znode_t),
+	mutex_init(&zfsvfs.z_znodes_lock, NULL, MUTEX_DEFAULT, NULL);
+	list_create(&zfsvfs.z_all_znodes, sizeof (znode_t),
 	    offsetof(znode_t, z_link_node));
 
-	for (i = 0; i != ZFS_OBJ_MTX_SZ; i++)
-		mutex_init(&zfsvfs->z_hold_mtx[i], NULL, MUTEX_DEFAULT, NULL);
-
-	rootzp->z_zfsvfs = zfsvfs;
-	VERIFY(0 == zfs_acl_ids_create(rootzp, IS_ROOT_NODE, &vattr,
-	    cr, NULL, &acl_ids));
-	zfs_mknode(rootzp, &vattr, tx, cr, IS_ROOT_NODE, &zp, &acl_ids);
+	ASSERT(!POINTER_IS_VALID(rootzp->z_zfsvfs));
+	rootzp->z_zfsvfs = &zfsvfs;
+	zfs_mknode(rootzp, &vattr, tx, cr, IS_ROOT_NODE, &zp, 0, NULL, NULL);
 	ASSERT3P(zp, ==, rootzp);
+	ASSERT(!vn_in_dnlc(ZTOV(rootzp))); /* not valid to move */
 	error = zap_add(os, moid, ZFS_ROOT_OBJ, 8, 1, &rootzp->z_id, tx);
 	ASSERT(error == 0);
-	zfs_acl_ids_free(&acl_ids);
 	POINTER_INVALIDATE(&rootzp->z_zfsvfs);
 
-	sa_handle_destroy(rootzp->z_sa_hdl);
+	ZTOV(rootzp)->v_count = 0;
+	dmu_buf_rele(rootzp->z_dbuf, NULL);
+	rootzp->z_dbuf = NULL;
 	kmem_cache_free(znode_cache, rootzp);
-
-	/*
-	 * Create shares directory
-	 */
-
-	error = zfs_create_share_dir(zfsvfs, tx);
-
-	ASSERT(error == 0);
-
-	for (i = 0; i != ZFS_OBJ_MTX_SZ; i++)
-		mutex_destroy(&zfsvfs->z_hold_mtx[i]);
-	mutex_destroy(&zfsvfs->z_znodes_lock);
-	kmem_free(zfsvfs, sizeof (zfsvfs_t));
 }
+
 #endif /* _KERNEL */
-
-static int
-zfs_sa_setup(objset_t *osp, sa_attr_type_t **sa_table)
-{
-	uint64_t sa_obj = 0;
-	int error;
-
-	error = zap_lookup(osp, MASTER_NODE_OBJ, ZFS_SA_ATTRS, 8, 1, &sa_obj);
-	if (error != 0 && error != ENOENT)
-		return (error);
-
-	error = sa_setup(osp, sa_obj, zfs_attr_table, ZPL_END, sa_table);
-	return (error);
-}
-
-static int
-zfs_grab_sa_handle(objset_t *osp, uint64_t obj, sa_handle_t **hdlp,
-    dmu_buf_t **db, void *tag)
-{
-	dmu_object_info_t doi;
-	int error;
-
-	if ((error = sa_buf_hold(osp, obj, tag, db)) != 0)
-		return (error);
-
-	dmu_object_info_from_db(*db, &doi);
-	if ((doi.doi_bonus_type != DMU_OT_SA &&
-	    doi.doi_bonus_type != DMU_OT_ZNODE) ||
-	    doi.doi_bonus_type == DMU_OT_ZNODE &&
-	    doi.doi_bonus_size < sizeof (znode_phys_t)) {
-		sa_buf_rele(*db, tag);
-		return (SET_ERROR(ENOTSUP));
-	}
-
-	error = sa_handle_get(osp, obj, NULL, SA_HDL_PRIVATE, hdlp);
-	if (error != 0) {
-		sa_buf_rele(*db, tag);
-		return (error);
-	}
-
-	return (0);
-}
-
-void
-zfs_release_sa_handle(sa_handle_t *hdl, dmu_buf_t *db, void *tag)
-{
-	sa_handle_destroy(hdl);
-	sa_buf_rele(db, tag);
-}
-
 /*
  * Given an object number, return its parent object number and whether
  * or not the object is an extended attribute directory.
  */
 static int
-zfs_obj_to_pobj(objset_t *osp, sa_handle_t *hdl, sa_attr_type_t *sa_table,
-    uint64_t *pobjp, int *is_xattrdir)
+zfs_obj_to_pobj(objset_t *osp, uint64_t obj, uint64_t *pobjp, int *is_xattrdir)
 {
-	uint64_t parent;
-	uint64_t pflags;
-	uint64_t mode;
-	uint64_t parent_mode;
-	sa_bulk_attr_t bulk[3];
-	sa_handle_t *sa_hdl;
-	dmu_buf_t *sa_db;
-	int count = 0;
+	dmu_buf_t *db;
+	dmu_object_info_t doi;
+	znode_phys_t *zp;
 	int error;
 
-	SA_ADD_BULK_ATTR(bulk, count, sa_table[ZPL_PARENT], NULL,
-	    &parent, sizeof (parent));
-	SA_ADD_BULK_ATTR(bulk, count, sa_table[ZPL_FLAGS], NULL,
-	    &pflags, sizeof (pflags));
-	SA_ADD_BULK_ATTR(bulk, count, sa_table[ZPL_MODE], NULL,
-	    &mode, sizeof (mode));
-
-	if ((error = sa_bulk_lookup(hdl, bulk, count)) != 0)
+	if ((error = dmu_bonus_hold(osp, obj, FTAG, &db)) != 0)
 		return (error);
 
-	/*
-	 * When a link is removed its parent pointer is not changed and will
-	 * be invalid.  There are two cases where a link is removed but the
-	 * file stays around, when it goes to the delete queue and when there
-	 * are additional links.
-	 */
-	error = zfs_grab_sa_handle(osp, parent, &sa_hdl, &sa_db, FTAG);
-	if (error != 0)
-		return (error);
+	dmu_object_info_from_db(db, &doi);
+	if (doi.doi_bonus_type != DMU_OT_ZNODE ||
+	    doi.doi_bonus_size < sizeof (znode_phys_t)) {
+		dmu_buf_rele(db, FTAG);
+		return (EINVAL);
+	}
 
-	error = sa_lookup(sa_hdl, ZPL_MODE, &parent_mode, sizeof (parent_mode));
-	zfs_release_sa_handle(sa_hdl, sa_db, FTAG);
-	if (error != 0)
-		return (error);
-
-	*is_xattrdir = ((pflags & ZFS_XATTR) != 0) && S_ISDIR(mode);
-
-	/*
-	 * Extended attributes can be applied to files, directories, etc.
-	 * Otherwise the parent must be a directory.
-	 */
-	if (!*is_xattrdir && !S_ISDIR(parent_mode))
-		return (SET_ERROR(EINVAL));
-
-	*pobjp = parent;
+	zp = db->db_data;
+	*pobjp = zp->zp_parent;
+	*is_xattrdir = ((zp->zp_flags & ZFS_XATTR) != 0) &&
+	    S_ISDIR(zp->zp_mode);
+	dmu_buf_rele(db, FTAG);
 
 	return (0);
 }
 
-/*
- * Given an object number, return some zpl level statistics
- */
-static int
-zfs_obj_to_stats_impl(sa_handle_t *hdl, sa_attr_type_t *sa_table,
-    zfs_stat_t *sb)
+int
+zfs_obj_to_path(objset_t *osp, uint64_t obj, char *buf, int len)
 {
-	sa_bulk_attr_t bulk[4];
-	int count = 0;
-
-	SA_ADD_BULK_ATTR(bulk, count, sa_table[ZPL_MODE], NULL,
-	    &sb->zs_mode, sizeof (sb->zs_mode));
-	SA_ADD_BULK_ATTR(bulk, count, sa_table[ZPL_GEN], NULL,
-	    &sb->zs_gen, sizeof (sb->zs_gen));
-	SA_ADD_BULK_ATTR(bulk, count, sa_table[ZPL_LINKS], NULL,
-	    &sb->zs_links, sizeof (sb->zs_links));
-	SA_ADD_BULK_ATTR(bulk, count, sa_table[ZPL_CTIME], NULL,
-	    &sb->zs_ctime, sizeof (sb->zs_ctime));
-
-	return (sa_bulk_lookup(hdl, bulk, count));
-}
-
-static int
-zfs_obj_to_path_impl(objset_t *osp, uint64_t obj, sa_handle_t *hdl,
-    sa_attr_type_t *sa_table, char *buf, int len)
-{
-	sa_handle_t *sa_hdl;
-	sa_handle_t *prevhdl = NULL;
-	dmu_buf_t *prevdb = NULL;
-	dmu_buf_t *sa_db = NULL;
 	char *path = buf + len - 1;
 	int error;
 
 	*path = '\0';
-	sa_hdl = hdl;
 
 	for (;;) {
 		uint64_t pobj;
@@ -2322,10 +1639,7 @@ zfs_obj_to_path_impl(objset_t *osp, uint64_t obj, sa_handle_t *hdl,
 		size_t complen;
 		int is_xattrdir;
 
-		if (prevdb)
-			zfs_release_sa_handle(prevhdl, prevdb, FTAG);
-
-		if ((error = zfs_obj_to_pobj(osp, sa_hdl, sa_table, &pobj,
+		if ((error = zfs_obj_to_pobj(osp, obj, &pobj,
 		    &is_xattrdir)) != 0)
 			break;
 
@@ -2350,112 +1664,9 @@ zfs_obj_to_path_impl(objset_t *osp, uint64_t obj, sa_handle_t *hdl,
 		ASSERT(path >= buf);
 		bcopy(component, path, complen);
 		obj = pobj;
-
-		if (sa_hdl != hdl) {
-			prevhdl = sa_hdl;
-			prevdb = sa_db;
-		}
-		error = zfs_grab_sa_handle(osp, obj, &sa_hdl, &sa_db, FTAG);
-		if (error != 0) {
-			sa_hdl = prevhdl;
-			sa_db = prevdb;
-			break;
-		}
-	}
-
-	if (sa_hdl != NULL && sa_hdl != hdl) {
-		ASSERT(sa_db != NULL);
-		zfs_release_sa_handle(sa_hdl, sa_db, FTAG);
 	}
 
 	if (error == 0)
 		(void) memmove(buf, path, buf + len - path);
-
 	return (error);
 }
-
-int
-zfs_obj_to_path(objset_t *osp, uint64_t obj, char *buf, int len)
-{
-	sa_attr_type_t *sa_table;
-	sa_handle_t *hdl;
-	dmu_buf_t *db;
-	int error;
-
-	error = zfs_sa_setup(osp, &sa_table);
-	if (error != 0)
-		return (error);
-
-	error = zfs_grab_sa_handle(osp, obj, &hdl, &db, FTAG);
-	if (error != 0)
-		return (error);
-
-	error = zfs_obj_to_path_impl(osp, obj, hdl, sa_table, buf, len);
-
-	zfs_release_sa_handle(hdl, db, FTAG);
-	return (error);
-}
-
-int
-zfs_obj_to_stats(objset_t *osp, uint64_t obj, zfs_stat_t *sb,
-    char *buf, int len)
-{
-	char *path = buf + len - 1;
-	sa_attr_type_t *sa_table;
-	sa_handle_t *hdl;
-	dmu_buf_t *db;
-	int error;
-
-	*path = '\0';
-
-	error = zfs_sa_setup(osp, &sa_table);
-	if (error != 0)
-		return (error);
-
-	error = zfs_grab_sa_handle(osp, obj, &hdl, &db, FTAG);
-	if (error != 0)
-		return (error);
-
-	error = zfs_obj_to_stats_impl(hdl, sa_table, sb);
-	if (error != 0) {
-		zfs_release_sa_handle(hdl, db, FTAG);
-		return (error);
-	}
-
-	error = zfs_obj_to_path_impl(osp, obj, hdl, sa_table, buf, len);
-
-	zfs_release_sa_handle(hdl, db, FTAG);
-	return (error);
-}
-
-#ifdef _KERNEL
-int
-zfs_znode_parent_and_name(znode_t *zp, znode_t **dzpp, char *buf)
-{
-	zfsvfs_t *zfsvfs = zp->z_zfsvfs;
-	uint64_t parent;
-	int is_xattrdir;
-	int err;
-
-	/* Extended attributes should not be visible as regular files. */
-	if ((zp->z_pflags & ZFS_XATTR) != 0)
-		return (SET_ERROR(EINVAL));
-
-	err = zfs_obj_to_pobj(zfsvfs->z_os, zp->z_sa_hdl, zfsvfs->z_attr_table,
-	    &parent, &is_xattrdir);
-	if (err != 0)
-		return (err);
-	ASSERT0(is_xattrdir);
-
-	/* No name as this is a root object. */
-	if (parent == zp->z_id)
-		return (SET_ERROR(EINVAL));
-
-	err = zap_value_search(zfsvfs->z_os, parent, zp->z_id,
-	    ZFS_DIRENT_OBJ(-1ULL), buf);
-	if (err != 0)
-		return (err);
-	err = zfs_zget(zfsvfs, parent, dzpp);
-	return (err);
-}
-#endif /* _KERNEL */

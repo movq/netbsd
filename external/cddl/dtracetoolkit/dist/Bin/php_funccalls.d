@@ -3,7 +3,7 @@
  * php_funccalls.d - measure PHP function calls using DTrace.
  *                   Written for the PHP DTrace provider.
  *
- * $Id: php_funccalls.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: php_funccalls.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * This traces PHP activity from all running programs on the system
  * which support the PHP DTrace provider.

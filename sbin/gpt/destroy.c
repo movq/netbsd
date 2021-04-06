@@ -24,17 +24,8 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
-#endif
-
 #include <sys/cdefs.h>
-#ifdef __FBSDID
 __FBSDID("$FreeBSD: src/sbin/gpt/destroy.c,v 1.6 2005/08/31 01:47:19 marcel Exp $");
-#endif
-#ifdef __RCSID
-__RCSID("$NetBSD: destroy.c,v 1.13 2019/10/16 19:03:53 jnemeth Exp $");
-#endif
 
 #include <sys/types.h>
 
@@ -47,90 +38,76 @@ __RCSID("$NetBSD: destroy.c,v 1.13 2019/10/16 19:03:53 jnemeth Exp $");
 
 #include "map.h"
 #include "gpt.h"
-#include "gpt_private.h"
 
-static int cmd_destroy(gpt_t, int, char *[]);
+static int recoverable;
 
-static const char *destroyhelp[] = {
-	"[-r]",
-};
-
-struct gpt_cmd c_destroy = {
-	"destroy",
-	cmd_destroy,
-	destroyhelp, __arraycount(destroyhelp),
-	GPT_SYNC,
-};
-
-#define usage() gpt_usage(NULL, &c_destroy)
-
-
-static int
-destroy(gpt_t gpt, int force, int recoverable)
+static void
+usage_destroy(void)
 {
-	map_t pri_hdr, sec_hdr, pmbr;
 
-	pri_hdr = map_find(gpt, MAP_TYPE_PRI_GPT_HDR);
-	sec_hdr = map_find(gpt, MAP_TYPE_SEC_GPT_HDR);
-	pmbr = map_find(gpt, MAP_TYPE_PMBR);
+	fprintf(stderr,
+	    "usage: %s [-r] device ...\n", getprogname());
+	exit(1);
+}
+
+static void
+destroy(int fd)
+{
+	map_t *pri_hdr, *sec_hdr;
+
+	pri_hdr = map_find(MAP_TYPE_PRI_GPT_HDR);
+	sec_hdr = map_find(MAP_TYPE_SEC_GPT_HDR);
 
 	if (pri_hdr == NULL && sec_hdr == NULL) {
-		gpt_warnx(gpt, "Device doesn't contain a GPT");
-		return -1;
+		warnx("%s: error: device doesn't contain a GPT", device_name);
+		return;
 	}
 
 	if (recoverable && sec_hdr == NULL) {
-		gpt_warnx(gpt, "Recoverability not possible");
-		return -1;
+		warnx("%s: error: recoverability not possible", device_name);
+		return;
 	}
 
 	if (pri_hdr != NULL) {
-		memset(pri_hdr->map_data, 0, gpt->secsz);
-		if (gpt_write(gpt, pri_hdr) == -1) {
-			gpt_warnx(gpt, "Error writing primary header");
-			return -1;
-		}
+		bzero(pri_hdr->map_data, secsz);
+		gpt_write(fd, pri_hdr);
 	}
 
 	if (!recoverable && sec_hdr != NULL) {
-		memset(sec_hdr->map_data, 0, gpt->secsz);
-		if (gpt_write(gpt, sec_hdr) == -1) {
-			gpt_warnx(gpt, "Error writing backup header");
-			return -1;
-		}
+		bzero(sec_hdr->map_data, secsz);
+		gpt_write(fd, sec_hdr);
 	}
-
-	if (!recoverable && pmbr != NULL) {
-		memset(pmbr->map_data, 0, gpt->secsz);
-		if (gpt_write(gpt, pmbr) == -1) {
-			gpt_warnx(gpt, "Error deleting PMBR");
-			return -1;
-		}
-	}
-
-	return 0;
 }
 
-static int
-cmd_destroy(gpt_t gpt, int argc, char *argv[])
+int
+cmd_destroy(int argc, char *argv[])
 {
-	int ch;
-	int recoverable = 0;
+	int ch, fd;
 
-	while ((ch = getopt(argc, argv, "fr")) != -1) {
+	while ((ch = getopt(argc, argv, "r")) != -1) {
 		switch(ch) {
-		case 'f':
-			break;
 		case 'r':
 			recoverable = 1;
 			break;
 		default:
-			return usage();
+			usage_destroy();
 		}
 	}
 
-	if (argc != optind)
-		return usage();
+	if (argc == optind)
+		usage_destroy();
 
-	return destroy(gpt, 0, recoverable);
+	while (optind < argc) {
+		fd = gpt_open(argv[optind++]);
+		if (fd == -1) {
+			warn("unable to open device '%s'", device_name);
+			continue;
+		}
+
+		destroy(fd);
+
+		gpt_close(fd);
+	}
+
+	return (0);
 }

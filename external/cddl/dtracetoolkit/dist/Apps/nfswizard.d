@@ -8,7 +8,7 @@
  * to explain various details of NFS client activity, including response
  * times and file access.
  *
- * $Id: nfswizard.d,v 1.1.1.1 2015/09/30 22:01:06 christos Exp $
+ * $Id: nfswizard.d,v 1.1 2015/09/30 22:01:06 christos Exp $
  *
  * USAGE:     nfswizard.d    # hit Ctrl-C to end sample
  *

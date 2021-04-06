@@ -1,5 +1,3 @@
-/*	$NetBSD: elf.c,v 1.3 2016/02/20 02:43:42 christos Exp $	*/
-
 /*-
  * Copyright (c) 2006,2008,2011 Joseph Koshy
  * All rights reserved.
@@ -30,24 +28,13 @@
 
 #include "_libelf.h"
 
-__RCSID("$NetBSD: elf.c,v 1.3 2016/02/20 02:43:42 christos Exp $");
 ELFTC_VCSID("Id: elf.c 2225 2011-11-26 18:55:54Z jkoshy ");
 
 struct _libelf_globals _libelf = {
+	.libelf_arch		= LIBELF_ARCH,
+	.libelf_byteorder	= LIBELF_BYTEORDER,
+	.libelf_class		= LIBELF_CLASS,
 	.libelf_error		= 0,
 	.libelf_fillchar	= 0,
 	.libelf_version		= EV_NONE
 };
-
-unsigned int
-_libelf_host_byteorder(void)
-{
-	static union {
-		uint32_t	val;
-		uint8_t		bytes[4];
-	} byte_order_check = {
-		.val	=	0xdeadbeef,
-	};
-
-	return (byte_order_check.bytes[0] == 0xef ? ELFDATA2LSB : ELFDATA2MSB);
-}

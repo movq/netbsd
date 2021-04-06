@@ -3,7 +3,7 @@
  * j_syscolors.d - trace Java method flow plus syscalls, in color.
  *                 Written for the Java hotspot DTrace provider.
  *
- * $Id: j_syscolors.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: j_syscolors.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * This traces Java methods if the hotspot provider exists (1.6.0) and
  * the flag "+ExtendedDTraceProbes" is used. eg,

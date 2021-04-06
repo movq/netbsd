@@ -12,7 +12,7 @@
  * This idea came from the script /usr/demo/dtrace/pri.d, which
  * produces similar output for priority changes, not samples.
  *
- * $Id: priclass.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: priclass.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * USAGE:       priclass.d      # hit Ctrl-C to end sampling
  *

@@ -1,10 +1,6 @@
-/* $NetBSD: fpu.h,v 1.7 2017/10/17 00:26:35 maya Exp $ */
-
 /*-
- * Copyright (c) 2001 Ross Harvey
+ * Copyright (c) 1998 Doug Rabson
  * All rights reserved.
- *
- * This software was written for NetBSD.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -14,107 +10,115 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
- * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
- * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ *	Id: fpu.h,v 1.2 1998/12/23 11:50:51 dfr Exp
  */
 
-#ifndef _ALPHA_FPU_H_
-#define _ALPHA_FPU_H_
-
-#define	_FP_C_DEF(n) (1UL << (n))
+#ifndef _MACHINE_FPU_H_
+#define _MACHINE_FPU_H_
 
 /*
- * Most of these next definitions were moved from <ieeefp.h>. Apparently the
- * names happen to match those exported by Compaq and Linux from their fpu.h
- * files.
+ * Floating point control register bits.
+ *
+ * From Alpha AXP Architecture Reference Manual, Instruction
+ * Descriptions (I) PP 4-69. 
  */
 
-#define	FPCR_SUM	_FP_C_DEF(63)
-#define	FPCR_INED	_FP_C_DEF(62)
-#define	FPCR_UNFD	_FP_C_DEF(61)
-#define	FPCR_UNDZ	_FP_C_DEF(60)
-#define	FPCR_DYN(rm)	((unsigned long)(rm) << 58)
-#define	FPCR_IOV	_FP_C_DEF(57)
-#define	FPCR_INE	_FP_C_DEF(56)
-#define	FPCR_UNF	_FP_C_DEF(55)
-#define	FPCR_OVF	_FP_C_DEF(54)
-#define	FPCR_DZE	_FP_C_DEF(53)
-#define	FPCR_INV	_FP_C_DEF(52)
-#define	FPCR_OVFD	_FP_C_DEF(51)
-#define	FPCR_DZED	_FP_C_DEF(50)
-#define	FPCR_INVD	_FP_C_DEF(49)
-#define	FPCR_DNZ	_FP_C_DEF(48)
-#define	FPCR_DNOD	_FP_C_DEF(47)
-
-#define	FPCR_MIRRORED (FPCR_INE | FPCR_UNF | FPCR_OVF | FPCR_DZE | FPCR_INV)
-#define FPCR_MIR_START 52
+#define FPCR_INVD	(1LL << 49)	/* Invalid Operation DIsable */
+#define FPCR_DZED	(1LL << 50)	/* Division by Zero Disable */
+#define FPCR_OVFD	(1LL << 51)	/* Overflow Disable */
+#define FPCR_INV	(1LL << 52)	/* Invalid Operation */
+#define FPCR_DZE	(1LL << 53)	/* Division by Zero */
+#define FPCR_OVF	(1LL << 54)	/* Overflow */
+#define FPCR_UNF	(1LL << 55)	/* Underflow */
+#define FPCR_INE	(1LL << 56)	/* Inexact Result */
+#define FPCR_IOV	(1LL << 57)	/* Integer Overflow */
+#define FPCR_DYN_CHOPPED (0LL << 58)	/* Chopped rounding mode */
+#define FPCR_DYN_MINUS	(1LL << 58)	/* Minus infinity */
+#define FPCR_DYN_NORMAL (2LL << 58)	/* Normal rounding */
+#define FPCR_DYN_PLUS	(3LL << 58)	/* Plus infinity */
+#define FPCR_DYN_MASK	(3LL << 58)	/* Rounding mode mask */
+#define FPCR_DYN_SHIFT	58
+#define FPCR_UNDZ	(1LL << 60)	/* Underflow to Zero */
+#define FPCR_UNFD	(1LL << 61)	/* Underflow Disable */
+#define FPCR_INED	(1LL << 62)	/* Inexact Disable */
+#define FPCR_SUM	(1LL << 63)	/* Summary Bit */
+#define FPCR_MASK	(~0LL << 49)
 
 /*
- * The AARM specifies the bit positions of the software word used for
- * user mode interface to the control and status of the kernel completion
- * routines. Although it largely just redefines the FPCR, it shuffles
- * the bit order. The names of the bits are defined in the AARM, and
- * the definition prefix can easily be determined from public domain
- * programs written to either the Compaq or Linux interfaces, which
- * appear to be identical.
+ * Exception summary bits.
+ *
+ * From Alpha AXP Architecture Reference Manual, DEC OSF/1 Exceptions
+ * and Interrupts (II-B) PP 5-5.
  */
 
-#define IEEE_STATUS_DNO _FP_C_DEF(22)
-#define IEEE_STATUS_INE _FP_C_DEF(21)
-#define IEEE_STATUS_UNF _FP_C_DEF(20)
-#define IEEE_STATUS_OVF _FP_C_DEF(19)
-#define IEEE_STATUS_DZE _FP_C_DEF(18)
-#define IEEE_STATUS_INV _FP_C_DEF(17)
+#define EXCSUM_SWC	(1LL << 0)	/* Software completion */
+#define EXCSUM_INV	(1LL << 1)	/* Invalid operation */
+#define EXCSUM_DZE	(1LL << 2)	/* Division by zero */
+#define EXCSUM_OVF	(1LL << 3)	/* Overflow */
+#define EXCSUM_UNF	(1LL << 4)	/* Underflow */
+#define EXCSUM_INE	(1LL << 5)	/* Inexact result */
+#define EXCSUM_IOV	(1LL << 6)	/* Integer overflow */
 
-#define	IEEE_TRAP_ENABLE_DNO _FP_C_DEF(6)
-#define	IEEE_TRAP_ENABLE_INE _FP_C_DEF(5)
-#define	IEEE_TRAP_ENABLE_UNF _FP_C_DEF(4)
-#define	IEEE_TRAP_ENABLE_OVF _FP_C_DEF(3)
-#define	IEEE_TRAP_ENABLE_DZE _FP_C_DEF(2)
-#define	IEEE_TRAP_ENABLE_INV _FP_C_DEF(1)
+/*
+ * Definitions for IEEE trap enables.  These are implemented in
+ * software and should be compatible with OSF/1 and Linux.
+ */
 
-#define	IEEE_INHERIT _FP_C_DEF(14)
-#define	IEEE_MAP_UMZ _FP_C_DEF(13)	/* Map underflowed outputs to zero */
-#define	IEEE_MAP_DMZ _FP_C_DEF(12)	/* Map denormal inputs to zero */
+/* read/write flags */
+#define IEEE_TRAP_ENABLE_INV	(1LL << 1) /* Invalid operation */
+#define IEEE_TRAP_ENABLE_DZE	(1LL << 2) /* Division by zero */
+#define IEEE_TRAP_ENABLE_OVF	(1LL << 3) /* Overflow */
+#define IEEE_TRAP_ENABLE_UNF	(1LL << 4) /* Underflow */
+#define IEEE_TRAP_ENABLE_INE	(1LL << 5) /* Inexact result */
+#define IEEE_TRAP_ENABLE_MASK	(IEEE_TRAP_ENABLE_INV		\
+				 | IEEE_TRAP_ENABLE_DZE		\
+				 | IEEE_TRAP_ENABLE_OVF		\
+				 | IEEE_TRAP_ENABLE_UNF		\
+				 | IEEE_TRAP_ENABLE_INE)
 
-#define FP_C_MIRRORED (IEEE_STATUS_INE | IEEE_STATUS_UNF | IEEE_STATUS_OVF\
-				| IEEE_STATUS_DZE | IEEE_STATUS_INV)
-#define	FP_C_MIR_START 17
+/* read only flags */
+#define IEEE_STATUS_INV		(1LL << 17) /* Invalid operation */
+#define IEEE_STATUS_DZE		(1LL << 18) /* Division by zero */
+#define IEEE_STATUS_OVF		(1LL << 19) /* Overflow */
+#define IEEE_STATUS_UNF		(1LL << 20) /* Underflow */
+#define IEEE_STATUS_INE		(1LL << 21) /* Inexact result */
+#define IEEE_STATUS_MASK	(IEEE_STATUS_INV		\
+				 | IEEE_STATUS_DZE		\
+				 | IEEE_STATUS_OVF		\
+				 | IEEE_STATUS_UNF		\
+				 | IEEE_STATUS_INE)
+#define IEEE_STATUS_TO_EXCSUM_SHIFT	16 /* convert to excsum */
+#define IEEE_STATUS_TO_FPCR_SHIFT	35 /* convert to fpcr */
 
-#ifdef _KERNEL
+#define IEEE_INHERIT		(1LL << 63) /* inherit on fork */
 
-#define	FLD_MASK(len) ((1UL << (len)) - 1)
-#define FLD_CLEAR(obj, origin, len)	\
-		((obj) & ~(FLD_MASK(len) << (origin)))
-#define	FLD_INSERT(obj, origin, len, value)	\
-		(FLD_CLEAR(obj, origin, len) | (value) << origin)
+/* read and write floating point control register */
+#define GET_FPCR(x) \
+	__asm__("trapb"); \
+	__asm__("mf_fpcr %0" : "=f" (x)); \
+	__asm__("trapb")
+#define SET_FPCR(x) \
+	__asm__("trapb"); \
+	__asm__("mt_fpcr %0" : : "f" (x)); \
+	__asm__("trapb")
 
-#define	FP_C_TO_NETBSD_MASK(fp_c) 	((fp_c) >> 1 & 0x3f)
-#define	FP_C_TO_NETBSD_FLAG(fp_c) 	((fp_c) >> 17 & 0x3f)
-#define NETBSD_MASK_TO_FP_C(m)		(((m) & 0x3f) << 1)
-#define NETBSD_FLAG_TO_FP_C(s)		(((s) & 0x3f) << 17)
-#define	CLEAR_FP_C_MASK(fp_c)		((fp_c) & ~(0x3f << 1))
-#define	CLEAR_FP_C_FLAG(fp_c)		((fp_c) & ~(0x3f << 17))
-#define	SET_FP_C_MASK(fp_c, m) (CLEAR_FP_C_MASK(fp_c) | NETBSD_MASK_TO_FP_C(m))
-#define	SET_FP_C_FLAG(fp_c, m) (CLEAR_FP_C_FLAG(fp_c) | NETBSD_FLAG_TO_FP_C(m))
+#ifdef KERNEL
+
+extern int fp_software_completion(u_int64_t regmask, struct proc *p);
 
 #endif
 
-#endif
+#endif /* ! _MACHINE_FPU_H_ */

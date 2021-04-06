@@ -30,10 +30,6 @@
  * fixups.
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-# include "nbtool_config.h"
-#endif
-
 #include <stdio.h>
 #include <strings.h>
 
@@ -41,7 +37,6 @@
 #include "ctftools.h"
 #include "hash.h"
 #include "memory.h"
-#include "traverse.h"
 
 /*
  * Due to 4432619, the 6.1 compiler will sometimes incorrectly generate pointer
@@ -57,17 +52,17 @@
 static void
 fix_ptrptr_to_struct(tdata_t *td)
 {
-	const char *strs[2] = { "as", "fdbuffer" };
-	const char *mems[2] = { "a_objectdir", "fd_shadow" };
-	const char *acts[2] = { "vnode", "page" };
-	const char *tgts[2] = { "vnode_t", "page_t" };
+	char *strs[2] = { "as", "fdbuffer" };
+	char *mems[2] = { "a_objectdir", "fd_shadow" };
+	char *acts[2] = { "vnode", "page" };
+	char *tgts[2] = { "vnode_t", "page_t" };
 	tdesc_t *str;
 	tdesc_t *act, *tgt;
 	tdesc_t *p1, *p2;
 	mlist_t *ml;
 	int i;
 
-	for (i = 0; i < (int) (sizeof (strs) / sizeof (strs[0])); i++) {
+	for (i = 0; i < sizeof (strs) / sizeof (strs[0]); i++) {
 		if (!(str = lookupname(strs[i])) || str->t_type != STRUCT)
 			continue;
 
@@ -111,8 +106,8 @@ fix_ptrptr_to_struct(tdata_t *td)
 static void
 fix_ptr_to_struct(tdata_t *td)
 {
-	const char *strs[2] = { "vmem", "id_space" };
-	const char *mems[2] = { NULL, "is_vmem" };
+	char *strs[2] = { "vmem", "id_space" };
+	char *mems[2] = { NULL, "is_vmem" };
 	tdesc_t *ptr = NULL;
 	tdesc_t *str, *vmt;
 	mlist_t *ml;
@@ -121,7 +116,7 @@ fix_ptr_to_struct(tdata_t *td)
 	if ((vmt = lookupname("vmem_t")) == NULL || vmt->t_type != TYPEDEF)
 		return;
 
-	for (i = 0; i < (int) (sizeof (strs) / sizeof (strs[0])); i++) {
+	for (i = 0; i < sizeof (strs) / sizeof (strs[0]); i++) {
 		if (!(str = lookupname(strs[i])) || str->t_type != STRUCT)
 			continue;
 
@@ -168,10 +163,8 @@ struct match {
 };
 
 static int
-matching_iidesc(void *arg1, void *arg2)
+matching_iidesc(iidesc_t *iidesc, struct match *match)
 {
-	iidesc_t *iidesc = arg1;
-	struct match *match = arg2;
 	if (!streq(iidesc->ii_name, match->m_name))
 		return (0);
 
@@ -183,10 +176,10 @@ matching_iidesc(void *arg1, void *arg2)
 }
 
 static tdesc_t *
-lookup_tdesc(tdata_t *td, char const *name)
+lookup_tdesc(tdata_t *td, const char *name)
 {
 	struct match match = { NULL, name };
-	iter_iidescs_by_name(td, name, matching_iidesc, &match);
+	iter_iidescs_by_name(td, name, (int (*)())matching_iidesc, &match);
 	return (match.m_ret);
 }
 
@@ -277,64 +270,8 @@ fix_small_cpu_struct(tdata_t *td, size_t ptrsize)
 	lml->ml_next = cpum;
 }
 
-#ifdef __NetBSD__
-
-/*
- * XXX: A crude hack to bring down the number of types for a
- * GENERIC kernel below 2**15-1 (from ~34000 to ~29800).
- *
- * Remove the type attributes "volatile", "const" and "restrict",
- * for DTRACE these attributes are of little value.
- */
-
-static int
-fix_kill_attr_cb(tdesc_t *tdp, tdesc_t **tdpp, void *private __unused)
-{
-
-	while (tdp->t_type == VOLATILE ||
-	    tdp->t_type == RESTRICT ||
-	    tdp->t_type == CONST)
-		tdp = tdp->t_tdesc;
-
-	*tdpp = tdp;
-
-	return 1;
-}
-
-static tdtrav_cb_f fix_kill_attr_tab[] = {
-	NULL,
-	NULL,			/* intrinsic */
-	NULL,			/* pointer */
-	NULL,			/* reference */
-	NULL,			/* array */
-	NULL,			/* function */
-	NULL,			/* struct */
-	NULL,			/* union */
-	NULL,			/* class */
-	NULL,			/* enum */
-	NULL		,	/* forward */
-	NULL,			/* typedef */
-	NULL,			/* typedef unres */
-	fix_kill_attr_cb,	/* volatile */
-	fix_kill_attr_cb,	/* const */
-	fix_kill_attr_cb,	/* restrict */
-};
-
-static void
-fix_kill_attr(tdata_t *td, size_t ptrsize)
-{
-
-	(void) iitraverse_hash(td->td_iihash, &td->td_curvgen,
-	    fix_kill_attr_tab, NULL, NULL, NULL);
-}
-
-#endif /* __NetBSD__ */
-
 void
 cvt_fixups(tdata_t *td, size_t ptrsize)
 {
 	fix_small_cpu_struct(td, ptrsize);
-#ifdef __NetBSD__
-	fix_kill_attr(td, ptrsize);
-#endif
 }

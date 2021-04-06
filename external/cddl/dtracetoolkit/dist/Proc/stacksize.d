@@ -3,7 +3,7 @@
  * stacksize.d - measure stack size for running threads.
  *               Written using DTrace (Solaris 10 3/05).
  *
- * $Id: stacksize.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: stacksize.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * USAGE:       stacksize.d              # hit Ctrl-C to end sample
  *

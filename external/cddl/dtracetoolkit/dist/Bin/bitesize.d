@@ -9,7 +9,7 @@
  * If applications must use the disks, we generally prefer they do so
  * with large I/O sizes.
  *
- * $Id: bitesize.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: bitesize.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE:	bitesize.d	# wait several seconds, then hit Ctrl-C
  *

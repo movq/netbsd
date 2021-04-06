@@ -19,9 +19,11 @@
  * CDDL HEADER END
  */
 /*
- * Copyright (c) 2006, 2010, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2013, 2014 by Delphix. All rights reserved.
+ * Copyright 2008 Sun Microsystems, Inc.  All rights reserved.
+ * Use is subject to license terms.
  */
+
+#pragma ident	"%Z%%M%	%I%	%E% SMI"
 
 /*
  * Routines to manage the on-disk persistent error log.
@@ -35,7 +37,7 @@
  * deleted from the log when the scrub completes.
  *
  * The log is stored using a ZAP object whose key is a string form of the
- * zbookmark_phys tuple (objset, object, level, blkid), and whose contents is an
+ * zbookmark tuple (objset, object, level, blkid), and whose contents is an
  * optional 'objset:object' human-readable string describing the data.  When an
  * error is first logged, this string will be empty, indicating that no name is
  * known.  This prevents us from having to issue a potentially large amount of
@@ -54,12 +56,43 @@
 #include <sys/zap.h>
 #include <sys/zio.h>
 
+/*
+ * This is a stripped-down version of strtoull, suitable only for converting
+ * lowercase hexidecimal numbers that don't overflow.
+ */
+#ifdef _KERNEL
+static uint64_t
+strtonum(char *str, char **nptr)
+{
+	uint64_t val = 0;
+	char c;
+	int digit;
+
+	while ((c = *str) != '\0') {
+		if (c >= '0' && c <= '9')
+			digit = c - '0';
+		else if (c >= 'a' && c <= 'f')
+			digit = 10 + c - 'a';
+		else
+			break;
+
+		val *= 16;
+		val += digit;
+
+		str++;
+	}
+
+	*nptr = str;
+
+	return (val);
+}
+#endif
 
 /*
  * Convert a bookmark to a string.
  */
 static void
-bookmark_to_name(zbookmark_phys_t *zb, char *buf, size_t len)
+bookmark_to_name(zbookmark_t *zb, char *buf, size_t len)
 {
 	(void) snprintf(buf, len, "%llx:%llx:%llx:%llx",
 	    (u_longlong_t)zb->zb_objset, (u_longlong_t)zb->zb_object,
@@ -71,7 +104,7 @@ bookmark_to_name(zbookmark_phys_t *zb, char *buf, size_t len)
  */
 #ifdef _KERNEL
 static void
-name_to_bookmark(char *buf, zbookmark_phys_t *zb)
+name_to_bookmark(char *buf, zbookmark_t *zb)
 {
 	zb->zb_objset = strtonum(buf, &buf);
 	ASSERT(*buf == ':');
@@ -92,7 +125,7 @@ name_to_bookmark(char *buf, zbookmark_phys_t *zb)
 void
 spa_log_error(spa_t *spa, zio_t *zio)
 {
-	zbookmark_phys_t *zb = &zio->io_logical->io_bookmark;
+	zbookmark_t *zb = &zio->io_logical->io_bookmark;
 	spa_error_entry_t search;
 	spa_error_entry_t *new;
 	avl_tree_t *tree;
@@ -102,7 +135,7 @@ spa_log_error(spa_t *spa, zio_t *zio)
 	 * If we are trying to import a pool, ignore any errors, as we won't be
 	 * writing to the pool any time soon.
 	 */
-	if (spa_load_state(spa) == SPA_LOAD_TRYIMPORT)
+	if (spa->spa_load_state == SPA_LOAD_TRYIMPORT)
 		return;
 
 	mutex_enter(&spa->spa_errlist_lock);
@@ -165,7 +198,7 @@ process_error_log(spa_t *spa, uint64_t obj, void *addr, size_t *count)
 {
 	zap_cursor_t zc;
 	zap_attribute_t za;
-	zbookmark_phys_t zb;
+	zbookmark_t zb;
 
 	if (obj == 0)
 		return (0);
@@ -176,17 +209,15 @@ process_error_log(spa_t *spa, uint64_t obj, void *addr, size_t *count)
 
 		if (*count == 0) {
 			zap_cursor_fini(&zc);
-			return (SET_ERROR(ENOMEM));
+			return (ENOMEM);
 		}
 
 		name_to_bookmark(za.za_name, &zb);
 
 		if (copyout(&zb, (char *)addr +
-		    (*count - 1) * sizeof (zbookmark_phys_t),
-		    sizeof (zbookmark_phys_t)) != 0) {
-			zap_cursor_fini(&zc);
-			return (SET_ERROR(EFAULT));
-		}
+		    (*count - 1) * sizeof (zbookmark_t),
+		    sizeof (zbookmark_t)) != 0)
+			return (EFAULT);
 
 		*count -= 1;
 	}
@@ -204,12 +235,12 @@ process_error_list(avl_tree_t *list, void *addr, size_t *count)
 	for (se = avl_first(list); se != NULL; se = AVL_NEXT(list, se)) {
 
 		if (*count == 0)
-			return (SET_ERROR(ENOMEM));
+			return (ENOMEM);
 
 		if (copyout(&se->se_bookmark, (char *)addr +
-		    (*count - 1) * sizeof (zbookmark_phys_t),
-		    sizeof (zbookmark_phys_t)) != 0)
-			return (SET_ERROR(EFAULT));
+		    (*count - 1) * sizeof (zbookmark_t),
+		    sizeof (zbookmark_t)) != 0)
+			return (EFAULT);
 
 		*count -= 1;
 	}

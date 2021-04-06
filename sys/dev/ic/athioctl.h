@@ -1,7 +1,5 @@
-/*	$NetBSD: athioctl.h,v 1.17 2017/10/28 06:27:32 riastradh Exp $	*/
-
 /*-
- * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
+ * Copyright (c) 2002, 2003 Sam Leffler, Errno Consulting
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,33 +33,23 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGES.
  *
- * $FreeBSD: src/sys/dev/ath/if_athioctl.h,v 1.10 2005/03/30 20:13:08 sam Exp $
+ * $FreeBSD: src/sys/dev/ath/if_athioctl.h,v 1.3 2003/09/05 22:22:49 sam Exp $
  */
 
 /*
- * Ioctl-related definitions for the Atheros Wireless LAN controller driver.
+ * Ioctl-related defintions for the Atheros Wireless LAN controller driver.
  */
 #ifndef _DEV_ATH_ATHIOCTL_H
 #define _DEV_ATH_ATHIOCTL_H
-
-#include <sys/types.h>
-#include <sys/ioccom.h>
-
-#include <net/if.h>
-
-#include <net80211/ieee80211_radiotap.h>
 
 struct ath_stats {
 	u_int32_t	ast_watchdog;	/* device reset by watchdog */
 	u_int32_t	ast_hardware;	/* fatal hardware error interrupts */
 	u_int32_t	ast_bmiss;	/* beacon miss interrupts */
-	u_int32_t	ast_bstuck;	/* beacon stuck interrupts */
 	u_int32_t	ast_rxorn;	/* rx overrun interrupts */
 	u_int32_t	ast_rxeol;	/* rx eol interrupts */
 	u_int32_t	ast_txurn;	/* tx underrun interrupts */
-	u_int32_t	ast_mib;	/* mib interrupts */
 	u_int32_t	ast_intrcoal;	/* interrupts coalesced */
-	u_int32_t	ast_tx_packets;	/* packet sent on the interface */
 	u_int32_t	ast_tx_mgmt;	/* management frames transmitted */
 	u_int32_t	ast_tx_discard;	/* frames discarded prior to assoc */
 	u_int32_t	ast_tx_qstop;	/* output stopped 'cuz no buffer */
@@ -82,27 +70,16 @@ struct ath_stats {
 	u_int32_t	ast_tx_rts;	/* tx frames with rts enabled */
 	u_int32_t	ast_tx_cts;	/* tx frames with cts enabled */
 	u_int32_t	ast_tx_shortpre;/* tx frames with short preamble */
-	u_int32_t	ast_tx_altrate;	/* tx frames with alternate rate */
-	u_int32_t	ast_tx_protect;	/* tx frames with protection */
-	u_int32_t	ast_tx_ctsburst;/* tx frames with cts and bursting */
-	u_int32_t	ast_tx_ctsext;	/* tx frames with cts extension */
 	u_int32_t	ast_rx_nombuf;	/* rx setup failed 'cuz no mbuf */
 	u_int32_t	ast_rx_busdma;	/* rx setup failed for dma resrcs */
 	u_int32_t	ast_rx_orn;	/* rx failed 'cuz of desc overrun */
 	u_int32_t	ast_rx_crcerr;	/* rx failed 'cuz of bad CRC */
 	u_int32_t	ast_rx_fifoerr;	/* rx failed 'cuz of FIFO overrun */
 	u_int32_t	ast_rx_badcrypt;/* rx failed 'cuz decryption */
-	u_int32_t	ast_rx_badmic;	/* rx failed 'cuz MIC failure */
 	u_int32_t	ast_rx_phyerr;	/* rx failed 'cuz of PHY err */
 	u_int32_t	ast_rx_phy[32];	/* rx PHY error per-code counts */
 	u_int32_t	ast_rx_tooshort;/* rx discarded 'cuz frame too short */
-	u_int32_t	ast_rx_toobig;	/* rx discarded 'cuz frame too large */
-	u_int32_t	ast_rx_packets;	/* packet recv on the interface */
-	u_int32_t	ast_rx_mgt;	/* management frames received */
 	u_int32_t	ast_rx_ctl;	/* rx discarded 'cuz ctl frame */
-	int8_t		ast_tx_rssi;	/* tx rssi of last ack */
-	int8_t		ast_rx_rssi;	/* rx rssi from histogram */
-	u_int32_t	ast_be_xmit;	/* beacons transmitted */
 	u_int32_t	ast_be_nombuf;	/* beacon setup failed 'cuz no mbuf */
 	u_int32_t	ast_per_cal;	/* periodic calibration calls */
 	u_int32_t	ast_per_calfail;/* periodic calibration failed */
@@ -110,74 +87,43 @@ struct ath_stats {
 	u_int32_t	ast_rate_calls;	/* rate control checks */
 	u_int32_t	ast_rate_raise;	/* rate control raised xmit rate */
 	u_int32_t	ast_rate_drop;	/* rate control dropped xmit rate */
-	u_int32_t	ast_ant_defswitch;/* rx/default antenna switches */
-	u_int32_t	ast_ant_txswitch;/* tx antenna switches */
-	u_int32_t	ast_ant_rx[8];	/* rx frames with antenna */
-	u_int32_t	ast_ant_tx[8];	/* tx frames with antenna */
-	u_int32_t	ast_bmiss_phantom;/* beacon miss interrupts */
-	u_int32_t	ast_pad[32];
 };
 
 #define	SIOCGATHSTATS	_IOWR('i', 137, struct ifreq)
-
-struct ath_diag {
-	char	ad_name[IFNAMSIZ];	/* if name, e.g. "ath0" */
-	u_int16_t ad_id;
-#define	ATH_DIAG_DYN	0x8000		/* allocate buffer in caller */
-#define	ATH_DIAG_IN	0x4000		/* copy in parameters */
-#define	ATH_DIAG_OUT	0x0000		/* copy out results (always) */
-#define	ATH_DIAG_ID	0x0fff
-	u_int16_t ad_in_size;		/* pack to fit, yech */
-	void *	ad_in_data;
-	void *	ad_out_data;
-	u_int	ad_out_size;
-
-};
-#define	SIOCGATHDIAG	_IOWR('i', 138, struct ath_diag)
 
 /*
  * Radio capture format.
  */
 #define ATH_RX_RADIOTAP_PRESENT (		\
-	(1 << IEEE80211_RADIOTAP_TSFT)		| \
 	(1 << IEEE80211_RADIOTAP_FLAGS)		| \
 	(1 << IEEE80211_RADIOTAP_RATE)		| \
 	(1 << IEEE80211_RADIOTAP_CHANNEL)	| \
-	(1 << IEEE80211_RADIOTAP_DBM_ANTSIGNAL)	| \
-	(1 << IEEE80211_RADIOTAP_DBM_ANTNOISE)	| \
+	(1 << IEEE80211_RADIOTAP_DB_ANTSIGNAL)	| \
 	(1 << IEEE80211_RADIOTAP_ANTENNA)	| \
 	0)
 
 struct ath_rx_radiotap_header {
 	struct ieee80211_radiotap_header wr_ihdr;
-	u_int64_t	wr_tsf;
-	u_int8_t	wr_flags;
+	u_int8_t	wr_flags;		/* XXX for padding */
 	u_int8_t	wr_rate;
 	u_int16_t	wr_chan_freq;
 	u_int16_t	wr_chan_flags;
-	int8_t		wr_antsignal;
-	int8_t		wr_antnoise;
+	u_int8_t	wr_antsignal;
 	u_int8_t	wr_antenna;
 };
 
 #define ATH_TX_RADIOTAP_PRESENT (		\
-	(1 << IEEE80211_RADIOTAP_TSFT)		| \
 	(1 << IEEE80211_RADIOTAP_FLAGS)		| \
 	(1 << IEEE80211_RADIOTAP_RATE)		| \
 	(1 << IEEE80211_RADIOTAP_CHANNEL)	| \
-	(1 << IEEE80211_RADIOTAP_DBM_TX_POWER)	| \
-	(1 << IEEE80211_RADIOTAP_ANTENNA)	| \
 	0)
 
 struct ath_tx_radiotap_header {
 	struct ieee80211_radiotap_header wt_ihdr;
-	u_int64_t	wt_tsf;
-	u_int8_t	wt_flags;
+	u_int8_t	wt_flags;		/* XXX for padding */
 	u_int8_t	wt_rate;
 	u_int16_t	wt_chan_freq;
 	u_int16_t	wt_chan_flags;
-	u_int8_t	wt_txpower;
-	u_int8_t	wt_antenna;
 };
 
 #endif /* _DEV_ATH_ATHIOCTL_H */

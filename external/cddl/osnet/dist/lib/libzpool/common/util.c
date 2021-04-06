@@ -19,7 +19,8 @@
  * CDDL HEADER END
  */
 /*
- * Copyright (c) 2005, 2010, Oracle and/or its affiliates. All rights reserved.
+ * Copyright 2008 Sun Microsystems, Inc.  All rights reserved.
+ * Use is subject to license terms.
  */
 
 #include <assert.h>
@@ -89,7 +90,7 @@ show_vdev_stats(const char *desc, const char *ctype, nvlist_t *nv, int indent)
 		if (is_log)
 			prefix = "log ";
 
-		if (nvlist_lookup_uint64_array(nv, ZPOOL_CONFIG_VDEV_STATS,
+		if (nvlist_lookup_uint64_array(nv, ZPOOL_CONFIG_STATS,
 		    (uint64_t **)&vs, &c) != 0)
 			vs = &v0;
 
@@ -108,7 +109,7 @@ show_vdev_stats(const char *desc, const char *ctype, nvlist_t *nv, int indent)
 		(void) printf("%*s%s%*s%*s%*s %5s %5s %5s %5s %5s %5s %5s\n",
 		    indent, "",
 		    prefix,
-		    (int)(indent + strlen(prefix) - 25 - (vs->vs_space ? 0 : 12)),
+		    indent + strlen(prefix) - 25 - (vs->vs_space ? 0 : 12),
 		    desc,
 		    vs->vs_space ? 6 : 0, vs->vs_space ? used : "",
 		    vs->vs_space ? 6 : 0, vs->vs_space ? avail : "",

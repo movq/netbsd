@@ -3,7 +3,7 @@
  * js_objgc.d - trace JavaScript Object GC using DTrace.
  *              Written for the JavaScript DTrace provider.
  *
- * $Id: js_objgc.d,v 1.1.1.1 2015/09/30 22:01:06 christos Exp $
+ * $Id: js_objgc.d,v 1.1 2015/09/30 22:01:06 christos Exp $
  *
  * This traces JavaScript activity from all running browers on the system
  * which support the JavaScript DTrace provider.

@@ -1,5 +1,3 @@
-/* $NetBSD: timetc.h,v 1.9 2020/09/04 00:36:07 thorpej Exp $ */
-
 /*-
  * ----------------------------------------------------------------------------
  * "THE BEER-WARE LICENSE" (Revision 42):
@@ -14,19 +12,9 @@
 #ifndef _SYS_TIMETC_H_
 #define	_SYS_TIMETC_H_
 
-#if !defined(_KERNEL) && !defined(_KMEMUSER)
+#ifndef _KERNEL
 #error "no user-serviceable parts inside"
 #endif
-
-/*
- * max recommended timecounter name length
- *
- * it is not a functional limit but names longer
- * then that will not be controllable via
- * sysctl. see kern/kern_tc.c for the sysctl
- * implementation.
- */
-#define MAX_TCNAMELEN	64
 
 /*-
  * `struct timecounter' is the interface between the hardware which implements
@@ -40,7 +28,6 @@
  */
 
 struct timecounter;
-struct timespec;
 typedef u_int timecounter_get_t(struct timecounter *);
 typedef void timecounter_pps_t(struct timecounter *);
 
@@ -60,9 +47,9 @@ struct timecounter {
 		 */
 	u_int 			tc_counter_mask;
 		/* This mask should mask off any unimplemented bits. */
-	uint64_t		tc_frequency;
+	u_int64_t		tc_frequency;
 		/* Frequency of the counter in Hz. */
-	const char		*tc_name;
+	char			*tc_name;
 		/* Name of the timecounter. */
 	int			tc_quality;
 		/*
@@ -77,19 +64,15 @@ struct timecounter {
 		/* Pointer to the next timecounter. */
 };
 
-#ifdef _KERNEL
 extern struct timecounter *timecounter;
 
-uint64_t tc_getfrequency(void);
+u_int64_t tc_getfrequency(void);
 void	tc_init(struct timecounter *tc);
-int	tc_detach(struct timecounter *);
-void	tc_setclock(const struct timespec *ts);
+void	tc_setclock(struct timespec *ts);
 void	tc_ticktock(void);
-void	tc_gonebad(struct timecounter *);
 
 #ifdef SYSCTL_DECL
 SYSCTL_DECL(_kern_timecounter);
 #endif
-#endif /* _KERNEL */
 
 #endif /* !_SYS_TIMETC_H_ */

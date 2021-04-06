@@ -3,7 +3,7 @@
  * rb_syscalls.d - count Ruby calls and syscalls using DTrace.
  *                 Written for the Ruby DTrace provider.
  *
- * $Id: rb_syscalls.d,v 1.1.1.1 2015/09/30 22:01:09 christos Exp $
+ * $Id: rb_syscalls.d,v 1.1 2015/09/30 22:01:09 christos Exp $
  *
  * USAGE: rb_syscalls.d { -p PID | -c cmd }	# hit Ctrl-C to end
  *

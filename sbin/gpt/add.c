@@ -24,21 +24,10 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
-#endif
-
 #include <sys/cdefs.h>
-#ifdef __FBSDID
-__FBSDID("$FreeBSD: src/sbin/gpt/add.c,v 1.14 2006/06/22 22:05:28 marcel Exp $");
-#endif
-#ifdef __RCSID
-__RCSID("$NetBSD: add.c,v 1.44 2018/07/03 03:41:23 jnemeth Exp $");
-#endif
+__FBSDID("$FreeBSD: src/sbin/gpt/add.c,v 1.15 2006/10/04 18:20:25 marcel Exp $");
 
 #include <sys/types.h>
-#include <sys/param.h>
-#include <sys/stat.h>
 
 #include <err.h>
 #include <stddef.h>
@@ -49,160 +38,180 @@ __RCSID("$NetBSD: add.c,v 1.44 2018/07/03 03:41:23 jnemeth Exp $");
 
 #include "map.h"
 #include "gpt.h"
-#include "gpt_private.h"
 
-static int cmd_add(gpt_t, int, char *[]);
-
-static const char *addhelp[] = {
-	"[-a alignment] [-b blocknr] [-i index] [-l label]",
-	"[-s size] [-t type]",
-};
-
-struct gpt_cmd c_add = {
-	"add",
-	cmd_add,
-	addhelp, __arraycount(addhelp),
-	GPT_SYNC,
-};
-
-#define usage() gpt_usage(NULL, &c_add)
+static uuid_t type;
+static off_t block, size;
+static unsigned int entry;
 
 static void
-ent_set(struct gpt_ent *ent, const map_t map, const gpt_uuid_t xtype,
-    const uint8_t *xname)
+usage_add(void)
 {
-	gpt_uuid_copy(ent->ent_type, xtype);
-	ent->ent_lba_start = htole64((uint64_t)map->map_start);
-	ent->ent_lba_end = htole64((uint64_t)(map->map_start +
-	    map->map_size - 1LL));
-	if (xname == NULL)
-		return;
-	utf8_to_utf16(xname, ent->ent_name, __arraycount(ent->ent_name));
+
+	fprintf(stderr,
+	    "usage: %s [-b lba] [-i index] [-s lba] [-t uuid] device ...\n",
+	    getprogname());
+	exit(1);
 }
 
-static int
-add(gpt_t gpt, off_t alignment, off_t block, off_t sectors, off_t size,
-    u_int entry, uint8_t *name, gpt_uuid_t type)
+static void
+add(int fd)
 {
-	map_t map;
+	map_t *gpt, *tpg;
+	map_t *tbl, *lbt;
+	map_t *map;
 	struct gpt_hdr *hdr;
 	struct gpt_ent *ent;
 	unsigned int i;
-	off_t alignsecs;
-	char buf[128];
-	
-	if ((hdr = gpt_hdr(gpt)) == NULL)
-		return -1;
 
-	ent = NULL;
+	gpt = map_find(MAP_TYPE_PRI_GPT_HDR);
+	if (gpt == NULL) {
+		warnx("%s: error: no primary GPT header; run create or recover",
+		    device_name);
+		return;
+	}
 
+	tpg = map_find(MAP_TYPE_SEC_GPT_HDR);
+	if (tpg == NULL) {
+		warnx("%s: error: no secondary GPT header; run recover",
+		    device_name);
+		return;
+	}
+
+	tbl = map_find(MAP_TYPE_PRI_GPT_TBL);
+	lbt = map_find(MAP_TYPE_SEC_GPT_TBL);
+	if (tbl == NULL || lbt == NULL) {
+		warnx("%s: error: run recover -- trust me", device_name);
+		return;
+	}
+
+	hdr = gpt->map_data;
 	if (entry > le32toh(hdr->hdr_entries)) {
-		gpt_warnx(gpt, "index %u out of range (%u max)",
+		warnx("%s: error: index %u out of range (%u max)", device_name,
 		    entry, le32toh(hdr->hdr_entries));
-		return -1;
+		return;
 	}
 
 	if (entry > 0) {
 		i = entry - 1;
-		ent = gpt_ent_primary(gpt, i);
-		if (!gpt_uuid_is_nil(ent->ent_type)) {
-			gpt_warnx(gpt, "Entry at index %u is not free", entry);
-			return -1;
+		ent = (void*)((char*)tbl->map_data + i *
+		    le32toh(hdr->hdr_entsz));
+		if (!uuid_is_nil(&ent->ent_type, NULL)) {
+			warnx("%s: error: entry at index %u is not free",
+			    device_name, entry);
+			return;
 		}
 	} else {
 		/* Find empty slot in GPT table. */
 		for (i = 0; i < le32toh(hdr->hdr_entries); i++) {
-			ent = gpt_ent_primary(gpt, i);
-			if (gpt_uuid_is_nil(ent->ent_type))
+			ent = (void*)((char*)tbl->map_data + i *
+			    le32toh(hdr->hdr_entsz));
+			if (uuid_is_nil(&ent->ent_type, NULL))
 				break;
 		}
 		if (i == le32toh(hdr->hdr_entries)) {
-			gpt_warnx(gpt, "No available table entries");
-			return -1;
+			warnx("%s: error: no available table entries",
+			    device_name);
+			return;
 		}
 	}
 
-	if (alignment > 0) {
-		alignsecs = alignment / gpt->secsz;
-		map = map_alloc(gpt, block, sectors, alignsecs);
-		if (map == NULL) {
-			gpt_warnx(gpt, "Not enough space available on "
-			      "device for an aligned partition");
-			return -1;
-		}
-	} else {
-		map = map_alloc(gpt, block, sectors, 0);
-		if (map == NULL) {
-			gpt_warnx(gpt, "Not enough space available on device");
-			return -1;
-		}
+	map = map_alloc(block, size);
+	if (map == NULL) {
+		warnx("%s: error: no space available on device", device_name);
+		return;
 	}
 
-	ent_set(ent, map, type, name);
-	if (gpt_write_primary(gpt) == -1)
-		return -1;
+	le_uuid_enc(&ent->ent_type, &type);
+	ent->ent_lba_start = htole64(map->map_start);
+	ent->ent_lba_end = htole64(map->map_start + map->map_size - 1LL);
 
-	ent = gpt_ent_backup(gpt, i);
-	ent_set(ent, map, type, name);
-	if (gpt_write_backup(gpt) == -1)
-		return -1;
+	hdr->hdr_crc_table = htole32(crc32(tbl->map_data,
+	    le32toh(hdr->hdr_entries) * le32toh(hdr->hdr_entsz)));
+	hdr->hdr_crc_self = 0;
+	hdr->hdr_crc_self = htole32(crc32(hdr, le32toh(hdr->hdr_size)));
 
-	gpt_uuid_snprintf(buf, sizeof(buf), "%d", type);
-	gpt_msg(gpt, "Partition %d added: %s %" PRIu64 " %" PRIu64, i + 1,
-	    buf, map->map_start, map->map_size);
-	return 0;
+	gpt_write(fd, gpt);
+	gpt_write(fd, tbl);
+
+	hdr = tpg->map_data;
+	ent = (void*)((char*)lbt->map_data + i * le32toh(hdr->hdr_entsz));
+
+	le_uuid_enc(&ent->ent_type, &type);
+	ent->ent_lba_start = htole64(map->map_start);
+	ent->ent_lba_end = htole64(map->map_start + map->map_size - 1LL);
+
+	hdr->hdr_crc_table = htole32(crc32(lbt->map_data,
+	    le32toh(hdr->hdr_entries) * le32toh(hdr->hdr_entsz)));
+	hdr->hdr_crc_self = 0;
+	hdr->hdr_crc_self = htole32(crc32(hdr, le32toh(hdr->hdr_size)));
+
+	gpt_write(fd, lbt);
+	gpt_write(fd, tpg);
+
+	printf("%sp%u added\n", device_name, i + 1);
 }
 
-static int
-cmd_add(gpt_t gpt, int argc, char *argv[])
+int
+cmd_add(int argc, char *argv[])
 {
-	int ch;
-	off_t alignment = 0, block = 0, sectors = 0, size = 0;
-	unsigned int entry = 0;
-	uint8_t *name = NULL;
-	gpt_uuid_t type;
+	char *p;
+	int ch, fd;
 
-	gpt_uuid_copy(type, gpt_uuid_nil);
-
-	while ((ch = getopt(argc, argv, GPT_AIS "b:l:t:")) != -1) {
+	/* Get the migrate options */
+	while ((ch = getopt(argc, argv, "b:i:s:t:")) != -1) {
 		switch(ch) {
 		case 'b':
-			if (gpt_human_get(gpt, &block) == -1)
-				goto usage;
+			if (block > 0)
+				usage_add();
+			block = strtoll(optarg, &p, 10);
+			if (*p != 0 || block < 1)
+				usage_add();
 			break;
-		case 'l':
-			if (gpt_name_get(gpt, &name) == -1)
-				goto usage;
+		case 'i':
+			if (entry > 0)
+				usage_add();
+			entry = strtol(optarg, &p, 10);
+			if (*p != 0 || entry < 1)
+				usage_add();
+			break;
+		case 's':
+			if (size > 0)
+				usage_add();
+			size = strtoll(optarg, &p, 10);
+			if (*p != 0 || size < 1)
+				usage_add();
 			break;
 		case 't':
-			if (gpt_uuid_get(gpt, &type) == -1)
-				goto usage;
+			if (!uuid_is_nil(&type, NULL))
+				usage_add();
+			if (parse_uuid(optarg, &type) != 0)
+				usage_add();
 			break;
 		default:
-			if (gpt_add_ais(gpt, &alignment, &entry, &size, ch)
-			    == -1)
-				goto usage;
-			break;
+			usage_add();
 		}
 	}
 
-	if (argc != optind)
-		return usage();
+	if (argc == optind)
+		usage_add();
 
-	/* Create NetBSD FFS partitions by default. */
-	if (gpt_uuid_is_nil(type))
-		gpt_uuid_create(GPT_TYPE_NETBSD_FFS, type, NULL, 0);
+	/* Create UFS partitions by default. */
+	if (uuid_is_nil(&type, NULL)) {
+		uuid_t ufs = GPT_ENT_TYPE_FREEBSD_UFS;
+		type = ufs;
+	}
 
-	if (optind != argc)
-		goto cleanup;
+	while (optind < argc) {
+		fd = gpt_open(argv[optind++]);
+		if (fd == -1) {
+			warn("unable to open device '%s'", device_name);
+			continue;
+		}
 
-	if ((sectors = gpt_check_ais(gpt, alignment, ~0U, size)) == -1)
-		goto cleanup;
+		add(fd);
 
-	return add(gpt, alignment, block, sectors, size, entry, name, type);
-usage:
-	return usage();
-cleanup:
-	free(name);
-	return -1;
+		gpt_close(fd);
+	}
+
+	return (0);
 }

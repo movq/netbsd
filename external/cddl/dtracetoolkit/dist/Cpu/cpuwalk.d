@@ -6,7 +6,7 @@
  * This program is for multi-CPU servers, and can help identify if a process
  * is running on multiple CPUs concurrently or not.
  *
- * $Id: cpuwalk.d,v 1.1.1.1 2015/09/30 22:01:07 christos Exp $
+ * $Id: cpuwalk.d,v 1.1 2015/09/30 22:01:07 christos Exp $
  *
  * USAGE:	cpuwalk.d [duration]
  *	   eg,
