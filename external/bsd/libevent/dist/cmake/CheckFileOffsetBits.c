@@ -1,4 +1,4 @@
-/*	$NetBSD: CheckFileOffsetBits.c,v 1.1 2021/04/07 02:43:15 christos Exp $	*/
+/*	$NetBSD: CheckFileOffsetBits.c,v 1.1.1.1 2021/04/07 02:43:15 christos Exp $	*/
 #include <sys/types.h>
 
 #define KB ((off_t)1024)

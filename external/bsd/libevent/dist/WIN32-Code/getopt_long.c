@@ -1,4 +1,4 @@
-/*	$NetBSD: getopt_long.c,v 1.1 2021/04/07 02:43:15 christos Exp $	*/
+/*	$NetBSD: getopt_long.c,v 1.1.1.1 2021/04/07 02:43:15 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994, 1996
