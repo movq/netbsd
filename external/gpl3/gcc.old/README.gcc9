@@ -1,4 +1,4 @@
-$NetBSD: README.gcc9,v 1.1 2021/04/09 22:32:28 mrg Exp $
+$NetBSD: README.gcc9,v 1.1.1.1 2021/04/09 22:32:28 mrg Exp $
 
 new stuff:
 	cc1objcplus
