@@ -1,4 +1,4 @@
-/*	$NetBSD: trampoline.c,v 1.1 2021/04/29 16:46:32 christos Exp $	*/
+/*	$NetBSD: trampoline.c,v 1.1.1.1 2021/04/29 16:46:32 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

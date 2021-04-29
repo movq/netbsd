@@ -1,4 +1,4 @@
-/*	$NetBSD: tlsdns_test.c,v 1.1 2021/04/29 16:46:33 christos Exp $	*/
+/*	$NetBSD: tlsdns_test.c,v 1.1.1.1 2021/04/29 16:46:33 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
