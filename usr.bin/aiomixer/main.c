@@ -1,4 +1,4 @@
-/* $NetBSD: main.c,v 1.2 2021/05/09 15:40:27 christos Exp $ */
+/* $NetBSD: main.c,v 1.1 2021/05/07 16:29:24 nia Exp $ */
 /*-
  * Copyright (c) 2021 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -482,7 +482,7 @@ open_device(struct aiomixer *aio, const char *device)
 	}
 }
 
-static __dead void
+static void
 on_signal(int dummy)
 {
 	endwin();

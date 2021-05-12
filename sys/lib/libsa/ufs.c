@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs.c,v 1.79 2021/05/12 08:45:28 mrg Exp $	*/
+/*	$NetBSD: ufs.c,v 1.78 2020/12/19 08:51:03 rin Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -200,6 +200,9 @@ static int buf_read_file(struct open_file *, char **, size_t *);
 static int search_directory(const char *, int, struct open_file *, ino32_t *);
 #ifdef LIBSA_FFSv1
 static void ffs_oldfscompat(FS *);
+#endif
+#ifdef LIBSA_FFSv2
+static int ffs_find_superblock(struct open_file *, FS *);
 #endif
 
 
@@ -510,14 +513,15 @@ search_directory(const char *name, int length, struct open_file *f,
 	return ENOENT;
 }
 
-static __inline__ int
+#ifdef LIBSA_FFSv2
+
+daddr_t sblock_try[] = SBLOCKSEARCH;
+
+static int
 ffs_find_superblock(struct open_file *f, FS *fs)
 {
-	int rc;
+	int i, rc;
 	size_t buf_size;
-#ifdef LIBSA_FFSv2
-	static daddr_t sblock_try[] = SBLOCKSEARCH;
-	int i;
 
 	for (i = 0; sblock_try[i] != -1; i++) {
 		rc = DEV_STRATEGY(f->f_dev)(f->f_devdata, F_READ,
@@ -532,20 +536,9 @@ ffs_find_superblock(struct open_file *f, FS *fs)
 		}
 	}
 	return EINVAL;
-#else /* LIBSA_FFSv2 */
-	rc = DEV_STRATEGY(f->f_dev)(f->f_devdata, F_READ,
-		SBLOCKOFFSET / DEV_BSIZE, SBLOCKSIZE, fs, &buf_size);
-	if (rc)
-		return rc;
-	if (buf_size != SBLOCKSIZE ||
-#ifdef LIBSA_LFS
-	    fs->lfs_version != REQUIRED_LFS_VERSION ||
-#endif
-	    fs->fs_magic != FS_MAGIC)
-		return EINVAL;
-	return 0;
-#endif /* !LIBSA_FFSv2 */
 }
+
+#endif
 
 /*
  * Open a file.
@@ -578,10 +571,26 @@ ufs_open(const char *path, struct open_file *f)
 	fp->f_fs = fs;
 	twiddle();
 
+#ifdef LIBSA_FFSv2
 	rc = ffs_find_superblock(f, fs);
 	if (rc)
 		goto out;
-
+#else
+	{
+		size_t buf_size;
+		rc = DEV_STRATEGY(f->f_dev)(f->f_devdata, F_READ,
+			SBLOCKOFFSET / DEV_BSIZE, SBLOCKSIZE, fs, &buf_size);
+		if (rc)
+			goto out;
+		if (buf_size != SBLOCKSIZE ||
+#ifdef LIBSA_LFS
+		    fs->lfs_version != REQUIRED_LFS_VERSION ||
+#endif
+		    fs->fs_magic != FS_MAGIC) {
+			rc = EINVAL;
+			goto out;
+		}
+	}
 #if defined(LIBSA_LFS) && REQUIRED_LFS_VERSION == 2
 	/*
 	 * XXX	We should check the second superblock and use the eldest
@@ -595,6 +604,8 @@ ufs_open(const char *path, struct open_file *f)
 	fs->lfs_dobyteswap = 0;
 	fs->lfs_hasolddirfmt = (fs->fs_maxsymlinklen <= 0);
 #endif
+#endif
+
 #ifdef LIBSA_FFSv1
 	ffs_oldfscompat(fs);
 #endif

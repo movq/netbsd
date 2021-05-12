@@ -1,4 +1,4 @@
-#	$NetBSD: t_pppoe.sh,v 1.31 2021/05/11 05:57:02 yamaguchi Exp $
+#	$NetBSD: t_pppoe.sh,v 1.29 2021/05/06 01:09:43 yamaguchi Exp $
 #
 # Copyright (c) 2016 Internet Initiative Japan Inc.
 # All rights reserved.
@@ -238,7 +238,7 @@ run_test()
 	atf_ifconfig -w 10
 	atf_check -s exit:0 -o ignore rump.ping -c 1 -w $TIMEOUT $CLIENT_IP
 	atf_check -s exit:0 -o match:'session' -x "$HIJACKING pppoectl -d pppoe0"
-	$DEBUG && $HIJACKING pppoectl -d pppoe0
+	$DEBUG && HIJACKING pppoectl -d pppoe0
 	unset RUMP_SERVER
 
 	# test for invalid password
@@ -725,37 +725,6 @@ pppoe_params_body()
 	    -x "${dumpcmd} | grep PADR"
 	atf_check -s exit:0 -o not-match:'\[AC-Name "ACNAME-TEST5\]"' -e ignore \
 	    -x "${dumpcmd} | grep PADI"
-
-	export RUMP_SERVER=$CLIENT
-	atf_ifconfig pppoe0 down
-	export RUMP_SERVER=$SERVER
-	wait_for_disconnected
-
-	# ipcp & ipv6cp are enabled by default
-	export RUMP_SERVER=$CLIENT
-	atf_check -s exit:0 -o match:'ipcp: enable' \
-	    -x "$HIJACKING pppoectl pppoe0"
-	atf_check -s exit:0 -o match:'ipv6cp: enable' \
-	    -x "$HIJACKING pppoectl pppoe0"
-
-	# ipcp enable & ipv6cp disable
-	atf_pppoectl pppoe0 noipv6cp
-	atf_ifconfig pppoe0 up
-	wait_for_opened "IPCP"
-	atf_check -s exit:0 -o match:'IPv6CP state: initial' \
-	    -x "$HIJACKING pppoectl -dd pppoe0"
-
-	atf_ifconfig pppoe0 down
-	export RUMP_SERVER=$SERVER
-	wait_for_disconnected
-
-	# ipcp disable & ipv6cp enable
-	export RUMP_SERVER=$CLIENT
-	atf_pppoectl pppoe0 noipcp ipv6cp
-	atf_ifconfig pppoe0 up
-	wait_for_opened "IPv6CP"
-	atf_check -s exit:0 -o match:'IPCP state: initial' \
-	    -x "$HIJACKING pppoectl -dd pppoe0"
 }
 
 pppoe_params_cleanup()
