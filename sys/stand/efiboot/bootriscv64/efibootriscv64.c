@@ -1,4 +1,4 @@
-/* $NetBSD: efibootriscv64.c,v 1.1 2021/05/02 15:22:27 jmcneill Exp $ */
+/* $NetBSD: efibootriscv64.c,v 1.1.4.2 2021/05/13 00:47:33 thorpej Exp $ */
 
 /*-
  * Copyright (c) 2021 Jared McNeill <jmcneill@invisible.ca>

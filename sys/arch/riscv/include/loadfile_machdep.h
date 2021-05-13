@@ -1,4 +1,4 @@
-/*	$NetBSD: loadfile_machdep.h,v 1.1 2021/05/05 12:47:02 jmcneill Exp $	*/
+/*	$NetBSD: loadfile_machdep.h,v 1.1.4.2 2021/05/13 00:47:27 thorpej Exp $	*/
 
 #ifdef _LP64
 #define BOOT_ELF64

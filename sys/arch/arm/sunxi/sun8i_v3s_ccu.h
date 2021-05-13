@@ -1,4 +1,4 @@
-/* $NetBSD: sun8i_v3s_ccu.h,v 1.1 2021/05/05 10:24:04 jmcneill Exp $ */
+/* $NetBSD: sun8i_v3s_ccu.h,v 1.1.4.2 2021/05/13 00:47:24 thorpej Exp $ */
 
 /*-
  * Copyright (c) 2021 Rui-Xiang Guo

@@ -1,4 +1,4 @@
-/*	$NetBSD: ofw_pci_subr.c,v 1.1 2021/05/12 23:22:33 thorpej Exp $	*/
+/*	$NetBSD: ofw_pci_subr.c,v 1.1.2.2 2021/05/13 00:47:31 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 2021 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofw_pci_subr.c,v 1.1 2021/05/12 23:22:33 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofw_pci_subr.c,v 1.1.2.2 2021/05/13 00:47:31 thorpej Exp $");
 
 #include <sys/types.h>
 #include <sys/device.h>

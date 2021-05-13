@@ -1,4 +1,4 @@
-/*	$NetBSD: mcclock_ofisa.c,v 1.1 2021/04/27 21:39:39 thorpej Exp $	*/
+/*	$NetBSD: mcclock_ofisa.c,v 1.1.4.2 2021/05/13 00:47:30 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 2021 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mcclock_ofisa.c,v 1.1 2021/04/27 21:39:39 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mcclock_ofisa.c,v 1.1.4.2 2021/05/13 00:47:30 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
