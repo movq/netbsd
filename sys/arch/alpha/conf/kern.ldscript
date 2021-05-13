@@ -1,4 +1,4 @@
-/*	$NetBSD: kern.ldscript,v 1.1 2021/05/05 01:35:35 thorpej Exp $	*/
+/*	$NetBSD: kern.ldscript,v 1.1.4.2 2021/05/13 00:47:20 thorpej Exp $	*/
 
 /*
  * Linker script for the NetBSD/alpha kernel.

@@ -1,4 +1,4 @@
-/*	$NetBSD: shark_iic.c,v 1.1 2021/04/30 02:24:05 thorpej Exp $	*/
+/*	$NetBSD: shark_iic.c,v 1.1.4.2 2021/05/13 00:47:27 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2021 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: shark_iic.c,v 1.1 2021/04/30 02:24:05 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: shark_iic.c,v 1.1.4.2 2021/05/13 00:47:27 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

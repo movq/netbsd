@@ -1,4 +1,4 @@
-/*	$NetBSD: gdt.h,v 1.1 2021/04/30 15:37:05 christos Exp $	*/
+/*	$NetBSD: gdt.h,v 1.1.4.2 2021/05/13 00:47:29 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
