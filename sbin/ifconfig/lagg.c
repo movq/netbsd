@@ -1,4 +1,4 @@
-/*	$NetBSD: lagg.c,v 1.1 2021/05/17 04:07:42 yamaguchi Exp $	*/
+/*	$NetBSD: lagg.c,v 1.1.2.2 2021/05/31 22:15:08 cjep Exp $	*/
 
 /*
  * Copyright (c) 2021 Internet Initiative Japan Inc.
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: lagg.c,v 1.1 2021/05/17 04:07:42 yamaguchi Exp $");
+__RCSID("$NetBSD: lagg.c,v 1.1.2.2 2021/05/31 22:15:08 cjep Exp $");
 #endif /* !defined(lint) */
 
 #include <sys/param.h>

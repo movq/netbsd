@@ -1,4 +1,4 @@
-#	$NetBSD: t_lagg.sh,v 1.2 2021/05/25 00:38:30 yamaguchi Exp $
+#	$NetBSD: t_lagg.sh,v 1.2.2.2 2021/05/31 22:15:23 cjep Exp $
 #
 # Copyright (c) 2021 Internet Initiative Japan Inc.
 # All rights reserved.

@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel_swap.c,v 1.1 2021/05/17 08:50:36 mrg Exp $	*/
+/*	$NetBSD: disklabel_swap.c,v 1.1.2.2 2021/05/31 22:15:20 cjep Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988 Regents of the University of California.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: disklabel_swap.c,v 1.1 2021/05/17 08:50:36 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disklabel_swap.c,v 1.1.2.2 2021/05/31 22:15:20 cjep Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_disklabel.h"

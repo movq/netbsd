@@ -1,4 +1,4 @@
-/*	$NetBSD: msg_344.c,v 1.1 2021/05/16 11:11:37 rillig Exp $	*/
+/*	$NetBSD: msg_344.c,v 1.1.2.2 2021/05/31 22:15:24 cjep Exp $	*/
 # 3 "msg_344.c"
 
 // Test for message: bit-field of type plain 'int' has implementation-defined signedness [344]

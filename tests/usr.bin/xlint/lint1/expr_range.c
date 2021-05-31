@@ -1,4 +1,4 @@
-/*	$NetBSD: expr_range.c,v 1.2 2021/05/15 19:12:14 rillig Exp $	*/
+/*	$NetBSD: expr_range.c,v 1.2.2.2 2021/05/31 22:15:24 cjep Exp $	*/
 # 3 "expr_range.c"
 
 /*

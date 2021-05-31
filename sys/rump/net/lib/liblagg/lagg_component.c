@@ -1,4 +1,4 @@
-/*	$NetBSD: lagg_component.c,v 1.1 2021/05/17 04:07:44 yamaguchi Exp $	*/
+/*	$NetBSD: lagg_component.c,v 1.1.2.2 2021/05/31 22:15:22 cjep Exp $	*/
 
 /*
  * Copyright (c) 2021 Internet Initiative Japan Inc.
@@ -28,7 +28,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lagg_component.c,v 1.1 2021/05/17 04:07:44 yamaguchi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lagg_component.c,v 1.1.2.2 2021/05/31 22:15:22 cjep Exp $");
 
 #include <sys/param.h>
 

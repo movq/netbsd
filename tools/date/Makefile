@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2021/05/27 08:41:35 cjep Exp $
+#	$NetBSD: Makefile,v 1.2.2.2 2021/05/31 22:15:24 cjep Exp $
 
 .include <bsd.hostinit.mk>
 
