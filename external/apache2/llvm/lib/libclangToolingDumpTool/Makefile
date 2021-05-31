@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2021/05/30 01:56:58 joerg Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2021/05/31 22:10:13 cjep Exp $
 
 LIB=	clangToolingDumpTool
 

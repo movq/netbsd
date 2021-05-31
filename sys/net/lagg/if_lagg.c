@@ -1,4 +1,4 @@
-/*	$NetBSD: if_lagg.c,v 1.4 2021/05/24 13:42:58 thorpej Exp $	*/
+/*	$NetBSD: if_lagg.c,v 1.4.2.2 2021/05/31 22:15:21 cjep Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006 Reyk Floeter <reyk@openbsd.org>
@@ -20,7 +20,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_lagg.c,v 1.4 2021/05/24 13:42:58 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_lagg.c,v 1.4.2.2 2021/05/31 22:15:21 cjep Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_inet.h"

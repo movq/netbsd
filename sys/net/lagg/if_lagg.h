@@ -1,4 +1,4 @@
-/*	$NetBSD: if_lagg.h,v 1.2 2021/05/24 06:08:28 yamaguchi Exp $	*/
+/*	$NetBSD: if_lagg.h,v 1.2.2.2 2021/05/31 22:15:21 cjep Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006 Reyk Floeter <reyk@openbsd.org>
