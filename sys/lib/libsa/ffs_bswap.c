@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_bswap.c,v 1.1 2021/05/27 06:54:44 mrg Exp $	*/
+/*	$NetBSD: ffs_bswap.c,v 1.1.6.2 2021/06/17 04:46:34 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1998 Manuel Bouyer.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_bswap.c,v 1.1 2021/05/27 06:54:44 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_bswap.c,v 1.1.6.2 2021/06/17 04:46:34 thorpej Exp $");
 
 #include <sys/param.h>
 #include <lib/libkern/libkern.h>

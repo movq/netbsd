@@ -1,4 +1,4 @@
-/*	$NetBSD: dkcksum.c,v 1.1 2021/05/17 08:50:36 mrg Exp $	*/
+/*	$NetBSD: dkcksum.c,v 1.1.6.2 2021/06/17 04:46:33 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -36,7 +36,7 @@
 #if 0
 static char sccsid[] = "@(#)dkcksum.c	8.1 (Berkeley) 6/5/93";
 #else
-__RCSID("$NetBSD: dkcksum.c,v 1.1 2021/05/17 08:50:36 mrg Exp $");
+__RCSID("$NetBSD: dkcksum.c,v 1.1.6.2 2021/06/17 04:46:33 thorpej Exp $");
 #endif
 #endif /* not lint */
 

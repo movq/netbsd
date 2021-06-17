@@ -1,4 +1,4 @@
-/*	$NetBSD: if_laggproto.c,v 1.2 2021/05/24 13:43:21 thorpej Exp $	*/
+/*	$NetBSD: if_laggproto.c,v 1.2.6.2 2021/06/17 04:46:35 thorpej Exp $	*/
 
 /*-
  * SPDX-License-Identifier: BSD-2-Clause-NetBSD
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_laggproto.c,v 1.2 2021/05/24 13:43:21 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_laggproto.c,v 1.2.6.2 2021/06/17 04:46:35 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
