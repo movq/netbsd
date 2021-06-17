@@ -1,4 +1,4 @@
-/*	$NetBSD: if_laggvar.h,v 1.2 2021/05/24 06:08:28 yamaguchi Exp $	*/
+/*	$NetBSD: if_laggvar.h,v 1.2.6.2 2021/06/17 04:46:35 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2021 Internet Initiative Japan Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_laggproto.h,v 1.3 2021/05/24 06:24:20 yamaguchi Exp $	*/
+/*	$NetBSD: if_laggproto.h,v 1.3.6.2 2021/06/17 04:46:35 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2021 Internet Initiative Japan Inc.

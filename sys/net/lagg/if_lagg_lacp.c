@@ -1,4 +1,4 @@
-/*	$NetBSD: if_lagg_lacp.c,v 1.2 2021/05/18 11:02:58 hannken Exp $	*/
+/*	$NetBSD: if_lagg_lacp.c,v 1.2.6.2 2021/06/17 04:46:35 thorpej Exp $	*/
 
 /*-
  * SPDX-License-Identifier: BSD-2-Clause-NetBSD
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_lagg_lacp.c,v 1.2 2021/05/18 11:02:58 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_lagg_lacp.c,v 1.2.6.2 2021/06/17 04:46:35 thorpej Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_lagg.h"
