@@ -1,4 +1,4 @@
-/* $NetBSD: fancontrolvar.h,v 1.2 2021/07/30 22:07:14 macallan Exp $ */
+/* $NetBSD: fancontrolvar.h,v 1.2.4.2 2021/08/01 22:42:12 thorpej Exp $ */
 
 /*-
  * Copyright (c) 2021 Michael Lorenz

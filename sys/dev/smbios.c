@@ -1,4 +1,4 @@
-/*	$NetBSD: smbios.c,v 1.3 2021/07/24 22:33:23 jmcneill Exp $	*/
+/*	$NetBSD: smbios.c,v 1.3.4.2 2021/08/01 22:42:21 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -86,7 +86,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbios.c,v 1.3 2021/07/24 22:33:23 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbios.c,v 1.3.4.2 2021/08/01 22:42:21 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: pmap_subr.s,v 1.1 2021/07/10 20:22:37 thorpej Exp $ */
+/* $NetBSD: pmap_subr.s,v 1.1.4.2 2021/08/01 22:42:00 thorpej Exp $ */
 
 /*-
  * Copyright (c) 2021 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-__KERNEL_RCSID(7, "$NetBSD: pmap_subr.s,v 1.1 2021/07/10 20:22:37 thorpej Exp $")
+__KERNEL_RCSID(7, "$NetBSD: pmap_subr.s,v 1.1.4.2 2021/08/01 22:42:00 thorpej Exp $")
 
 /*
  * Optimized pmap subroutines.

@@ -1,4 +1,4 @@
-/*	$NetBSD: altq_component.c,v 1.1 2021/07/14 03:19:24 ozaki-r Exp $	*/
+/*	$NetBSD: altq_component.c,v 1.1.4.2 2021/08/01 22:42:43 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2019 Internet Initiative Japan Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: altq_component.c,v 1.1 2021/07/14 03:19:24 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: altq_component.c,v 1.1.4.2 2021/08/01 22:42:43 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/stat.h>
