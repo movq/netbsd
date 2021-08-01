@@ -1,4 +1,4 @@
-/* $NetBSD: smbios_platform.c,v 1.1 2021/07/21 23:26:15 jmcneill Exp $ */
+/* $NetBSD: smbios_platform.c,v 1.1.4.2 2021/08/01 22:42:21 thorpej Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "isa.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbios_platform.c,v 1.1 2021/07/21 23:26:15 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbios_platform.c,v 1.1.4.2 2021/08/01 22:42:21 thorpej Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

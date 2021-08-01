@@ -1,4 +1,4 @@
-/*	$NetBSD: smbiosvar.h,v 1.2 2021/07/24 11:39:19 jmcneill Exp $ */
+/*	$NetBSD: smbiosvar.h,v 1.2.4.2 2021/08/01 22:42:21 thorpej Exp $ */
 /*
  * Copyright (c) 2006 Gordon Willem Klok <gklok@cogeco.ca>
  * Copyright (c) 2005 Jordan Hargrave

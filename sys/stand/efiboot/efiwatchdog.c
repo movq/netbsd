@@ -1,4 +1,4 @@
-/* $NetBSD: efiwatchdog.c,v 1.1 2021/06/20 19:10:47 jmcneill Exp $ */
+/* $NetBSD: efiwatchdog.c,v 1.1.4.2 2021/08/01 22:42:44 thorpej Exp $ */
 
 /*-
  * Copyright (c) 2021 Jared McNeill <jmcneill@invisible.ca>

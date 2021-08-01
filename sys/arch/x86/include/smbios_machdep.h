@@ -1,4 +1,4 @@
-/*	$NetBSD: smbios_machdep.h,v 1.1 2021/07/21 23:16:09 jmcneill Exp $ */
+/*	$NetBSD: smbios_machdep.h,v 1.1.4.2 2021/08/01 22:42:19 thorpej Exp $ */
 /*
  * Copyright (c) 2006 Gordon Willem Klok <gklok@cogeco.ca>
  * Copyright (c) 2005 Jordan Hargrave

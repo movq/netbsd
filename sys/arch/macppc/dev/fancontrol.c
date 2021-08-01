@@ -1,4 +1,4 @@
-/* $NetBSD: fancontrol.c,v 1.3 2021/07/30 22:07:14 macallan Exp $ */
+/* $NetBSD: fancontrol.c,v 1.3.4.2 2021/08/01 22:42:12 thorpej Exp $ */
 
 /*-
  * Copyright (c) 2021 Michael Lorenz
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fancontrol.c,v 1.3 2021/07/30 22:07:14 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fancontrol.c,v 1.3.4.2 2021/08/01 22:42:12 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
