@@ -1,4 +1,4 @@
-/*	$NetBSD: proto-wt.h,v 1.1 2021/08/14 16:05:24 christos Exp $	*/
+/*	$NetBSD: proto-wt.h,v 1.1.1.1 2021/08/14 16:05:24 christos Exp $	*/
 
 /* OpenLDAP WiredTiger backend */
 /* $OpenLDAP$ */

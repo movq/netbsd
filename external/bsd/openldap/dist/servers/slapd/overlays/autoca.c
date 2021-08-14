@@ -1,4 +1,4 @@
-/*	$NetBSD: autoca.c,v 1.1 2021/08/14 16:05:25 christos Exp $	*/
+/*	$NetBSD: autoca.c,v 1.1.1.1 2021/08/14 16:05:25 christos Exp $	*/
 
 /* autoca.c - Automatic Certificate Authority */
 /* $OpenLDAP$ */
@@ -22,7 +22,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: autoca.c,v 1.1 2021/08/14 16:05:25 christos Exp $");
+__RCSID("$NetBSD: autoca.c,v 1.1.1.1 2021/08/14 16:05:25 christos Exp $");
 
 #include "portable.h"
 
