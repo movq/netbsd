@@ -1,4 +1,4 @@
-/*	$NetBSD: thr_debug.c,v 1.1 2021/08/14 16:05:27 christos Exp $	*/
+/*	$NetBSD: thr_debug.c,v 1.1.1.1 2021/08/14 16:05:27 christos Exp $	*/
 
 /* thr_debug.c - wrapper around the chosen thread wrapper, for debugging. */
 /* $OpenLDAP$ */
@@ -101,7 +101,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: thr_debug.c,v 1.1 2021/08/14 16:05:27 christos Exp $");
+__RCSID("$NetBSD: thr_debug.c,v 1.1.1.1 2021/08/14 16:05:27 christos Exp $");
 
 #include "portable.h"
 

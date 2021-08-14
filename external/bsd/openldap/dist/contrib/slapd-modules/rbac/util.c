@@ -1,4 +1,4 @@
-/*	$NetBSD: util.c,v 1.1 2021/08/14 16:05:14 christos Exp $	*/
+/*	$NetBSD: util.c,v 1.1.1.1 2021/08/14 16:05:14 christos Exp $	*/
 
 /* util.c - RBAC utility */
 /* $OpenLDAP$ */
@@ -19,7 +19,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: util.c,v 1.1 2021/08/14 16:05:14 christos Exp $");
+__RCSID("$NetBSD: util.c,v 1.1.1.1 2021/08/14 16:05:14 christos Exp $");
 
 #include "portable.h"
 

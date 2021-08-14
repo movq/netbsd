@@ -1,4 +1,4 @@
-/*	$NetBSD: ppm.h,v 1.1 2021/08/14 16:05:14 christos Exp $	*/
+/*	$NetBSD: ppm.h,v 1.1.1.1 2021/08/14 16:05:14 christos Exp $	*/
 
 /*
  * ppm.h for OpenLDAP
