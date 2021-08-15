@@ -1,4 +1,4 @@
-# $NetBSD: mips.inc,v 1.2 2021/04/26 20:01:13 christos Exp $
+# $NetBSD: mips.inc,v 1.2.6.2 2021/08/15 08:58:55 martin Exp $
 
 .ifndef MIPS_LE
 
