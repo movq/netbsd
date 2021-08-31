@@ -1,4 +1,4 @@
-/*	$NetBSD: msg_259.c,v 1.14 2021/08/31 18:15:56 rillig Exp $	*/
+/*	$NetBSD: msg_259.c,v 1.15 2021/08/31 18:59:26 rillig Exp $	*/
 # 3 "msg_259.c"
 
 // Test for message: argument #%d is converted from '%s' to '%s' due to prototype [259]
@@ -65,8 +65,8 @@ signed_to_unsigned(int si, long sl, long long sll)
 
 	/* expect+1: warning: argument #1 is converted from 'long' to 'unsigned long' due to prototype [259] */
 	unsigned_long(sl);
-
-	unsigned_long(si);
+	/* expect+1: warning: argument #1 is converted from 'long long' to 'unsigned long' due to prototype [259] */
+	unsigned_long(sll);
 
 	/*
 	 * XXX: Why no warning?  Even though 'unsigned long long' is 64 bits
@@ -93,7 +93,8 @@ unsigned_to_signed(unsigned int ui, unsigned long ul, unsigned long long ull)
 	signed_long(ui);
 	/* expect+1: warning: argument #1 is converted from 'unsigned long' to 'long' due to prototype [259] */
 	signed_long(ul);
-	signed_long(ui);
+	/* expect+1: warning: argument #1 is converted from 'unsigned long long' to 'long' due to prototype [259] */
+	signed_long(ull);
 	signed_long_long(ui);
 	/* expect+1: warning: argument #1 is converted from 'unsigned long' to 'long long' due to prototype [259] */
 	signed_long_long(ul);
@@ -111,7 +112,8 @@ signed_to_signed(signed int si, signed long sl, signed long long sll)
 	signed_int(sll);
 	signed_long(si);
 	signed_long(sl);
-	signed_long(si);
+	/* expect+1: warning: argument #1 is converted from 'long long' to 'long' due to prototype [259] */
+	signed_long(sll);
 	signed_long_long(si);
 	/* expect+1: warning: argument #1 is converted from 'long' to 'long long' due to prototype [259] */
 	signed_long_long(sl);
@@ -128,7 +130,8 @@ unsigned_to_unsigned(unsigned int ui, unsigned long ul, unsigned long long ull)
 	unsigned_int(ull);
 	unsigned_long(ui);
 	unsigned_long(ul);
-	unsigned_long(ui);
+	/* expect+1: warning: argument #1 is converted from 'unsigned long long' to 'unsigned long' due to prototype [259] */
+	unsigned_long(ull);
 	unsigned_long_long(ui);
 	/* expect+1: warning: argument #1 is converted from 'unsigned long' to 'unsigned long long' due to prototype [259] */
 	unsigned_long_long(ul);
@@ -141,7 +144,8 @@ pass_sizeof_as_smaller_type(void)
 	/*
 	 * XXX: Even though the expression has type size_t, it has a constant
 	 * value that fits effortless into an 'unsigned int', it's so small
-	 * that it would even fit into a 3-bit bit-field.
+	 * that it would even fit into a 3-bit bit-field, so lint should not
+	 * warn here.
 	 */
 	/* expect+1: warning: argument #1 is converted from 'unsigned long' to 'unsigned int' due to prototype [259] */
 	unsigned_int(sizeof(int));
