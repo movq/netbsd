@@ -1,4 +1,4 @@
-/*	$NetBSD: reloc_riscv64.c,v 1.1 2021/09/30 18:50:09 jmcneill Exp $	*/
+/*	$NetBSD: reloc_riscv64.c,v 1.1.1.1 2021/09/30 18:50:09 jmcneill Exp $	*/
 
 // SPDX-License-Identifier: GPL-2.0+
 /* reloc_riscv.c - position independent ELF shared object relocator

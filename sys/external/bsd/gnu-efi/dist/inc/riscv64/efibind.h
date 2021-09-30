@@ -1,4 +1,4 @@
-/*	$NetBSD: efibind.h,v 1.1 2021/09/30 18:50:09 jmcneill Exp $	*/
+/*	$NetBSD: efibind.h,v 1.1.1.1 2021/09/30 18:50:09 jmcneill Exp $	*/
 
 /*
  * Copright (C) 2014 - 2015 Linaro Ltd.

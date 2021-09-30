@@ -1,4 +1,4 @@
-/*	$NetBSD: math.c,v 1.1 2021/09/30 18:50:09 jmcneill Exp $	*/
+/*	$NetBSD: math.c,v 1.1.1.1 2021/09/30 18:50:09 jmcneill Exp $	*/
 
 // SPDX-License-Identifier: BSD-2-Clause-Patent
 /*

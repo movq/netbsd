@@ -1,4 +1,4 @@
-/*	$NetBSD: eficonex.h,v 1.1 2021/09/30 18:50:09 jmcneill Exp $	*/
+/*	$NetBSD: eficonex.h,v 1.1.1.1 2021/09/30 18:50:09 jmcneill Exp $	*/
 
 #ifndef _EFI_CONEX_H
 #define _EFI_CONEX_H

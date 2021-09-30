@@ -1,4 +1,4 @@
-/*	$NetBSD: efishell.h,v 1.1 2021/09/30 18:50:09 jmcneill Exp $	*/
+/*	$NetBSD: efishell.h,v 1.1.1.1 2021/09/30 18:50:09 jmcneill Exp $	*/
 
 /**
   EFI Shell protocol as defined in the UEFI Shell Specification 2.2.
