@@ -1,4 +1,4 @@
-# $NetBSD: etc.rc,v 1.1 2021/10/08 20:24:06 maya Exp $
+# $NetBSD: etc.rc,v 1.1.2.2 2021/10/15 15:14:51 martin Exp $
 #
 # Copyright (c) 1997 Perry E. Metzger
 # Copyright (c) 1994 Christopher G. Demetriou
