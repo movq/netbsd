@@ -1,4 +1,4 @@
-/*	$NetBSD: realtek,rtd1195.h,v 1.1 2021/11/07 16:49:57 jmcneill Exp $	*/
+/*	$NetBSD: realtek,rtd1195.h,v 1.1.1.1 2021/11/07 16:49:57 jmcneill Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0-or-later OR BSD-2-Clause) */
 /*

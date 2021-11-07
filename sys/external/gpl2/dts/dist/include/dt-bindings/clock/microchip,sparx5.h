@@ -1,4 +1,4 @@
-/*	$NetBSD: microchip,sparx5.h,v 1.1 2021/11/07 16:50:00 jmcneill Exp $	*/
+/*	$NetBSD: microchip,sparx5.h,v 1.1.1.1 2021/11/07 16:50:00 jmcneill Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*

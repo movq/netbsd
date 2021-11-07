@@ -1,4 +1,4 @@
-/*	$NetBSD: tegra194-mc.h,v 1.1 2021/11/07 16:49:56 jmcneill Exp $	*/
+/*	$NetBSD: tegra194-mc.h,v 1.1.1.1 2021/11/07 16:49:56 jmcneill Exp $	*/
 
 #ifndef DT_BINDINGS_MEMORY_TEGRA194_MC_H
 #define DT_BINDINGS_MEMORY_TEGRA194_MC_H

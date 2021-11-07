@@ -1,4 +1,4 @@
-/*	$NetBSD: mt6765-power.h,v 1.1 2021/11/07 16:49:56 jmcneill Exp $	*/
+/*	$NetBSD: mt6765-power.h,v 1.1.1.1 2021/11/07 16:49:56 jmcneill Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 #ifndef _DT_BINDINGS_POWER_MT6765_POWER_H
