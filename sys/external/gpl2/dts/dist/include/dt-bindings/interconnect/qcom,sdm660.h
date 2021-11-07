@@ -1,4 +1,4 @@
-/*	$NetBSD: qcom,sdm660.h,v 1.1 2021/11/07 16:49:57 jmcneill Exp $	*/
+/*	$NetBSD: qcom,sdm660.h,v 1.1.1.1 2021/11/07 16:49:57 jmcneill Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 /* SDM660 interconnect IDs */

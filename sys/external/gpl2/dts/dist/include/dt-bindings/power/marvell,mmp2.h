@@ -1,4 +1,4 @@
-/*	$NetBSD: marvell,mmp2.h,v 1.1 2021/11/07 16:49:56 jmcneill Exp $	*/
+/*	$NetBSD: marvell,mmp2.h,v 1.1.1.1 2021/11/07 16:49:56 jmcneill Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 #ifndef __DTS_MARVELL_MMP2_POWER_H

@@ -1,4 +1,4 @@
-/*	$NetBSD: sun50i-a100-r-ccu.h,v 1.1 2021/11/07 16:49:57 jmcneill Exp $	*/
+/*	$NetBSD: sun50i-a100-r-ccu.h,v 1.1.1.1 2021/11/07 16:49:57 jmcneill Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0+ or MIT) */
 /*

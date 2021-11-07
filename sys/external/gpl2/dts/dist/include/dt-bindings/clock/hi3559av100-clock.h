@@ -1,4 +1,4 @@
-/*	$NetBSD: hi3559av100-clock.h,v 1.1 2021/11/07 16:50:00 jmcneill Exp $	*/
+/*	$NetBSD: hi3559av100-clock.h,v 1.1.1.1 2021/11/07 16:50:00 jmcneill Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0-or-later or BSD-2-Clause */
 /*

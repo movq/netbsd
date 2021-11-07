@@ -1,4 +1,4 @@
-/*	$NetBSD: qcom,videocc-sc7280.h,v 1.1 2021/11/07 16:49:59 jmcneill Exp $	*/
+/*	$NetBSD: qcom,videocc-sc7280.h,v 1.1.1.1 2021/11/07 16:49:59 jmcneill Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
 /*
