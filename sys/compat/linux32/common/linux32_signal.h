@@ -1,4 +1,4 @@
-/* $NetBSD: linux32_signal.h,v 1.4 2021/11/01 05:07:16 thorpej Exp $ */
+/* $NetBSD: linux32_signal.h,v 1.5 2021/11/25 03:08:04 ryo Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -34,8 +34,12 @@
 #define _LINUX32_SIGNAL_H_
 
 #include <compat/linux32/common/linux32_siginfo.h>
-#ifdef __amd64__
+#if defined(__aarch64__)
+#include <compat/linux32/arch/aarch64/linux32_signal.h>
+#elif defined(__amd64__)
 #include <compat/linux32/arch/amd64/linux32_signal.h>
+#else
+#error Undefined linux32_signal.h machine type.
 #endif
 
 void linux32_to_native_sigset(sigset_t *, const linux32_sigset_t *);
