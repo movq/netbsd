@@ -1,4 +1,4 @@
-/*	$NetBSD: hgsmi_ch_setup.h,v 1.1 2021/12/18 20:15:53 riastradh Exp $	*/
+/*	$NetBSD: hgsmi_ch_setup.h,v 1.1.1.1 2021/12/18 20:15:53 riastradh Exp $	*/
 
 /* SPDX-License-Identifier: MIT */
 /* Copyright (C) 2006-2017 Oracle Corporation */

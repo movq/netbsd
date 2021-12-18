@@ -1,4 +1,4 @@
-/*	$NetBSD: dcn_1_0_offset.h,v 1.1 2021/12/18 20:12:06 riastradh Exp $	*/
+/*	$NetBSD: dcn_1_0_offset.h,v 1.1.1.1 2021/12/18 20:12:06 riastradh Exp $	*/
 
 /*
  * Copyright (C) 2017  Advanced Micro Devices, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: gfx_6_0_d.h,v 1.1 2021/12/18 20:13:07 riastradh Exp $	*/
+/*	$NetBSD: gfx_6_0_d.h,v 1.1.1.1 2021/12/18 20:13:07 riastradh Exp $	*/
 
 /*
  *

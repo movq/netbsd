@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_opregion.h,v 1.1 2021/12/18 20:15:30 riastradh Exp $	*/
+/*	$NetBSD: intel_opregion.h,v 1.1.1.1 2021/12/18 20:15:30 riastradh Exp $	*/
 
 /*
  * Copyright © 2008-2017 Intel Corporation

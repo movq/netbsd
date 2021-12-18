@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_uc.h,v 1.1 2021/12/18 20:15:33 riastradh Exp $	*/
+/*	$NetBSD: intel_uc.h,v 1.1.1.1 2021/12/18 20:15:33 riastradh Exp $	*/
 
 /* SPDX-License-Identifier: MIT */
 /*

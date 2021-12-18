@@ -1,4 +1,4 @@
-/*	$NetBSD: ovly.h,v 1.1 2021/12/18 20:15:37 riastradh Exp $	*/
+/*	$NetBSD: ovly.h,v 1.1.1.1 2021/12/18 20:15:37 riastradh Exp $	*/
 
 #ifndef __NV50_KMS_OVLY_H__
 #define __NV50_KMS_OVLY_H__

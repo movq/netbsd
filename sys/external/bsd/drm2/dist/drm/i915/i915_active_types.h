@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_active_types.h,v 1.1 2021/12/18 20:15:24 riastradh Exp $	*/
+/*	$NetBSD: i915_active_types.h,v 1.1.1.1 2021/12/18 20:15:24 riastradh Exp $	*/
 
 /*
  * SPDX-License-Identifier: MIT

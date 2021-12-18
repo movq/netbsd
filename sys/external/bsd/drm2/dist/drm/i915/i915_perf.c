@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_perf.c,v 1.1 2021/12/18 20:15:25 riastradh Exp $	*/
+/*	$NetBSD: i915_perf.c,v 1.1.1.1 2021/12/18 20:15:25 riastradh Exp $	*/
 
 /*
  * Copyright © 2015-2016 Intel Corporation
@@ -194,7 +194,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i915_perf.c,v 1.1 2021/12/18 20:15:25 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i915_perf.c,v 1.1.1.1 2021/12/18 20:15:25 riastradh Exp $");
 
 #include <linux/anon_inodes.h>
 #include <linux/sizes.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: atomfirmwareid.h,v 1.1 2021/12/18 20:11:27 riastradh Exp $	*/
+/*	$NetBSD: atomfirmwareid.h,v 1.1.1.1 2021/12/18 20:11:27 riastradh Exp $	*/
 
 /****************************************************************************\
 * 

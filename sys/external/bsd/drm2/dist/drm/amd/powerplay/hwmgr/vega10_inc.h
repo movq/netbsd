@@ -1,4 +1,4 @@
-/*	$NetBSD: vega10_inc.h,v 1.1 2021/12/18 20:15:21 riastradh Exp $	*/
+/*	$NetBSD: vega10_inc.h,v 1.1.1.1 2021/12/18 20:15:21 riastradh Exp $	*/
 
 /*
  * Copyright 2016 Advanced Micro Devices, Inc.

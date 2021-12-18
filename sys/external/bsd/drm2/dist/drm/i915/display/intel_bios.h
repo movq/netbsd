@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_bios.h,v 1.1 2021/12/18 20:15:27 riastradh Exp $	*/
+/*	$NetBSD: intel_bios.h,v 1.1.1.1 2021/12/18 20:15:27 riastradh Exp $	*/
 
 /*
  * Copyright © 2016-2019 Intel Corporation

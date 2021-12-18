@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_uc_fw.c,v 1.1 2021/12/18 20:15:33 riastradh Exp $	*/
+/*	$NetBSD: intel_uc_fw.c,v 1.1.1.1 2021/12/18 20:15:33 riastradh Exp $	*/
 
 // SPDX-License-Identifier: MIT
 /*
@@ -6,7 +6,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_uc_fw.c,v 1.1 2021/12/18 20:15:33 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_uc_fw.c,v 1.1.1.1 2021/12/18 20:15:33 riastradh Exp $");
 
 #include <linux/bitfield.h>
 #include <linux/firmware.h>

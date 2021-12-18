@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_overlay.c,v 1.1 2021/12/18 20:15:30 riastradh Exp $	*/
+/*	$NetBSD: intel_overlay.c,v 1.1.1.1 2021/12/18 20:15:30 riastradh Exp $	*/
 
 /*
  * Copyright © 2009
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_overlay.c,v 1.1 2021/12/18 20:15:30 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_overlay.c,v 1.1.1.1 2021/12/18 20:15:30 riastradh Exp $");
 
 #include <drm/drm_fourcc.h>
 #include <drm/i915_drm.h>

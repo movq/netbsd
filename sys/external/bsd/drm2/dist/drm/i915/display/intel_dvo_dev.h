@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_dvo_dev.h,v 1.1 2021/12/18 20:15:29 riastradh Exp $	*/
+/*	$NetBSD: intel_dvo_dev.h,v 1.1.1.1 2021/12/18 20:15:29 riastradh Exp $	*/
 
 /*
  * Copyright © 2006 Eric Anholt

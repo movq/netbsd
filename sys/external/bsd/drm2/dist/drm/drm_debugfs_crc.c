@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_debugfs_crc.c,v 1.1 2021/12/18 20:11:01 riastradh Exp $	*/
+/*	$NetBSD: drm_debugfs_crc.c,v 1.1.1.1 2021/12/18 20:11:01 riastradh Exp $	*/
 
 /*
  * Copyright © 2008 Intel Corporation
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_debugfs_crc.c,v 1.1 2021/12/18 20:11:01 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_debugfs_crc.c,v 1.1.1.1 2021/12/18 20:11:01 riastradh Exp $");
 
 #include <linux/circ_buf.h>
 #include <linux/ctype.h>

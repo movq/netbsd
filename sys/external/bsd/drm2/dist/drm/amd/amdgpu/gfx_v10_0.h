@@ -1,4 +1,4 @@
-/*	$NetBSD: gfx_v10_0.h,v 1.1 2021/12/18 20:11:13 riastradh Exp $	*/
+/*	$NetBSD: gfx_v10_0.h,v 1.1.1.1 2021/12/18 20:11:13 riastradh Exp $	*/
 
 /*
  * Copyright 2019 dvanced Micro Devices, Inc.

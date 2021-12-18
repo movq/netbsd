@@ -1,4 +1,4 @@
-/*	$NetBSD: umc_6_1_2_offset.h,v 1.1 2021/12/18 20:15:15 riastradh Exp $	*/
+/*	$NetBSD: umc_6_1_2_offset.h,v 1.1.1.1 2021/12/18 20:15:15 riastradh Exp $	*/
 
 /*
  * Copyright (C) 2019  Advanced Micro Devices, Inc.

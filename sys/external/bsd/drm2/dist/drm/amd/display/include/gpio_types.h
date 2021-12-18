@@ -1,4 +1,4 @@
-/*	$NetBSD: gpio_types.h,v 1.1 2021/12/18 20:11:25 riastradh Exp $	*/
+/*	$NetBSD: gpio_types.h,v 1.1.1.1 2021/12/18 20:11:25 riastradh Exp $	*/
 
 /*
  * Copyright 2012-15 Advanced Micro Devices, Inc.

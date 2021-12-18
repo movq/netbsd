@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_lpe_audio.h,v 1.1 2021/12/18 20:15:57 riastradh Exp $	*/
+/*	$NetBSD: intel_lpe_audio.h,v 1.1.1.1 2021/12/18 20:15:57 riastradh Exp $	*/
 
 /*
  * Copyright © 2016 Intel Corporation

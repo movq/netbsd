@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_crtc_helper_internal.h,v 1.1 2021/12/18 20:11:00 riastradh Exp $	*/
+/*	$NetBSD: drm_crtc_helper_internal.h,v 1.1.1.1 2021/12/18 20:11:00 riastradh Exp $	*/
 
 /*
  * Copyright © 2016 Intel Corporation

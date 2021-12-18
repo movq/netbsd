@@ -1,4 +1,4 @@
-/*	$NetBSD: fw.h,v 1.1 2021/12/18 20:15:37 riastradh Exp $	*/
+/*	$NetBSD: fw.h,v 1.1.1.1 2021/12/18 20:15:37 riastradh Exp $	*/
 
 /* SPDX-License-Identifier: MIT */
 #ifndef __NVFW_FW_H__

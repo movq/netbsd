@@ -1,4 +1,4 @@
-/*	$NetBSD: ifb00d.h,v 1.1 2021/12/18 20:15:37 riastradh Exp $	*/
+/*	$NetBSD: ifb00d.h,v 1.1.1.1 2021/12/18 20:15:37 riastradh Exp $	*/
 
 #ifndef __NVIF_IFB00D_H__
 #define __NVIF_IFB00D_H__

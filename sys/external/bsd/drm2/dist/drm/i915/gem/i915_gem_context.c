@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_gem_context.c,v 1.1 2021/12/18 20:15:31 riastradh Exp $	*/
+/*	$NetBSD: i915_gem_context.c,v 1.1.1.1 2021/12/18 20:15:31 riastradh Exp $	*/
 
 /*
  * SPDX-License-Identifier: MIT
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i915_gem_context.c,v 1.1 2021/12/18 20:15:31 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i915_gem_context.c,v 1.1.1.1 2021/12/18 20:15:31 riastradh Exp $");
 
 #include <linux/log2.h>
 #include <linux/nospec.h>
