@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_display.c,v 1.1 2021/12/18 20:15:28 riastradh Exp $	*/
+/*	$NetBSD: intel_display.c,v 1.1.1.1 2021/12/18 20:15:28 riastradh Exp $	*/
 
 /*
  * Copyright © 2006-2007 Intel Corporation
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_display.c,v 1.1 2021/12/18 20:15:28 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_display.c,v 1.1.1.1 2021/12/18 20:15:28 riastradh Exp $");
 
 #include <linux/i2c.h>
 #include <linux/input.h>

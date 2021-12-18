@@ -1,4 +1,4 @@
-/*	$NetBSD: mod_shared.h,v 1.1 2021/12/18 20:11:26 riastradh Exp $	*/
+/*	$NetBSD: mod_shared.h,v 1.1.1.1 2021/12/18 20:11:26 riastradh Exp $	*/
 
 /*
  * Copyright 2016 Advanced Micro Devices, Inc.

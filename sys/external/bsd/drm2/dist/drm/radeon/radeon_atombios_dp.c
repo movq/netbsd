@@ -1,4 +1,4 @@
-/*	$NetBSD: radeon_atombios_dp.c,v 1.1 2018/08/27 14:38:20 riastradh Exp $	*/
+/*	$NetBSD: radeon_atombios_dp.c,v 1.1.1.1 2021/12/18 20:15:46 riastradh Exp $	*/
 
 /*
  * Copyright 2007-8 Advanced Micro Devices, Inc.
@@ -26,10 +26,10 @@
  *          Alex Deucher
  *          Jerome Glisse
  */
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: radeon_atombios_dp.c,v 1.1 2018/08/27 14:38:20 riastradh Exp $");
 
-#include <drm/drmP.h>
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: radeon_atombios_dp.c,v 1.1.1.1 2021/12/18 20:15:46 riastradh Exp $");
+
 #include <drm/radeon_drm.h>
 #include "radeon.h"
 
@@ -41,11 +41,11 @@ __KERNEL_RCSID(0, "$NetBSD: radeon_atombios_dp.c,v 1.1 2018/08/27 14:38:20 riast
 #define DP_LINK_CONFIGURATION_SIZE 9
 #define DP_DPCD_SIZE DP_RECEIVER_CAP_SIZE
 
-static const char *voltage_names[] = {
-        "0.4V", "0.6V", "0.8V", "1.2V"
+static char *voltage_names[] = {
+	"0.4V", "0.6V", "0.8V", "1.2V"
 };
-static const char *pre_emph_names[] = {
-        "0dB", "3.5dB", "6dB", "9.5dB"
+static char *pre_emph_names[] = {
+	"0dB", "3.5dB", "6dB", "9.5dB"
 };
 
 /***** radeon AUX functions *****/
@@ -246,11 +246,6 @@ void radeon_dp_aux_init(struct radeon_connector *radeon_connector)
 		radeon_connector->ddc_bus->aux.transfer = radeon_dp_aux_transfer_atom;
 	}
 
-#ifdef __NetBSD__
-	/* XXX dervied from sysfs/i2c on linux. */
-	radeon_connector->ddc_bus->aux.name = "radeon_dp_aux";
-#endif
-
 	ret = drm_dp_aux_register(&radeon_connector->ddc_bus->aux);
 	if (!ret)
 		radeon_connector->ddc_bus->has_aux = true;
@@ -312,10 +307,10 @@ static int convert_bpc_to_bpp(int bpc)
 
 /***** radeon specific DP functions *****/
 
-int radeon_dp_get_dp_link_config(struct drm_connector *connector,
-				 const u8 dpcd[DP_DPCD_SIZE],
-				 unsigned pix_clock,
-				 unsigned *dp_lanes, unsigned *dp_rate)
+static int radeon_dp_get_dp_link_config(struct drm_connector *connector,
+					const u8 dpcd[DP_DPCD_SIZE],
+					unsigned pix_clock,
+					unsigned *dp_lanes, unsigned *dp_rate)
 {
 	int bpp = convert_bpc_to_bpp(radeon_get_monitor_bpc(connector));
 	static const unsigned link_rates[3] = { 162000, 270000, 540000 };
@@ -385,11 +380,11 @@ static void radeon_dp_probe_oui(struct radeon_connector *radeon_connector)
 		return;
 
 	if (drm_dp_dpcd_read(&radeon_connector->ddc_bus->aux, DP_SINK_OUI, buf, 3) == 3)
-		DRM_DEBUG_KMS("Sink OUI: %02hhx%02hhx%02hhx\n",
+		DRM_DEBUG_KMS("Sink OUI: %02hx%02hx%02hx\n",
 			      buf[0], buf[1], buf[2]);
 
 	if (drm_dp_dpcd_read(&radeon_connector->ddc_bus->aux, DP_BRANCH_OUI, buf, 3) == 3)
-		DRM_DEBUG_KMS("Branch OUI: %02hhx%02hhx%02hhx\n",
+		DRM_DEBUG_KMS("Branch OUI: %02hx%02hx%02hx\n",
 			      buf[0], buf[1], buf[2]);
 }
 
@@ -397,22 +392,21 @@ bool radeon_dp_getdpcd(struct radeon_connector *radeon_connector)
 {
 	struct radeon_connector_atom_dig *dig_connector = radeon_connector->con_priv;
 	u8 msg[DP_DPCD_SIZE];
-	int ret, i;
+	int ret;
 
-	for (i = 0; i < 7; i++) {
-		ret = drm_dp_dpcd_read(&radeon_connector->ddc_bus->aux, DP_DPCD_REV, msg,
-				       DP_DPCD_SIZE);
-		if (ret == DP_DPCD_SIZE) {
-			memcpy(dig_connector->dpcd, msg, DP_DPCD_SIZE);
+	ret = drm_dp_dpcd_read(&radeon_connector->ddc_bus->aux, DP_DPCD_REV, msg,
+			       DP_DPCD_SIZE);
+	if (ret == DP_DPCD_SIZE) {
+		memcpy(dig_connector->dpcd, msg, DP_DPCD_SIZE);
 
-			DRM_DEBUG_KMS("DPCD: %*ph\n", (int)sizeof(dig_connector->dpcd),
-				      dig_connector->dpcd);
+		DRM_DEBUG_KMS("DPCD: %*ph\n", (int)sizeof(dig_connector->dpcd),
+			      dig_connector->dpcd);
 
-			radeon_dp_probe_oui(radeon_connector);
+		radeon_dp_probe_oui(radeon_connector);
 
-			return true;
-		}
+		return true;
 	}
+
 	dig_connector->dpcd[0] = 0;
 	return false;
 }
@@ -824,9 +818,8 @@ void radeon_dp_link_train(struct drm_encoder *encoder,
 	dp_info.use_dpencoder = true;
 	index = GetIndexIntoMasterTable(COMMAND, DPEncoderService);
 	if (atom_parse_cmd_header(rdev->mode_info.atom_context, index, &frev, &crev)) {
-		if (crev > 1) {
+		if (crev > 1)
 			dp_info.use_dpencoder = false;
-		}
 	}
 
 	dp_info.enc_id = 0;

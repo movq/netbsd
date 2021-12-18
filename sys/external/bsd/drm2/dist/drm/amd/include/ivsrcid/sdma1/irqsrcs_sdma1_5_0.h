@@ -1,4 +1,4 @@
-/*	$NetBSD: irqsrcs_sdma1_5_0.h,v 1.1 2021/12/18 20:15:18 riastradh Exp $	*/
+/*	$NetBSD: irqsrcs_sdma1_5_0.h,v 1.1.1.1 2021/12/18 20:15:18 riastradh Exp $	*/
 
 /*
  * Copyright 2018 Advanced Micro Devices, Inc.

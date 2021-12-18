@@ -1,4 +1,4 @@
-/*	$NetBSD: vc4_drm.h,v 1.1 2021/12/18 20:15:58 riastradh Exp $	*/
+/*	$NetBSD: vc4_drm.h,v 1.1.1.1 2021/12/18 20:15:58 riastradh Exp $	*/
 
 /*
  * Copyright © 2014-2015 Broadcom

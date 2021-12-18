@@ -1,4 +1,4 @@
-/*	$NetBSD: vegam_smumgr.h,v 1.1 2021/12/18 20:15:23 riastradh Exp $	*/
+/*	$NetBSD: vegam_smumgr.h,v 1.1.1.1 2021/12/18 20:15:23 riastradh Exp $	*/
 
 /*
  * Copyright 2017 Advanced Micro Devices, Inc.

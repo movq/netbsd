@@ -1,4 +1,4 @@
-/*	$NetBSD: vega10_sdma_pkt_open.h,v 1.1 2021/12/18 20:11:15 riastradh Exp $	*/
+/*	$NetBSD: vega10_sdma_pkt_open.h,v 1.1.1.1 2021/12/18 20:11:15 riastradh Exp $	*/
 
 /*
  * Copyright (C) 2016  Advanced Micro Devices, Inc.

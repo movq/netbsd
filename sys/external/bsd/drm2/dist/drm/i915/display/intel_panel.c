@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_panel.c,v 1.1 2021/12/18 20:15:30 riastradh Exp $	*/
+/*	$NetBSD: intel_panel.c,v 1.1.1.1 2021/12/18 20:15:30 riastradh Exp $	*/
 
 /*
  * Copyright © 2006-2010 Intel Corporation
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_panel.c,v 1.1 2021/12/18 20:15:30 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_panel.c,v 1.1.1.1 2021/12/18 20:15:30 riastradh Exp $");
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 

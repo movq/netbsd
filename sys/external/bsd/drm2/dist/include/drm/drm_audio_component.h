@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_audio_component.h,v 1.1 2021/12/18 20:15:56 riastradh Exp $	*/
+/*	$NetBSD: drm_audio_component.h,v 1.1.1.1 2021/12/18 20:15:56 riastradh Exp $	*/
 
 // SPDX-License-Identifier: MIT
 // Copyright © 2014 Intel Corporation

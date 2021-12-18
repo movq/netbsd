@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_bios.c,v 1.1 2021/12/18 20:15:27 riastradh Exp $	*/
+/*	$NetBSD: intel_bios.c,v 1.1.1.1 2021/12/18 20:15:27 riastradh Exp $	*/
 
 /*
  * Copyright © 2006 Intel Corporation
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_bios.c,v 1.1 2021/12/18 20:15:27 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_bios.c,v 1.1.1.1 2021/12/18 20:15:27 riastradh Exp $");
 
 #include <drm/drm_dp_helper.h>
 #include <drm/i915_drm.h>

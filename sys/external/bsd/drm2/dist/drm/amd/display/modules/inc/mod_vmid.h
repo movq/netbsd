@@ -1,4 +1,4 @@
-/*	$NetBSD: mod_vmid.h,v 1.1 2021/12/18 20:11:26 riastradh Exp $	*/
+/*	$NetBSD: mod_vmid.h,v 1.1.1.1 2021/12/18 20:11:26 riastradh Exp $	*/
 
 /*
  * Copyright 2019 Advanced Micro Devices, Inc.

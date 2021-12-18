@@ -1,4 +1,4 @@
-/*	$NetBSD: nbio_7_0_offset.h,v 1.1 2021/12/18 20:14:32 riastradh Exp $	*/
+/*	$NetBSD: nbio_7_0_offset.h,v 1.1.1.1 2021/12/18 20:14:32 riastradh Exp $	*/
 
 /*
  * Copyright (C) 2017  Advanced Micro Devices, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_mmhub.h,v 1.1 2021/12/18 20:11:09 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_mmhub.h,v 1.1.1.1 2021/12/18 20:11:09 riastradh Exp $	*/
 
 /*
  * Copyright (C) 2019  Advanced Micro Devices, Inc.

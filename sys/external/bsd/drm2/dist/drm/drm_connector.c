@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_connector.c,v 1.1 2021/12/18 20:11:00 riastradh Exp $	*/
+/*	$NetBSD: drm_connector.c,v 1.1.1.1 2021/12/18 20:11:00 riastradh Exp $	*/
 
 /*
  * Copyright (c) 2016 Intel Corporation
@@ -23,7 +23,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_connector.c,v 1.1 2021/12/18 20:11:00 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_connector.c,v 1.1.1.1 2021/12/18 20:11:00 riastradh Exp $");
 
 #include <drm/drm_connector.h>
 #include <drm/drm_edid.h>

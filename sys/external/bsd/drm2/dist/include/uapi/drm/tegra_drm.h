@@ -1,4 +1,4 @@
-/*	$NetBSD: tegra_drm.h,v 1.1 2021/12/18 20:15:58 riastradh Exp $	*/
+/*	$NetBSD: tegra_drm.h,v 1.1.1.1 2021/12/18 20:15:58 riastradh Exp $	*/
 
 /*
  * Copyright (c) 2012-2013, NVIDIA CORPORATION.  All rights reserved.

@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_display.h,v 1.1 2021/12/18 20:15:28 riastradh Exp $	*/
+/*	$NetBSD: intel_display.h,v 1.1.1.1 2021/12/18 20:15:28 riastradh Exp $	*/
 
 /*
  * Copyright © 2006-2019 Intel Corporation

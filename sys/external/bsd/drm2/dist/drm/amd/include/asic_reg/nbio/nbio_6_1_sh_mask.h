@@ -1,4 +1,4 @@
-/*	$NetBSD: nbio_6_1_sh_mask.h,v 1.1 2021/12/18 20:14:28 riastradh Exp $	*/
+/*	$NetBSD: nbio_6_1_sh_mask.h,v 1.1.1.1 2021/12/18 20:14:28 riastradh Exp $	*/
 
 /*
  * Copyright (C) 2017  Advanced Micro Devices, Inc.

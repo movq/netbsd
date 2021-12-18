@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_params.h,v 1.1 2021/12/18 20:15:25 riastradh Exp $	*/
+/*	$NetBSD: i915_params.h,v 1.1.1.1 2021/12/18 20:15:25 riastradh Exp $	*/
 
 /*
  * Copyright © 2015 Intel Corporation

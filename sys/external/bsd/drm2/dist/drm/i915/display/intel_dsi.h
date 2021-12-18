@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_dsi.h,v 1.1 2021/12/18 20:15:29 riastradh Exp $	*/
+/*	$NetBSD: intel_dsi.h,v 1.1.1.1 2021/12/18 20:15:29 riastradh Exp $	*/
 
 /*
  * Copyright © 2013 Intel Corporation

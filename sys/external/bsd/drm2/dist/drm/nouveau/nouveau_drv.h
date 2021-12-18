@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_drv.h,v 1.1 2021/12/18 20:15:35 riastradh Exp $	*/
+/*	$NetBSD: nouveau_drv.h,v 1.1.1.1 2021/12/18 20:15:35 riastradh Exp $	*/
 
 /* SPDX-License-Identifier: MIT */
 #ifndef __NOUVEAU_DRV_H__

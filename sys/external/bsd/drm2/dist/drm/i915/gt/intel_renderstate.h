@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_renderstate.h,v 1.1 2021/12/18 20:15:32 riastradh Exp $	*/
+/*	$NetBSD: intel_renderstate.h,v 1.1.1.1 2021/12/18 20:15:32 riastradh Exp $	*/
 
 /*
  * Copyright © 2014 Intel Corporation

@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_dp_dual_mode_helper.h,v 1.1 2021/12/18 20:15:56 riastradh Exp $	*/
+/*	$NetBSD: drm_dp_dual_mode_helper.h,v 1.1.1.1 2021/12/18 20:15:56 riastradh Exp $	*/
 
 /*
  * Copyright © 2016 Intel Corporation

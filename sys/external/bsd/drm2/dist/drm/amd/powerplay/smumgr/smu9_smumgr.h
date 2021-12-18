@@ -1,4 +1,4 @@
-/*	$NetBSD: smu9_smumgr.h,v 1.1 2021/12/18 20:15:23 riastradh Exp $	*/
+/*	$NetBSD: smu9_smumgr.h,v 1.1.1.1 2021/12/18 20:15:23 riastradh Exp $	*/
 
 /*
  * Copyright 2018 Advanced Micro Devices, Inc.

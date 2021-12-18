@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_mode.h,v 1.1 2021/12/18 20:15:57 riastradh Exp $	*/
+/*	$NetBSD: drm_mode.h,v 1.1.1.1 2021/12/18 20:15:57 riastradh Exp $	*/
 
 /*
  * Copyright (c) 2007 Dave Airlie <airlied@linux.ie>

@@ -1,4 +1,4 @@
-/*	$NetBSD: mock_request.c,v 1.1 2021/12/18 20:15:35 riastradh Exp $	*/
+/*	$NetBSD: mock_request.c,v 1.1.1.1 2021/12/18 20:15:35 riastradh Exp $	*/
 
 /*
  * Copyright © 2016 Intel Corporation
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mock_request.c,v 1.1 2021/12/18 20:15:35 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mock_request.c,v 1.1.1.1 2021/12/18 20:15:35 riastradh Exp $");
 
 #include "gem/selftests/igt_gem_utils.h"
 #include "gt/mock_engine.h"

@@ -1,4 +1,4 @@
-/*	$NetBSD: luts_1d.h,v 1.1 2021/12/18 20:11:25 riastradh Exp $	*/
+/*	$NetBSD: luts_1d.h,v 1.1.1.1 2021/12/18 20:11:25 riastradh Exp $	*/
 
 /*
  * Copyright 2016 Advanced Micro Devices, Inc.

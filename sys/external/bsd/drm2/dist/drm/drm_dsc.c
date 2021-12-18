@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_dsc.c,v 1.1 2021/12/18 20:11:01 riastradh Exp $	*/
+/*	$NetBSD: drm_dsc.c,v 1.1.1.1 2021/12/18 20:11:01 riastradh Exp $	*/
 
 // SPDX-License-Identifier: MIT
 /*
@@ -9,7 +9,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_dsc.c,v 1.1 2021/12/18 20:11:01 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_dsc.c,v 1.1.1.1 2021/12/18 20:11:01 riastradh Exp $");
 
 #include <linux/kernel.h>
 #include <linux/module.h>

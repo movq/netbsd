@@ -1,4 +1,4 @@
-/*	$NetBSD: gk104.h,v 1.1 2021/12/18 20:15:43 riastradh Exp $	*/
+/*	$NetBSD: gk104.h,v 1.1.1.1 2021/12/18 20:15:43 riastradh Exp $	*/
 
 /*
  * Copyright 2018 Red Hat Inc.

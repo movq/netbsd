@@ -1,4 +1,4 @@
-/*	$NetBSD: grph_object_ctrl_defs.h,v 1.1 2021/12/18 20:11:25 riastradh Exp $	*/
+/*	$NetBSD: grph_object_ctrl_defs.h,v 1.1.1.1 2021/12/18 20:11:25 riastradh Exp $	*/
 
 /*
  * Copyright 2012-15 Advanced Micro Devices, Inc.

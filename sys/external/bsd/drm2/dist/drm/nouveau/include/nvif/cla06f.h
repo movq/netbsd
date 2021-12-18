@@ -1,4 +1,4 @@
-/*	$NetBSD: cla06f.h,v 1.1 2021/12/18 20:15:37 riastradh Exp $	*/
+/*	$NetBSD: cla06f.h,v 1.1.1.1 2021/12/18 20:15:37 riastradh Exp $	*/
 
 /* SPDX-License-Identifier: MIT */
 #ifndef __NVIF_CLA06F_H__

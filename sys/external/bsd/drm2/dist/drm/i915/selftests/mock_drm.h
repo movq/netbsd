@@ -1,4 +1,4 @@
-/*	$NetBSD: mock_drm.h,v 1.1 2021/12/18 20:15:35 riastradh Exp $	*/
+/*	$NetBSD: mock_drm.h,v 1.1.1.1 2021/12/18 20:15:35 riastradh Exp $	*/
 
 /*
  * Copyright © 2017 Intel Corporation
