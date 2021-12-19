@@ -1,4 +1,4 @@
-/*	$NetBSD: bug.h,v 1.2 2021/12/19 11:01:37 riastradh Exp $	*/
+/*	$NetBSD: bug.h,v 1.3 2021/12/19 11:10:41 riastradh Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -35,21 +35,10 @@
 #include <sys/cdefs.h>
 #include <sys/systm.h>
 
-/*
- * static_assert is violated with runtime-only compiler semantics in a few
- * places. Instead of breaking the build, stop asserting these corner cases.
- */
-
-#define DRMCTASSERT(x)	CTASSERT((__builtin_choose_expr(		\
-			__builtin_constant_p(x), (x), 1)))
+#include <linux/build_bug.h>	/* XXX */
 
 #define	BUG()			panic("%s:%d: BUG!", __FILE__, __LINE__)
 #define	BUG_ON(CONDITION)	KASSERT(!(CONDITION))
-
-#define	BUILD_BUG()		do {} while (0)
-#define	BUILD_BUG_ON(CONDITION)	DRMCTASSERT(!(CONDITION))
-#define	BUILD_BUG_ON_MSG(CONDITION,MSG)	DRMCTASSERT(!(CONDITION))
-#define	BUILD_BUG_ON_INVALID(EXPR)	((void)sizeof((long)(EXPR)))
 
 /* XXX Rate limit?  */
 #define WARN(CONDITION, FMT, ...)					\
