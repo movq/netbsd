@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_writeback.h,v 1.5 2021/12/19 01:58:47 riastradh Exp $	*/
+/*	$NetBSD: drm_writeback.h,v 1.6 2021/12/19 10:46:03 riastradh Exp $	*/
 
 /*-
  * Copyright (c) 2018 The NetBSD Foundation, Inc.
@@ -32,10 +32,17 @@
 #ifndef	_DRM_DRM_WRITEBACK_H_
 #define	_DRM_DRM_WRITEBACK_H_
 
+#include <drm/drm_connector.h>
+
 struct dma_fence;
 struct drm_connector;
+struct drm_connector_state;
 struct drm_framebuffer;
 struct drm_writeback_connector;
+
+struct drm_writeback_connector {
+	struct drm_connector	base;
+};
 
 struct drm_writeback_job {
 	struct drm_framebuffer	*fb;
@@ -46,29 +53,9 @@ struct drm_writeback_connector *
 	drm_connector_to_writeback(struct drm_connector *);
 struct dma_fence *
 	drm_writeback_get_out_fence(struct drm_writeback_connector *);
-
-static inline void
-drm_writeback_cleanup_job(struct drm_writeback_job *job)
-{
-
-	panic("TODO");
-}
-
-static inline int
-drm_writeback_prepare_job(struct drm_writeback_job *job)
-{
-
-	panic("TODO");
-	return 0;
-}
-
-static inline int
-drm_writeback_set_fb(struct drm_connector_state *conn_state,
-    struct drm_framebuffer *fb)
-{
-
-	panic("TODO");
-	return 0;
-}
+int	drm_writeback_prepare_job(struct drm_writeback_job *);
+void	drm_writeback_cleanup_job(struct drm_writeback_job *);
+int	drm_writeback_set_fb(struct drm_connector_state *,
+	    struct drm_framebuffer *);
 
 #endif	/* _DRM_DRM_WRITEBACK_H_ */
