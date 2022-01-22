@@ -1,4 +1,4 @@
-/* $NetBSD: fuse_internal.h,v 1.1 2021/12/04 06:42:39 pho Exp $ */
+/* $NetBSD: fuse_internal.h,v 1.2 2022/01/22 07:53:06 pho Exp $ */
 
 /*
  * Copyright (c) 2021 The NetBSD Foundation, Inc.
@@ -38,5 +38,20 @@
 
 #include <fuse.h>
 #include <fuse_lowlevel.h>
+#include <sys/cdefs.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Internal functions, hidden from users */
+__BEGIN_HIDDEN_DECLS
+int __fuse_set_signal_handlers(struct fuse* fuse);
+int __fuse_remove_signal_handlers(struct fuse* fuse);
+__END_HIDDEN_DECLS
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
