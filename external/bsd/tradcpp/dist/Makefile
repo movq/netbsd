@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2022/08/27 21:46:47 dholland Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2022/08/27 21:46:47 dholland Exp $
 
 PROG=	tradcpp
 SRCS=	main.c \
