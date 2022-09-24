@@ -1,4 +1,4 @@
-/*	$NetBSD: magic_fuzzer.c,v 1.1 2022/09/24 20:07:53 christos Exp $	*/
+/*	$NetBSD: magic_fuzzer.c,v 1.1.1.1 2022/09/24 20:07:53 christos Exp $	*/
 
 /*
  * Redistribution and use in source and binary forms, with or without
@@ -33,7 +33,7 @@
 #if 0
 FILE_RCSID("@(#)$File: magic_fuzzer.c,v 1.1 2017/04/24 19:41:34 christos Exp $")
 #else
-__RCSID("$NetBSD: magic_fuzzer.c,v 1.1 2022/09/24 20:07:53 christos Exp $");
+__RCSID("$NetBSD: magic_fuzzer.c,v 1.1.1.1 2022/09/24 20:07:53 christos Exp $");
 #endif
 #endif	/* lint */
 
