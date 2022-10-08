@@ -1,4 +1,4 @@
-/*	$NetBSD: bounce_notify_util_tester.c,v 1.1 2022/10/08 16:09:06 christos Exp $	*/
+/*	$NetBSD: bounce_notify_util_tester.c,v 1.1.1.1 2022/10/08 16:09:06 christos Exp $	*/
 
  /*
   * System library.

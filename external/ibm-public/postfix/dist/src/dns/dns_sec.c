@@ -1,4 +1,4 @@
-/*	$NetBSD: dns_sec.c,v 1.1 2022/10/08 16:09:06 christos Exp $	*/
+/*	$NetBSD: dns_sec.c,v 1.1.1.1 2022/10/08 16:09:06 christos Exp $	*/
 
 /*++
 /* NAME
