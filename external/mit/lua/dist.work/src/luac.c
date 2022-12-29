@@ -1,4 +1,4 @@
-/*	$NetBSD: luac.c,v 1.1 2022/12/29 09:45:57 nikita Exp $	*/
+/*	$NetBSD: luac.c,v 1.1.1.1 2022/12/29 09:45:57 nikita Exp $	*/
 
 /*
 ** Id: luac.c 

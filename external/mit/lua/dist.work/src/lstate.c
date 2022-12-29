@@ -1,4 +1,4 @@
-/*	$NetBSD: lstate.c,v 1.1 2022/12/29 09:45:57 nikita Exp $	*/
+/*	$NetBSD: lstate.c,v 1.1.1.1 2022/12/29 09:45:57 nikita Exp $	*/
 
 /*
 ** Id: lstate.c 

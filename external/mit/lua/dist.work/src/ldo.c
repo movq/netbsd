@@ -1,4 +1,4 @@
-/*	$NetBSD: ldo.c,v 1.1 2022/12/29 09:45:57 nikita Exp $	*/
+/*	$NetBSD: ldo.c,v 1.1.1.1 2022/12/29 09:45:57 nikita Exp $	*/
 
 /*
 ** Id: ldo.c 

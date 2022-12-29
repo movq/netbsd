@@ -1,4 +1,4 @@
-/*	$NetBSD: lparser.h,v 1.1 2022/12/29 09:45:58 nikita Exp $	*/
+/*	$NetBSD: lparser.h,v 1.1.1.1 2022/12/29 09:45:58 nikita Exp $	*/
 
 /*
 ** Id: lparser.h 
