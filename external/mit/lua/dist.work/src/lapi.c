@@ -1,4 +1,4 @@
-/*	$NetBSD: lapi.c,v 1.1 2022/12/29 09:45:58 nikita Exp $	*/
+/*	$NetBSD: lapi.c,v 1.1.1.1 2022/12/29 09:45:58 nikita Exp $	*/
 
 /*
 ** Id: lapi.c 
