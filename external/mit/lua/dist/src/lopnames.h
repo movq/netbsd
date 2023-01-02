@@ -1,4 +1,4 @@
-/*	$NetBSD: lopnames.h,v 1.1 2023/01/02 20:57:29 nikita Exp $	*/
+/*	$NetBSD: lopnames.h,v 1.1.1.1 2023/01/02 20:57:29 nikita Exp $	*/
 
 /*
 ** Id: lopnames.h 
