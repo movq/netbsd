@@ -1,4 +1,4 @@
-#	$NetBSD: xpm.mk,v 1.2 2023/01/20 10:20:05 mrg Exp $
+#	$NetBSD: xpm.mk,v 1.2.2.2 2023/01/23 13:36:04 martin Exp $
 
 CPPFLAGS+=	-DHAS_SNPRINTF
 CPPFLAGS+=	-DXPM_PATH_COMPRESS=\"/usr/bin/compress\"
