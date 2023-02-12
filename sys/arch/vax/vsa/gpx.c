@@ -1,4 +1,4 @@
-/*	$NetBSD: gpx.c,v 1.1 2023/02/06 13:13:05 tsutsui Exp $ */
+/*	$NetBSD: gpx.c,v 1.1.2.2 2023/02/12 12:27:26 martin Exp $ */
 /*	$OpenBSD: gpx.c,v 1.25 2014/12/23 21:39:12 miod Exp $	*/
 /*
  * Copyright (c) 2006 Miodrag Vallat.
