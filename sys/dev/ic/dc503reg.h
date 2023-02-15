@@ -1,4 +1,4 @@
-/*	$NetBSD: dc503reg.h,v 1.1 2023/02/11 05:59:39 tsutsui Exp $	*/
+/*	$NetBSD: dc503reg.h,v 1.1.2.2 2023/02/15 19:14:50 martin Exp $	*/
 /*	$OpenBSD: dc503reg.h,v 1.1 2006/07/23 19:17:23 miod Exp $	*/
 /*	NetBSD: pmreg.h,v 1.7 2005/12/11 12:18:36 christos Exp 	*/
 

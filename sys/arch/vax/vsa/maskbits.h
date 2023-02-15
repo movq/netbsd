@@ -1,4 +1,4 @@
-/*	$NetBSD: maskbits.h,v 1.1 2023/02/11 05:59:39 tsutsui Exp $	*/
+/*	$NetBSD: maskbits.h,v 1.1.2.2 2023/02/15 19:14:50 martin Exp $	*/
 /*	$OpenBSD: maskbits.h,v 1.1 2006/08/05 10:00:30 miod Exp $	*/
 
 /*-
