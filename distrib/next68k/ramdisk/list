@@ -1,4 +1,4 @@
-#	$NetBSD: list,v 1.1 2023/02/11 19:12:31 tsutsui Exp $
+#	$NetBSD: list,v 1.1.2.2 2023/02/22 12:59:17 martin Exp $
 
 SRCDIRS	bin sbin usr.bin usr.sbin
 
