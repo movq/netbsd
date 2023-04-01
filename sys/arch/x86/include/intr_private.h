@@ -1,4 +1,4 @@
-/*	$NetBSD: intr_private.h,v 1.1 2023/01/25 15:54:52 riastradh Exp $	*/
+/*	$NetBSD: intr_private.h,v 1.1.2.2 2023/04/01 15:11:00 martin Exp $	*/
 
 /*-
  * Copyright (c) 2023 The NetBSD Foundation, Inc.
