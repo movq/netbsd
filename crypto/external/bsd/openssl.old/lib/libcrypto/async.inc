@@ -1,4 +1,4 @@
-#	$NetBSD: async.inc,v 1.1 2023/04/18 14:19:03 christos Exp $
+#	$NetBSD: async.inc,v 1.1.1.1 2023/04/18 14:19:03 christos Exp $
 #
 #	@(#) Copyright (c) 1995 Simon J. Gerraty
 #

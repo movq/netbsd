@@ -1,4 +1,4 @@
-#	$NetBSD: sm4.inc,v 1.1 2023/04/18 14:19:04 christos Exp $
+#	$NetBSD: sm4.inc,v 1.1.1.1 2023/04/18 14:19:04 christos Exp $
 #
 #	SRCS extracted from src/crypto/dist/openssl/crypto/sm4/Makefile
 #

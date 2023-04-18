@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2023/04/18 14:19:16 christos Exp $
+# $NetBSD: Makefile,v 1.1.1.1 2023/04/18 14:19:16 christos Exp $
 
 LIBISPRIVATE=	yes
 LIB=		cryptotest

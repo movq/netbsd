@@ -1,4 +1,4 @@
-#	$NetBSD: aria.inc,v 1.1 2023/04/18 14:19:03 christos Exp $
+#	$NetBSD: aria.inc,v 1.1.1.1 2023/04/18 14:19:03 christos Exp $
 #
 #	SRCS extracted from src/crypto/dist/openssl/crypto/aria/Makefile
 #

@@ -1,4 +1,4 @@
-#	$NetBSD: ct.inc,v 1.1 2023/04/18 14:19:04 christos Exp $
+#	$NetBSD: ct.inc,v 1.1.1.1 2023/04/18 14:19:04 christos Exp $
 #
 #	@(#) Copyright (c) 1995 Simon J. Gcmsaty
 #
