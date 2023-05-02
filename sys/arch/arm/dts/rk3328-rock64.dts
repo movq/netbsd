@@ -1,4 +1,4 @@
-/*	$NetBSD: rk3328-rock64.dts,v 1.8 2023/04/24 05:16:01 mrg Exp $	*/
+/*	$NetBSD: rk3328-rock64.dts,v 1.8.2.2 2023/05/02 21:31:56 martin Exp $	*/
 
 /*
  * Copyright (c) 2023 Matthew R. Green
