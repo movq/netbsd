@@ -1,4 +1,4 @@
-# Copyright 2012-2020 Free Software Foundation, Inc.
+# Copyright 2012-2014 Free Software Foundation, Inc.
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 3 of the License, or
@@ -14,19 +14,19 @@
 #
 
 if {[skip_shlib_tests]} {
-    untested "skipping shared library tests"
+    untested catch-load.exp
     return -1
 }
 
 if {[get_compiler_info]} {
     warning "Could not get compiler info"
-    untested "no compiler info"
+    untested catch-load.exp
     return -1
 }
 
 standard_testfile .c
 if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug shlib_load}] != "" } {
-    untested "failed to compile"
+    untested catch-load.exp
     return -1
 }
 
@@ -35,7 +35,7 @@ set srcfile2 ${testfile2}.c
 set binfile2 [standard_output_file ${testfile2}.so]
 set binfile2_dlopen [shlib_target_file ${testfile2}.so]
 if { [gdb_compile_shlib "${srcdir}/${subdir}/${srcfile2}" ${binfile2} {debug}] != "" } {
-    untested "failed to compile shared library"
+    untested catch-load.exp
     return -1
 }
 
@@ -46,11 +46,12 @@ if { [gdb_compile_shlib "${srcdir}/${subdir}/${srcfile2}" ${binfile2} {debug}] !
 # MATCH is a boolean saying whether we expect the catchpoint to be hit.
 proc one_catch_load_test {scenario kind match sostop} {
     with_test_prefix "${scenario}" {
-	global testfile testfile2 binfile2 binfile2_dlopen
+	global verbose testfile testfile2 binfile2 binfile2_dlopen
+	global srcfile
 	global decimal gdb_prompt
 
 	clean_restart $testfile
-	gdb_load_shlib $binfile2
+	gdb_load_shlibs $binfile2
 
 	if {![runto_main]} {
 	    fail "can't run to main"

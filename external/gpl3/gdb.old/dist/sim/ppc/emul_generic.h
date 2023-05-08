@@ -28,7 +28,6 @@
 #include "tree.h"
 
 #include "bfd.h"
-#include "libiberty.h"
 
 #ifndef INLINE_EMUL_GENERIC
 #define INLINE_EMUL_GENERIC

@@ -1,6 +1,6 @@
 /* Target-dependent header for the MIPS architecture, for GDB, the GNU Debugger.
 
-   Copyright (C) 2002-2020 Free Software Foundation, Inc.
+   Copyright (C) 2002-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -47,10 +47,6 @@ enum mips_isa
     ISA_MIPS16,
     ISA_MICROMIPS
   };
-
-/* Corresponding MSYMBOL_TARGET_FLAG aliases.  */
-#define MSYMBOL_TARGET_FLAG_MIPS16 MSYMBOL_TARGET_FLAG_1
-#define MSYMBOL_TARGET_FLAG_MICROMIPS MSYMBOL_TARGET_FLAG_2
 
 /* Return the MIPS ISA's register size.  Just a short cut to the BFD
    architecture's word size.  */
@@ -113,6 +109,14 @@ struct gdbarch_tdep
   int register_size_valid_p;
   int register_size;
 
+  /* General-purpose registers.  */
+  struct regset *gregset;
+  struct regset *gregset64;
+
+  /* Floating-point registers.  */
+  struct regset *fpregset;
+  struct regset *fpregset64;
+
   /* Return the expected next PC if FRAME is stopped at a syscall
      instruction.  */
   CORE_ADDR (*syscall_next_pc) (struct frame_info *frame);
@@ -153,6 +157,9 @@ enum
   MIPS_LAST_EMBED_REGNUM = 89	/* Last one.  */
 };
 
+/* Defined in mips-tdep.c and used in remote-mips.c.  */
+extern void deprecated_mips_set_processor_regs_hack (void);
+
 /* Instruction sizes and other useful constants.  */
 enum
 {
@@ -163,23 +170,19 @@ enum
 };
 
 /* Single step based on where the current instruction will take us.  */
-extern std::vector<CORE_ADDR> mips_software_single_step
-  (struct regcache *regcache);
-
-/* Strip the ISA (compression) bit off from ADDR.  */
-extern CORE_ADDR mips_unmake_compact_addr (CORE_ADDR addr);
+extern int mips_software_single_step (struct frame_info *frame);
 
 /* Tell if the program counter value in MEMADDR is in a standard
    MIPS function.  */
-extern int mips_pc_is_mips (CORE_ADDR memaddr);
+extern int mips_pc_is_mips (bfd_vma memaddr);
 
 /* Tell if the program counter value in MEMADDR is in a MIPS16
    function.  */
-extern int mips_pc_is_mips16 (struct gdbarch *gdbarch, CORE_ADDR memaddr);
+extern int mips_pc_is_mips16 (struct gdbarch *gdbarch, bfd_vma memaddr);
 
 /* Tell if the program counter value in MEMADDR is in a microMIPS
    function.  */
-extern int mips_pc_is_micromips (struct gdbarch *gdbarch, CORE_ADDR memaddr);
+extern int mips_pc_is_micromips (struct gdbarch *gdbarch, bfd_vma memaddr);
 
 /* Return the currently configured (or set) saved register size.  */
 extern unsigned int mips_abi_regsize (struct gdbarch *gdbarch);

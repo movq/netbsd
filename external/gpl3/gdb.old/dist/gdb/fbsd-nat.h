@@ -1,6 +1,6 @@
 /* Native-dependent code for FreeBSD.
 
-   Copyright (C) 2004-2020 Free Software Foundation, Inc.
+   Copyright (C) 2004-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,88 +20,20 @@
 #ifndef FBSD_NAT_H
 #define FBSD_NAT_H
 
-#include "inf-ptrace.h"
-#include <osreldate.h>
-#include <sys/proc.h>
+/* Return the name of a file that can be opened to get the symbols for
+   the child process identified by PID.  */
 
-/* FreeBSD kernels 11.3 and later report valid si_code values for
-   SIGTRAP on all architectures.  Older FreeBSD kernels that supported
-   TRAP_BRKPT did not report valid values for MIPS and sparc64.  Even
-   older kernels without TRAP_BRKPT support did not report valid
-   values on any architecture.  */
-#if (__FreeBSD_kernel_version >= 1102502) || (__FreeBSD_version >= 1102502)
-# define USE_SIGTRAP_SIGINFO
-#elif defined(TRAP_BRKPT)
-# if !defined(__mips__) && !defined(__sparc64__)
-#  define USE_SIGTRAP_SIGINFO
-# endif
-#endif
+extern char *fbsd_pid_to_exec_file (int pid);
 
-/* A prototype FreeBSD target.  */
+/* Iterate over all the memory regions in the current inferior,
+   calling FUNC for each memory region.  OBFD is passed as the last
+   argument to FUNC.  */
 
-class fbsd_nat_target : public inf_ptrace_target
-{
-public:
-  char *pid_to_exec_file (int pid) override;
+extern int fbsd_find_memory_regions (find_memory_region_ftype func, void *obfd);
 
-  int find_memory_regions (find_memory_region_ftype func, void *data) override;
+/* Create appropriate note sections for a corefile, returning them in
+   allocated memory.  */
 
-  bool info_proc (const char *, enum info_proc_what) override;
-
-  enum target_xfer_status xfer_partial (enum target_object object,
-					const char *annex,
-					gdb_byte *readbuf,
-					const gdb_byte *writebuf,
-					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
-
-#ifdef PT_LWPINFO
-  bool thread_alive (ptid_t ptid) override;
-  std::string pid_to_str (ptid_t) override;
-
-#ifdef HAVE_STRUCT_PTRACE_LWPINFO_PL_TDNAME
-  const char *thread_name (struct thread_info *) override;
-#endif
-
-  void update_thread_list () override;
-
-  thread_control_capabilities get_thread_control_capabilities () override
-  { return tc_schedlock; }
-
-  void resume (ptid_t, int, enum gdb_signal) override;
-
-  ptid_t wait (ptid_t, struct target_waitstatus *, int) override;
-
-  void post_startup_inferior (ptid_t) override;
-  void post_attach (int) override;
-
-#ifdef USE_SIGTRAP_SIGINFO
-  bool supports_stopped_by_sw_breakpoint () override;
-  bool stopped_by_sw_breakpoint () override;
-#endif
-
-#ifdef TDP_RFPPWAIT
-  bool follow_fork (bool, bool) override;
-
-  int insert_fork_catchpoint (int) override;
-  int remove_fork_catchpoint (int) override;
-
-  int insert_vfork_catchpoint (int) override;
-  int remove_vfork_catchpoint (int) override;
-#endif
-
-#ifdef PL_FLAG_EXEC
-  int insert_exec_catchpoint (int) override;
-  int remove_exec_catchpoint (int) override;
-#endif
-
-#ifdef HAVE_STRUCT_PTRACE_LWPINFO_PL_SYSCALL_CODE
-  int set_syscall_catchpoint (int, bool, int, gdb::array_view<const int>)
-    override;
-#endif
-#endif /* PT_LWPINFO */
-
-  bool supports_multi_process () override;
-};
+extern char *fbsd_make_corefile_notes (bfd *obfd, int *note_size);
 
 #endif /* fbsd-nat.h */

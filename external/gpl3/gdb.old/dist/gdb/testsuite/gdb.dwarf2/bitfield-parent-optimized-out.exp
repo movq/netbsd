@@ -1,4 +1,4 @@
-# Copyright 2016-2020 Free Software Foundation, Inc.
+# Copyright 2016 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -29,6 +29,8 @@ set executable ${testfile}
 # Make some DWARF for the test.
 set asm_file [standard_output_file $srcfile2]
 Dwarf::assemble $asm_file {
+    global srcdir subdir srcfile
+
     cu { version 3 addr_size 4 } {
 	compile_unit {} {
 	    declare_labels struct_label var_label int_label
@@ -41,23 +43,24 @@ Dwarf::assemble $asm_file {
 
 	    struct_label: structure_type {
 		{name S}
-		{byte_size 8 DW_FORM_sdata}
+		{byte_size 4 DW_FORM_sdata}
 	    } {
 		member {
 		    {name bitfield}
 		    {type :$int_label}
 		    {bit_size 12 DW_FORM_sdata}
 		    {bit_offset 20 DW_FORM_sdata}
+		    {data_member_location 2 DW_FORM_sdata}
 		}
 		member {
 		    {name intfield}
 		    {type :$int_label}
-		    {data_member_location 4 DW_FORM_sdata}
+		    {data_member_location 2 DW_FORM_sdata}
 		}
 	    }
 
 	    subprogram {
-		{MACRO_AT_func { main }}
+		{MACRO_AT_func { main ${srcdir}/${subdir}/${srcfile} }}
 		{type :$int_label}
 		{external 1 flag}
 	    } {
@@ -71,7 +74,7 @@ Dwarf::assemble $asm_file {
     }
 }
 
-if [prepare_for_testing "failed to prepare" $executable "${asm_file} ${srcfile}" {}] {
+if [prepare_for_testing ${testfile}.exp $executable "${asm_file} ${srcfile}" {}] {
     return -1
 }
 

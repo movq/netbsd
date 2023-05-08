@@ -1,4 +1,4 @@
-# Copyright 1992-2020 Free Software Foundation, Inc.
+# Copyright 1992-2014 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -24,7 +24,7 @@ load_lib "cp-support.exp"
 
 standard_testfile .cc
 
-if {[prepare_for_testing "failed to prepare" $testfile $srcfile {debug c++}]} {
+if {[prepare_for_testing $testfile.exp $testfile $srcfile {debug c++}]} {
     return -1
 }
 
@@ -307,73 +307,6 @@ proc test_ptype_class_objects {} {
 	    { method public "Bar(int, int, int);" }
 	}
 
-    # Derived class with typedef'd baseclass with virtual methods.
-
-    cp_test_ptype_class \
-	"class DynamicBar" "" "class" "DynamicBar" \
-	{
-	    { base          "public DynamicBase2" }
-	    { field  public "int y;" }
-	    { method public "DynamicBar(int, int);" }
-	}
-
-    # Classes with typedefs of different access.
-
-    cp_test_ptype_class \
-	"class class_with_typedefs" "" "class" "class_with_typedefs" \
-	{
-	    { field protected \
-		  "class_with_typedefs::public_int public_int_;" }
-	    { field protected \
-		  "class_with_typedefs::protected_int protected_int_;" }
-	    { field protected \
-		  "class_with_typedefs::private_int private_int_;" }
-	    { method public "class_with_typedefs(void);" }
-	    { method public "class_with_typedefs::public_int add_public(class_with_typedefs::public_int);" }
-	    { method public \
-		  "class_with_typedefs::public_int add_all(int);" }
-	    { method protected "class_with_typedefs::protected_int add_protected(class_with_typedefs::protected_int);" }
-	    { method private "class_with_typedefs::private_int add_private(class_with_typedefs::private_int);" }
-	    { typedef public "typedef int public_int;" }
-	    { typedef protected "typedef int protected_int;" }
-	    { typedef private "typedef int private_int;" }
-	}
-
-    cp_test_ptype_class \
-	"class class_with_public_typedef" "" "class" \
-	"class_with_public_typedef" {
-	    { field private "int a;" }
-	    { field public "class_with_public_typedef::INT b;" }
-	    { typedef public "typedef int INT;" }
-	}
-    cp_test_ptype_class \
-	"class class_with_protected_typedef" "" "class" \
-	"class_with_protected_typedef" {
-	    { field private "int a;" }
-	    { field protected "class_with_protected_typedef::INT b;" }
-	    { typedef protected "typedef int INT;" }
-	}
-    cp_test_ptype_class \
-	"struct struct_with_protected_typedef" "" "struct" \
-	"struct_with_protected_typedef" {
-	    { field public "int a;" }
-	    { field protected "struct_with_protected_typedef::INT b;" }
-	    { typedef protected "typedef int INT;" }
-	}
-    cp_test_ptype_class \
-	"struct struct_with_private_typedef" "" "struct" \
-	"struct_with_private_typedef" {
-	    { field public "int a;" }
-	    { field private "struct_with_private_typedef::INT b;" }
-	    { typedef private "typedef int INT;" }
-	}
-
-    # For the following two cases, we cannot use cp_test_ptype_class.
-    # We need to explicitly check whether the access label was suppressed.
-    set ws {[ \t\r\n]*}
-    foreach {tag lbl} {"class" "private" "struct" "public"} {
-	gdb_test "ptype/r ${tag}_with_${lbl}_typedef" "type = $tag ${tag}_with_${lbl}_typedef \{${ws}int a;${ws}${tag}_with_${lbl}_typedef::INT b;${ws}typedef int INT;${ws}\}"
-    }
 }
 
 # Test simple access to class members.
@@ -477,7 +410,7 @@ proc test_enums {} {
     # ptype on the enum member
 
     gdb_test_multiple "ptype obj_with_enum.priv_enum" "ptype obj_with_enum.priv_enum" {
-        -re "type = enum ClassWithEnum::PrivEnum (: unsigned (int|short|char) )?\{ ?(ClassWithEnum::)?red, (ClassWithEnum::)?green, (ClassWithEnum::)?blue, (ClassWithEnum::)?yellow = 42 ?\}$nl$gdb_prompt $" {
+        -re "type = enum ClassWithEnum::PrivEnum \{ ?(ClassWithEnum::)?red, (ClassWithEnum::)?green, (ClassWithEnum::)?blue, (ClassWithEnum::)?yellow = 42 ?\}$nl$gdb_prompt $" {
 	    pass "ptype obj_with_enum.priv_enum"
         }
 	-re "type = enum PrivEnum \{ ?(ClassWithEnum::)?red, (ClassWithEnum::)?green, (ClassWithEnum::)?blue, (ClassWithEnum::)?yellow = 42 ?\}$nl$gdb_prompt $" {
@@ -602,11 +535,6 @@ proc test_static_members {} {
     gdb_test "print cnsi" \
 	"{x = 30, y = 40, static null = {x = 0, y = 0, static null = <same as static member of an already seen type>, static yy = {z = 5, static xx = {x = 1, y = 2, static null = <same as static member of an already seen type>, static yy = <same as static member of an already seen type>}}}, static yy = <same as static member of an already seen type>}" \
 	"print cnsi with static members"
-
-    # Another case of infinite recursion.
-    gdb_test "print Outer::instance" \
-	"{inner = {static instance = {static instance = <same as static member of an already seen type>}}, static instance = {inner = {static instance = {static instance = <same as static member of an already seen type>}}, static instance = <same as static member of an already seen type>}}" \
-	"print recursive static member"
 }
 
 proc do_tests {} {
@@ -648,6 +576,39 @@ proc do_tests {} {
     test_static_members
 
     # Now some random tests that were just thrown in here.
+
+    gdb_breakpoint marker_reg1
+    gdb_test "continue" ".*Breakpoint .* marker_reg1.*" ""
+    gdb_test "finish" "Run till exit from.*" "finish from marker_reg1"
+
+    # This class is so small that an instance of it can fit in a register.
+    # When gdb tries to call a method, it gets embarrassed about taking
+    # the address of a register.
+    #
+    # TODO: I think that message should be a PASS, not an XFAIL.
+    # gdb prints an informative message and declines to do something
+    # impossible.
+    #
+    # The method call actually succeeds if the compiler allocates very
+    # small classes in memory instead of registers.  So this test does
+    # not tell us anything interesting if the call succeeds.
+    #
+    # -- chastain 2003-12-31
+    gdb_test_multiple "print v.method ()" "calling method for small class" {
+	-re "\\$\[0-9\]+ = 82$nl$gdb_prompt $" {
+	    # gcc 3.3.2 -gdwarf-2
+	    # gcc HEAD 2003-12-28 21:08:30 UTC -gdwarf-2
+	    # gcc 3.3.2 -gstabs+
+	    # gcc HEAD 2003-12-28 21:08:30 UTC -gstabs+
+	    pass "calling method for small class"
+	}
+	-re "Address requested for identifier \"v\" which is in register .*$nl$gdb_prompt $" {
+	    # gcc 2.95.3 -gdwarf-2
+	    # gcc 2.95.3 -gstabs+
+	    setup_xfail "*-*-*" 2972
+	    fail "calling method for small class"
+	}
+    }
 
     gdb_test "print base1::Base1" "<.*Base1.*>" "print ctor of typedef class"
     gdb_test "print base1::~Base1" "<.*~Base1(\\(\\))?>" \

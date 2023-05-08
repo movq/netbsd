@@ -10,13 +10,14 @@ information.
 The support is split into a basic support file @file{aoutx.h}
 and other files which derive functions from the base. One
 derivation file is @file{aoutf1.h} (for a.out flavour 1), and
-adds to the basic a.out functions support for sun3, sun4, and
-386 a.out files, to create a target jump vector for a specific
-target.
+adds to the basic a.out functions support for sun3, sun4, 386
+and 29k a.out files, to create a target jump vector for a
+specific target.
 
 This information is further split out into more specific files
 for each machine, including @file{sunos.c} for sun3 and sun4,
-and @file{demo64.c} for a demonstration of a 64 bit a.out format.
+@file{newsos3.c} for the Sony NEWS, and @file{demo64.c} for a
+demonstration of a 64 bit a.out format.
 
 The base file @file{aoutx.h} defines general mechanisms for
 reading and writing records to and from disk and various
@@ -47,14 +48,14 @@ from @file{sunos.c}:
 
 @example
        #define TARGET_NAME "a.out-sunos-big"
-       #define VECNAME    sparc_aout_sunos_be_vec
+       #define VECNAME    sunos_big_vec
        #include "aoutf1.h"
 @end example
 
 requires all the names from @file{aout32.c}, and produces the jump vector
 
 @example
-       sparc_aout_sunos_be_vec
+       sunos_big_vec
 @end example
 
 The file @file{host-aout.c} is a special case.  It is for a large set
@@ -89,7 +90,7 @@ to use @file{host-aout.c}, specify:
        TDEPFILES= host-aout.o trad-core.o
 @end example
 
-in the @file{config/@var{XXX}.mt} file, and modify @file{configure.ac}
+in the @file{config/@var{XXX}.mt} file, and modify @file{configure.in}
 to use the
 @file{@var{XXX}.mt} file (by setting "@code{bfd_target=XXX}") when your
 configuration is selected.
@@ -101,9 +102,10 @@ configuration is selected.
 The file @file{aoutx.h} provides for both the @emph{standard}
 and @emph{extended} forms of a.out relocation records.
 
-The standard records contain only an address, a symbol index,
-and a type field.  The extended records also have a full
-integer for an addend.
+The standard records contain only an
+address, a symbol index, and a type field. The extended records
+(used on 29ks and sparcs) also have a full integer for an
+addend.
 
 @subsection Internal entry points
 

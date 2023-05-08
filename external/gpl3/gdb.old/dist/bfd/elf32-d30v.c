@@ -1,5 +1,6 @@
 /* D30V-specific support for 32-bit ELF
-   Copyright (C) 1997-2020 Free Software Foundation, Inc.
+   Copyright 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2007
+   Free Software Foundation, Inc.
    Contributed by Martin Hunt (hunt@cygnus.com).
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -56,7 +57,7 @@ bfd_elf_d30v_reloc (bfd *abfd,
     }
 
   r = bfd_elf_generic_reloc (abfd, reloc_entry, symbol, data,
-			     input_section, output_bfd, error_message);
+                             input_section, output_bfd, error_message);
   if (r != bfd_reloc_continue)
     return r;
 
@@ -123,7 +124,7 @@ bfd_elf_d30v_reloc (bfd *abfd,
     }
 
   in1 |= (relocation >> 26) & 0x3F;		/* Top 6 bits.  */
-  in2 |= ((relocation & 0x03FC0000) << 2);	/* Next 8 bits.  */
+  in2 |= ((relocation & 0x03FC0000) << 2);  	/* Next 8 bits.  */
   in2 |= relocation & 0x0003FFFF;		/* Bottom 18 bits.  */
 
   /* Change a PC-relative instruction to its
@@ -164,7 +165,7 @@ bfd_elf_d30v_reloc_21 (bfd *abfd,
     }
 
   r = bfd_elf_generic_reloc (abfd, reloc_entry, symbol, data,
-			     input_section, output_bfd, error_message);
+                             input_section, output_bfd, error_message);
   if (r != bfd_reloc_continue)
     return r;
 
@@ -254,11 +255,11 @@ static reloc_howto_type elf_d30v_howto_table[] =
   /* This reloc does nothing.  */
   HOWTO (R_D30V_NONE,		/* Type.  */
 	 0,			/* Rightshift.  */
-	 3,			/* Size (0 = byte, 1 = short, 2 = long).  */
-	 0,			/* Bitsize.  */
+	 2,			/* Size (0 = byte, 1 = short, 2 = long).  */
+	 32,			/* Bitsize.  */
 	 FALSE,			/* PC_relative.  */
 	 0,			/* Bitpos.  */
-	 complain_overflow_dont, /* Complain_on_overflow.  */
+	 complain_overflow_bitfield, /* Complain_on_overflow.  */
 	 bfd_elf_generic_reloc,	/* Special_function.  */
 	 "R_D30V_NONE",		/* Name.  */
 	 FALSE,			/* Partial_inplace.  */
@@ -508,46 +509,30 @@ bfd_elf32_bfd_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
 
 /* Set the howto pointer for an D30V ELF reloc (type REL).  */
 
-static bfd_boolean
-d30v_info_to_howto_rel (bfd *abfd,
+static void
+d30v_info_to_howto_rel (bfd *abfd ATTRIBUTE_UNUSED,
 			arelent *cache_ptr,
 			Elf_Internal_Rela *dst)
 {
   unsigned int r_type;
 
   r_type = ELF32_R_TYPE (dst->r_info);
-  if (r_type >= (unsigned int) R_D30V_max)
-    {
-      /* xgettext:c-format */
-      _bfd_error_handler (_("%pB: unsupported relocation type %#x"),
-			  abfd, r_type);
-      bfd_set_error (bfd_error_bad_value);
-      return FALSE;
-    }
+  BFD_ASSERT (r_type < (unsigned int) R_D30V_max);
   cache_ptr->howto = &elf_d30v_howto_table[r_type];
-  return TRUE;
 }
 
 /* Set the howto pointer for an D30V ELF reloc (type RELA).  */
 
-static bfd_boolean
-d30v_info_to_howto_rela (bfd *abfd,
+static void
+d30v_info_to_howto_rela (bfd *abfd ATTRIBUTE_UNUSED,
 			 arelent *cache_ptr,
 			 Elf_Internal_Rela *dst)
 {
   unsigned int r_type;
 
   r_type = ELF32_R_TYPE (dst->r_info);
-  if (r_type >= (unsigned int) R_D30V_max)
-    {
-      /* xgettext:c-format */
-      _bfd_error_handler (_("%pB: unsupported relocation type %#x"),
-			  abfd, r_type);
-      bfd_set_error (bfd_error_bad_value);
-      return FALSE;
-    }
+  BFD_ASSERT (r_type < (unsigned int) R_D30V_max);
   cache_ptr->howto = &elf_d30v_howto_table[r_type];
-  return TRUE;
 }
 
 #define ELF_ARCH		bfd_arch_d30v
@@ -555,11 +540,12 @@ d30v_info_to_howto_rela (bfd *abfd,
 #define ELF_MACHINE_ALT1	EM_CYGNUS_D30V
 #define ELF_MAXPAGESIZE		0x1000
 
-#define TARGET_BIG_SYM		d30v_elf32_vec
+#define TARGET_BIG_SYM          bfd_elf32_d30v_vec
 #define TARGET_BIG_NAME		"elf32-d30v"
 
 #define elf_info_to_howto	d30v_info_to_howto_rela
 #define elf_info_to_howto_rel	d30v_info_to_howto_rel
 #define elf_backend_object_p	0
+#define elf_backend_final_write_processing	0
 
 #include "elf32-target.h"

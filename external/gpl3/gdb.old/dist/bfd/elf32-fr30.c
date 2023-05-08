@@ -1,5 +1,7 @@
 /* FR30-specific support for 32-bit ELF.
-   Copyright (C) 1998-2020 Free Software Foundation, Inc.
+   Copyright 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008,
+   2010, 2012
+   Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -37,11 +39,11 @@ static reloc_howto_type fr30_elf_howto_table [] =
   /* This reloc does nothing.  */
   HOWTO (R_FR30_NONE,		/* type */
 	 0,			/* rightshift */
-	 3,			/* size (0 = byte, 1 = short, 2 = long) */
-	 0,			/* bitsize */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 32,			/* bitsize */
 	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
-	 complain_overflow_dont, /* complain_on_overflow */
+	 complain_overflow_bitfield, /* complain_on_overflow */
 	 bfd_elf_generic_reloc,	/* special_function */
 	 "R_FR30_NONE",		/* name */
 	 FALSE,			/* partial_inplace */
@@ -200,33 +202,33 @@ static reloc_howto_type fr30_elf_howto_table [] =
 	 FALSE),		/* pcrel_offset */
   /* GNU extension to record C++ vtable hierarchy */
   HOWTO (R_FR30_GNU_VTINHERIT, /* type */
-	 0,			/* rightshift */
-	 2,			/* size (0 = byte, 1 = short, 2 = long) */
-	 0,			/* bitsize */
-	 FALSE,			/* pc_relative */
-	 0,			/* bitpos */
-	 complain_overflow_dont, /* complain_on_overflow */
-	 NULL,			/* special_function */
-	 "R_FR30_GNU_VTINHERIT", /* name */
-	 FALSE,			/* partial_inplace */
-	 0,			/* src_mask */
-	 0,			/* dst_mask */
-	 FALSE),		/* pcrel_offset */
+         0,                     /* rightshift */
+         2,                     /* size (0 = byte, 1 = short, 2 = long) */
+         0,                     /* bitsize */
+         FALSE,                 /* pc_relative */
+         0,                     /* bitpos */
+         complain_overflow_dont, /* complain_on_overflow */
+         NULL,                  /* special_function */
+         "R_FR30_GNU_VTINHERIT", /* name */
+         FALSE,                 /* partial_inplace */
+         0,                     /* src_mask */
+         0,                     /* dst_mask */
+         FALSE),                /* pcrel_offset */
 
   /* GNU extension to record C++ vtable member usage */
-  HOWTO (R_FR30_GNU_VTENTRY,	 /* type */
-	 0,			/* rightshift */
-	 2,			/* size (0 = byte, 1 = short, 2 = long) */
-	 0,			/* bitsize */
-	 FALSE,			/* pc_relative */
-	 0,			/* bitpos */
-	 complain_overflow_dont, /* complain_on_overflow */
-	 _bfd_elf_rel_vtable_reloc_fn,	/* special_function */
-	 "R_FR30_GNU_VTENTRY",	 /* name */
-	 FALSE,			/* partial_inplace */
-	 0,			/* src_mask */
-	 0,			/* dst_mask */
-	 FALSE),		/* pcrel_offset */
+  HOWTO (R_FR30_GNU_VTENTRY,     /* type */
+         0,                     /* rightshift */
+         2,                     /* size (0 = byte, 1 = short, 2 = long) */
+         0,                     /* bitsize */
+         FALSE,                 /* pc_relative */
+         0,                     /* bitpos */
+         complain_overflow_dont, /* complain_on_overflow */
+         _bfd_elf_rel_vtable_reloc_fn,  /* special_function */
+         "R_FR30_GNU_VTENTRY",   /* name */
+         FALSE,                 /* partial_inplace */
+         0,                     /* src_mask */
+         0,                     /* dst_mask */
+         FALSE),                /* pcrel_offset */
 };
 
 /* Utility to actually perform an R_FR30_20 reloc.  */
@@ -321,11 +323,11 @@ struct fr30_reloc_map
 
 static const struct fr30_reloc_map fr30_reloc_map [] =
 {
-  { BFD_RELOC_NONE,	      R_FR30_NONE },
-  { BFD_RELOC_8,	      R_FR30_8 },
-  { BFD_RELOC_FR30_20,	      R_FR30_20 },
-  { BFD_RELOC_32,	      R_FR30_32 },
-  { BFD_RELOC_FR30_48,	      R_FR30_48 },
+  { BFD_RELOC_NONE,           R_FR30_NONE },
+  { BFD_RELOC_8,              R_FR30_8 },
+  { BFD_RELOC_FR30_20,        R_FR30_20 },
+  { BFD_RELOC_32,             R_FR30_32 },
+  { BFD_RELOC_FR30_48,        R_FR30_48 },
   { BFD_RELOC_FR30_6_IN_4,    R_FR30_6_IN_4 },
   { BFD_RELOC_FR30_8_IN_8,    R_FR30_8_IN_8 },
   { BFD_RELOC_FR30_9_IN_8,    R_FR30_9_IN_8 },
@@ -343,7 +345,7 @@ fr30_reloc_type_lookup (bfd *abfd ATTRIBUTE_UNUSED,
   unsigned int i;
 
   for (i = sizeof (fr30_reloc_map) / sizeof (fr30_reloc_map[0]);
-       i--;)
+       --i;)
     if (fr30_reloc_map [i].bfd_reloc_val == code)
       return & fr30_elf_howto_table [fr30_reloc_map[i].fr30_reloc_val];
 
@@ -367,7 +369,7 @@ fr30_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED, const char *r_name)
 
 /* Set the howto pointer for an FR30 ELF reloc.  */
 
-static bfd_boolean
+static void
 fr30_info_to_howto_rela (bfd *abfd ATTRIBUTE_UNUSED,
 			 arelent *cache_ptr,
 			 Elf_Internal_Rela *dst)
@@ -375,16 +377,8 @@ fr30_info_to_howto_rela (bfd *abfd ATTRIBUTE_UNUSED,
   unsigned int r_type;
 
   r_type = ELF32_R_TYPE (dst->r_info);
-  if (r_type >= (unsigned int) R_FR30_max)
-    {
-      /* xgettext:c-format */
-      _bfd_error_handler (_("%pB: unsupported relocation type %#x"),
-			  abfd, r_type);
-      bfd_set_error (bfd_error_bad_value);
-      return FALSE;
-    }
+  BFD_ASSERT (r_type < (unsigned int) R_FR30_max);
   cache_ptr->howto = & fr30_elf_howto_table [r_type];
-  return TRUE;
 }
 
 /* Perform a single relocation.  By default we use the standard BFD
@@ -549,7 +543,7 @@ fr30_elf_relocate_section (bfd *output_bfd,
 
 	  name = bfd_elf_string_from_elf_section
 	    (input_bfd, symtab_hdr->sh_link, sym->st_name);
-	  name = name == NULL ? bfd_section_name (sec) : name;
+	  name = (name == NULL) ? bfd_section_name (input_bfd, sec) : name;
 	}
       else
 	{
@@ -567,7 +561,7 @@ fr30_elf_relocate_section (bfd *output_bfd,
 	RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
 					 rel, 1, relend, howto, 0, contents);
 
-      if (bfd_link_relocatable (info))
+      if (info->relocatable)
 	continue;
 
       r = fr30_final_link_relocate (howto, input_bfd, input_section,
@@ -580,14 +574,15 @@ fr30_elf_relocate_section (bfd *output_bfd,
 	  switch (r)
 	    {
 	    case bfd_reloc_overflow:
-	      (*info->callbacks->reloc_overflow)
+	      r = info->callbacks->reloc_overflow
 		(info, (h ? &h->root : NULL), name, howto->name,
 		 (bfd_vma) 0, input_bfd, input_section, rel->r_offset);
 	      break;
 
 	    case bfd_reloc_undefined:
-	      (*info->callbacks->undefined_symbol)
-		(info, name, input_bfd, input_section, rel->r_offset, TRUE);
+	      r = info->callbacks->undefined_symbol
+		(info, name, input_bfd, input_section, rel->r_offset,
+		 TRUE);
 	      break;
 
 	    case bfd_reloc_outofrange:
@@ -608,8 +603,11 @@ fr30_elf_relocate_section (bfd *output_bfd,
 	    }
 
 	  if (msg)
-	    (*info->callbacks->warning) (info, msg, name, input_bfd,
-					 input_section, rel->r_offset);
+	    r = info->callbacks->warning
+	      (info, msg, name, input_bfd, input_section, rel->r_offset);
+
+	  if (! r)
+	    return FALSE;
 	}
     }
 
@@ -652,7 +650,7 @@ fr30_elf_check_relocs (bfd *abfd,
   const Elf_Internal_Rela *rel;
   const Elf_Internal_Rela *rel_end;
 
-  if (bfd_link_relocatable (info))
+  if (info->relocatable)
     return TRUE;
 
   symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
@@ -666,31 +664,37 @@ fr30_elf_check_relocs (bfd *abfd,
 
       r_symndx = ELF32_R_SYM (rel->r_info);
       if (r_symndx < symtab_hdr->sh_info)
-	h = NULL;
+        h = NULL;
       else
 	{
 	  h = sym_hashes[r_symndx - symtab_hdr->sh_info];
 	  while (h->root.type == bfd_link_hash_indirect
 		 || h->root.type == bfd_link_hash_warning)
 	    h = (struct elf_link_hash_entry *) h->root.u.i.link;
+
+	  /* PR15323, ref flags aren't set for references in the same
+	     object.  */
+	  h->root.non_ir_ref = 1;
 	}
 
       switch (ELF32_R_TYPE (rel->r_info))
-	{
-	/* This relocation describes the C++ object vtable hierarchy.
-	   Reconstruct it for later use during GC.  */
-	case R_FR30_GNU_VTINHERIT:
-	  if (!bfd_elf_gc_record_vtinherit (abfd, sec, h, rel->r_offset))
-	    return FALSE;
-	  break;
+        {
+        /* This relocation describes the C++ object vtable hierarchy.
+           Reconstruct it for later use during GC.  */
+        case R_FR30_GNU_VTINHERIT:
+          if (!bfd_elf_gc_record_vtinherit (abfd, sec, h, rel->r_offset))
+            return FALSE;
+          break;
 
-	/* This relocation describes which C++ vtable entries are actually
-	   used.  Record for later use during GC.  */
-	case R_FR30_GNU_VTENTRY:
-	  if (!bfd_elf_gc_record_vtentry (abfd, sec, h, rel->r_addend))
-	    return FALSE;
-	  break;
-	}
+        /* This relocation describes which C++ vtable entries are actually
+           used.  Record for later use during GC.  */
+        case R_FR30_GNU_VTENTRY:
+          BFD_ASSERT (h != NULL);
+          if (h != NULL
+              && !bfd_elf_gc_record_vtentry (abfd, sec, h, rel->r_addend))
+            return FALSE;
+          break;
+        }
     }
 
   return TRUE;
@@ -701,19 +705,19 @@ fr30_elf_check_relocs (bfd *abfd,
 #define ELF_MACHINE_ALT1	EM_CYGNUS_FR30
 #define ELF_MAXPAGESIZE		0x1000
 
-#define TARGET_BIG_SYM		fr30_elf32_vec
+#define TARGET_BIG_SYM          bfd_elf32_fr30_vec
 #define TARGET_BIG_NAME		"elf32-fr30"
 
 #define elf_info_to_howto_rel			NULL
 #define elf_info_to_howto			fr30_info_to_howto_rela
 #define elf_backend_relocate_section		fr30_elf_relocate_section
 #define elf_backend_gc_mark_hook		fr30_elf_gc_mark_hook
-#define elf_backend_check_relocs		fr30_elf_check_relocs
+#define elf_backend_check_relocs                fr30_elf_check_relocs
 
 #define elf_backend_can_gc_sections		1
 #define elf_backend_rela_normal			1
 
 #define bfd_elf32_bfd_reloc_type_lookup		fr30_reloc_type_lookup
-#define bfd_elf32_bfd_reloc_name_lookup		fr30_reloc_name_lookup
+#define bfd_elf32_bfd_reloc_name_lookup	fr30_reloc_name_lookup
 
 #include "elf32-target.h"

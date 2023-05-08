@@ -1,4 +1,4 @@
-# Copyright 2011-2020 Free Software Foundation, Inc.
+# Copyright 2011-2014 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -39,16 +39,7 @@ if {![dwarf2_support]} {
 standard_testfile
 set executable ${testfile}
 
-if [is_ilp32_target] {
-    set ptrbits 32
-} else {
-    set ptrbits 64
-}
-
-if { [build_executable ${testfile}.exp ${executable} \
-	  "${testfile}.c ${testfile}.S" \
-	  [list additional_flags=-DINLINED \
-		additional_flags=-DPTRBITS=$ptrbits]] == -1 } {
+if {[build_executable ${testfile}.exp ${executable} "${testfile}.c ${testfile}.S" {additional_flags=-DINLINED}] == -1} {
     return -1
 }
 
@@ -79,4 +70,4 @@ gdb_continue_to_breakpoint "func"
 # Sanity check GDB has really found 2 locations
 gdb_test {info break $bpnum} "\r\n2\\.1\[ \t\]\[^\n\]*\r\n2\\.2\[ \t\]\[^\n\]*" "2 locations found"
 
-gdb_test "p (int) v" " = 0" "no statement got executed"
+gdb_test "p v" " = 0" "no statement got executed"

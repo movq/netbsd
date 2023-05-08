@@ -1,6 +1,6 @@
 /* Table of opcodes for the Texas Instruments TMS320C[34]X family.
 
-   Copyright (C) 2002-2020 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2003, 2010 Free Software Foundation.
   
    Contributed by Michael P. Hayes (m.hayes@elec.canterbury.ac.nz)
    
@@ -23,13 +23,11 @@
 #define IS_CPU_TIC4X(v) ((v) ==  0 || (v) == 40 || (v) == 44)
 
 /* Define some bitfield extraction/insertion macros.  */
-#define EXTRU(inst, m, l) \
-  (((inst) >> (l)) & ((2u << ((m) - (l))) - 1))
-#define EXTRS(inst, m, l) \
-  ((int) ((EXTRU (inst, m, l) ^ (1u << ((m) - (l)))) - (1u << ((m) - (l)))))
-#define INSERTU(inst, val, m, l) \
-  ((inst) |= ((val) & ((2u << ((m) - (l))) - 1)) << (l))
-#define INSERTS INSERTU
+#define EXTR(inst, m, l)          ((inst) << (31 - (m)) >> (31 - ((m) - (l)))) 
+#define EXTRU(inst, m, l)         EXTR ((unsigned long)(inst), (m), (l))
+#define EXTRS(inst, m, l)         EXTR ((long)(inst), (m), (l))
+#define INSERTU(inst, val, m, l)  (inst |= ((val) << (l))) 
+#define INSERTS(inst, val, m, l)  INSERTU (inst, ((val) & ((1 << ((m) - (l) + 1)) - 1)), m, l)
 
 /* Define register numbers.  */
 typedef enum
@@ -60,7 +58,7 @@ c4x_reg_t;
 
 struct tic4x_register
 {
-  const char *  name;
+  char *        name;
   unsigned long regno;
 };
 
@@ -133,7 +131,7 @@ const unsigned int tic4x_num_registers = (((sizeof tic4x_registers) / (sizeof ti
 
 struct tic4x_cond
 {
-  const char *  name;
+  char *        name;
   unsigned long cond;
 };
 
@@ -173,7 +171,7 @@ const unsigned int tic4x_num_conds = (((sizeof tic4x_conds) / (sizeof tic4x_cond
 
 struct tic4x_indirect
 {
-  const char *  name;
+  char *        name;
   unsigned long modn;
 };
 
@@ -225,10 +223,10 @@ const unsigned int tic4x_num_indirects = (((sizeof tic4x_indirects) / (sizeof ti
 /* Instruction template.  */
 struct tic4x_inst
 {
-  const char *  name;
+  char *        name;
   unsigned long opcode;
   unsigned long opmask;
-  const char *        args;
+  char *        args;
   unsigned long oplevel;
 };
 

@@ -1,5 +1,6 @@
 /* flonum_mult.c - multiply two flonums
-   Copyright (C) 1987-2020 Free Software Foundation, Inc.
+   Copyright 1987, 1990, 1991, 1992, 1995, 2000, 2002, 2003, 2007
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 

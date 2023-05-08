@@ -1,5 +1,6 @@
-Known problems in GDB can be found by searching GDB's Bugzilla, here:
 
-    https://sourceware.org/bugzilla/query.cgi?product=gdb
+			Known problems in GDB 7.2.50
 
-For help on searching, click the "Help" link at the top of the page.
+		See also: http://www.gnu.org/software/gdb/bugs/
+
+None worth mentioning here.

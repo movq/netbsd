@@ -1,5 +1,7 @@
 /* BFD back end for traditional Unix core files (U-area and raw sections)
-   Copyright (C) 1988-2020 Free Software Foundation, Inc.
+   Copyright 1988, 1989, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 1999,
+   2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2011, 2012
+   Free Software Foundation, Inc.
    Written by John Gilmore of Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -22,7 +24,7 @@
 #include "sysdep.h"
 #include "bfd.h"
 #include "libbfd.h"
-#include "libaout.h"	       /* BFD a.out internal data structures */
+#include "libaout.h"           /* BFD a.out internal data structures */
 
 #include <sys/param.h>
 #ifdef HAVE_DIRENT_H
@@ -71,13 +73,13 @@ struct trad_core_struct
 
 /* Handle 4.2-style (and perhaps also sysV-style) core dump file.  */
 
-static bfd_cleanup
+static const bfd_target *
 trad_unix_core_file_p (bfd *abfd)
 {
   int val;
   struct user u;
   struct trad_core_struct *rawptr;
-  size_t amt;
+  bfd_size_type amt;
   flagword flags;
 
 #ifdef TRAD_CORE_USER_OFFSET
@@ -220,7 +222,7 @@ trad_unix_core_file_p (bfd *abfd)
   core_datasec (abfd)->alignment_power = 2;
   core_regsec (abfd)->alignment_power = 2;
 
-  return _bfd_no_cleanup;
+  return abfd->xvec;
 
  fail:
   bfd_release (abfd, abfd->tdata.any);
@@ -265,7 +267,7 @@ swap_abort (void)
 #define	NO_PUT64 ((void (*) (bfd_uint64_t, void *)) swap_abort)
 #define	NO_GETS64 ((bfd_int64_t (*) (const void *)) swap_abort)
 
-const bfd_target core_trad_vec =
+const bfd_target trad_core_vec =
   {
     "trad-core",
     bfd_target_unknown_flavour,
@@ -293,16 +295,12 @@ const bfd_target core_trad_vec =
       trad_unix_core_file_p		/* a core file */
     },
     {				/* bfd_set_format */
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error
+      bfd_false, bfd_false,
+      bfd_false, bfd_false
     },
     {				/* bfd_write_contents */
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error
+      bfd_false, bfd_false,
+      bfd_false, bfd_false
     },
 
     BFD_JUMP_TABLE_GENERIC (_bfd_generic),

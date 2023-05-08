@@ -1,6 +1,6 @@
 /* Unwinder test program.
 
-   Copyright 2006-2020 Free Software Foundation, Inc.
+   Copyright 2006-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -24,7 +24,6 @@
 #endif
 
 void gdb2029 (void);
-void optimized_1 (void);
 
 int
 main (void)

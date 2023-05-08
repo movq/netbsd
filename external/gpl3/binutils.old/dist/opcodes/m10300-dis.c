@@ -1,5 +1,6 @@
 /* Disassemble MN10300 instructions.
-   Copyright (C) 1996-2020 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2003, 2005, 2007, 2012
+   Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -21,7 +22,7 @@
 #include "sysdep.h"
 #include <stdio.h>
 #include "opcode/mn10300.h"
-#include "disassemble.h"
+#include "dis-asm.h"
 #include "opintl.h"
 
 #define HAVE_AM33_2 (info->mach == AM33_2)
@@ -318,13 +319,7 @@ disassemble (bfd_vma memaddr,
 	      if ((operand->flags & MN10300_OPERAND_PLUS) != 0)
 		nocomma = 1;
 
-	      if ((operand->flags & MN10300_OPERAND_DREG) != 0
-		  || (operand->flags & MN10300_OPERAND_AREG) != 0
-		  || (operand->flags & MN10300_OPERAND_RREG) != 0
-		  || (operand->flags & MN10300_OPERAND_XRREG) != 0)
-		value = ((insn >> (operand->shift + extra_shift))
-			 & ((1 << operand->bits) - 1));
-	      else if ((operand->flags & MN10300_OPERAND_SPLIT) != 0)
+	      if ((operand->flags & MN10300_OPERAND_SPLIT) != 0)
 		{
 		  unsigned long temp;
 
@@ -416,10 +411,18 @@ disassemble (bfd_vma memaddr,
 	      nocomma = 0;
 
 	      if ((operand->flags & MN10300_OPERAND_DREG) != 0)
-		(*info->fprintf_func) (info->stream, "d%d", (int) value);
+		{
+		  value = ((insn >> (operand->shift + extra_shift))
+			   & ((1 << operand->bits) - 1));
+		  (*info->fprintf_func) (info->stream, "d%d", (int) value);
+		}
 
 	      else if ((operand->flags & MN10300_OPERAND_AREG) != 0)
-		(*info->fprintf_func) (info->stream, "a%d", (int) value);
+		{
+		  value = ((insn >> (operand->shift + extra_shift))
+			   & ((1 << operand->bits) - 1));
+		  (*info->fprintf_func) (info->stream, "a%d", (int) value);
+		}
 
 	      else if ((operand->flags & MN10300_OPERAND_SP) != 0)
 		(*info->fprintf_func) (info->stream, "sp");
@@ -432,6 +435,8 @@ disassemble (bfd_vma memaddr,
 
 	      else if ((operand->flags & MN10300_OPERAND_RREG) != 0)
 		{
+		  value = ((insn >> (operand->shift + extra_shift))
+			   & ((1 << operand->bits) - 1));
 		  if (value < 8)
 		    (*info->fprintf_func) (info->stream, "r%d", (int) value);
 		  else if (value < 12)
@@ -442,6 +447,8 @@ disassemble (bfd_vma memaddr,
 
 	      else if ((operand->flags & MN10300_OPERAND_XRREG) != 0)
 		{
+		  value = ((insn >> (operand->shift + extra_shift))
+			   & ((1 << operand->bits) - 1));
 		  if (value == 0)
 		    (*info->fprintf_func) (info->stream, "sp");
 		  else

@@ -1,4 +1,4 @@
-# Copyright 2011-2020 Free Software Foundation, Inc.
+# Copyright 2011-2014 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,78 +17,94 @@ standard_testfile .c
 
 # Fission doesn't support macros yet.  Bug 15954.
 if [using_fission] {
-    untested "fission does not support macros yet"
+    untested ${testfile}.exp
     return -1
 }
 
 get_compiler_info
 if ![test_compiler_info gcc*] {
-  untested "no compiler info"
+  untested ${testfile}.exp
   return -1
 }
 
-# Don't use "debug" here.  Otherwise "-g" would be appended to the gcc
-# command line, possibly overriding "-g3" (depending on gcc version).
-set options "additional_flags=-g3"
+set options "debug additional_flags=-g3"
 
-if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} $options] } {
+if { [prepare_for_testing ${testfile}.exp ${testfile} ${srcfile} $options] } {
+    untested ${testfile}.exp
     return -1
 }
 
 if ![runto_main] {
-    untested "could not run to main"
+    untested ${testfile}.exp
     return -1
 }
 
 # Test various error messages.
 gdb_test "info macro -- -all" \
-	 "The symbol `-all' has no definition .*\r\nat .*$srcfile:\[0-9\]+"
+	 "The symbol `-all' has no definition .*\r\nat .*$srcfile:\[0-9\]+" \
+	 "info macro -- -all"
 gdb_test "info macro  -- -all" \
-	 "The symbol `-all' has no definition .*\r\nat .*$srcfile:\[0-9\]+"
+	 "The symbol `-all' has no definition .*\r\nat .*$srcfile:\[0-9\]+" \
+	 "info macro  -- -all"
 
 gdb_test "info macro -all --" \
-	 "You must follow.*with the name.*you want to see.*\[^\r\n\]*\[\r\n\]"
+	 "You must follow.*with the name.*you want to see.*\[^\r\n\]*\[\r\n\]" \
+	 "info macro -all --"
 
 gdb_test "info macro -all  --" \
-	 "You must follow.*with the name.*you want to see.*\[^\r\n\]*\[\r\n\]"
+	 "You must follow.*with the name.*you want to see.*\[^\r\n\]*\[\r\n\]" \
+	 "info macro -all  --"
 
 gdb_test "info macro  -all  --" \
-	 "You must follow.*with the name.*you want to see.*\[^\r\n\]*\[\r\n\]"
+	 "You must follow.*with the name.*you want to see.*\[^\r\n\]*\[\r\n\]" \
+	 "info macro  -all  --"
 
 gdb_test "info macro --" \
-	 "You must follow.*with the name.*you want to see.*\[^\r\n\]*\[\r\n\]"
+	 "You must follow.*with the name.*you want to see.*\[^\r\n\]*\[\r\n\]" \
+	 "info macro --"
 
 gdb_test "info macro -- " \
-	 "You must follow.*with the name.*you want to see.*\[^\r\n\]*\[\r\n\]"
+	 "You must follow.*with the name.*you want to see.*\[^\r\n\]*\[\r\n\]" \
+	 "'info macro -- '"
 gdb_test "info macro  -- " \
-	 "You must follow.*with the name.*you want to see.*\[^\r\n\]*\[\r\n\]"
+	 "You must follow.*with the name.*you want to see.*\[^\r\n\]*\[\r\n\]" \
+	 "'info macro  -- '"
 
 gdb_test "info macro -invalid-option" \
-	 "Unrecognized option.*Try \"help info macro\"\."
+	 "Unrecognized option.*Try \"help info macro\"\." \
+	 "info macro -invalid-option 1"
 
 gdb_test "info macro  -invalid-option" \
-	 "Unrecognized option.*Try \"help info macro\"\."
+	 "Unrecognized option.*Try \"help info macro\"\." \
+	 "info macro  -invalid-option"
 
 gdb_test "info macro -invalid-option FOO" \
-	 "Unrecognized option.*Try \"help info macro\"\."
+	 "Unrecognized option.*Try \"help info macro\"\." \
+	 "info macro -invalid-option FOO"
 gdb_test "info macro  -invalid-option FOO" \
-	 "Unrecognized option.*Try \"help info macro\"\."
+	 "Unrecognized option.*Try \"help info macro\"\." \
+	 "info macro  -invalid-option FOO"
 
 # Single macro lookups.
 gdb_test "info macro -- FOO" \
-	 ".*#define FOO \"hello\""
+	 ".*#define FOO \"hello\"" \
+	 "info macro -- FOO"
 
 gdb_test "info macro  -- FOO" \
-	 ".*#define FOO \"hello\""
+	 ".*#define FOO \"hello\"" \
+	 "info macro  -- FOO"
 
 gdb_test "info macro --  FOO" \
-	 ".*#define FOO \"hello\""
+	 ".*#define FOO \"hello\"" \
+	 "info macro --  FOO"
 
 gdb_test "info macro FOO" \
-	 ".*#define FOO \"hello\""
+	 ".*#define FOO \"hello\"" \
+	 "info macro FOO"
 
 gdb_test "info macro  FOO" \
-	 ".*#define FOO \"hello\""
+	 ".*#define FOO \"hello\"" \
+	 "info macro  FOO"
 
 # Multiple macro lookups.
 set test "info macro -a FOO"
@@ -108,24 +124,19 @@ set testname "$test 1"
 gdb_test "$test" "$r1$r2$r3$r4" "$testname"
 
 set test "info macro -a  --  FOO"
-gdb_test "$test" "$r1$r2$r3$r4"
+set testname "$test"
+gdb_test "$test" "$r1$r2$r3$r4" "$testname"
 
 set test "info macro  -a  --  FOO"
-gdb_test "$test" "$r1$r2$r3$r4"
-
-proc gdb_test_multiple_with_read1_timeout_factor { factor command message \
-						       user_code } {
-    with_read1_timeout_factor $factor {
-        uplevel [list gdb_test_multiple $command $message $user_code]
-    }
-}
+set testname "$test"
+gdb_test "$test" "$r1$r2$r3$r4" "$testname"
 
 set test "info macros"
 set r1 ".*#define FOO \"hello\""
 set r2 ".*#define ONE"
 set r3 ".*\r\n$gdb_prompt"
 set testname "$test 2"
-gdb_test_multiple_with_read1_timeout_factor 10 "$test" $testname {
+gdb_test_multiple "$test" $testname {
   -re "$r1$r2$r3" {
      pass $testname
   }
@@ -146,7 +157,7 @@ set r2 ".*#define ONE"
 set r3 ".*#define TWO"
 set r4 ".*\r\n$gdb_prompt"
 set testname "$test 3"
-gdb_test_multiple_with_read1_timeout_factor 10 "$test" $testname {
+gdb_test_multiple "$test" $testname {
   -re ".*#define THREE.*\r\n$gdb_prompt" {
      fail $testname
   }
@@ -166,7 +177,7 @@ set r3 ".*#define THREE"
 set r4 ".*#define TWO"
 set r5 ".*\r\n$gdb_prompt"
 set testname "$test 4"
-gdb_test_multiple_with_read1_timeout_factor 10 "$test" $testname {
+gdb_test_multiple "$test" $testname {
   -re ".*#define FOUR.*\r\n$gdb_prompt" {
      fail $testname
   }
@@ -176,7 +187,7 @@ gdb_test_multiple_with_read1_timeout_factor 10 "$test" $testname {
 }
 # same as above with a linespec.
 set test "info macros *\$pc"
-gdb_test_multiple_with_read1_timeout_factor 10 "$test" $test {
+gdb_test_multiple "$test" $test {
   -re ".*#define FOUR.*\r\n$gdb_prompt" {
      fail $test
   }
@@ -192,7 +203,7 @@ set r3 ".*#define TWO."
 set r4 ".*\r\n$gdb_prompt"
 set test "info macros"
 set testname "$test 5"
-gdb_test_multiple_with_read1_timeout_factor 10 "$test" $test {
+gdb_test_multiple "$test" $test {
   -re ".*#define THREE.*\r\n$gdb_prompt" {
      fail $testname
   }
@@ -209,7 +220,7 @@ gdb_test "next" ".*" ""
 set r1 ".*#define DEF_MACROS"
 set r2 ".*\r\n$gdb_prompt"
 set testname "$test 6"
-gdb_test_multiple_with_read1_timeout_factor 10 "$test" $testname {
+gdb_test_multiple "$test" $testname {
   -re ".*#define FOO \" \".*\r\n$gdb_prompt" {
      fail $testname
   }
@@ -245,7 +256,7 @@ set r2 ".*#define FOO\\(a\\) foo = a"
 set r3 ".*#define FOUR"
 set r4 ".*\r\n$gdb_prompt"
 set testname "$test 7"
-gdb_test_multiple_with_read1_timeout_factor 10 "$test" $testname {
+gdb_test_multiple "$test" $testname {
   -re ".*#define FOO \" \".*\r\n$gdb_prompt" {
      fail $testname
   }
@@ -273,4 +284,7 @@ set test "info macros info-macros.c:42"
 
 set r1 ".*define DEF_MACROS"
 set r2 ".*define ONE"
-gdb_test "$test" "$r1$r2.*"
+# info macros on the line where the #define or #include is
+# fails to find the macro defined (though it works on the next line.)
+setup_kfail "gdb/NNNN" *-*-*
+gdb_test "$test" "$r1$r2" "$test"

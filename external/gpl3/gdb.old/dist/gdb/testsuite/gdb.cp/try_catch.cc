@@ -1,6 +1,6 @@
 /* This test script is part of GDB, the GNU debugger.
 
-   Copyright 2002-2020 Free Software Foundation, Inc.
+   Copyright 2002-2014 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -18,7 +18,6 @@
 #include <exception>
 #include <stdexcept>
 #include <string>
-#include <string.h>
 
 enum region { oriental, egyptian, greek, etruscan, roman };
 
@@ -130,8 +129,8 @@ int main()
     }
   catch (exception& obj)
     {
-      if (strcmp (obj.what(), "gdb.1") != 0)	// marker 3-catch
+      if (obj.what() != "gdb.1")	// marker 3-catch
 	test &= false;
     }
-  return 0;	// marker test-complete
+  return 0;
 }

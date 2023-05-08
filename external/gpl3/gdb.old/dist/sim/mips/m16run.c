@@ -33,7 +33,7 @@ sim_engine_run (SIM_DESC sd,
 		int siggnal) /* ignore */
 {
   sim_cpu *cpu = STATE_CPU (sd, next_cpu_nr);
-  address_word cia = CPU_PC_GET (cpu);
+  address_word cia = CIA_GET (cpu);
 
   while (1)
     {
@@ -64,9 +64,9 @@ sim_engine_run (SIM_DESC sd,
       /* process any events */
       if (sim_events_tick (sd))
         {
-          CPU_PC_SET (CPU, cia);
+          CIA_SET (CPU, cia);
           sim_events_process (sd);
-	  cia = CPU_PC_GET (CPU);
+	  cia = CIA_GET (CPU);
         }
 
     }

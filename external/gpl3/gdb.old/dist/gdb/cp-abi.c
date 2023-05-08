@@ -1,6 +1,6 @@
 /* Generic code for supporting multiple C++ ABI's
 
-   Copyright (C) 2001-2020 Free Software Foundation, Inc.
+   Copyright (C) 2001-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -21,8 +21,12 @@
 #include "value.h"
 #include "cp-abi.h"
 #include "command.h"
+#include "exceptions.h"
 #include "gdbcmd.h"
 #include "ui-out.h"
+#include "gdb_assert.h"
+#include <string.h>
+
 static struct cp_abi_ops *find_cp_abi (const char *short_name);
 
 static struct cp_abi_ops current_cp_abi = { "", NULL };
@@ -66,30 +70,29 @@ is_operator_name (const char *name)
 
 int
 baseclass_offset (struct type *type, int index, const gdb_byte *valaddr,
-		  LONGEST embedded_offset, CORE_ADDR address,
+		  int embedded_offset, CORE_ADDR address,
 		  const struct value *val)
 {
+  volatile struct gdb_exception ex;
   int res = 0;
 
   gdb_assert (current_cp_abi.baseclass_offset != NULL);
 
-  try
+  TRY_CATCH (ex, RETURN_MASK_ERROR)
     {
       res = (*current_cp_abi.baseclass_offset) (type, index, valaddr,
 						embedded_offset,
 						address, val);
     }
-  catch (const gdb_exception_error &ex)
-    {
-      if (ex.error != NOT_AVAILABLE_ERROR)
-	throw;
 
-      throw_error (NOT_AVAILABLE_ERROR,
-		   _("Cannot determine virtual baseclass offset "
-		     "of incomplete object"));
-    }
-
-  return res;
+  if (ex.reason < 0 && ex.error == NOT_AVAILABLE_ERROR)
+    throw_error (NOT_AVAILABLE_ERROR,
+		 _("Cannot determine virtual baseclass offset "
+		   "of incomplete object"));
+  else if (ex.reason < 0)
+    throw_exception (ex);
+  else
+    return res;
 }
 
 struct value *
@@ -105,22 +108,19 @@ value_virtual_fn_field (struct value **arg1p,
 
 struct type *
 value_rtti_type (struct value *v, int *full,
-		 LONGEST *top, int *using_enc)
+		 int *top, int *using_enc)
 {
   struct type *ret = NULL;
+  volatile struct gdb_exception e;
 
-  if ((current_cp_abi.rtti_type) == NULL
-      || !HAVE_CPLUS_STRUCT (check_typedef (value_type (v))))
+  if ((current_cp_abi.rtti_type) == NULL)
     return NULL;
-  try
+  TRY_CATCH (e, RETURN_MASK_ERROR)
     {
       ret = (*current_cp_abi.rtti_type) (v, full, top, using_enc);
     }
-  catch (const gdb_exception_error &e)
-    {
-      return NULL;
-    }
-
+  if (e.reason < 0)
+    return NULL;
   return ret;
 }
 
@@ -211,7 +211,7 @@ cplus_type_from_type_info (struct value *value)
 
 /* See cp-abi.h.  */
 
-std::string
+char *
 cplus_typename_from_type_info (struct value *value)
 {
   if (current_cp_abi.get_typename_from_type_info == NULL)
@@ -220,13 +220,11 @@ cplus_typename_from_type_info (struct value *value)
   return (*current_cp_abi.get_typename_from_type_info) (value);
 }
 
-/* See cp-abi.h.  */
-
-struct language_pass_by_ref_info
+int
 cp_pass_by_reference (struct type *type)
 {
   if ((current_cp_abi.pass_by_reference) == NULL)
-    return {};
+    return 0;
   return (*current_cp_abi.pass_by_reference) (type);
 }
 
@@ -273,8 +271,10 @@ set_cp_abi_as_auto_default (const char *short_name)
 		    _("Cannot find C++ ABI \"%s\" to set it as auto default."),
 		    short_name);
 
-  xfree ((char *) auto_cp_abi.longname);
-  xfree ((char *) auto_cp_abi.doc);
+  if (auto_cp_abi.longname != NULL)
+    xfree ((char *) auto_cp_abi.longname);
+  if (auto_cp_abi.doc != NULL)
+    xfree ((char *) auto_cp_abi.doc);
 
   auto_cp_abi = *abi;
 
@@ -313,34 +313,37 @@ static void
 list_cp_abis (int from_tty)
 {
   struct ui_out *uiout = current_uiout;
+  struct cleanup *cleanup_chain;
   int i;
 
-  uiout->text ("The available C++ ABIs are:\n");
-  ui_out_emit_tuple tuple_emitter (uiout, "cp-abi-list");
+  ui_out_text (uiout, "The available C++ ABIs are:\n");
+  cleanup_chain = make_cleanup_ui_out_tuple_begin_end (uiout,
+						       "cp-abi-list");
   for (i = 0; i < num_cp_abis; i++)
     {
       char pad[14];
       int padcount;
 
-      uiout->text ("  ");
-      uiout->field_string ("cp-abi", cp_abis[i]->shortname);
+      ui_out_text (uiout, "  ");
+      ui_out_field_string (uiout, "cp-abi", cp_abis[i]->shortname);
 
       padcount = 16 - 2 - strlen (cp_abis[i]->shortname);
       pad[padcount] = 0;
       while (padcount > 0)
 	pad[--padcount] = ' ';
-      uiout->text (pad);
+      ui_out_text (uiout, pad);
 
-      uiout->field_string ("doc", cp_abis[i]->doc);
-      uiout->text ("\n");
+      ui_out_field_string (uiout, "doc", cp_abis[i]->doc);
+      ui_out_text (uiout, "\n");
     }
+  do_cleanups (cleanup_chain);
 }
 
 /* Set the current C++ ABI, or display the list of options if no
    argument is given.  */
 
 static void
-set_cp_abi_cmd (const char *args, int from_tty)
+set_cp_abi_cmd (char *args, int from_tty)
 {
   if (args == NULL)
     {
@@ -354,9 +357,8 @@ set_cp_abi_cmd (const char *args, int from_tty)
 
 /* A completion function for "set cp-abi".  */
 
-static void
+static VEC (char_ptr) *
 cp_abi_completer (struct cmd_list_element *ignore,
-		  completion_tracker &tracker,
 		  const char *text, const char *word)
 {
   static const char **cp_abi_names;
@@ -371,27 +373,28 @@ cp_abi_completer (struct cmd_list_element *ignore,
       cp_abi_names[i] = NULL;
     }
 
-  complete_on_enum (tracker, cp_abi_names, text, word);
+  return complete_on_enum (cp_abi_names, text, word);
 }
 
 /* Show the currently selected C++ ABI.  */
 
 static void
-show_cp_abi_cmd (const char *args, int from_tty)
+show_cp_abi_cmd (char *args, int from_tty)
 {
   struct ui_out *uiout = current_uiout;
 
-  uiout->text ("The currently selected C++ ABI is \"");
+  ui_out_text (uiout, "The currently selected C++ ABI is \"");
 
-  uiout->field_string ("cp-abi", current_cp_abi.shortname);
-  uiout->text ("\" (");
-  uiout->field_string ("longname", current_cp_abi.longname);
-  uiout->text (").\n");
+  ui_out_field_string (uiout, "cp-abi", current_cp_abi.shortname);
+  ui_out_text (uiout, "\" (");
+  ui_out_field_string (uiout, "longname", current_cp_abi.longname);
+  ui_out_text (uiout, ").\n");
 }
 
-void _initialize_cp_abi ();
+extern initialize_file_ftype _initialize_cp_abi; /* -Wmissing-prototypes */
+
 void
-_initialize_cp_abi ()
+_initialize_cp_abi (void)
 {
   struct cmd_list_element *c;
 

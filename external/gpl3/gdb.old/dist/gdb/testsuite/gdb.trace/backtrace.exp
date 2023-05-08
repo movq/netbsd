@@ -1,4 +1,4 @@
-#   Copyright 1998-2020 Free Software Foundation, Inc.
+#   Copyright 1998-2014 Free Software Foundation, Inc.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,23 +21,19 @@ standard_testfile actions.c
 set executable $testfile
 set expfile $testfile.exp
 
-if ![gdb_trace_common_supports_arch] {
-    unsupported "no trace-common.h support for arch"
-    return -1
-}
-
-if [prepare_for_testing "failed to prepare" $executable $srcfile \
-	[list debug nowarnings nopie]] {
+if [prepare_for_testing $expfile $executable $srcfile \
+	[list debug nowarnings]] {
+    untested "failed to prepare for trace tests"
     return -1
 }
 
 if ![runto_main] {
-    fail "can't run to main to check for trace support"
+    fail "Can't run to main to check for trace support"
     return -1
 }
 
 if { ![gdb_target_supports_trace] } then {
-    unsupported "current target does not support trace"
+    unsupported "Current target does not support trace"
     return 1
 
 }
@@ -62,7 +58,7 @@ set arg6 6
 
 set baseline [gdb_find_recursion_test_baseline $srcfile]
 if { $baseline == -1 } {
-    fail "could not find gdb_recursion_test function"
+    fail "Could not find gdb_recursion_test function"
     return
 }
 
@@ -95,13 +91,13 @@ gdb_test_multiple "list $baseline, +12" "all tests in this module will fail" {
     }
     -re ".*$gdb_prompt $" {
 	if { ($testline1 == 0) || ($testline2 == 0) || ($testline3 == 0) || ($testline4 == 0) || ($testline5 == 0) || ($testline6 == 0) } {
-	    untested "unexpected testline values"
+	    untested backtrace.exp
 	    set return_me 1
 all tests in this module will fail."
 	}
     }
     default {
-	    untested "couldn't match pattern"
+	    untested backtrace.exp
 	    set return_me 1
 all tests in this module will fail."
     }
@@ -144,13 +140,24 @@ gdb_trace_setactions "8.6: setup TP to collect regs, args, and locals" \
 	"$tdp4" \
 	"collect \$regs, \$args, \$locs" "^$"
 
+if [is_amd64_regs_target] {
+    set fpreg "\$rbp"
+    set spreg "\$rsp"
+} elseif [is_x86_like_target] {
+    set fpreg "\$ebp"
+    set spreg "\$esp"
+} else {
+    set fpreg "\$fp"
+    set spreg "\$sp"
+}
+
 gdb_trace_setactions "8.6: setup TP to collect stack mem cast expr" \
        "$tdp6" \
-       "collect \$$fpreg, \(\*\(void \*\*\) \(\$$spreg\)\) @ 128" "^$"
+       "collect $fpreg, \(\*\(void \*\*\) \($spreg\)\) @ 64" "^$"
 
 gdb_test_no_output "tstart" ""
 
-gdb_breakpoint "end" qualified
+gdb_test "break end" ".*" ""
 gdb_test "continue" \
     "Continuing.*Breakpoint $decimal, end.*" \
     "run trace experiment"
@@ -249,8 +256,11 @@ proc gdb_backtrace_tdp_4 { msg depth traceframe } {
 
 	# Output of 'tdump' on frame 0 and frame 1 should be
 	# identical.
-	gdb_assert ![string compare $output_string0 $output_string1] \
-	    "tdump output"
+	if ![string compare $output_string0 $output_string1]  {
+	    pass "tdump output"
+	} else {
+	    fail "tdump output"
+	}
     }
 }
 

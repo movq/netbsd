@@ -1,4 +1,4 @@
-# Copyright 2013-2020 Free Software Foundation, Inc.
+# Copyright 2013-2015 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,20 +19,19 @@ if { ![istarget "x86_64-*-*"] || ![is_lp64_target] } {
 }
 
 proc test_probe { probe_name } {
-    with_test_prefix "probe: ${probe_name}" {
-	if { ![runto "-pstap $probe_name"] } {
-	    fail "run to probe $probe_name"
-	    return
-	}
-
-	gdb_test "print \$_probe_argc" " = 1"
-	gdb_test "print \$_probe_arg0" " = 10"
+    if { ![runto "-pstap $probe_name"] } {
+	fail "run to probe $probe_name"
+	return
     }
+
+    gdb_test "print \$_probe_argc" " = 1"
+    gdb_test "print \$_probe_arg0" " = 10"
 }
 
 standard_testfile amd64-stap-triplet.S
 
-if { [prepare_for_testing "failed to prepare" $testfile $srcfile] } {
+if { [prepare_for_testing $testfile.exp $testfile $srcfile] } {
+    untested amd64-stap-special-operands.exp
     return -1
 }
 
@@ -40,7 +39,8 @@ test_probe "triplet"
 
 standard_testfile amd64-stap-three-arg-disp.S
 
-if { [prepare_for_testing "failed to prepare" $testfile $srcfile] } {
+if { [prepare_for_testing $testfile.exp $testfile $srcfile] } {
+    untested amd64-stap-special-operands.exp
     return -1
 }
 

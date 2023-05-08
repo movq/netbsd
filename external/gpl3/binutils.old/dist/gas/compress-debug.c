@@ -1,5 +1,5 @@
 /* compress-debug.c - compress debug sections
-   Copyright (C) 2010-2020 Free Software Foundation, Inc.
+   Copyright 2010 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -20,15 +20,21 @@
 
 #include "config.h"
 #include <stdio.h>
-#include <zlib.h>
 #include "ansidecl.h"
 #include "compress-debug.h"
+
+#ifdef HAVE_ZLIB_H
+#include <zlib.h>
+#endif
 
 /* Initialize the compression engine.  */
 
 struct z_stream_s *
 compress_init (void)
 {
+#ifndef HAVE_ZLIB_H
+  return NULL;
+#else
   static struct z_stream_s strm;
 
   strm.zalloc = NULL;
@@ -36,15 +42,22 @@ compress_init (void)
   strm.opaque = NULL;
   deflateInit (&strm, Z_DEFAULT_COMPRESSION);
   return &strm;
+#endif /* HAVE_ZLIB_H */
 }
 
 /* Stream the contents of a frag to the compression engine.  Output
    from the engine goes into the current frag on the obstack.  */
 
 int
-compress_data (struct z_stream_s *strm, const char **next_in,
-	       int *avail_in, char **next_out, int *avail_out)
+compress_data (struct z_stream_s *strm ATTRIBUTE_UNUSED,
+	       const char **next_in ATTRIBUTE_UNUSED,
+	       int *avail_in ATTRIBUTE_UNUSED,
+	       char **next_out ATTRIBUTE_UNUSED,
+	       int *avail_out ATTRIBUTE_UNUSED)
 {
+#ifndef HAVE_ZLIB_H
+  return -1;
+#else
   int out_size = 0;
   int x;
 
@@ -64,6 +77,7 @@ compress_data (struct z_stream_s *strm, const char **next_in,
   *avail_out = strm->avail_out;
 
   return out_size;
+#endif /* HAVE_ZLIB_H */
 }
 
 /* Finish the compression and consume the remaining compressed output.
@@ -71,9 +85,14 @@ compress_data (struct z_stream_s *strm, const char **next_in,
    needed.  */
 
 int
-compress_finish (struct z_stream_s *strm, char **next_out,
-		 int *avail_out, int *out_size)
+compress_finish (struct z_stream_s *strm ATTRIBUTE_UNUSED,
+		 char **next_out ATTRIBUTE_UNUSED,
+		 int *avail_out ATTRIBUTE_UNUSED,
+		 int *out_size ATTRIBUTE_UNUSED)
 {
+#ifndef HAVE_ZLIB_H
+  return -1;
+#else
   int x;
 
   strm->avail_in = 0;
@@ -94,4 +113,5 @@ compress_finish (struct z_stream_s *strm, char **next_out,
   if (strm->avail_out != 0)
     return -1;
   return 1;
+#endif /* HAVE_ZLIB_H */
 }

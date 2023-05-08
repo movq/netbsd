@@ -1,5 +1,6 @@
 /* This file is tc-sh.h
-   Copyright (C) 1993-2020 Free Software Foundation, Inc.
+   Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
+   2003, 2004, 2005, 2006, 2007, 2008, 2010 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -77,7 +78,7 @@ extern int sh_force_relocation (struct fix *);
        || (FIX)->fx_r_type == BFD_RELOC_8))
 
 #define TC_FORCE_RELOCATION_SUB_SAME(FIX, SEC)		\
-  (GENERIC_FORCE_RELOCATION_SUB_SAME (FIX, SEC)		\
+  (! SEG_NORMAL (SEC)					\
    || TC_FORCE_RELOCATION (FIX)				\
    || (sh_relax && SWITCH_TABLE (FIX)))
 
@@ -160,6 +161,8 @@ extern int target_big_endian;
 #define TARGET_FORMAT (!target_big_endian ? "elf32-sh-linux" : "elf32-shbig-linux")
 #elif defined(TE_NetBSD)
 #define TARGET_FORMAT (!target_big_endian ? "elf32-shl-nbsd" : "elf32-sh-nbsd")
+#elif defined TARGET_SYMBIAN
+#define TARGET_FORMAT (!target_big_endian ? "elf32-shl-symbian" : "elf32-sh-symbian")
 #elif defined (TE_VXWORKS)
 #define TARGET_FORMAT (!target_big_endian ? "elf32-shl-vxworks" : "elf32-sh-vxworks")
 #elif defined (TE_UCLINUX)
@@ -202,10 +205,11 @@ extern bfd_boolean sh_fix_adjustable (struct fix *);
    can only be determined at link time.  */
 
 #define TC_FORCE_RELOCATION_LOCAL(FIX)			\
-  (GENERIC_FORCE_RELOCATION_LOCAL (FIX)			\
+  (!(FIX)->fx_pcrel					\
    || (FIX)->fx_r_type == BFD_RELOC_32_PLT_PCREL	\
    || (FIX)->fx_r_type == BFD_RELOC_32_GOT_PCREL	\
-   || (FIX)->fx_r_type == BFD_RELOC_SH_GOTPC)
+   || (FIX)->fx_r_type == BFD_RELOC_SH_GOTPC		\
+   || TC_FORCE_RELOCATION (FIX))
 
 #define TC_FORCE_RELOCATION_SUB_LOCAL(FIX, SEG)		\
   ((!md_register_arithmetic && (SEG) == reg_section)	\
@@ -229,10 +233,9 @@ extern bfd_boolean sh_fix_adjustable (struct fix *);
 int sh_parse_name (char const *, expressionS *,
 		   enum expr_mode, char *);
 
-#define TC_CONS_FIX_NEW(FRAG, OFF, LEN, EXP, RELOC)	\
-  sh_cons_fix_new ((FRAG), (OFF), (LEN), (EXP), (RELOC))
-void sh_cons_fix_new (fragS *, int, int, expressionS *,
-		      bfd_reloc_code_real_type);
+#define TC_CONS_FIX_NEW(FRAG, OFF, LEN, EXP) \
+  sh_cons_fix_new ((FRAG), (OFF), (LEN), (EXP))
+void sh_cons_fix_new (fragS *, int, int, expressionS *);
 
 /* This is used to construct expressions out of @GOTOFF, @PLT and @GOT
    symbols.  The relocation type is stored in X_md.  */

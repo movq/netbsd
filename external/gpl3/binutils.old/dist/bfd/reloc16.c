@@ -1,5 +1,7 @@
 /* 8 and 16 bit COFF relocation functions, for BFD.
-   Copyright (C) 1990-2020 Free Software Foundation, Inc.
+   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 2000, 2001,
+   2002, 2003, 2004, 2005, 2007, 2008, 2009, 2012
+   Free Software Foundation, Inc.
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -22,7 +24,8 @@
 
 /* Most of this hacked by Steve Chamberlain <sac@cygnus.com>.  */
 
-/* These routines are used by coff-z8k to do relocation.
+/* These routines are used by coff-h8300 and coff-z8k to do
+   relocation.
 
    FIXME: This code should be rewritten to support the new COFF
    linker.  Basically, they need to deal with COFF relocs rather than
@@ -79,9 +82,11 @@ bfd_coff_reloc16_get_value (arelent *reloc,
 	value = 0;
       else
 	{
-	  (*link_info->callbacks->undefined_symbol)
-	    (link_info, bfd_asymbol_name (symbol),
-	     input_section->owner, input_section, reloc->address, TRUE);
+	  if (!((*link_info->callbacks->undefined_symbol)
+		(link_info, bfd_asymbol_name (symbol),
+		 input_section->owner, input_section, reloc->address,
+		 TRUE)))
+	    abort ();
 	  value = 0;
 	}
     }
@@ -150,7 +155,7 @@ bfd_coff_reloc16_relax_section (bfd *abfd,
   arelent **reloc_vector = NULL;
   long reloc_count;
 
-  if (bfd_link_relocatable (link_info))
+  if (link_info->relocatable)
     (*link_info->callbacks->einfo)
       (_("%P%F: --relax and -r may not be used together\n"));
 

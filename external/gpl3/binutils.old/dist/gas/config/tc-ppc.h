@@ -1,5 +1,6 @@
 /* tc-ppc.h -- Header file for tc-ppc.c.
-   Copyright (C) 1994-2020 Free Software Foundation, Inc.
+   Copyright 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003,
+   2004, 2005, 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support.
 
    This file is part of GAS, the GNU Assembler.
@@ -51,7 +52,7 @@ extern int target_big_endian;
 
 /* The target BFD format.  */
 #define TARGET_FORMAT (ppc_target_format ())
-extern const char *ppc_target_format (void);
+extern char *ppc_target_format (void);
 
 /* Permit temporary numeric labels.  */
 #define LOCAL_LABELS_FB 1
@@ -61,7 +62,7 @@ extern const char *ppc_target_format (void);
 
 /* Strings do not use backslash escapes under COFF.  */
 #ifdef OBJ_COFF
-#define TC_STRING_ESCAPES 0
+#define NO_STRING_ESCAPES
 #endif
 
 #ifdef OBJ_ELF
@@ -82,15 +83,10 @@ extern const char *ppc_target_format (void);
   if ((FRAGP)->fr_type == rs_align_code)				\
     ppc_handle_align (FRAGP);
 
-extern unsigned int ppc_nop_select (void);
-#define NOP_OPCODE ppc_nop_select ()
-
 extern void ppc_handle_align (struct frag *);
 extern void ppc_frag_check (struct frag *);
 
-#ifdef OBJ_ELF
 #define SUB_SEGMENT_ALIGN(SEG, FRCHAIN) 0
-#endif
 
 #define md_frag_check(FRAGP) ppc_frag_check (FRAGP)
 
@@ -174,6 +170,10 @@ extern char *ppc_canonicalize_symbol_name (char *);
 #define tc_symbol_new_hook(sym) ppc_symbol_new_hook (sym)
 extern void ppc_symbol_new_hook (symbolS *);
 
+/* Set the symbol class of a label based on the csect.  */
+#define tc_frob_label(sym) ppc_frob_label (sym)
+extern void ppc_frob_label (symbolS *);
+
 /* TOC relocs requires special handling.  */
 #define tc_fix_adjustable(FIX) ppc_fix_adjustable (FIX)
 extern int ppc_fix_adjustable (struct fix *);
@@ -205,10 +205,10 @@ do {								\
 extern void ppc_xcoff_end (void);
 #define md_end ppc_xcoff_end
 
-#endif /* OBJ_XCOFF */
-
 #define tc_new_dot_label(sym) ppc_new_dot_label (sym)
 extern void ppc_new_dot_label (symbolS *);
+
+#endif /* OBJ_XCOFF */
 
 extern const char       ppc_symbol_chars[];
 #define tc_symbol_chars ppc_symbol_chars
@@ -225,9 +225,6 @@ extern int ppc_section_flags (flagword, bfd_vma, int);
 #define tc_comment_chars ppc_comment_chars
 extern const char *ppc_comment_chars;
 
-#define md_elf_section_letter		ppc_elf_section_letter
-extern bfd_vma ppc_elf_section_letter (int, const char **);
-
 /* Keep relocations relative to the GOT, or non-PC relative.  */
 #define tc_fix_adjustable(FIX) ppc_fix_adjustable (FIX)
 extern int ppc_fix_adjustable (struct fix *);
@@ -235,22 +232,8 @@ extern int ppc_fix_adjustable (struct fix *);
 /* Values passed to md_apply_fix don't include symbol values.  */
 #define MD_APPLY_SYM_VALUE(FIX) 0
 
-#define TC_PARSE_CONS_EXPRESSION(EXP, NBYTES) \
-  ppc_elf_parse_cons (EXP, NBYTES)
-extern bfd_reloc_code_real_type ppc_elf_parse_cons (expressionS *,
-						    unsigned int);
-#define TC_CONS_FIX_CHECK(EXP, NBYTES, FIX) \
-  ppc_elf_cons_fix_check (EXP, NBYTES, FIX)
-extern void ppc_elf_cons_fix_check (expressionS *, unsigned int, struct fix *);
-
 #define tc_frob_file_before_adjust ppc_frob_file_before_adjust
 extern void ppc_frob_file_before_adjust (void);
-
-#define tc_adjust_symtab() ppc_elf_adjust_symtab ()
-extern void ppc_elf_adjust_symtab (void);
-
-extern void ppc_elf_end (void);
-#define md_end ppc_elf_end
 
 #endif /* OBJ_ELF */
 
@@ -259,42 +242,6 @@ extern void ppc_elf_end (void);
 extern int ppc_force_relocation (struct fix *);
 #endif
 
-#ifdef OBJ_ELF
-/* Don't allow the generic code to convert fixups involving the
-   subtraction of a label in the current section to pc-relative if we
-   don't have the necessary pc-relative relocation.  */
-#define TC_FORCE_RELOCATION_SUB_LOCAL(FIX, SEG) \
-  (!((FIX)->fx_r_type == BFD_RELOC_64				\
-     || (FIX)->fx_r_type == BFD_RELOC_32			\
-     || (FIX)->fx_r_type == BFD_RELOC_16			\
-     || (FIX)->fx_r_type == BFD_RELOC_LO16			\
-     || (FIX)->fx_r_type == BFD_RELOC_HI16			\
-     || (FIX)->fx_r_type == BFD_RELOC_HI16_S			\
-     || (FIX)->fx_r_type == BFD_RELOC_PPC64_ADDR16_HIGH		\
-     || (FIX)->fx_r_type == BFD_RELOC_PPC64_ADDR16_HIGHA	\
-     || (FIX)->fx_r_type == BFD_RELOC_PPC64_HIGHER		\
-     || (FIX)->fx_r_type == BFD_RELOC_PPC64_HIGHER_S		\
-     || (FIX)->fx_r_type == BFD_RELOC_PPC64_HIGHEST		\
-     || (FIX)->fx_r_type == BFD_RELOC_PPC64_HIGHEST_S		\
-     || (FIX)->fx_r_type == BFD_RELOC_PPC64_ADDR16_HIGHER34	\
-     || (FIX)->fx_r_type == BFD_RELOC_PPC64_ADDR16_HIGHERA34	\
-     || (FIX)->fx_r_type == BFD_RELOC_PPC64_ADDR16_HIGHEST34	\
-     || (FIX)->fx_r_type == BFD_RELOC_PPC64_ADDR16_HIGHESTA34	\
-     || (FIX)->fx_r_type == BFD_RELOC_PPC_16DX_HA		\
-     || (FIX)->fx_r_type == BFD_RELOC_PPC64_D34			\
-     || (FIX)->fx_r_type == BFD_RELOC_PPC64_D28))
-#endif
-
-#define TC_VALIDATE_FIX_SUB(FIX, SEG) 0
-
-/* Various frobbings of labels and their addresses.  */
-#define md_start_line_hook() ppc_start_line_hook ()
-extern void ppc_start_line_hook (void);
-
-/* Set the symbol class of a label based on the csect.  */
-#define tc_frob_label(sym) ppc_frob_label (sym)
-extern void ppc_frob_label (symbolS *);
-
 /* call md_pcrel_from_section, not md_pcrel_from */
 #define MD_PCREL_FROM_SECTION(FIX, SEC) md_pcrel_from_section(FIX, SEC)
 extern long md_pcrel_from_section (struct fix *, segT);
@@ -302,32 +249,16 @@ extern long md_pcrel_from_section (struct fix *, segT);
 #define md_parse_name(name, exp, mode, c) ppc_parse_name (name, exp)
 extern int ppc_parse_name (const char *, struct expressionS *);
 
-#define md_optimize_expr(left, op, right) ppc_optimize_expr (left, op, right)
-extern int ppc_optimize_expr (expressionS *, operatorT, expressionS *);
-
 #define md_operand(x)
 
 #define md_cleanup() ppc_cleanup ()
 extern void ppc_cleanup (void);
 
-#if (defined TE_AIX5 || defined TE_AIX					\
-     || defined TE_FreeBSD || defined TE_NetBSD || defined TE_LYNX)
 /* ppc uses different register numbers between .eh_frame and .debug_frame.
    This macro translates the .eh_frame register numbers to .debug_frame
    register numbers.  */
-#define md_reg_eh_frame_to_debug_frame(regno)				\
-  ((regno) == 70 ? 64	/* cr2 */					\
-   : (regno) == 65 ? 108 /* lr */					\
-   : (regno) == 66 ? 109 /* ctr */					\
-   : (regno) >= 68 && (regno) <= 75 ? (regno) + 86 - 68 /* crN */	\
-   : (regno) == 76 ? 101 /* xer */					\
-   : (regno) >= 77 && (regno) <= 108 ? (regno) + 1124 - 77 /* vrN */	\
-   : (regno) == 109 ? 356 /* vrsave */					\
-   : (regno) == 110 ? 67 /* vscr */					\
-   : (regno) == 111 ? 99 /* spe_acc */					\
-   : (regno) == 112 ? 612 /* spefscr */					\
-   : (regno))
-#endif
+#define md_reg_eh_frame_to_debug_frame(regno) \
+  ((regno) == 70 ? 64 /* cr2 */ : (regno))
 
 #define TARGET_USE_CFIPOP 1
 
@@ -344,4 +275,3 @@ extern int ppc_dwarf2_line_min_insn_length;
 #define DWARF2_LINE_MIN_INSN_LENGTH     ppc_dwarf2_line_min_insn_length
 #define DWARF2_DEFAULT_RETURN_COLUMN    0x41
 #define DWARF2_CIE_DATA_ALIGNMENT       ppc_cie_data_alignment
-#define EH_FRAME_ALIGNMENT		2

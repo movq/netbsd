@@ -340,12 +340,12 @@
 
 2015-12-09  Luis Machado  <lgustavo@codesourcery.com>
 
-	* mi/mi-cmd-var.c (mi_parse_format): Handle new "zero-hexadecimal"
+	* gdb/mi/mi-cmd-var.c (mi_parse_format): Handle new "zero-hexadecimal"
 	format.
-	* varobj.c (varobj_format_string): Add "zero-hexadecimal" entry.
+	* gdb/varobj.c (varobj_format_string): Add "zero-hexadecimal" entry.
 	(format_code): Add 'z' entry.
 	(varobj_set_display_format): Handle FORMAT_ZHEXADECIMAL.
-	* varobj.h (varobj_display_formats) <FORMAT_ZHEXADECIMAL>: New enum
+	* gdb/varobj.h (varobj_display_formats) <FORMAT_ZHEXADECIMAL>: New enum
 	field.
 	* NEWS: Add new note to MI changes citing the new zero-hexadecimal
 	format for -var-set-format.
@@ -1085,7 +1085,7 @@
 2015-11-04  Marcin Kościelnicki  <koriakin@0x04.net>
 
 	PR/18376
-	* s390-linux-tdep.c (s390_is_partial_instruction): New function.
+	* gdb/s390-linux-tdep.c (s390_is_partial_instruction): New function.
 	(s390_software_single_step): New function.
 	(s390_displaced_step_hw_singlestep): New function.
 	(s390_gdbarch_init): Fill gdbarch slots with the above.
@@ -1093,8 +1093,8 @@
 2015-11-04  Marcin Kościelnicki  <koriakin@0x04.net>
 
 	PR/18376
-	* configure.tgt: Add linux-record.o to s390*-linux.
-	* s390-linux-tdep.c: #include "linux-record.h", "record-full.h"
+	* gdb/configure.tgt: Add linux-record.o to s390*-linux.
+	* gdb/s390-linux-tdep.c: #include "linux-record.h", "record-full.h"
 	(s390_linux_record_tdep): New static global variable.
 	(s390x_linux_record_tdep): New static global variable.
 	(s390_all_but_pc_registers_record): New function.
@@ -1744,7 +1744,7 @@
 
 2015-10-21  Aleksandar Ristovski  <aristovski@qnx.com>
 
-	* nto-tdep.c (QNX_NOTE_NAME, QNX_INFO_SECT_NAME): New defines.
+	* gdb/nto-tdep.c (QNX_NOTE_NAME, QNX_INFO_SECT_NAME): New defines.
 	(nto_sniff_abi_note_section): New function.
 	(nto_elf_osabi_sniffer): Use new function to recognize nto specific
 	binary.
@@ -1766,7 +1766,7 @@
 
 2015-10-20  Aleksandar Ristovski  <aristovski@qnx.com>
 
-	* nto-procfs.c (procfs_pid_to_exec_file): New function.
+	* gdb/nto-procfs.c (procfs_pid_to_exec_file): New function.
 	(init_procfs_targets): Wire new function.
 
 2015-10-20  Aleksandar Ristovski  <aristovski@qnx.com>
@@ -8207,6 +8207,11 @@
 	(arm_linux_fetch_inferior_registers): Call fetch_fpregs and
 	fetch_regs instead.
 
+2015-07-06  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* doc/gdb.texinfo (TUI): Restructure documentation on TUI layout
+	and focus commands.
+
 2015-07-06  Joel Brobecker  <brobecker@adacore.com>
 
 	* NEWS: Create a new section for the next release branch.
@@ -8224,6 +8229,10 @@
 	breakpoints in a special way.
 	(remove_breakpoint): Likewise.
 	(mark_breakpoints_out): Likewise.
+
+2015-07-06  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* doc/gdb.texinfo (TUI): Add comma after @xref.
 
 2015-07-06  Andrew Burgess  <andrew.burgess@embecosm.com>
 
@@ -9250,7 +9259,7 @@
 
 2015-05-28  Kyle Huey  <me@kylehuey.com>  (tiny patch)
 
-	* arm-tdep.c (arm_gdbarch_init): Perform arm_abi detection on
+	* gdb/arm-tdep.c (arm_gdbarch_init): Perform arm_abi detection on
 	ELFOSABI_GNU binaries.
 
 2015-05-27  Doug Evans  <dje@google.com>
@@ -10886,7 +10895,7 @@
 
 2015-04-02  Gary Benson <gbenson@redhat.com>
 
-	* gdb_bfd.h (TARGET_SYSROOT_PREFIX): New definition.
+	* gdb/gdb_bfd.h (TARGET_SYSROOT_PREFIX): New definition.
 	(is_target_filename): New declaration.
 	(gdb_bfd_has_target_filename): Likewise.
 	(gdb_bfd_open): Update documentation comment.
@@ -11041,7 +11050,7 @@
 2015-03-31  Antoine Tremblay  <antoine.tremblay@ericsson.com>
 
 	* NEWS: Mention info os cpus support.
-	* nat/linux-osdata.c (linux_xfer_osdata_cpus): New function.
+	* gdb/nat/linux-osdata.c (linux_xfer_osdata_cpus): New function.
 	(struct osdata_type): Add cpus entry, reorder the entries in
 	alphabetical order.
 
@@ -12516,7 +12525,7 @@
 
 2015-02-26  Antoine Tremblay  <antoine.tremblay@ericsson.com>
 
-	* infcmd.c (print_return_value): use type_to_string to print type.
+	* gdb/infcmd.c (print_return_value): use type_to_string to print type.
 
 2015-02-26  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
@@ -13005,7 +13014,7 @@
 2015-02-09  Sergio Durigan Junior  <sergiodj@redhat.com>
 
 	PR remote/17946
-	* remote.c (remote_parse_stop_reply): Fix wrong comparison
+	* gdb/remote.c (remote_parse_stop_reply): Fix wrong comparison
 	of pointer against char.
 
 2015-02-09  Mark Wielaard  <mjw@redhat.com>

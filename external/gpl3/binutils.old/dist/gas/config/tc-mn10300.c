@@ -1,5 +1,6 @@
 /* tc-mn10300.c -- Assembler code for the Matsushita 10300
-   Copyright (C) 1996-2020 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+   2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -88,6 +89,9 @@ const relax_typeS md_relax_table[] =
   {0x7fffffff, -0x80000000, 8, 0},
 
 };
+
+/*  Set linkrelax here to avoid fixups in most sections.  */
+int linkrelax = 1;
 
 static int current_machine;
 
@@ -284,7 +288,7 @@ static const struct reg_name other_registers[] =
 #define OTHER_REG_NAME_CNT	ARRAY_SIZE (other_registers)
 
 /* Perform a binary search of the given register table REGS to see
-   if NAME is a valid register name.  Returns the register number from
+   if NAME is a valid regiter name.  Returns the register number from
    the array on success, or -1 on failure.  */
 
 static int
@@ -334,13 +338,13 @@ get_register_name (expressionS *           expressionP,
   char c;
 
   /* Find the spelling of the operand.  */
-  start = input_line_pointer;
+  start = name = input_line_pointer;
 
-  c = get_symbol_name (&name);
+  c = get_symbol_end ();
   reg_number = reg_name_search (table, table_length, name);
 
   /* Put back the delimiting char.  */
-  (void) restore_line_pointer (c);
+  *input_line_pointer = c;
 
   /* Look to see if it's in the register table.  */
   if (reg_number >= 0)
@@ -406,13 +410,13 @@ other_register_name (expressionS *expressionP)
   char c;
 
   /* Find the spelling of the operand.  */
-  start = input_line_pointer;
+  start = name = input_line_pointer;
 
-  c = get_symbol_name (&name);
+  c = get_symbol_end ();
   reg_number = reg_name_search (other_registers, ARRAY_SIZE (other_registers), name);
 
   /* Put back the delimiting char.  */
-  (void) restore_line_pointer (c);
+  *input_line_pointer = c;
 
   /* Look to see if it's in the register table.  */
   if (reg_number == 0
@@ -441,7 +445,7 @@ none yet\n"));
 }
 
 int
-md_parse_option (int c ATTRIBUTE_UNUSED, const char *arg ATTRIBUTE_UNUSED)
+md_parse_option (int c ATTRIBUTE_UNUSED, char *arg ATTRIBUTE_UNUSED)
 {
   return 0;
 }
@@ -452,7 +456,7 @@ md_undefined_symbol (char *name ATTRIBUTE_UNUSED)
   return 0;
 }
 
-const char *
+char *
 md_atof (int type, char *litp, int *sizep)
 {
   return ieee_md_atof (type, litp, sizep, FALSE);
@@ -900,15 +904,15 @@ md_convert_frag (bfd *abfd ATTRIBUTE_UNUSED,
 valueT
 md_section_align (asection *seg, valueT addr)
 {
-  int align = bfd_section_alignment (seg);
+  int align = bfd_get_section_alignment (stdoutput, seg);
 
-  return ((addr + (1 << align) - 1) & -(1 << align));
+  return ((addr + (1 << align) - 1) & (-1 << align));
 }
 
 void
 md_begin (void)
 {
-  const char *prev_name = "";
+  char *prev_name = "";
   const struct mn10300_opcode *op;
 
   mn10300_hash = hash_new ();
@@ -935,15 +939,12 @@ md_begin (void)
     as_warn (_("could not set architecture and machine"));
 
   current_machine = AM33_2;
-#else
+#else  
   if (!bfd_set_arch_mach (stdoutput, bfd_arch_mn10300, MN103))
     as_warn (_("could not set architecture and machine"));
 
   current_machine = MN103;
 #endif
-
-  /*  Set linkrelax here to avoid fixups in most sections.  */
-  linkrelax = 1;
 }
 
 static symbolS *GOT_symbol;
@@ -1013,8 +1014,7 @@ mn10300_check_fixup (struct mn10300_fixup *fixup)
 }
 
 void
-mn10300_cons_fix_new (fragS *frag, int off, int size, expressionS *exp,
-		      bfd_reloc_code_real_type r ATTRIBUTE_UNUSED)
+mn10300_cons_fix_new (fragS *frag, int off, int size, expressionS *exp)
 {
   struct mn10300_fixup fixup;
 
@@ -1069,7 +1069,7 @@ mn10300_cons_fix_new (fragS *frag, int off, int size, expressionS *exp,
       as_bad (_("unsupported BFD relocation size %u"), size);
       fixup.reloc = BFD_RELOC_UNUSED;
     }
-
+    
   fix_new_exp (frag, off, size, &fixup.exp, 0, fixup.reloc);
 }
 
@@ -1346,17 +1346,17 @@ md_assemble (char *str)
 	    }
 	  else if (operand->flags & MN10300_OPERAND_SP)
 	    {
-	      char *start;
-	      char c = get_symbol_name (&start);
+	      char *start = input_line_pointer;
+	      char c = get_symbol_end ();
 
 	      if (strcasecmp (start, "sp") != 0)
 		{
-		  (void) restore_line_pointer (c);
+		  *input_line_pointer = c;
 		  input_line_pointer = hold;
 		  str = hold;
 		  goto error;
 		}
-	      (void) restore_line_pointer (c);
+	      *input_line_pointer = c;
 	      goto keep_going;
 	    }
 	  else if (operand->flags & MN10300_OPERAND_RREG)
@@ -1397,92 +1397,92 @@ md_assemble (char *str)
 	    }
 	  else if (operand->flags & MN10300_OPERAND_FPCR)
 	    {
-	      char *start;
-	      char c = get_symbol_name (&start);
+	      char *start = input_line_pointer;
+	      char c = get_symbol_end ();
 
 	      if (strcasecmp (start, "fpcr") != 0)
 		{
-		  (void) restore_line_pointer (c);
+		  *input_line_pointer = c;
 		  input_line_pointer = hold;
 		  str = hold;
 		  goto error;
 		}
-	      (void) restore_line_pointer (c);
+	      *input_line_pointer = c;
 	      goto keep_going;
 	    }
 	  else if (operand->flags & MN10300_OPERAND_USP)
 	    {
-	      char *start;
-	      char c = get_symbol_name (&start);
+	      char *start = input_line_pointer;
+	      char c = get_symbol_end ();
 
 	      if (strcasecmp (start, "usp") != 0)
 		{
-		  (void) restore_line_pointer (c);
+		  *input_line_pointer = c;
 		  input_line_pointer = hold;
 		  str = hold;
 		  goto error;
 		}
-	      (void) restore_line_pointer (c);
+	      *input_line_pointer = c;
 	      goto keep_going;
 	    }
 	  else if (operand->flags & MN10300_OPERAND_SSP)
 	    {
-	      char *start;
-	      char c = get_symbol_name (&start);
+	      char *start = input_line_pointer;
+	      char c = get_symbol_end ();
 
 	      if (strcasecmp (start, "ssp") != 0)
 		{
-		  (void) restore_line_pointer (c);
+		  *input_line_pointer = c;
 		  input_line_pointer = hold;
 		  str = hold;
 		  goto error;
 		}
-	      (void) restore_line_pointer (c);
+	      *input_line_pointer = c;
 	      goto keep_going;
 	    }
 	  else if (operand->flags & MN10300_OPERAND_MSP)
 	    {
-	      char *start;
-	      char c = get_symbol_name (&start);
+	      char *start = input_line_pointer;
+	      char c = get_symbol_end ();
 
 	      if (strcasecmp (start, "msp") != 0)
 		{
-		  (void) restore_line_pointer (c);
+		  *input_line_pointer = c;
 		  input_line_pointer = hold;
 		  str = hold;
 		  goto error;
 		}
-	      (void) restore_line_pointer (c);
+	      *input_line_pointer = c;
 	      goto keep_going;
 	    }
 	  else if (operand->flags & MN10300_OPERAND_PC)
 	    {
-	      char *start;
-	      char c = get_symbol_name (&start);
+	      char *start = input_line_pointer;
+	      char c = get_symbol_end ();
 
 	      if (strcasecmp (start, "pc") != 0)
 		{
-		  (void) restore_line_pointer (c);
+		  *input_line_pointer = c;
 		  input_line_pointer = hold;
 		  str = hold;
 		  goto error;
 		}
-	      (void) restore_line_pointer (c);
+	      *input_line_pointer = c;
 	      goto keep_going;
 	    }
 	  else if (operand->flags & MN10300_OPERAND_EPSW)
 	    {
-	      char *start;
-	      char c = get_symbol_name (&start);
+	      char *start = input_line_pointer;
+	      char c = get_symbol_end ();
 
 	      if (strcasecmp (start, "epsw") != 0)
 		{
-		  (void) restore_line_pointer (c);
+		  *input_line_pointer = c;
 		  input_line_pointer = hold;
 		  str = hold;
 		  goto error;
 		}
-	      (void) restore_line_pointer (c);
+	      *input_line_pointer = c;
 	      goto keep_going;
 	    }
 	  else if (operand->flags & MN10300_OPERAND_PLUS)
@@ -1498,32 +1498,32 @@ md_assemble (char *str)
 	    }
 	  else if (operand->flags & MN10300_OPERAND_PSW)
 	    {
-	      char *start;
-	      char c = get_symbol_name (&start);
+	      char *start = input_line_pointer;
+	      char c = get_symbol_end ();
 
 	      if (strcasecmp (start, "psw") != 0)
 		{
-		  (void) restore_line_pointer (c);
+		  *input_line_pointer = c;
 		  input_line_pointer = hold;
 		  str = hold;
 		  goto error;
 		}
-	      (void) restore_line_pointer (c);
+	      *input_line_pointer = c;
 	      goto keep_going;
 	    }
 	  else if (operand->flags & MN10300_OPERAND_MDR)
 	    {
-	      char *start;
-	      char c = get_symbol_name (&start);
+	      char *start = input_line_pointer;
+	      char c = get_symbol_end ();
 
 	      if (strcasecmp (start, "mdr") != 0)
 		{
-		  (void) restore_line_pointer (c);
+		  *input_line_pointer = c;
 		  input_line_pointer = hold;
 		  str = hold;
 		  goto error;
 		}
-	      (void) restore_line_pointer (c);
+	      *input_line_pointer = c;
 	      goto keep_going;
 	    }
 	  else if (operand->flags & MN10300_OPERAND_REG_LIST)
@@ -1554,56 +1554,57 @@ md_assemble (char *str)
 		  if (*input_line_pointer == ',')
 		    input_line_pointer++;
 
-		  c = get_symbol_name (&start);
+		  start = input_line_pointer;
+		  c = get_symbol_end ();
 
 		  if (strcasecmp (start, "d2") == 0)
 		    {
 		      value |= 0x80;
-		      (void) restore_line_pointer (c);
+		      *input_line_pointer = c;
 		    }
 		  else if (strcasecmp (start, "d3") == 0)
 		    {
 		      value |= 0x40;
-		      (void) restore_line_pointer (c);
+		      *input_line_pointer = c;
 		    }
 		  else if (strcasecmp (start, "a2") == 0)
 		    {
 		      value |= 0x20;
-		      (void) restore_line_pointer (c);
+		      *input_line_pointer = c;
 		    }
 		  else if (strcasecmp (start, "a3") == 0)
 		    {
 		      value |= 0x10;
-		      (void) restore_line_pointer (c);
+		      *input_line_pointer = c;
 		    }
 		  else if (strcasecmp (start, "other") == 0)
 		    {
 		      value |= 0x08;
-		      (void) restore_line_pointer (c);
+		      *input_line_pointer = c;
 		    }
 		  else if (HAVE_AM33
 			   && strcasecmp (start, "exreg0") == 0)
 		    {
 		      value |= 0x04;
-		      (void) restore_line_pointer (c);
+		      *input_line_pointer = c;
 		    }
 		  else if (HAVE_AM33
 			   && strcasecmp (start, "exreg1") == 0)
 		    {
 		      value |= 0x02;
-		      (void) restore_line_pointer (c);
+		      *input_line_pointer = c;
 		    }
 		  else if (HAVE_AM33
 			   && strcasecmp (start, "exother") == 0)
 		    {
 		      value |= 0x01;
-		      (void) restore_line_pointer (c);
+		      *input_line_pointer = c;
 		    }
 		  else if (HAVE_AM33
 			   && strcasecmp (start, "all") == 0)
 		    {
 		      value |= 0xff;
-		      (void) restore_line_pointer (c);
+		      *input_line_pointer = c;
 		    }
 		  else
 		    {
@@ -1865,7 +1866,7 @@ keep_going:
 	 as the size of a pointer, so we need a union to convert
 	 the opindex field of the fr_cgen structure into a char *
 	 so that it can be stored in the frag.  We do not have
-	 to worry about losing accuracy as we are not going to
+	 to worry about loosing accuracy as we are not going to
 	 be even close to the 32bit limit of the int.  */
       union
       {
@@ -2168,7 +2169,7 @@ tc_gen_reloc (asection *seg ATTRIBUTE_UNUSED, fixS *fixp)
   static arelent * relocs[MAX_RELOC_EXPANSION + 1];
   arelent *reloc;
 
-  reloc = XNEW (arelent);
+  reloc = xmalloc (sizeof (arelent));
 
   reloc->howto = bfd_reloc_type_lookup (stdoutput, fixp->fx_r_type);
   if (reloc->howto == NULL)
@@ -2204,7 +2205,7 @@ tc_gen_reloc (asection *seg ATTRIBUTE_UNUSED, fixS *fixp)
 	 even local symbols defined in the same section.  */
       if (ssec != absolute_section || asec != absolute_section)
 	{
-	  arelent * reloc2 = XNEW (arelent);
+	  arelent * reloc2 = xmalloc (sizeof * reloc);
 
 	  relocs[0] = reloc2;
 	  relocs[1] = reloc;
@@ -2212,10 +2213,10 @@ tc_gen_reloc (asection *seg ATTRIBUTE_UNUSED, fixS *fixp)
 	  reloc2->address = reloc->address;
 	  reloc2->howto = bfd_reloc_type_lookup (stdoutput, BFD_RELOC_MN10300_SYM_DIFF);
 	  reloc2->addend = - S_GET_VALUE (fixp->fx_subsy);
-	  reloc2->sym_ptr_ptr = XNEW (asymbol *);
+	  reloc2->sym_ptr_ptr = xmalloc (sizeof (asymbol *));
 	  *reloc2->sym_ptr_ptr = symbol_get_bfdsym (fixp->fx_subsy);
 
-	  reloc->addend = fixp->fx_offset;
+	  reloc->addend = fixp->fx_offset; 
 	  if (asec == absolute_section)
 	    {
 	      reloc->addend += S_GET_VALUE (fixp->fx_addsy);
@@ -2223,7 +2224,7 @@ tc_gen_reloc (asection *seg ATTRIBUTE_UNUSED, fixS *fixp)
 	    }
 	  else
 	    {
-	      reloc->sym_ptr_ptr = XNEW (asymbol *);
+	      reloc->sym_ptr_ptr = xmalloc (sizeof (asymbol *));
 	      *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixp->fx_addsy);
 	    }
 
@@ -2268,7 +2269,7 @@ tc_gen_reloc (asection *seg ATTRIBUTE_UNUSED, fixS *fixp)
     }
   else
     {
-      reloc->sym_ptr_ptr = XNEW (asymbol *);
+      reloc->sym_ptr_ptr = xmalloc (sizeof (asymbol *));
       *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixp->fx_addsy);
       reloc->addend = fixp->fx_offset;
     }
@@ -2282,7 +2283,7 @@ static inline bfd_boolean
 has_known_symbol_location (fragS * fragp, asection * sec)
 {
   symbolS * sym = fragp->fr_symbol;
-
+  
   return sym != NULL
     && S_IS_DEFINED (sym)
     && ! S_IS_WEAK (sym)
@@ -2383,7 +2384,7 @@ md_apply_fix (fixS * fixP, valueT * valP, segT seg)
     case BFD_RELOC_MN10300_ALIGN:
       fixP->fx_done = 1;
       return;
-
+      
     case BFD_RELOC_NONE:
     default:
       as_bad_where (fixP->fx_file, fixP->fx_line,
@@ -2422,7 +2423,7 @@ mn10300_fix_adjustable (struct fix *fixp)
 
   /* Likewise, do not adjust symbols that won't be merged, or debug
      symbols, because they too break relaxation.  We do want to adjust
-     other mergeable symbols, like .rodata, because code relaxations
+     other mergable symbols, like .rodata, because code relaxations
      need section-relative symbols to properly relax them.  */
   if (! (S_GET_SEGMENT (fixp->fx_addsy)->flags & SEC_MERGE))
     return FALSE;
@@ -2443,7 +2444,7 @@ set_arch_mach (int mach)
 }
 
 static inline char *
-mn10300_end_of_match (char *cont, const char *what)
+mn10300_end_of_match (char *cont, char *what)
 {
   int len = strlen (what);
 
@@ -2452,7 +2453,7 @@ mn10300_end_of_match (char *cont, const char *what)
     return cont + len;
 
   return NULL;
-}
+}  
 
 int
 mn10300_parse_name (char const *name,
@@ -2499,7 +2500,7 @@ mn10300_parse_name (char const *name,
     }
 
   exprP->X_add_symbol = symbol_find_or_make (name);
-
+  
   if (*nextcharP != '@')
     goto no_suffix;
   else if ((next_end = mn10300_end_of_match (next + 1, "GOTOFF")))
@@ -2616,9 +2617,9 @@ mn10300_handle_align (fragS *frag)
       && now_seg != bss_section
       /* Do not create relocs for the merging sections - such
 	 relocs will prevent the contents from being merged.  */
-      && (bfd_section_flags (now_seg) & SEC_MERGE) == 0)
+      && (bfd_get_section_flags (now_seg->owner, now_seg) & SEC_MERGE) == 0)
     /* Create a new fixup to record the alignment request.  The symbol is
-       irrelevant but must be present so we use the absolute section symbol.
+       irrelevent but must be present so we use the absolute section symbol.
        The offset from the symbol is used to record the power-of-two alignment
        value.  The size is set to 0 because the frag may already be aligned,
        thus causing cvt_frag_to_fill to reduce the size of the frag to zero.  */

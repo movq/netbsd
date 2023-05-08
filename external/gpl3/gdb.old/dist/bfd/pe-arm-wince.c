@@ -1,5 +1,5 @@
 /* BFD back-end for ARM WINCE PE files.
-   Copyright (C) 2006-2020 Free Software Foundation, Inc.
+   Copyright 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -18,21 +18,13 @@
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
-#include "sysdep.h"
-#include "bfd.h"
-
 #define TARGET_UNDERSCORE    0
 #define USER_LABEL_PREFIX    ""
 
-#define TARGET_LITTLE_SYM    arm_pe_wince_le_vec
+#define TARGET_LITTLE_SYM    arm_wince_pe_little_vec
 #define TARGET_LITTLE_NAME   "pe-arm-wince-little"
-#define TARGET_BIG_SYM       arm_pe_wince_be_vec
+#define TARGET_BIG_SYM       arm_wince_pe_big_vec
 #define TARGET_BIG_NAME      "pe-arm-wince-big"
-
-#define LOCAL_LABEL_PREFIX "."
-
-#undef  bfd_pe_print_pdata
-#define	bfd_pe_print_pdata   _bfd_pe_print_ce_compressed_pdata
 
 #define bfd_arm_allocate_interworking_sections \
   bfd_arm_wince_pe_allocate_interworking_sections
@@ -41,4 +33,13 @@
 #define bfd_arm_process_before_allocation \
   bfd_arm_wince_pe_process_before_allocation
 
+#define LOCAL_LABEL_PREFIX "."
+
+#include "sysdep.h"
+#include "bfd.h"
+
+#undef  bfd_pe_print_pdata
+#define	bfd_pe_print_pdata   _bfd_pe_print_ce_compressed_pdata
+
 #include "pe-arm.c"
+

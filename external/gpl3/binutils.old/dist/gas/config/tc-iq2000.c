@@ -1,5 +1,6 @@
 /* tc-iq2000.c -- Assembler for the Sitera IQ2000.
-   Copyright (C) 2003-2020 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2005, 2006, 2007, 2009, 2010
+   Free Software Foundation. Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -27,6 +28,7 @@
 #include "cgen.h"
 #include "elf/common.h"
 #include "elf/iq2000.h"
+#include "libbfd.h"
 #include "sb.h"
 #include "macro.h"
 
@@ -117,7 +119,7 @@ size_t md_longopts_size = sizeof (md_longopts);
 
 int
 md_parse_option (int c ATTRIBUTE_UNUSED,
-		 const char * arg ATTRIBUTE_UNUSED)
+		 char * arg ATTRIBUTE_UNUSED)
 {
   return 0;
 }
@@ -232,7 +234,7 @@ iq2000_add_macro (const char *  name,
   sb macro_name;
   const char *namestr;
 
-  macro = XNEW (macro_entry);
+  macro = xmalloc (sizeof (macro_entry));
   sb_new (& macro->sub);
   sb_new (& macro_name);
 
@@ -252,7 +254,7 @@ iq2000_add_macro (const char *  name,
 	{
 	  formal_entry *formal;
 
-	  formal = XNEW (formal_entry);
+	  formal = xmalloc (sizeof (formal_entry));
 
 	  sb_new (& formal->name);
 	  sb_new (& formal->def);
@@ -430,8 +432,8 @@ md_assemble (char * str)
 valueT
 md_section_align (segT segment, valueT size)
 {
-  int align = bfd_section_alignment (segment);
-  return ((size + (1 << align) - 1) & -(1 << align));
+  int align = bfd_get_section_alignment (stdoutput, segment);
+  return ((size + (1 << align) - 1) & (-1 << align));
 }
 
 symbolS *
@@ -534,7 +536,7 @@ iq2000_record_hi16 (int    reloc_type,
 
   gas_assert (reloc_type == BFD_RELOC_HI16);
 
-  hi_fixup = XNEW (struct iq2000_hi_fixup);
+  hi_fixup = xmalloc (sizeof * hi_fixup);
   hi_fixup->fixp = fixP;
   hi_fixup->seg  = now_seg;
   hi_fixup->next = iq2000_hi_fixup_list;
@@ -723,7 +725,7 @@ md_operand (expressionS * exp)
     gas_cgen_md_operand (exp);
 }
 
-const char *
+char *
 md_atof (int type, char * litP, int * sizeP)
 {
   return ieee_md_atof (type, litP, sizeP, TRUE);
@@ -795,9 +797,10 @@ get_symbol (void)
   char *name;
   symbolS *p;
 
-  c = get_symbol_name (&name);
+  name = input_line_pointer;
+  c = get_symbol_end ();
   p = (symbolS *) symbol_find_or_make (name);
-  (void) restore_line_pointer (c);
+  *input_line_pointer = c;
   return p;
 }
 
@@ -817,7 +820,7 @@ s_iq2000_end (int x ATTRIBUTE_UNUSED)
   else
     p = NULL;
 
-  if ((bfd_section_flags (now_seg) & SEC_CODE) != 0)
+  if ((bfd_get_section_flags (stdoutput, now_seg) & SEC_CODE) != 0)
     maybe_text = 1;
   else
     maybe_text = 0;
@@ -916,7 +919,7 @@ s_iq2000_ent (int aent)
   if (ISDIGIT (*input_line_pointer) || *input_line_pointer == '-')
     get_number ();
 
-  if ((bfd_section_flags (now_seg) & SEC_CODE) != 0)
+  if ((bfd_get_section_flags (stdoutput, now_seg) & SEC_CODE) != 0)
     maybe_text = 1;
   else
     maybe_text = 0;

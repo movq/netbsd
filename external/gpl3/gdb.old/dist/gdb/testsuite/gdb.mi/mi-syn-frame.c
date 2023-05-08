@@ -9,14 +9,12 @@ void subroutine (int);
 void handler (int);
 void have_a_very_merry_interrupt (void);
 
-int
 main ()
 {
   foo ();   /* Put a breakpoint on foo() and call it to see a dummy frame */
 
 
   have_a_very_merry_interrupt ();
-  return 0;
 }
 
 void
@@ -27,7 +25,7 @@ foo (void)
 void 
 bar (void)
 {
-  *(volatile char *)0 = 0;    /* try to cause a segfault */
+  *(char *)0 = 0;    /* try to cause a segfault */
 
   /* On MMU-less system, previous memory access to address zero doesn't
      trigger a SIGSEGV.  Trigger a SIGILL.  Each arch should define its

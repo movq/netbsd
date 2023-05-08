@@ -1,4 +1,4 @@
-# Copyright 2011-2020 Free Software Foundation, Inc.
+# Copyright 2011-2014 Free Software Foundation, Inc.
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 3 of the License, or
@@ -49,9 +49,9 @@ proc strace_remove_socket { action } {
 
     # Restart with a fresh gdb.
     clean_restart $executable
-    gdb_load_shlib $libipa
+    gdb_load_shlibs $libipa
     if ![runto_main] {
-	fail "can't run to main"
+	fail "Can't run to main"
 	return -1
     }
 
@@ -134,9 +134,9 @@ proc strace_info_marker { } {
 
 	# Restart with a fresh gdb.
 	clean_restart $executable
-	gdb_load_shlib $libipa
+	gdb_load_shlibs $libipa
 	if ![runto_main] {
-	    fail "can't run to main"
+	    fail "Can't run to main"
 	    return -1
 	}
 
@@ -171,9 +171,9 @@ proc strace_probe_marker { } {
 
 	# Restart with a fresh gdb.
 	clean_restart $executable
-	gdb_load_shlib $libipa
+	gdb_load_shlibs $libipa
 	if ![runto_main] {
-	    fail "can't run to main"
+	    fail "Can't run to main"
 	    return -1
 	}
 
@@ -185,7 +185,7 @@ proc strace_probe_marker { } {
 	gdb_test "info static-tracepoint-markers" \
 	    "ust/bar\[\t \]+y\[\t \]+$hex .*ust/bar2\[\t \]+y\[\t \]+$hex.*"
 
-	gdb_breakpoint "end" qualified
+	gdb_test "break end" "Breakpoint \[0-9\]+ at.*"
 
 	gdb_test_no_output "tstart"
 	gdb_test "continue" "Continuing\\.\[ \r\n\]+Breakpoint.*" \
@@ -211,9 +211,9 @@ proc strace_trace_on_same_addr { type } {
 
 	# Restart with a fresh gdb.
 	clean_restart $executable
-	gdb_load_shlib $libipa
+	gdb_load_shlibs $libipa
 	if ![runto_main] {
-	    fail "can't run to main"
+	    fail "Can't run to main"
 	    return -1
 	}
 
@@ -242,7 +242,7 @@ proc strace_trace_on_same_addr { type } {
 	    "ust/bar\[\t \]+y\[\t \]+$hex .*ust/bar2\[\t \]+y\[\t \]+$hex.*" \
 	    "info static-tracepoint-markers 2"
 
-	# Set breakpoints or tracepoints.
+	# Set breapoints or tracepoints.
 	set test "${type} on marker bar"
 	gdb_test_multiple "${type} *${marker_bar_addr}" $test {
 	    -re "\(Fast trace|Trace|Break\)point \[0-9\]+ at ${hex}: file.*\r\n$gdb_prompt $" {
@@ -274,7 +274,7 @@ proc strace_trace_on_same_addr { type } {
 	    }
 	}
 
-	gdb_breakpoint "end" qualified
+	gdb_test "break end" "Breakpoint \[0-9\]+ at.*"
 
 	if [string equal $type "break"] {
 	    gdb_test "continue" "Continuing\\.\[ \r\n\]+Breakpoint.*" \
@@ -315,9 +315,9 @@ proc strace_trace_on_diff_addr { } {
 
 	# Restart with a fresh gdb.
 	clean_restart $executable
-	gdb_load_shlib $libipa
+	gdb_load_shlibs $libipa
 	if ![runto_main] {
-	    fail "can't run to main"
+	    fail "Can't run to main"
 	    return -1
 	}
 
@@ -350,7 +350,7 @@ proc strace_trace_on_diff_addr { } {
 	gdb_test "trace *${marker_bar2_addr}" \
 	    "Tracepoint \[0-9\]+ at ${hex}: file.*"
 
-	gdb_breakpoint "end" qualified
+	gdb_test "break end" "Breakpoint \[0-9\]+ at.*"
 
 	gdb_test_no_output "tstart"
 	gdb_test "continue" "Continuing\\.\[ \r\n\]+Breakpoint.*" \
@@ -375,9 +375,9 @@ if { [istarget "x86_64-*-linux*"] || [istarget "i\[34567\]86-*-linux*"] } {
 }
 
 clean_restart $executable
-gdb_load_shlib $libipa
+gdb_load_shlibs $libipa
 if ![runto_main] {
-    fail "can't run to main to check for trace support"
+    fail "Can't run to main to check for trace support"
     return -1
 }
 if { ![gdb_target_supports_trace] } then {
@@ -386,14 +386,9 @@ if { ![gdb_target_supports_trace] } then {
     # file can be removed.  Note that GDB simply kill inferior doesn't remove
     # the socket file.
     gdb_test "detach" "Detaching .*, process .*"
-    unsupported "current target does not support trace"
+    unsupported "Current target does not support trace"
     return -1
 }
-
-# Double-check that marker ID ("-m") is not mistaken for an explicit location
-# flag.
-gdb_test "strace -m gdbfoobarbaz" \
-    "No known static tracepoint marker named gdbfoobarbaz"
 
 strace_probe_marker
 

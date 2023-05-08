@@ -1,5 +1,5 @@
 /* Remote serial interface for local (hardwired) serial ports for GO32.
-   Copyright (C) 1992-2020 Free Software Foundation, Inc.
+   Copyright (C) 1992-2014 Free Software Foundation, Inc.
 
    Contributed by Nigel Stephens, Algorithmics Ltd. (nigel@algor.co.uk).
 
@@ -24,6 +24,9 @@
 #include "defs.h"
 #include "gdbcmd.h"
 #include "serial.h"
+#include <string.h>
+
+
 /*
  * NS16550 UART registers
  */
@@ -593,26 +596,9 @@ dos_close (struct serial *scb)
 }
 
 
-/* Implementation of the serial_ops flush_output method.  */
 
 static int
-dos_flush_output (struct serial *scb)
-{
-  return 0;
-}
-
-/* Implementation of the serial_ops setparity method.  */
-
-static int
-dos_setparity (struct serial *scb, int parity)
-{
-  return 0;
-}
-
-/* Implementation of the serial_ops drain_output method.  */
-
-static int
-dos_drain_output (struct serial *scb)
+dos_noop (struct serial *scb)
 {
   return 0;
 }
@@ -633,8 +619,6 @@ dos_readchar (struct serial *scb, int timeout)
   then = rawclock () + (timeout * RAWHZ);
   while ((c = dos_getc (port)) < 0)
     {
-      QUIT;
-
       if (timeout >= 0 && (rawclock () - then) >= 0)
 	return SERIAL_TIMEOUT;
     }
@@ -655,14 +639,14 @@ dos_get_tty_state (struct serial *scb)
       /* We've never heard about this port.  We should fail this call,
 	 unless they are asking about one of the 3 standard handles,
 	 in which case we pretend the handle was open by us if it is
-	 connected to a terminal device.  This is because Unix
+	 connected to a terminal device.  This is beacuse Unix
 	 terminals use the serial interface, so GDB expects the
 	 standard handles to go through here.  */
       if (scb->fd >= 3 || !isatty (scb->fd))
 	return NULL;
     }
 
-  state = XNEW (struct dos_ttystate);
+  state = (struct dos_ttystate *) xmalloc (sizeof *state);
   *state = *port;
   return (serial_ttystate) state;
 }
@@ -672,7 +656,7 @@ dos_copy_tty_state (struct serial *scb, serial_ttystate ttystate)
 {
   struct dos_ttystate *state;
 
-  state = XNEW (struct dos_ttystate);
+  state = (struct dos_ttystate *) xmalloc (sizeof *state);
   *state = *(struct dos_ttystate *) ttystate;
 
   return (serial_ttystate) state;
@@ -684,6 +668,17 @@ dos_set_tty_state (struct serial *scb, serial_ttystate ttystate)
   struct dos_ttystate *state;
 
   state = (struct dos_ttystate *) ttystate;
+  dos_setbaudrate (scb, state->baudrate);
+  return 0;
+}
+
+static int
+dos_noflush_set_tty_state (struct serial *scb, serial_ttystate new_ttystate,
+			   serial_ttystate old_ttystate)
+{
+  struct dos_ttystate *state;
+
+  state = (struct dos_ttystate *) new_ttystate;
   dos_setbaudrate (scb, state->baudrate);
   return 0;
 }
@@ -798,12 +793,10 @@ dos_write (struct serial *scb, const void *buf, size_t count)
   size_t fifosize = port->fifo ? 16 : 1;
   long then;
   size_t cnt;
-  const char *str = (const char *) buf;
+  const char *str = buf;
 
   while (count > 0)
     {
-      QUIT;
-
       /* Send the data, fifosize bytes at a time.  */
       cnt = fifosize > count ? count : fifosize;
       port->txbusy = 1;
@@ -863,7 +856,7 @@ static const struct serial_ops dos_ops =
   NULL,				/* fdopen, not implemented */
   dos_readchar,
   dos_write,
-  dos_flush_output,
+  dos_noop,			/* flush output */
   dos_flush_input,
   dos_sendbreak,
   dos_raw,
@@ -871,10 +864,10 @@ static const struct serial_ops dos_ops =
   dos_copy_tty_state,
   dos_set_tty_state,
   dos_print_tty_state,
+  dos_noflush_set_tty_state,
   dos_setbaudrate,
   dos_setstopbits,
-  dos_setparity,
-  dos_drain_output,
+  dos_noop,			/* Wait for output to drain.  */
   (void (*)(struct serial *, int))NULL	/* Change into async mode.  */
 };
 
@@ -887,7 +880,7 @@ gdb_pipe (int pdes[2])
 }
 
 static void
-info_serial_command (const char *arg, int from_tty)
+dos_info (char *arg, int from_tty)
 {
   struct dos_ttystate *port;
 #ifdef DOS_STATS
@@ -915,9 +908,11 @@ info_serial_command (const char *arg, int from_tty)
 #endif
 }
 
-void _initialize_ser_dos ();
+/* -Wmissing-prototypes */
+extern initialize_file_ftype _initialize_ser_dos;
+
 void
-_initialize_ser_dos ()
+_initialize_ser_dos (void)
 {
   serial_add_interface (&dos_ops);
 
@@ -985,6 +980,6 @@ Show COM4 interrupt request."), NULL,
 			    NULL, /* FIXME: i18n: */
 			    &setlist, &showlist);
 
-  add_info ("serial", info_serial_command,
+  add_info ("serial", dos_info,
 	    _("Print DOS serial port status."));
 }

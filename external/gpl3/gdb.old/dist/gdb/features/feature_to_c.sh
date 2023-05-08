@@ -2,7 +2,7 @@
 
 # Convert text files to compilable C arrays.
 #
-# Copyright (C) 2007-2020 Free Software Foundation, Inc.
+# Copyright (C) 2007-2014 Free Software Foundation, Inc.
 #
 # This file is part of GDB.
 #
@@ -19,20 +19,18 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-if test -z "$1" || test -z "$2"; then
+output=$1
+shift
+
+if test -z "$output" || test -z "$1"; then
   echo "Usage: $0 OUTPUTFILE INPUTFILE..."
   exit 1
 fi
-
-output=$1
-shift
 
 if test -e "$output"; then
   echo "Output file \"$output\" already exists; refusing to overwrite."
   exit 1
 fi
-
-echo '#include "xml-builtin.h"' >> $output
 
 for input; do
   arrayname=xml_feature_`echo $input | sed 's,.*/,,; s/[-.]/_/g'`
@@ -65,8 +63,7 @@ for input; do
 done
 
 echo >> $output
-
-echo "extern const char *const xml_builtin[][2] = {" >> $output
+echo "const char *const xml_builtin[][2] = {" >> $output
 
 for input; do
   basename=`echo $input | sed 's,.*/,,'`

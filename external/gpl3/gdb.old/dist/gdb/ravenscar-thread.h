@@ -1,6 +1,6 @@
 /* Ada Ravenscar thread support.
 
-   Copyright (C) 2004-2020 Free Software Foundation, Inc.
+   Copyright (C) 2004-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -24,12 +24,9 @@
 
 struct ravenscar_arch_ops
 {
-  virtual ~ravenscar_arch_ops ()
-  {
-  }
-
-  virtual void fetch_registers (struct regcache *, int) = 0;
-  virtual void store_registers (struct regcache *, int) = 0;
+  void (*to_fetch_registers) (struct regcache *, int);
+  void (*to_store_registers) (struct regcache *, int);
+  void (*to_prepare_to_store) (struct regcache *);
 };
 
 #endif /* !defined (RAVENSCAR_THREAD_H) */

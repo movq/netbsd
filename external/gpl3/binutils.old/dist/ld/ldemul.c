@@ -1,5 +1,7 @@
 /* ldemul.c -- clearing house for ld emulation states
-   Copyright (C) 1991-2020 Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
+   2001, 2002, 2003, 2005, 2007, 2008, 2009, 2010, 2011, 2012
+   Free Software Foundation, Inc.
 
    This file is part of the GNU Binutils.
 
@@ -22,7 +24,6 @@
 #include "bfd.h"
 #include "getopt.h"
 #include "bfdlink.h"
-#include "ctf-api.h"
 
 #include "ld.h"
 #include "ldmisc.h"
@@ -63,12 +64,6 @@ void
 ldemul_after_open (void)
 {
   ld_emulation->after_open ();
-}
-
-void
-ldemul_after_check_relocs (void)
-{
-  ld_emulation->after_check_relocs ();
 }
 
 void
@@ -212,7 +207,7 @@ void
 after_parse_default (void)
 {
   if (entry_symbol.name != NULL
-      && (bfd_link_executable (&link_info) || entry_from_cmdline))
+      && (link_info.executable || entry_from_cmdline))
     {
       bfd_boolean is_vma = FALSE;
 
@@ -226,43 +221,10 @@ after_parse_default (void)
       if (!is_vma)
 	ldlang_add_undef (entry_symbol.name, entry_from_cmdline);
     }
-  if (config.maxpagesize == 0)
-    config.maxpagesize = bfd_emul_get_maxpagesize (default_target);
-  if (config.commonpagesize == 0)
-    config.commonpagesize = bfd_emul_get_commonpagesize (default_target,
-							 link_info.relro);
 }
 
 void
 after_open_default (void)
-{
-  link_info.big_endian = TRUE;
-
-  if (bfd_big_endian (link_info.output_bfd))
-    ;
-  else if (bfd_little_endian (link_info.output_bfd))
-    link_info.big_endian = FALSE;
-  else
-    {
-      if (command_line.endian == ENDIAN_BIG)
-	;
-      else if (command_line.endian == ENDIAN_LITTLE)
-	link_info.big_endian = FALSE;
-      else if (command_line.endian == ENDIAN_UNSET)
-	{
-	  LANG_FOR_EACH_INPUT_STATEMENT (s)
-	    if (s->the_bfd != NULL)
-	      {
-		if (bfd_little_endian (s->the_bfd))
-		  link_info.big_endian = FALSE;
-		break;
-	      }
-	}
-    }
-}
-
-void
-after_check_relocs_default (void)
 {
 }
 
@@ -275,14 +237,14 @@ after_allocation_default (void)
 void
 before_allocation_default (void)
 {
-  if (!bfd_link_relocatable (&link_info))
+  if (!link_info.relocatable)
     strip_excluded_output_sections ();
 }
 
 void
 finish_default (void)
 {
-  if (!bfd_link_relocatable (&link_info))
+  if (!link_info.relocatable)
     _bfd_fix_excluded_sec_syms (link_info.output_bfd, &link_info);
 }
 
@@ -300,13 +262,13 @@ set_output_arch_default (void)
 void
 syslib_default (char *ignore ATTRIBUTE_UNUSED)
 {
-  info_msg (_("%pS SYSLIB ignored\n"), NULL);
+  info_msg (_("%S SYSLIB ignored\n"), NULL);
 }
 
 void
 hll_default (char *ignore ATTRIBUTE_UNUSED)
 {
-  info_msg (_("%pS HLL ignored\n"), NULL);
+  info_msg (_("%S HLL ignored\n"), NULL);
 }
 
 ld_emulation_xfer_type *ld_emulations[] = { EMULATION_LIST };
@@ -368,7 +330,7 @@ ldemul_list_emulation_options (FILE *f)
 	}
     }
 
-  if (!options_found)
+  if (! options_found)
     fprintf (f, _("  no emulation specific options.\n"));
 }
 
@@ -387,33 +349,4 @@ ldemul_new_vers_pattern (struct bfd_elf_version_expr *entry)
   if (ld_emulation->new_vers_pattern)
     entry = (*ld_emulation->new_vers_pattern) (entry);
   return entry;
-}
-
-void
-ldemul_extra_map_file_text (bfd *abfd, struct bfd_link_info *info, FILE *mapf)
-{
-  if (ld_emulation->extra_map_file_text)
-    ld_emulation->extra_map_file_text (abfd, info, mapf);
-}
-
-int
-ldemul_emit_ctf_early (void)
-{
-  if (ld_emulation->emit_ctf_early)
-    return ld_emulation->emit_ctf_early ();
-  /* If the emulation doesn't know if it wants to emit CTF early, it is going
-     to do so.  */
-  return 1;
-}
-
-void
-ldemul_examine_strtab_for_ctf (struct ctf_file *ctf_output,
-			       struct elf_sym_strtab *syms,
-			       bfd_size_type symcount,
-			       struct elf_strtab_hash *symstrtab)
-
-{
-  if (ld_emulation->examine_strtab_for_ctf)
-    ld_emulation->examine_strtab_for_ctf (ctf_output, syms,
-					  symcount, symstrtab);
 }

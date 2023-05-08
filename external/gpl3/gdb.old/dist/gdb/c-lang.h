@@ -1,6 +1,6 @@
 /* C language support definitions for GDB, the GNU debugger.
 
-   Copyright (C) 1992-2020 Free Software Foundation, Inc.
+   Copyright (C) 1992-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -24,18 +24,16 @@
 struct ui_file;
 struct language_arch_info;
 struct type_print_options;
-struct parser_state;
 
 #include "value.h"
 #include "macroexp.h"
 #include "parser-defs.h"
-#include "gdbsupport/enum-flags.h"
 
 
 /* The various kinds of C string and character.  Note that these
    values are chosen so that they may be or'd together in certain
    ways.  */
-enum c_string_type_values : unsigned
+enum c_string_type
   {
     /* An ordinary string: "value".  */
     C_STRING = 0,
@@ -57,11 +55,11 @@ enum c_string_type_values : unsigned
     C_CHAR_32 = 7
   };
 
-DEF_ENUM_FLAGS_TYPE (enum c_string_type_values, c_string_type);
-
 /* Defined in c-exp.y.  */
 
-extern int c_parse (struct parser_state *);
+extern int c_parse (void);
+
+extern void c_error (char *);
 
 extern int c_parse_escape (const char **, struct obstack *);
 
@@ -70,21 +68,15 @@ extern void c_print_type (struct type *, const char *,
 			  struct ui_file *, int, int,
 			  const struct type_print_options *);
 
-/* Print a type but allow the precise language to be specified.  */
-
-extern void c_print_type (struct type *, const char *,
-			  struct ui_file *, int, int,
-			  enum language,
-			  const struct type_print_options *);
-
 extern void c_print_typedef (struct type *,
 			     struct symbol *,
 			     struct ui_file *);
 
-/* Implement la_value_print_inner for the C family of languages.  */
-
-extern void c_value_print_inner (struct value *, struct ui_file *, int,
-				 const struct value_print_options *);
+extern void c_val_print (struct type *, const gdb_byte *,
+			 int, CORE_ADDR,
+			 struct ui_file *, int,
+			 const struct value *,
+			 const struct value_print_options *);
 
 extern void c_value_print (struct value *, struct ui_file *,
 			   const struct value_print_options *);
@@ -124,69 +116,29 @@ extern void c_type_print_base (struct type *, struct ui_file *,
 /* These are in cp-valprint.c */
 
 extern void cp_print_class_member (const gdb_byte *, struct type *,
-				   struct ui_file *, const char *);
+				   struct ui_file *, char *);
 
-extern void cp_print_value_fields (struct value *,
+extern void cp_print_value_fields (struct type *, struct type *,
+				   const gdb_byte *, int, CORE_ADDR,
 				   struct ui_file *, int,
+				   const struct value *,
 				   const struct value_print_options *,
 				   struct type **, int);
 
-/* gcc-2.6 or later (when using -fvtable-thunks)
-   emits a unique named type for a vtable entry.
-   Some gdb code depends on that specific name.  */
-
-extern const char vtbl_ptr_name[];
+extern void cp_print_value_fields_rtti (struct type *,
+					const gdb_byte *, int, CORE_ADDR,
+					struct ui_file *, int,
+					const struct value *,
+					const struct value_print_options *,
+					struct type **, int);
 
 extern int cp_is_vtbl_ptr_type (struct type *);
 
 extern int cp_is_vtbl_member (struct type *);
 
-/* Return true if TYPE is a string type.  Unlike DEFAULT_IS_STRING_TYPE_P
-   this will detect arrays of characters not just TYPE_CODE_STRING.  */
-
-extern bool c_is_string_type_p (struct type *type);
-
 /* These are in c-valprint.c.  */
 
 extern int c_textual_element_type (struct type *, char);
 
-/* Create a new instance of the C compiler and return it.  The new
-   compiler is owned by the caller and must be freed using the destroy
-   method.  This function never returns NULL, but rather throws an
-   exception on failure.  This is suitable for use as the
-   language_defn::get_compile_instance method.  */
-
-extern compile_instance *c_get_compile_context (void);
-
-/* Create a new instance of the C++ compiler and return it.  The new
-   compiler is owned by the caller and must be freed using the destroy
-   method.  This function never returns NULL, but rather throws an
-   exception on failure.  This is suitable for use as the
-   language_defn::get_compile_instance method.  */
-
-extern compile_instance *cplus_get_compile_context ();
-
-/* This takes the user-supplied text and returns a new bit of code to
-   compile.
-
-   This is used as the compute_program language method; see that
-   for a description of the arguments.  */
-
-extern std::string c_compute_program (compile_instance *inst,
-				      const char *input,
-				      struct gdbarch *gdbarch,
-				      const struct block *expr_block,
-				      CORE_ADDR expr_pc);
-
-/* This takes the user-supplied text and returns a new bit of code to compile.
-
-   This is used as the compute_program language method; see that
-   for a description of the arguments.  */
-
-extern std::string cplus_compute_program (compile_instance *inst,
-					  const char *input,
-					  struct gdbarch *gdbarch,
-					  const struct block *expr_block,
-					  CORE_ADDR expr_pc);
 
 #endif /* !defined (C_LANG_H) */

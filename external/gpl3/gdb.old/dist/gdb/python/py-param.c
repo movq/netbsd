@@ -1,6 +1,6 @@
 /* GDB parameters implemented in Python
 
-   Copyright (C) 2008-2020 Free Software Foundation, Inc.
+   Copyright (C) 2008-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,6 +20,7 @@
 
 #include "defs.h"
 #include "value.h"
+#include "exceptions.h"
 #include "python-internal.h"
 #include "charset.h"
 #include "gdbcmd.h"
@@ -31,7 +32,7 @@
 /* Parameter constants and their values.  */
 struct parm_constant
 {
-  const char *name;
+  char *name;
   int value;
 };
 
@@ -46,8 +47,6 @@ struct parm_constant parm_constants[] =
   { "PARAM_OPTIONAL_FILENAME", var_optional_filename },
   { "PARAM_FILENAME", var_filename },
   { "PARAM_ZINTEGER", var_zinteger },
-  { "PARAM_ZUINTEGER", var_zuinteger },
-  { "PARAM_ZUINTEGER_UNLIMITED", var_zuinteger_unlimited },
   { "PARAM_ENUM", var_enum },
   { NULL, 0 }
 };
@@ -55,10 +54,7 @@ struct parm_constant parm_constants[] =
 /* A union that can hold anything described by enum var_types.  */
 union parmpy_variable
 {
-  /* Hold a boolean value.  */
-  bool boolval;
-
-  /* Hold an integer value.  */
+  /* Hold an integer value, for boolean and integer types.  */
   int intval;
 
   /* Hold an auto_boolean.  */
@@ -93,7 +89,7 @@ struct parmpy_object
 
 typedef struct parmpy_object parmpy_object;
 
-extern PyTypeObject parmpy_object_type
+static PyTypeObject parmpy_object_type
     CPYCHECKER_TYPE_OBJECT_FOR_TYPEDEF ("parmpy_object");
 
 /* Some handy string constants.  */
@@ -153,19 +149,21 @@ set_parameter_value (parmpy_object *self, PyObject *value)
 	}
       else
 	{
-	  gdb::unique_xmalloc_ptr<char>
-	    string (python_string_to_host_string (value));
+	  char *string;
+
+	  string = python_string_to_host_string (value);
 	  if (string == NULL)
 	    return -1;
 
 	  xfree (self->value.stringval);
-	  self->value.stringval = string.release ();
+	  self->value.stringval = string;
 	}
       break;
 
     case var_enum:
       {
 	int i;
+	char *str;
 
 	if (! gdbpy_is_string (value))
 	  {
@@ -174,13 +172,13 @@ set_parameter_value (parmpy_object *self, PyObject *value)
 	    return -1;
 	  }
 
-	gdb::unique_xmalloc_ptr<char>
-	  str (python_string_to_host_string (value));
+	str = python_string_to_host_string (value);
 	if (str == NULL)
 	  return -1;
 	for (i = 0; self->enumeration[i]; ++i)
-	  if (! strcmp (self->enumeration[i], str.get ()))
+	  if (! strcmp (self->enumeration[i], str))
 	    break;
+	xfree (str);
 	if (! self->enumeration[i])
 	  {
 	    PyErr_SetString (PyExc_RuntimeError,
@@ -201,7 +199,7 @@ set_parameter_value (parmpy_object *self, PyObject *value)
       cmp = PyObject_IsTrue (value);
       if (cmp < 0)
 	  return -1;
-      self->value.boolval = cmp;
+      self->value.intval = cmp;
       break;
 
     case var_auto_boolean:
@@ -229,8 +227,6 @@ set_parameter_value (parmpy_object *self, PyObject *value)
     case var_integer:
     case var_zinteger:
     case var_uinteger:
-    case var_zuinteger:
-    case var_zuinteger_unlimited:
       {
 	long l;
 	int ok;
@@ -245,33 +241,20 @@ set_parameter_value (parmpy_object *self, PyObject *value)
 	if (! gdb_py_int_as_long (value, &l))
 	  return -1;
 
-	switch (self->type)
+	if (self->type == var_uinteger)
 	  {
-	  case var_uinteger:
+	    ok = (l >= 0 && l <= UINT_MAX);
 	    if (l == 0)
 	      l = UINT_MAX;
-	    /* Fall through.  */
-	  case var_zuinteger:
-	    ok = (l >= 0 && l <= UINT_MAX);
-	    break;
-
-	  case var_zuinteger_unlimited:
-	    ok = (l >= -1 && l <= INT_MAX);
-	    break;
-
-	  case var_integer:
+	  }
+	else if (self->type == var_integer)
+	  {
 	    ok = (l >= INT_MIN && l <= INT_MAX);
 	    if (l == 0)
 	      l = INT_MAX;
-	    break;
-
-	  case var_zinteger:
-	    ok = (l >= INT_MIN && l <= INT_MAX);
-	    break;
-
-	  default:
-	    gdb_assert_not_reached ("unknown var_ constant");
 	  }
+	else
+	  ok = (l >= INT_MIN && l <= INT_MAX);
 
 	if (! ok)
 	  {
@@ -280,10 +263,7 @@ set_parameter_value (parmpy_object *self, PyObject *value)
 	    return -1;
 	  }
 
-	if (self->type == var_uinteger || self->type == var_zuinteger)
-	  self->value.uintval = (unsigned) l;
-	else
-	  self->value.intval = (int) l;
+	self->value.intval = (int) l;
 	break;
       }
 
@@ -322,24 +302,25 @@ set_attr (PyObject *obj, PyObject *attr_name, PyObject *val)
 /* A helper function which returns a documentation string for an
    object. */
 
-static gdb::unique_xmalloc_ptr<char>
+static char *
 get_doc_string (PyObject *object, PyObject *attr)
 {
-  gdb::unique_xmalloc_ptr<char> result;
+  char *result = NULL;
 
   if (PyObject_HasAttr (object, attr))
     {
-      gdbpy_ref<> ds_obj (PyObject_GetAttr (object, attr));
+      PyObject *ds_obj = PyObject_GetAttr (object, attr);
 
-      if (ds_obj != NULL && gdbpy_is_string (ds_obj.get ()))
+      if (ds_obj && gdbpy_is_string (ds_obj))
 	{
-	  result = python_string_to_host_string (ds_obj.get ());
+	  result = python_string_to_host_string (ds_obj);
 	  if (result == NULL)
 	    gdbpy_print_stack ();
 	}
+      Py_XDECREF (ds_obj);
     }
   if (! result)
-    result.reset (xstrdup (_("This command is not documented.")));
+    result = xstrdup (_("This command is not documented."));
   return result;
 }
 
@@ -347,18 +328,19 @@ get_doc_string (PyObject *object, PyObject *attr)
    argument ARG.  ARG can be NULL.  METHOD should return a Python
    string.  If this function returns NULL, there has been an error and
    the appropriate exception set.  */
-static gdb::unique_xmalloc_ptr<char>
+static char *
 call_doc_function (PyObject *obj, PyObject *method, PyObject *arg)
 {
-  gdb::unique_xmalloc_ptr<char> data;
-  gdbpy_ref<> result (PyObject_CallMethodObjArgs (obj, method, arg, NULL));
+  char *data = NULL;
+  PyObject *result = PyObject_CallMethodObjArgs (obj, method, arg, NULL);
 
-  if (result == NULL)
+  if (! result)
     return NULL;
 
-  if (gdbpy_is_string (result.get ()))
+  if (gdbpy_is_string (result))
     {
-      data = python_string_to_host_string (result.get ());
+      data = python_string_to_host_string (result);
+      Py_DECREF (result);
       if (! data)
 	return NULL;
     }
@@ -366,6 +348,7 @@ call_doc_function (PyObject *obj, PyObject *method, PyObject *arg)
     {
       PyErr_SetString (PyExc_RuntimeError,
 		       _("Parameter must return a string value."));
+      Py_DECREF (result);
       return NULL;
     }
 
@@ -379,31 +362,44 @@ call_doc_function (PyObject *obj, PyObject *method, PyObject *arg)
    neither exist, insert a string indicating the Parameter is not
    documented.  */
 static void
-get_set_value (const char *args, int from_tty,
+get_set_value (char *args, int from_tty,
 	       struct cmd_list_element *c)
 {
   PyObject *obj = (PyObject *) get_cmd_context (c);
-  gdb::unique_xmalloc_ptr<char> set_doc_string;
+  char *set_doc_string;
+  struct cleanup *cleanup = ensure_python_env (get_current_arch (),
+					       current_language);
+  PyObject *set_doc_func = PyString_FromString ("get_set_string");
 
-  gdbpy_enter enter_py (get_current_arch (), current_language);
-  gdbpy_ref<> set_doc_func (PyString_FromString ("get_set_string"));
+  if (! set_doc_func)
+    goto error;
 
-  if (set_doc_func == NULL)
+  if (PyObject_HasAttr (obj, set_doc_func))
     {
-      gdbpy_print_stack ();
-      return;
-    }
-
-  if (PyObject_HasAttr (obj, set_doc_func.get ()))
-    {
-      set_doc_string = call_doc_function (obj, set_doc_func.get (), NULL);
+      set_doc_string = call_doc_function (obj, set_doc_func, NULL);
       if (! set_doc_string)
-	gdbpy_handle_exception ();
+	goto error;
+    }
+  else
+    {
+      /* We have to preserve the existing < GDB 7.3 API.  If a
+	 callback function does not exist, then attempt to read the
+	 set_doc attribute.  */
+      set_doc_string  = get_doc_string (obj, set_doc_cst);
     }
 
-  const char *str = set_doc_string.get ();
-  if (str != nullptr && str[0] != '\0')
-    fprintf_filtered (gdb_stdout, "%s\n", str);
+  make_cleanup (xfree, set_doc_string);
+  fprintf_filtered (gdb_stdout, "%s\n", set_doc_string);
+
+  Py_XDECREF (set_doc_func);
+  do_cleanups (cleanup);
+  return;
+
+ error:
+  Py_XDECREF (set_doc_func);
+  gdbpy_print_stack ();
+  do_cleanups (cleanup);
+  return;
 }
 
 /* A callback function that is registered against the respective
@@ -418,36 +414,29 @@ get_show_value (struct ui_file *file, int from_tty,
 		const char *value)
 {
   PyObject *obj = (PyObject *) get_cmd_context (c);
-  gdb::unique_xmalloc_ptr<char> show_doc_string;
+  char *show_doc_string = NULL;
+  struct cleanup *cleanup = ensure_python_env (get_current_arch (),
+					       current_language);
+  PyObject *show_doc_func = PyString_FromString ("get_show_string");
 
-  gdbpy_enter enter_py (get_current_arch (), current_language);
-  gdbpy_ref<> show_doc_func (PyString_FromString ("get_show_string"));
+  if (! show_doc_func)
+    goto error;
 
-  if (show_doc_func == NULL)
+  if (PyObject_HasAttr (obj, show_doc_func))
     {
-      gdbpy_print_stack ();
-      return;
-    }
+      PyObject *val_obj = PyString_FromString (value);
 
-  if (PyObject_HasAttr (obj, show_doc_func.get ()))
-    {
-      gdbpy_ref<> val_obj (PyString_FromString (value));
+      if (! val_obj)
+	goto error;
 
-      if (val_obj == NULL)
-	{
-	  gdbpy_print_stack ();
-	  return;
-	}
-
-      show_doc_string = call_doc_function (obj, show_doc_func.get (),
-					   val_obj.get ());
+      show_doc_string = call_doc_function (obj, show_doc_func, val_obj);
+      Py_DECREF (val_obj);
       if (! show_doc_string)
-	{
-	  gdbpy_print_stack ();
-	  return;
-	}
+	goto error;
 
-      fprintf_filtered (file, "%s\n", show_doc_string.get ());
+      make_cleanup (xfree, show_doc_string);
+
+      fprintf_filtered (file, "%s\n", show_doc_string);
     }
   else
     {
@@ -455,8 +444,19 @@ get_show_value (struct ui_file *file, int from_tty,
 	 callback function does not exist, then attempt to read the
 	 show_doc attribute.  */
       show_doc_string  = get_doc_string (obj, show_doc_cst);
-      fprintf_filtered (file, "%s %s\n", show_doc_string.get (), value);
+      make_cleanup (xfree, show_doc_string);
+      fprintf_filtered (file, "%s %s\n", show_doc_string, value);
     }
+
+  Py_XDECREF (show_doc_func);
+  do_cleanups (cleanup);
+  return;
+
+ error:
+  Py_XDECREF (show_doc_func);
+  gdbpy_print_stack ();
+  do_cleanups (cleanup);
+  return;
 }
 
 
@@ -464,9 +464,8 @@ get_show_value (struct ui_file *file, int from_tty,
    function.  */
 static void
 add_setshow_generic (int parmclass, enum command_class cmdclass,
-		     const char *cmd_name, parmpy_object *self,
-		     const char *set_doc, const char *show_doc,
-		     const char *help_doc,
+		     char *cmd_name, parmpy_object *self,
+		     char *set_doc, char *show_doc, char *help_doc,
 		     struct cmd_list_element **set_list,
 		     struct cmd_list_element **show_list)
 {
@@ -478,7 +477,7 @@ add_setshow_generic (int parmclass, enum command_class cmdclass,
     case var_boolean:
 
       add_setshow_boolean_cmd (cmd_name, cmdclass,
-			       &self->value.boolval, set_doc, show_doc,
+			       &self->value.intval, set_doc, show_doc,
 			       help_doc, get_set_value, get_show_value,
 			       set_list, show_list);
 
@@ -541,21 +540,6 @@ add_setshow_generic (int parmclass, enum command_class cmdclass,
 				set_list, show_list);
       break;
 
-    case var_zuinteger:
-      add_setshow_zuinteger_cmd (cmd_name, cmdclass,
-				&self->value.uintval, set_doc, show_doc,
-				help_doc, get_set_value, get_show_value,
-				set_list, show_list);
-      break;
-
-    case var_zuinteger_unlimited:
-      add_setshow_zuinteger_unlimited_cmd (cmd_name, cmdclass,
-					   &self->value.intval, set_doc,
-					   show_doc, help_doc, get_set_value,
-					   get_show_value,
-					   set_list, show_list);
-      break;
-
     case var_enum:
       add_setshow_enum_cmd (cmd_name, cmdclass, self->enumeration,
 			    &self->value.cstringval, set_doc, show_doc,
@@ -569,12 +553,12 @@ add_setshow_generic (int parmclass, enum command_class cmdclass,
   /* Lookup created parameter, and register Python object against the
      parameter context.  Perform this task against both lists.  */
   tmp_name = cmd_name;
-  param = lookup_cmd (&tmp_name, *show_list, "", NULL, 0, 1);
+  param = lookup_cmd (&tmp_name, *show_list, "", 0, 1);
   if (param)
     set_cmd_context (param, self);
 
   tmp_name = cmd_name;
-  param = lookup_cmd (&tmp_name, *set_list, "", NULL, 0, 1);
+  param = lookup_cmd (&tmp_name, *set_list, "", 0, 1);
   if (param)
     set_cmd_context (param, self);
 }
@@ -585,6 +569,7 @@ static int
 compute_enum_values (parmpy_object *self, PyObject *enum_values)
 {
   Py_ssize_t size, i;
+  struct cleanup *back_to;
 
   if (! enum_values)
     {
@@ -610,27 +595,38 @@ compute_enum_values (parmpy_object *self, PyObject *enum_values)
       return 0;
     }
 
-  gdb_argv holder (XCNEWVEC (char *, size + 1));
-  char **enumeration = holder.get ();
+  self->enumeration = xmalloc ((size + 1) * sizeof (char *));
+  back_to = make_cleanup (free_current_contents, &self->enumeration);
+  memset (self->enumeration, 0, (size + 1) * sizeof (char *));
 
   for (i = 0; i < size; ++i)
     {
-      gdbpy_ref<> item (PySequence_GetItem (enum_values, i));
+      PyObject *item = PySequence_GetItem (enum_values, i);
 
-      if (item == NULL)
-	return 0;
-      if (! gdbpy_is_string (item.get ()))
+      if (! item)
 	{
+	  do_cleanups (back_to);
+	  return 0;
+	}
+      if (! gdbpy_is_string (item))
+	{
+	  Py_DECREF (item);
+	  do_cleanups (back_to);
 	  PyErr_SetString (PyExc_RuntimeError,
 			   _("The enumeration item not a string."));
 	  return 0;
 	}
-      enumeration[i] = python_string_to_host_string (item.get ()).release ();
-      if (enumeration[i] == NULL)
-	return 0;
+      self->enumeration[i] = python_string_to_host_string (item);
+      Py_DECREF (item);
+      if (self->enumeration[i] == NULL)
+	{
+	  do_cleanups (back_to);
+	  return 0;
+	}
+      make_cleanup (xfree, (char *) self->enumeration[i]);
     }
 
-  self->enumeration = const_cast<const char**> (holder.release ());
+  discard_cleanups (back_to);
   return 1;
 }
 
@@ -662,11 +658,12 @@ parmpy_init (PyObject *self, PyObject *args, PyObject *kwds)
 {
   parmpy_object *obj = (parmpy_object *) self;
   const char *name;
-  gdb::unique_xmalloc_ptr<char> set_doc, show_doc, doc;
+  char *set_doc, *show_doc, *doc;
   char *cmd_name;
   int parmclass, cmdtype;
   PyObject *enum_values = NULL;
   struct cmd_list_element **set_list, **show_list;
+  volatile struct gdb_exception except;
 
   if (! PyArg_ParseTuple (args, "sii|O", &name, &cmdtype, &parmclass,
 			  &enum_values))
@@ -688,8 +685,7 @@ parmpy_init (PyObject *self, PyObject *args, PyObject *kwds)
       && parmclass != var_uinteger && parmclass != var_integer
       && parmclass != var_string && parmclass != var_string_noescape
       && parmclass != var_optional_filename && parmclass != var_filename
-      && parmclass != var_zinteger && parmclass != var_zuinteger
-      && parmclass != var_zuinteger_unlimited && parmclass != var_enum)
+      && parmclass != var_zinteger && parmclass != var_enum)
     {
       PyErr_SetString (PyExc_RuntimeError,
 		       _("Invalid parameter class argument."));
@@ -729,21 +725,25 @@ parmpy_init (PyObject *self, PyObject *args, PyObject *kwds)
 
   Py_INCREF (self);
 
-  try
+  TRY_CATCH (except, RETURN_MASK_ALL)
     {
       add_setshow_generic (parmclass, (enum command_class) cmdtype,
 			   cmd_name, obj,
-			   set_doc.get (), show_doc.get (),
-			   doc.get (), set_list, show_list);
+			   set_doc, show_doc,
+			   doc, set_list, show_list);
     }
-  catch (const gdb_exception &except)
+  if (except.reason < 0)
     {
       xfree (cmd_name);
+      xfree (set_doc);
+      xfree (show_doc);
+      xfree (doc);
       Py_DECREF (self);
-      gdbpy_convert_exception (except);
+      PyErr_Format (except.reason == RETURN_QUIT
+		    ? PyExc_KeyboardInterrupt : PyExc_RuntimeError,
+		    "%s", except.message);
       return -1;
     }
-
   return 0;
 }
 
@@ -780,7 +780,7 @@ gdbpy_initialize_parameters (void)
 
 
 
-PyTypeObject parmpy_object_type =
+static PyTypeObject parmpy_object_type =
 {
   PyVarObject_HEAD_INIT (NULL, 0)
   "gdb.Parameter",		  /*tp_name*/

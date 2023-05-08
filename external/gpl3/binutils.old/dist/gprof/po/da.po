@@ -1,18 +1,16 @@
 # Danish messages for gprof.
 # Copyright (C) 2001, 2002 Free Software Foundation, Inc.
 # This file is distributed under the same license as the binutils package.
-# Keld Simonsen <keld@keldix.com>, 2002,2011, 2015
+# Keld Simonsen <keld@dkuug.dk>, 2002,2011
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: gprof 2.24.90\n"
+"Project-Id-Version: gprof 2.20.90\n"
 "Report-Msgid-Bugs-To: bug-binutils@gnu.org\n"
-"POT-Creation-Date: 2014-02-10 09:42+1030\n"
-"PO-Revision-Date: 2015-04-26 14:01+0200\n"
+"POT-Creation-Date: 2010-11-05 11:34+0100\n"
+"PO-Revision-Date: 2011-01-08 14:01+0100\n"
 "Last-Translator: Keld Simonsen <keld@keldix.com>\n"
 "Language-Team: Danish <dansk@dansk-gruppen.dk>\n"
-"Language: da\n"
-"X-Bugs: Report translation errors to the Language-Team address.\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=iso-8859-1\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -36,27 +34,27 @@ msgstr "[find_call] 0x%lx: jsr%s <indirekte_barn>\n"
 msgid "[find_call] 0x%lx: bsr"
 msgstr "[find_call] 0x%lx: bsr"
 
-#: basic_blocks.c:129 call_graph.c:89 hist.c:107
+#: basic_blocks.c:128 call_graph.c:89 hist.c:107
 #, c-format
 msgid "%s: %s: unexpected end of file\n"
 msgstr "%s: %s: uventet filslutning\n"
 
-#: basic_blocks.c:197
+#: basic_blocks.c:196
 #, c-format
 msgid "%s: warning: ignoring basic-block exec counts (use -l or --line)\n"
 msgstr "%s: advarsel: ignorerer eksekveringsregning for grundblok (brug -l eller --line)\n"
 
 #. FIXME: This only works if bfd_vma is unsigned long.
-#: basic_blocks.c:290 basic_blocks.c:300
+#: basic_blocks.c:289 basic_blocks.c:299
 #, c-format
 msgid "%s:%d: (%s:0x%lx) %lu executions\n"
 msgstr "%s:%d: (%s:0x%lx) %lu eksekveringer\n"
 
-#: basic_blocks.c:291 basic_blocks.c:301
+#: basic_blocks.c:290 basic_blocks.c:300
 msgid "<unknown>"
 msgstr "<ukendt>"
 
-#: basic_blocks.c:544
+#: basic_blocks.c:543
 #, c-format
 msgid ""
 "\n"
@@ -73,7 +71,7 @@ msgstr ""
 "     Linje     Antal\n"
 "\n"
 
-#: basic_blocks.c:568
+#: basic_blocks.c:567
 #, c-format
 msgid ""
 "\n"
@@ -84,22 +82,22 @@ msgstr ""
 "Eksekveringsoversigt:\n"
 "\n"
 
-#: basic_blocks.c:569
+#: basic_blocks.c:568
 #, c-format
 msgid "%9ld   Executable lines in this file\n"
 msgstr "%9ld   Eksekverbare linjer i denne fil\n"
 
-#: basic_blocks.c:571
+#: basic_blocks.c:570
 #, c-format
 msgid "%9ld   Lines executed\n"
 msgstr "%9ld   Eksekverede linjer\n"
 
-#: basic_blocks.c:572
+#: basic_blocks.c:571
 #, c-format
 msgid "%9.2f   Percent of the file executed\n"
 msgstr "%9.2f   Procent af filen eksekveret\n"
 
-#: basic_blocks.c:576
+#: basic_blocks.c:575
 #, c-format
 msgid ""
 "\n"
@@ -108,7 +106,7 @@ msgstr ""
 "\n"
 "%9lu   Totalt antal linjeeksekveringer\n"
 
-#: basic_blocks.c:578
+#: basic_blocks.c:577
 #, c-format
 msgid "%9.2f   Average executions per line\n"
 msgstr "%9.2f   Gennemsniteksekveringer per linje\n"
@@ -118,7 +116,7 @@ msgstr "%9.2f   Gennemsniteksekveringer per linje\n"
 msgid "[cg_tally] arc from %s to %s traversed %lu times\n"
 msgstr "[cg_tally] gren fra %s til %s gennemløbet %lu gange\n"
 
-#: cg_print.c:75
+#: cg_print.c:74
 #, c-format
 msgid ""
 "\t\t     Call graph (explanation follows)\n"
@@ -127,7 +125,7 @@ msgstr ""
 "\t\t     Kaldsgraf (forklaring følger)\n"
 "\n"
 
-#: cg_print.c:77
+#: cg_print.c:76
 #, c-format
 msgid ""
 "\t\t\tCall graph\n"
@@ -136,7 +134,7 @@ msgstr ""
 "\t\t\tKaldsgraf\n"
 "\n"
 
-#: cg_print.c:80 hist.c:471
+#: cg_print.c:79 hist.c:468
 #, c-format
 msgid ""
 "\n"
@@ -145,7 +143,7 @@ msgstr ""
 "\n"
 "opløsning: hver stikprøve dækker %ld byte"
 
-#: cg_print.c:84
+#: cg_print.c:83
 #, c-format
 msgid ""
 " for %.2f%% of %.2f seconds\n"
@@ -154,7 +152,7 @@ msgstr ""
 " for %.2f%% på %.2f sekunder\n"
 "\n"
 
-#: cg_print.c:88
+#: cg_print.c:87
 #, c-format
 msgid ""
 " no time propagated\n"
@@ -163,64 +161,64 @@ msgstr ""
 " ingen tid propageret\n"
 "\n"
 
-#: cg_print.c:97 cg_print.c:102 cg_print.c:105
+#: cg_print.c:96 cg_print.c:99 cg_print.c:101
 msgid "called"
 msgstr "kaldt"
 
-#: cg_print.c:97 cg_print.c:105
+#: cg_print.c:96 cg_print.c:101
 msgid "total"
 msgstr "totalt"
 
-#: cg_print.c:97
+#: cg_print.c:96
 msgid "parents"
 msgstr "forældre"
 
-#: cg_print.c:99 cg_print.c:103
+#: cg_print.c:98 cg_print.c:99
 msgid "index"
 msgstr "indeks"
 
-#: cg_print.c:101
-#, no-c-format
+#: cg_print.c:98
+#, c-format
 msgid "%time"
 msgstr "%tid"
 
-#: cg_print.c:102
+#: cg_print.c:98 cg_print.c:99
 msgid "self"
 msgstr "selv"
 
-#: cg_print.c:102
+#: cg_print.c:98
 msgid "descendants"
 msgstr "afkom"
 
-#: cg_print.c:103 hist.c:497
+#: cg_print.c:99 hist.c:494
 msgid "name"
 msgstr "navn"
 
-#: cg_print.c:105
+#: cg_print.c:101
 msgid "children"
 msgstr "børn"
 
-#: cg_print.c:110
+#: cg_print.c:106
 #, c-format
 msgid "index %% time    self  children    called     name\n"
 msgstr "indeks %% tid    selv  børn        kaldt      navn\n"
 
-#: cg_print.c:133
+#: cg_print.c:129
 #, c-format
 msgid " <cycle %d as a whole> [%d]\n"
 msgstr " <hele cyklusen %d> [%d]\n"
 
-#: cg_print.c:359
+#: cg_print.c:355
 #, c-format
 msgid "%6.6s %5.5s %7.7s %11.11s %7.7s %7.7s     <spontaneous>\n"
 msgstr "%6.6s %5.5s %7.7s %11.11s %7.7s %7.7s     <spontant>\n"
 
-#: cg_print.c:360
+#: cg_print.c:356
 #, c-format
 msgid "%6.6s %5.5s %7.7s %7.7s %7.7s %7.7s     <spontaneous>\n"
 msgstr "%6.6s %5.5s %7.7s %7.7s %7.7s %7.7s     <spontant>\n"
 
-#: cg_print.c:594
+#: cg_print.c:590
 #, c-format
 msgid ""
 "Index by function name\n"
@@ -229,52 +227,52 @@ msgstr ""
 "Indeks efter funktionsnavn\n"
 "\n"
 
-#: cg_print.c:651 cg_print.c:660
+#: cg_print.c:647 cg_print.c:656
 #, c-format
 msgid "<cycle %d>"
 msgstr "<cyklus %d>"
 
-#: corefile.c:61
+#: corefile.c:60
 #, c-format
 msgid "%s: unable to parse mapping file %s.\n"
 msgstr "%s: kan ikke tolke mappingsfilen %s.\n"
 
-#: corefile.c:85 corefile.c:526
+#: corefile.c:84 corefile.c:504
 #, c-format
 msgid "%s: could not open %s.\n"
 msgstr "%s: kunne ikke åbne %s.\n"
 
-#: corefile.c:187
+#: corefile.c:183
 #, c-format
 msgid "%s: %s: not in executable format\n"
 msgstr "%s: %s: ikke i udførbart format\n"
 
-#: corefile.c:198
+#: corefile.c:194
 #, c-format
 msgid "%s: can't find .text section in %s\n"
 msgstr "%s: kan ikke finde .text-sektion i %s\n"
 
-#: corefile.c:273
+#: corefile.c:269
 #, c-format
 msgid "%s: ran out room for %lu bytes of text space\n"
 msgstr "%s: slut på plads for %lu byte tekstplads\n"
 
-#: corefile.c:287
+#: corefile.c:283
 #, c-format
 msgid "%s: can't do -c\n"
 msgstr "%s: kan ikke lave -c\n"
 
-#: corefile.c:330
+#: corefile.c:322
 #, c-format
 msgid "%s: -c not supported on architecture %s\n"
 msgstr "%s: -c understøttes ikke på arkitekturen %s\n"
 
-#: corefile.c:535 corefile.c:638
+#: corefile.c:513 corefile.c:598
 #, c-format
 msgid "%s: file `%s' has no symbols\n"
 msgstr "%s: filen \"%s\" har ingen symboler\n"
 
-#: corefile.c:905
+#: corefile.c:859
 #, c-format
 msgid "%s: somebody miscounted: ltab.len=%d instead of %ld\n"
 msgstr "%s: nogen regnede forkert: ltab.len=%d i stedet for %ld\n"
@@ -369,7 +367,7 @@ msgstr "\t%d grundbloksregningspost\n"
 msgid "\t%d basic-block count records\n"
 msgstr "\t%d grundbloksregningsposter\n"
 
-#: gprof.c:162
+#: gprof.c:159
 #, c-format
 msgid ""
 "Usage: %s [-[abcDhilLsTvwxyz]] [-[ACeEfFJnNOpPqSQZ][name]] [-I dirs]\n"
@@ -377,7 +375,7 @@ msgid ""
 "\t[--[no-]annotated-source[=name]] [--[no-]exec-counts[=name]]\n"
 "\t[--[no-]flat-profile[=name]] [--[no-]graph[=name]]\n"
 "\t[--[no-]time=name] [--all-lines] [--brief] [--debug[=level]]\n"
-"\t[--function-ordering] [--file-ordering] [--inline-file-names]\n"
+"\t[--function-ordering] [--file-ordering]\n"
 "\t[--directory-path=dirs] [--display-unused-functions]\n"
 "\t[--file-format=name] [--file-info] [--help] [--line] [--min-count=n]\n"
 "\t[--no-static] [--print-path] [--separate-files]\n"
@@ -386,75 +384,75 @@ msgid ""
 "\t[--demangle[=STYLE]] [--no-demangle] [--external-symbol-table=name] [@FILE]\n"
 "\t[image-file] [profile-file...]\n"
 msgstr ""
-"Brug: %s [-[abcDhilLsTvwxyz]] [-[ACeEfFJnNOpPqSQZ][name]] [-I kataloger]\n"
-"\t[-d[tal]] [-k fra/til] [-m mindste-antal] [-t tabel-længde]\n"
-"\t[--[no-]annotated-source[=navn]] [--[no-]exec-counts[=navn]]\n"
-"\t[--[no-]flat-profile[=navn]] [--[no-]graph[=navn]]\n"
-"\t[--[no-]time=navn] [--all-lines] [--brief] [--debug[=niveau]]\n"
-"\t[--function-ordering] [--file-ordering] [--inline-file-navne]\n"
+"Brug: %s [-[abcDhilLsTvwxyz]] [-[ACeEfFJnNOpPqSQZ][name]]\n"
+"\t[-I kataloger] [-d[tal]] [-k fra/til] [-m mindste-antal]\n"
+"\t[-t tabel-længte] [--[no-]annotated-source[=navn]]\n"
+"\t[--[no-]exec-counts[=navn]] [--[no-]flat-profile[=navn]]\n"
+"\t[--[no-]graph[=navn]] [--[no-]time=navn] [--all-lines] [--brief]\n"
+"\t[--debug[=niveau]] [--function-ordering] [--file-ordering]\n"
 "\t[--directory-path=kataloger] [--display-unused-functions]\n"
 "\t[--file-format=navn] [--file-info] [--help] [--line] [--min-count=n]\n"
 "\t[--no-static] [--print-path] [--separate-files]\n"
 "\t[--static-call-graph] [--sum] [--table-length=længde] [--traditional]\n"
 "\t[--version] [--width=n] [--ignore-non-functions]\n"
-"\t[--demangle[=STIL]] [--no-demangle] [--external-symbol-table=navn] [@FIL]\n"
-"\t[image-file] [profile-file...]\n"
+"\t[--demangle[=STIL]] [--no-demangle]\n"
+"\t[ [--external-symbol-table=navn] [@FIL]\n"
 "\t[billedfil] [profilfil...]\n"
 
-#: gprof.c:178
+#: gprof.c:175
 #, c-format
 msgid "Report bugs to %s\n"
 msgstr ""
 "Rapportér fejl til %s,\n"
 "og synpunkter på oversættelsen til dansk@dansk-gruppen.dk\n"
 
-#: gprof.c:254
+#: gprof.c:251
 #, c-format
 msgid "%s: debugging not supported; -d ignored\n"
 msgstr "%s: fejlsøgning understøttes ikke; -d ignoreredes\n"
 
-#: gprof.c:334
+#: gprof.c:331
 #, c-format
 msgid "%s: unknown file format %s\n"
 msgstr "%s: ukendt filformat %s\n"
 
 #. This output is intended to follow the GNU standards document.
-#: gprof.c:422
+#: gprof.c:419
 #, c-format
 msgid "GNU gprof %s\n"
 msgstr "GNU gprof %s\n"
 
-#: gprof.c:423
+#: gprof.c:420
 #, c-format
 msgid "Based on BSD gprof, copyright 1983 Regents of the University of California.\n"
 msgstr "Baseret på BSD gprof, copyright 1983 Regents of the University of California.\n"
 
-#: gprof.c:424
+#: gprof.c:421
 #, c-format
 msgid "This program is free software.  This program has absolutely no warranty.\n"
 msgstr "Dette program er frit programmel. Dette program har ingen som helst garanti.\n"
 
-#: gprof.c:465
+#: gprof.c:462
 #, c-format
 msgid "%s: unknown demangling style `%s'\n"
 msgstr "%s: ukendt demanglingsstil \"%s\"\n"
 
-#: gprof.c:488
+#: gprof.c:482
 #, c-format
 msgid "%s: Only one of --function-ordering and --file-ordering may be specified.\n"
 msgstr "%s: Kun en af --function-ordering og --file-ordering kan angives.\n"
 
-#: gprof.c:540
+#: gprof.c:534
 #, c-format
 msgid "%s: sorry, file format `prof' is not yet supported\n"
 msgstr "%s: desværre, filformatet \"prof\" understøttes ikke endnu\n"
 
-#: gprof.c:594
+#: gprof.c:588
 #, c-format
 msgid "%s: gmon.out file is missing histogram\n"
 msgstr "%s: gmon.out-filen mangler histogram\n"
 
-#: gprof.c:601
+#: gprof.c:595
 #, c-format
 msgid "%s: gmon.out file is missing call-graph data\n"
 msgstr "%s: gmon.out-filen mangler kaldsgrafdata\n"
@@ -496,12 +494,12 @@ msgstr "%s overlappende histogramposter\n"
 msgid "%s: %s: unexpected EOF after reading %u of %u samples\n"
 msgstr "%s: %s: uventet filslut efter læsning af %u af %u stikprøver\n"
 
-#: hist.c:467
+#: hist.c:464
 #, c-format
 msgid "%c%c/call"
 msgstr "%c%c/kald"
 
-#: hist.c:475
+#: hist.c:472
 #, c-format
 msgid ""
 " for %.2f%% of %.2f %s\n"
@@ -510,7 +508,7 @@ msgstr ""
 " for %.2f%% af %.2f %s\n"
 "\n"
 
-#: hist.c:481
+#: hist.c:478
 #, c-format
 msgid ""
 "\n"
@@ -519,7 +517,7 @@ msgstr ""
 "\n"
 "Hver stikprøve regnes som %g %s.\n"
 
-#: hist.c:486
+#: hist.c:483
 #, c-format
 msgid ""
 " no time accumulated\n"
@@ -528,27 +526,27 @@ msgstr ""
 " ingen tid akkumuleret\n"
 "\n"
 
-#: hist.c:493
+#: hist.c:490
 msgid "cumulative"
 msgstr "kumulativ"
 
-#: hist.c:493
+#: hist.c:490
 msgid "self  "
 msgstr "selv"
 
-#: hist.c:493
+#: hist.c:490
 msgid "total "
 msgstr "totalt"
 
-#: hist.c:496
+#: hist.c:493
 msgid "time"
 msgstr "tid"
 
-#: hist.c:496
+#: hist.c:493
 msgid "calls"
 msgstr "kald"
 
-#: hist.c:585
+#: hist.c:582
 #, c-format
 msgid ""
 "\n"
@@ -561,12 +559,12 @@ msgstr ""
 "\n"
 "flad profil:\n"
 
-#: hist.c:591
+#: hist.c:588
 #, c-format
 msgid "Flat profile:\n"
 msgstr "Flad profil:\n"
 
-#: hist.c:712
+#: hist.c:709
 #, c-format
 msgid "%s: found a symbol that covers several histogram records"
 msgstr "%s: fandt et symbol der dækker flere hisogramposter"
@@ -591,7 +589,7 @@ msgstr "%s: kunne ikke finde \"%s\"\n"
 msgid "*** File %s:\n"
 msgstr "*** Fil %s:\n"
 
-#: utils.c:106
+#: utils.c:99
 #, c-format
 msgid " <cycle %d>"
 msgstr " <cyklus %d>"

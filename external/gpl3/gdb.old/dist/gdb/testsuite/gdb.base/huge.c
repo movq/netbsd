@@ -12,7 +12,6 @@
 #endif
 static int a[CRASH_GDB], b[CRASH_GDB];
 
-int
 main()
 {
   memcpy (a, b, sizeof (a));

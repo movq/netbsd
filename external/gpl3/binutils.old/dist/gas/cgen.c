@@ -1,5 +1,6 @@
 /* GAS interface for targets using CGEN: Cpu tools GENerator.
-   Copyright (C) 1996-2020 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+   2006, 2007, 2009, 2010, 2011, 2012  Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -26,6 +27,7 @@
 #include "dwarf2dbg.h"
 
 #include "symbols.h"
+#include "struc-symbol.h"
 
 #ifdef OBJ_COMPLEX_RELC
 static expressionS * make_right_shifted_expr
@@ -36,7 +38,7 @@ static unsigned long gas_cgen_encode_addend
    const unsigned long, const unsigned long, const unsigned long, \
    const unsigned long);
 
-static const char * weak_operand_overflow_check
+static char * weak_operand_overflow_check
   (const expressionS *, const CGEN_OPERAND *);
 
 static void queue_fixup_recursively
@@ -56,7 +58,9 @@ CGEN_CPU_DESC gas_cgen_cpu_desc;
    ??? Not currently used.  */
 
 void
-cgen_asm_record_register (char *name, int number)
+cgen_asm_record_register (name, number)
+     char *name;
+     int number;
 {
   /* Use symbol_create here instead of symbol_new so we don't try to
      output registers into the object file's symbol table.  */
@@ -91,7 +95,7 @@ static int num_fixups;
    ??? May wish to make this static and delete calls in md_assemble.  */
 
 void
-gas_cgen_init_parse (void)
+gas_cgen_init_parse ()
 {
   num_fixups = 0;
 }
@@ -99,7 +103,10 @@ gas_cgen_init_parse (void)
 /* Queue a fixup.  */
 
 static void
-queue_fixup (int opindex, int opinfo, expressionS *expP)
+queue_fixup (opindex, opinfo, expP)
+     int           opindex;
+     int           opinfo;
+     expressionS * expP;
 {
   /* We need to generate a fixup for this expression.  */
   if (num_fixups >= GAS_CGEN_MAX_FIXUPS)
@@ -153,7 +160,7 @@ struct saved_fixups
 static struct saved_fixups stored_fixups[MAX_SAVED_FIXUP_CHAINS];
 
 void
-gas_cgen_initialize_saved_fixups_array (void)
+gas_cgen_initialize_saved_fixups_array ()
 {
   int i = 0;
 
@@ -162,7 +169,8 @@ gas_cgen_initialize_saved_fixups_array (void)
 }
 
 void
-gas_cgen_save_fixups (int i)
+gas_cgen_save_fixups (i)
+     int i;
 {
   if (i < 0 || i >= MAX_SAVED_FIXUP_CHAINS)
     {
@@ -177,7 +185,8 @@ gas_cgen_save_fixups (int i)
 }
 
 void
-gas_cgen_restore_fixups (int i)
+gas_cgen_restore_fixups (i)
+     int i;
 {
   if (i < 0 || i >= MAX_SAVED_FIXUP_CHAINS)
     {
@@ -192,7 +201,8 @@ gas_cgen_restore_fixups (int i)
 }
 
 void
-gas_cgen_swap_fixups (int i)
+gas_cgen_swap_fixups (i)
+     int i;
 {
   if (i < 0 || i >= MAX_SAVED_FIXUP_CHAINS)
     {
@@ -238,9 +248,15 @@ gas_cgen_swap_fixups (int i)
    operand type.  We pick a BFD reloc type in md_apply_fix.  */
 
 fixS *
-gas_cgen_record_fixup (fragS *frag, int where, const CGEN_INSN *insn,
-		       int length, const CGEN_OPERAND *operand, int opinfo,
-		       symbolS *symbol, offsetT offset)
+gas_cgen_record_fixup (frag, where, insn, length, operand, opinfo, symbol, offset)
+     fragS *              frag;
+     int                  where;
+     const CGEN_INSN *    insn;
+     int                  length;
+     const CGEN_OPERAND * operand;
+     int                  opinfo;
+     symbolS *            symbol;
+     offsetT              offset;
 {
   fixS *fixP;
 
@@ -273,9 +289,14 @@ gas_cgen_record_fixup (fragS *frag, int where, const CGEN_INSN *insn,
    operand type.  We pick a BFD reloc type in md_apply_fix.  */
 
 fixS *
-gas_cgen_record_fixup_exp (fragS *frag, int where, const CGEN_INSN *insn,
-			   int length, const CGEN_OPERAND *operand, int opinfo,
-			   expressionS *exp)
+gas_cgen_record_fixup_exp (frag, where, insn, length, operand, opinfo, exp)
+     fragS *              frag;
+     int                  where;
+     const CGEN_INSN *    insn;
+     int                  length;
+     const CGEN_OPERAND * operand;
+     int                  opinfo;
+     expressionS *        exp;
 {
   fixS *fixP;
 
@@ -324,11 +345,19 @@ static int expr_jmp_buf_p;
    The resulting value is stored in VALUEP.  */
 
 const char *
-gas_cgen_parse_operand (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
-		       	enum cgen_parse_operand_type want, const char **strP,
-		       	int opindex, int opinfo,
-		       	enum cgen_parse_operand_result *resultP,
-		       	bfd_vma *valueP)
+gas_cgen_parse_operand (cd, want, strP, opindex, opinfo, resultP, valueP)
+
+#ifdef OBJ_COMPLEX_RELC
+     CGEN_CPU_DESC cd;
+#else
+     CGEN_CPU_DESC cd ATTRIBUTE_UNUSED;
+#endif
+     enum cgen_parse_operand_type want;
+     const char **strP;
+     int opindex;
+     int opinfo;
+     enum cgen_parse_operand_result *resultP;
+     bfd_vma *valueP;
 {
 #ifdef __STDC__
   /* These are volatile to survive the setjmp.  */
@@ -415,8 +444,6 @@ gas_cgen_parse_operand (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
 
       if (! errmsg)
 	{
-	  asymbol *bsym;
-
 	  /* Fragment the expression as necessary, and queue a reloc.  */
 	  memset (& dummy_fixup, 0, sizeof (fixS));
 
@@ -424,12 +451,11 @@ gas_cgen_parse_operand (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
 
 	  if (exp.X_op == O_symbol
 	      && reloc_type == BFD_RELOC_RELC
-	      && symbol_constant_p (exp.X_add_symbol)
-	      && (!symbol_symbolS (exp.X_add_symbol)
-		  || (bsym = symbol_get_bfdsym (exp.X_add_symbol)) == NULL
-		  || (bsym->section != expr_section
-		      && bsym->section != absolute_section
-		      && bsym->section != undefined_section)))
+	      && exp.X_add_symbol->sy_value.X_op == O_constant
+	      && (!exp.X_add_symbol->bsym
+		  || (exp.X_add_symbol->bsym->section != expr_section
+		      && exp.X_add_symbol->bsym->section != absolute_section
+		      && exp.X_add_symbol->bsym->section != undefined_section)))
 	    {
 	      /* Local labels will have been (eagerly) turned into constants
 		 by now, due to the inappropriately deep insight of the
@@ -457,15 +483,13 @@ gas_cgen_parse_operand (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
 	  if (operand && (operand->hw_type == HW_H_SINT))
 	    signed_p = 1;
 
-	  if (symbol_symbolS (stmp)
-	      && (bsym = symbol_get_bfdsym (stmp)) != NULL
-	      && bsym->section == expr_section
+	  if (stmp->bsym && (stmp->bsym->section == expr_section)
 	      && ! S_IS_LOCAL (stmp))
 	    {
 	      if (signed_p)
-		bsym->flags |= BSF_SRELC;
+		stmp->bsym->flags |= BSF_SRELC;
 	      else
-		bsym->flags |= BSF_RELC;
+		stmp->bsym->flags |= BSF_RELC;
 	    }
 
 	  /* Now package it all up for the fixup emitter.  */
@@ -502,7 +526,8 @@ gas_cgen_parse_operand (CGEN_CPU_DESC cd ATTRIBUTE_UNUSED,
    ??? This could be done differently by adding code to `expression'.  */
 
 void
-gas_cgen_md_operand (expressionS *expressionP ATTRIBUTE_UNUSED)
+gas_cgen_md_operand (expressionP)
+     expressionS *expressionP ATTRIBUTE_UNUSED;
 {
   /* Don't longjmp if we're not called from within cgen_parse_operand().  */
   if (expr_jmp_buf_p)
@@ -517,8 +542,12 @@ gas_cgen_md_operand (expressionS *expressionP ATTRIBUTE_UNUSED)
    The "result" is stored in RESULT if non-NULL.  */
 
 void
-gas_cgen_finish_insn (const CGEN_INSN *insn, CGEN_INSN_BYTES_PTR buf,
-		      unsigned int length, int relax_p, finished_insnS *result)
+gas_cgen_finish_insn (insn, buf, length, relax_p, result)
+     const CGEN_INSN *insn;
+     CGEN_INSN_BYTES_PTR buf;
+     unsigned int length;
+     int relax_p;
+     finished_insnS *result;
 {
   int i;
   int relax_operand;
@@ -752,7 +781,7 @@ gas_cgen_encode_addend (const unsigned long start,    /* in bits */
    overflow, so signal it by returning an error string. Any other case is
    ambiguous, so we assume it's OK and return NULL.  */
 
-static const char *
+static char *
 weak_operand_overflow_check (const expressionS *  exp,
 			     const CGEN_OPERAND * operand)
 {
@@ -775,12 +804,12 @@ weak_operand_overflow_check (const expressionS *  exp,
   mask = exp->X_add_number;
 
   if (exp->X_add_symbol
-      && symbol_constant_p (exp->X_add_symbol))
-    mask |= *symbol_X_add_number (exp->X_add_symbol);
+      && exp->X_add_symbol->sy_value.X_op == O_constant)
+    mask |= exp->X_add_symbol->sy_value.X_add_number;
 
   if (exp->X_op_symbol
-      && symbol_constant_p (exp->X_op_symbol))
-    mask |= *symbol_X_add_number (exp->X_op_symbol);
+      && exp->X_op_symbol->sy_value.X_op == O_constant)
+    mask |= exp->X_op_symbol->sy_value.X_add_number;
 
   /* Want to know if mask covers more bits than opmask.
      this is the same as asking if mask has any bits not in opmask,
@@ -804,20 +833,18 @@ make_right_shifted_expr (expressionS * exp,
 {
   symbolS * stmp = 0;
   expressionS * new_exp;
-  asymbol *bsym;
 
   stmp = expr_build_binary (O_right_shift,
 			    make_expr_symbol (exp),
 			    expr_build_uconstant (amount));
-  bsym = symbol_get_bfdsym (stmp);
 
   if (signed_p)
-    bsym->flags |= BSF_SRELC;
+    stmp->bsym->flags |= BSF_SRELC;
   else
-    bsym->flags |= BSF_RELC;
+    stmp->bsym->flags |= BSF_RELC;
 
   /* Then wrap that in a "symbol expr" for good measure.  */
-  new_exp = XNEW (expressionS);
+  new_exp = xmalloc (sizeof (expressionS));
   memset (new_exp, 0, sizeof (expressionS));
   new_exp->X_op = O_symbol;
   new_exp->X_op_symbol = 0;
@@ -842,7 +869,10 @@ make_right_shifted_expr (expressionS * exp,
    should handle them all.  */
 
 void
-gas_cgen_md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
+gas_cgen_md_apply_fix (fixP, valP, seg)
+     fixS *   fixP;
+     valueT * valP;
+     segT     seg ATTRIBUTE_UNUSED;
 {
   char *where = fixP->fx_frag->fr_literal + fixP->fx_where;
   valueT value = * valP;
@@ -862,6 +892,7 @@ gas_cgen_md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
       const CGEN_OPERAND *operand = cgen_operand_lookup_by_num (cd, opindex);
       const char *errmsg;
       bfd_reloc_code_real_type reloc_type;
+      CGEN_FIELDS *fields = alloca (CGEN_CPU_SIZEOF_FIELDS (cd));
       const CGEN_INSN *insn = fixP->fx_cgen.insn;
 #ifdef OBJ_COMPLEX_RELC
       int start;
@@ -897,8 +928,6 @@ gas_cgen_md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 	     finish the job.  Testing for pcrel is a temporary hack.  */
 	  || fixP->fx_pcrel)
 	{
-	  CGEN_FIELDS *fields = xmalloc (CGEN_CPU_SIZEOF_FIELDS (cd));
-
 	  CGEN_CPU_SET_FIELDS_BITSIZE (cd) (fields, CGEN_INSN_BITSIZE (insn));
 	  CGEN_CPU_SET_VMA_OPERAND (cd) (cd, opindex, fields, (bfd_vma) value);
 
@@ -922,8 +951,6 @@ gas_cgen_md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 #endif
 	  if (errmsg)
 	    as_bad_where (fixP->fx_file, fixP->fx_line, "%s", errmsg);
-
-	  free (fields);
 	}
 
       if (fixP->fx_done)
@@ -1013,12 +1040,14 @@ gas_cgen_pcrel_r_type (bfd_reloc_code_real_type r)
    FIXME: To what extent can we get all relevant targets to use this?  */
 
 arelent *
-gas_cgen_tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixP)
+gas_cgen_tc_gen_reloc (section, fixP)
+     asection * section ATTRIBUTE_UNUSED;
+     fixS *     fixP;
 {
   bfd_reloc_code_real_type r_type = fixP->fx_r_type;
   arelent *reloc;
 
-  reloc = XNEW (arelent);
+  reloc = (arelent *) xmalloc (sizeof (arelent));
 
 #ifdef GAS_CGEN_PCREL_R_TYPE
   if (fixP->fx_pcrel)
@@ -1035,7 +1064,7 @@ gas_cgen_tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixP)
 
   gas_assert (!fixP->fx_pcrel == !reloc->howto->pc_relative);
 
-  reloc->sym_ptr_ptr = XNEW (asymbol *);
+  reloc->sym_ptr_ptr = (asymbol **) xmalloc (sizeof (asymbol *));
   *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixP->fx_addsy);
 
   /* Use fx_offset for these cases.  */
@@ -1053,7 +1082,7 @@ gas_cgen_tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixP)
    Called after gas_cgen_cpu_desc has been created.  */
 
 void
-gas_cgen_begin (void)
+gas_cgen_begin ()
 {
   if (flag_signed_overflow_ok)
     cgen_set_signed_overflow_ok (gas_cgen_cpu_desc);

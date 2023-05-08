@@ -1,5 +1,6 @@
 /* Print VAX instructions.
-   Copyright (C) 1995-2020 Free Software Foundation, Inc.
+   Copyright 1995, 1998, 2000, 2001, 2002, 2005, 2007, 2009, 2012
+   Free Software Foundation, Inc.
    Contributed by Pauline Middelink <middelin@polyware.iaf.nl>
 
    This file is part of the GNU opcodes library.
@@ -23,7 +24,7 @@
 #include <setjmp.h>
 #include <string.h>
 #include "opcode/vax.h"
-#include "disassemble.h"
+#include "dis-asm.h"
 
 static char *reg_names[] =
 {
@@ -64,7 +65,7 @@ static char *entry_mask_bit[] =
 #define COERCE32(x) ((int) (((x) ^ 0x80000000) - 0x80000000))
 #define NEXTLONG(p)  \
   (p += 4, FETCH_DATA (info, p), \
-   (COERCE32 (((((((unsigned) p[-1] << 8) + p[-2]) << 8) + p[-3]) << 8) + p[-4])))
+   (COERCE32 ((((((p[-1] << 8) + p[-2]) << 8) + p[-3]) << 8) + p[-4])))
 
 /* Maximum length of an instruction.  */
 #define MAXLEN 25
@@ -75,7 +76,7 @@ struct private
   bfd_byte * max_fetched;
   bfd_byte   the_buffer[MAXLEN];
   bfd_vma    insn_start;
-  OPCODES_SIGJMP_BUF    bailout;
+  jmp_buf    bailout;
 };
 
 /* Make sure that bytes from INFO->PRIVATE_DATA->BUFFER (inclusive)
@@ -99,7 +100,7 @@ fetch_data (struct disassemble_info *info, bfd_byte *addr)
   if (status != 0)
     {
       (*info->memory_error_func) (status, start, info);
-      OPCODES_SIGLONGJMP (priv->bailout, 1);
+      longjmp (priv->bailout, 1);
     }
   else
     priv->max_fetched = addr;
@@ -117,7 +118,7 @@ static bfd_vma *     entry_addr = NULL;
    there's no symbol table.  Returns TRUE upon success, FALSE otherwise.  */
 
 static bfd_boolean
-parse_disassembler_options (const char *options)
+parse_disassembler_options (char * options)
 {
   const char * entry_switch = "entry:";
 
@@ -129,16 +130,16 @@ parse_disassembler_options (const char *options)
       if (entry_addr_occupied_slots >= entry_addr_total_slots)
 	{
 	  /* A guesstimate of the number of entries we will have to create.  */
-	  entry_addr_total_slots
-	    += 1 + strlen (options) / (strlen (entry_switch) + 5);
-
+	  entry_addr_total_slots +=
+	    strlen (options) / (strlen (entry_switch) + 5);
+	  
 	  entry_addr = realloc (entry_addr, sizeof (bfd_vma)
 				* entry_addr_total_slots);
 	}
 
       if (entry_addr == NULL)
 	return FALSE;
-
+	  
       entry_addr[entry_addr_occupied_slots] = bfd_scan_vma (options, NULL, 0);
       entry_addr_occupied_slots ++;
     }
@@ -240,18 +241,8 @@ print_insn_mode (const char *d,
         (*info->fprintf_func) (info->stream, "$0x%x", mode);
       break;
     case 0x40: /* Index:			base-addr[Rn] */
-      {
-	unsigned char *q = p0 + 1;
-	unsigned char nextmode = NEXTBYTE (q);
-	if (nextmode < 0x60 || nextmode == 0x8f)
-	  /* Literal, index, register, or immediate is invalid.  In
-	     particular don't recurse into another index mode which
-	     might overflow the_buffer.   */
-	  (*info->fprintf_func) (info->stream, "[invalid base]");
-	else
-	  p += print_insn_mode (d, size, p0 + 1, addr + 1, info);
-	(*info->fprintf_func) (info->stream, "[%s]", reg_names[reg]);
-      }
+      p += print_insn_mode (d, size, p0 + 1, addr + 1, info);
+      (*info->fprintf_func) (info->stream, "[%s]", reg_names[reg]);
       break;
     case 0x50: /* Register:			Rn */
       (*info->fprintf_func) (info->stream, "%s", reg_names[reg]);
@@ -306,7 +297,6 @@ print_insn_mode (const char *d,
       break;
     case 0xB0: /* Displacement byte deferred:	*displ(Rn).  */
       (*info->fprintf_func) (info->stream, "*");
-      /* Fall through.  */
     case 0xA0: /* Displacement byte:		displ(Rn).  */
       if (reg == 0xF)
 	(*info->print_address_func) (addr + 2 + NEXTBYTE (p), info);
@@ -316,7 +306,6 @@ print_insn_mode (const char *d,
       break;
     case 0xD0: /* Displacement word deferred:	*displ(Rn).  */
       (*info->fprintf_func) (info->stream, "*");
-      /* Fall through.  */
     case 0xC0: /* Displacement word:		displ(Rn).  */
       if (reg == 0xF)
 	(*info->print_address_func) (addr + 3 + NEXTWORD (p), info);
@@ -326,7 +315,6 @@ print_insn_mode (const char *d,
       break;
     case 0xF0: /* Displacement long deferred:	*displ(Rn).  */
       (*info->fprintf_func) (info->stream, "*");
-      /* Fall through.  */
     case 0xE0: /* Displacement long:		displ(Rn).  */
       if (reg == 0xF)
 	(*info->print_address_func) (addr + 5 + NEXTLONG (p), info);
@@ -408,15 +396,14 @@ print_insn_vax (bfd_vma memaddr, disassemble_info *info)
       parsed_disassembler_options = TRUE;
     }
 
-  if (OPCODES_SIGSETJMP (priv.bailout) != 0)
+  if (setjmp (priv.bailout) != 0)
     /* Error return.  */
     return -1;
 
   argp = NULL;
   /* Check if the info buffer has more than one byte left since
      the last opcode might be a single byte with no argument data.  */
-  if (info->buffer_length - (memaddr - info->buffer_vma) > 1
-      && (info->stop_vma == 0 || memaddr < (info->stop_vma - 1)))
+  if (info->buffer_length - (memaddr - info->buffer_vma) > 1)
     {
       FETCH_DATA (info, buffer + 2);
     }
@@ -450,8 +437,7 @@ print_insn_vax (bfd_vma memaddr, disassemble_info *info)
       int offset;
 
       FETCH_DATA (info, buffer + 4);
-      offset = ((unsigned) buffer[3] << 24 | buffer[2] << 16
-		| buffer[1] << 8 | buffer[0]);
+      offset = buffer[3] << 24 | buffer[2] << 16 | buffer[1] << 8 | buffer[0];
       (*info->fprintf_func) (info->stream, ".long 0x%08x", offset);
 
       return 4;

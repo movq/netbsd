@@ -1,5 +1,6 @@
 /* symbols.h -
-   Copyright (C) 1987-2020 Free Software Foundation, Inc.
+   Copyright 1987, 1990, 1992, 1993, 1994, 1995, 1997, 1999, 2000, 2001,
+   2002, 2003, 2004, 2005, 2006, 2007, 2008 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -57,7 +58,6 @@ symbolS *symbol_clone_if_forward_ref (symbolS *, int);
 #define symbol_clone_if_forward_ref(s) symbol_clone_if_forward_ref (s, 0)
 symbolS *symbol_temp_new (segT, valueT, fragS *);
 symbolS *symbol_temp_new_now (void);
-symbolS *symbol_temp_new_now_octets (void);
 symbolS *symbol_temp_make (void);
 
 symbolS *colon (const char *sym_name);
@@ -147,7 +147,7 @@ struct broken_word
     struct broken_word *use_jump;
   };
 extern struct broken_word *broken_words;
-#endif /* ifdef WORKING_DOT_WORD */
+#endif /* ndef WORKING_DOT_WORD */
 
 /*
  * Current means for getting from symbols to segments and vice verse.
@@ -168,8 +168,6 @@ void symbol_remove (symbolS * symbolP, symbolS ** rootP,
 		    symbolS ** lastP);
 
 extern symbolS *symbol_previous (symbolS *);
-
-extern int symbol_on_chain (symbolS *s, symbolS *rootPP, symbolS *lastPP);
 
 void verify_symbol_chain (symbolS * rootP, symbolS * lastP);
 
@@ -203,7 +201,6 @@ extern int symbol_equated_p (symbolS *);
 extern int symbol_equated_reloc_p (symbolS *);
 extern int symbol_constant_p (symbolS *);
 extern int symbol_shadow_p (symbolS *);
-extern symbolS *symbol_symbolS (symbolS *);
 extern asymbol *symbol_get_bfdsym (symbolS *);
 extern void symbol_set_bfdsym (symbolS *, asymbol *);
 extern int symbol_same_p (symbolS *, symbolS *);

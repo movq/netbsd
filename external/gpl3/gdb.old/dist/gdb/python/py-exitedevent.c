@@ -1,6 +1,6 @@
 /* Python interface to inferior exit events.
 
-   Copyright (C) 2009-2020 Free Software Foundation, Inc.
+   Copyright (C) 2009-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,32 +20,48 @@
 #include "defs.h"
 #include "py-event.h"
 
-static gdbpy_ref<>
+static PyTypeObject exited_event_object_type
+    CPYCHECKER_TYPE_OBJECT_FOR_TYPEDEF ("event_object");
+
+static PyObject *
 create_exited_event_object (const LONGEST *exit_code, struct inferior *inf)
 {
-  gdbpy_ref<> exited_event = create_event_object (&exited_event_object_type);
+  PyObject *exited_event;
+  PyObject *inf_obj = NULL;
 
-  if (exited_event == NULL)
-    return NULL;
+  exited_event = create_event_object (&exited_event_object_type);
+
+  if (!exited_event)
+    goto fail;
 
   if (exit_code)
     {
-      gdbpy_ref<> exit_code_obj (PyLong_FromLongLong (*exit_code));
+      PyObject *exit_code_obj = PyLong_FromLongLong (*exit_code);
+      int failed;
 
       if (exit_code_obj == NULL)
-	return NULL;
-      if (evpy_add_attribute (exited_event.get (), "exit_code",
-			      exit_code_obj.get ()) < 0)
-	return NULL;
+	goto fail;
+
+      failed = evpy_add_attribute (exited_event, "exit_code",
+				   exit_code_obj) < 0;
+      Py_DECREF (exit_code_obj);
+      if (failed)
+	goto fail;
     }
 
-  gdbpy_ref<inferior_object> inf_obj = inferior_to_inferior_object (inf);
-  if (inf_obj == NULL || evpy_add_attribute (exited_event.get (),
-					     "inferior",
-					     (PyObject *) inf_obj.get ()) < 0)
-    return NULL;
+  inf_obj = inferior_to_inferior_object (inf);
+  if (!inf_obj || evpy_add_attribute (exited_event,
+                                      "inferior",
+                                      inf_obj) < 0)
+    goto fail;
+  Py_DECREF (inf_obj);
 
   return exited_event;
+
+ fail:
+  Py_XDECREF (inf_obj);
+  Py_XDECREF (exited_event);
+  return NULL;
 }
 
 /* Callback that is used when an exit event occurs.  This function
@@ -54,13 +70,23 @@ create_exited_event_object (const LONGEST *exit_code, struct inferior *inf)
 int
 emit_exited_event (const LONGEST *exit_code, struct inferior *inf)
 {
+  PyObject *event;
+
   if (evregpy_no_listeners_p (gdb_py_events.exited))
     return 0;
 
-  gdbpy_ref<> event = create_exited_event_object (exit_code, inf);
+  event = create_exited_event_object (exit_code, inf);
 
-  if (event != NULL)
-    return evpy_emit_event (event.get (), gdb_py_events.exited);
+  if (event)
+    return evpy_emit_event (event, gdb_py_events.exited);
 
   return -1;
 }
+
+
+GDBPY_NEW_EVENT_TYPE (exited,
+                      "gdb.ExitedEvent",
+                      "ExitedEvent",
+                      "GDB exited event object",
+                      event_object_type,
+                      static);

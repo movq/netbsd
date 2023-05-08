@@ -1,5 +1,7 @@
 /* Mach-O support for BFD.
-   Copyright (C) 1999-2020 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001, 2002, 2003, 2005, 2007, 2008, 2009, 2011,
+   2012
+   Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -21,12 +23,8 @@
 #ifndef _BFD_MACH_O_H_
 #define _BFD_MACH_O_H_
 
+#include "bfd.h"
 #include "mach-o/loader.h"
-#include "mach-o/external.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 typedef struct bfd_mach_o_header
 {
@@ -112,18 +110,6 @@ bfd_mach_o_segment_command;
 #define BFD_MACH_O_PROT_WRITE   0x02
 #define BFD_MACH_O_PROT_EXECUTE 0x04
 
-/* Target platforms.  */
-#define BFD_MACH_O_PLATFORM_MACOS    1
-#define BFD_MACH_O_PLATFORM_IOS      2
-#define BFD_MACH_O_PLATFORM_TVOS     3
-#define BFD_MACH_O_PLATFORM_WATCHOS  4
-#define BFD_MACH_O_PLATFORM_BRIDGEOS 5
-
-/* Build tools.  */
-#define BFD_MACH_O_TOOL_CLANG 1
-#define BFD_MACH_O_TOOL_SWIFT 2
-#define BFD_MACH_O_TOOL_LD    3
-
 /* Expanded internal representation of a relocation entry.  */
 typedef struct bfd_mach_o_reloc_info
 {
@@ -183,7 +169,7 @@ bfd_mach_o_symtab_command;
    tables is determined as follows:
        table of contents - the defined external symbols are sorted by name
        module table - the file contains only one module so everything in the
-		      file is part of the module.
+                      file is part of the module.
        reference symbol table - is the defined and undefined external symbols
 
    For dynamically linked shared library files this load command also contains
@@ -304,7 +290,7 @@ typedef struct bfd_mach_o_dysymtab_command
      symbols are sorted by name and is use as the table of contents.  */
 
   unsigned long tocoff;       /* File offset to table of contents.  */
-  unsigned long ntoc;	      /* Number of entries in table of contents.  */
+  unsigned long ntoc;         /* Number of entries in table of contents.  */
 
   /* To support dynamic binding of "modules" (whole object files) the symbol
      table must reflect the modules that the file was created from.  This is
@@ -391,27 +377,6 @@ bfd_mach_o_dysymtab_command;
 #define BFD_MACH_O_INDIRECT_SYMBOL_ABS   0x40000000
 #define BFD_MACH_O_INDIRECT_SYMBOL_SIZE  4
 
-/* For LC_TWOLEVEL_HINTS.  */
-
-typedef struct bfd_mach_o_twolevel_hints_command
-{
-  /* Offset to the hint table.  */
-  unsigned int offset;
-
-  /* Number of entries in the table.  */
-  unsigned int nhints;
-}
-bfd_mach_o_twolevel_hints_command;
-
-/* For LC_PREBIND_CKSUM.  */
-
-typedef struct bfd_mach_o_prebind_cksum_command
-{
-  /* Checksum or zero.  */
-  unsigned int cksum;
-}
-bfd_mach_o_prebind_cksum_command;
-
 /* For LC_THREAD or LC_UNIXTHREAD.  */
 
 typedef struct bfd_mach_o_thread_flavour
@@ -434,7 +399,8 @@ bfd_mach_o_thread_command;
 
 typedef struct bfd_mach_o_dylinker_command
 {
-  unsigned int name_offset;	    /* Offset to library's path name.  */
+  unsigned long name_offset;         /* Offset to library's path name.  */
+  unsigned long name_len;            /* Offset to library's path name.  */
   char *name_str;
 }
 bfd_mach_o_dylinker_command;
@@ -444,7 +410,8 @@ bfd_mach_o_dylinker_command;
 
 typedef struct bfd_mach_o_dylib_command
 {
-  unsigned int name_offset;	       /* Offset to library's path name.  */
+  unsigned long name_offset;           /* Offset to library's path name.  */
+  unsigned long name_len;              /* Offset to library's path name.  */
   unsigned long timestamp;	       /* Library's build time stamp.  */
   unsigned long current_version;       /* Library's current version number.  */
   unsigned long compatibility_version; /* Library's compatibility vers number.  */
@@ -456,12 +423,9 @@ bfd_mach_o_dylib_command;
 
 typedef struct bfd_mach_o_prebound_dylib_command
 {
-  unsigned int name_offset;	      /* Library's path name.  */
-  unsigned int nmodules;	      /* Number of modules in library.  */
-  unsigned int linked_modules_offset; /* Bit vector of linked modules.  */
-
-  char *name_str;
-  unsigned char *linked_modules;
+  unsigned long name;                /* Library's path name.  */
+  unsigned long nmodules;            /* Number of modules in library.  */
+  unsigned long linked_modules;      /* Bit vector of linked modules.  */
 }
 bfd_mach_o_prebound_dylib_command;
 
@@ -493,6 +457,7 @@ bfd_mach_o_str_command;
 typedef struct bfd_mach_o_fvmlib_command
 {
   unsigned int name_offset;
+  unsigned int name_len;
   char *name_str;
   unsigned int minor_version;
   unsigned int header_addr;
@@ -502,36 +467,33 @@ bfd_mach_o_fvmlib_command;
 typedef struct bfd_mach_o_dyld_info_command
 {
   /* File offset and size to rebase info.  */
-  unsigned int rebase_off;
+  unsigned int rebase_off; 
   unsigned int rebase_size;
-  unsigned char *rebase_content;
 
   /* File offset and size of binding info.  */
   unsigned int bind_off;
   unsigned int bind_size;
-  unsigned char *bind_content;
 
   /* File offset and size of weak binding info.  */
   unsigned int weak_bind_off;
   unsigned int weak_bind_size;
-  unsigned char *weak_bind_content;
 
   /* File offset and size of lazy binding info.  */
   unsigned int lazy_bind_off;
   unsigned int lazy_bind_size;
-  unsigned char *lazy_bind_content;
 
   /* File offset and size of export info.  */
   unsigned int export_off;
   unsigned int export_size;
-  unsigned char *export_content;
 }
 bfd_mach_o_dyld_info_command;
 
 typedef struct bfd_mach_o_version_min_command
 {
-  uint32_t version;
-  uint32_t sdk;
+  unsigned char rel;
+  unsigned char maj;
+  unsigned char min;
+  unsigned int reserved;
 }
 bfd_mach_o_version_min_command;
 
@@ -543,60 +505,12 @@ typedef struct bfd_mach_o_encryption_info_command
 }
 bfd_mach_o_encryption_info_command;
 
-typedef struct bfd_mach_o_main_command
-{
-  bfd_uint64_t entryoff;
-  bfd_uint64_t stacksize;
-}
-bfd_mach_o_main_command;
-
-typedef struct bfd_mach_o_source_version_command
-{
-  unsigned int a;
-  unsigned short b;
-  unsigned short c;
-  unsigned short d;
-  unsigned short e;
-}
-bfd_mach_o_source_version_command;
-
-typedef struct bfd_mach_o_note_command
-{
-  char data_owner[16];
-  bfd_uint64_t offset;
-  bfd_uint64_t size;
-}
-bfd_mach_o_note_command;
-
-typedef struct bfd_mach_o_build_version_tool
-{
-  uint32_t tool;
-  uint32_t version;
-}
-bfd_mach_o_build_version_tool;
-
-typedef struct bfd_mach_o_build_version_command
-{
-  uint32_t platform;
-  uint32_t minos;
-  uint32_t sdk;
-  uint32_t ntools;
-}
-bfd_mach_o_build_version_command;
-
 typedef struct bfd_mach_o_load_command
 {
-  /* Next command in the single linked list.  */
-  struct bfd_mach_o_load_command *next;
-
-  /* Type and required flag.  */
   bfd_mach_o_load_command_type type;
   bfd_boolean type_required;
-
-  /* Offset and length in the file.  */
   unsigned int offset;
   unsigned int len;
-
   union
   {
     bfd_mach_o_segment_command segment;
@@ -606,8 +520,6 @@ typedef struct bfd_mach_o_load_command
     bfd_mach_o_dylib_command dylib;
     bfd_mach_o_dylinker_command dylinker;
     bfd_mach_o_prebound_dylib_command prebound_dylib;
-    bfd_mach_o_prebind_cksum_command prebind_cksum;
-    bfd_mach_o_twolevel_hints_command twolevel_hints;
     bfd_mach_o_uuid_command uuid;
     bfd_mach_o_linkedit_command linkedit;
     bfd_mach_o_str_command str;
@@ -615,11 +527,8 @@ typedef struct bfd_mach_o_load_command
     bfd_mach_o_version_min_command version_min;
     bfd_mach_o_encryption_info_command encryption_info;
     bfd_mach_o_fvmlib_command fvmlib;
-    bfd_mach_o_main_command main;
-    bfd_mach_o_source_version_command source_version;
-    bfd_mach_o_note_command note;
-    bfd_mach_o_build_version_command build_version;
-  } command;
+  }
+  command;
 }
 bfd_mach_o_load_command;
 
@@ -627,13 +536,8 @@ typedef struct mach_o_data_struct
 {
   /* Mach-O header.  */
   bfd_mach_o_header header;
-
-  /* File offset of the header.  Usually this is 0.  */
-  file_ptr hdr_offset;
-
   /* Array of load commands (length is given by header.ncmds).  */
-  bfd_mach_o_load_command *first_command;
-  bfd_mach_o_load_command *last_command;
+  bfd_mach_o_load_command *commands;
 
   /* Flatten array of sections.  The array is 0-based.  */
   unsigned long nsects;
@@ -652,10 +556,10 @@ typedef struct mach_o_data_struct
   /* A place to stash dwarf2 info for this bfd.  */
   void *dwarf2_find_line_info;
 
-  /* BFD of .dSYM file.  */
+  /* BFD of .dSYM file. */
   bfd *dsym_bfd;
 
-  /* Cache of dynamic relocs.  */
+  /* Cache of dynamic relocs. */
   arelent *dyn_reloc_cache;
 }
 bfd_mach_o_data_struct;
@@ -681,24 +585,23 @@ bfd_boolean bfd_mach_o_valid (bfd *);
 bfd_boolean bfd_mach_o_mkobject_init (bfd *);
 const bfd_target *bfd_mach_o_object_p (bfd *);
 const bfd_target *bfd_mach_o_core_p (bfd *);
-const bfd_target *bfd_mach_o_fat_archive_p (bfd *);
-bfd *bfd_mach_o_fat_openr_next_archived_file (bfd *, bfd *);
+const bfd_target *bfd_mach_o_archive_p (bfd *);
+bfd *bfd_mach_o_openr_next_archived_file (bfd *, bfd *);
 bfd_boolean bfd_mach_o_set_arch_mach (bfd *, enum bfd_architecture,
-				      unsigned long);
+                                      unsigned long);
 int bfd_mach_o_lookup_command (bfd *, bfd_mach_o_load_command_type, bfd_mach_o_load_command **);
 bfd_boolean bfd_mach_o_new_section_hook (bfd *, asection *);
 bfd_boolean bfd_mach_o_write_contents (bfd *);
 bfd_boolean bfd_mach_o_bfd_copy_private_symbol_data (bfd *, asymbol *,
-						     bfd *, asymbol *);
+                                                     bfd *, asymbol *);
 bfd_boolean bfd_mach_o_bfd_copy_private_section_data (bfd *, asection *,
-						      bfd *, asection *);
-bfd_boolean bfd_mach_o_bfd_copy_private_header_data (bfd *, bfd *);
+                                                      bfd *, asection *);
+bfd_boolean bfd_mach_o_bfd_copy_private_bfd_data (bfd *, bfd *);
 bfd_boolean bfd_mach_o_bfd_set_private_flags (bfd *, flagword);
-bfd_boolean bfd_mach_o_bfd_print_private_bfd_data (bfd *, void *);
 long bfd_mach_o_get_symtab_upper_bound (bfd *);
 long bfd_mach_o_canonicalize_symtab (bfd *, asymbol **);
-long bfd_mach_o_get_synthetic_symtab (bfd *, long, asymbol **, long,
-				      asymbol **, asymbol **ret);
+long bfd_mach_o_get_synthetic_symtab (bfd *, long, asymbol **, long, 
+                                      asymbol **, asymbol **ret);
 long bfd_mach_o_get_reloc_upper_bound (bfd *, asection *);
 long bfd_mach_o_canonicalize_reloc (bfd *, asection *, arelent **, asymbol **);
 long bfd_mach_o_get_dynamic_reloc_upper_bound (bfd *);
@@ -713,11 +616,11 @@ char *bfd_mach_o_core_file_failing_command (bfd *);
 int bfd_mach_o_core_file_failing_signal (bfd *);
 bfd_boolean bfd_mach_o_core_file_matches_executable_p (bfd *, bfd *);
 bfd *bfd_mach_o_fat_extract (bfd *, bfd_format , const bfd_arch_info_type *);
-const bfd_target *bfd_mach_o_header_p (bfd *, file_ptr, bfd_mach_o_filetype,
-				       bfd_mach_o_cpu_type);
+const bfd_target *bfd_mach_o_header_p (bfd *, bfd_mach_o_filetype,
+                                       bfd_mach_o_cpu_type);
 bfd_boolean bfd_mach_o_build_commands (bfd *);
 bfd_boolean bfd_mach_o_set_section_contents (bfd *, asection *, const void *,
-					     file_ptr, bfd_size_type);
+                                             file_ptr, bfd_size_type);
 unsigned int bfd_mach_o_version (bfd *);
 
 unsigned int bfd_mach_o_get_section_type_from_name (bfd *, const char *);
@@ -725,11 +628,9 @@ unsigned int bfd_mach_o_get_section_attribute_from_name (const char *);
 
 void bfd_mach_o_convert_section_name_to_bfd (bfd *, const char *, const char *,
 					     const char **, flagword *);
-bfd_boolean bfd_mach_o_find_nearest_line (bfd *, asymbol **,
-					  asection *, bfd_vma,
-					  const char **, const char **,
-					  unsigned int *, unsigned int *);
-#define bfd_mach_o_find_line _bfd_nosymbols_find_line
+bfd_boolean bfd_mach_o_find_nearest_line (bfd *, asection *, asymbol **,
+                                          bfd_vma, const char **,
+                                          const char **, unsigned int *);
 bfd_boolean bfd_mach_o_close_and_cleanup (bfd *);
 bfd_boolean bfd_mach_o_free_cached_info (bfd *);
 
@@ -737,13 +638,6 @@ unsigned int bfd_mach_o_section_get_nbr_indirect (bfd *, bfd_mach_o_section *);
 unsigned int bfd_mach_o_section_get_entry_size (bfd *, bfd_mach_o_section *);
 bfd_boolean bfd_mach_o_read_symtab_symbols (bfd *);
 bfd_boolean bfd_mach_o_read_symtab_strtab (bfd *abfd);
-
-bfd_vma bfd_mach_o_get_base_address (bfd *);
-
-void bfd_mach_o_swap_in_non_scattered_reloc (bfd *, bfd_mach_o_reloc_info *,
-					     unsigned char *);
-bfd_boolean bfd_mach_o_canonicalize_non_scattered_reloc (bfd *, bfd_mach_o_reloc_info *, arelent *, asymbol **);
-bfd_boolean bfd_mach_o_pre_canonicalize_one_reloc (bfd *, struct mach_o_reloc_info_external *, bfd_mach_o_reloc_info *, arelent *, asymbol **);
 
 /* A placeholder in case we need to suppress emitting the dysymtab for some
    reason (e.g. compatibility with older system versions).  */
@@ -780,12 +674,10 @@ bfd_mach_o_section_data_for_bfd_name (bfd *, const char *, const char **);
 typedef struct bfd_mach_o_backend_data
 {
   enum bfd_architecture arch;
-  bfd_vma page_size;
-  bfd_boolean (*_bfd_mach_o_canonicalize_one_reloc)
-  (bfd *, struct mach_o_reloc_info_external *, arelent *, asymbol **, arelent *);
+  bfd_boolean (*_bfd_mach_o_swap_reloc_in)(arelent *, bfd_mach_o_reloc_info *);
   bfd_boolean (*_bfd_mach_o_swap_reloc_out)(arelent *, bfd_mach_o_reloc_info *);
   bfd_boolean (*_bfd_mach_o_print_thread)(bfd *, bfd_mach_o_thread_flavour *,
-					  void *, char *);
+                                          void *, char *);
   const mach_o_segment_name_xlat *segsec_names_xlat;
   bfd_boolean (*bfd_mach_o_section_type_valid_for_target) (unsigned long);
 }
@@ -796,9 +688,5 @@ bfd_mach_o_backend_data;
 
 #define SYM_MACHO_FIELDS_UNSET ((bfd_vma) -1)
 #define SYM_MACHO_FIELDS_NOT_VALIDATED ((bfd_vma) -2)
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* _BFD_MACH_O_H_ */

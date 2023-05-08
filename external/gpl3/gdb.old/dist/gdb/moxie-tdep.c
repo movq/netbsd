@@ -1,6 +1,6 @@
 /* Target-dependent code for Moxie.
 
-   Copyright (C) 2009-2020 Free Software Foundation, Inc.
+   Copyright (C) 2009-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,6 +25,7 @@
 #include "gdbtypes.h"
 #include "gdbcmd.h"
 #include "gdbcore.h"
+#include <string.h>
 #include "value.h"
 #include "inferior.h"
 #include "symfile.h"
@@ -38,8 +39,13 @@
 #include "record.h"
 #include "record-full.h"
 
+#include "gdb_assert.h"
+
 #include "moxie-tdep.h"
-#include <algorithm>
+
+/* Local functions.  */
+
+extern void _initialize_moxie_tdep (void);
 
 /* Use an invalid address value as 'not available' marker.  */
 enum { REG_UNAVAIL = (CORE_ADDR) -1 };
@@ -64,13 +70,21 @@ moxie_frame_align (struct gdbarch *gdbarch, CORE_ADDR sp)
   return sp & ~1;
 }
 
-constexpr gdb_byte moxie_break_insn[] = { 0x35, 0x00 };
+/* Implement the "breakpoint_from_pc" gdbarch method.  */
 
-typedef BP_MANIPULATION (moxie_break_insn) moxie_breakpoint;
+static const unsigned char *
+moxie_breakpoint_from_pc (struct gdbarch *gdbarch,
+			  CORE_ADDR *pcptr, int *lenptr)
+{
+  static unsigned char breakpoint[] = { 0x35, 0x00 };
+
+  *lenptr = sizeof (breakpoint);
+  return breakpoint;
+}
 
 /* Moxie register names.  */
 
-static const char *moxie_register_names[] = {
+char *moxie_register_names[] = {
   "$fp",  "$sp",  "$r0",  "$r1",  "$r2",
   "$r3",  "$r4",  "$r5", "$r6", "$r7",
   "$r8", "$r9", "$r10", "$r11", "$r12",
@@ -106,9 +120,9 @@ moxie_register_type (struct gdbarch *gdbarch, int reg_nr)
 
 static void
 moxie_store_return_value (struct type *type, struct regcache *regcache,
-			 const gdb_byte *valbuf)
+			 const void *valbuf)
 {
-  struct gdbarch *gdbarch = regcache->arch ();
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   CORE_ADDR regval;
   int len = TYPE_LENGTH (type);
@@ -118,7 +132,8 @@ moxie_store_return_value (struct type *type, struct regcache *regcache,
   regcache_cooked_write_unsigned (regcache, RET1_REGNUM, regval);
   if (len > 4)
     {
-      regval = extract_unsigned_integer (valbuf + 4, len - 4, byte_order);
+      regval = extract_unsigned_integer ((gdb_byte *) valbuf + 4,
+					 len - 4, byte_order);
       regcache_cooked_write_unsigned (regcache, RET1_REGNUM + 1, regval);
     }
 }
@@ -214,7 +229,7 @@ moxie_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
       CORE_ADDR post_prologue_pc
 	= skip_prologue_using_sal (gdbarch, func_addr);
       if (post_prologue_pc != 0)
-	return std::max (pc, post_prologue_pc);
+	return max (pc, post_prologue_pc);
       else
 	{
 	  /* Can't determine prologue from the symbol table, need to examine
@@ -229,10 +244,10 @@ moxie_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 	  plg_end = moxie_analyze_prologue (func_addr, 
 					    func_end, &cache, gdbarch);
 	  /* Found a function.  */
-	  sym = lookup_symbol (func_name, NULL, VAR_DOMAIN, NULL).symbol;
+	  sym = lookup_symbol (func_name, NULL, VAR_DOMAIN, NULL);
 	  /* Don't use line number debug info for assembly source
 	     files.  */
-	  if (sym && sym->language () != language_asm)
+	  if (sym && SYMBOL_LANGUAGE (sym) != language_asm)
 	    {
 	      sal = find_pc_line (func_addr, 0);
 	      if (sal.end && sal.end < func_end)
@@ -271,7 +286,7 @@ struct moxie_unwind_cache
 };
 
 /* Read an unsigned integer from the inferior, and adjust
-   endianness.  */
+   endianess.  */
 static ULONGEST
 moxie_process_readu (CORE_ADDR addr, gdb_byte *buf,
 		     int length, enum bfd_endian byte_order)
@@ -295,19 +310,20 @@ moxie_process_readu (CORE_ADDR addr, gdb_byte *buf,
 
 /* Insert a single step breakpoint.  */
 
-static std::vector<CORE_ADDR>
-moxie_software_single_step (struct regcache *regcache)
+static int
+moxie_software_single_step (struct frame_info *frame)
 {
-  struct gdbarch *gdbarch = regcache->arch ();
+  struct gdbarch *gdbarch = get_frame_arch (frame);
+  struct address_space *aspace = get_frame_address_space (frame);
   CORE_ADDR addr;
   gdb_byte buf[4];
   uint16_t inst;
   uint32_t tmpu32;
   ULONGEST fp;
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
-  std::vector<CORE_ADDR> next_pcs;
+  struct regcache *regcache = get_current_regcache ();
 
-  addr = regcache_read_pc (regcache);
+  addr = get_frame_pc (frame);
 
   inst = (uint16_t) moxie_process_readu (addr, buf, 2, byte_order);
 
@@ -333,8 +349,8 @@ moxie_software_single_step (struct regcache *regcache)
 	    case 0x09: /* bleu */
 	      /* Insert breaks on both branches, because we can't currently tell
 		 which way things will go.  */
-	      next_pcs.push_back (addr + 2);
-	      next_pcs.push_back (addr + 2 + INST2OFFSET(inst));
+	      insert_single_step_breakpoint (gdbarch, aspace, addr + 2);
+	      insert_single_step_breakpoint (gdbarch, aspace, addr + 2 + INST2OFFSET(inst));
 	      break;
 	    default:
 	      {
@@ -346,7 +362,7 @@ moxie_software_single_step (struct regcache *regcache)
       else
 	{
 	  /* This is a Form 2 instruction.  They are all 16 bits.  */
-	  next_pcs.push_back (addr + 2);
+	  insert_single_step_breakpoint (gdbarch, aspace, addr + 2);
 	}
     }
   else
@@ -357,7 +373,7 @@ moxie_software_single_step (struct regcache *regcache)
       switch (opcode)
 	{
 	  /* 16-bit instructions.  */
-	case 0x00: /* bad */
+	case 0x00: /* nop */
 	case 0x02: /* mov (register-to-register) */
 	case 0x05: /* add.l */
 	case 0x06: /* push */
@@ -365,13 +381,13 @@ moxie_software_single_step (struct regcache *regcache)
 	case 0x0a: /* ld.l (register indirect) */
 	case 0x0b: /* st.l */
 	case 0x0e: /* cmp */
-	case 0x0f: /* nop */
-	case 0x10: /* sex.b */
-	case 0x11: /* sex.s */
-	case 0x12: /* zex.b */
-	case 0x13: /* zex.s */
-	case 0x14: /* umul.x */
-	case 0x15: /* mul.x */
+	case 0x0f:
+	case 0x10:
+	case 0x11:
+	case 0x12:
+	case 0x13:
+	case 0x14:
+	case 0x15:
 	case 0x16:
 	case 0x17:
 	case 0x18:
@@ -393,48 +409,51 @@ moxie_software_single_step (struct regcache *regcache)
 	case 0x32: /* udiv.l */
 	case 0x33: /* mod.l */
 	case 0x34: /* umod.l */
-	  next_pcs.push_back (addr + 2);
-	  break;
-
-	  /* 32-bit instructions.  */
-	case 0x0c: /* ldo.l */
-	case 0x0d: /* sto.l */
-	case 0x36: /* ldo.b */
-	case 0x37: /* sto.b */
-	case 0x38: /* ldo.s */
-	case 0x39: /* sto.s */
-	  next_pcs.push_back (addr + 4);
+	  insert_single_step_breakpoint (gdbarch, aspace, addr + 2);
 	  break;
 
 	  /* 48-bit instructions.  */
 	case 0x01: /* ldi.l (immediate) */
 	case 0x08: /* lda.l */
 	case 0x09: /* sta.l */
+	case 0x0c: /* ldo.l */
+	case 0x0d: /* sto.l */
 	case 0x1b: /* ldi.b (immediate) */
 	case 0x1d: /* lda.b */
 	case 0x1f: /* sta.b */
 	case 0x20: /* ldi.s (immediate) */
 	case 0x22: /* lda.s */
 	case 0x24: /* sta.s */
-	  next_pcs.push_back (addr + 6);
+	case 0x36: /* ldo.b */
+	case 0x37: /* sto.b */
+	case 0x38: /* ldo.s */
+	case 0x39: /* sto.s */
+	  insert_single_step_breakpoint (gdbarch, aspace, addr + 6);
 	  break;
 
 	  /* Control flow instructions.	 */
 	case 0x03: /* jsra */
 	case 0x1a: /* jmpa */
-	  next_pcs.push_back (moxie_process_readu (addr + 2, buf, 4,
-						   byte_order));
+	  insert_single_step_breakpoint (gdbarch, aspace,
+					 moxie_process_readu (addr + 2,
+							      buf, 4,
+							      byte_order));
 	  break;
 
 	case 0x04: /* ret */
 	  regcache_cooked_read_unsigned (regcache, MOXIE_FP_REGNUM, &fp);
-	  next_pcs.push_back (moxie_process_readu (fp + 4, buf, 4, byte_order));
+	  insert_single_step_breakpoint (gdbarch, aspace,
+					 moxie_process_readu (fp + 4,
+							      buf, 4,
+							      byte_order));
 	  break;
 
 	case 0x19: /* jsr */
 	case 0x25: /* jmp */
-	  regcache->raw_read ((inst >> 4) & 0xf, (gdb_byte *) & tmpu32);
-	  next_pcs.push_back (tmpu32);
+	  regcache_raw_read (regcache,
+			     (inst >> 4) & 0xf, (gdb_byte *) & tmpu32);
+	  insert_single_step_breakpoint (gdbarch, aspace,
+					 tmpu32);
 	  break;
 
 	case 0x30: /* swi */
@@ -444,7 +463,34 @@ moxie_software_single_step (struct regcache *regcache)
 	}
     }
 
-  return next_pcs;
+  return 1;
+}
+
+/* Implement the "read_pc" gdbarch method.  */
+
+static CORE_ADDR
+moxie_read_pc (struct regcache *regcache)
+{
+  ULONGEST pc;
+
+  regcache_cooked_read_unsigned (regcache, MOXIE_PC_REGNUM, &pc);
+  return pc;
+}
+
+/* Implement the "write_pc" gdbarch method.  */
+
+static void
+moxie_write_pc (struct regcache *regcache, CORE_ADDR val)
+{
+  regcache_cooked_write_unsigned (regcache, MOXIE_PC_REGNUM, val);
+}
+
+/* Implement the "unwind_sp" gdbarch method.  */
+
+static CORE_ADDR
+moxie_unwind_sp (struct gdbarch *gdbarch, struct frame_info *next_frame)
+{
+  return frame_unwind_register_unsigned (next_frame, MOXIE_SP_REGNUM);
 }
 
 /* Given a return value in `regbuf' with a type `valtype', 
@@ -452,24 +498,25 @@ moxie_software_single_step (struct regcache *regcache)
 
 static void
 moxie_extract_return_value (struct type *type, struct regcache *regcache,
-			    gdb_byte *dst)
+			   void *dst)
 {
-  struct gdbarch *gdbarch = regcache->arch ();
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  bfd_byte *valbuf = dst;
   int len = TYPE_LENGTH (type);
   ULONGEST tmp;
 
   /* By using store_unsigned_integer we avoid having to do
      anything special for small big-endian values.  */
   regcache_cooked_read_unsigned (regcache, RET1_REGNUM, &tmp);
-  store_unsigned_integer (dst, (len > 4 ? len - 4 : len), byte_order, tmp);
+  store_unsigned_integer (valbuf, (len > 4 ? len - 4 : len), byte_order, tmp);
 
   /* Ignore return values more than 8 bytes in size because the moxie
      returns anything more than 8 bytes in the stack.  */
   if (len > 4)
     {
       regcache_cooked_read_unsigned (regcache, RET1_REGNUM + 1, &tmp);
-      store_unsigned_integer (dst + len - 4, 4, byte_order, tmp);
+      store_unsigned_integer (valbuf + len - 4, 4, byte_order, tmp);
     }
 }
 
@@ -522,7 +569,7 @@ moxie_frame_cache (struct frame_info *this_frame, void **this_cache)
   int i;
 
   if (*this_cache)
-    return (struct moxie_frame_cache *) *this_cache;
+    return *this_cache;
 
   cache = moxie_alloc_frame_cache ();
   *this_cache = cache;
@@ -546,6 +593,14 @@ moxie_frame_cache (struct frame_info *this_frame, void **this_cache)
       cache->saved_regs[i] = cache->base - cache->saved_regs[i];
 
   return cache;
+}
+
+/* Implement the "unwind_pc" gdbarch method.  */
+
+static CORE_ADDR
+moxie_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
+{
+  return frame_unwind_register_unsigned (next_frame, MOXIE_PC_REGNUM);
 }
 
 /* Given a GDB frame, determine the address of the calling function's
@@ -612,6 +667,14 @@ static const struct frame_base moxie_frame_base = {
   moxie_frame_base_address,
   moxie_frame_base_address
 };
+
+static struct frame_id
+moxie_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
+{
+  CORE_ADDR sp = get_frame_register_unsigned (this_frame, MOXIE_SP_REGNUM);
+
+  return frame_id_build (sp, get_frame_pc (this_frame));
+}
 
 /* Parse the current instruction and record the values of the registers and
    memory that will be changed in current instruction to "record_arch_list".
@@ -709,7 +772,7 @@ moxie_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 	  break;
 	case 0x03: /* jsra */
 	  {
-	    regcache->raw_read (
+	    regcache_raw_read (regcache, 
 			       MOXIE_SP_REGNUM, (gdb_byte *) & tmpu32);
 	    tmpu32 = extract_unsigned_integer ((gdb_byte *) & tmpu32, 
 					       4, byte_order);
@@ -738,7 +801,7 @@ moxie_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 	case 0x06: /* push */
 	  {
 	    int reg = (inst >> 4) & 0xf;
-	    regcache->raw_read (reg, (gdb_byte *) & tmpu32);
+	    regcache_raw_read (regcache, reg, (gdb_byte *) & tmpu32);
 	    tmpu32 = extract_unsigned_integer ((gdb_byte *) & tmpu32, 
 					       4, byte_order);
 	    if (record_full_arch_list_add_reg (regcache, reg)
@@ -780,7 +843,7 @@ moxie_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 	case 0x0b: /* st.l */
 	  {
 	    int reg = (inst >> 4) & 0xf;
-	    regcache->raw_read (reg, (gdb_byte *) & tmpu32);
+	    regcache_raw_read (regcache, reg, (gdb_byte *) & tmpu32);
 	    tmpu32 = extract_unsigned_integer ((gdb_byte *) & tmpu32, 
 					       4, byte_order);
 	    if (record_full_arch_list_add_mem (tmpu32, 4))
@@ -797,9 +860,9 @@ moxie_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 	case 0x0d: /* sto.l */
 	  {
 	    int reg = (inst >> 4) & 0xf;
-	    uint32_t offset = (((int16_t) moxie_process_readu (addr+2, buf, 2,
-							       byte_order)) << 16 ) >> 16;
-	    regcache->raw_read (reg, (gdb_byte *) & tmpu32);
+	    uint32_t offset = (uint32_t) moxie_process_readu (addr+2, buf, 4,
+							      byte_order);
+	    regcache_raw_read (regcache, reg, (gdb_byte *) & tmpu32);
 	    tmpu32 = extract_unsigned_integer ((gdb_byte *) & tmpu32, 
 					       4, byte_order);
 	    tmpu32 += offset;
@@ -813,23 +876,13 @@ moxie_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 	      return -1;
 	  }
 	  break;
-	case 0x0f: /* nop */
-	  {
-	    /* Do nothing.  */
-	    break;
-	  }
-	case 0x10: /* sex.b */
-	case 0x11: /* sex.s */
-	case 0x12: /* zex.b */
-	case 0x13: /* zex.s */
-	case 0x14: /* umul.x */
-	case 0x15: /* mul.x */
-	  {
-	    int reg = (inst >> 4) & 0xf;
-	    if (record_full_arch_list_add_reg (regcache, reg))
-	      return -1;
-	  }
-	  break;
+	case 0x0f:
+	case 0x10:
+	case 0x11:
+	case 0x12:
+	case 0x13:
+	case 0x14:
+	case 0x15:
 	case 0x16:
 	case 0x17:
 	case 0x18:
@@ -839,7 +892,7 @@ moxie_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 	  }
 	case 0x19: /* jsr */
 	  {
-	    regcache->raw_read (
+	    regcache_raw_read (regcache, 
 			       MOXIE_SP_REGNUM, (gdb_byte *) & tmpu32);
 	    tmpu32 = extract_unsigned_integer ((gdb_byte *) & tmpu32, 
 					       4, byte_order);
@@ -867,7 +920,7 @@ moxie_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 	case 0x1e: /* st.b */
 	  {
 	    int reg = (inst >> 4) & 0xf;
-	    regcache->raw_read (reg, (gdb_byte *) & tmpu32);
+	    regcache_raw_read (regcache, reg, (gdb_byte *) & tmpu32);
 	    tmpu32 = extract_unsigned_integer ((gdb_byte *) & tmpu32, 
 					       4, byte_order);
 	    if (record_full_arch_list_add_mem (tmpu32, 1))
@@ -893,7 +946,7 @@ moxie_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 	case 0x23: /* st.s */
 	  {
 	    int reg = (inst >> 4) & 0xf;
-	    regcache->raw_read (reg, (gdb_byte *) & tmpu32);
+	    regcache_raw_read (regcache, reg, (gdb_byte *) & tmpu32);
 	    tmpu32 = extract_unsigned_integer ((gdb_byte *) & tmpu32, 
 					       4, byte_order);
 	    if (record_full_arch_list_add_mem (tmpu32, 2))
@@ -915,13 +968,13 @@ moxie_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 	case 0x26: /* and */
 	case 0x27: /* lshr */
 	case 0x28: /* ashl */
-	case 0x29: /* sub */
+	case 0x29: /* sub.l */
 	case 0x2a: /* neg */
 	case 0x2b: /* or */
 	case 0x2c: /* not */
 	case 0x2d: /* ashr */
 	case 0x2e: /* xor */
-	case 0x2f: /* mul */
+	case 0x2f: /* mul.l */
 	  {
 	    int reg = (inst >> 4) & 0xf;
 	    if (record_full_arch_list_add_reg (regcache, reg))
@@ -953,12 +1006,12 @@ moxie_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 		  uint32_t length, ptr;
 
 		  /* Read buffer pointer is in $r1.  */
-		  regcache->raw_read (3, (gdb_byte *) & ptr);
+		  regcache_raw_read (regcache, 3, (gdb_byte *) & ptr);
 		  ptr = extract_unsigned_integer ((gdb_byte *) & ptr, 
 						  4, byte_order);
 
 		  /* String length is at 0x12($fp).  */
-		  regcache->raw_read (
+		  regcache_raw_read (regcache, 
 				     MOXIE_FP_REGNUM, (gdb_byte *) & tmpu32);
 		  tmpu32 = extract_unsigned_integer ((gdb_byte *) & tmpu32, 
 						     4, byte_order);
@@ -1002,9 +1055,9 @@ moxie_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 	case 0x37: /* sto.b */
 	  {
 	    int reg = (inst >> 4) & 0xf;
-	    uint32_t offset = (((int16_t) moxie_process_readu (addr+2, buf, 2,
-							       byte_order)) << 16 ) >> 16;
-	    regcache->raw_read (reg, (gdb_byte *) & tmpu32);
+	    uint32_t offset = (uint32_t) moxie_process_readu (addr+2, buf, 4,
+							      byte_order);
+	    regcache_raw_read (regcache, reg, (gdb_byte *) & tmpu32);
 	    tmpu32 = extract_unsigned_integer ((gdb_byte *) & tmpu32, 
 					       4, byte_order);
 	    tmpu32 += offset;
@@ -1022,9 +1075,9 @@ moxie_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 	case 0x39: /* sto.s */
 	  {
 	    int reg = (inst >> 4) & 0xf;
-	    uint32_t offset = (((int16_t) moxie_process_readu (addr+2, buf, 2,
-							       byte_order)) << 16 ) >> 16;
-	    regcache->raw_read (reg, (gdb_byte *) & tmpu32);
+	    uint32_t offset = (uint32_t) moxie_process_readu (addr+2, buf, 4,
+							      byte_order);
+	    regcache_raw_read (regcache, reg, (gdb_byte *) & tmpu32);
 	    tmpu32 = extract_unsigned_integer ((gdb_byte *) & tmpu32, 
 					       4, byte_order);
 	    tmpu32 += offset;
@@ -1059,11 +1112,12 @@ moxie_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     return arches->gdbarch;
 
   /* Allocate space for the new architecture.  */
-  tdep = XCNEW (struct gdbarch_tdep);
+  tdep = XMALLOC (struct gdbarch_tdep);
   gdbarch = gdbarch_alloc (&info, tdep);
 
-  set_gdbarch_wchar_bit (gdbarch, 32);
-  set_gdbarch_wchar_signed (gdbarch, 0);
+  set_gdbarch_read_pc (gdbarch, moxie_read_pc);
+  set_gdbarch_write_pc (gdbarch, moxie_write_pc);
+  set_gdbarch_unwind_sp (gdbarch, moxie_unwind_sp);
 
   set_gdbarch_num_regs (gdbarch, MOXIE_NUM_REGS);
   set_gdbarch_sp_regnum (gdbarch, MOXIE_SP_REGNUM);
@@ -1075,13 +1129,19 @@ moxie_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   set_gdbarch_skip_prologue (gdbarch, moxie_skip_prologue);
   set_gdbarch_inner_than (gdbarch, core_addr_lessthan);
-  set_gdbarch_breakpoint_kind_from_pc (gdbarch,
-				       moxie_breakpoint::kind_from_pc);
-  set_gdbarch_sw_breakpoint_from_kind (gdbarch,
-				       moxie_breakpoint::bp_from_kind);
+  set_gdbarch_breakpoint_from_pc (gdbarch, moxie_breakpoint_from_pc);
   set_gdbarch_frame_align (gdbarch, moxie_frame_align);
 
   frame_base_set_default (gdbarch, &moxie_frame_base);
+
+  /* Methods for saving / extracting a dummy frame's ID.  The ID's
+     stack address must match the SP value returned by
+     PUSH_DUMMY_CALL, and saved by generic_save_dummy_frame_tos.  */
+  set_gdbarch_dummy_id (gdbarch, moxie_dummy_id);
+
+  set_gdbarch_unwind_pc (gdbarch, moxie_unwind_pc);
+
+  set_gdbarch_print_insn (gdbarch, print_insn_moxie);
 
   /* Hook in ABI-specific overrides, if they have been registered.  */
   gdbarch_init_osabi (info, gdbarch);
@@ -1103,9 +1163,8 @@ moxie_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
 /* Register this machine's init routine.  */
 
-void _initialize_moxie_tdep ();
 void
-_initialize_moxie_tdep ()
+_initialize_moxie_tdep (void)
 {
   register_gdbarch_init (bfd_arch_moxie, moxie_gdbarch_init);
 }

@@ -1,6 +1,6 @@
 /* Python interface to inferior stop events.
 
-   Copyright (C) 2009-2020 Free Software Foundation, Inc.
+   Copyright (C) 2009-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,11 +20,19 @@
 #include "defs.h"
 #include "py-stopevent.h"
 
-gdbpy_ref<>
+PyObject *
 create_stop_event_object (PyTypeObject *py_type)
 {
-  gdbpy_ref<> thread = py_get_event_thread (inferior_ptid);
-  return create_thread_event_object (py_type, thread.get ());
+  PyObject *stop_event_obj = create_thread_event_object (py_type);
+
+  if (!stop_event_obj)
+    goto fail;
+
+  return stop_event_obj;
+
+  fail:
+   Py_XDECREF (stop_event_obj);
+   return NULL;
 }
 
 /* Callback observers when a stop event occurs.  This function will create a
@@ -37,8 +45,8 @@ create_stop_event_object (PyTypeObject *py_type)
 int
 emit_stop_event (struct bpstats *bs, enum gdb_signal stop_signal)
 {
-  gdbpy_ref<> stop_event_obj;
-  gdbpy_ref<> list;
+  PyObject *stop_event_obj = NULL; /* Appease GCC warning.  */
+  PyObject *list = NULL;
   PyObject *first_bp = NULL;
   struct bpstats *current_bs;
 
@@ -56,13 +64,13 @@ emit_stop_event (struct bpstats *bs, enum gdb_signal stop_signal)
 
           if (list == NULL)
             {
-              list.reset (PyList_New (0));
-              if (list == NULL)
-		return -1;
+              list = PyList_New (0);
+              if (!list)
+                goto fail;
             }
 
-          if (PyList_Append (list.get (), current_py_bp))
-	    return -1;
+          if (PyList_Append (list, current_py_bp))
+            goto fail;
 
           if (first_bp == NULL)
             first_bp = current_py_bp;
@@ -71,29 +79,41 @@ emit_stop_event (struct bpstats *bs, enum gdb_signal stop_signal)
 
   if (list != NULL)
     {
-      stop_event_obj = create_breakpoint_event_object (list.get (),
-						       first_bp);
-      if (stop_event_obj == NULL)
-	return -1;
+      stop_event_obj = create_breakpoint_event_object (list, first_bp);
+      if (!stop_event_obj)
+        goto fail;
+      Py_DECREF (list);
     }
 
   /* Check if the signal is "Signal 0" or "Trace/breakpoint trap".  */
   if (stop_signal != GDB_SIGNAL_0
       && stop_signal != GDB_SIGNAL_TRAP)
     {
-      stop_event_obj = create_signal_event_object (stop_signal);
-      if (stop_event_obj == NULL)
-	return -1;
+      stop_event_obj =
+	  create_signal_event_object (stop_signal);
+      if (!stop_event_obj)
+	goto fail;
     }
 
   /* If all fails emit an unknown stop event.  All event types should
      be known and this should eventually be unused.  */
-  if (stop_event_obj == NULL)
+  if (!stop_event_obj)
     {
       stop_event_obj = create_stop_event_object (&stop_event_object_type);
-      if (stop_event_obj == NULL)
-	return -1;
+      if (!stop_event_obj)
+        goto fail;
     }
 
-  return evpy_emit_event (stop_event_obj.get (), gdb_py_events.stop);
+  return evpy_emit_event (stop_event_obj, gdb_py_events.stop);
+
+ fail:
+  Py_XDECREF (list);
+  return -1;
 }
+
+GDBPY_NEW_EVENT_TYPE (stop,
+                      "gdb.StopEvent",
+                      "StopEvent",
+                      "GDB stop event object",
+                      thread_event_object_type,
+                      /*no qual*/);

@@ -34,7 +34,6 @@
 #include "os_emul.h"
 #include "mon.h"
 #include "model.h"
-#include "libiberty.h"
 
 #ifndef CONST_ATTRIBUTE
 #define CONST_ATTRIBUTE __attribute__((__const__))

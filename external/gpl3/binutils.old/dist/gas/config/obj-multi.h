@@ -1,5 +1,6 @@
 /* Multiple object format emulation.
-   Copyright (C) 1995-2020 Free Software Foundation, Inc.
+   Copyright 1995, 1996, 1997, 1999, 2000, 2002, 2004, 2005, 2007, 2009, 2010
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -155,10 +156,7 @@
 
 #define EMIT_SECTION_SYMBOLS (this_format->emit_section_symbols)
 
-#ifndef INITIALIZING_EMULS
-/* We want to use the default FAKE_LABEL_NAME in as.c.  */
 #define FAKE_LABEL_NAME (this_emulation->fake_label_name)
-#endif
 
 #ifdef OBJ_MAYBE_ELF
 /* We need OBJ_SYMFIELD_TYPE so that symbol_get_obj is defined in symbol.c

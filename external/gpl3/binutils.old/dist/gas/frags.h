@@ -1,5 +1,7 @@
 /* frags.h - Header file for the frag concept.
-   Copyright (C) 1987-2020 Free Software Foundation, Inc.
+   Copyright 1987, 1992, 1993, 1994, 1995, 1997, 1998, 1999, 2000, 2001,
+   2002, 2003, 2004, 2005, 2006, 2007, 2010, 2011, 2012
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -45,7 +47,7 @@ struct frag {
   addressT last_fr_address;
 
   /* (Fixed) number of octets we know we have.  May be 0.  */
-  valueT fr_fix;
+  offsetT fr_fix;
   /* May be used for (Variable) number of octets after above.
      The generic frag handling code no longer makes any use of fr_var.  */
   offsetT fr_var;
@@ -60,7 +62,7 @@ struct frag {
   struct frag *fr_next;
 
   /* Where the frag was created, or where it became a variant frag.  */
-  const char *fr_file;
+  char *fr_file;
   unsigned int fr_line;
 
 #ifndef NO_LISTING
@@ -127,37 +129,32 @@ extern void frag_append_1_char (int);
 
 void frag_init (void);
 fragS *frag_alloc (struct obstack *);
-void frag_grow (size_t nchars);
-char *frag_more (size_t nchars);
+void frag_grow (unsigned int nchars);
+char *frag_more (int nchars);
 void frag_align (int alignment, int fill_character, int max);
 void frag_align_pattern (int alignment, const char *fill_pattern,
-			 size_t n_fill, int max);
+			 int n_fill, int max);
 void frag_align_code (int alignment, int max);
-void frag_new (size_t old_frags_var_max_size);
+void frag_new (int old_frags_var_max_size);
 void frag_wane (fragS * fragP);
-size_t frag_room (void);
+int frag_room (void);
 
 char *frag_variant (relax_stateT type,
-		    size_t max_chars,
-		    size_t var,
+		    int max_chars,
+		    int var,
 		    relax_substateT subtype,
 		    symbolS * symbol,
 		    offsetT offset,
 		    char *opcode);
 
 char *frag_var (relax_stateT type,
-		size_t max_chars,
-		size_t var,
+		int max_chars,
+		int var,
 		relax_substateT subtype,
 		symbolS * symbol,
 		offsetT offset,
 		char *opcode);
 
 bfd_boolean frag_offset_fixed_p (const fragS *, const fragS *, offsetT *);
-bfd_boolean frag_gtoffset_p (valueT, const fragS *, valueT, const fragS *,
-			     offsetT *);
-
-int get_frag_count (void);
-void clear_frag_count (void);
 
 #endif /* FRAGS_H */

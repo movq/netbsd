@@ -1,5 +1,5 @@
 /* Styling for ui_file
-   Copyright (C) 2018-2020 Free Software Foundation, Inc.
+   Copyright (C) 2018-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,7 +18,6 @@
 
 #include "defs.h"
 #include "ui-style.h"
-#include "gdb_regex.h"
 
 /* A regular expression that is used for matching ANSI terminal escape
    sequences.  */
@@ -404,7 +403,6 @@ skip_ansi_escape (const char *buf, int *n_read)
   return true;
 }
 
-void _initialize_ui_style ();
 void
 _initialize_ui_style ()
 {

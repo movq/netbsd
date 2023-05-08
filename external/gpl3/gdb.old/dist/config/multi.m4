@@ -65,4 +65,4 @@ CONFIG_SHELL=${CONFIG_SHELL-/bin/sh}
 CC="$CC"
 CXX="$CXX"
 GFORTRAN="$GFORTRAN"
-GDC="$GDC"])])dnl
+GCJ="$GCJ"])])dnl

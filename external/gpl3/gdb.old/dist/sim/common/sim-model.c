@@ -1,5 +1,5 @@
 /* Model support.
-   Copyright (C) 1996-2020 Free Software Foundation, Inc.
+   Copyright (C) 1996-2014 Free Software Foundation, Inc.
    Contributed by Cygnus Support.
 
 This file is part of GDB, the GNU debugger.
@@ -25,7 +25,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #include "sim-assert.h"
 #include "bfd.h"
 
-static void model_set (sim_cpu *, const SIM_MODEL *);
+static void model_set (sim_cpu *, const MODEL *);
 
 static DECLARE_OPTION_HANDLER (model_option_handler);
 
@@ -59,7 +59,7 @@ model_option_handler (SIM_DESC sd, sim_cpu *cpu, int opt,
     {
     case OPTION_MODEL :
       {
-	const SIM_MODEL *model = sim_model_lookup (arg);
+	const MODEL *model = sim_model_lookup (arg);
 	if (! model)
 	  {
 	    sim_io_eprintf (sd, "unknown model `%s'\n", arg);
@@ -71,8 +71,8 @@ model_option_handler (SIM_DESC sd, sim_cpu *cpu, int opt,
 
     case OPTION_MODEL_INFO :
       {
-	const SIM_MACH **machp;
-	const SIM_MODEL *model;
+	const MACH **machp;
+	const MODEL *model;
 	for (machp = & sim_machs[0]; *machp != NULL; ++machp)
 	  {
 	    sim_io_printf (sd, "Models for architecture `%s':\n",
@@ -103,7 +103,7 @@ sim_model_install (SIM_DESC sd)
 /* Subroutine of sim_model_set to set the model for one cpu.  */
 
 static void
-model_set (sim_cpu *cpu, const SIM_MODEL *model)
+model_set (sim_cpu *cpu, const MODEL *model)
 {
   CPU_MACH (cpu) = MODEL_MACH (model);
   CPU_MODEL (cpu) = model;
@@ -115,7 +115,7 @@ model_set (sim_cpu *cpu, const SIM_MODEL *model)
    If CPU is NULL, all cpus are set to MODEL.  */
 
 void
-sim_model_set (SIM_DESC sd, sim_cpu *cpu, const SIM_MODEL *model)
+sim_model_set (SIM_DESC sd, sim_cpu *cpu, const MODEL *model)
 {
   if (! cpu)
     {
@@ -134,11 +134,11 @@ sim_model_set (SIM_DESC sd, sim_cpu *cpu, const SIM_MODEL *model)
 /* Look up model named NAME.
    Result is pointer to MODEL entry or NULL if not found.  */
 
-const SIM_MODEL *
+const MODEL *
 sim_model_lookup (const char *name)
 {
-  const SIM_MACH **machp;
-  const SIM_MODEL *model;
+  const MACH **machp;
+  const MODEL *model;
 
   for (machp = & sim_machs[0]; *machp != NULL; ++machp)
     {
@@ -154,10 +154,10 @@ sim_model_lookup (const char *name)
 /* Look up machine named NAME.
    Result is pointer to MACH entry or NULL if not found.  */
 
-const SIM_MACH *
+const MACH *
 sim_mach_lookup (const char *name)
 {
-  const SIM_MACH **machp;
+  const MACH **machp;
 
   for (machp = & sim_machs[0]; *machp != NULL; ++machp)
     {
@@ -170,10 +170,10 @@ sim_mach_lookup (const char *name)
 /* Look up a machine via its bfd name.
    Result is pointer to MACH entry or NULL if not found.  */
 
-const SIM_MACH *
+const MACH *
 sim_mach_lookup_bfd_name (const char *name)
 {
-  const SIM_MACH **machp;
+  const MACH **machp;
 
   for (machp = & sim_machs[0]; *machp != NULL; ++machp)
     {
@@ -190,9 +190,6 @@ sim_model_init (SIM_DESC sd)
 {
   SIM_CPU *cpu;
 
-  if (!WITH_MODEL_P)
-    return SIM_RC_OK;
-
   /* If both cpu model and state architecture are set, ensure they're
      compatible.  If only one is set, set the other.  If neither are set,
      use the default model.  STATE_ARCHITECTURE is the bfd_arch_info data
@@ -206,8 +203,7 @@ sim_model_init (SIM_DESC sd)
       && ! CPU_MACH (cpu))
     {
       /* Set the default model.  */
-      const SIM_MODEL *model = sim_model_lookup (WITH_DEFAULT_MODEL);
-      SIM_ASSERT (model != NULL);
+      const MODEL *model = sim_model_lookup (WITH_DEFAULT_MODEL);
       sim_model_set (sd, NULL, model);
     }
 
@@ -227,7 +223,7 @@ sim_model_init (SIM_DESC sd)
     {
       /* Use the default model for the selected machine.
 	 The default model is the first one in the list.  */
-      const SIM_MACH *mach = sim_mach_lookup_bfd_name (STATE_ARCHITECTURE (sd)->printable_name);
+      const MACH *mach = sim_mach_lookup_bfd_name (STATE_ARCHITECTURE (sd)->printable_name);
 
       if (mach == NULL)
 	{
@@ -244,12 +240,3 @@ sim_model_init (SIM_DESC sd)
 
   return SIM_RC_OK;
 }
-
-#if !WITH_MODEL_P
-/* Set up basic model support.  This is a stub for ports that do not define
-   models.  See sim-model.h for more details.  */
-const SIM_MACH *sim_machs[] =
-{
-  NULL
-};
-#endif

@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2008-2020 Free Software Foundation, Inc.
+   Copyright 2008-2014 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -42,8 +42,6 @@ struct ns {
 
 struct lazystring {
   const char *lazy_str;
-  /* If -1, don't pass length to gdb.lazy_string().  */
-  int len;
 };
 
 struct hint_error {
@@ -112,16 +110,6 @@ class Fake
 };
 #endif
 
-struct to_string_returns_value_inner
-{
-  int val;
-};
-
-struct to_string_returns_value_wrapper
-{
-  struct to_string_returns_value_inner inner;
-};
-
 struct substruct {
   int a;
   int b;
@@ -175,7 +163,6 @@ struct container
   string name;
   int len;
   int *elements;
-  int is_map_p;
 };
 
 typedef struct container zzz_type;
@@ -196,7 +183,6 @@ make_container (const char *s)
   result.name = make_string (s);
   result.len = 0;
   result.elements = 0;
-  result.is_map_p = 0;
 
   return result;
 }
@@ -244,7 +230,7 @@ struct nullstr
 struct string_repr string_1 = { { "one" } };
 struct string_repr string_2 = { { "two" } };
 
-int
+static int
 eval_func (int p1, int p2, int p3, int p4, int p5, int p6, int p7, int p8)
 {
   return p1;
@@ -269,17 +255,6 @@ bug_14741()
   set_item(&c, 0, 5);
 }
 
-/* Some typedefs/variables for checking that GDB doesn't lose typedefs
-   when looking for a printer.  */
-typedef int int_type;
-typedef int_type int_type2;
-typedef int_type int_type3;
-
-int an_int = -1;
-int_type an_int_type = 1;
-int_type2 an_int_type2 = 2;
-int_type3 an_int_type3 = 3;
-
 int
 main ()
 {
@@ -295,10 +270,9 @@ main ()
   nostring_type nstype, nstype2;
   struct memory_error me;
   struct ns ns, ns2;
-  struct lazystring estring, estring2, estring3;
+  struct lazystring estring, estring2;
   struct hint_error hint_error;
   struct children_as_list children_as_list;
-  struct to_string_returns_value_wrapper tsrvw = { { 1989 } };
 
   nstype.elements = narray;
   nstype.len = 0;
@@ -321,15 +295,10 @@ main ()
   ns2.null_str = NULL;
   ns2.length = 20;
 
-  estring.lazy_str = "embedded x\201\202\203\204";
-  estring.len = -1;
+  estring.lazy_str = "embedded x\201\202\203\204" ;
 
   /* Incomplete UTF-8, but ok Latin-1.  */
   estring2.lazy_str = "embedded x\302";
-  estring2.len = -1;
-
-  estring3.lazy_str = NULL;
-  estring3.len = 42;
 
 #ifdef __cplusplus
   S cps;

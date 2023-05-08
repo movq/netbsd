@@ -1,5 +1,6 @@
 /* Declarations for Intel 80386 opcode table
-   Copyright (C) 2007-2020 Free Software Foundation, Inc.
+   Copyright 2007, 2008, 2009, 2010, 2012
+   Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -43,10 +44,6 @@ enum
   Cpu586,
   /* i686 or better required */
   Cpu686,
-  /* CMOV Instruction support required */
-  CpuCMOV,
-  /* FXSR Instruction support required */
-  CpuFXSR,
   /* CLFLUSH Instruction support required */
   CpuClflush,
   /* NOP Instruction support required */
@@ -97,27 +94,10 @@ enum
   CpuAVX,
   /* AVX2 support required */
   CpuAVX2,
-  /* Intel AVX-512 Foundation Instructions support required */
-  CpuAVX512F,
-  /* Intel AVX-512 Conflict Detection Instructions support required */
-  CpuAVX512CD,
-  /* Intel AVX-512 Exponential and Reciprocal Instructions support
-     required */
-  CpuAVX512ER,
-  /* Intel AVX-512 Prefetch Instructions support required */
-  CpuAVX512PF,
-  /* Intel AVX-512 VL Instructions support required.  */
-  CpuAVX512VL,
-  /* Intel AVX-512 DQ Instructions support required.  */
-  CpuAVX512DQ,
-  /* Intel AVX-512 BW Instructions support required.  */
-  CpuAVX512BW,
   /* Intel L1OM support required */
   CpuL1OM,
   /* Intel K1OM support required */
   CpuK1OM,
-  /* Intel IAMCU support required */
-  CpuIAMCU,
   /* Xsave/xrstor New Instructions support required */
   CpuXsave,
   /* Xsaveopt New Instructions support required */
@@ -140,8 +120,6 @@ enum
   CpuTBM,
   /* MOVBE Instruction support required */
   CpuMovbe,
-  /* CMPXCHG16B instruction support required.  */
-  CpuCX16,
   /* EPT Instructions required */
   CpuEPT,
   /* RDTSCP Instruction support required */
@@ -164,8 +142,6 @@ enum
   CpuINVPCID,
   /* VMFUNC Instruction required */
   CpuVMFUNC,
-  /* Intel MPX Instructions required  */
-  CpuMPX,
   /* 64bit support available, used by -march= in assembler.  */
   CpuLM,
   /* RDRSEED instruction required.  */
@@ -174,79 +150,6 @@ enum
   CpuADX,
   /* Supports prefetchw and prefetch instructions.  */
   CpuPRFCHW,
-  /* SMAP instructions required.  */
-  CpuSMAP,
-  /* SHA instructions required.  */
-  CpuSHA,
-  /* CLFLUSHOPT instruction required */
-  CpuClflushOpt,
-  /* XSAVES/XRSTORS instruction required */
-  CpuXSAVES,
-  /* XSAVEC instruction required */
-  CpuXSAVEC,
-  /* PREFETCHWT1 instruction required */
-  CpuPREFETCHWT1,
-  /* SE1 instruction required */
-  CpuSE1,
-  /* CLWB instruction required */
-  CpuCLWB,
-  /* Intel AVX-512 IFMA Instructions support required.  */
-  CpuAVX512IFMA,
-  /* Intel AVX-512 VBMI Instructions support required.  */
-  CpuAVX512VBMI,
-  /* Intel AVX-512 4FMAPS Instructions support required.  */
-  CpuAVX512_4FMAPS,
-  /* Intel AVX-512 4VNNIW Instructions support required.  */
-  CpuAVX512_4VNNIW,
-  /* Intel AVX-512 VPOPCNTDQ Instructions support required.  */
-  CpuAVX512_VPOPCNTDQ,
-  /* Intel AVX-512 VBMI2 Instructions support required.  */
-  CpuAVX512_VBMI2,
-  /* Intel AVX-512 VNNI Instructions support required.  */
-  CpuAVX512_VNNI,
-  /* Intel AVX-512 BITALG Instructions support required.  */
-  CpuAVX512_BITALG,
-  /* Intel AVX-512 BF16 Instructions support required.  */
-  CpuAVX512_BF16,
-  /* Intel AVX-512 VP2INTERSECT Instructions support required.  */
-  CpuAVX512_VP2INTERSECT,
-  /* mwaitx instruction required */
-  CpuMWAITX,
-  /* Clzero instruction required */
-  CpuCLZERO,
-  /* OSPKE instruction required */
-  CpuOSPKE,
-  /* RDPID instruction required */
-  CpuRDPID,
-  /* PTWRITE instruction required */
-  CpuPTWRITE,
-  /* CET instructions support required */
-  CpuIBT,
-  CpuSHSTK,
-  /* GFNI instructions required */
-  CpuGFNI,
-  /* VAES instructions required */
-  CpuVAES,
-  /* VPCLMULQDQ instructions required */
-  CpuVPCLMULQDQ,
-  /* WBNOINVD instructions required */
-  CpuWBNOINVD,
-  /* PCONFIG instructions required */
-  CpuPCONFIG,
-  /* WAITPKG instructions required */
-  CpuWAITPKG,
-  /* CLDEMOTE instruction required */
-  CpuCLDEMOTE,
-  /* MOVDIRI instruction support required */
-  CpuMOVDIRI,
-  /* MOVDIRR64B instruction required */
-  CpuMOVDIR64B,
-  /* ENQCMD instruction required */
-  CpuENQCMD,
-  /* RDPRU instruction required */
-  CpuRDPRU,
-  /* MCOMMIT instruction required */
-  CpuMCOMMIT,
   /* 64bit support required  */
   Cpu64,
   /* Not supported in the 64bit mode  */
@@ -276,8 +179,6 @@ typedef union i386_cpu_flags
       unsigned int cpui486:1;
       unsigned int cpui586:1;
       unsigned int cpui686:1;
-      unsigned int cpucmov:1;
-      unsigned int cpufxsr:1;
       unsigned int cpuclflush:1;
       unsigned int cpunop:1;
       unsigned int cpusyscall:1;
@@ -303,16 +204,8 @@ typedef union i386_cpu_flags
       unsigned int cpusse4_2:1;
       unsigned int cpuavx:1;
       unsigned int cpuavx2:1;
-      unsigned int cpuavx512f:1;
-      unsigned int cpuavx512cd:1;
-      unsigned int cpuavx512er:1;
-      unsigned int cpuavx512pf:1;
-      unsigned int cpuavx512vl:1;
-      unsigned int cpuavx512dq:1;
-      unsigned int cpuavx512bw:1;
       unsigned int cpul1om:1;
       unsigned int cpuk1om:1;
-      unsigned int cpuiamcu:1;
       unsigned int cpuxsave:1;
       unsigned int cpuxsaveopt:1;
       unsigned int cpuaes:1;
@@ -324,7 +217,6 @@ typedef union i386_cpu_flags
       unsigned int cpubmi:1;
       unsigned int cputbm:1;
       unsigned int cpumovbe:1;
-      unsigned int cpucx16:1;
       unsigned int cpuept:1;
       unsigned int cpurdtscp:1;
       unsigned int cpufsgsbase:1;
@@ -336,48 +228,10 @@ typedef union i386_cpu_flags
       unsigned int cpurtm:1;
       unsigned int cpuinvpcid:1;
       unsigned int cpuvmfunc:1;
-      unsigned int cpumpx:1;
       unsigned int cpulm:1;
       unsigned int cpurdseed:1;
       unsigned int cpuadx:1;
       unsigned int cpuprfchw:1;
-      unsigned int cpusmap:1;
-      unsigned int cpusha:1;
-      unsigned int cpuclflushopt:1;
-      unsigned int cpuxsaves:1;
-      unsigned int cpuxsavec:1;
-      unsigned int cpuprefetchwt1:1;
-      unsigned int cpuse1:1;
-      unsigned int cpuclwb:1;
-      unsigned int cpuavx512ifma:1;
-      unsigned int cpuavx512vbmi:1;
-      unsigned int cpuavx512_4fmaps:1;
-      unsigned int cpuavx512_4vnniw:1;
-      unsigned int cpuavx512_vpopcntdq:1;
-      unsigned int cpuavx512_vbmi2:1;
-      unsigned int cpuavx512_vnni:1;
-      unsigned int cpuavx512_bitalg:1;
-      unsigned int cpuavx512_bf16:1;
-      unsigned int cpuavx512_vp2intersect:1;
-      unsigned int cpumwaitx:1;
-      unsigned int cpuclzero:1;
-      unsigned int cpuospke:1;
-      unsigned int cpurdpid:1;
-      unsigned int cpuptwrite:1;
-      unsigned int cpuibt:1;
-      unsigned int cpushstk:1;
-      unsigned int cpugfni:1;
-      unsigned int cpuvaes:1;
-      unsigned int cpuvpclmulqdq:1;
-      unsigned int cpuwbnoinvd:1;
-      unsigned int cpupconfig:1;
-      unsigned int cpuwaitpkg:1;
-      unsigned int cpucldemote:1;
-      unsigned int cpumovdiri:1;
-      unsigned int cpumovdir64b:1;
-      unsigned int cpuenqcmd:1;
-      unsigned int cpurdpru:1;
-      unsigned int cpumcommit:1;
       unsigned int cpu64:1;
       unsigned int cpuno64:1;
 #ifdef CpuUnused
@@ -393,38 +247,35 @@ enum
 {
   /* has direction bit. */
   D = 0,
-  /* set if operands can be both bytes and words/dwords/qwords, encoded the
-     canonical way; the base_opcode field should hold the encoding for byte
-     operands  */
+  /* set if operands can be words or dwords encoded the canonical way */
   W,
-  /* load form instruction. Must be placed before store form.  */
-  Load,
+  /* Skip the current insn and use the next insn in i386-opc.tbl to swap
+     operand in encoding.  */
+  S,
   /* insn has a modrm byte. */
   Modrm,
   /* register is in low 3 bits of opcode */
   ShortForm,
-  /* special case for jump insns; value has to be 1 */
-#define JUMP 1
-  /* call and jump */
-#define JUMP_DWORD 2
-  /* loop and jecxz */
-#define JUMP_BYTE 3
-  /* special case for intersegment leaps/calls */
-#define JUMP_INTERSEGMENT 4
-  /* absolute address for jump */
-#define JUMP_ABSOLUTE 5
+  /* special case for jump insns.  */
   Jump,
+  /* call and jump */
+  JumpDword,
+  /* loop and jecxz */
+  JumpByte,
+  /* special case for intersegment leaps/calls */
+  JumpInterSegment,
   /* FP insn memory format bit, sized by 0x4 */
   FloatMF,
   /* src/dest swap for floats. */
   FloatR,
+  /* has float insn direction bit. */
+  FloatD,
   /* needs size prefix if in 32-bit mode */
-#define SIZE16 1
+  Size16,
   /* needs size prefix if in 16-bit mode */
-#define SIZE32 2
+  Size32,
   /* needs size prefix if in 64-bit mode */
-#define SIZE64 3
-  Size,
+  Size64,
   /* check register size.  */
   CheckRegSize,
   /* instruction ignores operand size prefix and in Intel mode ignores
@@ -432,8 +283,6 @@ enum
   IgnoreSize,
   /* default insn size depends on mode */
   DefaultSize,
-  /* any memory size */
-  Anysize,
   /* b suffix on instruction illegal */
   No_bSuf,
   /* w suffix on instruction illegal */
@@ -448,26 +297,15 @@ enum
   No_ldSuf,
   /* instruction needs FWAIT */
   FWait,
-  /* IsString provides for a quick test for string instructions, and
-     its actual value also indicates which of the operands (if any)
-     requires use of the %es segment.  */
-#define IS_STRING_ES_OP0 2
-#define IS_STRING_ES_OP1 3
+  /* quick test for string instructions */
   IsString,
-  /* RegMem is for instructions with a modrm byte where the register
-     destination operand should be encoded in the mod and regmem fields.
-     Normally, it will be encoded in the reg field. We add a RegMem
-     flag to indicate that it should be encoded in the regmem field.  */
-  RegMem,
-  /* quick test if branch instruction is MPX supported */
-  BNDPrefixOk,
-  /* quick test if NOTRACK prefix is supported */
-  NoTrackPrefixOk,
   /* quick test for lockable instructions */
   IsLockable,
   /* fake an extra reg operand for clr, imul and special register
      processing for some instructions.  */
   RegKludge,
+  /* The first operand must be xmm0 */
+  FirstXmm0,
   /* An implicit xmm0 as the first operand */
   Implicit1stXmm0,
   /* The HLE prefix is OK:
@@ -486,8 +324,8 @@ enum
   ToDword,
   /* Convert to QWORD */
   ToQword,
-  /* Address prefix changes register operand */
-  AddrPrefixOpReg,
+  /* Address prefix changes operand 0 */
+  AddrPrefixOp0,
   /* opcode is a prefix */
   IsPrefix,
   /* instruction has extension in 8 bit imm */
@@ -499,7 +337,7 @@ enum
   /* deprecated fp insn, gets a warning */
   Ugh,
   /* insn has VEX prefix:
-	1: 128bit VEX prefix (or operand dependent).
+	1: 128bit VEX prefix.
 	2: 256bit VEX prefix.
 	3: Scalar VEX prefix.
    */
@@ -531,11 +369,9 @@ enum
      0: Set by the REX.W bit.
      1: VEX.W0.  Should always be 0.
      2: VEX.W1.  Should always be 1.
-     3: VEX.WIG. The VEX.W bit is ignored.
    */
 #define VEXW0	1
 #define VEXW1	2
-#define VEXWIG	3
   VexW,
   /* VEX opcode prefix:
      0: VEX 0x0F opcode prefix.
@@ -560,107 +396,51 @@ enum
 #define XOP2SOURCES	1
 #define VEX3SOURCES	2
   VexSources,
+  /* instruction has VEX 8 bit imm */
+  VexImmExt,
   /* Instruction with vector SIB byte:
 	1: 128bit vector register.
 	2: 256bit vector register.
-	3: 512bit vector register.
    */
 #define VecSIB128	1
 #define VecSIB256	2
-#define VecSIB512	3
   VecSIB,
   /* SSE to AVX support required */
   SSE2AVX,
   /* No AVX equivalent */
   NoAVX,
-
-  /* insn has EVEX prefix:
-	1: 512bit EVEX prefix.
-	2: 128bit EVEX prefix.
-	3: 256bit EVEX prefix.
-	4: Length-ignored (LIG) EVEX prefix.
-	5: Length determined from actual operands.
-   */
-#define EVEX512                1
-#define EVEX128                2
-#define EVEX256                3
-#define EVEXLIG                4
-#define EVEXDYN                5
-  EVex,
-
-  /* AVX512 masking support:
-	1: Zeroing or merging masking depending on operands.
-	2: Merging-masking.
-	3: Both zeroing and merging masking.
-   */
-#define DYNAMIC_MASKING 1
-#define MERGING_MASKING 2
-#define BOTH_MASKING    3
-  Masking,
-
-  /* AVX512 broadcast support.  The number of bytes to broadcast is
-     1 << (Broadcast - 1):
-	1: Byte broadcast.
-	2: Word broadcast.
-	3: Dword broadcast.
-	4: Qword broadcast.
-   */
-#define BYTE_BROADCAST	1
-#define WORD_BROADCAST	2
-#define DWORD_BROADCAST	3
-#define QWORD_BROADCAST	4
-  Broadcast,
-
-  /* Static rounding control is supported.  */
-  StaticRounding,
-
-  /* Supress All Exceptions is supported.  */
-  SAE,
-
-  /* Compressed Disp8*N attribute.  */
-#define DISP8_SHIFT_VL 7
-  Disp8MemShift,
-
-  /* Default mask isn't allowed.  */
-  NoDefMask,
-
-  /* The second operand must be a vector register, {x,y,z}mmN, where N is a multiple of 4.
-     It implicitly denotes the register group of {x,y,z}mmN - {x,y,z}mm(N + 3).
-   */
-  ImplicitQuadGroup,
-
-  /* Support encoding optimization.  */
-  Optimize,
-
+  /* Compatible with old (<= 2.8.1) versions of gcc  */
+  OldGcc,
   /* AT&T mnemonic.  */
   ATTMnemonic,
   /* AT&T syntax.  */
   ATTSyntax,
   /* Intel syntax.  */
   IntelSyntax,
-  /* AMD64.  */
-  AMD64,
-  /* Intel64.  */
-  Intel64,
   /* The last bitfield in i386_opcode_modifier.  */
-  Opcode_Modifier_Num
+  Opcode_Modifier_Max
 };
 
 typedef struct i386_opcode_modifier
 {
   unsigned int d:1;
   unsigned int w:1;
-  unsigned int load:1;
+  unsigned int s:1;
   unsigned int modrm:1;
   unsigned int shortform:1;
-  unsigned int jump:3;
+  unsigned int jump:1;
+  unsigned int jumpdword:1;
+  unsigned int jumpbyte:1;
+  unsigned int jumpintersegment:1;
   unsigned int floatmf:1;
   unsigned int floatr:1;
-  unsigned int size:2;
+  unsigned int floatd:1;
+  unsigned int size16:1;
+  unsigned int size32:1;
+  unsigned int size64:1;
   unsigned int checkregsize:1;
   unsigned int ignoresize:1;
   unsigned int defaultsize:1;
-  unsigned int anysize:1;
   unsigned int no_bsuf:1;
   unsigned int no_wsuf:1;
   unsigned int no_lsuf:1;
@@ -668,18 +448,16 @@ typedef struct i386_opcode_modifier
   unsigned int no_qsuf:1;
   unsigned int no_ldsuf:1;
   unsigned int fwait:1;
-  unsigned int isstring:2;
-  unsigned int regmem:1;
-  unsigned int bndprefixok:1;
-  unsigned int notrackprefixok:1;
+  unsigned int isstring:1;
   unsigned int islockable:1;
   unsigned int regkludge:1;
+  unsigned int firstxmm0:1;
   unsigned int implicit1stxmm0:1;
   unsigned int hleprefixok:2;
   unsigned int repprefixok:1;
   unsigned int todword:1;
   unsigned int toqword:1;
-  unsigned int addrprefixopreg:1;
+  unsigned int addrprefixop0:1;
   unsigned int isprefix:1;
   unsigned int immext:1;
   unsigned int norex64:1;
@@ -690,60 +468,46 @@ typedef struct i386_opcode_modifier
   unsigned int vexw:2;
   unsigned int vexopcode:3;
   unsigned int vexsources:2;
+  unsigned int veximmext:1;
   unsigned int vecsib:2;
   unsigned int sse2avx:1;
   unsigned int noavx:1;
-  unsigned int evex:3;
-  unsigned int masking:2;
-  unsigned int broadcast:3;
-  unsigned int staticrounding:1;
-  unsigned int sae:1;
-  unsigned int disp8memshift:3;
-  unsigned int nodefmask:1;
-  unsigned int implicitquadgroup:1;
-  unsigned int optimize:1;
+  unsigned int oldgcc:1;
   unsigned int attmnemonic:1;
   unsigned int attsyntax:1;
   unsigned int intelsyntax:1;
-  unsigned int amd64:1;
-  unsigned int intel64:1;
 } i386_opcode_modifier;
-
-/* Operand classes.  */
-
-#define CLASS_WIDTH 4
-enum operand_class
-{
-  ClassNone,
-  Reg, /* GPRs and FP regs, distinguished by operand size */
-  SReg, /* Segment register */
-  RegCR, /* Control register */
-  RegDR, /* Debug register */
-  RegTR, /* Test register */
-  RegMMX, /* MMX register */
-  RegSIMD, /* XMM/YMM/ZMM registers, distinguished by operand size */
-  RegMask, /* Vector Mask register */
-  RegBND, /* Bound register */
-};
-
-/* Special operand instances.  */
-
-#define INSTANCE_WIDTH 3
-enum operand_instance
-{
-  InstanceNone,
-  Accum, /* Accumulator %al/%ax/%eax/%rax/%st(0)/%xmm0 */
-  RegC,  /* %cl / %cx / %ecx / %rcx, e.g. register to hold shift count */
-  RegD,  /* %dl / %dx / %edx / %rdx, e.g. register to hold I/O port addr */
-  RegB,  /* %bl / %bx / %ebx / %rbx */
-};
 
 /* Position of operand_type bits.  */
 
 enum
 {
-  /* Class and Instance */
-  ClassInstance = CLASS_WIDTH + INSTANCE_WIDTH - 1,
+  /* 8bit register */
+  Reg8 = 0,
+  /* 16bit register */
+  Reg16,
+  /* 32bit register */
+  Reg32,
+  /* 64bit register */
+  Reg64,
+  /* Floating pointer stack register */
+  FloatReg,
+  /* MMX register */
+  RegMMX,
+  /* SSE register */
+  RegXMM,
+  /* AVX registers */
+  RegYMM,
+  /* Control register */
+  Control,
+  /* Debug register */
+  Debug,
+  /* Test register */
+  Test,
+  /* 2 bit segment register */
+  SReg2,
+  /* 3 bit segment register */
+  SReg3,
   /* 1 bit immediate */
   Imm1,
   /* 8 bit immediate */
@@ -775,48 +539,82 @@ enum
   Disp32S,
   /* 64 bit displacement */
   Disp64,
+  /* Accumulator %al/%ax/%eax/%rax */
+  Acc,
+  /* Floating pointer top stack register %st(0) */
+  FloatAcc,
   /* Register which can be used for base or index in memory operand.  */
   BaseIndex,
-  /* BYTE size. */
+  /* Register to hold in/out port addr = dx */
+  InOutPortReg,
+  /* Register to hold shift count = cl */
+  ShiftCount,
+  /* Absolute address for jump.  */
+  JumpAbsolute,
+  /* String insn operand with fixed es segment */
+  EsSeg,
+  /* RegMem is for instructions with a modrm byte where the register
+     destination operand should be encoded in the mod and regmem fields.
+     Normally, it will be encoded in the reg field. We add a RegMem
+     flag to the destination register operand to indicate that it should
+     be encoded in the regmem field.  */
+  RegMem,
+  /* Memory.  */
+  Mem,
+  /* BYTE memory. */
   Byte,
-  /* WORD size. 2 byte */
+  /* WORD memory. 2 byte */
   Word,
-  /* DWORD size. 4 byte */
+  /* DWORD memory. 4 byte */
   Dword,
-  /* FWORD size. 6 byte */
+  /* FWORD memory. 6 byte */
   Fword,
-  /* QWORD size. 8 byte */
+  /* QWORD memory. 8 byte */
   Qword,
-  /* TBYTE size. 10 byte */
+  /* TBYTE memory. 10 byte */
   Tbyte,
-  /* XMMWORD size. */
+  /* XMMWORD memory. */
   Xmmword,
-  /* YMMWORD size. */
+  /* YMMWORD memory. */
   Ymmword,
-  /* ZMMWORD size.  */
-  Zmmword,
   /* Unspecified memory size.  */
   Unspecified,
+  /* Any memory size.  */
+  Anysize,
 
-  /* The number of bits in i386_operand_type.  */
-  OTNum
+  /* Vector 4 bit immediate.  */
+  Vec_Imm4,
+
+  /* The last bitfield in i386_operand_type.  */
+  OTMax
 };
 
 #define OTNumOfUints \
-  ((OTNum - 1) / sizeof (unsigned int) / CHAR_BIT + 1)
+  (OTMax / sizeof (unsigned int) / CHAR_BIT + 1)
 #define OTNumOfBits \
   (OTNumOfUints * sizeof (unsigned int) * CHAR_BIT)
 
 /* If you get a compiler error for zero width of the unused field,
    comment it out.  */
-#define OTUnused		OTNum
+#define OTUnused		(OTMax + 1)
 
 typedef union i386_operand_type
 {
   struct
     {
-      unsigned int class:CLASS_WIDTH;
-      unsigned int instance:INSTANCE_WIDTH;
+      unsigned int reg8:1;
+      unsigned int reg16:1;
+      unsigned int reg32:1;
+      unsigned int reg64:1;
+      unsigned int floatreg:1;
+      unsigned int regmmx:1;
+      unsigned int regxmm:1;
+      unsigned int regymm:1;
+      unsigned int control:1;
+      unsigned int debug:1;
+      unsigned int test:1;
+      unsigned int sreg2:1;
+      unsigned int sreg3:1;
       unsigned int imm1:1;
       unsigned int imm8:1;
       unsigned int imm8s:1;
@@ -829,7 +627,15 @@ typedef union i386_operand_type
       unsigned int disp32:1;
       unsigned int disp32s:1;
       unsigned int disp64:1;
+      unsigned int acc:1;
+      unsigned int floatacc:1;
       unsigned int baseindex:1;
+      unsigned int inoutportreg:1;
+      unsigned int shiftcount:1;
+      unsigned int jumpabsolute:1;
+      unsigned int esseg:1;
+      unsigned int regmem:1;
+      unsigned int mem:1;
       unsigned int byte:1;
       unsigned int word:1;
       unsigned int dword:1;
@@ -838,8 +644,9 @@ typedef union i386_operand_type
       unsigned int tbyte:1;
       unsigned int xmmword:1;
       unsigned int ymmword:1;
-      unsigned int zmmword:1;
       unsigned int unspecified:1;
+      unsigned int anysize:1;
+      unsigned int vec_imm4:1;
 #ifdef OTUnused
       unsigned int unused:(OTNumOfBits - OTUnused);
 #endif
@@ -852,6 +659,9 @@ typedef struct insn_template
   /* instruction name sans width suffix ("mov" for movl insns) */
   char *name;
 
+  /* how many operands */
+  unsigned int operands;
+
   /* base_opcode is the fundamental opcode byte without optional
      prefix(es).  */
   unsigned int base_opcode;
@@ -860,22 +670,17 @@ typedef struct insn_template
 			       unset if Regmem --> Reg. */
 #define Opcode_FloatR	0x8 /* Bit to swap src/dest for float insns. */
 #define Opcode_FloatD 0x400 /* Direction bit for float insns. */
-#define Opcode_SIMD_FloatD 0x1 /* Direction bit for SIMD fp insns. */
-#define Opcode_SIMD_IntD 0x10 /* Direction bit for SIMD int insns. */
 
   /* extension_opcode is the 3 bit extension for group <n> insns.
      This field is also used to store the 8-bit opcode suffix for the
      AMD 3DNow! instructions.
      If this template has no extension opcode (the usual case) use None
      Instructions */
-  unsigned short extension_opcode;
+  unsigned int extension_opcode;
 #define None 0xffff		/* If no extension_opcode is possible.  */
 
   /* Opcode length.  */
   unsigned char opcode_length;
-
-  /* how many operands */
-  unsigned char operands;
 
   /* cpu feature flags */
   i386_cpu_flags cpu_flags;
@@ -903,11 +708,12 @@ typedef struct
   unsigned char reg_flags;
 #define RegRex	    0x1  /* Extended register.  */
 #define RegRex64    0x2  /* Extended 8 bit register.  */
-#define RegVRex	    0x4  /* Extended vector register.  */
   unsigned char reg_num;
-#define RegIP	((unsigned char ) ~0)
+#define RegRip	((unsigned char ) ~0)
+#define RegEip	(RegRip - 1)
 /* EIZ and RIZ are fake index registers.  */
-#define RegIZ	(RegIP - 1)
+#define RegEiz	(RegEip - 1)
+#define RegRiz	(RegEiz - 1)
 /* FLAT is a fake segment register (Intel mode).  */
 #define RegFlat     ((unsigned char) ~0)
   signed char dw2_regnum[2];

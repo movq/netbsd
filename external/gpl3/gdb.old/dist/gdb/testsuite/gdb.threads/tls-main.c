@@ -1,4 +1,3 @@
-int foo (void);
 __thread int i_tls = 2;
 int main ()
 {

@@ -1,5 +1,6 @@
 # This shell script emits a C file. -*- C -*-
-#   Copyright (C) 2003-2020 Free Software Foundation, Inc.
+#   Copyright 2003, 2004, 2005, 2007, 2008, 2009
+#   Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -19,7 +20,7 @@
 # MA 02110-1301, USA.
 #
 
-# This file is sourced from elf.em, and defines extra alpha
+# This file is sourced from elf32.em, and defines extra alpha
 # specific routines.
 #
 fragment <<EOF
@@ -47,7 +48,7 @@ alpha_after_open (void)
       lang_output_section_statement_type *plt_os[2];
 
       num_plt = 0;
-      for (os = (void *) lang_os_list.head;
+      for (os = &lang_output_section_statement.head->output_section_statement;
 	   os != NULL;
 	   os = os->next)
 	{
@@ -72,17 +73,14 @@ alpha_after_open (void)
 static void
 alpha_after_parse (void)
 {
-  link_info.relax_pass = 2;
-  if (limit_32bit
-      && !bfd_link_pic (&link_info)
-      && !bfd_link_relocatable (&link_info))
+  if (limit_32bit && !link_info.shared && !link_info.relocatable)
     lang_section_start (".interp",
 			exp_binop ('+',
 				   exp_intop (ALPHA_TEXT_START_32BIT),
 				   exp_nameop (SIZEOF_HEADERS, NULL)),
 			NULL);
 
-  ldelf_after_parse ();
+  after_parse_default ();
 }
 
 static void
@@ -92,9 +90,7 @@ alpha_before_allocation (void)
   gld${EMULATION_NAME}_before_allocation ();
 
   /* Add -relax if -O, not -r, and not explicitly disabled.  */
-  if (link_info.optimize
-      && !bfd_link_relocatable (&link_info)
-      && ! RELAXATION_DISABLED_BY_USER)
+  if (link_info.optimize && !link_info.relocatable && ! RELAXATION_DISABLED_BY_USER)
     ENABLE_RELAXATION;
 }
 
@@ -126,11 +122,10 @@ PARSE_AND_LIST_LONGOPTS='
 PARSE_AND_LIST_OPTIONS='
   fprintf (file, _("\
   --taso                      Load executable in the lower 31-bit addressable\n\
-                                virtual address range\n"));
-  fprintf (file, _("\
-  --secureplt                 Force PLT in text segment\n"));
-  fprintf (file, _("\
-  --no-secureplt              Force PLT in data segment\n"));
+                                virtual address range.\n\
+  --secureplt                 Force PLT in text segment.\n\
+  --no-secureplt              Force PLT in data segment.\n\
+"));
 '
 
 PARSE_AND_LIST_ARGS_CASES='

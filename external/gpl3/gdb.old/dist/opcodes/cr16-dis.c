@@ -1,5 +1,5 @@
 /* Disassembler code for CR16.
-   Copyright (C) 2007-2020 Free Software Foundation, Inc.
+   Copyright 2007, 2008, 2009, 2012, 2013  Free Software Foundation, Inc.
    Contributed by M R Swami Reddy (MR.Swami.Reddy@nsc.com).
 
    This file is part of GAS, GDB and the GNU binutils.
@@ -19,7 +19,7 @@
    Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
 #include "sysdep.h"
-#include "disassemble.h"
+#include "dis-asm.h"
 #include "opcode/cr16.h"
 #include "libiberty.h"
 
@@ -29,12 +29,18 @@
 #define ESCAPE_16_BIT  0xB
 
 /* Extract 'n_bits' from 'a' starting from offset 'offs'.  */
-#define EXTRACT(a, offs, n_bits) \
-  (((a) >> (offs)) & ((1ul << ((n_bits) - 1) << 1) - 1))
+#define EXTRACT(a, offs, n_bits)                    \
+  (n_bits == 32 ? (((a) >> (offs)) & 0xffffffffL)   \
+  : (((a) >> (offs)) & ((1 << (n_bits)) -1)))
 
-/* Set Bit Mask - a mask to set all bits in a 32-bit word starting
-   from offset 'offs'.  */
-#define SBM(offs)  ((1ul << 31 << 1) - (1ul << (offs)))
+/* Set Bit Mask - a mask to set all bits starting from offset 'offs'.  */
+#define SBM(offs)  ((((1 << (32 - offs)) -1) << (offs)))
+
+typedef struct
+{
+  dwordU val;
+  int nbits;
+} parameter;
 
 /* Structure to map valid 'cinv' instruction options.  */
 
@@ -48,7 +54,7 @@ typedef struct
 cinv_entry;
 
 /* CR16 'cinv' options mapping.  */
-static const cinv_entry cr16_cinvs[] =
+const cinv_entry cr16_cinvs[] =
 {
   {"cinv[i]",     "cinv    [i]"},
   {"cinv[i,u]",   "cinv    [i,u]"},
@@ -72,20 +78,20 @@ typedef enum REG_ARG_TYPE
 REG_ARG_TYPE;
 
 /* Current opcode table entry we're disassembling.  */
-static const inst *instruction;
+const inst *instruction;
 /* Current instruction we're disassembling.  */
-static ins cr16_currInsn;
+ins cr16_currInsn;
 /* The current instruction is read into 3 consecutive words.  */
-static wordU cr16_words[3];
+wordU cr16_words[3];
 /* Contains all words in appropriate order.  */
-static ULONGLONG cr16_allWords;
+ULONGLONG cr16_allWords;
 /* Holds the current processed argument number.  */
-static int processing_argument_number;
+int processing_argument_number;
 /* Nonzero means a IMM4 instruction.  */
-static int imm4flag;
+int imm4flag;
 /* Nonzero means the instruction's original size is
    incremented (escape sequence is used).  */
-static int size_changed;
+int size_changed;
 
 
 /* Print the constant expression length.  */
@@ -281,10 +287,14 @@ getprocpregname (int reg_index)
                        0         16        32        48
     words                  [0]       [1]       [2]      */
 
-static inline dwordU
+static parameter
 makelongparameter (ULONGLONG val, int start, int end)
 {
-  return EXTRACT (val, 48 - end, end - start);
+  parameter p;
+
+  p.val = (dwordU) EXTRACT (val, 48 - end, end - start);
+  p.nbits = end - start;
+  return p;
 }
 
 /* Build a mask of the instruction's 'constant' opcode,
@@ -309,7 +319,8 @@ cr16_match_opcode (void)
 {
   unsigned long mask;
   /* The instruction 'constant' opcode doesn't exceed 32 bits.  */
-  unsigned long doubleWord = cr16_words[1] + ((unsigned) cr16_words[0] << 16);
+  unsigned long doubleWord = (cr16_words[1]
+			     + (cr16_words[0] << 16)) & 0xffffffff;
 
   /* Start searching from end of instruction table.  */
   instruction = &cr16_instruction[NUMOPCODES - 2];
@@ -318,12 +329,15 @@ cr16_match_opcode (void)
   while (instruction >= cr16_instruction)
     {
       mask = build_mask ();
+      /* Adjust mask for bcond with 32-bit size instruction */
+      if ((IS_INSN_MNEMONIC("b") && instruction->size == 2))
+        mask = 0xff0f0000;
 
       if ((doubleWord & mask) == BIN (instruction->match,
-				      instruction->match_bits))
-	return 1;
+                                      instruction->match_bits))
+        return 1;
       else
-	instruction--;
+        instruction--;
     }
   return 0;
 }
@@ -334,7 +348,7 @@ static void
 make_argument (argument * a, int start_bits)
 {
   int inst_bit_size;
-  dwordU p;
+  parameter p;
 
   if ((instruction->size == 3) && a->size >= 16)
     inst_bit_size = 48;
@@ -344,75 +358,78 @@ make_argument (argument * a, int start_bits)
   switch (a->type)
     {
     case arg_r:
-      p = makelongparameter (cr16_allWords,
+      p = makelongparameter (cr16_allWords, 
 			     inst_bit_size - (start_bits + a->size),
 			     inst_bit_size - start_bits);
-      a->r = p;
+      a->r = p.val;
       break;
 
     case arg_rp:
       p = makelongparameter (cr16_allWords,
 			     inst_bit_size - (start_bits + a->size),
 			     inst_bit_size - start_bits);
-      a->rp = p;
+      a->rp = p.val;
       break;
 
     case arg_pr:
       p = makelongparameter (cr16_allWords,
 			     inst_bit_size - (start_bits + a->size),
 			     inst_bit_size - start_bits);
-      a->pr = p;
+      a->pr = p.val;
       break;
 
     case arg_prp:
       p = makelongparameter (cr16_allWords,
 			     inst_bit_size - (start_bits + a->size),
 			     inst_bit_size - start_bits);
-      a->prp = p;
+      a->prp = p.val;
       break;
 
     case arg_ic:
-      p = makelongparameter (cr16_allWords,
+      p = makelongparameter (cr16_allWords, 
 			     inst_bit_size - (start_bits + a->size),
 			     inst_bit_size - start_bits);
-      a->constant = p;
+      a->constant = p.val;
       break;
 
     case arg_cc:
       p = makelongparameter (cr16_allWords,
 			     inst_bit_size - (start_bits + a->size),
 			     inst_bit_size - start_bits);
-      a->cc = p;
+
+      a->cc = p.val;
       break;
 
     case arg_idxr:
-      if (IS_INSN_TYPE (CSTBIT_INS) && instruction->mnemonic[4] == 'b')
+      if ((IS_INSN_MNEMONIC ("cbitb"))
+	  || (IS_INSN_MNEMONIC ("sbitb"))
+	  || (IS_INSN_MNEMONIC ("tbitb")))
 	p = makelongparameter (cr16_allWords, 8, 9);
       else
 	p = makelongparameter (cr16_allWords, 9, 10);
-      a->i_r = p;
+      a->i_r = p.val;
       p = makelongparameter (cr16_allWords,
 			     inst_bit_size - a->size, inst_bit_size);
-      a->constant = p;
+      a->constant = p.val;
       break;
 
     case arg_idxrp:
       p = makelongparameter (cr16_allWords, start_bits + 12, start_bits + 13);
-      a->i_r = p;
+      a->i_r = p.val;
       p = makelongparameter (cr16_allWords, start_bits + 13, start_bits + 16);
-      a->rp = p;
+      a->rp = p.val;
       if (inst_bit_size > 32)
 	{
 	  p = makelongparameter (cr16_allWords, inst_bit_size - start_bits - 12,
 				 inst_bit_size);
-	  a->constant = (p & 0xffff) | (p >> 8 & 0xf0000);
+	  a->constant = ((p.val & 0xffff) | (p.val >> 8 & 0xf0000));
 	}
       else if (instruction->size == 2)
 	{
 	  p = makelongparameter (cr16_allWords, inst_bit_size - 22,
 				 inst_bit_size);
-	  a->constant = ((p & 0xf) | (((p >> 20) & 0x3) << 4)
-			 | ((p >> 14 & 0x3) << 6) | (((p >>7) & 0x1f) << 7));
+	  a->constant = (p.val & 0xf) | (((p.val >>20) & 0x3) << 4)
+	    | ((p.val >>14 & 0x3) << 6) | (((p.val >>7) & 0x1f) <<7);
 	}
       else if (instruction->size == 1 && a->size == 0)
 	a->constant = 0;
@@ -421,17 +438,17 @@ make_argument (argument * a, int start_bits)
 
     case arg_rbase:
       p = makelongparameter (cr16_allWords, inst_bit_size, inst_bit_size);
-      a->constant = p;
+      a->constant = p.val;
       p = makelongparameter (cr16_allWords, inst_bit_size - (start_bits + 4),
-			     inst_bit_size - start_bits);
-      a->r = p;
+                             inst_bit_size - start_bits);
+      a->r = p.val;
       break;
 
     case arg_cr:
       p = makelongparameter (cr16_allWords, start_bits + 12, start_bits + 16);
-      a->r = p;
-      p = makelongparameter (cr16_allWords, inst_bit_size - 28, inst_bit_size);
-      a->constant = ((p >> 8) & 0xf0000) | (p & 0xffff);
+      a->r = p.val;
+      p = makelongparameter (cr16_allWords, inst_bit_size - 16, inst_bit_size);
+      a->constant = p.val;
       break;
 
     case arg_crp:
@@ -439,19 +456,19 @@ make_argument (argument * a, int start_bits)
 	p = makelongparameter (cr16_allWords, 12, 16);
       else
 	p = makelongparameter (cr16_allWords, start_bits + 12, start_bits + 16);
-      a->rp = p;
+      a->rp = p.val;
 
       if (inst_bit_size > 32)
 	{
 	  p = makelongparameter (cr16_allWords, inst_bit_size - start_bits - 12,
 				 inst_bit_size);
-	  a->constant = ((p & 0xffff) | (p >> 8 & 0xf0000));
+	  a->constant = ((p.val & 0xffff) | (p.val >> 8 & 0xf0000));
 	}
       else if (instruction->size == 2)
 	{
-	  p = makelongparameter (cr16_allWords, inst_bit_size - 16,
+	  p = makelongparameter (cr16_allWords, inst_bit_size - 16, 
 				 inst_bit_size);
-	  a->constant = p;
+	  a->constant = p.val;
 	}
       else if (instruction->size == 1 && a->size != 0)
 	{
@@ -460,9 +477,9 @@ make_argument (argument * a, int start_bits)
 	      || IS_INSN_MNEMONIC ("loadd")
 	      || IS_INSN_MNEMONIC ("storw")
 	      || IS_INSN_MNEMONIC ("stord"))
-	    a->constant = p * 2;
+	    a->constant = (p.val * 2);
 	  else
-	    a->constant = p;
+	    a->constant = p.val;
 	}
       else /* below case for 0x0(reg pair) */
 	a->constant = 0;
@@ -480,21 +497,21 @@ make_argument (argument * a, int start_bits)
 	    {
 	    case 8 :
 	      p = makelongparameter (cr16_allWords, 0, start_bits);
-	      a->constant = ((p & 0xf00) >> 4) | (p & 0xf);
+	      a->constant = ((((p.val&0xf00)>>4)) | (p.val&0xf));
 	      break;
 
 	    case 24:
 	      if (instruction->size == 3)
 		{
 		  p = makelongparameter (cr16_allWords, 16, inst_bit_size);
-		  a->constant = ((((p >> 16) & 0xf) << 20)
-				 | (((p >> 24) & 0xf) << 16)
-				 | (p & 0xffff));
+		  a->constant = ((((p.val>>16)&0xf) << 20)
+				 | (((p.val>>24)&0xf) << 16)
+				 | (p.val & 0xffff));
 		}
 	      else if (instruction->size == 2)
 		{
 		  p = makelongparameter (cr16_allWords, 8, inst_bit_size);
-		  a->constant = p;
+		  a->constant = p.val;
 		}
 	      break;
 
@@ -502,7 +519,7 @@ make_argument (argument * a, int start_bits)
 	      p = makelongparameter (cr16_allWords,
 				     inst_bit_size - (start_bits + a->size),
 				     inst_bit_size - start_bits);
-	      a->constant = p;
+	      a->constant = p.val;
 	      break;
 	    }
 	}
@@ -511,7 +528,7 @@ make_argument (argument * a, int start_bits)
 	  p = makelongparameter (cr16_allWords,
 				 inst_bit_size - (start_bits + a->size),
 				 inst_bit_size - start_bits);
-	  a->constant = p;
+	  a->constant = p.val;
 	}
       break;
 
@@ -708,18 +725,18 @@ print_arguments (ins *currentInsn, bfd_vma memaddr, struct disassemble_info *inf
 
       /* For "bal (ra), disp17" instruction only.  */
       if ((IS_INSN_MNEMONIC ("bal")) && (i == 0) && instruction->size == 2)
-	{
-	  info->fprintf_func (info->stream, "(ra),");
-	  continue;
-	}
+        {
+          info->fprintf_func (info->stream, "(ra),");
+          continue;
+        }
 
       if ((INST_HAS_REG_LIST) && (i == 2))
-	info->fprintf_func (info->stream, "RA");
+        info->fprintf_func (info->stream, "RA");
       else
-	print_arg (&currentInsn->arg[i], memaddr, info);
+        print_arg (&currentInsn->arg[i], memaddr, info);
 
       if ((i != currentInsn->nargs - 1) && (!IS_INSN_MNEMONIC ("b")))
-	info->fprintf_func (info->stream, ",");
+        info->fprintf_func (info->stream, ",");
     }
 }
 
@@ -778,7 +795,7 @@ get_words_at_PC (bfd_vma memaddr, struct disassemble_info *info)
   for (i = 0, mem = memaddr; i < 3; i++, mem += 2)
     cr16_words[i] = get_word_at_PC (mem, info);
 
-  cr16_allWords =  ((ULONGLONG) cr16_words[0] << 32)
+  cr16_allWords =  ((ULONGLONG) cr16_words[0] << 32) 
 		   + ((unsigned long) cr16_words[1] << 16) + cr16_words[2];
 }
 
@@ -798,21 +815,20 @@ print_insn_cr16 (bfd_vma memaddr, struct disassemble_info *info)
   /* Find a matching opcode in table.  */
   is_decoded = cr16_match_opcode ();
   /* If found, print the instruction's mnemonic and arguments.  */
-  if (is_decoded > 0 && (cr16_words[0] != 0 || cr16_words[1] != 0))
+  if (is_decoded > 0 && (cr16_words[0] << 16 || cr16_words[1]) != 0)
     {
       if (strneq (instruction->mnemonic, "cinv", 4))
-	info->fprintf_func (info->stream,"%s",
-			    getcinvstring (instruction->mnemonic));
+        info->fprintf_func (info->stream,"%s", getcinvstring (instruction->mnemonic));
       else
-	info->fprintf_func (info->stream, "%s", instruction->mnemonic);
+        info->fprintf_func (info->stream, "%s", instruction->mnemonic);
 
       if (((cr16_currInsn.nargs = get_number_of_operands ()) != 0)
 	  && ! (IS_INSN_MNEMONIC ("b")))
-	info->fprintf_func (info->stream, "\t");
+        info->fprintf_func (info->stream, "\t");
       cr16_make_instruction ();
       /* For push/pop/pushrtn with RA instructions.  */
       if ((INST_HAS_REG_LIST) && ((cr16_words[0] >> 7) & 0x1))
-	cr16_currInsn.nargs +=1;
+        cr16_currInsn.nargs +=1;
       print_arguments (&cr16_currInsn, memaddr, info);
       return cr16_currInsn.size;
     }

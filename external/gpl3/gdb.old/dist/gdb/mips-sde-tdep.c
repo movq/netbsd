@@ -1,6 +1,6 @@
 /* Target-dependent code for SDE on MIPS processors.
 
-   Copyright (C) 2014-2020 Free Software Foundation, Inc.
+   Copyright (C) 2014-2015 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -48,7 +48,7 @@ mips_sde_frame_cache (struct frame_info *this_frame, void **this_cache)
   int i;
 
   if (*this_cache != NULL)
-    return (struct trad_frame_cache *) *this_cache;
+    return *this_cache;
   cache = trad_frame_cache_zalloc (this_frame);
   *this_cache = cache;
 
@@ -205,14 +205,14 @@ static void
 mips_sde_elf_osabi_sniff_abi_tag_sections (bfd *abfd, asection *sect,
 					   void *obj)
 {
-  enum gdb_osabi *os_ident_ptr = (enum gdb_osabi *) obj;
+  enum gdb_osabi *os_ident_ptr = obj;
   const char *name;
 
-  name = bfd_section_name (sect);
+  name = bfd_get_section_name (abfd, sect);
 
   /* The presence of a section with a ".sde" prefix is indicative
      of an SDE binary.  */
-  if (startswith (name, ".sde"))
+  if (strncmp (name, ".sde", 4) == 0)
     *os_ident_ptr = GDB_OSABI_SDE;
 }
 
@@ -256,9 +256,11 @@ mips_sde_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   frame_base_append_sniffer (gdbarch, mips_sde_frame_base_sniffer);
 }
 
-void _initialize_mips_sde_tdep ();
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+extern initialize_file_ftype _initialize_mips_sde_tdep;
+
 void
-_initialize_mips_sde_tdep ()
+_initialize_mips_sde_tdep (void)
 {
   gdbarch_register_osabi_sniffer (bfd_arch_mips,
 				  bfd_target_elf_flavour,

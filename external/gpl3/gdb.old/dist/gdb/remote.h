@@ -1,5 +1,5 @@
 /* Remote target communications for serial-line targets in custom GDB protocol
-   Copyright (C) 1999-2020 Free Software Foundation, Inc.
+   Copyright (C) 1999-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,7 +22,6 @@
 #include "remote-notif.h"
 
 struct target_desc;
-struct remote_target;
 
 /* Read a packet from the remote machine, with error checking, and
    store it in *BUF.  Resize *BUF using xrealloc if necessary to hold
@@ -30,8 +29,7 @@ struct remote_target;
    rather than timing out; this is used (in synchronous mode) to wait
    for a target that is is executing user code to stop.  */
 
-extern void getpkt (remote_target *remote,
-		    char **buf, long *sizeof_buf, int forever);
+extern void getpkt (char **buf, long *sizeof_buf, int forever);
 
 /* Send a packet to the remote machine, with error checking.  The data
    of the packet is in BUF.  The string in BUF can be at most PBUFSIZ
@@ -39,7 +37,13 @@ extern void getpkt (remote_target *remote,
    we are debugging (remote_debug) and want to print the sent packet
    as a string.  */
 
-extern int putpkt (remote_target *remote, const char *buf);
+extern int putpkt (char *buf);
+
+extern int hex2bin (const char *hex, gdb_byte *bin, int count);
+
+extern int bin2hex (const gdb_byte *bin, char *hex, int count);
+
+extern char *unpack_varlen_hex (char *buff, ULONGEST *result);
 
 void register_remote_g_packet_guess (struct gdbarch *gdbarch, int bytes,
 				     const struct target_desc *tdesc);
@@ -51,10 +55,20 @@ void remote_file_get (const char *remote_file, const char *local_file,
 		      int from_tty);
 void remote_file_delete (const char *remote_file, int from_tty);
 
+bfd *remote_bfd_open (const char *remote_file, const char *target);
+
+/* If a path starts with this sequence, GDB will retrieve the target
+   libraries from the remote system.  */
+
+#define REMOTE_SYSROOT_PREFIX "remote:"
+
+/* True if FILENAME starts with REMOTE_SYSROOT_PREFIX.  */
+
+int remote_filename_p (const char *filename);
+
 extern int remote_register_number_and_offset (struct gdbarch *gdbarch,
 					      int regnum, int *pnum,
 					      int *poffset);
 
-extern void remote_notif_get_pending_events (remote_target *remote,
-					     struct notif_client *np);
+extern void remote_notif_get_pending_events (struct notif_client *np);
 #endif

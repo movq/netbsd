@@ -1,5 +1,6 @@
 /* BFD back-end for PPCbug boot records.
-   Copyright (C) 1996-2020 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+   2007, 2008, 2009, 2011, 2012 Free Software Foundation, Inc.
    Written by Michael Meissner, Cygnus Support, <meissner@cygnus.com>
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -102,7 +103,7 @@ ppcboot_mkobject (bfd *abfd)
 {
   if (!ppcboot_get_tdata (abfd))
     {
-      size_t amt = sizeof (ppcboot_data_t);
+      bfd_size_type amt = sizeof (ppcboot_data_t);
       ppcboot_set_tdata (abfd, bfd_zalloc (abfd, amt));
     }
 
@@ -130,7 +131,7 @@ ppcboot_set_arch_mach (bfd *abfd,
    was not defaulted.  That is, it must be explicitly specified as
    being ppcboot.  */
 
-static bfd_cleanup
+static const bfd_target *
 ppcboot_object_p (bfd *abfd)
 {
   struct stat statbuf;
@@ -207,7 +208,7 @@ ppcboot_object_p (bfd *abfd)
   memcpy (&tdata->header, &hdr, sizeof (ppcboot_hdr_t));
 
   ppcboot_set_arch_mach (abfd, bfd_arch_powerpc, 0L);
-  return _bfd_no_cleanup;
+  return abfd->xvec;
 }
 
 #define ppcboot_close_and_cleanup _bfd_generic_close_and_cleanup
@@ -276,7 +277,7 @@ ppcboot_canonicalize_symtab (bfd *abfd, asymbol **alocation)
   asection *sec = ppcboot_get_tdata (abfd)->sec;
   asymbol *syms;
   unsigned int i;
-  size_t amt = PPCBOOT_SYMS * sizeof (asymbol);
+  bfd_size_type amt = PPCBOOT_SYMS * sizeof (asymbol);
 
   syms = (asymbol *) bfd_alloc (abfd, amt);
   if (syms == NULL)
@@ -326,13 +327,11 @@ ppcboot_get_symbol_info (bfd *ignore_abfd ATTRIBUTE_UNUSED,
   bfd_symbol_info (symbol, ret);
 }
 
-#define ppcboot_get_symbol_version_string \
-  _bfd_nosymbols_get_symbol_version_string
-#define ppcboot_bfd_is_target_special_symbol _bfd_bool_bfd_asymbol_false
+#define ppcboot_bfd_is_target_special_symbol \
+  ((bfd_boolean (*) (bfd *, asymbol *)) bfd_false)
 #define ppcboot_bfd_is_local_label_name bfd_generic_is_local_label_name
 #define ppcboot_get_lineno _bfd_nosymbols_get_lineno
 #define ppcboot_find_nearest_line _bfd_nosymbols_find_nearest_line
-#define ppcboot_find_line _bfd_nosymbols_find_line
 #define ppcboot_find_inliner_info _bfd_nosymbols_find_inliner_info
 #define ppcboot_bfd_make_debug_symbol _bfd_nosymbols_bfd_make_debug_symbol
 #define ppcboot_read_minisymbols _bfd_generic_read_minisymbols
@@ -353,8 +352,8 @@ ppcboot_set_section_contents (bfd *abfd,
       asection *s;
 
       /* The lowest section VMA sets the virtual address of the start
-	 of the file.  We use the set the file position of all the
-	 sections.  */
+         of the file.  We use the set the file position of all the
+         sections.  */
       low = abfd->sections->vma;
       for (s = abfd->sections->next; s != NULL; s = s->next)
 	if (s->vma < low)
@@ -401,7 +400,7 @@ ppcboot_bfd_print_private_bfd_data (bfd *abfd, void * farg)
   if (tdata->header.os_id)
     fprintf (f, "OS_ID               = 0x%.2x\n", tdata->header.os_id);
 
-  if (tdata->header.partition_name[0])
+  if (tdata->header.partition_name)
     fprintf (f, _("Partition name      = \"%s\"\n"), tdata->header.partition_name);
 
   for (i = 0; i < 4; i++)
@@ -421,25 +420,20 @@ ppcboot_bfd_print_private_bfd_data (bfd *abfd, void * farg)
 	  && !sector_begin && !sector_length)
 	continue;
 
-      /* xgettext:c-format */
       fprintf (f, _("\nPartition[%d] start  = { 0x%.2x, 0x%.2x, 0x%.2x, 0x%.2x }\n"), i,
 	       tdata->header.partition[i].partition_begin.ind,
 	       tdata->header.partition[i].partition_begin.head,
 	       tdata->header.partition[i].partition_begin.sector,
 	       tdata->header.partition[i].partition_begin.cylinder);
 
-      /* xgettext:c-format */
       fprintf (f, _("Partition[%d] end    = { 0x%.2x, 0x%.2x, 0x%.2x, 0x%.2x }\n"), i,
 	       tdata->header.partition[i].partition_end.ind,
 	       tdata->header.partition[i].partition_end.head,
 	       tdata->header.partition[i].partition_end.sector,
 	       tdata->header.partition[i].partition_end.cylinder);
 
-      /* xgettext:c-format */
       fprintf (f, _("Partition[%d] sector = 0x%.8lx (%ld)\n"),
 	       i, (unsigned long) sector_begin, sector_begin);
-
-      /* xgettext:c-format */
       fprintf (f, _("Partition[%d] length = 0x%.8lx (%ld)\n"),
 	       i, (unsigned long) sector_length, sector_length);
     }
@@ -456,14 +450,12 @@ ppcboot_bfd_print_private_bfd_data (bfd *abfd, void * farg)
 #define ppcboot_bfd_lookup_section_flags bfd_generic_lookup_section_flags
 #define ppcboot_bfd_merge_sections bfd_generic_merge_sections
 #define ppcboot_bfd_is_group_section bfd_generic_is_group_section
-#define ppcboot_bfd_group_name bfd_generic_group_name
 #define ppcboot_bfd_discard_group bfd_generic_discard_group
 #define ppcboot_section_already_linked \
   _bfd_generic_section_already_linked
 #define ppcboot_bfd_define_common_symbol bfd_generic_define_common_symbol
-#define ppcboot_bfd_link_hide_symbol _bfd_generic_link_hide_symbol
-#define ppcboot_bfd_define_start_stop bfd_generic_define_start_stop
 #define ppcboot_bfd_link_hash_table_create _bfd_generic_link_hash_table_create
+#define ppcboot_bfd_link_hash_table_free _bfd_generic_link_hash_table_free
 #define ppcboot_bfd_link_add_symbols _bfd_generic_link_add_symbols
 #define ppcboot_bfd_link_just_syms _bfd_generic_link_just_syms
 #define ppcboot_bfd_copy_link_hash_symbol_type \
@@ -472,7 +464,6 @@ ppcboot_bfd_print_private_bfd_data (bfd *abfd, void * farg)
 #define ppcboot_bfd_link_split_section _bfd_generic_link_split_section
 #define ppcboot_get_section_contents_in_window \
   _bfd_generic_get_section_contents_in_window
-#define ppcboot_bfd_link_check_relocs _bfd_generic_link_check_relocs
 
 #define ppcboot_bfd_copy_private_bfd_data _bfd_generic_bfd_copy_private_bfd_data
 #define ppcboot_bfd_merge_private_bfd_data _bfd_generic_bfd_merge_private_bfd_data
@@ -482,7 +473,7 @@ ppcboot_bfd_print_private_bfd_data (bfd *abfd, void * farg)
 #define ppcboot_bfd_set_private_flags _bfd_generic_bfd_set_private_flags
 #define ppcboot_bfd_print_private_bfd_dat ppcboot_bfd_print_private_bfd_data
 
-const bfd_target powerpc_boot_vec =
+const bfd_target ppcboot_vec =
 {
   "ppcboot",			/* name */
   bfd_target_unknown_flavour,	/* flavour */
@@ -508,16 +499,16 @@ const bfd_target powerpc_boot_vec =
     _bfd_dummy_target,
   },
   {				/* bfd_set_format */
-    _bfd_bool_bfd_false_error,
+    bfd_false,
     ppcboot_mkobject,
-    _bfd_bool_bfd_false_error,
-    _bfd_bool_bfd_false_error,
+    bfd_false,
+    bfd_false,
   },
   {				/* bfd_write_contents */
-    _bfd_bool_bfd_false_error,
-    _bfd_bool_bfd_true,
-    _bfd_bool_bfd_false_error,
-    _bfd_bool_bfd_false_error,
+    bfd_false,
+    bfd_true,
+    bfd_false,
+    bfd_false,
   },
 
   BFD_JUMP_TABLE_GENERIC (ppcboot),

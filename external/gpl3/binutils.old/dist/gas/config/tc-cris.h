@@ -1,5 +1,6 @@
 /* tc-cris.h -- Header file for tc-cris.c, the CRIS GAS port.
-   Copyright (C) 2000-2020 Free Software Foundation, Inc.
+   Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2007, 2009
+   Free Software Foundation, Inc.
 
    Contributed by Axis Communications AB, Lund, Sweden.
    Originally written for GAS 1.38.1 by Mikael Asker.
@@ -54,6 +55,8 @@ extern const pseudo_typeS md_pseudo_table[];
 extern const char cris_comment_chars[];
 extern const char line_comment_chars[];
 extern const char line_separator_chars[];
+extern const char EXP_CHARS[];
+extern const char FLT_CHARS[];
 
 /* This should be optional, since it is ignored as an escape (assumed to
    be itself) if it is not recognized.  */
@@ -93,8 +96,9 @@ extern int md_cris_force_relocation (struct fix *);
 /* Make sure we don't resolve fixups for which we want to emit dynamic
    relocations.  */
 #define TC_FORCE_RELOCATION_LOCAL(FIX)			\
-  (GENERIC_FORCE_RELOCATION_LOCAL (FIX)			\
-   || IS_CRIS_PIC_RELOC ((FIX)->fx_r_type))
+  (!(FIX)->fx_pcrel					\
+   || IS_CRIS_PIC_RELOC ((FIX)->fx_r_type)		\
+   || TC_FORCE_RELOCATION (FIX))
 
 /* For some reloc types, don't adjust fixups by reducing to a section
    symbol.  */

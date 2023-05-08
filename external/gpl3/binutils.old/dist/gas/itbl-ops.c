@@ -1,5 +1,6 @@
 /* itbl-ops.c
-   Copyright (C) 1997-2020 Free Software Foundation, Inc.
+   Copyright 1997, 1999, 2000, 2001, 2002, 2003, 2005, 2006, 2007,
+   2009, 2010  Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -132,7 +133,7 @@ struct itbl_field {
 struct itbl_entry {
   e_processor processor;	/* processor number */
   e_type type;			/* dreg/creg/greg/insn */
-  char *name;			/* mnemonic name for insn/register */
+  char *name;			/* mnemionic name for insn/register */
   unsigned long value;		/* opcode/instruction mask/register number */
   unsigned long flags;		/* effects of the instruction */
   struct itbl_range range;	/* bit range within instruction for value */
@@ -299,7 +300,7 @@ append_insns_as_macros (void)
 {
   struct ITBL_OPCODE_STRUCT *new_opcodes, *o;
   struct itbl_entry *e, **es;
-  int n, size, new_num_opcodes;
+  int n, size, new_size, new_num_opcodes;
 #ifdef USE_MACROS
   int id;
 #endif
@@ -320,9 +321,12 @@ append_insns_as_macros (void)
   ASSERT (size >= 0);
   DBG (("I get=%d\n", size / sizeof (ITBL_OPCODES[0])));
 
-  /* FIXME since ITBL_OPCODES could be a static table,
+  new_size = sizeof (struct ITBL_OPCODE_STRUCT) * new_num_opcodes;
+  ASSERT (new_size > size);
+
+  /* FIXME since ITBL_OPCODES culd be a static table,
 		we can't realloc or delete the old memory.  */
-  new_opcodes = XNEWVEC (struct ITBL_OPCODE_STRUCT, new_num_opcodes);
+  new_opcodes = (struct ITBL_OPCODE_STRUCT *) malloc (new_size);
   if (!new_opcodes)
     {
       printf (_("Unable to allocate memory for new instructions\n"));
@@ -540,7 +544,7 @@ itbl_assemble (char *name, char *s)
 				return 0;	/-* error; invalid operand *-/
 				break;
 			*/
-	  /* If not a symbol, fallthru to IMMED */
+	  /* If not a symbol, fall thru to IMMED */
 	case e_immed:
 	  if (*n == '0' && *(n + 1) == 'x')	/* hex begins 0x...  */
 	    {
@@ -850,11 +854,13 @@ alloc_entry (e_processor processor, e_type type,
   struct itbl_entry *e, **es;
   if (!name)
     return 0;
-  e = XNEW (struct itbl_entry);
+  e = (struct itbl_entry *) malloc (sizeof (struct itbl_entry));
   if (e)
     {
       memset (e, 0, sizeof (struct itbl_entry));
-      e->name = xstrdup (name);
+      e->name = (char *) malloc (sizeof (strlen (name)) + 1);
+      if (e->name)
+	strcpy (e->name, name);
       e->processor = processor;
       e->type = type;
       e->value = value;
@@ -872,7 +878,7 @@ alloc_field (e_type type, int sbit, int ebit,
 	     unsigned long flags)
 {
   struct itbl_field *f;
-  f = XNEW (struct itbl_field);
+  f = (struct itbl_field *) malloc (sizeof (struct itbl_field));
   if (f)
     {
       memset (f, 0, sizeof (struct itbl_field));

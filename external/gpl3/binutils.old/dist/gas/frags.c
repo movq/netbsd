@@ -1,5 +1,7 @@
 /* frags.c - manage frags -
-   Copyright (C) 1987-2020 Free Software Foundation, Inc.
+   Copyright 1987, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
+   1999, 2000, 2001, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2011, 2012
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -24,20 +26,6 @@
 
 extern fragS zero_address_frag;
 extern fragS predefined_address_frag;
-
-static int totalfrags;
-
-int
-get_frag_count (void)
-{
-  return totalfrags;
-}
-
-void
-clear_frag_count (void)
-{
-  totalfrags = 0;
-}
 
 /* Initialization for frag routines.  */
 
@@ -84,7 +72,6 @@ frag_alloc (struct obstack *ob)
   ptr = (fragS *) obstack_alloc (ob, SIZEOF_STRUCT_FRAG);
   obstack_alignment_mask (ob) = oalign;
   memset (ptr, 0, SIZEOF_STRUCT_FRAG);
-  totalfrags++;
   return ptr;
 }
 
@@ -94,12 +81,12 @@ frag_alloc (struct obstack *ob)
    do not return. Do not set up any fields of *now_frag.  */
 
 void
-frag_grow (size_t nchars)
+frag_grow (unsigned int nchars)
 {
   if (obstack_room (&frchain_now->frch_obstack) < nchars)
     {
-      size_t oldc;
-      size_t newc;
+      long oldc;
+      long newc;
 
       /* Try to allocate a bit more than needed right now.  But don't do
          this if we would waste too much memory.  Especially necessary
@@ -111,11 +98,8 @@ frag_grow (size_t nchars)
       newc += SIZEOF_STRUCT_FRAG;
 
       /* Check for possible overflow.  */
-      if (newc < nchars)
-	as_fatal (ngettext ("can't extend frag %lu char",
-			    "can't extend frag %lu chars",
-			    (unsigned long) nchars),
-		  (unsigned long) nchars);
+      if (newc < 0)
+        as_fatal (_("can't extend frag %u chars"), nchars);
 
       /* Force to allocate at least NEWC bytes, but not less than the
          default.  */
@@ -155,7 +139,7 @@ frag_grow (size_t nchars)
    of frchain_now.  */
 
 void
-frag_new (size_t old_frags_var_max_size
+frag_new (int old_frags_var_max_size
 	  /* Number of chars (already allocated on obstack frags) in
 	     variable_length part of frag.  */)
 {
@@ -165,9 +149,7 @@ frag_new (size_t old_frags_var_max_size
   gas_assert (frchain_now->frch_last == frag_now);
 
   /* Fix up old frag's fr_fix.  */
-  frag_now->fr_fix = frag_now_fix_octets ();
-  gas_assert (frag_now->fr_fix >= old_frags_var_max_size);
-  frag_now->fr_fix -= old_frags_var_max_size;
+  frag_now->fr_fix = frag_now_fix_octets () - old_frags_var_max_size;
   /* Make sure its type is valid.  */
   gas_assert (frag_now->fr_type != 0);
 
@@ -181,7 +163,7 @@ frag_new (size_t old_frags_var_max_size
   gas_assert (former_last_fragP == frag_now);
   frag_now = frag_alloc (&frchP->frch_obstack);
 
-  frag_now->fr_file = as_where (&frag_now->fr_line);
+  as_where (&frag_now->fr_file, &frag_now->fr_line);
 
   /* Generally, frag_now->points to an address rounded up to next
      alignment.  However, characters will add to obstack frags
@@ -209,23 +191,23 @@ frag_new (size_t old_frags_var_max_size
    frag_now_growth past the new chars.  */
 
 char *
-frag_more (size_t nchars)
+frag_more (int nchars)
 {
-  char *retval;
+  register char *retval;
 
   frag_alloc_check (&frchain_now->frch_obstack);
   frag_grow (nchars);
   retval = obstack_next_free (&frchain_now->frch_obstack);
   obstack_blank_fast (&frchain_now->frch_obstack, nchars);
-  return retval;
+  return (retval);
 }
 
 /* Close the current frag, setting its fields for a relaxable frag.  Start a
    new frag.  */
 
 static void
-frag_var_init (relax_stateT type, size_t max_chars, size_t var,
-	       relax_substateT subtype, symbolS *symbol, offsetT offset,
+frag_var_init (relax_stateT type, int max_chars, int var,
+               relax_substateT subtype, symbolS *symbol, offsetT offset,
                char *opcode)
 {
   frag_now->fr_var = var;
@@ -240,9 +222,9 @@ frag_var_init (relax_stateT type, size_t max_chars, size_t var,
   frag_now->fr_cgen.opinfo = 0;
 #endif
 #ifdef TC_FRAG_INIT
-  TC_FRAG_INIT (frag_now, max_chars);
+  TC_FRAG_INIT (frag_now);
 #endif
-  frag_now->fr_file = as_where (&frag_now->fr_line);
+  as_where (&frag_now->fr_file, &frag_now->fr_line);
 
   frag_new (max_chars);
 }
@@ -255,11 +237,10 @@ frag_var_init (relax_stateT type, size_t max_chars, size_t var,
    to write into.  */
 
 char *
-frag_var (relax_stateT type, size_t max_chars, size_t var,
-	  relax_substateT subtype, symbolS *symbol, offsetT offset,
-	  char *opcode)
+frag_var (relax_stateT type, int max_chars, int var, relax_substateT subtype,
+	  symbolS *symbol, offsetT offset, char *opcode)
 {
-  char *retval;
+  register char *retval;
 
   frag_grow (max_chars);
   retval = obstack_next_free (&frchain_now->frch_obstack);
@@ -273,11 +254,11 @@ frag_var (relax_stateT type, size_t max_chars, size_t var,
 	No call to frag_grow is done.  */
 
 char *
-frag_variant (relax_stateT type, size_t max_chars, size_t var,
+frag_variant (relax_stateT type, int max_chars, int var,
 	      relax_substateT subtype, symbolS *symbol, offsetT offset,
 	      char *opcode)
 {
-  char *retval;
+  register char *retval;
 
   retval = obstack_next_free (&frchain_now->frch_obstack);
   frag_var_init (type, max_chars, var, subtype, symbol, offset, opcode);
@@ -288,7 +269,7 @@ frag_variant (relax_stateT type, size_t max_chars, size_t var,
 /* Reduce the variable end of a frag to a harmless state.  */
 
 void
-frag_wane (fragS *fragP)
+frag_wane (register fragS *fragP)
 {
   fragP->fr_type = rs_fill;
   fragP->fr_offset = 0;
@@ -297,7 +278,7 @@ frag_wane (fragS *fragP)
 
 /* Return the number of bytes by which the current frag can be grown.  */
 
-size_t
+int
 frag_room (void)
 {
   return obstack_room (&frchain_now->frch_obstack);
@@ -342,7 +323,7 @@ frag_align (int alignment, int fill_character, int max)
 
 void
 frag_align_pattern (int alignment, const char *fill_pattern,
-		    size_t n_fill, int max)
+		    int n_fill, int max)
 {
   char *p;
 
@@ -395,12 +376,7 @@ frag_now_fix_octets (void)
 addressT
 frag_now_fix (void)
 {
-  /* Symbols whose section has SEC_ELF_OCTETS set,
-     resolve to octets instead of target bytes.  */
-  if (now_seg->flags & SEC_OCTETS)
-    return frag_now_fix_octets ();
-  else
-    return frag_now_fix_octets () / OCTETS_PER_BYTE;
+  return frag_now_fix_octets () / OCTETS_PER_BYTE;
 }
 
 void
@@ -466,59 +442,4 @@ frag_offset_fixed_p (const fragS *frag1, const fragS *frag2, offsetT *offset)
     }
 
   return FALSE;
-}
-
-/* Return TRUE if we can determine whether FRAG2 OFF2 appears after
-   (strict >, not >=) FRAG1 OFF1, assuming it is not before.  Set
-   *OFFSET so that resolve_expression will resolve an O_gt operation
-   between them to false (0) if they are guaranteed to be at the same
-   location, or to true (-1) if they are guaranteed to be at different
-   locations.  Return FALSE conservatively, e.g. if neither result can
-   be guaranteed (yet).
-
-   They are known to be in the same segment, and not the same frag
-   (this is a fallback for frag_offset_fixed_p, that always takes care
-   of this case), and it is expected (from the uses this is designed
-   to simplify, namely location view increments) that frag2 is
-   reachable from frag1 following the fr_next links, rather than the
-   other way round.  */
-
-bfd_boolean
-frag_gtoffset_p (valueT off2, const fragS *frag2,
-		 valueT off1, const fragS *frag1, offsetT *offset)
-{
-  /* Insanity check.  */
-  if (frag2 == frag1 || off1 > frag1->fr_fix)
-    return FALSE;
-
-  /* If the first symbol offset is at the end of the first frag and
-     the second symbol offset at the beginning of the second frag then
-     it is possible they are at the same address.  Go looking for a
-     non-zero fr_fix in any frag between these frags.  If found then
-     we can say the O_gt result will be true.  If no such frag is
-     found we assume that frag1 or any of the following frags might
-     have a variable tail and thus the answer is unknown.  This isn't
-     strictly true; some frags don't have a variable tail, but it
-     doesn't seem worth optimizing for those cases.  */
-  const fragS *frag = frag1;
-  offsetT delta = off2 - off1;
-  for (;;)
-    {
-      delta += frag->fr_fix;
-      frag = frag->fr_next;
-      if (frag == frag2)
-	{
-	  if (delta == 0)
-	    return FALSE;
-	  break;
-	}
-      /* If we run off the end of the frag chain then we have a case
-	 where frag2 is not after frag1, ie. an O_gt expression not
-	 created for .loc view.  */
-      if (frag == NULL)
-	return FALSE;
-    }
-
-  *offset = (off2 - off1 - delta) * OCTETS_PER_BYTE;
-  return TRUE;
 }

@@ -1,6 +1,7 @@
 /* CGEN generic opcode support.
 
-   Copyright (C) 1996-2020 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2003, 2005, 2007, 2009,
+   2012  Free Software Foundation, Inc.
 
    This file is part of libopcodes.
 
@@ -127,7 +128,7 @@ cgen_keyword_add (CGEN_KEYWORD *kt, CGEN_KEYWORD_ENTRY *ke)
 	&& ! strchr (kt->nonalpha_chars, ke->name[i]))
       {
 	size_t idx = strlen (kt->nonalpha_chars);
-
+	
 	/* If you hit this limit, please don't just
 	   increase the size of the field, instead
 	   look for a better algorithm.  */
@@ -357,10 +358,9 @@ cgen_macro_insn_count (CGEN_CPU_DESC cd)
 /* Cover function to read and properly byteswap an insn value.  */
 
 CGEN_INSN_INT
-cgen_get_insn_value (CGEN_CPU_DESC cd, unsigned char *buf, int length,
-                     int endian)
+cgen_get_insn_value (CGEN_CPU_DESC cd, unsigned char *buf, int length)
 {
-  int big_p = (endian == CGEN_ENDIAN_BIG);
+  int big_p = (cd->insn_endian == CGEN_ENDIAN_BIG);
   int insn_chunk_bitsize = cd->insn_chunk_bitsize;
   CGEN_INSN_INT value = 0;
 
@@ -370,7 +370,7 @@ cgen_get_insn_value (CGEN_CPU_DESC cd, unsigned char *buf, int length,
 	 segments, and endian-convert them, one at a time. */
       int i;
 
-      /* Enforce divisibility. */
+      /* Enforce divisibility. */ 
       if ((length % insn_chunk_bitsize) != 0)
 	abort ();
 
@@ -386,7 +386,7 @@ cgen_get_insn_value (CGEN_CPU_DESC cd, unsigned char *buf, int length,
     }
   else
     {
-      value = bfd_get_bits (buf, length, endian == CGEN_ENDIAN_BIG);
+      value = bfd_get_bits (buf, length, cd->insn_endian == CGEN_ENDIAN_BIG);
     }
 
   return value;
@@ -398,10 +398,9 @@ void
 cgen_put_insn_value (CGEN_CPU_DESC cd,
 		     unsigned char *buf,
 		     int length,
-		     CGEN_INSN_INT value,
-                     int endian)
+		     CGEN_INSN_INT value)
 {
-  int big_p = (endian == CGEN_ENDIAN_BIG);
+  int big_p = (cd->insn_endian == CGEN_ENDIAN_BIG);
   int insn_chunk_bitsize = cd->insn_chunk_bitsize;
 
   if (insn_chunk_bitsize != 0 && insn_chunk_bitsize < length)
@@ -410,7 +409,7 @@ cgen_put_insn_value (CGEN_CPU_DESC cd,
 	 segments, and endian-convert them, one at a time. */
       int i;
 
-      /* Enforce divisibility. */
+      /* Enforce divisibility. */ 
       if ((length % insn_chunk_bitsize) != 0)
 	abort ();
 
@@ -454,15 +453,17 @@ cgen_lookup_insn (CGEN_CPU_DESC cd,
 		  CGEN_FIELDS *fields,
 		  int alias_p)
 {
+  unsigned char *buf;
+  CGEN_INSN_INT base_insn;
   CGEN_EXTRACT_INFO ex_info;
   CGEN_EXTRACT_INFO *info;
 
   if (cd->int_insn_p)
     {
       info = NULL;
-      insn_bytes_value = (unsigned char *) xmalloc (cd->max_insn_bitsize / 8);
-      cgen_put_insn_value (cd, insn_bytes_value, length, insn_int_value,
-                           cd->insn_endian);
+      buf = (unsigned char *) alloca (cd->max_insn_bitsize / 8);
+      cgen_put_insn_value (cd, buf, length, insn_int_value);
+      base_insn = insn_int_value;
     }
   else
     {
@@ -470,8 +471,8 @@ cgen_lookup_insn (CGEN_CPU_DESC cd,
       ex_info.dis_info = NULL;
       ex_info.insn_bytes = insn_bytes_value;
       ex_info.valid = -1;
-      insn_int_value = cgen_get_insn_value (cd, insn_bytes_value, length,
-                                            cd->insn_endian);
+      buf = insn_bytes_value;
+      base_insn = cgen_get_insn_value (cd, buf, length);
     }
 
   if (!insn)
@@ -481,8 +482,7 @@ cgen_lookup_insn (CGEN_CPU_DESC cd,
       /* The instructions are stored in hash lists.
 	 Pick the first one and keep trying until we find the right one.  */
 
-      insn_list = cgen_dis_lookup_insn (cd, (char *) insn_bytes_value,
-					insn_int_value);
+      insn_list = cgen_dis_lookup_insn (cd, (char *) buf, base_insn);
       while (insn_list != NULL)
 	{
 	  insn = insn_list->insn;
@@ -494,18 +494,18 @@ cgen_lookup_insn (CGEN_CPU_DESC cd,
 	      /* Basic bit mask must be correct.  */
 	      /* ??? May wish to allow target to defer this check until the
 		 extract handler.  */
-	      if ((insn_int_value & CGEN_INSN_BASE_MASK (insn))
+	      if ((base_insn & CGEN_INSN_BASE_MASK (insn))
 		  == CGEN_INSN_BASE_VALUE (insn))
 		{
 		  /* ??? 0 is passed for `pc' */
 		  int elength = CGEN_EXTRACT_FN (cd, insn)
-		    (cd, insn, info, insn_int_value, fields, (bfd_vma) 0);
+		    (cd, insn, info, base_insn, fields, (bfd_vma) 0);
 		  if (elength > 0)
 		    {
 		      /* sanity check */
 		      if (length != 0 && length != elength)
 			abort ();
-		      break;
+		      return insn;
 		    }
 		}
 	    }
@@ -525,17 +525,15 @@ cgen_lookup_insn (CGEN_CPU_DESC cd,
 
       /* ??? 0 is passed for `pc' */
       length = CGEN_EXTRACT_FN (cd, insn)
-	(cd, insn, info, insn_int_value, fields, (bfd_vma) 0);
+	(cd, insn, info, base_insn, fields, (bfd_vma) 0);
       /* Sanity check: must succeed.
 	 Could relax this later if it ever proves useful.  */
       if (length == 0)
 	abort ();
+      return insn;
     }
 
-  if (cd->int_insn_p)
-    free (insn_bytes_value);
-
-  return insn;
+  return NULL;
 }
 
 /* Fill in the operand instances used by INSN whose operands are FIELDS.

@@ -1,6 +1,6 @@
 /* Test case for forgotten hw-watchpoints after fork()-off of a process.
 
-   Copyright 2012-2020 Free Software Foundation, Inc.
+   Copyright 2012-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,14 +17,14 @@
    You should have received a copy of the GNU General Public License
    along with this program; if not, see <http://www.gnu.org/licenses/>.  */
 
-#include "watchpoint-fork.h"
-
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
 #include <assert.h>
 #include <signal.h>
 #include <stdio.h>
+
+#include "watchpoint-fork.h"
 
 /* `pid_t' may not be available.  */
 
@@ -59,9 +59,7 @@ forkoff (int nr)
     case -1:
       assert (0);
     default:
-#if DEBUG
       printf ("parent%d: %d\n", nr, (int) child);
-#endif
 
       /* Sleep for a while to possibly get incorrectly ATTACH_THREADed by GDB
 	 tracing the child fork with no longer valid thread/lwp entries of the
@@ -97,9 +95,7 @@ forkoff (int nr)
 
       _exit (0);
     case 0:
-#if DEBUG
       printf ("child%d: %d\n", nr, (int) getpid ());
-#endif
 
       /* Let the parent signal us about its success.  Be careful of races.  */
 

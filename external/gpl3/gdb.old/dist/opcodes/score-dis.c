@@ -1,5 +1,5 @@
 /* Instruction printing code for Score
-   Copyright (C) 2006-2020 Free Software Foundation, Inc.
+   Copyright 2006, 2007, 2008, 2009 Free Software Foundation, Inc.
    Contributed by:
    Brain.lin (brain.lin@sunplusct.com)
    Mei Ligang (ligang@sunnorth.com.cn)
@@ -23,7 +23,7 @@
    MA 02110-1301, USA.  */
 
 #include "sysdep.h"
-#include "disassemble.h"
+#include "dis-asm.h"
 #define DEFINE_TABLE
 #include "opintl.h"
 #include "bfd.h"
@@ -35,14 +35,14 @@
 
 #ifdef BFD64
 /* s3_s7: opcodes and export prototypes.  */
-extern int
+extern int 
 s7_print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little);
 
 struct score_opcode
 {
   bfd_vma value;
-  bfd_vma mask;		/* Recognise instruction if (op & mask) == value.  */
-  char *assembler;	/* Disassembly string.  */
+  bfd_vma mask;           /* Recognise instruction if (op & mask) == value.  */
+  char *assembler;        /* Disassembly string.  */
 };
 
 /* Note: There is a partial ordering in this table - it must be searched from
@@ -52,7 +52,7 @@ static struct score_opcode score_opcodes[] =
 {
   /* Score Instructions.  */
   {0x3800000a, 0x3e007fff, "abs\t\t%20-24r, %15-19r"},
-  {0x3800004b, 0x3e007fff, "abs.s\t\t%20-24r, %15-19r"},
+  {0x3800004b, 0x3e007fff, "abs.s\t\t%20-24r, %15-19r"},        
   {0x00000010, 0x3e0003ff, "add\t\t%20-24r, %15-19r, %10-14r"},
   {0x00000011, 0x3e0003ff, "add.c\t\t%20-24r, %15-19r, %10-14r"},
   {0x38000048, 0x3e0003ff, "add.s\t\t%20-24r, %15-19r, %10-14r"},
@@ -190,36 +190,36 @@ static struct score_opcode score_opcodes[] =
   {0x31e00000, 0x3ff00000, "cache\t\t%20-24d, [%15-19r, %0-14i]"},
   {0x31f00000, 0x3ff00000, "cache\t\t%20-24d, [%15-19r, %0-14i]"},
   {0x38000000, 0x3ff003ff, "mad\t\t%15-19r, %10-14r"},
-  {0x38000020, 0x3ff003ff, "madu\t\t%15-19r, %10-14r"},
+  {0x38000020, 0x3ff003ff, "madu\t\t%15-19r, %10-14r"},        
   {0x38000080, 0x3ff003ff, "mad.f\t\t%15-19r, %10-14r"},
-  {0x38000001, 0x3ff003ff, "msb\t\t%15-19r, %10-14r"},
+  {0x38000001, 0x3ff003ff, "msb\t\t%15-19r, %10-14r"},    
   {0x38000021, 0x3ff003ff, "msbu\t\t%15-19r, %10-14r"},
   {0x38000081, 0x3ff003ff, "msb.f\t\t%15-19r, %10-14r"},
-  {0x38000102, 0x3ff003ff, "mazl\t\t%15-19r, %10-14r"},
-  {0x38000182, 0x3ff003ff, "mazl.f\t\t%15-19r, %10-14r"},
-  {0x38000002, 0x3ff003ff, "madl\t\t%15-19r, %10-14r"},
-  {0x380000c2, 0x3ff003ff, "madl.fs\t\t%15-19r, %10-14r"},
-  {0x38000303, 0x3ff003ff, "mazh\t\t%15-19r, %10-14r"},
-  {0x38000383, 0x3ff003ff, "mazh.f\t\t%15-19r, %10-14r"},
-  {0x38000203, 0x3ff003ff, "madh\t\t%15-19r, %10-14r"},
-  {0x380002c3, 0x3ff003ff, "madh.fs\t\t%15-19r, %10-14r"},
-  {0x38000007, 0x3e0003ff, "max\t\t%20-24r, %15-19r, %10-14r"},
+  {0x38000102, 0x3ff003ff, "mazl\t\t%15-19r, %10-14r"},        
+  {0x38000182, 0x3ff003ff, "mazl.f\t\t%15-19r, %10-14r"},        
+  {0x38000002, 0x3ff003ff, "madl\t\t%15-19r, %10-14r"},    
+  {0x380000c2, 0x3ff003ff, "madl.fs\t\t%15-19r, %10-14r"},        
+  {0x38000303, 0x3ff003ff, "mazh\t\t%15-19r, %10-14r"},    
+  {0x38000383, 0x3ff003ff, "mazh.f\t\t%15-19r, %10-14r"},    
+  {0x38000203, 0x3ff003ff, "madh\t\t%15-19r, %10-14r"},    
+  {0x380002c3, 0x3ff003ff, "madh.fs\t\t%15-19r, %10-14r"},    
+  {0x38000007, 0x3e0003ff, "max\t\t%20-24r, %15-19r, %10-14r"},    
 
-  {0x00000064, 0x3e00007e, "mbitclr\t\t[%15-19r, %m], %10-14d"},
-  {0x0000006c, 0x3e00007e, "mbitset\t\t[%15-19r, %m], %10-14d"},
+  {0x00000064, 0x3e00007e, "mbitclr\t\t[%15-19r, %m], %10-14d"},    
+  {0x0000006c, 0x3e00007e, "mbitset\t\t[%15-19r, %m], %10-14d"},    
 
   {0x38000006, 0x3e0003ff, "min\t\t%20-24r, %15-19r, %10-14r"},
-  {0x38000104, 0x3ff003ff, "mszl\t\t%15-19r, %10-14r"},
-  {0x38000184, 0x3ff003ff, "mszl.f\t\t%15-19r, %10-14r"},
-  {0x38000004, 0x3ff003ff, "msbl\t\t%15-19r, %10-14r"},
+  {0x38000104, 0x3ff003ff, "mszl\t\t%15-19r, %10-14r"},    
+  {0x38000184, 0x3ff003ff, "mszl.f\t\t%15-19r, %10-14r"},    
+  {0x38000004, 0x3ff003ff, "msbl\t\t%15-19r, %10-14r"},        
   {0x380000c4, 0x3ff003ff, "msbl.fs\t\t%15-19r, %10-14r"},
-  {0x38000305, 0x3ff003ff, "mszh\t\t%15-19r, %10-14r"},
-  {0x38000385, 0x3ff003ff, "mszh.f\t\t%15-19r, %10-14r"},
-  {0x38000205, 0x3ff003ff, "msbh\t\t%15-19r, %10-14r"},
-  {0x380002c5, 0x3ff003ff, "msbh.fs\t\t%15-19r, %10-14r"},
-  {0x3800004e, 0x3e0003ff, "sll.s\t\t%20-24r, %15-19r, %10-14r"},
-  {0x38000049, 0x3e0003ff, "sub.s\t\t%20-24r, %15-19r, %10-14r"},
-  {0x0000001c, 0x3e007fff, "clz\t\t%20-24r, %15-19r"},
+  {0x38000305, 0x3ff003ff, "mszh\t\t%15-19r, %10-14r"},        
+  {0x38000385, 0x3ff003ff, "mszh.f\t\t%15-19r, %10-14r"},    
+  {0x38000205, 0x3ff003ff, "msbh\t\t%15-19r, %10-14r"},        
+  {0x380002c5, 0x3ff003ff, "msbh.fs\t\t%15-19r, %10-14r"},        
+  {0x3800004e, 0x3e0003ff, "sll.s\t\t%20-24r, %15-19r, %10-14r"},                
+  {0x38000049, 0x3e0003ff, "sub.s\t\t%20-24r, %15-19r, %10-14r"},    
+  {0x0000001c, 0x3e007fff, "clz\t\t%20-24r, %15-19r"},    
   {0x38000000, 0x3e000000, "ceinst\t\t%20-24d, %15-19r, %10-14r, %5-9d, %0-4d"},
   {0x00000019, 0x3ff003ff, "cmpteq.c\t\t%15-19r, %10-14r"},
   {0x00100019, 0x3ff003ff, "cmptmi.c\t\t%15-19r, %10-14r"},
@@ -285,15 +285,15 @@ static struct score_opcode score_opcodes[] =
   {0x0e000000, 0x3e000007, "lw\t\t%20-24r, [%15-19r]+, %3-14i"},
   {0x00001000, 0x00007000, "lw!\t\t%8-11r, [%5-7r,%0-4d2]"},
   {0x000000000002LL, 0x1c000000001fLL, "lw48\t\t%37-41r,[0x%7-36w]"},
-  {0x00007a00, 0x00007f00, "madl.fs!\t\t%4-7r, %0-3r"},
-  {0x00007500, 0x00007f00, "madu!\t\t%4-7r, %0-3r"},
+  {0x00007a00, 0x00007f00, "madl.fs!\t\t%4-7r, %0-3r"}, 
+  {0x00007500, 0x00007f00, "madu!\t\t%4-7r, %0-3r"}, 
   {0x00007400, 0x00007f00, "mad.f!\t\t%4-7r, %0-3r"},
-  {0x00007900, 0x00007f00, "mazh.f!\t\t%4-7r, %0-3r"},
+  {0x00007900, 0x00007f00, "mazh.f!\t\t%4-7r, %0-3r"}, 
   {0x00007800, 0x00007f00, "mazl.f!\t\t%4-7r, %0-3r"},
   {0x00000448, 0x3e007fff, "mfcel\t\t%20-24r"},
   {0x00007100, 0x00007ff0, "mfcel!\t\t%0-3r"},
-  {0x00000848, 0x3e007fff, "mfceh\t\t%20-24r"},
-  {0x00007110, 0x00007ff0, "mfceh!\t\t%0-3r"},
+  {0x00000848, 0x3e007fff, "mfceh\t\t%20-24r"},  
+  {0x00007110, 0x00007ff0, "mfceh!\t\t%0-3r"}, 
   {0x00000c48, 0x3e007fff, "mfcehl\t\t%20-24r, %15-19r"},
   {0x00000048, 0x3e0003ff, "mfce\t\t%20-24r, er%10-14d"},
   {0x00000050, 0x3e0003ff, "mfsr\t\t%20-24r, sr%10-14d"},
@@ -311,7 +311,7 @@ static struct score_opcode score_opcodes[] =
   {0x00006c00, 0x00007c00, "rpush!\t\t%5-9r, %0-4d"},
   {0x00007600, 0x00007f00, "msb.f!\t\t%4-7r, %0-3r"},
   {0x00007f00, 0x00007f00, "msbh.fs!\t\t%4-7r, %0-3r"},
-  {0x00007e00, 0x00007f00, "msbl.fs!\t\t%4-7r, %0-3r"},
+  {0x00007e00, 0x00007f00, "msbl.fs!\t\t%4-7r, %0-3r"}, 
   {0x00007700, 0x00007f00, "msbu!\t\t%4-7r, %0-3r"},
   {0x00007d00, 0x00007f00, "mszh.f!\t\t%4-7r, %0-3r"},
   {0x00007c00, 0x00007f00, "mszl.f!\t\t%4-7r, %0-3r"},
@@ -338,14 +338,14 @@ static struct score_opcode score_opcodes[] =
   {0x00000341, 0x3e0003ff, "mulr.f\t\t%20-24r,%15-19r, %10-14r"},
   {0x00000040, 0x3e0003ff, "maz\t\t%15-19r, %10-14r"},
   {0x00000041, 0x3e0003ff, "mul.f\t\t%15-19r, %10-14r"},
-  {0x00000041, 0x3e0003ff, "maz.f\t\t%15-19r, %10-14r"},
+  {0x00000041, 0x3e0003ff, "maz.f\t\t%15-19r, %10-14r"},    
   {0x00007200, 0x00007f00, "mul.f!\t\t%4-7r, %0-3r"},
   {0x00000042, 0x3e0003ff, "mulu\t\t%15-19r, %10-14r"},
   {0x00000142, 0x3e0003ff, "mulur.l\t\t%20-24r,%15-19r, %10-14r"},
   {0x00000242, 0x3e0003ff, "mulur.h\t\t%20-24r,%15-19r, %10-14r"},
   {0x00000342, 0x3e0003ff, "mulur\t\t%20-24r,%15-19r, %10-14r"},
   {0x00000042, 0x3e0003ff, "mazu\t\t%15-19r, %10-14r"},
-  {0x00007300, 0x00007f00, "mulu!\t\t%4-7r, %0-3r"},
+  {0x00007300, 0x00007f00, "mulu!\t\t%4-7r, %0-3r"},    
   {0x00000056, 0x3e007fff, "mvcs\t\t%20-24r, %15-19r"},
   {0x00000456, 0x3e007fff, "mvcc\t\t%20-24r, %15-19r"},
   {0x00000856, 0x3e007fff, "mvgtu\t\t%20-24r, %15-19r"},
@@ -370,8 +370,8 @@ static struct score_opcode score_opcodes[] =
   {0x00000000, 0x00007fff, "nop!"},
   {0x00000022, 0x3e0003ff, "or\t\t%20-24r, %15-19r, %10-14r"},
   {0x00000023, 0x3e0003ff, "or.c\t\t%20-24r, %15-19r, %10-14r"},
-  {0x020a0000, 0x3e0e0001, "ori\t\t%20-24r, 0x%1-16x"},
-  {0x020a0001, 0x3e0e0001, "ori.c\t\t%20-24r, 0x%1-16x"},
+  {0x020a0000, 0x3e0e0001, "ori\t\t%20-24r, 0x%1-16x"},    
+  {0x020a0001, 0x3e0e0001, "ori.c\t\t%20-24r, 0x%1-16x"},    
   {0x0a0a0000, 0x3e0e0001, "oris\t\t%20-24r, 0x%1-16x"},
   {0x0a0a0001, 0x3e0e0001, "oris.c\t\t%20-24r, 0x%1-16x"},
   {0x1a000000, 0x3e000001, "orri\t\t%20-24r, %15-19r, 0x%1-14x"},
@@ -473,7 +473,6 @@ static struct score_opcode score_opcodes[] =
   {0x00003454, 0x3e007fff, "tvc"},
   {0x00000026, 0x3e0003ff, "xor\t\t%20-24r, %15-19r, %10-14r"},
   {0x00000027, 0x3e0003ff, "xor.c\t\t%20-24r, %15-19r, %10-14r"},
-  {0,0,NULL}
 };
 
 
@@ -521,147 +520,149 @@ print_insn_score48 (struct disassemble_info *info, bfd_vma given)
   for (insn = score_opcodes; insn->assembler; insn++)
     {
       /* Using insn->mask &0xff00000000 to distinguish 48/32 bit.  */
-      if ((insn->mask & 0xff0000000000LL) != 0
-	  && (given & insn->mask) == insn->value)
-	{
-	  info->bytes_per_chunk = 2;
-	  info->bytes_per_line =6;
+      if (((insn->mask & 0xff0000000000LL)!=0) && (given & insn->mask) == insn->value)
+        {
+           info->bytes_per_chunk = 2;
+           info->bytes_per_line =6;
 
-	  char *c;
+          char *c;
 
-	  for (c = insn->assembler; *c; c++)
-	    {
-	      if (*c == '%')
-		{
-		  switch (*++c)
-		    {
-		    case '0':
-		    case '1':
-		    case '2':
-		    case '3':
-		    case '4':
-		    case '5':
-		    case '6':
-		    case '7':
-		    case '8':
-		    case '9':
-		      {
-			int bitstart = *c++ - '0';
-			int bitend = 0;
+          for (c = insn->assembler; *c; c++)
+            {
+              if (*c == '%')
+                {
+                  switch (*++c)
+                    {
+                    case '0':
+                    case '1':
+                    case '2':
+                    case '3':
+                    case '4':
+                    case '5':
+                    case '6':
+                    case '7':
+                    case '8':
+                    case '9':
+                      {
+                        int bitstart = *c++ - '0';
+                        int bitend = 0;
 
-			while (*c >= '0' && *c <= '9')
-			  bitstart = (bitstart * 10) + *c++ - '0';
+                        while (*c >= '0' && *c <= '9')
+                          bitstart = (bitstart * 10) + *c++ - '0';
 
-			switch (*c)
-			  {
-			  case '-':
-			    c++;
-			    while (*c >= '0' && *c <= '9')
-			      bitend = (bitend * 10) + *c++ - '0';
+                        switch (*c)
+                          {
+                          case '-':
+                            c++;
+                            while (*c >= '0' && *c <= '9')
+                              bitend = (bitend * 10) + *c++ - '0';
 
-			    if (!bitend)
-			      abort ();
+                            if (!bitend)
+                              abort ();
 
-			    switch (*c)
-			      {
-			      case 'r':
-				{
-				  unsigned long reg;
+                            switch (*c)
+                              {
+                              case 'r':
+                                {
+                                  long reg;
 
-				  reg = given >> bitstart;
-				  reg &= (2u << (bitend - bitstart)) - 1;
+                                  reg = given >> bitstart;
+                                  reg &= (2 << (bitend - bitstart)) - 1;
 
-				  func (stream, "%s", score_regnames[reg]);
-				}
-				break;
-			      case 'd':
-				{
-				  unsigned long reg;
+                                  func (stream, "%s", score_regnames[reg]);
+                                }
+                                break;
+                              case 'd':
+                                {
+                                  long reg;
 
-				  reg = given >> bitstart;
-				  reg &= (2u << (bitend - bitstart)) - 1;
+                                  reg = given >> bitstart;
+                                  reg &= (2 << (bitend - bitstart)) - 1;
 
-				  func (stream, "%ld", reg);
-				}
-				break;
-			      case 'i':
-				{
-				  long reg;
-				  reg = given >> bitstart;
-				  reg &= (2u << (bitend - bitstart)) - 1;
-				  reg = ((reg ^ (1u << (bitend - bitstart)))
-					 - (1u << (bitend - bitstart)));
-				  /* Fix bug: s3_testsuite 64-bit.
-				     Remove high 32 bits.  */
-				  reg = (int) reg;
+                                  func (stream, "%ld", reg);
+                                }
+                                break;
+                              case 'i':
+                                {
+                                  long reg;
+                                  reg = given >> bitstart;
+                                  reg &= (2 << (bitend - bitstart)) - 1;
+                                  reg = ((reg ^ (1 << (bitend - bitstart))) -
+                                        (1 << (bitend - bitstart)));
+                                  /* Fix bug: s3_testsuite 64-bit.  
+                                     Remove high 32 bits.  */
+                                  reg = (int) reg;
 
-				  if (((given & insn->mask) == 0x0c00000a)      /* ldc1  */
-				      || ((given & insn->mask) == 0x0c000012)   /* ldc2  */
-				      || ((given & insn->mask) == 0x0c00001c)   /* ldc3  */
-				      || ((given & insn->mask) == 0x0c00000b)   /* stc1  */
-				      || ((given & insn->mask) == 0x0c000013)   /* stc2  */
-				      || ((given & insn->mask) == 0x0c00001b))  /* stc3  */
-				    reg *= 4;
+                                  if (((given & insn->mask) == 0x0c00000a)      /* ldc1  */
+                                      || ((given & insn->mask) == 0x0c000012)   /* ldc2  */
+                                      || ((given & insn->mask) == 0x0c00001c)   /* ldc3  */
+                                      || ((given & insn->mask) == 0x0c00000b)   /* stc1  */
+                                      || ((given & insn->mask) == 0x0c000013)   /* stc2  */
+                                      || ((given & insn->mask) == 0x0c00001b))  /* stc3  */
+                                    reg <<= 2;
 
-				  func (stream, "%ld", reg);
-				}
-				break;
-			      case 'x':
-				{
-				  unsigned long reg;
+                                  func (stream, "%ld", reg);
+                                }
+                                break;
+                              case 'x':
+                                {
+                                  long reg;
 
-				  reg = given >> bitstart;
-				  reg &= (2u << (bitend - bitstart)) - 1;
+                                  reg = given >> bitstart;
+                                  reg &= (2 << (bitend - bitstart)) - 1;
+                                  /* Fix bug: s3_testsuite 64-bit.  
+                                     Remove high 32 bits.  */
+                                  reg = (int) reg;
 
-				  func (stream, "%lx", reg);
-				}
-				break;
-			      case 'w':
-				{
-				  unsigned long reg;
-				  reg = given >> bitstart;
-				  reg &= (2u << (bitend - bitstart)) - 1;
-				  reg <<= 2;
-				  func (stream, "%lx", reg);
-				}
-				break;
+                                  func (stream, "%lx", reg);
+                                }
+                                break;
+                                case 'w':
+                                {
+                                    long reg;
+                                    reg = given >> bitstart;
+                                    reg &= (2 << (bitend - bitstart)) - 1;
+                                    reg <<=2;
+                                    func (stream, "%lx", reg);
+                                }
+                                break;
+                   
+                              default:
+                                abort ();
+                              }
+                            break;
 
-			      default:
-				abort ();
-			      }
-			    break;
-
-			  case '`':
-			    c++;
-			    if ((given & (1u << bitstart)) == 0)
-			      func (stream, "%c", *c);
-			    break;
-			  case '\'':
-			    c++;
-			    if ((given & (1u << bitstart)) != 0)
-			      func (stream, "%c", *c);
-			    break;
-			  default:
-			    abort ();
-			  }
-			break;
-		      }
-		    default:
+                          case '`':
+                            c++;
+                            if ((given & (1 << bitstart)) == 0)
+                              func (stream, "%c", *c);
+                            break;
+                          case '\'':
+                            c++;
+                            if ((given & (1 << bitstart)) != 0)
+                              func (stream, "%c", *c);
+                            break;
+                          default:
+                            abort ();
+                          }
+                        break;
+                      }
+                    default:
 		      abort ();
-		    }
-		}
-	      else
-		func (stream, "%c", *c);
-	    }
-	  return 6;
-	}
+                    }
+                }
+              else
+                func (stream, "%c", *c);
+            }
+          return 6;
+        }
     }
 
 #if (SCORE_SIMULATOR_ACTIVE)
   func (stream, _("<illegal instruction>"));
   return 6;
 #endif
-
+  
   abort ();
 }
 
@@ -672,207 +673,196 @@ print_insn_score32 (bfd_vma pc, struct disassemble_info *info, long given)
 {
   struct score_opcode *insn;
   void *stream = info->stream;
-  int rb_equal_zero = 1;
+  int  rb_equal_zero=1;
   fprintf_ftype func = info->fprintf_func;
 
   for (insn = score_opcodes; insn->assembler; insn++)
     {
-      if ((insn->mask & 0xff0000000000LL) == 0
-	  && (insn->mask & 0xffff0000) != 0
-	  && (given & insn->mask) == insn->value)
-	{
-	  /* check for bcmpeq / bcmpeqz / bcmpne / bcmpnez
-	     given & 0x7c00 is to test if rb is zero,
-	     rb_equal_zero = 1 : index to bcmpeqz
-	     rb_equal_zero = 0 , index to bcmpeq
-	     only for branch compare (insn->mask == 0x3e00007e).  */
-	  if ((given & 0x7c00) != 0
-	      && rb_equal_zero
-	      && insn->mask == 0x3e00007e
-	      && (insn->value == 0x0000004c || insn->value == 0x0000004e))
-	    {
-	      rb_equal_zero =0;
-	      continue;
-	    }
+      if (((insn->mask & 0xff0000000000LL)==0)&&(insn->mask & 0xffff0000) && (given & insn->mask) == insn->value)
+        {
+          /* check for bcmpeq / bcmpeqz / bcmpne / bcmpnez */
+            /* given &0x7c00 is for to test if rb is zero  ,
+                 rb_equal_zero =1 : index to bcmpeqz 
+                 rb_equal_zero =0 , index to bcmpeq
+                this checking rule only for branch compare ( insn->mask ==0x3e00007e*/
+            if (((given & 0x7c00) !=0)&&(rb_equal_zero ==1)&&(insn->mask == 0x3e00007e)
+                && (insn->value == 0x0000004c || insn->value == 0x0000004e))
+            {
+                rb_equal_zero =0;
+               continue;
+             }
+          
+          char *c;
 
-	  char *c;
+          for (c = insn->assembler; *c; c++)
+            {
+              if (*c == '%')
+                {
+                  switch (*++c)
+                    {
+                    case 'j':
+                      {
+                        int target;
 
-	  for (c = insn->assembler; *c; c++)
-	    {
-	      if (*c == '%')
-		{
-		  switch (*++c)
-		    {
-		    case 'j':
-		      {
-			int target;
+                        if (info->flags & INSN_HAS_RELOC)
+                          pc = 0;
+                        target = (pc & 0xfe000000) | (given & 0x01fffffe);
+                        (*info->print_address_func) (target, info);
+                      }
+                      break;
+                    case 'b':
+                      {
+                        /* Sign-extend a 20-bit number.  */
+#define SEXT20(x)       ((((x) & 0xfffff) ^ (~ 0x7ffff)) + 0x80000)
+                        int disp = ((given & 0x01ff8000) >> 5) | (given & 0x3fe);
+                        int target = (pc + SEXT20 (disp));
 
-			if (info->flags & INSN_HAS_RELOC)
-			  pc = 0;
-			target = (pc & 0xfe000000) | (given & 0x01fffffe);
-			(*info->print_address_func) (target, info);
-		      }
-		      break;
-		    case 'b':
-		      {
-			/* Sign-extend a 20-bit number.  */
-#define SEXT20(x) ((((x) & 0xfffff) ^ (~ 0x7ffff)) + 0x80000)
-			int disp = (((given & 0x01ff8000) >> 5)
-				    | (given & 0x3fe));
-			int target = (pc + SEXT20 (disp));
+                        (*info->print_address_func) (target, info);
+                      }
+                      break;
+                    case 'z':
+                      {
+#define SEXT10(x)           ((((x) & 0x3ff) ^ (~ 0x1ff)) + 0x200)
+                           if  ((given & 0x7c00 ) == 0)
+                           {
+                               /* Sign-extend a 20-bit number.  */
+                               /* disp : [24 -20]  , [9-7 ] , [0] */
+                                  int disp = (given&1)<<1 |((given>>7)&7)<<2 |((given>>20)&0x1f)<<5;
+                                  int target = (pc + SEXT10 (disp));
+                                  (*info->print_address_func) (target, info);
+                           }
+                           else
+                           {
+                               long reg;
+                               int bitstart = 10;
+                               int bitend = 14;
+                               reg = given >> bitstart;
+                               reg &= (2 << (bitend - bitstart)) - 1;
+                               /* Sign-extend a 20-bit number.  */
+                               int disp = (given&1)<<1 |((given>>7)&7)<<2 |((given>>20)&0x1f)<<5;
+                               int target = (pc + SEXT10 (disp));
+                               func (stream, "%s ,", score_regnames[reg] );
+                                  (*info->print_address_func) (target, info);
+                               
+                               }
+ 
+                      }
+                      break;
+                    case 'm':
+                      {
+                        /* disp : [24 -20]  , [9-7 ] , [0] */
+                        int disp = (given&1)<<2 |((given>>7)&7)<<3 |((given>>20)&0x1f)<<6;
+                        (*info->print_address_func) (disp, info);
+                      }
+                      break;
+                    case '0':
+                    case '1':
+                    case '2':
+                    case '3':
+                    case '4':
+                    case '5':
+                    case '6':
+                    case '7':
+                    case '8':
+                    case '9':
+                      {
+                        int bitstart = *c++ - '0';
+                        int bitend = 0;
 
-			(*info->print_address_func) (target, info);
-		      }
-		      break;
-		    case 'z':
-		      {
-#define SEXT10(x) ((((x) & 0x3ff) ^ (~ 0x1ff)) + 0x200)
-			if  ((given & 0x7c00 ) == 0)
-			  {
-			    /* Sign-extend a 20-bit number.  */
-			    /* disp : [24 -20]  , [9-7 ] , [0] */
-			    int disp = ((given & 1) << 1
-					| ((given >> 7) & 7) << 2
-					| ((given >> 20) & 0x1f) <<5);
-			    int target = (pc + SEXT10 (disp));
-			    (*info->print_address_func) (target, info);
-			  }
-			else
-			  {
-			    unsigned long reg;
-			    int bitstart = 10;
-			    int bitend = 14;
-			    reg = given >> bitstart;
-			    reg &= (2u << (bitend - bitstart)) - 1;
-			    /* Sign-extend a 20-bit number.  */
-			    int disp = ((given & 1) << 1
-					| ((given >> 7) & 7) << 2
-					| ((given >> 20) & 0x1f) <<5);
-			    int target = (pc + SEXT10 (disp));
-			    func (stream, "%s ,", score_regnames[reg] );
-			    (*info->print_address_func) (target, info);
+                        while (*c >= '0' && *c <= '9')
+                          bitstart = (bitstart * 10) + *c++ - '0';
 
-			  }
+                        switch (*c)
+                          {
+                          case '-':
+                            c++;
+                            while (*c >= '0' && *c <= '9')
+                              bitend = (bitend * 10) + *c++ - '0';
 
-		      }
-		      break;
-		    case 'm':
-		      {
-			/* disp : [24 -20]  , [9-7 ] , [0] */
-			int disp = ((given & 1) << 2
-				    | ((given >> 7) & 7) << 3
-				    | ((given >> 20) & 0x1f) << 6);
-			(*info->print_address_func) (disp, info);
-		      }
-		      break;
-		    case '0':
-		    case '1':
-		    case '2':
-		    case '3':
-		    case '4':
-		    case '5':
-		    case '6':
-		    case '7':
-		    case '8':
-		    case '9':
-		      {
-			int bitstart = *c++ - '0';
-			int bitend = 0;
+                            if (!bitend)
+                              abort ();
 
-			while (*c >= '0' && *c <= '9')
-			  bitstart = (bitstart * 10) + *c++ - '0';
+                            switch (*c)
+                              {
+                              case 'r':
+                                {
+                                  long reg;
 
-			switch (*c)
-			  {
-			  case '-':
-			    c++;
-			    while (*c >= '0' && *c <= '9')
-			      bitend = (bitend * 10) + *c++ - '0';
+                                  reg = given >> bitstart;
+                                  reg &= (2 << (bitend - bitstart)) - 1;
 
-			    if (!bitend)
-			      abort ();
+                                  func (stream, "%s", score_regnames[reg]);
+                                }
+                                break;
+                              case 'd':
+                                {
+                                  long reg;
 
-			    switch (*c)
-			      {
-			      case 'r':
-				{
-				  unsigned long reg;
+                                  reg = given >> bitstart;
+                                  reg &= (2 << (bitend - bitstart)) - 1;
 
-				  reg = given >> bitstart;
-				  reg &= (2u << (bitend - bitstart)) - 1;
+                                  func (stream, "%ld", reg);
+                                }
+                                break;
+                              case 'i':
+                                {
+                                  long reg;
 
-				  func (stream, "%s", score_regnames[reg]);
-				}
-				break;
-			      case 'd':
-				{
-				  unsigned long reg;
+                                  reg = given >> bitstart;
+                                  reg &= (2 << (bitend - bitstart)) - 1;
+                                  reg = ((reg ^ (1 << (bitend - bitstart))) -
+                                        (1 << (bitend - bitstart)));
 
-				  reg = given >> bitstart;
-				  reg &= (2u << (bitend - bitstart)) - 1;
+                                  if (((given & insn->mask) == 0x0c00000a)      /* ldc1  */
+                                      || ((given & insn->mask) == 0x0c000012)   /* ldc2  */
+                                      || ((given & insn->mask) == 0x0c00001c)   /* ldc3  */
+                                      || ((given & insn->mask) == 0x0c00000b)   /* stc1  */
+                                      || ((given & insn->mask) == 0x0c000013)   /* stc2  */
+                                      || ((given & insn->mask) == 0x0c00001b))  /* stc3  */
+                                    reg <<= 2;
 
-				  func (stream, "%ld", reg);
-				}
-				break;
-			      case 'i':
-				{
-				  long reg;
+                                  func (stream, "%ld", reg);
+                                }
+                                break;
+                              case 'x':
+                                {
+                                  long reg;
 
-				  reg = given >> bitstart;
-				  reg &= (2u << (bitend - bitstart)) - 1;
-				  reg = ((reg ^ (1u << (bitend - bitstart)))
-					 - (1u << (bitend - bitstart)));
+                                  reg = given >> bitstart;
+                                  reg &= (2 << (bitend - bitstart)) - 1;
 
-				  if (((given & insn->mask) == 0x0c00000a)      /* ldc1  */
-				      || ((given & insn->mask) == 0x0c000012)   /* ldc2  */
-				      || ((given & insn->mask) == 0x0c00001c)   /* ldc3  */
-				      || ((given & insn->mask) == 0x0c00000b)   /* stc1  */
-				      || ((given & insn->mask) == 0x0c000013)   /* stc2  */
-				      || ((given & insn->mask) == 0x0c00001b))  /* stc3  */
-				    reg *= 4;
+                                  func (stream, "%lx", reg);
+                                }
+                                break;
+                              default:
+                                abort ();
+                              }
+                            break;
 
-				  func (stream, "%ld", reg);
-				}
-				break;
-			      case 'x':
-				{
-				  unsigned long reg;
-
-				  reg = given >> bitstart;
-				  reg &= (2u << (bitend - bitstart)) - 1;
-
-				  func (stream, "%lx", reg);
-				}
-				break;
-			      default:
-				abort ();
-			      }
-			    break;
-
-			  case '`':
-			    c++;
-			    if ((given & (1u << bitstart)) == 0)
-			      func (stream, "%c", *c);
-			    break;
-			  case '\'':
-			    c++;
-			    if ((given & (1u << bitstart)) != 0)
-			      func (stream, "%c", *c);
-			    break;
-			  default:
-			    abort ();
-			  }
-			break;
-		      }
-		    default:
+                          case '`':
+                            c++;
+                            if ((given & (1 << bitstart)) == 0)
+                              func (stream, "%c", *c);
+                            break;
+                          case '\'':
+                            c++;
+                            if ((given & (1 << bitstart)) != 0)
+                              func (stream, "%c", *c);
+                            break;
+                          default:
+                            abort ();
+                          }
+                        break;
+                      }
+                    default:
 		      abort ();
-		    }
-		}
-	      else
-		func (stream, "%c", *c);
-	    }
-	  return 4;
-	}
+                    }
+                }
+              else
+                func (stream, "%c", *c);
+            }
+          return 4;
+        }
     }
 
 #if (SCORE_SIMULATOR_ACTIVE)
@@ -895,152 +885,152 @@ print_insn_score16 (bfd_vma pc, struct disassemble_info *info, long given)
   given &= 0xffff;
   for (insn = score_opcodes; insn->assembler; insn++)
     {
-      if ((insn->mask & 0xff0000000000LL) == 0
-	  && !(insn->mask & 0xffff0000)
-	  && (given & insn->mask) == insn->value)
-	{
-	  char *c = insn->assembler;
+      if (((insn->mask & 0xff0000000000LL)==0) &&!(insn->mask & 0xffff0000) && (given & insn->mask) == insn->value)
+        {
+          char *c = insn->assembler;
 
-	  info->bytes_per_chunk = 2;
-	  info->bytes_per_line = 4;
-	  given &= 0xffff;
+          info->bytes_per_chunk = 2;
+          info->bytes_per_line = 4;
+          given &= 0xffff;
 
-	  for (; *c; c++)
-	    {
-	      if (*c == '%')
-		{
-		  switch (*++c)
-		    {
-		    case 'j':
-		      {
-			int target;
+          for (; *c; c++)
+            {
+              if (*c == '%')
+                {
+                  switch (*++c)
+                    {
 
-			if (info->flags & INSN_HAS_RELOC)
-			  pc = 0;
+                    case 'j':
+                      {
+                        int target;
 
-			target = (pc & 0xfffff000) | (given & 0x00000ffe);
-			(*info->print_address_func) (target, info);
-		      }
-		      break;
+                        if (info->flags & INSN_HAS_RELOC)
+                          pc = 0;
 
-		    case 'b':
-		      {
-			/* Sign-extend a 9-bit number.  */
-#define SEXT10(x) ((((x) & 0x3ff) ^ (~ 0x1ff)) + 0x200)
-			int disp = (given & 0x1ff) << 1;
-			int target = (pc + SEXT10 (disp));
+                        target = (pc & 0xfffff000) | (given & 0x00000ffe);
+                        (*info->print_address_func) (target, info);
+                      }
+                      break;
+                    case 'b':
+                      {
+                        /* Sign-extend a 9-bit number.  */
+#define SEXT10(x)       ((((x) & 0x3ff) ^ (~ 0x1ff)) + 0x200)
+                        int disp = (given & 0x1ff) << 1;
+                        int target = (pc + SEXT10 (disp));
 
-			(*info->print_address_func) (target, info);
-		      }
-		      break;
+                        (*info->print_address_func) (target, info);
+                      }
+                      break;
 
-		    case '0':
-		    case '1':
-		    case '2':
-		    case '3':
-		    case '4':
-		    case '5':
-		    case '6':
-		    case '7':
-		    case '8':
-		    case '9':
-		      {
-			int bitstart = *c++ - '0';
-			int bitend = 0;
+                    case '0':
+                    case '1':
+                    case '2':
+                    case '3':
+                    case '4':
+                    case '5':
+                    case '6':
+                    case '7':
+                    case '8':
+                    case '9':
+                      {
+                        int bitstart = *c++ - '0';
+                        int bitend = 0;
 
-			while (*c >= '0' && *c <= '9')
-			  bitstart = (bitstart * 10) + *c++ - '0';
+                        while (*c >= '0' && *c <= '9')
+                          bitstart = (bitstart * 10) + *c++ - '0';
 
-			switch (*c)
-			  {
-			  case '-':
-			    {
-			      long reg;
+                        switch (*c)
+                          {
+                          case '-':
+                            {
+                              long reg;
 
-			      c++;
-			      while (*c >= '0' && *c <= '9')
-				bitend = (bitend * 10) + *c++ - '0';
-			      if (!bitend)
-				abort ();
-			      reg = given >> bitstart;
-			      reg &= (2u << (bitend - bitstart)) - 1;
+                              c++;
+                              while (*c >= '0' && *c <= '9')
+                                bitend = (bitend * 10) + *c++ - '0';
+                              if (!bitend)
+                                abort ();
+                              reg = given >> bitstart;
+                              reg &= (2 << (bitend - bitstart)) - 1;
 
-			      switch (*c)
-				{
-				case 'R':
-				  func (stream, "%s", score_regnames[reg + 16]);
-				  break;
-				case 'r':
-				  func (stream, "%s", score_regnames[reg]);
-				  break;
-				case 'd':
-				  /* Check rpush rd, 0 and rpop! rd, 0.
-				     If 0, then print 32.  */
-				  if (((given & 0x00007c00) == 0x00006c00
-				       || (given & 0x00007c00) == 0x00006800)
-				      && reg == 0)
-				    reg = 32;
+                              /* Check rpush rd, 0 and rpop! rd, 0.
+                                 If reg = 0, then set to 32.  */
+                              if (((given & 0x00007c00) == 0x00006c00
+                                    || (given & 0x00007c00) == 0x00006800)
+                                  && reg == 0)
+                                {
+                                  reg = 32;
+                                }
 
-				  if (*(c + 1) == '\0')
-				    func (stream, "%ld", reg);
-				  else
-				    {
-				      c++;
-				      if (*c == '1')
-					func (stream, "%ld", reg << 1);
-				      else if (*c == '2')
-					func (stream, "%ld", reg << 2);
-				    }
-				  break;
+                              switch (*c)
+                                {
+                                case 'R':
+                                  func (stream, "%s", score_regnames[reg + 16]);
+                                  break;
+                                case 'r':
+                                  func (stream, "%s", score_regnames[reg]);
+                                  break;
+                                case 'd':
+                                  if (*(c + 1) == '\0')
+                                    func (stream, "%ld", reg);
+                                  else
+                                    {
+                                      c++;
+                                      if (*c == '1')
+                                        func (stream, "%ld", reg << 1);
+                                      else if (*c == '2')
+                                        func (stream, "%ld", reg << 2);
+                                    }
+                                  break;
 
-				case 'x':
-				  if (*(c + 1) == '\0')
-				    func (stream, "%lx", reg);
-				  else
-				    {
-				      c++;
-				      if (*c == '1')
-					func (stream, "%lx", reg << 1);
-				      else if (*c == '2')
-					func (stream, "%lx", reg << 2);
-				    }
-				  break;
-				case 'i':
-				  reg = (reg ^ (1u << bitend)) - (1u << bitend);
-				  func (stream, "%ld", reg);
-				  break;
-				default:
-				  abort ();
-				}
-			    }
-			    break;
+                                case 'x':
+                                  if (*(c + 1) == '\0')
+                                    func (stream, "%lx", reg);
+                                  else
+                                    {
+                                      c++;
+                                      if (*c == '1')
+                                        func (stream, "%lx", reg << 1);
+                                      else if (*c == '2')
+                                        func (stream, "%lx", reg << 2);
+                                    }
+                                  break;
+                                case 'i':
+                                  reg = ((reg ^ (1 << bitend)) - (1 << bitend));
+                                  func (stream, "%ld", reg);
+                                  break;
+                                default:
+                                  abort ();
+                                }
+                            }
+                            break;
 
-			  case '\'':
-			    c++;
-			    if ((given & (1u << bitstart)) != 0)
-			      func (stream, "%c", *c);
-			    break;
-			  default:
-			    abort ();
-			  }
-		      }
-		      break;
-		    default:
-		      abort ();
-		    }
-		}
-	      else
-		func (stream, "%c", *c);
-	    }
+                          case '\'':
+                            c++;
+                            if ((given & (1 << bitstart)) != 0)
+                              func (stream, "%c", *c);
+                            break;
+                          default:
+                            abort ();
+                          }
+                      }
+                      break;
+                    default:
+                      abort ();
+                    }
+                }
+              else
+                func (stream, "%c", *c);
+            }
 
-	  return 2;
-	}
+          return 2;
+        }
     }
 #if (SCORE_SIMULATOR_ACTIVE)
   func (stream, _("<illegal instruction>"));
   return 2;
 #endif
-
+  
   /* No match.  */
   abort ();
 }
@@ -1051,7 +1041,7 @@ static int
 s3_print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
 {
   unsigned char b[6];
-  bfd_vma given, given_h, given_l, given_16, given_32, given_48;
+  bfd_vma  given,given_h , given_l, given_16, given_32, given_48;
   bfd_vma ridparity;
   int status;
   void *stream = info->stream;
@@ -1059,54 +1049,61 @@ s3_print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
 
   info->display_endian = little ? BFD_ENDIAN_LITTLE : BFD_ENDIAN_BIG;
   info->bytes_per_chunk = 2;
-  status = info->read_memory_func (pc, (bfd_byte *) &b[0], 4, info);
+  status = info->read_memory_func (pc, (bfd_byte *) & b[0], 4, info);
   if (status != 0)
     {
       info->bytes_per_chunk = 2;
       status = info->read_memory_func (pc, (bfd_byte *) b, 2, info);
       b[3] = b[2] = 0;
       if (status != 0)
-	{
-	  info->memory_error_func (status, pc, info);
-	  return -1;
-	}
+        {
+          info->memory_error_func (status, pc, info);
+          return -1;
+        }
     }
   if (little)
-    given = b[0] | (b[1] << 8);
+    {
+      given = b[0] | (b[1] << 8);
+    }
   else
-    given = (b[0] << 8) | b[1];
+    {
+      given = (b[0] << 8) | b[1];
+    }
 
   /* Set given_16.  */
   given_16 = given;
 
   /* Judge if now is insn_16_p.  */
   if ((given & 0x8000)==0)
-    return print_insn_score16 (pc, info, given);
-  else
+    return  print_insn_score16 (pc, info, given);
+
+  else 
     {
       if (little)
-	given = ((bfd_vma) b[2] | (bfd_vma) b[3] << 8
-		 | (bfd_vma) b[0] << 16 | (bfd_vma) b[1] << 24);
+        {
+          given = ((bfd_vma)b[2]) | ((bfd_vma)b[3] << 8) | ((bfd_vma)b[0] << 16) | ((bfd_vma)b[1] << 24);
+        }
       else
-	given = ((bfd_vma) b[0] << 24 | (bfd_vma) b[1] << 16
-		 | (bfd_vma) b[2] << 8 | (bfd_vma) b[3]);
+        {
+          given = ((bfd_vma)b[0] << 24) | ((bfd_vma)b[1] << 16) | ((bfd_vma)b[2] << 8) | ((bfd_vma)b[3]);
+        }
 
       /* Set given_32.  */
       given_32 = given;
 
       /* Judge if now is insn_32.  */
-      if ((given & 0x80008000) == 0x80000000)
-	{
-	  /* Get rid of parity.  */
-	  ridparity = (given & 0x7FFF);
-	  ridparity |= (given & 0x7FFF0000) >> 1;
-	  given = ridparity;
-	  return print_insn_score32 (pc, info, given);
-	}
+      if ((given &0x80008000)==0x80000000)
+        {
+          /* Get rid of parity.  */
+          ridparity = (given & 0x7FFF);
+          ridparity |= (given & 0x7FFF0000) >> 1;
+          given = ridparity;
+          return  print_insn_score32 (pc, info, given);
+        }
     }
 
   /* The insn is 48 bit.  */
-  status = info->read_memory_func (pc, (bfd_byte *) &b[0], 6, info);
+  status = info->read_memory_func (pc, (bfd_byte *) & b[0], 6, info);
   if (status != 0)
     {
       info->memory_error_func (status, pc, info);
@@ -1114,56 +1111,58 @@ s3_print_insn (bfd_vma pc, struct disassemble_info *info, bfd_boolean little)
     }
 
   if (little)
-    given = ((bfd_vma) b[4] | (bfd_vma) b[5] << 8
-	     | (bfd_vma) b[2] << 16 | (bfd_vma) b[3] << 24
-	     | (bfd_vma) b[0] << 32 | (bfd_vma) b[1] << 40);
-  else
     {
-      given_l = ((bfd_vma) b[5] | (bfd_vma) b[4] << 8
-		 | (bfd_vma) b[3] << 16 | (bfd_vma) b[2] << 24);
-      given_h = (bfd_vma) b[1] | (bfd_vma) b[0] << 8;
-      given = (bfd_vma) given_h << 32 | (bfd_vma) given_l ;
-    }
-
-  /* Set given_48.  */
-  given_48 = given;
-
-  if ((given & 0x800080008000LL) == 0x800080000000LL)
-    {
-      /* Get rid of parity.  */
-      ridparity = (given & 0x7FFF);
-      ridparity |= (given & 0x7FFF0000) >> 1;
-      ridparity |= (given & 0x7FFF00000000LL) >> 2;
-      given = ridparity;
-      status = print_insn_score48  (info, given);
-      return status;
-    }
-
-  /* Check 0x800080008000, 0x80008000, 0x8000.  */
-  if ((given_48 & 0x800080008000LL) != 0x800080000000LL)
-    {
-#if (SCORE_SIMULATOR_ACTIVE)
-      func (stream, _("<illegal instruction>"));
-      return 6;
-#endif
-    }
-  if ((given_32 & 0xffff00000000LL) == 0
-      && ((given_32 & 0x80008000) != 0x80000000))
-    {
-#if (SCORE_SIMULATOR_ACTIVE)
-      func (stream, _("<illegal instruction>"));
-      return 4;
-#endif
-    }
-  if (((given_16 & 0xffffffff0000LL) == 0) && ((given_16 & 0x8000) != 0))
-    {
-#if (SCORE_SIMULATOR_ACTIVE)
-      func (stream, _("<illegal instruction>"));
-      return 2;
-#endif
+      given = ((bfd_vma)b[4]) | ((bfd_vma)b[5] << 8) | ((bfd_vma)b[2] << 16) | ((bfd_vma)b[3] << 24)
+              | ((bfd_vma)b[0] << 32) | ((bfd_vma)b[1] << 40);
     }
   else
-    return 0;
+    {
+      given_l = ((bfd_vma)b[5]) | ((bfd_vma)b[4] << 8) | ((bfd_vma)b[3] << 16) | ((bfd_vma)b[2] << 24) ;
+      given_h = ((bfd_vma)b[1] )|((bfd_vma)b[0] <<8);
+      given = ((bfd_vma)given_h<<32) | (bfd_vma)given_l ;
+    
+    }
+
+    /* Set given_48.  */
+    given_48 = given;
+
+    if ((given & 0x800080008000LL) == 0x800080000000LL)
+      {
+        /* Get rid of parity.  */
+        ridparity = (given & 0x7FFF);
+        ridparity |= (given & 0x7FFF0000) >> 1;
+        ridparity |= (given & 0x7FFF00000000LL) >> 2;
+        given = ridparity;
+        status = print_insn_score48  (info, given);
+        return status;
+      }
+
+    /* Check 0x800080008000, 0x80008000, 0x8000.  */
+    if ((given_48 & 0x800080008000LL) != 0x800080000000LL)
+      {
+#if (SCORE_SIMULATOR_ACTIVE)
+        func (stream, _("<illegal instruction>"));
+        return 6;
+#endif
+      }
+    if (((given_32 & 0xffff00000000LL) == 0) && ((given_32 & 0x80008000) != 0x80000000))
+      {
+#if (SCORE_SIMULATOR_ACTIVE)
+        func (stream, _("<illegal instruction>"));
+        return 4;
+#endif
+      }
+    if (((given_16 & 0xffffffff0000LL) == 0) && ((given_16 & 0x8000) != 0))
+      {
+#if (SCORE_SIMULATOR_ACTIVE)
+        func (stream, _("<illegal instruction>"));
+        return 2;
+#endif
+      }
+    else
+      {
+        return 0;
+      }
 }
 
 static unsigned long
@@ -1195,15 +1194,15 @@ print_insn_little_score (bfd_vma pc, struct disassemble_info *info)
 #else /* not BFD64 */
 int
 print_insn_big_score (bfd_vma pc ATTRIBUTE_UNUSED,
-		      struct disassemble_info *info ATTRIBUTE_UNUSED)
+		      struct disassemble_info * info ATTRIBUTE_UNUSED)
 {
   abort ();
 }
 
 int
 print_insn_little_score (bfd_vma pc ATTRIBUTE_UNUSED,
-			 struct disassemble_info *info ATTRIBUTE_UNUSED)
+			 struct disassemble_info * info ATTRIBUTE_UNUSED)
 {
   abort ();
 }
-#endif
+#endif 

@@ -1,5 +1,6 @@
 /* Definitions for TI C6X assembler.
-   Copyright (C) 2010-2020 Free Software Foundation, Inc.
+   Copyright 2010
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -130,7 +131,7 @@ typedef struct
   bfd_boolean can_cross_fp_boundary;
 } tic6x_frag_info;
 #define TC_FRAG_TYPE tic6x_frag_info
-#define TC_FRAG_INIT(fragP, max_bytes) tic6x_frag_init (fragP)
+#define TC_FRAG_INIT(fragP) tic6x_frag_init (fragP)
 extern void tic6x_frag_init (fragS *fragp);
 
 typedef struct
@@ -184,10 +185,10 @@ extern long tic6x_pcrel_from_section (struct fix *fixp, segT sec);
 #define md_start_line_hook() tic6x_start_line_hook ()
 extern void tic6x_start_line_hook (void);
 
-#define TC_CONS_FIX_NEW(frag, where, size, exp, reloc)	\
-  tic6x_cons_fix_new (frag, where, size, exp, reloc)
-extern void tic6x_cons_fix_new (fragS *, int, int, expressionS *,
-				bfd_reloc_code_real_type);
+#define TC_CONS_FIX_NEW(frag, where, size, exp)	\
+  tic6x_cons_fix_new (frag, where, size, exp)
+extern void tic6x_cons_fix_new (fragS *frag, int where, int size,
+				expressionS *exp);
 
 #define tc_fix_adjustable(FIX) tic6x_fix_adjustable (FIX)
 extern bfd_boolean tic6x_fix_adjustable (struct fix *);

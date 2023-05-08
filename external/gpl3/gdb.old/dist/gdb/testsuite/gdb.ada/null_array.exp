@@ -1,4 +1,4 @@
-# Copyright 2008-2020 Free Software Foundation, Inc.
+# Copyright 2008-2014 Free Software Foundation, Inc.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,8 +14,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 load_lib "ada.exp"
-
-if { [skip_ada_tests] } { return -1 }
 
 standard_ada_testfile foo
 
@@ -38,10 +36,13 @@ if {[test_compiler_info {gcc-[0-3]-*}]
     setup_xfail *-*-* 
 }
 gdb_test "print my_table" \
-         "= \\(\\)"
+         "= \\(\\)" \
+         "print my_table"
 
 gdb_test "ptype my_table" \
-         "type = array \\(10 \\.\\. 1\\) of integer"
+         "type = array \\(10 \\.\\. 1\\) of integer" \
+         "ptype my_table"
 
 gdb_test "print my_matrix" \
-         "= \\(m => \\((\"\", ){9}\"\"\\)\\)"
+         "= \\(m => \\((\"\", ){9}\"\"\\)\\)" \
+         "print my_matrix"

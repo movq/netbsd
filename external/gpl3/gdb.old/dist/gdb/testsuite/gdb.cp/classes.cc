@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 1993-2020 Free Software Foundation, Inc.
+   Copyright 1993-2014 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -434,24 +434,6 @@ Foo::operator int() { return x; }
 ByAnyOtherName foo(10, 11);
 Bar bar(20, 21, 22);
 
-/* Use a typedef for the baseclass to exercise gnu-v3-abi.c:gnuv3_dynamic_class
-   recursion.  It's important that the class itself have no name to make sure
-   the typedef makes it through to the recursive call.  */
-typedef class {
- public:
-  int x;
-  virtual int get_x () { return x; }
-} DynamicBase2;
-
-class DynamicBar : public DynamicBase2
-{
- public:
-  DynamicBar (int i, int j) { x = i; y = j; }
-  int y;
-};
-
-DynamicBar dynbar (23, 24);
-
 class ClassWithEnum {
 public:
   enum PrivEnum { red, green, blue, yellow = 42 };
@@ -532,81 +514,41 @@ typedef struct {
 } tagless_struct;
 tagless_struct v_tagless;
 
-class class_with_typedefs
-{
-public:
-  typedef int public_int;
-protected:
-  typedef int protected_int;
-private:
-  typedef int private_int;
-
-public:
-  class_with_typedefs ()
-    : public_int_ (1), protected_int_ (2), private_int_ (3) {}
-  public_int add_public (public_int a) { return a + public_int_; }
-  public_int add_all (int a)
-  { return add_public (a) + add_protected (a) + add_private (a); }
-
-protected:
-  protected_int add_protected (protected_int a) { return a + protected_int_; }
-
-private:
-  private_int add_private (private_int a) { return a + private_int_; }
-
-protected:
-  public_int public_int_;
-  protected_int protected_int_;
-  private_int private_int_;
+/* Try to get the compiler to allocate a class in a register.  */
+class small {
+ public:
+  int x;
+  int method ();
 };
 
-class class_with_public_typedef
+int
+small::method ()
 {
-  int a;
-public:
-  typedef int INT;
-  INT b;
-};
+  return x + 5;
+}
 
-class class_with_protected_typedef
-{
-  int a;
-protected:
-  typedef int INT;
-  INT b;
-};
+void marker_reg1 () {}
 
-class class_with_private_typedef
+int
+register_class ()
 {
-  int a;
-private:
-  typedef int INT;
-  INT b;
-};
+  /* We don't call any methods for v, so gcc version cygnus-2.3.3-930220
+     might put this variable in a register.  This is a lose, though, because
+     it means that GDB can't call any methods for that variable.  */
+  register small v;
 
-struct struct_with_public_typedef
-{
-  int a;
-public:
-  typedef int INT;
-  INT b;
-};
+  int i;
 
-struct struct_with_protected_typedef
-{
-  int a;
-protected:
-  typedef int INT;
-  INT b;
-};
-
-struct struct_with_private_typedef
-{
-  int a;
-private:
-  typedef int INT;
-  INT b;
-};
+  /* Perform a computation sufficiently complicated that optimizing compilers
+     won't optimized out the variable.  If some compiler constant-folds this
+     whole loop, maybe using a parameter to this function here would help.  */
+  v.x = 0;
+  for (i = 0; i < 13; ++i)
+    v.x += i;
+  --v.x; /* v.x is now 77 */
+  marker_reg1 ();
+  return v.x + 5;
+}
 
 void dummy()
 {
@@ -629,19 +571,6 @@ void use_methods ()
   base1 b (3);
 }
 
-struct Inner
-{
-  static Inner instance;
-};
-
-struct Outer
-{
-  Inner inner;
-  static Outer instance;
-};
-
-Inner Inner::instance;
-Outer Outer::instance;
 
 int
 main()
@@ -650,6 +579,7 @@ main()
   inheritance1 ();
   inheritance3 ();
   enums1 ();
+  register_class ();
 
   /* FIXME: pmi gets optimized out.  Need to do some more computation with
      it or something.  (No one notices, because the test is xfail'd anyway,
@@ -676,10 +606,3 @@ protected_class protected_c;
 default_private_class default_private_c;
 explicit_private_class explicit_private_c;
 mixed_protection_class mixed_protection_c;
-class_with_typedefs class_with_typedefs_c;
-class_with_public_typedef class_with_public_typedef_c;
-class_with_protected_typedef class_with_protected_typedef_c;
-class_with_private_typedef class_with_private_typedef_c;
-struct_with_public_typedef struct_with_public_typedef_s;
-struct_with_protected_typedef struct_with_protected_typedef_s;
-struct_with_private_typedef struct_with_private_typedef_s;

@@ -1,4 +1,4 @@
-# Copyright 2008-2020 Free Software Foundation, Inc.
+# Copyright 2008-2014 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 # This file was updated by Jan Kratochvil <jan.kratochvil@redhat.com>.
 
 # This test only works on Linux
-if { ![isnative] || [is_remote host] || [use_gdb_stub]
+if { ![isnative] || [is_remote host] || [target_info exists use_gdb_stub]
      || ![istarget *-linux*] } {
     continue
 }
@@ -44,8 +44,13 @@ proc corefunc { threadtype } {
 	return -1
     }
 
-    set test_spawn_id [spawn_wait_for_attach $binfile]
-    set testpid [spawn_id_get_pid $test_spawn_id]
+    # Start the program running and then wait for a bit, to be sure
+    # that it can be attached to.
+
+    set testpid [eval exec $binfile &]
+
+    # Avoid some race:
+    sleep 2
 
     # Stop the program 
     remote_exec build "kill -s STOP ${testpid}"
@@ -81,7 +86,7 @@ proc corefunc { threadtype } {
     # the Linux kernel version.  The behavior is not tested as it is not
     # dependent on GDB.
 
-    kill_wait_spawned_process $test_spawn_id
+    remote_exec build "kill -9 ${testpid}"
 }
 
 # build the test case first without threads

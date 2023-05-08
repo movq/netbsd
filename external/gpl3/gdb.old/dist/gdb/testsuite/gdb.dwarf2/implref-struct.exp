@@ -1,4 +1,4 @@
-# Copyright 2016-2020 Free Software Foundation, Inc.
+# Copyright 2016 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -40,7 +40,8 @@ set asm_file [standard_output_file ${srcfile2}]
 # For that, we ask GDB by debugging our implref-struct program.
 # Any program would do, but since we already have implref-struct
 # specifically for this testcase, might as well use that.
-if [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} {debug c++}] {
+if [prepare_for_testing ${testfile}.exp ${testfile} ${srcfile} {debug c++}] {
+    untested ${testfile}.exp
     return -1
 }
 
@@ -49,6 +50,8 @@ if [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} {debug c++}] 
 # global so that its name is an exported symbol that can we can reference from
 # the DWARF using gdb_target_symbol.
 Dwarf::assemble ${asm_file} {
+    global srcdir subdir srcfile
+
     cu {} {
 	DW_TAG_compile_unit {
 	    {DW_AT_language @DW_LANG_C_plus_plus}
@@ -113,7 +116,7 @@ Dwarf::assemble ${asm_file} {
 	    }
 
 	    DW_TAG_subprogram {
-		{MACRO_AT_func { "main" }}
+		{MACRO_AT_func { "main" "${srcdir}/${subdir}/${srcfile}" }}
 		{DW_AT_type :${int_label}}
 		{DW_AT_external 1 DW_FORM_flag}
 	    } {
@@ -127,7 +130,7 @@ Dwarf::assemble ${asm_file} {
     }
 }
 
-if [prepare_for_testing "failed to prepare" ${executable} [list ${asm_file} ${srcfile}] {}] {
+if [prepare_for_testing ${testfile}.exp ${executable} [list ${asm_file} ${srcfile}] {}] {
     return -1
 }
 
@@ -175,11 +178,9 @@ foreach_with_prefix print-object {"off" "on"} {
 # Test assignment through the synthetic reference.
 gdb_test_no_output "set (ref = s2)"
 
-with_test_prefix "after assignment" {
-    foreach_with_prefix print-object {"off" "on"} {
-	gdb_test_no_output "set print object ${print-object}"
+foreach_with_prefix print-object {"off" "on"} {
+    gdb_test_no_output "set print object ${print-object}"
 
-	gdb_test "print ref" " = \\(S &\\) @${address}: \\{${s2_members}\\}" "print ref"
-	gdb_test "print s1" " = \\{${s2_members}\\}" "print s1"
-    }
+    gdb_test "print ref" " = \\(S &\\) @${address}: \\{${s2_members}\\}" "print ref after assignment"
+    gdb_test "print s1" " = \\{${s2_members}\\}" "print s1 after assignment"
 }

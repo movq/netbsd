@@ -1,6 +1,6 @@
 /* Target-dependent code for Solaris UltraSPARC.
 
-   Copyright (C) 2003-2020 Free Software Foundation, Inc.
+   Copyright (C) 2003-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,14 +25,15 @@
 #include "objfiles.h"
 #include "osabi.h"
 #include "trad-frame.h"
-#include "regset.h"
+
+#include "gdb_assert.h"
 
 #include "sol2-tdep.h"
 #include "sparc64-tdep.h"
 #include "solib-svr4.h"
 
 /* From <sys/regset.h>.  */
-const struct sparc_gregmap sparc64_sol2_gregmap =
+const struct sparc_gregset sparc64_sol2_gregset =
 {
   32 * 8,			/* "tstate" */
   33 * 8,			/* %pc */
@@ -45,57 +46,11 @@ const struct sparc_gregmap sparc64_sol2_gregmap =
   8				/* sizeof (%y) */
 };
 
-const struct sparc_fpregmap sparc64_sol2_fpregmap =
+const struct sparc_fpregset sparc64_sol2_fpregset =
 {
   0 * 8,			/* %f0 */
   33 * 8,			/* %fsr */
 };
-
-static void
-sparc64_sol2_supply_core_gregset (const struct regset *regset,
-				  struct regcache *regcache,
-				  int regnum, const void *gregs, size_t len)
-{
-  sparc64_supply_gregset (&sparc64_sol2_gregmap, regcache, regnum, gregs);
-}
-
-static void
-sparc64_sol2_collect_core_gregset (const struct regset *regset,
-				   const struct regcache *regcache,
-				   int regnum, void *gregs, size_t len)
-{
-  sparc64_collect_gregset (&sparc64_sol2_gregmap, regcache, regnum, gregs);
-}
-
-static void
-sparc64_sol2_supply_core_fpregset (const struct regset *regset,
-				   struct regcache *regcache,
-				   int regnum, const void *fpregs, size_t len)
-{
-  sparc64_supply_fpregset (&sparc64_sol2_fpregmap, regcache, regnum, fpregs);
-}
-
-static void
-sparc64_sol2_collect_core_fpregset (const struct regset *regset,
-				    const struct regcache *regcache,
-				    int regnum, void *fpregs, size_t len)
-{
-  sparc64_collect_fpregset (&sparc64_sol2_fpregmap, regcache, regnum, fpregs);
-}
-
-static const struct regset sparc64_sol2_gregset =
-  {
-    NULL,
-    sparc64_sol2_supply_core_gregset,
-    sparc64_sol2_collect_core_gregset
-  };
-
-static const struct regset sparc64_sol2_fpregset =
-  {
-    NULL,
-    sparc64_sol2_supply_core_fpregset,
-    sparc64_sol2_collect_core_fpregset
-  };
 
 
 static struct sparc_frame_cache *
@@ -107,7 +62,7 @@ sparc64_sol2_sigtramp_frame_cache (struct frame_info *this_frame,
   int regnum;
 
   if (*this_cache)
-    return (struct sparc_frame_cache *) *this_cache;
+    return *this_cache;
 
   cache = sparc_frame_cache (this_frame, this_cache);
   gdb_assert (cache == *this_cache);
@@ -180,9 +135,15 @@ sparc64_sol2_sigtramp_frame_sniffer (const struct frame_unwind *self,
 				     struct frame_info *this_frame,
 				     void **this_cache)
 {
-  return sol2_sigtramp_p (this_frame);
-}
+  CORE_ADDR pc = get_frame_pc (this_frame);
+  const char *name;
 
+  find_pc_partial_function (pc, &name, NULL, NULL);
+  if (sparc_sol2_pc_in_sigtramp (pc, name))
+    return 1;
+
+  return 0;
+}
 static const struct frame_unwind sparc64_sol2_sigtramp_frame_unwind =
 {
   SIGTRAMP_FRAME,
@@ -195,25 +156,28 @@ static const struct frame_unwind sparc64_sol2_sigtramp_frame_unwind =
 
 
 
-static void
+void
 sparc64_sol2_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-
-  tdep->gregset = &sparc64_sol2_gregset;
-  tdep->sizeof_gregset = 304;
-
-  tdep->fpregset = &sparc64_sol2_fpregset;
-  tdep->sizeof_fpregset = 544;
 
   frame_unwind_append_unwinder (gdbarch, &sparc64_sol2_sigtramp_frame_unwind);
 
   sparc64_init_abi (info, gdbarch);
 
-  sol2_init_abi (info, gdbarch);
+  /* The Sun compilers (Sun ONE Studio, Forte Developer, Sun WorkShop, SunPRO)
+     compiler puts out 0 instead of the address in N_SO stabs.  Starting with
+     SunPRO 3.0, the compiler does this for N_FUN stabs too.  */
+  set_gdbarch_sofun_address_maybe_missing (gdbarch, 1);
+
+  /* The Sun compilers also do "globalization"; see the comment in
+     sparc_sol2_static_transform_name for more information.  */
+  set_gdbarch_static_transform_name
+    (gdbarch, sparc_sol2_static_transform_name);
 
   /* Solaris has SVR4-style shared libraries...  */
   set_gdbarch_skip_trampoline_code (gdbarch, find_solib_trampoline_target);
+  set_gdbarch_skip_solib_resolver (gdbarch, sol2_skip_solib_resolver);
   set_solib_svr4_fetch_link_map_offsets
     (gdbarch, svr4_lp64_fetch_link_map_offsets);
 
@@ -223,11 +187,17 @@ sparc64_sol2_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 
   /* Solaris has kernel-assisted single-stepping support.  */
   set_gdbarch_software_single_step (gdbarch, NULL);
-}
 
-void _initialize_sparc64_sol2_tdep ();
+  /* How to print LWP PTIDs from core files.  */
+  set_gdbarch_core_pid_to_str (gdbarch, sol2_core_pid_to_str);
+}
+
+
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+void _initialize_sparc64_sol2_tdep (void);
+
 void
-_initialize_sparc64_sol2_tdep ()
+_initialize_sparc64_sol2_tdep (void)
 {
   gdbarch_register_osabi (bfd_arch_sparc, bfd_mach_sparc_v9,
 			  GDB_OSABI_SOLARIS, sparc64_sol2_init_abi);

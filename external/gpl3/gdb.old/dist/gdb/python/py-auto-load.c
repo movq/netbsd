@@ -1,6 +1,6 @@
 /* GDB routines for supporting auto-loaded scripts.
 
-   Copyright (C) 2010-2020 Free Software Foundation, Inc.
+   Copyright (C) 2010-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,18 +18,23 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
+#include <string.h>
 #include "top.h"
+#include "exceptions.h"
 #include "gdbcmd.h"
 #include "objfiles.h"
 #include "python.h"
 #include "auto-load.h"
+
+#ifdef HAVE_PYTHON
+
 #include "python-internal.h"
 
 /* User-settable option to enable/disable auto-loading of Python scripts:
    set auto-load python-scripts on|off
    This is true if we should auto-load associated Python scripts when an
    objfile is opened, false otherwise.  */
-static bool auto_load_python_scripts = true;
+static int auto_load_python_scripts = 1;
 
 /* "show" command for the auto_load_python_scripts configuration variable.  */
 
@@ -40,21 +45,38 @@ show_auto_load_python_scripts (struct ui_file *file, int from_tty,
   fprintf_filtered (file, _("Auto-loading of Python scripts is %s.\n"), value);
 }
 
-/* Return non-zero if auto-loading Python scripts is enabled.
-   This is the extension_language_script_ops.auto_load_enabled "method".  */
+/* Return non-zero if auto-loading Python scripts is enabled.  */
 
-int
-gdbpy_auto_load_enabled (const struct extension_language_defn *extlang)
+static int
+auto_load_python_scripts_enabled (void)
 {
   return auto_load_python_scripts;
+}
+
+/* Definition of script language for Python scripts.  */
+
+static const struct script_language script_language_python =
+{
+  "python",
+  GDBPY_AUTO_FILE_NAME,
+  auto_load_python_scripts_enabled,
+  source_python_script_for_objfile
+};
+
+/* Return the Python script language definition.  */
+
+const struct script_language *
+gdbpy_script_language_defn (void)
+{
+  return &script_language_python;
 }
 
 /* Wrapper for "info auto-load python-scripts".  */
 
 static void
-info_auto_load_python_scripts (const char *pattern, int from_tty)
+info_auto_load_python_scripts (char *pattern, int from_tty)
 {
-  auto_load_info_scripts (pattern, from_tty, &extension_language_python);
+  auto_load_info_scripts (pattern, from_tty, &script_language_python);
 }
 
 int
@@ -84,12 +106,12 @@ Show the debugger's behaviour regarding auto-loaded Python scripts, "
 			   NULL, NULL, show_auto_load_python_scripts,
 			   &setlist, &showlist);
   cmd_name = "auto-load-scripts";
-  cmd = lookup_cmd (&cmd_name, setlist, "", NULL, -1, 1);
+  cmd = lookup_cmd (&cmd_name, setlist, "", -1, 1);
   deprecate_cmd (cmd, "set auto-load python-scripts");
 
   /* It is needed because lookup_cmd updates the CMD_NAME pointer.  */
   cmd_name = "auto-load-scripts";
-  cmd = lookup_cmd (&cmd_name, showlist, "", NULL, -1, 1);
+  cmd = lookup_cmd (&cmd_name, showlist, "", -1, 1);
   deprecate_cmd (cmd, "show auto-load python-scripts");
 
   add_cmd ("python-scripts", class_info, info_auto_load_python_scripts,
@@ -103,3 +125,16 @@ Print the list of automatically loaded Python scripts, deprecated."));
 
   return 0;
 }
+
+#else /* ! HAVE_PYTHON */
+
+/* Return the Python script language definition.
+   Since support isn't compiled in, return NULL.  */
+
+const struct script_language *
+gdbpy_script_language_defn (void)
+{
+  return NULL;
+}
+
+#endif /* ! HAVE_PYTHON */

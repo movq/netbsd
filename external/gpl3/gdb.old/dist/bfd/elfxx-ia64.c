@@ -1,5 +1,6 @@
 /* IA-64 support for 64-bit ELF
-   Copyright (C) 1998-2020 Free Software Foundation, Inc.
+   Copyright 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,
+   2008, 2009, 2010, 2011  Free Software Foundation, Inc.
    Contributed by David Mosberger-Tang <davidm@hpl.hp.com>
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -27,35 +28,36 @@
 #include "elf/ia64.h"
 #include "objalloc.h"
 #include "hashtab.h"
+#include "bfd_stdint.h"
 #include "elfxx-ia64.h"
 
 /* THE RULES for all the stuff the linker creates --
 
   GOT		Entries created in response to LTOFF or LTOFF_FPTR
-		relocations.  Dynamic relocs created for dynamic
-		symbols in an application; REL relocs for locals
-		in a shared library.
+ 		relocations.  Dynamic relocs created for dynamic
+ 		symbols in an application; REL relocs for locals
+ 		in a shared library.
 
   FPTR		The canonical function descriptor.  Created for local
-		symbols in applications.  Descriptors for dynamic symbols
-		and local symbols in shared libraries are created by
-		ld.so.	Thus there are no dynamic relocs against these
-		objects.  The FPTR relocs for such _are_ passed through
-		to the dynamic relocation tables.
+ 		symbols in applications.  Descriptors for dynamic symbols
+ 		and local symbols in shared libraries are created by
+ 		ld.so.  Thus there are no dynamic relocs against these
+ 		objects.  The FPTR relocs for such _are_ passed through
+ 		to the dynamic relocation tables.
 
   FULL_PLT	Created for a PCREL21B relocation against a dynamic symbol.
-		Requires the creation of a PLTOFF entry.  This does not
-		require any dynamic relocations.
+ 		Requires the creation of a PLTOFF entry.  This does not
+ 		require any dynamic relocations.
 
-  PLTOFF	Created by PLTOFF relocations.	For local symbols, this
-		is an alternate function descriptor, and in shared libraries
-		requires two REL relocations.  Note that this cannot be
-		transformed into an FPTR relocation, since it must be in
-		range of the GP.  For dynamic symbols, this is a function
-		descriptor for a MIN_PLT entry, and requires one IPLT reloc.
+  PLTOFF	Created by PLTOFF relocations.  For local symbols, this
+ 		is an alternate function descriptor, and in shared libraries
+ 		requires two REL relocations.  Note that this cannot be
+ 		transformed into an FPTR relocation, since it must be in
+ 		range of the GP.  For dynamic symbols, this is a function
+ 		descriptor for a MIN_PLT entry, and requires one IPLT reloc.
 
   MIN_PLT	Created by PLTOFF entries against dynamic symbols.  This
-		does not require dynamic relocations.  */
+ 		does not require dynamic relocations.  */
 
 /* ia64-specific relocation.  */
 
@@ -65,9 +67,9 @@
    done in elfNN_ia64_final_link_relocate.  */
 static bfd_reloc_status_type
 ia64_elf_reloc (bfd *abfd ATTRIBUTE_UNUSED, arelent *reloc,
-		asymbol *sym ATTRIBUTE_UNUSED,
-		PTR data ATTRIBUTE_UNUSED, asection *input_section,
-		bfd *output_bfd, char **error_message)
+                asymbol *sym ATTRIBUTE_UNUSED,
+                PTR data ATTRIBUTE_UNUSED, asection *input_section,
+                bfd *output_bfd, char **error_message)
 {
   if (output_bfd)
     {
@@ -90,7 +92,7 @@ ia64_elf_reloc (bfd *abfd ATTRIBUTE_UNUSED, arelent *reloc,
    TYPE field.  */
 static reloc_howto_type ia64_howto_table[] =
   {
-    IA64_HOWTO (R_IA64_NONE,	    "NONE",	   3, FALSE, TRUE),
+    IA64_HOWTO (R_IA64_NONE,	    "NONE",	   0, FALSE, TRUE),
 
     IA64_HOWTO (R_IA64_IMM14,	    "IMM14",	   0, FALSE, TRUE),
     IA64_HOWTO (R_IA64_IMM22,	    "IMM22",	   0, FALSE, TRUE),
@@ -195,12 +197,12 @@ static unsigned char elf_code_to_howto_index[R_IA64_MAX_RELOC_CODE + 1];
 reloc_howto_type *
 ia64_elf_lookup_howto (unsigned int rtype)
 {
-  static bfd_boolean inited = FALSE;
+  static int inited = 0;
   int i;
 
   if (!inited)
     {
-      inited = TRUE;
+      inited = 1;
 
       memset (elf_code_to_howto_index, 0xff, sizeof (elf_code_to_howto_index));
       for (i = 0; i < NELEMS (ia64_howto_table); ++i)
@@ -208,16 +210,16 @@ ia64_elf_lookup_howto (unsigned int rtype)
     }
 
   if (rtype > R_IA64_MAX_RELOC_CODE)
-    return NULL;
+    return 0;
   i = elf_code_to_howto_index[rtype];
   if (i >= NELEMS (ia64_howto_table))
-    return NULL;
+    return 0;
   return ia64_howto_table + i;
 }
 
-reloc_howto_type *
-ia64_elf_reloc_type_lookup (bfd *abfd,
-			    bfd_reloc_code_real_type bfd_code)
+reloc_howto_type*
+ia64_elf_reloc_type_lookup (bfd *abfd ATTRIBUTE_UNUSED,
+                            bfd_reloc_code_real_type bfd_code)
 {
   unsigned int rtype;
 
@@ -319,19 +321,14 @@ ia64_elf_reloc_type_lookup (bfd *abfd,
     case BFD_RELOC_IA64_DTPREL64LSB:	rtype = R_IA64_DTPREL64LSB; break;
     case BFD_RELOC_IA64_LTOFF_DTPREL22:	rtype = R_IA64_LTOFF_DTPREL22; break;
 
-    default:
-      /* xgettext:c-format */
-      _bfd_error_handler (_("%pB: unsupported relocation type %#x"),
-			  abfd, (int) bfd_code);
-      bfd_set_error (bfd_error_bad_value);
-      return NULL;
+    default: return 0;
     }
   return ia64_elf_lookup_howto (rtype);
 }
 
 reloc_howto_type *
 ia64_elf_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
-			    const char *r_name)
+                            const char *r_name)
 {
   unsigned int i;
 
@@ -405,7 +402,7 @@ ia64_elf_relax_br (bfd_byte *contents, bfd_vma off)
     {
     case 0:
       /* Check if slot 1 and slot 2 are NOPs. Possible template is
-	 BBB.  We only need to check nop.b.  */
+         BBB.  We only need to check nop.b.  */
       if (!(IS_NOP_B (s1) && IS_NOP_B (s2)))
 	return FALSE;
       br_code = s0;
@@ -685,7 +682,7 @@ ia64_elf_install_value (bfd_byte *hit_addr, bfd_vma v, unsigned int r_type)
 	 slot 2: bits 23..63 in t1 */
 
       /* First, clear the bits that form the 64 bit constant.  */
-      t0 &= ~(0x3ffffULL << 46);
+      t0 &= ~(0x3ffffLL << 46);
       t1 &= ~(0x7fffffLL
 	      | ((  (0x07fLL << 13) | (0x1ffLL << 27)
 		    | (0x01fLL << 22) | (0x001LL << 21)
@@ -714,7 +711,7 @@ ia64_elf_install_value (bfd_byte *hit_addr, bfd_vma v, unsigned int r_type)
 	 slot 2: bits 23..63 in t1 */
 
       /* First, clear the bits that form the 64 bit constant.  */
-      t0 &= ~(0x3ffffULL << 46);
+      t0 &= ~(0x3ffffLL << 46);
       t1 &= ~(0x7fffffLL
 	      | ((1LL << 36 | 0xfffffLL << 13) << 23));
 
@@ -744,7 +741,7 @@ ia64_elf_install_value (bfd_byte *hit_addr, bfd_vma v, unsigned int r_type)
       if (err)
 	return bfd_reloc_overflow;
 
-      dword &= ~(0x1ffffffffffULL << shift);
+      dword &= ~(0x1ffffffffffLL << shift);
       dword |= (insn << shift);
       bfd_putl64 (dword, hit_addr);
       break;

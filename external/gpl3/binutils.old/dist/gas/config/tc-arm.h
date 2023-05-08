@@ -1,5 +1,6 @@
 /* This file is tc-arm.h
-   Copyright (C) 1994-2020 Free Software Foundation, Inc.
+   Copyright 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003,
+   2004, 2005, 2006, 2007, 2008, 2009, 2012  Free Software Foundation, Inc.
    Contributed by Richard Earnshaw (rwe@pegasus.esprit.ec.org)
 	Modified by David Taylor (dtaylor@armltd.co.uk)
 
@@ -46,10 +47,26 @@
 
 struct fix;
 
-#if defined OBJ_COFF
+#if defined OBJ_AOUT
+# if defined TE_RISCIX
+#  define TARGET_FORMAT "a.out-riscix"
+# elif defined TE_LINUX
+#  define ARM_BI_ENDIAN
+#  define TARGET_FORMAT "a.out-arm-linux"
+# elif defined TE_NetBSD
+#  define TARGET_FORMAT "a.out-arm-netbsd"
+# else
+#  define ARM_BI_ENDIAN
+#  define TARGET_FORMAT (target_big_endian ? "a.out-arm-big" : "a.out-arm-little")
+# endif
+#elif defined OBJ_AIF
+# define TARGET_FORMAT "aif"
+#elif defined OBJ_COFF
 # define ARM_BI_ENDIAN
 # if defined TE_PE
-#  if defined TE_WINCE
+#  if defined TE_EPOC
+#   define TARGET_FORMAT (target_big_endian ? "epoc-pe-arm-big" : "epoc-pe-arm-little")
+#  elif defined TE_WINCE
 #   define TARGET_FORMAT (target_big_endian ? "pe-arm-wince-big" : "pe-arm-wince-little")
 #  else
 #   define TARGET_FORMAT (target_big_endian ? "pe-arm-big" : "pe-arm-little")
@@ -64,10 +81,6 @@ struct fix;
 
 /* We support double slash line-comments for compatibility with the ARM AArch64 Assembler.  */
 #define DOUBLESLASH_LINE_COMMENTS
-
-/* We conditionally support labels without a colon.  */
-#define LABELS_WITHOUT_COLONS codecomposer_syntax
-extern bfd_boolean codecomposer_syntax;
 
 #define tc_symbol_chars arm_symbol_chars
 extern const char arm_symbol_chars[];
@@ -88,10 +101,6 @@ extern int arm_optimize_expr (expressionS *, operatorT, expressionS *);
 
 #define md_start_line_hook() arm_start_line_hook ()
 
-#define TC_START_LABEL_WITHOUT_COLON(NUL_CHAR, NEXT_CHAR) \
-  tc_start_label_without_colon ()
-extern bfd_boolean tc_start_label_without_colon (void);
-
 #define tc_frob_label(S) arm_frob_label (S)
 
 /* We also need to mark assembler created symbols:  */
@@ -101,9 +110,6 @@ extern bfd_boolean tc_start_label_without_colon (void);
 #define md_end arm_md_end
 extern void arm_md_end (void);
 bfd_boolean arm_is_eabi (void);
-
-#define md_post_relax_hook		arm_md_post_relax ()
-extern void arm_md_post_relax (void);
 #endif
 
 /* NOTE: The fake label creation in stabs.c:s_stab_generic() has
@@ -164,8 +170,7 @@ void arm_copy_symbol_attributes (symbolS *, symbolS *);
   (arm_copy_symbol_attributes (DEST, SRC))
 #endif
 
-#define TC_START_LABEL(STR, NUL_CHAR, NEXT_CHAR)			\
-  (NEXT_CHAR == ':' || (NEXT_CHAR == '/' && arm_data_in_code ()))
+#define TC_START_LABEL(C,S,STR)            (C == ':' || (C == '/' && arm_data_in_code ()))
 #define tc_canonicalize_symbol_name(str) arm_canonicalize_symbol_name (str);
 #define obj_adjust_symtab() 		 arm_adjust_symtab ()
 
@@ -184,17 +189,17 @@ void arm_copy_symbol_attributes (symbolS *, symbolS *);
    pcrel, but it is easier to be safe than sorry.  */
 
 #define TC_FORCE_RELOCATION_LOCAL(FIX)			\
-  (GENERIC_FORCE_RELOCATION_LOCAL (FIX)			\
+  (!(FIX)->fx_pcrel					\
    || (FIX)->fx_r_type == BFD_RELOC_ARM_GOT32		\
    || (FIX)->fx_r_type == BFD_RELOC_32			\
-   || ((FIX)->fx_addsy != NULL				\
-       && S_IS_WEAK ((FIX)->fx_addsy)))
+   || ((FIX)->fx_addsy != NULL && S_IS_WEAK ((FIX)->fx_addsy))	\
+   || TC_FORCE_RELOCATION (FIX))
 
 /* Force output of R_ARM_REL32 relocations against thumb function symbols.
    This is needed to ensure the low bit is handled correctly.  */
 #define TC_FORCE_RELOCATION_SUB_SAME(FIX, SEG)	\
-  (GENERIC_FORCE_RELOCATION_SUB_SAME (FIX, SEG)	\
-   || THUMB_IS_FUNC ((FIX)->fx_addsy))
+  (THUMB_IS_FUNC ((FIX)->fx_addsy)		\
+   || !SEG_NORMAL (SEG))
 
 #define TC_FORCE_RELOCATION_ABS(FIX)			\
   (((FIX)->fx_pcrel					\
@@ -222,22 +227,10 @@ struct arm_frag_type
 #endif
 };
 
-static inline int
-arm_min (int am_p1, int am_p2)
-{
-  return am_p1 < am_p2 ? am_p1 : am_p2;
-}
-
 #define TC_FRAG_TYPE		struct arm_frag_type
-#define TC_FRAG_INIT(fragp, max_bytes) arm_init_frag (fragp, max_bytes)
-#define TC_ALIGN_ZERO_IS_DEFAULT 1
+/* NOTE: max_chars is a local variable from frag_var / frag_variant.  */
+#define TC_FRAG_INIT(fragp)	arm_init_frag (fragp, max_chars)
 #define HANDLE_ALIGN(fragp)	arm_handle_align (fragp)
-/* PR gas/19276: COFF/PE segment alignment is already handled in coff_frob_section().  */
-#ifndef TE_PE
-#define SUB_SEGMENT_ALIGN(SEG, FRCHAIN)				\
-  ((!(FRCHAIN)->frch_next && subseg_text_p (SEG))		\
-   ? arm_min (2, get_recorded_alignment (SEG)) : 0)
-#endif
 
 #define md_do_align(N, FILL, LEN, MAX, LABEL)					\
   if (FILL == NULL && (N) != 0 && ! need_pass_2 && subseg_text_p (now_seg))	\
@@ -254,25 +247,21 @@ arm_min (int am_p1, int am_p2)
 /* Registers are generally saved at negative offsets to the CFA.  */
 #define DWARF2_CIE_DATA_ALIGNMENT     (-4)
 
-/* State variables for predication block handling.  */
-enum pred_state
+/* State variables for IT block handling.  */
+enum it_state
 {
-  OUTSIDE_PRED_BLOCK, MANUAL_PRED_BLOCK, AUTOMATIC_PRED_BLOCK
+  OUTSIDE_IT_BLOCK, MANUAL_IT_BLOCK, AUTOMATIC_IT_BLOCK
 };
-enum pred_type {
-  SCALAR_PRED, VECTOR_PRED
-};
-struct current_pred
+struct current_it
 {
   int mask;
-  enum pred_state state;
+  enum it_state state;
   int cc;
   int block_length;
   char *insn;
   int state_handled;
   int warn_deprecated;
   int insn_cond;
-  enum pred_type type;
 };
 
 #ifdef OBJ_ELF
@@ -307,7 +296,7 @@ struct arm_segment_info_type
      emitted only once per section, to save unnecessary bloat.  */
   unsigned int marked_pr_dependency;
 
-  struct current_pred current_pred;
+  struct current_it current_it;
 };
 
 /* We want .cfi_* pseudo-ops for generating unwind info.  */
@@ -329,7 +318,7 @@ struct arm_segment_info_type
 
 #ifdef OBJ_ELF
 /* Values passed to md_apply_fix don't include the symbol value.  */
-# define MD_APPLY_SYM_VALUE(FIX) 		arm_apply_sym_value (FIX, this_segment)
+# define MD_APPLY_SYM_VALUE(FIX) 		arm_apply_sym_value (FIX)
 #endif
 
 #ifdef OBJ_COFF
@@ -353,8 +342,7 @@ extern int arm_data_in_code (void);
 extern char * arm_canonicalize_symbol_name (char *);
 extern void arm_adjust_symtab (void);
 extern void armelf_frob_symbol (symbolS *, int *);
-extern void cons_fix_new_arm (fragS *, int, int, expressionS *,
-			      bfd_reloc_code_real_type);
+extern void cons_fix_new_arm (fragS *, int, int, expressionS *);
 extern void arm_init_frag (struct frag *, int);
 extern void arm_handle_align (struct frag *);
 extern bfd_boolean arm_fix_adjustable (struct fix *);
@@ -374,18 +362,5 @@ void tc_pe_dwarf2_emit_offset (symbolS *, unsigned int);
 #ifdef OBJ_ELF
 #define CONVERT_SYMBOLIC_ATTRIBUTE(name) arm_convert_symbolic_attribute (name)
 extern int arm_convert_symbolic_attribute (const char *);
-extern int arm_apply_sym_value (struct fix *, segT);
+extern int arm_apply_sym_value (struct fix *);
 #endif
-
-#define tc_comment_chars arm_comment_chars
-extern char arm_comment_chars[];
-
-#define tc_line_separator_chars arm_line_separator_chars
-extern char arm_line_separator_chars[];
-
-#define TC_EQUAL_IN_INSN(c, s) arm_tc_equal_in_insn ((c), (s))
-extern bfd_boolean arm_tc_equal_in_insn (int, char *);
-
-#define TC_LARGEST_EXPONENT_IS_NORMAL(PRECISION) \
-	arm_is_largest_exponent_ok ((PRECISION))
-int arm_is_largest_exponent_ok (int precision);

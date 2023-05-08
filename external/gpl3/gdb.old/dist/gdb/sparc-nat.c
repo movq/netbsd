@@ -1,6 +1,6 @@
 /* Native-dependent code for SPARC.
 
-   Copyright (C) 2003-2020 Free Software Foundation, Inc.
+   Copyright (C) 2003-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,9 +22,11 @@
 #include "regcache.h"
 #include "target.h"
 
+#include "gdb_assert.h"
 #include <signal.h>
+#include <string.h>
 #include <sys/ptrace.h>
-#include "gdbsupport/gdb_wait.h"
+#include "gdb_wait.h"
 #ifdef HAVE_MACHINE_REG_H
 #include <machine/reg.h>
 #endif
@@ -78,29 +80,16 @@ typedef struct fp_status fpregset_t;
 #define PTRACE_SETFPREGS PT_SETFPREGS
 #endif
 
-static PTRACE_TYPE_RET
-gdb_ptrace (PTRACE_TYPE_ARG1 request, ptid_t ptid, PTRACE_TYPE_ARG3 addr)
-{
-#ifdef __NetBSD__
-  /* Support for NetBSD threads: unlike other ptrace implementations in this
-     file, NetBSD requires that we pass both the pid and lwp.  */
-  return ptrace (request, ptid.pid (), addr, ptid.lwp ());
-#else
-  pid_t pid = get_ptrace_pid (ptid);
-  return ptrace (request, pid, addr, 0);
-#endif
-}
-
 /* Register set description.  */
-const struct sparc_gregmap *sparc_gregmap;
-const struct sparc_fpregmap *sparc_fpregmap;
-void (*sparc_supply_gregset) (const struct sparc_gregmap *,
+const struct sparc_gregset *sparc_gregset;
+const struct sparc_fpregset *sparc_fpregset;
+void (*sparc_supply_gregset) (const struct sparc_gregset *,
 			      struct regcache *, int , const void *);
-void (*sparc_collect_gregset) (const struct sparc_gregmap *,
+void (*sparc_collect_gregset) (const struct sparc_gregset *,
 			       const struct regcache *, int, void *);
-void (*sparc_supply_fpregset) (const struct sparc_fpregmap *,
+void (*sparc_supply_fpregset) (const struct sparc_fpregset *,
 			       struct regcache *, int , const void *);
-void (*sparc_collect_fpregset) (const struct sparc_fpregmap *,
+void (*sparc_collect_fpregset) (const struct sparc_fpregset *,
 				const struct regcache *, int , void *);
 int (*sparc_gregset_supplies_p) (struct gdbarch *, int);
 int (*sparc_fpregset_supplies_p) (struct gdbarch *, int);
@@ -147,16 +136,19 @@ sparc32_fpregset_supplies_p (struct gdbarch *gdbarch, int regnum)
    for all registers (including the floating-point registers).  */
 
 void
-sparc_fetch_inferior_registers (struct regcache *regcache, int regnum)
+sparc_fetch_inferior_registers (struct target_ops *ops,
+				struct regcache *regcache, int regnum)
 {
-  struct gdbarch *gdbarch = regcache->arch ();
-  ptid_t ptid = regcache->ptid ();
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  int pid;
+
+  pid = ptid_get_pid (inferior_ptid);
 
   if (regnum == SPARC_G0_REGNUM)
     {
       gdb_byte zero[8] = { 0 };
 
-      regcache->raw_supply (SPARC_G0_REGNUM, &zero);
+      regcache_raw_supply (regcache, SPARC_G0_REGNUM, &zero);
       return;
     }
 
@@ -164,10 +156,10 @@ sparc_fetch_inferior_registers (struct regcache *regcache, int regnum)
     {
       gregset_t regs;
 
-      if (gdb_ptrace (PTRACE_GETREGS, ptid, (PTRACE_TYPE_ARG3) &regs) == -1)
+      if (ptrace (PTRACE_GETREGS, pid, (PTRACE_TYPE_ARG3) &regs, ptid_get_lwp (inferior_ptid)) == -1)
 	perror_with_name (_("Couldn't get registers"));
 
-      sparc_supply_gregset (sparc_gregmap, regcache, -1, &regs);
+      sparc_supply_gregset (sparc_gregset, regcache, -1, &regs);
       if (regnum != -1)
 	return;
     }
@@ -176,29 +168,32 @@ sparc_fetch_inferior_registers (struct regcache *regcache, int regnum)
     {
       fpregset_t fpregs;
 
-      if (gdb_ptrace (PTRACE_GETFPREGS, ptid, (PTRACE_TYPE_ARG3) &fpregs) == -1)
+      if (ptrace (PTRACE_GETFPREGS, pid, (PTRACE_TYPE_ARG3) &fpregs, ptid_get_lwp (inferior_ptid)) == -1)
 	perror_with_name (_("Couldn't get floating point status"));
 
-      sparc_supply_fpregset (sparc_fpregmap, regcache, -1, &fpregs);
+      sparc_supply_fpregset (sparc_fpregset, regcache, -1, &fpregs);
     }
 }
 
 void
-sparc_store_inferior_registers (struct regcache *regcache, int regnum)
+sparc_store_inferior_registers (struct target_ops *ops,
+				struct regcache *regcache, int regnum)
 {
-  struct gdbarch *gdbarch = regcache->arch ();
-  ptid_t ptid = regcache->ptid ();
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
+  int pid;
+
+  pid = ptid_get_pid (inferior_ptid);
 
   if (regnum == -1 || sparc_gregset_supplies_p (gdbarch, regnum))
     {
       gregset_t regs;
 
-      if (gdb_ptrace (PTRACE_GETREGS, ptid, (PTRACE_TYPE_ARG3) &regs) == -1)
+      if (ptrace (PTRACE_GETREGS, pid, (PTRACE_TYPE_ARG3) &regs, ptid_get_lwp (inferior_ptid)) == -1)
 	perror_with_name (_("Couldn't get registers"));
 
-      sparc_collect_gregset (sparc_gregmap, regcache, regnum, &regs);
+      sparc_collect_gregset (sparc_gregset, regcache, regnum, &regs);
 
-      if (gdb_ptrace (PTRACE_SETREGS, ptid, (PTRACE_TYPE_ARG3) &regs) == -1)
+      if (ptrace (PTRACE_SETREGS, pid, (PTRACE_TYPE_ARG3) &regs, ptid_get_lwp (inferior_ptid)) == -1)
 	perror_with_name (_("Couldn't write registers"));
 
       /* Deal with the stack regs.  */
@@ -219,11 +214,11 @@ sparc_store_inferior_registers (struct regcache *regcache, int regnum)
     {
       fpregset_t fpregs, saved_fpregs;
 
-      if (gdb_ptrace (PTRACE_GETFPREGS, ptid, (PTRACE_TYPE_ARG3) &fpregs) == -1)
+      if (ptrace (PTRACE_GETFPREGS, pid, (PTRACE_TYPE_ARG3) &fpregs, ptid_get_lwp (inferior_ptid)) == -1)
 	perror_with_name (_("Couldn't get floating-point registers"));
 
       memcpy (&saved_fpregs, &fpregs, sizeof (fpregs));
-      sparc_collect_fpregset (sparc_fpregmap, regcache, regnum, &fpregs);
+      sparc_collect_fpregset (sparc_fpregset, regcache, regnum, &fpregs);
 
       /* Writing the floating-point registers will fail on NetBSD with
 	 EINVAL if the inferior process doesn't have an FPU state
@@ -231,8 +226,8 @@ sparc_store_inferior_registers (struct regcache *regcache, int regnum)
 	 to write the registers if nothing changed.  */
       if (memcmp (&saved_fpregs, &fpregs, sizeof (fpregs)) != 0)
 	{
-	  if (gdb_ptrace (PTRACE_SETFPREGS, ptid,
-			  (PTRACE_TYPE_ARG3) &fpregs) == -1)
+	  if (ptrace (PTRACE_SETFPREGS, pid,
+		      (PTRACE_TYPE_ARG3) &fpregs, ptid_get_lwp (inferior_ptid)) == -1)
 	    perror_with_name (_("Couldn't write floating-point registers"));
 	}
 
@@ -242,14 +237,12 @@ sparc_store_inferior_registers (struct regcache *regcache, int regnum)
 }
 
 
-/* Implement the to_xfer_partial target_ops method for
-   TARGET_OBJECT_WCOOKIE.  Fetch StackGhost Per-Process XOR cookie.  */
+/* Fetch StackGhost Per-Process XOR cookie.  */
 
-enum target_xfer_status
-sparc_xfer_wcookie (enum target_object object,
+static LONGEST
+sparc_xfer_wcookie (struct target_ops *ops, enum target_object object,
 		    const char *annex, gdb_byte *readbuf,
-		    const gdb_byte *writebuf, ULONGEST offset, ULONGEST len,
-		    ULONGEST *xfered_len)
+		    const gdb_byte *writebuf, ULONGEST offset, LONGEST len)
 {
   unsigned long wcookie = 0;
   char *buf = (char *)&wcookie;
@@ -258,9 +251,9 @@ sparc_xfer_wcookie (enum target_object object,
   gdb_assert (readbuf && writebuf == NULL);
 
   if (offset == sizeof (unsigned long))
-    return TARGET_XFER_EOF;			/* Signal EOF.  */
+    return 0;			/* Signal EOF.  */
   if (offset > sizeof (unsigned long))
-    return TARGET_XFER_E_IO;
+    return -1;
 
 #ifdef PT_WCOOKIE
   /* If PT_WCOOKIE is defined (by <sys/ptrace.h>), assume we're
@@ -268,7 +261,9 @@ sparc_xfer_wcookie (enum target_object object,
      later).  Since release 3.6, OpenBSD uses a fully randomized
      cookie.  */
   {
-    int pid = inferior_ptid.pid ();
+    int pid;
+
+    pid = ptid_get_pid (inferior_ptid);
 
     /* Sanity check.  The proper type for a cookie is register_t, but
        we can't assume that this type exists on all systems supported
@@ -294,20 +289,52 @@ sparc_xfer_wcookie (enum target_object object,
     len = sizeof (unsigned long) - offset;
 
   memcpy (readbuf, buf + offset, len);
-  *xfered_len = (ULONGEST) len;
-  return TARGET_XFER_OK;
+  return len;
+}
+
+target_xfer_partial_ftype *inf_ptrace_xfer_partial;
+
+static LONGEST
+sparc_xfer_partial (struct target_ops *ops, enum target_object object,
+		    const char *annex, gdb_byte *readbuf,
+		    const gdb_byte *writebuf, ULONGEST offset, LONGEST len)
+{
+  if (object == TARGET_OBJECT_WCOOKIE)
+    return sparc_xfer_wcookie (ops, object, annex, readbuf, writebuf, 
+			       offset, len);
+
+  return inf_ptrace_xfer_partial (ops, object, annex, readbuf, writebuf,
+				  offset, len);
 }
 
+/* Create a prototype generic SPARC target.  The client can override
+   it with local methods.  */
 
-void _initialize_sparc_nat ();
-void
-_initialize_sparc_nat ()
+struct target_ops *
+sparc_target (void)
 {
-  /* Default to using SunOS 4 register sets.  */
-  if (sparc_gregmap == NULL)
-    sparc_gregmap = &sparc32_sunos4_gregmap;
-  if (sparc_fpregmap == NULL)
-    sparc_fpregmap = &sparc32_sunos4_fpregmap;
+  struct target_ops *t;
+
+  t = inf_ptrace_target ();
+  t->to_fetch_registers = sparc_fetch_inferior_registers;
+  t->to_store_registers = sparc_store_inferior_registers;
+  inf_ptrace_xfer_partial = t->to_xfer_partial;
+  t->to_xfer_partial = sparc_xfer_partial;
+  return t;
+}
+
+
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+void _initialize_sparc_nat (void);
+
+void
+_initialize_sparc_nat (void)
+{
+  /* Deafult to using SunOS 4 register sets.  */
+  if (sparc_gregset == NULL)
+    sparc_gregset = &sparc32_sunos4_gregset;
+  if (sparc_fpregset == NULL)
+    sparc_fpregset = &sparc32_sunos4_fpregset;
   if (sparc_supply_gregset == NULL)
     sparc_supply_gregset = sparc32_supply_gregset;
   if (sparc_collect_gregset == NULL)

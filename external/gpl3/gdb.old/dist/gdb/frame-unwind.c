@@ -1,6 +1,6 @@
 /* Definitions for frame unwinder, for GDB, the GNU debugger.
 
-   Copyright (C) 2003-2020 Free Software Foundation, Inc.
+   Copyright (C) 2003-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -24,10 +24,9 @@
 #include "inline-frame.h"
 #include "value.h"
 #include "regcache.h"
+#include "exceptions.h"
+#include "gdb_assert.h"
 #include "gdb_obstack.h"
-#include "target.h"
-#include "gdbarch.h"
-#include "dwarf2/frame-tailcall.h"
 
 static struct gdbarch_data *frame_unwind_data;
 
@@ -44,18 +43,6 @@ struct frame_unwind_table
   struct frame_unwind_table_entry **osabi_head;
 };
 
-/* A helper function to add an unwinder to a list.  LINK says where to
-   install the new unwinder.  The new link is returned.  */
-
-static struct frame_unwind_table_entry **
-add_unwinder (struct obstack *obstack, const struct frame_unwind *unwinder,
-	      struct frame_unwind_table_entry **link)
-{
-  *link = OBSTACK_ZALLOC (obstack, struct frame_unwind_table_entry);
-  (*link)->unwinder = unwinder;
-  return &(*link)->next;
-}
-
 static void *
 frame_unwind_init (struct obstack *obstack)
 {
@@ -64,21 +51,13 @@ frame_unwind_init (struct obstack *obstack)
 
   /* Start the table out with a few default sniffers.  OSABI code
      can't override this.  */
-  struct frame_unwind_table_entry **link = &table->list;
-
-  link = add_unwinder (obstack, &dummy_frame_unwind, link);
-  /* The DWARF tailcall sniffer must come before the inline sniffer.
-     Otherwise, we can end up in a situation where a DWARF frame finds
-     tailcall information, but then the inline sniffer claims a frame
-     before the tailcall sniffer, resulting in confusion.  This is
-     safe to do always because the tailcall sniffer can only ever be
-     activated if the newer frame was created using the DWARF
-     unwinder, and it also found tailcall information.  */
-  link = add_unwinder (obstack, &dwarf2_tailcall_frame_unwind, link);
-  link = add_unwinder (obstack, &inline_frame_unwind, link);
-
+  table->list = OBSTACK_ZALLOC (obstack, struct frame_unwind_table_entry);
+  table->list->unwinder = &dummy_frame_unwind;
+  table->list->next = OBSTACK_ZALLOC (obstack,
+				      struct frame_unwind_table_entry);
+  table->list->next->unwinder = &inline_frame_unwind;
   /* The insertion point for OSABI sniffers.  */
-  table->osabi_head = link;
+  table->osabi_head = &table->list->next->next;
   return table;
 }
 
@@ -86,8 +65,7 @@ void
 frame_unwind_prepend_unwinder (struct gdbarch *gdbarch,
 				const struct frame_unwind *unwinder)
 {
-  struct frame_unwind_table *table
-    = (struct frame_unwind_table *) gdbarch_data (gdbarch, frame_unwind_data);
+  struct frame_unwind_table *table = gdbarch_data (gdbarch, frame_unwind_data);
   struct frame_unwind_table_entry *entry;
 
   /* Insert the new entry at the start of the list.  */
@@ -101,67 +79,13 @@ void
 frame_unwind_append_unwinder (struct gdbarch *gdbarch,
 			      const struct frame_unwind *unwinder)
 {
-  struct frame_unwind_table *table
-    = (struct frame_unwind_table *) gdbarch_data (gdbarch, frame_unwind_data);
+  struct frame_unwind_table *table = gdbarch_data (gdbarch, frame_unwind_data);
   struct frame_unwind_table_entry **ip;
 
   /* Find the end of the list and insert the new entry there.  */
   for (ip = table->osabi_head; (*ip) != NULL; ip = &(*ip)->next);
   (*ip) = GDBARCH_OBSTACK_ZALLOC (gdbarch, struct frame_unwind_table_entry);
   (*ip)->unwinder = unwinder;
-}
-
-/* Call SNIFFER from UNWINDER.  If it succeeded set UNWINDER for
-   THIS_FRAME and return 1.  Otherwise the function keeps THIS_FRAME
-   unchanged and returns 0.  */
-
-static int
-frame_unwind_try_unwinder (struct frame_info *this_frame, void **this_cache,
-                          const struct frame_unwind *unwinder)
-{
-  int res = 0;
-
-  unsigned int entry_generation = get_frame_cache_generation ();
-
-  frame_prepare_for_sniffer (this_frame, unwinder);
-
-  try
-    {
-      res = unwinder->sniffer (unwinder, this_frame, this_cache);
-    }
-  catch (const gdb_exception &ex)
-    {
-      /* Catch all exceptions, caused by either interrupt or error.
-	 Reset *THIS_CACHE, unless something reinitialized the frame
-	 cache meanwhile, in which case THIS_FRAME/THIS_CACHE are now
-	 dangling.  */
-      if (get_frame_cache_generation () == entry_generation)
-	{
-	  *this_cache = NULL;
-	  frame_cleanup_after_sniffer (this_frame);
-	}
-
-      if (ex.error == NOT_AVAILABLE_ERROR)
-	{
-	  /* This usually means that not even the PC is available,
-	     thus most unwinders aren't able to determine if they're
-	     the best fit.  Keep trying.  Fallback prologue unwinders
-	     should always accept the frame.  */
-	  return 0;
-	}
-      throw;
-    }
-
-  if (res)
-    return 1;
-  else
-    {
-      /* Don't set *THIS_CACHE to NULL here, because sniffer has to do
-	 so.  */
-      frame_cleanup_after_sniffer (this_frame);
-      return 0;
-    }
-  gdb_assert_not_reached ("frame_unwind_try_unwinder");
 }
 
 /* Iterate through sniffers for THIS_FRAME frame until one returns with an
@@ -172,27 +96,39 @@ void
 frame_unwind_find_by_frame (struct frame_info *this_frame, void **this_cache)
 {
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
-  struct frame_unwind_table *table
-    = (struct frame_unwind_table *) gdbarch_data (gdbarch, frame_unwind_data);
+  struct frame_unwind_table *table = gdbarch_data (gdbarch, frame_unwind_data);
   struct frame_unwind_table_entry *entry;
-  const struct frame_unwind *unwinder_from_target;
-
-  unwinder_from_target = target_get_unwinder ();
-  if (unwinder_from_target != NULL
-      && frame_unwind_try_unwinder (this_frame, this_cache,
-                                   unwinder_from_target))
-    return;
-
-  unwinder_from_target = target_get_tailcall_unwinder ();
-  if (unwinder_from_target != NULL
-      && frame_unwind_try_unwinder (this_frame, this_cache,
-                                   unwinder_from_target))
-    return;
 
   for (entry = table->list; entry != NULL; entry = entry->next)
-    if (frame_unwind_try_unwinder (this_frame, this_cache, entry->unwinder))
-      return;
+    {
+      struct cleanup *old_cleanup;
+      volatile struct gdb_exception ex;
+      int res = 0;
 
+      old_cleanup = frame_prepare_for_sniffer (this_frame, entry->unwinder);
+
+      TRY_CATCH (ex, RETURN_MASK_ERROR)
+	{
+	  res = entry->unwinder->sniffer (entry->unwinder, this_frame,
+					  this_cache);
+	}
+      if (ex.reason < 0 && ex.error == NOT_AVAILABLE_ERROR)
+	{
+	  /* This usually means that not even the PC is available,
+	     thus most unwinders aren't able to determine if they're
+	     the best fit.  Keep trying.  Fallback prologue unwinders
+	     should always accept the frame.  */
+	}
+      else if (ex.reason < 0)
+	throw_exception (ex);
+      else if (res)
+        {
+          discard_cleanups (old_cleanup);
+          return;
+        }
+
+      do_cleanups (old_cleanup);
+    }
   internal_error (__FILE__, __LINE__, _("frame_unwind_find_by_frame failed"));
 }
 
@@ -221,26 +157,6 @@ default_frame_unwind_stop_reason (struct frame_info *this_frame,
     return UNWIND_NO_REASON;
 }
 
-/* See frame-unwind.h.  */
-
-CORE_ADDR
-default_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
-{
-  int pc_regnum = gdbarch_pc_regnum (gdbarch);
-  CORE_ADDR pc = frame_unwind_register_unsigned (next_frame, pc_regnum);
-  pc = gdbarch_addr_bits_remove (gdbarch, pc);
-  return pc;
-}
-
-/* See frame-unwind.h.  */
-
-CORE_ADDR
-default_unwind_sp (struct gdbarch *gdbarch, struct frame_info *next_frame)
-{
-  int sp_regnum = gdbarch_sp_regnum (gdbarch);
-  return frame_unwind_register_unsigned (next_frame, sp_regnum);
-}
-
 /* Helper functions for value-based register unwinding.  These return
    a (possibly lazy) value of the appropriate type.  */
 
@@ -251,8 +167,17 @@ frame_unwind_got_optimized (struct frame_info *frame, int regnum)
 {
   struct gdbarch *gdbarch = frame_unwind_arch (frame);
   struct type *type = register_type (gdbarch, regnum);
+  struct value *val;
 
-  return allocate_optimized_out_value (type);
+  /* Return an lval_register value, so that we print it as
+     "<not saved>".  */
+  val = allocate_value_lazy (type);
+  set_value_lazy (val, 0);
+  set_value_optimized_out (val, 1);
+  VALUE_LVAL (val) = lval_register;
+  VALUE_REGNUM (val) = regnum;
+  VALUE_FRAME_ID (val) = get_frame_id (frame);
+  return val;
 }
 
 /* Return a value which indicates that FRAME copied REGNUM into
@@ -323,9 +248,11 @@ frame_unwind_got_address (struct frame_info *frame, int regnum,
   return reg_val;
 }
 
-void _initialize_frame_unwind ();
+/* -Wmissing-prototypes */
+extern initialize_file_ftype _initialize_frame_unwind;
+
 void
-_initialize_frame_unwind ()
+_initialize_frame_unwind (void)
 {
   frame_unwind_data = gdbarch_data_register_pre_init (frame_unwind_init);
 }

@@ -1,5 +1,6 @@
 /* BFD back-end for TMS320C4X coff binaries.
-   Copyright (C) 1996-2020 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2002, 2003, 2005, 2007,
+   2008, 2012  Free Software Foundation, Inc.
 
    Contributed by Michael Hayes (m.hayes@elec.canterbury.ac.nz)
 
@@ -82,8 +83,8 @@ tic4x_relocation (bfd *abfd ATTRIBUTE_UNUSED,
   if (output_bfd != (bfd *) NULL)
     {
       /* This is a partial relocation, and we want to apply the
-	 relocation to the reloc entry rather than the raw data.
-	 Modify the reloc inplace to reflect what we now know.  */
+ 	 relocation to the reloc entry rather than the raw data.
+ 	 Modify the reloc inplace to reflect what we now know.  */
       reloc_entry->address += input_section->output_offset;
       return bfd_reloc_ok;
     }
@@ -165,8 +166,7 @@ tic4x_coff_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
    Called after some initial checking by the tic4x_rtype_to_howto fn
    below.  */
 static void
-tic4x_lookup_howto (bfd *abfd,
-		    arelent *internal,
+tic4x_lookup_howto (arelent *internal,
 		    struct internal_reloc *dst)
 {
   unsigned int i;
@@ -181,13 +181,13 @@ tic4x_lookup_howto (bfd *abfd,
 	}
     }
 
-  _bfd_error_handler (_("%pB: unsupported relocation type %#x"),
-		      abfd, (unsigned int) dst->r_type);
+  (*_bfd_error_handler) (_("Unrecognized reloc type 0x%x"),
+			 (unsigned int) dst->r_type);
   abort();
 }
 
 static reloc_howto_type *
-coff_tic4x_rtype_to_howto (bfd *abfd,
+coff_tic4x_rtype_to_howto (bfd *abfd ATTRIBUTE_UNUSED,
 			   asection *sec,
 			   struct internal_reloc *rel,
 			   struct coff_link_hash_entry *h ATTRIBUTE_UNUSED,
@@ -202,7 +202,7 @@ coff_tic4x_rtype_to_howto (bfd *abfd,
        in the output section.  */
     *addendp = (sec->output_section->vma + sec->output_offset) - sec->vma;
 
-  tic4x_lookup_howto (abfd, &genrel, rel);
+  tic4x_lookup_howto (&genrel, rel);
 
   return genrel.howto;
 }
@@ -222,20 +222,19 @@ tic4x_reloc_processing (arelent *relent,
   if (reloc->r_symndx != -1)
     {
       if (reloc->r_symndx < 0 || reloc->r_symndx >= obj_conv_table_size (abfd))
-	{
-	  _bfd_error_handler
-	    /* xgettext: c-format */
-	    (_("%pB: warning: illegal symbol index %ld in relocs"),
-	     abfd, reloc->r_symndx);
-	  relent->sym_ptr_ptr = bfd_abs_section_ptr->symbol_ptr_ptr;
-	  ptr = NULL;
-	}
+        {
+          (*_bfd_error_handler)
+            (_("%s: warning: illegal symbol index %ld in relocs"),
+             bfd_get_filename (abfd), reloc->r_symndx);
+          relent->sym_ptr_ptr = bfd_abs_section_ptr->symbol_ptr_ptr;
+          ptr = NULL;
+        }
       else
-	{
-	  relent->sym_ptr_ptr = (symbols
-				 + obj_convert (abfd)[reloc->r_symndx]);
-	  ptr = *(relent->sym_ptr_ptr);
-	}
+        {
+          relent->sym_ptr_ptr = (symbols
+                                 + obj_convert (abfd)[reloc->r_symndx]);
+          ptr = *(relent->sym_ptr_ptr);
+        }
     }
   else
     {
@@ -257,36 +256,36 @@ tic4x_reloc_processing (arelent *relent,
   /* !!     relent->section = (asection *) NULL;  */
 
   /* Fill in the relent->howto field from reloc->r_type.  */
-  tic4x_lookup_howto (abfd, relent, reloc);
+  tic4x_lookup_howto (relent, reloc);
 }
 
 
 /* TI COFF v0, DOS tools (little-endian headers).  */
 CREATE_LITTLE_COFF_TARGET_VEC(tic4x_coff0_vec, "coff0-tic4x",
-			      0, SEC_CODE | SEC_READONLY, '_',
+			      HAS_LOAD_PAGE, SEC_CODE | SEC_READONLY, '_',
 			      NULL, &ticoff0_swap_table);
 
 /* TI COFF v0, SPARC tools (big-endian headers).  */
 CREATE_BIGHDR_COFF_TARGET_VEC(tic4x_coff0_beh_vec, "coff0-beh-tic4x",
-			      0, SEC_CODE | SEC_READONLY, '_',
+			      HAS_LOAD_PAGE, SEC_CODE | SEC_READONLY, '_',
 			      &tic4x_coff0_vec, &ticoff0_swap_table);
 
 /* TI COFF v1, DOS tools (little-endian headers).  */
 CREATE_LITTLE_COFF_TARGET_VEC(tic4x_coff1_vec, "coff1-tic4x",
-			      0, SEC_CODE | SEC_READONLY, '_',
+			      HAS_LOAD_PAGE, SEC_CODE | SEC_READONLY, '_',
 			      &tic4x_coff0_beh_vec, &ticoff1_swap_table);
 
 /* TI COFF v1, SPARC tools (big-endian headers).  */
 CREATE_BIGHDR_COFF_TARGET_VEC(tic4x_coff1_beh_vec, "coff1-beh-tic4x",
-			      0, SEC_CODE | SEC_READONLY, '_',
+			      HAS_LOAD_PAGE, SEC_CODE | SEC_READONLY, '_',
 			      &tic4x_coff1_vec, &ticoff1_swap_table);
 
 /* TI COFF v2, TI DOS tools output (little-endian headers).  */
 CREATE_LITTLE_COFF_TARGET_VEC(tic4x_coff2_vec, "coff2-tic4x",
-			      0, SEC_CODE | SEC_READONLY, '_',
+			      HAS_LOAD_PAGE, SEC_CODE | SEC_READONLY, '_',
 			      &tic4x_coff1_beh_vec, COFF_SWAP_TABLE);
 
 /* TI COFF v2, TI SPARC tools output (big-endian headers).  */
 CREATE_BIGHDR_COFF_TARGET_VEC(tic4x_coff2_beh_vec, "coff2-beh-tic4x",
-			      0, SEC_CODE | SEC_READONLY, '_',
+			      HAS_LOAD_PAGE, SEC_CODE | SEC_READONLY, '_',
 			      &tic4x_coff2_vec, COFF_SWAP_TABLE);

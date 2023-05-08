@@ -1,5 +1,5 @@
 /* BFD back-end for Intel 386 PE IMAGE COFF files.
-   Copyright (C) 2006-2020 Free Software Foundation, Inc.
+   Copyright 2006, 2007, 2009 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -23,16 +23,16 @@
 #include "sysdep.h"
 #include "bfd.h"
 
-#define TARGET_SYM		x86_64_pei_vec
-#define TARGET_NAME		"pei-x86-64"
+#define TARGET_SYM 		x86_64pei_vec
+#define TARGET_NAME 		"pei-x86-64"
 #define COFF_IMAGE_WITH_PE
 #define COFF_WITH_PE
 #define COFF_WITH_pex64
-#define PCRELOFFSET		TRUE
+#define PCRELOFFSET 		TRUE
 #if defined (USE_MINGW64_LEADING_UNDERSCORES)
-#define TARGET_UNDERSCORE	'_'
+#define TARGET_UNDERSCORE 	'_'
 #else
-#define TARGET_UNDERSCORE	0
+#define TARGET_UNDERSCORE 	0
 #endif
 /* Long section names not allowed in executable images, only object files.  */
 #define COFF_LONG_SECTION_NAMES 0
@@ -98,20 +98,14 @@ pex64_get_runtime_function (bfd *abfd, struct pex64_runtime_function *rf,
 
 /* Swap in unwind info header.  */
 
-static bfd_boolean
-pex64_get_unwind_info (bfd *abfd, struct pex64_unwind_info *ui,
-		       void *data, void *data_end)
+static void
+pex64_get_unwind_info (bfd *abfd, struct pex64_unwind_info *ui, void *data)
 {
   struct external_pex64_unwind_info *ex_ui =
     (struct external_pex64_unwind_info *) data;
   bfd_byte *ex_dta = (bfd_byte *) data;
-  bfd_byte *ex_dta_end = (bfd_byte *) data_end;
 
   memset (ui, 0, sizeof (struct pex64_unwind_info));
-
-  if (ex_dta >= ex_dta_end || ex_dta + 4 >= ex_dta_end)
-    return FALSE;
-
   ui->Version = PEX64_UWI_VERSION (ex_ui->Version_Flags);
   ui->Flags = PEX64_UWI_FLAGS (ex_ui->Version_Flags);
   ui->SizeOfPrologue = (bfd_vma) ex_ui->SizeOfPrologue;
@@ -120,33 +114,24 @@ pex64_get_unwind_info (bfd *abfd, struct pex64_unwind_info *ui,
   ui->FrameOffset = PEX64_UWI_FRAMEOFF (ex_ui->FrameRegisterOffset);
   ui->sizeofUnwindCodes = PEX64_UWI_SIZEOF_UWCODE_ARRAY (ui->CountOfCodes);
   ui->SizeOfBlock = ui->sizeofUnwindCodes + 4;
-  ui->rawUnwindCodes = ex_dta + 4;
-  ui->rawUnwindCodesEnd = ex_dta_end;
-
+  ui->rawUnwindCodes = &ex_dta[4];
   ex_dta += ui->SizeOfBlock;
-  if (ex_dta >= ex_dta_end)
-    return FALSE;
-
   switch (ui->Flags)
     {
     case UNW_FLAG_CHAININFO:
-      if (ex_dta + 12 >= ex_dta_end)
-	return FALSE;
       ui->rva_BeginAddress = bfd_get_32 (abfd, ex_dta + 0);
       ui->rva_EndAddress = bfd_get_32 (abfd, ex_dta + 4);
       ui->rva_UnwindData = bfd_get_32 (abfd, ex_dta + 8);
       ui->SizeOfBlock += 12;
-      return TRUE;
+      return;
     case UNW_FLAG_EHANDLER:
     case UNW_FLAG_UHANDLER:
     case UNW_FLAG_FHANDLER:
-      if (ex_dta + 4 >= ex_dta_end)
-	return FALSE;
       ui->rva_ExceptionHandler = bfd_get_32 (abfd, ex_dta);
       ui->SizeOfBlock += 4;
-      return TRUE;
+      return;
     default:
-      return TRUE;
+      return;
     }
 }
 
@@ -172,32 +157,18 @@ pex64_xdata_print_uwd_codes (FILE *file, bfd *abfd,
 
   i = 0;
 
-  if (ui->rawUnwindCodes + 1 >= ui->rawUnwindCodesEnd)
-    {
-      fprintf (file, _("warning: corrupt unwind data\n"));
-      return;
-    }
-
   if (ui->Version == 2
       && PEX64_UNWCODE_CODE (ui->rawUnwindCodes[1]) == UWOP_EPILOG)
     {
       /* Display epilog opcode (whose docoding is not fully documented).
-	 Looks to be designed to speed-up unwinding, as there is no need
+         Looks to be designed to speed-up unwinding, as there is no need
 	 to decode instruction flow if outside an epilog.  */
       unsigned int func_size = rf->rva_EndAddress - rf->rva_BeginAddress;
 
-      if (ui->rawUnwindCodes + 1 + (ui->CountOfCodes * 2) >= ui->rawUnwindCodesEnd)
-	{
-	  fprintf (file, _("warning: corrupt unwind data\n"));
-	  return;
-	}
-
       fprintf (file, "\tv2 epilog (length: %02x) at pc+:",
 	       ui->rawUnwindCodes[0]);
-
       if (PEX64_UNWCODE_INFO (ui->rawUnwindCodes[1]))
 	fprintf (file, " 0x%x", func_size - ui->rawUnwindCodes[0]);
-
       i++;
       for (; i < ui->CountOfCodes; i++)
 	{
@@ -215,12 +186,6 @@ pex64_xdata_print_uwd_codes (FILE *file, bfd *abfd,
       fputc ('\n', file);
     }
 
-  if (ui->rawUnwindCodes + 2 + (ui->CountOfCodes * 2) >= ui->rawUnwindCodesEnd)
-    {
-      fprintf (file, _("warning: corrupt unwind data\n"));
-      return;
-    }
-
   for (; i < ui->CountOfCodes; i++)
     {
       const bfd_byte *dta = ui->rawUnwindCodes + 2 * i;
@@ -228,41 +193,27 @@ pex64_xdata_print_uwd_codes (FILE *file, bfd *abfd,
       int unexpected = FALSE;
 
       fprintf (file, "\t  pc+0x%02x: ", (unsigned int) dta[0]);
-
       switch (PEX64_UNWCODE_CODE (dta[1]))
 	{
 	case UWOP_PUSH_NONVOL:
 	  fprintf (file, "push %s", pex_regs[info]);
 	  break;
-
 	case UWOP_ALLOC_LARGE:
 	  if (info == 0)
 	    {
-	      if (dta + 4 > ui->rawUnwindCodesEnd)
-		{
-		  fprintf (file, _("warning: corrupt unwind data\n"));
-		  return;
-		}
-	      tmp = bfd_get_16 (abfd, dta + 2) * 8;
+	      tmp = bfd_get_16 (abfd, &dta[2]) * 8;
 	      i++;
 	    }
 	  else
 	    {
-	      if (dta + 6 > ui->rawUnwindCodesEnd)
-		{
-		  fprintf (file, _("warning: corrupt unwind data\n"));
-		  return;
-		}
-	      tmp = bfd_get_32 (abfd, dta + 2);
+	      tmp = bfd_get_32 (abfd, &dta[2]);
 	      i += 2;
 	    }
 	  fprintf (file, "alloc large area: rsp = rsp - 0x%x", tmp);
 	  break;
-
 	case UWOP_ALLOC_SMALL:
 	  fprintf (file, "alloc small area: rsp = rsp - 0x%x", (info + 1) * 8);
 	  break;
-
 	case UWOP_SET_FPREG:
 	  /* According to the documentation, info field is unused.  */
 	  fprintf (file, "FPReg: %s = rsp + 0x%x (info = 0x%x)",
@@ -271,40 +222,22 @@ pex64_xdata_print_uwd_codes (FILE *file, bfd *abfd,
 	  unexpected = ui->FrameRegister == 0;
 	  save_allowed = FALSE;
 	  break;
-
 	case UWOP_SAVE_NONVOL:
-	  if (dta + 4 > ui->rawUnwindCodesEnd)
-	    {
-	      fprintf (file, _("warning: corrupt unwind data\n"));
-	      return;
-	    }
-	  tmp = bfd_get_16 (abfd, dta + 2) * 8;
+	  tmp = bfd_get_16 (abfd, &dta[2]) * 8;
 	  i++;
 	  fprintf (file, "save %s at rsp + 0x%x", pex_regs[info], tmp);
 	  unexpected = !save_allowed;
 	  break;
-
 	case UWOP_SAVE_NONVOL_FAR:
-	  if (dta + 6 > ui->rawUnwindCodesEnd)
-	    {
-	      fprintf (file, _("warning: corrupt unwind data\n"));
-	      return;
-	    }
-	  tmp = bfd_get_32 (abfd, dta + 2);
+	  tmp = bfd_get_32 (abfd, &dta[2]);
 	  i += 2;
 	  fprintf (file, "save %s at rsp + 0x%x", pex_regs[info], tmp);
 	  unexpected = !save_allowed;
 	  break;
-
 	case UWOP_SAVE_XMM:
 	  if (ui->Version == 1)
 	    {
-	      if (dta + 4 > ui->rawUnwindCodesEnd)
-		{
-		  fprintf (file, _("warning: corrupt unwind data\n"));
-		  return;
-		}
-	      tmp = bfd_get_16 (abfd, dta + 2) * 8;
+	      tmp = bfd_get_16 (abfd, &dta[2]) * 8;
 	      i++;
 	      fprintf (file, "save mm%u at rsp + 0x%x", info, tmp);
 	      unexpected = !save_allowed;
@@ -315,43 +248,24 @@ pex64_xdata_print_uwd_codes (FILE *file, bfd *abfd,
 	      unexpected = TRUE;
 	    }
 	  break;
-
 	case UWOP_SAVE_XMM_FAR:
-	  if (dta + 6 > ui->rawUnwindCodesEnd)
-	    {
-	      fprintf (file, _("warning: corrupt unwind data\n"));
-	      return;
-	    }
-	  tmp = bfd_get_32 (abfd, dta + 2) * 8;
+	  tmp = bfd_get_32 (abfd, &dta[2]) * 8;
 	  i += 2;
 	  fprintf (file, "save mm%u at rsp + 0x%x", info, tmp);
 	  unexpected = !save_allowed;
 	  break;
-
 	case UWOP_SAVE_XMM128:
-	  if (dta + 4 > ui->rawUnwindCodesEnd)
-	    {
-	      fprintf (file, _("warning: corrupt unwind data\n"));
-	      return;
-	    }
-	  tmp = bfd_get_16 (abfd, dta + 2) * 16;
+	  tmp = bfd_get_16 (abfd, &dta[2]) * 16;
 	  i++;
 	  fprintf (file, "save xmm%u at rsp + 0x%x", info, tmp);
 	  unexpected = !save_allowed;
 	  break;
-
 	case UWOP_SAVE_XMM128_FAR:
-	  if (dta + 6 > ui->rawUnwindCodesEnd)
-	    {
-	      fprintf (file, _("warning: corrupt unwind data\n"));
-	      return;
-	    }
-	  tmp = bfd_get_32 (abfd, dta + 2) * 16;
+	  tmp = bfd_get_32 (abfd, &dta[2]) * 16;
 	  i += 2;
 	  fprintf (file, "save xmm%u at rsp + 0x%x", info, tmp);
 	  unexpected = !save_allowed;
 	  break;
-
 	case UWOP_PUSH_MACHFRAME:
 	  fprintf (file, "interrupt entry (SS, old RSP, EFLAGS, CS, RIP");
 	  if (info == 0)
@@ -361,13 +275,10 @@ pex64_xdata_print_uwd_codes (FILE *file, bfd *abfd,
 	  else
 	    fprintf (file, ", unknown(%u))", info);
 	  break;
-
 	default:
-	  /* PR 17512: file: 2245-7442-0.004.  */
-	  fprintf (file, _("Unknown: %x"), PEX64_UNWCODE_CODE (dta[1]));
-	  break;
-	}
-
+	  /* Already caught by the previous scan.  */
+	  abort ();
+      }
       if (unexpected)
 	fprintf (file, " [Unexpected!]");
       fputc ('\n', file);
@@ -406,37 +317,19 @@ pex64_dump_xdata (FILE *file, bfd *abfd,
   bfd_vma vaddr;
   bfd_vma end_addr;
   bfd_vma addr = rf->rva_UnwindData;
-  bfd_size_type sec_size = xdata_section->rawsize > 0 ? xdata_section->rawsize : xdata_section->size;
   struct pex64_unwind_info ui;
 
   vaddr = xdata_section->vma - pe_data (abfd)->pe_opthdr.ImageBase;
   addr -= vaddr;
 
-  /* PR 17512: file: 2245-7442-0.004.  */
-  if (addr >= sec_size)
-    {
-      fprintf (file, _("warning: xdata section corrupt\n"));
-      return;
-    }
-
   if (endx)
-    {
-      end_addr = endx[0] - vaddr;
-      /* PR 17512: file: 2245-7442-0.004.  */
-      if (end_addr > sec_size)
-	{
-	  fprintf (file, _("warning: xdata section corrupt\n"));
-	  end_addr = sec_size;
-	}
-    }
+    end_addr = endx[0] - vaddr;
   else
-    end_addr = sec_size;
+    end_addr = (xdata_section->rawsize != 0 ?
+		xdata_section->rawsize : xdata_section->size);
 
-  if (! pex64_get_unwind_info (abfd, &ui, xdata + addr, xdata + end_addr))
-    {
-      fprintf (file, _("warning: xdata section corrupt\n"));
-      return;
-    }
+
+  pex64_get_unwind_info (abfd, &ui, &xdata[addr]);
 
   if (ui.Version != 1 && ui.Version != 2)
     {
@@ -487,11 +380,7 @@ pex64_dump_xdata (FILE *file, bfd *abfd,
 	   ui.FrameRegister == 0 ? "none"
 	   : pex_regs[(unsigned int) ui.FrameRegister]);
 
-  /* PR 17512: file: 2245-7442-0.004.  */
-  if (ui.CountOfCodes * 2 + ui.rawUnwindCodes > xdata + xdata_section->size)
-    fprintf (file, _("Too many unwind codes (%ld)\n"), (long) ui.CountOfCodes);
-  else
-    pex64_xdata_print_uwd_codes (file, abfd, &ui, rf);
+  pex64_xdata_print_uwd_codes (file, abfd, &ui, rf);
 
   switch (ui.Flags)
     {
@@ -550,24 +439,23 @@ sort_xdata_arr (const void *l, const void *r)
 /* Display unwind tables for x86-64.  */
 
 static bfd_boolean
-pex64_bfd_print_pdata_section (bfd *abfd, void *vfile, asection *pdata_section)
+pex64_bfd_print_pdata (bfd *abfd, void *vfile)
 {
   FILE *file = (FILE *) vfile;
   bfd_byte *pdata = NULL;
   bfd_byte *xdata = NULL;
-  asection *xdata_section = NULL;
+  asection *pdata_section = bfd_get_section_by_name (abfd, ".pdata");
+  asection *xdata_section;
   bfd_vma xdata_base;
   bfd_size_type i;
-  bfd_size_type datasize;
   bfd_size_type stop;
-  bfd_vma prev_beginaddress = (bfd_vma) -1;
-  bfd_vma prev_unwinddata_rva = (bfd_vma) -1;
+  bfd_vma prev_beginaddress = 0;
+  bfd_vma prev_unwinddata_rva = 0;
   bfd_vma imagebase;
   int onaline = PDATA_ROW_SIZE;
   int seen_error = 0;
   bfd_vma *xdata_arr = NULL;
   int xdata_arr_cnt;
-  bfd_boolean virt_size_is_zero = FALSE;
 
   /* Sanity checks.  */
   if (pdata_section == NULL
@@ -578,40 +466,12 @@ pex64_bfd_print_pdata_section (bfd *abfd, void *vfile, asection *pdata_section)
   stop = pei_section_data (abfd, pdata_section)->virt_size;
   if ((stop % onaline) != 0)
     fprintf (file,
-	     /* xgettext:c-format */
-	     _("Warning: %s section size (%ld) is not a multiple of %d\n"),
-	     pdata_section->name, (long) stop, onaline);
-
-  datasize = pdata_section->size;
-  if (datasize == 0)
-    {
-      if (stop)
-	fprintf (file, _("Warning: %s section size is zero\n"),
-		 pdata_section->name);
-      return TRUE;
-    }
-
-  /* virt_size might be zero for objects.  */
-  if (stop == 0 && strcmp (abfd->xvec->name, "pe-x86-64") == 0)
-    {
-      stop = datasize;
-      virt_size_is_zero = TRUE;
-    }
-  else if (datasize < stop)
-      {
-	fprintf (file,
-		 /* xgettext:c-format */
-		 _("Warning: %s section size (%ld) is smaller than virtual size (%ld)\n"),
-		 pdata_section->name, (unsigned long) datasize,
-		 (unsigned long) stop);
-	/* Be sure not to read past datasize.  */
-	stop = datasize;
-      }
+	     _("warning: .pdata section size (%ld) is not a multiple of %d\n"),
+	     (long) stop, onaline);
 
   /* Display functions table.  */
   fprintf (file,
-	   _("\nThe Function Table (interpreted %s section contents)\n"),
-	   pdata_section->name);
+	   _("\nThe Function Table (interpreted .pdata section contents)\n"));
 
   fprintf (file, _("vma:\t\t\tBeginAddress\t EndAddress\t  UnwindData\n"));
 
@@ -622,10 +482,7 @@ pex64_bfd_print_pdata_section (bfd *abfd, void *vfile, asection *pdata_section)
   xdata_arr = (bfd_vma *) xmalloc (sizeof (bfd_vma) * ((stop / onaline) + 1));
   xdata_arr_cnt = 0;
 
-  if (strcmp (abfd->xvec->name, "pei-x86-64") == 0)
-    imagebase = pe_data (abfd)->pe_opthdr.ImageBase;
-  else
-    imagebase = 0;
+  imagebase = pe_data (abfd)->pe_opthdr.ImageBase;
 
   for (i = 0; i < stop; i += onaline)
     {
@@ -633,7 +490,6 @@ pex64_bfd_print_pdata_section (bfd *abfd, void *vfile, asection *pdata_section)
 
       if (i + PDATA_ROW_SIZE > stop)
 	break;
-
       pex64_get_runtime_function (abfd, &rf, &pdata[i]);
 
       if (rf.rva_BeginAddress == 0 && rf.rva_EndAddress == 0
@@ -654,7 +510,7 @@ pex64_bfd_print_pdata_section (bfd *abfd, void *vfile, asection *pdata_section)
 	  seen_error = 1;
 	  fprintf (file, "  has %s begin address as predecessor\n",
 	    (rf.rva_BeginAddress < prev_beginaddress ? "smaller" : "same"));
-	}
+        }
       prev_beginaddress = rf.rva_BeginAddress;
       /* Now we check for negative addresses.  */
       if ((prev_beginaddress & 0x80000000) != 0)
@@ -672,9 +528,8 @@ pex64_bfd_print_pdata_section (bfd *abfd, void *vfile, asection *pdata_section)
 	  seen_error = 1;
 	  fprintf (file, "  has negative unwind address\n");
 	}
-      else if ((rf.rva_UnwindData && !PEX64_IS_RUNTIME_FUNCTION_CHAINED (&rf))
-		|| virt_size_is_zero)
-	xdata_arr[xdata_arr_cnt++] = rf.rva_UnwindData;
+      if (rf.rva_UnwindData && !PEX64_IS_RUNTIME_FUNCTION_CHAINED (&rf))
+        xdata_arr[xdata_arr_cnt++] = rf.rva_UnwindData;
     }
 
   if (seen_error)
@@ -690,42 +545,19 @@ pex64_bfd_print_pdata_section (bfd *abfd, void *vfile, asection *pdata_section)
 
   /* Find the section containing the unwind data (.xdata).  */
   xdata_base = xdata_arr[0];
-  /* For sections with long names, first look for the same
-     section name, replacing .pdata by .xdata prefix.  */
-  if (strcmp (pdata_section->name, ".pdata") != 0)
-    {
-      size_t len = strlen (pdata_section->name);
-      char *xdata_name = xmalloc (len + 1);
+  xdata_section = pex64_get_section_by_rva (abfd, xdata_base, ".rdata");
 
-      xdata_name = memcpy (xdata_name, pdata_section->name, len + 1);
-      /* Transform .pdata prefix into .xdata prefix.  */
-      if (len > 1)
-	xdata_name [1] = 'x';
-      xdata_section = pex64_get_section_by_rva (abfd, xdata_base,
-						xdata_name);
-      free (xdata_name);
-    }
-  /* Second, try the .xdata section itself.  */
+  if (!xdata_section)
+    xdata_section = pex64_get_section_by_rva (abfd, xdata_base, ".data");
   if (!xdata_section)
     xdata_section = pex64_get_section_by_rva (abfd, xdata_base, ".xdata");
-  /* Otherwise, if xdata_base is non zero, search also inside
-     other standard sections.  */
-  if (!xdata_section && xdata_base)
-    xdata_section = pex64_get_section_by_rva (abfd, xdata_base, ".rdata");
-  if (!xdata_section && xdata_base)
-    xdata_section = pex64_get_section_by_rva (abfd, xdata_base, ".data");
-  if (!xdata_section && xdata_base)
+  if (!xdata_section)
     xdata_section = pex64_get_section_by_rva (abfd, xdata_base, ".pdata");
-  if (!xdata_section && xdata_base)
+  if (!xdata_section)
     xdata_section = pex64_get_section_by_rva (abfd, xdata_base, ".text");
-  /* Transfer xdata section into xdata array.  */
   if (!xdata_section
       || !bfd_malloc_and_get_section (abfd, xdata_section, &xdata))
     goto done;
-
-  /* Avoid "also used "... ouput for single unwind info
-     in object file.  */
-  prev_unwinddata_rva = (bfd_vma) -1;
 
   /* Do dump of pdata related xdata.  */
   for (i = 0; i < stop; i += onaline)
@@ -734,7 +566,6 @@ pex64_bfd_print_pdata_section (bfd *abfd, void *vfile, asection *pdata_section)
 
       if (i + PDATA_ROW_SIZE > stop)
 	break;
-
       pex64_get_runtime_function (abfd, &rf, &pdata[i]);
 
       if (rf.rva_BeginAddress == 0 && rf.rva_EndAddress == 0
@@ -742,7 +573,7 @@ pex64_bfd_print_pdata_section (bfd *abfd, void *vfile, asection *pdata_section)
 	/* We are probably into the padding of the section now.  */
 	break;
       if (i == 0)
-	fprintf (file, _("\nDump of %s\n"), xdata_section->name);
+        fprintf (file, "\nDump of .xdata\n");
 
       fputc (' ', file);
       fprintf_vma (file, rf.rva_UnwindData + imagebase);
@@ -765,19 +596,20 @@ pex64_bfd_print_pdata_section (bfd *abfd, void *vfile, asection *pdata_section)
       fprintf_vma (file, rf.rva_EndAddress + imagebase);
       fputc ('\n', file);
 
-      if (rf.rva_UnwindData != 0 || virt_size_is_zero)
+      if (rf.rva_UnwindData != 0)
 	{
 	  if (PEX64_IS_RUNTIME_FUNCTION_CHAINED (&rf))
 	    {
 	      bfd_vma altent = PEX64_GET_UNWINDDATA_UNIFIED_RVA (&rf);
-	      bfd_vma pdata_vma = bfd_section_vma (pdata_section);
+	      bfd_vma pdata_vma = bfd_get_section_vma (abfd, pdata_section);
 	      struct pex64_runtime_function arf;
 
 	      fprintf (file, "\t shares information with ");
 	      altent += imagebase;
 
 	      if (altent >= pdata_vma
-		  && altent - pdata_vma + PDATA_ROW_SIZE <= stop)
+		  && (altent + PDATA_ROW_SIZE <= pdata_vma
+		      + pei_section_data (abfd, pdata_section)->virt_size))
 		{
 		  pex64_get_runtime_function
 		    (abfd, &arf, &pdata[altent - pdata_vma]);
@@ -794,7 +626,7 @@ pex64_bfd_print_pdata_section (bfd *abfd, void *vfile, asection *pdata_section)
 
 	      /* Search for the current entry in the sorted array.  */
 	      p = (bfd_vma *)
-		  bsearch (&rf.rva_UnwindData, xdata_arr,
+	          bsearch (&rf.rva_UnwindData, xdata_arr,
 			   (size_t) xdata_arr_cnt, sizeof (bfd_vma),
 			   sort_xdata_arr);
 
@@ -803,7 +635,6 @@ pex64_bfd_print_pdata_section (bfd *abfd, void *vfile, asection *pdata_section)
 		 identical pointers in the array; advance past all of them.  */
 	      while (p[0] <= rf.rva_UnwindData)
 		++p;
-
 	      if (p[0] == ~((bfd_vma) 0))
 		p = NULL;
 
@@ -820,37 +651,6 @@ pex64_bfd_print_pdata_section (bfd *abfd, void *vfile, asection *pdata_section)
   return TRUE;
 }
 
-/* Static counter of number of found pdata sections.  */
-static bfd_boolean pdata_count;
-
-/* Functionn prototype.  */
-bfd_boolean pex64_bfd_print_pdata (bfd *, void *);
-
-/* Helper function for bfd_map_over_section.  */
-static void
-pex64_print_all_pdata_sections (bfd *abfd, asection *pdata, void *obj)
-{
-  if (CONST_STRNEQ (pdata->name, ".pdata"))
-    {
-      if (pex64_bfd_print_pdata_section (abfd, obj, pdata))
-	pdata_count++;
-    }
-}
-
-bfd_boolean
-pex64_bfd_print_pdata (bfd *abfd, void *vfile)
-{
-  asection *pdata_section = bfd_get_section_by_name (abfd, ".pdata");
-
-  if (pdata_section)
-    return pex64_bfd_print_pdata_section (abfd, vfile, pdata_section);
-
-  pdata_count = 0;
-  bfd_map_over_sections (abfd, pex64_print_all_pdata_sections, vfile);
-  return (pdata_count > 0);
-}
-
 #define bfd_pe_print_pdata   pex64_bfd_print_pdata
-#define bfd_coff_std_swap_table bfd_coff_pei_swap_table
 
 #include "coff-x86_64.c"

@@ -1,5 +1,6 @@
 /* debug.c -- Handle generic debugging information.
-   Copyright (C) 1995-2020 Free Software Foundation, Inc.
+   Copyright 1995, 1996, 1997, 1998, 1999, 2000, 2002, 2003, 2005, 2007,
+   2009  Free Software Foundation, Inc.
    Written by Ian Lance Taylor <ian@cygnus.com>.
 
    This file is part of GNU Binutils.
@@ -2419,9 +2420,6 @@ debug_write_type (struct debug_handle *info,
   int is;
   const char *tag = NULL;
 
-  if (type == DEBUG_TYPE_NULL)
-    return (*fns->empty_type) (fhandle);
-
   /* If we have a name for this type, just output it.  We only output
      typedef names after they have been defined.  We output type tags
      whenever we are not actually defining them.  */
@@ -2484,6 +2482,8 @@ debug_write_type (struct debug_handle *info,
       debug_error (_("debug_write_type: illegal type encountered"));
       return FALSE;
     case DEBUG_KIND_INDIRECT:
+      if (*type->u.kindirect->slot == DEBUG_TYPE_NULL)
+	return (*fns->empty_type) (fhandle);
       return debug_write_type (info, fns, fhandle, *type->u.kindirect->slot,
 			       name);
     case DEBUG_KIND_VOID:
@@ -3156,7 +3156,6 @@ debug_type_samep (struct debug_handle *info, struct debug_type_s *t1,
 	     && t1->u.krange->upper == t2->u.krange->upper
 	     && debug_type_samep (info, t1->u.krange->type,
 				  t2->u.krange->type));
-      break;
 
     case DEBUG_KIND_ARRAY:
       ret = (t1->u.karray->lower == t2->u.karray->lower

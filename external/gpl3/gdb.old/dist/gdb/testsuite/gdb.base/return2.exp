@@ -1,4 +1,4 @@
-# Copyright 2000-2020 Free Software Foundation, Inc.
+# Copyright 2000-2014 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,11 +19,9 @@
 standard_testfile .c
 
 if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug}] != "" } {
-     untested "failed to compile"
+     untested return2.exp
      return -1
 }
-
-set skip_float_test [gdb_skip_float_test]
 
 proc return_1 { type } {
     global gdb_prompt
@@ -50,7 +48,7 @@ proc return_1 { type } {
     gdb_test "print ${type}_resultval == testval.${type}_testval" ".* = 1" \
 	    "${type} value returned successfully"
     gdb_test "print ${type}_resultval != ${type}_returnval" ".* = 1" \
-	    "validate result value not equal to program return value, ${type}"
+	    "validate result value not equal to program return value"
 }
 
 proc return_void { } {
@@ -79,10 +77,10 @@ proc return_void { } {
 }
 
 proc return2_tests { } {
-    global gdb_prompt skip_float_test
+    global gdb_prompt
 
     if { ! [ runto_main ] } then {
-	untested "couldn't run to main"
+	untested return2.exp
 	return -1
     }
 
@@ -94,7 +92,7 @@ proc return2_tests { } {
     if { ! [istarget "m6811-*-*"] && ![istarget "h8300*-*"] } then {
         return_1 "long_long"
     }
-    if {!$skip_float_test} {
+    if ![target_info exists gdb,skip_float_tests] {
 	return_1 "float"
 	if { ! [istarget "m6811-*-*"] } then {
 	    return_1 "double"

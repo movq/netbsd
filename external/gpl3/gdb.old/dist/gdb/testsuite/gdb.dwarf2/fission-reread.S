@@ -1,4 +1,4 @@
-/* Copyright 2012-2020 Free Software Foundation, Inc.
+/* Copyright 2012-2014 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -38,36 +38,27 @@
    further hand-edited to support that.
 */
 
-#define CONCAT1(a, b) CONCAT2(a, b)
-#define CONCAT2(a, b) a ## b
-
-#ifdef SYMBOL_PREFIX
-# define SYMBOL(str)     CONCAT1(SYMBOL_PREFIX, str)
-#else
-# define SYMBOL(str)     str
-#endif
-
 	.file	"fission-reread.cc"
 
-	.globl	SYMBOL(baz)
+	.globl	baz
 	.data	/* Previously this used .bss, but it's not portable.  */
 	.align 4
-	.type	SYMBOL(baz), %object
-	.size	SYMBOL(baz), 4
-SYMBOL(baz):
+	.type	baz, %object
+	.size	baz, 4
+baz:
 	.zero	4
 
 	.text
 .Ltext0:
-	.globl	SYMBOL(main)
-	.type	SYMBOL(main), %function
-SYMBOL(main):
+	.globl	main
+	.type	main, %function
+main:
 .LFB0:
 	.file 1 "fission-reread.cc"
 	.loc 1 11 0
 	.4byte 0
 .LFE0:
-	.size	SYMBOL(main), .-SYMBOL(main)
+	.size	main, .-main
 .Letext0:
 
 	.section	.debug_types.dwo
@@ -143,7 +134,7 @@ SYMBOL(main):
 	.4byte	0	/* Offset to Type DIE */
 	.uleb128 0x2	/* (DIE (0) DW_TAG_type_unit) */
 	.ascii "/tmp/src/gdb/testsuite\0"	/* DW_AT_comp_dir */
-	.ascii "fission-reread.dwo\0" /* DW_AT_GNU_dwo_name */
+	.ascii "gdb.dwarf2/fission-reread.dwo\0" /* DW_AT_GNU_dwo_name */
 	.4byte	.Ldebug_pubnames0	/* DW_AT_GNU_pubnames */
 	.4byte	.Ldebug_pubtypes0	/* DW_AT_GNU_pubtypes */
 	.4byte	.Ldebug_addr0	/* DW_AT_GNU_addr_base */
@@ -214,7 +205,7 @@ SYMBOL(main):
 	.4byte	.Letext0-.Ltext0	/* DW_AT_high_pc */
 	.4byte	.Ldebug_line0	/* DW_AT_stmt_list */
 	.ascii "/tmp/src/gdb/testsuite\0"	/* DW_AT_comp_dir */
-	.ascii "fission-reread.dwo\0" /* DW_AT_GNU_dwo_name */
+	.ascii "gdb.dwarf2/fission-reread.dwo\0" /* DW_AT_GNU_dwo_name */
 	.4byte	.Ldebug_pubnames0	/* DW_AT_GNU_pubnames */
 	.4byte	.Ldebug_pubtypes0	/* DW_AT_GNU_pubtypes */
 	.4byte	.Ldebug_addr0	/* DW_AT_GNU_addr_base */
@@ -459,4 +450,4 @@ SYMBOL(main):
 	.section	.debug_addr
 .Ldebug_addr0:
 	.4byte	.LFB0	/* DW_AT_low_pc */
-	.4byte	SYMBOL(baz)	/* DW_AT_location */
+	.4byte	baz	/* DW_AT_location */

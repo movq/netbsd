@@ -150,22 +150,22 @@ namespace C
       // plan to have GDB try to print out, just to make sure that the
       // compiler and I agree which ones should be legal!  It's easy
       // to screw up when testing the boundaries of namespace stuff.
-      (void) c;
+      c;
       //cc;
-      (void) C::cc;
-      (void) cd;
+      C::cc;
+      cd;
       //C::D::cd;
-      (void) E::cde;
-      (void) shadow;
+      E::cde;
+      shadow;
       //E::ce;
-      (void) cX;
-      (void) F::cXf;
-      (void) F::cXfX;
-      (void) X;
-      (void) G::Xg;
+      cX;
+      F::cXf;
+      F::cXfX;
+      X;
+      G::Xg;
       //cXOtherFile;
       //XOtherFile;
-      (void) G::XgX;
+      G::XgX;
 
       return;
     }
