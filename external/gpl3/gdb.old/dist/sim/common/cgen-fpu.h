@@ -69,7 +69,6 @@ struct cgen_fp_ops {
   SF (*subsf) (CGEN_FPU*, SF, SF);
   SF (*mulsf) (CGEN_FPU*, SF, SF);
   SF (*divsf) (CGEN_FPU*, SF, SF);
-  SF (*remsf) (CGEN_FPU*, SF, SF);
   SF (*negsf) (CGEN_FPU*, SF);
   SF (*abssf) (CGEN_FPU*, SF);
   SF (*sqrtsf) (CGEN_FPU*, SF);
@@ -87,7 +86,6 @@ struct cgen_fp_ops {
   int (*lesf) (CGEN_FPU*, SF, SF);
   int (*gtsf) (CGEN_FPU*, SF, SF);
   int (*gesf) (CGEN_FPU*, SF, SF);
-  int (*unorderedsf) (CGEN_FPU*, SF, SF);
 
   /* basic DF ops */
 
@@ -95,7 +93,6 @@ struct cgen_fp_ops {
   DF (*subdf) (CGEN_FPU*, DF, DF);
   DF (*muldf) (CGEN_FPU*, DF, DF);
   DF (*divdf) (CGEN_FPU*, DF, DF);
-  DF (*remdf) (CGEN_FPU*, DF, DF);
   DF (*negdf) (CGEN_FPU*, DF);
   DF (*absdf) (CGEN_FPU*, DF);
   DF (*sqrtdf) (CGEN_FPU*, DF);
@@ -113,7 +110,6 @@ struct cgen_fp_ops {
   int (*ledf) (CGEN_FPU*, DF, DF);
   int (*gtdf) (CGEN_FPU*, DF, DF);
   int (*gedf) (CGEN_FPU*, DF, DF);
-  int (*unordereddf) (CGEN_FPU*, DF, DF);
 
   /* SF/DF conversion ops */
 
@@ -146,7 +142,6 @@ struct cgen_fp_ops {
   XF (*subxf) (CGEN_FPU*, XF, XF);
   XF (*mulxf) (CGEN_FPU*, XF, XF);
   XF (*divxf) (CGEN_FPU*, XF, XF);
-  XF (*remxf) (CGEN_FPU*, XF, XF);
   XF (*negxf) (CGEN_FPU*, XF);
   XF (*absxf) (CGEN_FPU*, XF);
   XF (*sqrtxf) (CGEN_FPU*, XF);
@@ -185,7 +180,6 @@ struct cgen_fp_ops {
   TF (*subtf) (CGEN_FPU*, TF, TF);
   TF (*multf) (CGEN_FPU*, TF, TF);
   TF (*divtf) (CGEN_FPU*, TF, TF);
-  TF (*remtf) (CGEN_FPU*, TF, TF);
   TF (*negtf) (CGEN_FPU*, TF);
   TF (*abstf) (CGEN_FPU*, TF);
   TF (*sqrttf) (CGEN_FPU*, TF);

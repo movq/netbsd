@@ -1,14 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/errno.h>
 #include <sys/types.h>
+#include <sys/fcntl.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <errno.h>
 #include <sys/wait.h>
-#include <fcntl.h>
 #include <unistd.h>
-#include <time.h>
 /* TESTS :
  * - open(const char *pathname, int flags, mode_t mode);
 1) Attempt to create file that already exists - EEXIST
@@ -55,11 +55,7 @@ time(time_t *t);
 Not applicable.
 
 system (const char * string);
-1) See if shell available - returns 0
-2) See if shell available - returns !0
-3) Execute simple shell command - returns 0
-4) Invalid string/command. -  returns 127.  */
-
+1) Invalid string/command. -  returns 127.  */
 static const char *strerrno (int err);
 
 /* Note that OUTDIR is defined by the test suite.  */
@@ -73,14 +69,10 @@ static const char *strerrno (int err);
 
 #define STRING      "Hello World"
 
-static void stop (void) {}
+static void stop () {}
 
-/* A NULL string.  We pass this to stat below instead of a NULL
-   literal to avoid -Wnonnull warnings.  */
-const char *null_str;
-
-void
-test_open (void)
+int
+test_open ()
 {
   int ret;
 
@@ -139,8 +131,8 @@ test_open (void)
   stop ();
 }
 
-void
-test_write (void)
+int
+test_write ()
 {
   int fd, ret;
 
@@ -156,7 +148,7 @@ test_write (void)
       close (fd);
     }
   else
-    printf ("write 1: errno = %d\n", errno);
+    printf ("write 1: ret = %d, errno = %d\n", ret, errno);
   stop ();
   /* Write using invalid file descriptor */
   errno = 0;
@@ -173,15 +165,14 @@ test_write (void)
       ret = write (fd, STRING, strlen (STRING));
       printf ("write 3: ret = %d, errno = %d %s\n", ret, errno,
 	      strerrno (errno));
-      close (fd);
     }
   else
-    printf ("write 3: errno = %d\n", errno);
+    printf ("write 3: ret = %d, errno = %d\n", ret, errno);
   stop ();
 }
 
-void
-test_read (void)
+int
+test_read ()
 {
   int fd, ret;
   char buf[16];
@@ -202,7 +193,7 @@ test_read (void)
       close (fd);
     }
   else
-    printf ("read 1: errno = %d\n", errno);
+    printf ("read 1: ret = %d, errno = %d\n", ret, errno);
   stop ();
   /* Read using invalid file descriptor */
   errno = 0;
@@ -212,8 +203,8 @@ test_read (void)
   stop ();
 }
 
-void
-test_lseek (void)
+int
+test_lseek ()
 {
   int fd;
   off_t ret = 0;
@@ -254,8 +245,8 @@ test_lseek (void)
   stop ();
 }
 
-void
-test_close (void)
+int
+test_close ()
 {
   int fd, ret;
 
@@ -270,7 +261,7 @@ test_close (void)
               ret == 0 ? "OK" : "");
     }
   else
-    printf ("close 1: errno = %d\n", errno);
+    printf ("close 1: ret = %d, errno = %d\n", ret, errno);
   stop ();
   /* Close an invalid file descriptor */
   errno = 0;
@@ -280,8 +271,8 @@ test_close (void)
   stop ();
 }
 
-void
-test_stat (void)
+int
+test_stat ()
 {
   int ret;
   struct stat st;
@@ -297,7 +288,7 @@ test_stat (void)
   stop ();
   /* NULL pathname */
   errno = 0;
-  ret = stat (null_str, &st);
+  ret = stat (NULL, &st);
   printf ("stat 2: ret = %d, errno = %d %s\n", ret, errno,
   	  strerrno (errno));
   stop ();
@@ -315,8 +306,8 @@ test_stat (void)
   stop ();
 }
 
-void
-test_fstat (void)
+int
+test_fstat ()
 {
   int fd, ret;
   struct stat st;
@@ -336,7 +327,7 @@ test_fstat (void)
       close (fd);
     }
   else
-    printf ("fstat 1: errno = %d\n", errno);
+    printf ("fstat 1: ret = %d, errno = %d\n", ret, errno);
   stop ();
   /* Fstat using invalid file descriptor */
   errno = 0;
@@ -346,8 +337,8 @@ test_fstat (void)
   stop ();
 }
 
-void
-test_isatty (void)
+int
+test_isatty ()
 {
   int fd;
 
@@ -376,40 +367,34 @@ test_isatty (void)
 
 char sys[1512];
 
-void
-test_system (void)
+int
+test_system ()
 {
   /*
    * Requires test framework to switch on "set remote system-call-allowed 1"
    */
   int ret;
 
-  /* Test for shell ('set remote system-call-allowed' is disabled
-     by default).  */
+  /* Test for shell */
   ret = system (NULL);
-  printf ("system 1: ret = %d %s\n", ret, ret == 0 ? "OK" : "");
-  stop ();
-  /* Test for shell again (the testsuite will have enabled it now).  */
-  ret = system (NULL);
-  printf ("system 2: ret = %d %s\n", ret, ret != 0 ? "OK" : "");
+  printf ("system 1: ret = %d %s\n", ret, ret != 0 ? "OK" : "");
   stop ();
   /* This test prepares the directory for test_rename() */
   sprintf (sys, "mkdir -p %s/%s %s/%s", OUTDIR, TESTSUBDIR, OUTDIR, TESTDIR2);
   ret = system (sys);
   if (ret == 127)
-    printf ("system 3: ret = %d /bin/sh unavailable???\n", ret);
+    printf ("system 2: ret = %d /bin/sh unavailable???\n", ret);
   else
-    printf ("system 3: ret = %d %s\n", ret, ret == 0 ? "OK" : "");
+    printf ("system 2: ret = %d %s\n", ret, ret == 0 ? "OK" : "");
   stop ();
   /* Invalid command (just guessing ;-) ) */
   ret = system ("wrtzlpfrmpft");
-  printf ("system 4: ret = %d %s\n", ret,
-	  WEXITSTATUS (ret) == 127 ? "OK" : "");
+  printf ("system 3: ret = %d %s\n", ret, WEXITSTATUS (ret) == 127 ? "OK" : "");
   stop ();
 }
 
-void
-test_rename (void)
+int
+test_rename ()
 {
   int ret;
   struct stat st;
@@ -463,8 +448,8 @@ test_rename (void)
 
 char name[1256];
 
-void
-test_unlink (void)
+int
+test_unlink ()
 {
   int ret;
 
@@ -503,8 +488,8 @@ test_unlink (void)
   stop ();
 }
 
-void
-test_time (void)
+int
+test_time ()
 {
   time_t ret, t;
 

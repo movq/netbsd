@@ -1,4 +1,4 @@
-/* Copyright (C) 1986-2020 Free Software Foundation, Inc.
+/* Copyright (C) 1986-2016 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -14,9 +14,6 @@
 
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
-
-#ifndef YY_REMAP_H
-#define YY_REMAP_H
 
 /* Remap normal yacc parser interface names (yyparse, yylex, yyerror,
    etc), as well as gratuitiously global symbol names, so we can have
@@ -92,8 +89,4 @@
 # define YYDEBUG 1  /* Default to yydebug support */
 #endif
 
-#ifndef TEST_CPNAMES
-# define YYFPRINTF parser_fprintf
-#endif
-
-#endif /* YY_REMAP_H */
+#define YYFPRINTF parser_fprintf

@@ -1,5 +1,7 @@
 /* tc-d10v.c -- Assembler code for the Mitsubishi D10V
-   Copyright (C) 1996-2020 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2005, 2006,
+   2007, 2009, 2010
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -104,7 +106,7 @@ size_t md_longopts_size = sizeof (md_longopts);
 static struct hash_control *d10v_hash;
 
 /* Do a binary search of the d10v_predefined_registers array to see if
-   NAME is a valid register name.  Return the register number from the
+   NAME is a valid regiter name.  Return the register number from the
    array on success, or -1 on failure.  */
 
 static int
@@ -222,7 +224,7 @@ md_show_usage (FILE *stream)
 }
 
 int
-md_parse_option (int c, const char *arg ATTRIBUTE_UNUSED)
+md_parse_option (int c, char *arg ATTRIBUTE_UNUSED)
 {
   switch (c)
     {
@@ -251,7 +253,7 @@ md_undefined_symbol (char *name ATTRIBUTE_UNUSED)
   return 0;
 }
 
-const char *
+char *
 md_atof (int type, char *litP, int *sizeP)
 {
   return ieee_md_atof (type, litP, sizeP, TRUE);
@@ -268,14 +270,14 @@ md_convert_frag (bfd *abfd ATTRIBUTE_UNUSED,
 valueT
 md_section_align (asection *seg, valueT addr)
 {
-  int align = bfd_section_alignment (seg);
-  return ((addr + (1 << align) - 1) & -(1 << align));
+  int align = bfd_get_section_alignment (stdoutput, seg);
+  return ((addr + (1 << align) - 1) & (-1 << align));
 }
 
 void
 md_begin (void)
 {
-  const char *prev_name = "";
+  char *prev_name = "";
   struct d10v_opcode *opcode;
   d10v_hash = hash_new ();
 
@@ -1117,7 +1119,7 @@ write_2_short (struct d10v_opcode *opcode1,
 static unsigned long prev_insn;
 static struct d10v_opcode *prev_opcode = 0;
 static subsegT prev_subseg;
-static segT prev_seg = 0;
+static segT prev_seg = 0;;
 
 /* Find the symbol which has the same name as the register in exp.  */
 
@@ -1226,7 +1228,9 @@ find_opcode (struct d10v_opcode *opcode, expressionS myops[])
 		  sym_frag = symbol_get_frag (myops[opnum].X_add_symbol);
 		  found_symbol = FALSE;
 
-		  current_position = frag_now_fix_octets ();
+		  current_position =
+		    obstack_next_free (&frchain_now->frch_obstack)
+		    - frag_now->fr_literal;
 		  symbol_position = S_GET_VALUE (myops[opnum].X_add_symbol);
 
 		  for (f = frchain_now->frch_root; f; f = f->fr_next)
@@ -1451,8 +1455,8 @@ arelent *
 tc_gen_reloc (asection *seg ATTRIBUTE_UNUSED, fixS *fixp)
 {
   arelent *reloc;
-  reloc = XNEW (arelent);
-  reloc->sym_ptr_ptr = XNEW (asymbol *);
+  reloc = xmalloc (sizeof (arelent));
+  reloc->sym_ptr_ptr = xmalloc (sizeof (asymbol *));
   *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixp->fx_addsy);
   reloc->address = fixp->fx_frag->fr_address + fixp->fx_where;
   reloc->howto = bfd_reloc_type_lookup (stdoutput, fixp->fx_r_type);
@@ -1548,7 +1552,7 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 	  if ( segf && segf->sym != fixP->fx_addsy)
 	    value = 0;
         }
-      /* Fall through.  */
+      /* Drop through.  */
     case BFD_RELOC_D10V_18:
       /* Instruction addresses are always right-shifted by 2.  */
       value >>= AT_WORD_RIGHT_SHIFT;
@@ -1579,9 +1583,6 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
       break;
     case BFD_RELOC_16:
       bfd_putb16 ((bfd_vma) value, (unsigned char *) where);
-      break;
-    case BFD_RELOC_8:
-      *where = value;
       break;
 
     case BFD_RELOC_VTABLE_INHERIT:

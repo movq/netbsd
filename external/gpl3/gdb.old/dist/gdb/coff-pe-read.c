@@ -2,7 +2,7 @@
    convert to internal format, for GDB. Used as a last resort if no
    debugging symbols recognized.
 
-   Copyright (C) 2003-2020 Free Software Foundation, Inc.
+   Copyright (C) 2003-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -33,7 +33,7 @@
 #include "symtab.h"
 #include "symfile.h"
 #include "objfiles.h"
-#include "gdbsupport/common-utils.h"
+#include "common/common-utils.h"
 #include "coff/internal.h"
 
 #include <ctype.h>
@@ -54,7 +54,7 @@ struct read_pe_section_data
   enum minimal_symbol_type ms_type;	/* Type to assign symbols in
 					   section.  */
   unsigned int index;		/* BFD section number.  */
-  std::string section_name;	/* Recorded section name.  */
+  char *section_name;		/* Recorded section name.  */
 };
 
 #define IMAGE_SCN_CNT_CODE 0x20
@@ -106,7 +106,7 @@ get_pe_section_index (const char *section_name,
   int i;
 
   for (i = 0; i < nb_sections; i++)
-    if (sections[i].section_name == section_name)
+    if (strcmp (sections[i].section_name, section_name) == 0)
       return i;
   return PE_SECTION_INDEX_INVALID;
 }
@@ -125,7 +125,7 @@ struct pe_sections_info
 static void
 get_section_vmas (bfd *abfd, asection *sectp, void *context)
 {
-  struct pe_sections_info *data = (struct pe_sections_info *) context;
+  struct pe_sections_info *data = context;
   struct read_pe_section_data *sections = data->sections;
   int sectix = get_pe_section_index (sectp->name, sections,
 				     data->nb_sections);
@@ -136,7 +136,7 @@ get_section_vmas (bfd *abfd, asection *sectp, void *context)
          bfd_get_section_vma() within memory.  Store the offset.  */
 
       sections[sectix].vma_offset
-	= bfd_section_vma (sectp) - sections[sectix].rva_start;
+	= bfd_get_section_vma (abfd, sectp) - sections[sectix].rva_start;
     }
 }
 
@@ -150,13 +150,13 @@ get_section_vmas (bfd *abfd, asection *sectp, void *context)
    OBJFILE is the objfile struct of DLL_NAME.  */
 
 static void
-add_pe_exported_sym (minimal_symbol_reader &reader,
-		     const char *sym_name,
+add_pe_exported_sym (const char *sym_name,
 		     unsigned long func_rva,
 		     int ordinal,
 		     const struct read_pe_section_data *section_data,
 		     const char *dll_name, struct objfile *objfile)
 {
+  char *qualified_name, *bare_name;
   /* Add the stored offset to get the loaded address of the symbol.  */
   CORE_ADDR vma = func_rva + section_data->vma_offset;
 
@@ -164,30 +164,30 @@ add_pe_exported_sym (minimal_symbol_reader &reader,
      of the dll name, e.g. KERNEL32!AddAtomA.  This matches the style
      used by windbg from the "Microsoft Debugging Tools for Windows".  */
 
-  std::string bare_name;
   if (sym_name == NULL || *sym_name == '\0')
-    bare_name = string_printf ("#%d", ordinal);
+    bare_name = xstrprintf ("#%d", ordinal);
   else
-    bare_name = sym_name;
+    bare_name = xstrdup (sym_name);
 
-  std::string qualified_name
-    = string_printf ("%s!%s", dll_name, bare_name.c_str ());
+  qualified_name = xstrprintf ("%s!%s", dll_name, bare_name);
 
   if ((section_data->ms_type == mst_unknown) && debug_coff_pe_read)
     fprintf_unfiltered (gdb_stdlog , _("Unknown section type for \"%s\""
 			" for entry \"%s\" in dll \"%s\"\n"),
-			section_data->section_name.c_str (), sym_name,
-			dll_name);
+			section_data->section_name, sym_name, dll_name);
 
-  reader.record_with_info (qualified_name.c_str (), vma, section_data->ms_type,
-			   section_data->index);
+  prim_record_minimal_symbol_and_info (qualified_name, vma,
+				       section_data->ms_type,
+				       section_data->index, objfile);
 
   /* Enter the plain name as well, which might not be unique.  */
-  reader.record_with_info (bare_name.c_str (), vma, section_data->ms_type,
-			   section_data->index);
+  prim_record_minimal_symbol_and_info (bare_name, vma, section_data->ms_type,
+				       section_data->index, objfile);
   if (debug_coff_pe_read > 1)
     fprintf_unfiltered (gdb_stdlog, _("Adding exported symbol \"%s\""
 			" in dll \"%s\"\n"), sym_name, dll_name);
+  xfree (qualified_name);
+  xfree (bare_name);
 }
 
 /* Create a minimal symbol entry for an exported forward symbol.
@@ -200,25 +200,25 @@ add_pe_exported_sym (minimal_symbol_reader &reader,
    OBJFILE is the objfile struct of DLL_NAME.  */
 
 static int
-add_pe_forwarded_sym (minimal_symbol_reader &reader,
-		      const char *sym_name, const char *forward_dll_name,
+add_pe_forwarded_sym (const char *sym_name, const char *forward_dll_name,
 		      const char *forward_func_name, int ordinal,
 		      const char *dll_name, struct objfile *objfile)
 {
-  CORE_ADDR vma, baseaddr;
+  CORE_ADDR vma;
   struct bound_minimal_symbol msymbol;
   enum minimal_symbol_type msymtype;
+  char *qualified_name, *bare_name;
   int forward_dll_name_len = strlen (forward_dll_name);
   int forward_func_name_len = strlen (forward_func_name);
   int forward_len = forward_dll_name_len + forward_func_name_len + 2;
-  char *forward_qualified_name = (char *) alloca (forward_len);
+  char *forward_qualified_name = alloca (forward_len);
   short section;
 
   xsnprintf (forward_qualified_name, forward_len, "%s!%s", forward_dll_name,
 	     forward_func_name);
 
 
-  msymbol = lookup_bound_minimal_symbol (forward_qualified_name);
+  msymbol = lookup_minimal_symbol_and_objfile (forward_qualified_name);
 
   if (!msymbol.minsym)
     {
@@ -226,7 +226,7 @@ add_pe_forwarded_sym (minimal_symbol_reader &reader,
 
       for (i = 0; i < forward_dll_name_len; i++)
 	forward_qualified_name[i] = tolower (forward_qualified_name[i]);
-      msymbol = lookup_bound_minimal_symbol (forward_qualified_name);
+      msymbol = lookup_minimal_symbol_and_objfile (forward_qualified_name);
     }
 
   if (!msymbol.minsym)
@@ -244,36 +244,29 @@ add_pe_forwarded_sym (minimal_symbol_reader &reader,
 			" \"%s\" in dll \"%s\", pointing to \"%s\"\n"),
 			sym_name, dll_name, forward_qualified_name);
 
-  vma = BMSYMBOL_VALUE_ADDRESS (msymbol);
+  vma = SYMBOL_VALUE_ADDRESS (msymbol.minsym);
   msymtype = MSYMBOL_TYPE (msymbol.minsym);
-  section = MSYMBOL_SECTION (msymbol.minsym);
+  section = SYMBOL_SECTION (msymbol.minsym);
 
   /* Generate a (hopefully unique) qualified name using the first part
      of the dll name, e.g. KERNEL32!AddAtomA.  This matches the style
      used by windbg from the "Microsoft Debugging Tools for Windows".  */
 
-  std::string bare_name;
   if (sym_name == NULL || *sym_name == '\0')
-    bare_name = string_printf ("#%d", ordinal);
+    bare_name = xstrprintf ("#%d", ordinal);
   else
-    bare_name = sym_name;
+    bare_name = xstrdup (sym_name);
 
-  std::string qualified_name
-    = string_printf ("%s!%s", dll_name, bare_name.c_str ());
+  qualified_name = xstrprintf ("%s!%s", dll_name, bare_name);
 
-  /* Note that this code makes a minimal symbol whose value may point
-     outside of any section in this objfile.  These symbols can't
-     really be relocated properly, but nevertheless we make a stab at
-     it, choosing an approach consistent with the history of this
-     code.  */
-  baseaddr = objfile->text_section_offset ();
-
-  reader.record_with_info (qualified_name.c_str (), vma - baseaddr, msymtype,
-			   section);
+  prim_record_minimal_symbol_and_info (qualified_name, vma, msymtype,
+				       section, objfile);
 
   /* Enter the plain name as well, which might not be unique.  */
-  reader.record_with_info (bare_name.c_str(), vma - baseaddr, msymtype,
-			   section);
+  prim_record_minimal_symbol_and_info (bare_name, vma, msymtype,
+				       section, objfile);
+  xfree (qualified_name);
+  xfree (bare_name);
 
   return 1;
 }
@@ -313,7 +306,7 @@ pe_get32 (bfd *abfd, int where)
 static unsigned int
 pe_as16 (void *ptr)
 {
-  unsigned char *b = (unsigned char *) ptr;
+  unsigned char *b = ptr;
 
   return b[0] + (b[1] << 8);
 }
@@ -321,7 +314,7 @@ pe_as16 (void *ptr)
 static unsigned int
 pe_as32 (void *ptr)
 {
-  unsigned char *b = (unsigned char *) ptr;
+  unsigned char *b = ptr;
 
   return b[0] + (b[1] << 8) + (b[2] << 16) + (b[3] << 24);
 }
@@ -331,8 +324,7 @@ pe_as32 (void *ptr)
    pe_implied_import_dll in pe-dll.c.  */
 
 void
-read_pe_exported_syms (minimal_symbol_reader &reader,
-		       struct objfile *objfile)
+read_pe_exported_syms (struct objfile *objfile)
 {
   bfd *dll = objfile->obfd;
   unsigned long nbnormal, nbforward;
@@ -342,7 +334,7 @@ read_pe_exported_syms (minimal_symbol_reader &reader,
   unsigned long exp_funcbase;
   unsigned char *expdata, *erva;
   unsigned long name_rvas, ordinals, nexp, ordbase;
-  char *dll_name = (char *) bfd_get_filename (dll);
+  char *dll_name = (char *) dll->filename;
   int otherix = PE_SECTION_TABLE_SIZE;
   int is_pe64 = 0;
   int is_pe32 = 0;
@@ -350,12 +342,17 @@ read_pe_exported_syms (minimal_symbol_reader &reader,
   /* Array elements are for text, data and bss in that order
      Initialization with RVA_START > RVA_END guarantees that
      unused sections won't be matched.  */
+  struct read_pe_section_data *section_data;
   struct pe_sections_info pe_sections_info;
+
+  struct cleanup *back_to = make_cleanup (null_cleanup, 0);
 
   char const *target = bfd_get_target (objfile->obfd);
 
-  std::vector<struct read_pe_section_data> section_data
-    (PE_SECTION_TABLE_SIZE);
+  section_data = xzalloc (PE_SECTION_TABLE_SIZE
+			 * sizeof (struct read_pe_section_data));
+
+  make_cleanup (free_current_contents, &section_data);
 
   for (i=0; i < PE_SECTION_TABLE_SIZE; i++)
     {
@@ -381,6 +378,7 @@ read_pe_exported_syms (minimal_symbol_reader &reader,
       /* This is not a recognized PE format file.  Abort now, because
 	 the code is untested on anything else.  *FIXME* test on
 	 further architectures and loosen or remove this test.  */
+      do_cleanups (back_to);
       return;
     }
 
@@ -393,7 +391,10 @@ read_pe_exported_syms (minimal_symbol_reader &reader,
     num_entries = pe_get32 (dll, opthdr_ofs + 92);
 
   if (num_entries < 1)		/* No exports.  */
-    return;
+    {
+      do_cleanups (back_to);
+      return;
+    }
   if (is_pe64)
     {
       export_opthdrrva = pe_get32 (dll, opthdr_ofs + 112);
@@ -441,18 +442,13 @@ read_pe_exported_syms (minimal_symbol_reader &reader,
 	}
     }
 
-  if (expptr == 0)
-    {
-      /* no section contains export table rva */
-      return;
-    }
-
   export_rva = export_opthdrrva;
   export_size = export_opthdrsize;
 
   if (export_size == 0)
     {
       /* Empty export table.  */
+      do_cleanups (back_to);
       return;
     }
 
@@ -488,8 +484,13 @@ read_pe_exported_syms (minimal_symbol_reader &reader,
 	}
       else
 	{
-	  section_data.resize (otherix + 1);
-	  section_data[otherix].section_name = sec_name;
+	  char *name;
+
+	  section_data = xrealloc (section_data, (otherix + 1)
+				   * sizeof (struct read_pe_section_data));
+	  name = xstrdup (sec_name);
+	  section_data[otherix].section_name = name;
+	  make_cleanup (xfree, name);
 	  section_data[otherix].rva_start = vaddr;
 	  section_data[otherix].rva_end = vaddr + vsize;
 	  section_data[otherix].vma_offset = 0;
@@ -506,8 +507,8 @@ read_pe_exported_syms (minimal_symbol_reader &reader,
 	}
     }
 
-  gdb::def_vector<unsigned char> expdata_storage (export_size);
-  expdata = expdata_storage.data ();
+  expdata = (unsigned char *) xmalloc (export_size);
+  make_cleanup (xfree, expdata);
 
   bfd_seek (dll, (file_ptr) expptr, SEEK_SET);
   bfd_bread (expdata, (bfd_size_type) export_size, dll);
@@ -523,9 +524,18 @@ read_pe_exported_syms (minimal_symbol_reader &reader,
   dll_name = (char *) (pe_as32 (expdata + 12) + erva);
 
   pe_sections_info.nb_sections = otherix;
-  pe_sections_info.sections = section_data.data ();
+  pe_sections_info.sections = section_data;
 
   bfd_map_over_sections (dll, get_section_vmas, &pe_sections_info);
+
+  /* Adjust the vma_offsets in case this PE got relocated. This
+     assumes that *all* sections share the same relocation offset
+     as the text section.  */
+  for (i = 0; i < otherix; i++)
+    {
+      section_data[i].vma_offset
+	+= ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
+    }
 
   /* Truncate name at first dot. Should maybe also convert to all
      lower case for convenience on Windows.  */
@@ -547,7 +557,7 @@ read_pe_exported_syms (minimal_symbol_reader &reader,
 
 
       /* Pointer to the function address vector.  */
-      /* This is relative to ordinal value. */
+      /* This is relatived to ordinal value. */
       unsigned long func_rva = pe_as32 (erva + exp_funcbase +
                                         ordinal * 4);
 
@@ -568,12 +578,12 @@ read_pe_exported_syms (minimal_symbol_reader &reader,
 	    {
 	      int len = (int) (sep - forward_name);
 
-	      forward_dll_name = (char *) alloca (len + 1);
+	      forward_dll_name = alloca (len + 1);
 	      strncpy (forward_dll_name, forward_name, len);
 	      forward_dll_name[len] = '\0';
 	      forward_func_name = ++sep;
 	    }
-	  if (add_pe_forwarded_sym (reader, funcname, forward_dll_name,
+	  if (add_pe_forwarded_sym (funcname, forward_dll_name,
 				    forward_func_name, ordinal,
 				    dll_name, objfile) != 0)
 	    ++nbforward;
@@ -588,8 +598,8 @@ read_pe_exported_syms (minimal_symbol_reader &reader,
 	      char *sym_name = (char *) (erva + name_rva);
 
 	      section_found = 1;
-	      add_pe_exported_sym (reader, sym_name, func_rva, ordinal,
-				   &section_data[sectix], dll_name, objfile);
+	      add_pe_exported_sym (sym_name, func_rva, ordinal,
+				   section_data + sectix, dll_name, objfile);
 	      ++nbnormal;
 	      break;
 	    }
@@ -600,8 +610,8 @@ read_pe_exported_syms (minimal_symbol_reader &reader,
 
 	  if (name_rva == 0)
 	    {
-	      add_pe_exported_sym (reader, NULL, func_rva, ordinal,
-				   &section_data[0], dll_name, objfile);
+	      add_pe_exported_sym (NULL, func_rva, ordinal,
+				   section_data, dll_name, objfile);
 	      ++nbnormal;
 	    }
 	  else if (debug_coff_pe_read)
@@ -615,12 +625,14 @@ read_pe_exported_syms (minimal_symbol_reader &reader,
     fprintf_unfiltered (gdb_stdlog, _("Finished reading \"%s\", exports %ld,"
 			" forwards %ld, total %ld/%ld.\n"), dll_name, nbnormal,
 			nbforward, nbnormal + nbforward, nexp);
+  /* Discard expdata and section_data.  */
+  do_cleanups (back_to);
 }
 
 /* Extract from ABFD the offset of the .text section.
    This offset is mainly related to the offset within the file.
    The value was previously expected to be 0x1000 for all files,
-   but some Windows OS core DLLs seem to use 0x10000 section alignment
+   but some Windows OS core DLLs seem to use 0x10000 section alignement
    which modified the return value of that function.
    Still return default 0x1000 value if ABFD is NULL or
    if '.text' section is not found, but that should not happen...  */
@@ -689,11 +701,14 @@ show_debug_coff_pe_read (struct ui_file *file, int from_tty,
   fprintf_filtered (file, _("Coff PE read debugging is %s.\n"), value);
 }
 
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+
+void _initialize_coff_pe_read (void);
+
 /* Adds "Set/show debug coff_pe_read" commands.  */
 
-void _initialize_coff_pe_read ();
 void
-_initialize_coff_pe_read ()
+_initialize_coff_pe_read (void)
 {
   add_setshow_zuinteger_cmd ("coff-pe-read", class_maintenance,
 			     &debug_coff_pe_read,

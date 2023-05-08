@@ -70,7 +70,6 @@ bfd_boolean line_granularity = FALSE;
 bfd_boolean print_descriptions = TRUE;
 bfd_boolean print_path = FALSE;
 bfd_boolean ignore_non_functions = FALSE;
-bfd_boolean inline_file_names = FALSE;
 File_Format file_format = FF_AUTO;
 
 bfd_boolean first_output = TRUE;
@@ -94,9 +93,8 @@ static char *default_excluded_list[] =
 /* Codes used for the long options with no short synonyms.  150 isn't
    special; it's just an arbitrary non-ASCII char value.  */
 
-#define OPTION_DEMANGLE			(150)
-#define OPTION_NO_DEMANGLE		(OPTION_DEMANGLE + 1)
-#define OPTION_INLINE_FILE_NAMES	(OPTION_DEMANGLE + 2)
+#define OPTION_DEMANGLE		(150)
+#define OPTION_NO_DEMANGLE	(OPTION_DEMANGLE + 1)
 
 static struct option long_options[] =
 {
@@ -127,7 +125,6 @@ static struct option long_options[] =
   {"no-demangle", no_argument, 0, OPTION_NO_DEMANGLE},
   {"directory-path", required_argument, 0, 'I'},
   {"display-unused-functions", no_argument, 0, 'z'},
-  {"inline-file-names", no_argument, 0, OPTION_INLINE_FILE_NAMES},
   {"min-count", required_argument, 0, 'm'},
   {"print-path", no_argument, 0, 'L'},
   {"separate-files", no_argument, 0, 'y'},
@@ -162,12 +159,12 @@ static void
 usage (FILE *stream, int status)
 {
   fprintf (stream, _("\
-Usage: %s [-[abcDhilLrsTvwxyz]] [-[ACeEfFJnNOpPqQRStZ][name]] [-I dirs]\n\
+Usage: %s [-[abcDhilLsTvwxyz]] [-[ACeEfFJnNOpPqSQZ][name]] [-I dirs]\n\
 	[-d[num]] [-k from/to] [-m min-count] [-t table-length]\n\
 	[--[no-]annotated-source[=name]] [--[no-]exec-counts[=name]]\n\
 	[--[no-]flat-profile[=name]] [--[no-]graph[=name]]\n\
 	[--[no-]time=name] [--all-lines] [--brief] [--debug[=level]]\n\
-	[--function-ordering] [--file-ordering] [--inline-file-names]\n\
+	[--function-ordering] [--file-ordering]\n\
 	[--directory-path=dirs] [--display-unused-functions]\n\
 	[--file-format=name] [--file-info] [--help] [--line] [--min-count=n]\n\
 	[--no-static] [--print-path] [--separate-files]\n\
@@ -261,20 +258,14 @@ main (int argc, char **argv)
 	  break;
 	case 'E':
 	  sym_id_add (optarg, EXCL_TIME);
-	  /* Fall through.  */
 	case 'e':
 	  sym_id_add (optarg, EXCL_GRAPH);
 	  break;
 	case 'F':
 	  sym_id_add (optarg, INCL_TIME);
-	  /* Fall through.  */
 	case 'f':
 	  sym_id_add (optarg, INCL_GRAPH);
 	  break;
-	  /* FIXME: The -g and -G options are not present in the getopt_long
-	     invocation above, and they are not documented in gprof.texi.
-	     Therefore they appear to be deprecated.  Test this theory and
-	     delete them if true.  */
 	case 'g':
 	  sym_id_add (optarg, EXCL_FLAT);
 	  break;
@@ -458,7 +449,7 @@ This program is free software.  This program has absolutely no warranty.\n"));
 	    {
 	      output_style &= ~STYLE_EXEC_COUNTS;
 	    }
-	  user_specified |= STYLE_EXEC_COUNTS;
+	  user_specified |= STYLE_ANNOTATED_SOURCE;
 	  break;
 	case OPTION_DEMANGLE:
 	  demangle = TRUE;
@@ -480,9 +471,6 @@ This program is free software.  This program has absolutely no warranty.\n"));
 	  break;
 	case OPTION_NO_DEMANGLE:
 	  demangle = FALSE;
-	  break;
-	case OPTION_INLINE_FILE_NAMES:
-	  inline_file_names = TRUE;
 	  break;
 	default:
 	  usage (stderr, 1);
@@ -620,7 +608,7 @@ This program is free software.  This program has absolutely no warranty.\n"));
   if (output_style & STYLE_FLAT_PROFILE)
     {
       /* Print the flat profile.  */
-      hist_print ();
+      hist_print ();		
     }
 
   if (cg && (output_style & STYLE_CALL_GRAPH))
@@ -628,20 +616,20 @@ This program is free software.  This program has absolutely no warranty.\n"));
       if (!bsd_style_output)
 	{
 	  /* Print the dynamic profile.  */
-	  cg_print (cg);
+	  cg_print (cg);	
 	}
       cg_print_index ();
     }
 
   if (output_style & STYLE_EXEC_COUNTS)
     print_exec_counts ();
-
+  
   if (output_style & STYLE_ANNOTATED_SOURCE)
     print_annotated_source ();
-
+  
   if (output_style & STYLE_FUNCTION_ORDER)
     cg_print_function_ordering ();
-
+  
   if (output_style & STYLE_FILE_ORDER)
     cg_print_file_ordering ();
 

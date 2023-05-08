@@ -1,4 +1,4 @@
-##Copyright (C) 1991-2020 Free Software Foundation, Inc.
+##Copyright (C) 1991-2014 Free Software Foundation, Inc.
 
 # Makefile for GDB documentation.
 # This file is part of GDB.
@@ -30,8 +30,6 @@ mandir = @mandir@
 man1dir = $(mandir)/man1
 man5dir = $(mandir)/man5
 
-transform = @program_transform_name@
-
 SHELL = @SHELL@
 
 LN_S = @LN_S@
@@ -41,7 +39,6 @@ INSTALL_PROGRAM = @INSTALL_PROGRAM@
 INSTALL_DATA = @INSTALL_DATA@
 
 SYSTEM_GDBINIT = @SYSTEM_GDBINIT@
-SYSTEM_GDBINIT_DIR = @SYSTEM_GDBINIT_DIR@
 
 mkinstalldirs = $(SHELL) $(srcdir)/../../mkinstalldirs
 
@@ -66,16 +63,13 @@ TEXI2ROFF=texi2roff
 # where to find texi2dvi, ditto
 TEXI2DVI=texi2dvi
 
-# Package to install the docs under
-PACKAGE = @PACKAGE@
-
 # Package version and bug-reporting URL.
 PKGVERSION = @PKGVERSION@
 BUGURL_TEXI = @REPORT_BUGS_TEXI@
 
 # Where is the source dir for the READLINE library doc?  
 # Traditionally readline is in .. or .
-READLINE_DIR = ${gdbdir}/../readline/readline/doc
+READLINE_DIR = ${gdbdir}/../readline/doc
 READLINE_TEXI_INCFLAG = @READLINE_TEXI_INCFLAG@
 
 # The GDB/MI docs come from a sibling directory ../mi
@@ -136,17 +130,13 @@ GDB_DOC_BUILD_INCLUDES = \
 	GDBvn.texi
 GDB_DOC_FILES = \
 	$(srcdir)/gdb.texinfo \
-	$(srcdir)/guile.texi \
-	$(srcdir)/python.texi \
 	$(GDB_DOC_SOURCE_INCLUDES) \
 	$(GDB_DOC_BUILD_INCLUDES)
 
 # Stabs manual: All files
 STABS_DOC_SOURCE_INCLUDES = \
 	$(srcdir)/fdl.texi
-STABS_DOC_BUILD_INCLUDES = \
-	gdb-cfg.texi \
-	GDBvn.texi
+STABS_DOC_BUILD_INCLUDES =
 STABS_DOC_FILES = \
 	$(srcdir)/stabs.texinfo \
 	$(STABS_DOC_SOURCE_INCLUDES) \
@@ -175,15 +165,18 @@ POD2MAN5 = pod2man --center="GNU Development Tools" \
 		   --release="gdb-`sed q version.subst`" --section=5
 
 # List of man pages generated from gdb.texi
-MAN1S = gdb.1 gdbserver.1 gcore.1 gdb-add-index.1
+MAN1S = gdb.1 gdbserver.1 gcore.1
 MAN5S = gdbinit.5
 MANS = $(MAN1S) $(MAN5S)
 
+# Host-dependent makefile fragment comes in here.
+@host_makefile_frag@
+# End of host-dependent makefile fragment
 HAVE_NATIVE_GCORE_TARGET = @HAVE_NATIVE_GCORE_TARGET@
 
 ###
 
-all: info
+all:
 
 info: $(INFO_DEPS)
 dvi: gdb.dvi stabs.dvi refcard.dvi annotate.dvi
@@ -191,43 +184,6 @@ ps: gdb.ps stabs.ps refcard.ps annotate.ps
 html: $(HTMLFILES)
 pdf: $(PDFFILES)
 man: $(MANS)
-
-DOXYGEN = doxygen
-doxyedit = sed -e 's,@srcdir\@,$(srcdir),g'
-
-doxy:	doxy/index.html \
-	doxy/gdb-api/index.html \
-	doxy/gdb-xref/index.html \
-	doxy/gdbserver/index.html
-
-doxy/index.html: $(srcdir)/doxy-index.in
-	-mkdir -p doxy
-	cp $(srcdir)/doxy-index.in doxy/index.html
-
-doxy/gdb-api/index.html: Doxyfile-gdb-api Doxyfile-base
-	-mkdir -p doxy
-	$(DOXYGEN) Doxyfile-gdb-api
-
-doxy/gdb-xref/index.html: Doxyfile-gdb-xref Doxyfile-base
-	-mkdir -p doxy
-	$(DOXYGEN) Doxyfile-gdb-xref
-
-doxy/gdbserver/index.html: Doxyfile-gdbserver Doxyfile-base
-	-mkdir -p doxy
-	$(DOXYGEN) Doxyfile-gdbserver
-
-Doxyfile-base:	$(srcdir)/Doxyfile-base.in 
-	$(doxyedit) $(srcdir)/Doxyfile-base.in >Doxyfile-base
-
-Doxyfile-gdb-api:	$(srcdir)/Doxyfile-gdb-api.in 
-	$(doxyedit) $(srcdir)/Doxyfile-gdb-api.in >Doxyfile-gdb-api
-
-Doxyfile-gdb-xref:	$(srcdir)/Doxyfile-gdb-xref.in
-	$(doxyedit) $(srcdir)/Doxyfile-gdb-xref.in >Doxyfile-gdb-xref
-
-Doxyfile-gdbserver:	$(srcdir)/Doxyfile-gdbserver.in
-	$(doxyedit) $(srcdir)/Doxyfile-gdbserver.in >Doxyfile-gdbserver
-
 all-doc: info dvi ps # pdf
 diststuff: info man
 	rm -f gdb-cfg.texi GDBvn.texi
@@ -310,7 +266,7 @@ install-man1: $(MAN1S)
 	    continue; \
 	  fi; \
 	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
-	  f=`echo $$p | sed -e 's|^.*/||' -e '$(transform)'`; \
+	  f=`echo $$p | sed -e 's|^.*/||'`; \
 	  echo " $(INSTALL_DATA) '$$d$$p' '$(DESTDIR)$(man1dir)/$$f'"; \
 	  $(INSTALL_DATA) "$$d$$p" "$(DESTDIR)$(man1dir)/$$f"; \
 	done
@@ -319,7 +275,7 @@ install-man5: $(MAN5S)
 	test -z "$(man5dir)" || $(mkinstalldirs) "$(DESTDIR)$(man5dir)"
 	@list='$(MAN5S)'; for p in $$list; do \
 	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
-	  f=`echo $$p | sed -e 's|^.*/||' -e '$(transform)'`; \
+	  f=`echo $$p | sed -e 's|^.*/||'`; \
 	  echo " $(INSTALL_DATA) '$$d$$p' '$(DESTDIR)$(man5dir)/$$f'"; \
 	  $(INSTALL_DATA) "$$d$$p" "$(DESTDIR)$(man5dir)/$$f"; \
 	done
@@ -425,9 +381,6 @@ GDBvn.texi : version.subst
 	fi
 	if [ -n "$(SYSTEM_GDBINIT)" ]; then \
 	  echo "@set SYSTEM_GDBINIT $(SYSTEM_GDBINIT)" >> ./GDBvn.new; \
-	fi
-	if [ -n "$(SYSTEM_GDBINIT_DIR)" ]; then \
-	  echo "@set SYSTEM_GDBINIT_DIR $(SYSTEM_GDBINIT_DIR)" >> ./GDBvn.new; \
 	fi
 	mv GDBvn.new GDBvn.texi
 
@@ -637,13 +590,6 @@ gcore.1: $(GDB_DOC_FILES)
 		mv -f $@.T$$$$ $@) || (rm -f $@.T$$$$ && exit 1)
 	rm -f gcore.pod
 
-gdb-add-index.1: $(GDB_DOC_FILES)
-	touch $@
-	-$(TEXI2POD) $(MANCONF) -Dgdb-add-index < $(srcdir)/gdb.texinfo > gdb-add-index.pod
-	-($(POD2MAN1) gdb-add-index.pod | sed -e '/^.if n .na/d' > $@.T$$$$ && \
-		mv -f $@.T$$$$ $@) || (rm -f $@.T$$$$ && exit 1)
-	rm -f gdb-add-index.pod
-
 gdbinit.5: $(GDB_DOC_FILES)
 	touch $@
 	-$(TEXI2POD) $(MANCONF) -Dgdbinit < $(srcdir)/gdb.texinfo > gdbinit.pod
@@ -684,6 +630,3 @@ maintainer-clean realclean: distclean
 install: install-info install-man
 
 uninstall: uninstall-info uninstall-man
-
-# Disable implicit make rules.
-include $(srcdir)/../disable-implicit-rules.mk

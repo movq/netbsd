@@ -1,5 +1,6 @@
 /* Disassembler for the PA-RISC. Somewhat derived from sparc-pinsn.c.
-   Copyright (C) 1989-2020 Free Software Foundation, Inc.
+   Copyright 1989, 1990, 1992, 1993, 1994, 1995, 1998, 1999, 2000, 2001, 2003,
+   2005, 2007, 2012  Free Software Foundation, Inc.
 
    Contributed by the Center for Software Science at the
    University of Utah (pa-gdb-bugs@cs.utah.edu).
@@ -22,7 +23,7 @@
    MA 02110-1301, USA.  */
 
 #include "sysdep.h"
-#include "disassemble.h"
+#include "dis-asm.h"
 #include "libhppa.h"
 #include "opcode/hppa.h"
 
@@ -289,7 +290,7 @@ extract_14 (unsigned word)
 static int
 extract_16 (unsigned word)
 {
-  unsigned m15, m0, m1;
+  int m15, m0, m1;
 
   m0 = GET_BIT (word, 16);
   m1 = GET_BIT (word, 17);
@@ -304,7 +305,7 @@ extract_16 (unsigned word)
 static int
 extract_21 (unsigned word)
 {
-  unsigned val;
+  int val;
 
   word &= MASK_21;
   word <<= 11;
@@ -425,7 +426,7 @@ print_insn_hppa (bfd_vma memaddr, disassemble_info *info)
 			fput_fp_reg (GET_FIELD (insn, 6, 10), info);
 		      break;
 
-		      /* 'fA' will not generate a space before the register
+		      /* 'fA' will not generate a space before the regsiter
 			 name.  Normally that is fine.  Except that it
 			 causes problems with xmpyu which has no FP format
 			 completer.  */
@@ -1098,12 +1099,12 @@ print_insn_hppa (bfd_vma memaddr, disassemble_info *info)
 
 		case '#':
 		  {
-		    unsigned sign = GET_FIELD (insn, 31, 31);
-		    unsigned imm10 = GET_FIELD (insn, 18, 27);
-		    unsigned disp;
+		    int sign = GET_FIELD (insn, 31, 31);
+		    int imm10 = GET_FIELD (insn, 18, 27);
+		    int disp;
 
 		    if (sign)
-		      disp = (-1U << 10) | imm10;
+		      disp = (-1 << 10) | imm10;
 		    else
 		      disp = imm10;
 
@@ -1114,12 +1115,12 @@ print_insn_hppa (bfd_vma memaddr, disassemble_info *info)
 		case 'K':
 		case 'd':
 		  {
-		    unsigned sign = GET_FIELD (insn, 31, 31);
-		    unsigned imm11 = GET_FIELD (insn, 18, 28);
-		    unsigned disp;
+		    int sign = GET_FIELD (insn, 31, 31);
+		    int imm11 = GET_FIELD (insn, 18, 28);
+		    int disp;
 
 		    if (sign)
-		      disp = (-1U << 11) | imm11;
+		      disp = (-1 << 11) | imm11;
 		    else
 		      disp = imm11;
 

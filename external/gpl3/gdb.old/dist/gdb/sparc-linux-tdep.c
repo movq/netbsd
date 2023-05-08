@@ -1,6 +1,6 @@
 /* Target-dependent code for GNU/Linux SPARC.
 
-   Copyright (C) 2003-2020 Free Software Foundation, Inc.
+   Copyright (C) 2003-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,7 +18,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
-#include "dwarf2/frame.h"
+#include "dwarf2-frame.h"
 #include "frame.h"
 #include "frame-unwind.h"
 #include "gdbtypes.h"
@@ -68,9 +68,9 @@ static const struct tramp_frame sparc32_linux_sigframe =
   SIGTRAMP_FRAME,
   4,
   {
-    { 0x821020d8, ULONGEST_MAX },		/* mov __NR_sigreturn, %g1 */
-    { 0x91d02010, ULONGEST_MAX },		/* ta  0x10 */
-    { TRAMP_SENTINEL_INSN, ULONGEST_MAX }
+    { 0x821020d8, -1 },		/* mov __NR_sugreturn, %g1 */
+    { 0x91d02010, -1 },		/* ta  0x10 */
+    { TRAMP_SENTINEL_INSN, -1 }
   },
   sparc32_linux_sigframe_init
 };
@@ -83,9 +83,9 @@ static const struct tramp_frame sparc32_linux_rt_sigframe =
   SIGTRAMP_FRAME,
   4,
   {
-    { 0x82102065, ULONGEST_MAX },		/* mov __NR_rt_sigreturn, %g1 */
-    { 0x91d02010, ULONGEST_MAX },		/* ta  0x10 */
-    { TRAMP_SENTINEL_INSN, ULONGEST_MAX }
+    { 0x82102065, -1 },		/* mov __NR_rt_sigreturn, %g1 */
+    { 0x91d02010, -1 },		/* ta  0x10 */
+    { TRAMP_SENTINEL_INSN, -1 }
   },
   sparc32_linux_sigframe_init
 };
@@ -198,7 +198,7 @@ sparc32_linux_step_trap (struct frame_info *frame, unsigned long insn)
 }
 
 
-const struct sparc_gregmap sparc32_linux_core_gregmap =
+const struct sparc_gregset sparc32_linux_core_gregset =
 {
   32 * 4,			/* %psr */
   33 * 4,			/* %pc */
@@ -217,7 +217,7 @@ sparc32_linux_supply_core_gregset (const struct regset *regset,
 				   struct regcache *regcache,
 				   int regnum, const void *gregs, size_t len)
 {
-  sparc32_supply_gregset (&sparc32_linux_core_gregmap,
+  sparc32_supply_gregset (&sparc32_linux_core_gregset,
 			  regcache, regnum, gregs);
 }
 
@@ -226,7 +226,7 @@ sparc32_linux_collect_core_gregset (const struct regset *regset,
 				    const struct regcache *regcache,
 				    int regnum, void *gregs, size_t len)
 {
-  sparc32_collect_gregset (&sparc32_linux_core_gregmap,
+  sparc32_collect_gregset (&sparc32_linux_core_gregset,
 			   regcache, regnum, gregs);
 }
 
@@ -235,7 +235,7 @@ sparc32_linux_supply_core_fpregset (const struct regset *regset,
 				    struct regcache *regcache,
 				    int regnum, const void *fpregs, size_t len)
 {
-  sparc32_supply_fpregset (&sparc32_bsd_fpregmap, regcache, regnum, fpregs);
+  sparc32_supply_fpregset (&sparc32_bsd_fpregset, regcache, regnum, fpregs);
 }
 
 static void
@@ -243,7 +243,7 @@ sparc32_linux_collect_core_fpregset (const struct regset *regset,
 				     const struct regcache *regcache,
 				     int regnum, void *fpregs, size_t len)
 {
-  sparc32_collect_fpregset (&sparc32_bsd_fpregmap, regcache, regnum, fpregs);
+  sparc32_collect_fpregset (&sparc32_bsd_fpregset, regcache, regnum, fpregs);
 }
 
 /* Set the program counter for process PTID to PC.  */
@@ -253,7 +253,7 @@ sparc32_linux_collect_core_fpregset (const struct regset *regset,
 static void
 sparc_linux_write_pc (struct regcache *regcache, CORE_ADDR pc)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (regcache->arch ());
+  struct gdbarch_tdep *tdep = gdbarch_tdep (get_regcache_arch (regcache));
   ULONGEST psr;
 
   regcache_cooked_write_unsigned (regcache, tdep->pc_regnum, pc);
@@ -274,9 +274,9 @@ sparc_linux_write_pc (struct regcache *regcache, CORE_ADDR pc)
 
 static LONGEST
 sparc32_linux_get_syscall_number (struct gdbarch *gdbarch,
-				  thread_info *thread)
+				  ptid_t ptid)
 {
-  struct regcache *regcache = get_thread_regcache (thread);
+  struct regcache *regcache = get_thread_regcache (ptid);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   /* The content of a register.  */
   gdb_byte buf[4];
@@ -286,7 +286,7 @@ sparc32_linux_get_syscall_number (struct gdbarch *gdbarch,
   /* Getting the system call number from the register.
      When dealing with the sparc architecture, this information
      is stored at the %g1 register.  */
-  regcache->cooked_read (SPARC_G1_REGNUM, buf);
+  regcache_cooked_read (regcache, SPARC_G1_REGNUM, buf);
 
   ret = extract_signed_integer (buf, 4, byte_order);
 
@@ -403,20 +403,6 @@ sparc32_linux_gdb_signal_to_target (struct gdbarch *gdbarch,
 
 
 
-static const struct regset sparc32_linux_gregset =
-  {
-    NULL,
-    sparc32_linux_supply_core_gregset,
-    sparc32_linux_collect_core_gregset
-  };
-
-static const struct regset sparc32_linux_fpregset =
-  {
-    NULL,
-    sparc32_linux_supply_core_fpregset,
-    sparc32_linux_collect_core_fpregset
-  };
-
 static void
 sparc32_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
@@ -424,10 +410,12 @@ sparc32_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 
   linux_init_abi (info, gdbarch);
 
-  tdep->gregset = &sparc32_linux_gregset;
+  tdep->gregset = regset_alloc (gdbarch, sparc32_linux_supply_core_gregset,
+				sparc32_linux_collect_core_gregset);
   tdep->sizeof_gregset = 152;
 
-  tdep->fpregset = &sparc32_linux_fpregset;
+  tdep->fpregset = regset_alloc (gdbarch, sparc32_linux_supply_core_fpregset,
+				 sparc32_linux_collect_core_fpregset);
   tdep->sizeof_fpregset = 396;
 
   tramp_frame_prepend_unwinder (gdbarch, &sparc32_linux_sigframe);
@@ -455,7 +443,7 @@ sparc32_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   set_gdbarch_write_pc (gdbarch, sparc_linux_write_pc);
 
   /* Functions for 'catch syscall'.  */
-  set_xml_syscall_file_name (gdbarch, XML_SYSCALL_FILENAME_SPARC32);
+  set_xml_syscall_file_name (XML_SYSCALL_FILENAME_SPARC32);
   set_gdbarch_get_syscall_number (gdbarch,
                                   sparc32_linux_get_syscall_number);
 
@@ -465,9 +453,11 @@ sparc32_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 				    sparc32_linux_gdb_signal_to_target);
 }
 
-void _initialize_sparc_linux_tdep ();
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+extern void _initialize_sparc_linux_tdep (void);
+
 void
-_initialize_sparc_linux_tdep ()
+_initialize_sparc_linux_tdep (void)
 {
   gdbarch_register_osabi (bfd_arch_sparc, 0, GDB_OSABI_LINUX,
 			  sparc32_linux_init_abi);

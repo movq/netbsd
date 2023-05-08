@@ -1,5 +1,5 @@
 /* MI Command Set - MI Command Parser.
-   Copyright (C) 2000-2020 Free Software Foundation, Inc.
+   Copyright (C) 2000-2014 Free Software Foundation, Inc.
    Contributed by Cygnus Solutions (a Red Hat company).
 
    This file is part of GDB.
@@ -17,21 +17,18 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef MI_MI_PARSE_H
-#define MI_MI_PARSE_H
+#ifndef MI_PARSE_H
+#define MI_PARSE_H
 
-#include "gdbsupport/run-time-clock.h"
-#include <chrono>
-#include "mi-cmds.h"  /* For enum print_values.  */
+#include <sys/time.h>
 
 /* MI parser */
 
 /* Timestamps for current command and last asynchronous command.  */
-struct mi_timestamp
-{
-  std::chrono::steady_clock::time_point wallclock;
-  user_cpu_time_clock::time_point utime;
-  system_cpu_time_clock::time_point stime;
+struct mi_timestamp {
+  struct timeval wallclock;
+  struct timeval utime;
+  struct timeval stime;
 };
 
 enum mi_command_type
@@ -41,11 +38,6 @@ enum mi_command_type
 
 struct mi_parse
   {
-    mi_parse ();
-    ~mi_parse ();
-
-    DISABLE_COPY_AND_ASSIGN (mi_parse);
-
     enum mi_command_type op;
     char *command;
     char *token;
@@ -72,11 +64,14 @@ struct mi_parse
    the TOKEN field of the resultant mi_parse object, to be freed by
    mi_parse_free.  */
 
-extern std::unique_ptr<struct mi_parse> mi_parse (const char *cmd,
-						  char **token);
+extern struct mi_parse *mi_parse (const char *cmd, char **token);
+
+/* Free a command returned by mi_parse_command.  */
+
+extern void mi_parse_free (struct mi_parse *cmd);
 
 /* Parse a string argument into a print_values value.  */
 
 enum print_values mi_parse_print_values (const char *name);
 
-#endif /* MI_MI_PARSE_H */
+#endif

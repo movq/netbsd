@@ -1,6 +1,6 @@
 /* Definitions for a frame unwinder, for GDB, the GNU debugger.
 
-   Copyright (C) 2003-2020 Free Software Foundation, Inc.
+   Copyright (C) 2003-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -46,8 +46,7 @@ struct value;
    the PC and attributes) and if SELF is the applicable unwinder,
    return non-zero.  Possibly also initialize THIS_PROLOGUE_CACHE; but
    only if returning 1.  Initializing THIS_PROLOGUE_CACHE in other
-   cases (0 return) is invalid.  In case of exception, the caller has
-   to set *THIS_PROLOGUE_CACHE to NULL.  */
+   cases (0 return, or exception) is invalid.  */
 
 typedef int (frame_sniffer_ftype) (const struct frame_unwind *self,
 				   struct frame_info *this_frame,
@@ -69,18 +68,6 @@ int default_frame_sniffer (const struct frame_unwind *self,
 enum unwind_stop_reason
   default_frame_unwind_stop_reason (struct frame_info *this_frame,
 				    void **this_cache);
-
-/* A default unwind_pc callback that simply unwinds the register identified
-   by GDBARCH_PC_REGNUM.  */
-
-extern CORE_ADDR default_unwind_pc (struct gdbarch *gdbarch,
-				    struct frame_info *next_frame);
-
-/* A default unwind_sp callback that simply unwinds the register identified
-   by GDBARCH_SP_REGNUM.  */
-
-extern CORE_ADDR default_unwind_sp (struct gdbarch *gdbarch,
-				    struct frame_info *next_frame);
 
 /* Assuming the frame chain: (outer) prev <-> this <-> next (inner);
    use THIS frame, and through it the NEXT frame's register unwind
@@ -132,9 +119,6 @@ typedef void (frame_this_id_ftype) (struct frame_info *this_frame,
    The result is a GDB value object describing the register value.  It
    may be a lazy reference to memory, a lazy reference to the value of
    a register in THIS frame, or a non-lvalue.
-
-   If the previous frame's register was not saved by THIS_FRAME and is
-   therefore undefined, return a wholly optimized-out not_lval value.
 
    THIS_PROLOGUE_CACHE can be used to share any prolog analysis data
    with the other unwind methods.  Memory for that cache should be

@@ -1,5 +1,5 @@
 /* Disassembler code for CRX.
-   Copyright (C) 2004-2020 Free Software Foundation, Inc.
+   Copyright 2004, 2005, 2006, 2007, 2012 Free Software Foundation, Inc.
    Contributed by Tomer Levi, NSC, Israel.
    Written by Tomer Levi.
 
@@ -21,7 +21,7 @@
    MA 02110-1301, USA.  */
 
 #include "sysdep.h"
-#include "disassemble.h"
+#include "dis-asm.h"
 #include "opcode/crx.h"
 
 /* String to print when opcode was not matched.  */
@@ -31,10 +31,11 @@
 
 /* Extract 'n_bits' from 'a' starting from offset 'offs'.  */
 #define EXTRACT(a, offs, n_bits)	    \
-  (((a) >> (offs)) & ((2ull << (n_bits - 1)) - 1))
+  (n_bits == 32 ? (((a) >> (offs)) & 0xffffffffL)   \
+  : (((a) >> (offs)) & ((1 << (n_bits)) -1)))
 
 /* Set Bit Mask - a mask to set all bits starting from offset 'offs'.  */
-#define SBM(offs)  ((-1u << (offs)) & 0xffffffff)
+#define SBM(offs)  ((((1 << (32 - offs)) -1) << (offs)))
 
 typedef unsigned long dwordU;
 typedef unsigned short wordU;
@@ -57,11 +58,11 @@ typedef struct
 cinv_entry;
 
 /* CRX 'cinv' options.  */
-static const cinv_entry crx_cinvs[] =
+const cinv_entry crx_cinvs[] =
 {
-  {"[i]", 2}, {"[i,u]", 3}, {"[d]", 4}, {"[d,u]", 5},
-  {"[d,i]", 6}, {"[d,i,u]", 7}, {"[b]", 8},
-  {"[b,i]", 10}, {"[b,i,u]", 11}, {"[b,d]", 12},
+  {"[i]", 2}, {"[i,u]", 3}, {"[d]", 4}, {"[d,u]", 5}, 
+  {"[d,i]", 6}, {"[d,i,u]", 7}, {"[b]", 8}, 
+  {"[b,i]", 10}, {"[b,i,u]", 11}, {"[b,d]", 12}, 
   {"[b,d,u]", 13}, {"[b,d,i]", 14}, {"[b,d,i,u]", 15}
 };
 
@@ -75,28 +76,45 @@ typedef enum REG_ARG_TYPE
     /* CO-Processor register (c<N>).  */
     COP_ARG,
     /* CO-Processor special register (cs<N>).  */
-    COPS_ARG
+    COPS_ARG 
   }
 REG_ARG_TYPE;
 
 /* Number of valid 'cinv' instruction options.  */
-static int NUMCINVS = ((sizeof crx_cinvs)/(sizeof crx_cinvs[0]));
+int NUMCINVS = ((sizeof crx_cinvs)/(sizeof crx_cinvs[0]));
 /* Current opcode table entry we're disassembling.  */
-static const inst *instruction;
+const inst *instruction;
 /* Current instruction we're disassembling.  */
-static ins currInsn;
+ins currInsn;
 /* The current instruction is read into 3 consecutive words.  */
-static wordU words[3];
+wordU words[3];
 /* Contains all words in appropriate order.  */
-static ULONGLONG allWords;
+ULONGLONG allWords;
 /* Holds the current processed argument number.  */
-static int processing_argument_number;
+int processing_argument_number;
 /* Nonzero means a CST4 instruction.  */
-static int cst4flag;
+int cst4flag;
 /* Nonzero means the instruction's original size is
    incremented (escape sequence is used).  */
-static int size_changed;
+int size_changed;
 
+static int get_number_of_operands (void);
+static argtype getargtype     (operand_type);
+static int getbits	      (operand_type);
+static char *getregname	      (reg);
+static char *getcopregname    (copreg, reg_type);
+static char * getprocregname  (int);
+static char *gettrapstring    (unsigned);
+static char *getcinvstring    (unsigned);
+static void getregliststring  (int, char *, enum REG_ARG_TYPE);
+static wordU get_word_at_PC   (bfd_vma, struct disassemble_info *);
+static void get_words_at_PC   (bfd_vma, struct disassemble_info *);
+static unsigned long build_mask (void);
+static int powerof2	      (int);
+static int match_opcode	      (void);
+static void make_instruction  (void);
+static void print_arguments   (ins *, bfd_vma, struct disassemble_info *);
+static void print_arg	      (argument *, bfd_vma, struct disassemble_info *);
 
 /* Retrieve the number of operands for the current assembled instruction.  */
 
@@ -105,7 +123,7 @@ get_number_of_operands (void)
 {
   int i;
 
-  for (i = 0; i < MAX_OPERANDS && instruction->operands[i].op_type; i++)
+  for (i = 0; instruction->operands[i].op_type && i < MAX_OPERANDS; i++)
     ;
 
   return i;
@@ -165,7 +183,7 @@ getcinvstring (unsigned int num)
 
 /* Given a register enum value, retrieve its name.  */
 
-static char *
+char *
 getregname (reg r)
 {
   const reg_entry * regentry = &crx_regtab[r];
@@ -178,7 +196,7 @@ getregname (reg r)
 
 /* Given a coprocessor register enum value, retrieve its name.  */
 
-static char *
+char *
 getcopregname (copreg r, reg_type type)
 {
   const reg_entry * regentry;
@@ -223,10 +241,10 @@ powerof2 (int x)
 
 /* Transform a register bit mask to a register list.  */
 
-static void
+void
 getregliststring (int mask, char *string, enum REG_ARG_TYPE core_cop)
 {
-  char temp_string[16];
+  char temp_string[5];
   int i;
 
   string[0] = '{';
@@ -297,11 +315,11 @@ makelongparameter (ULONGLONG val, int start, int end)
 /* Build a mask of the instruction's 'constant' opcode,
    based on the instruction's printing flags.  */
 
-static unsigned int
+static unsigned long
 build_mask (void)
 {
   unsigned int print_flags;
-  unsigned int mask;
+  unsigned long mask;
 
   print_flags = instruction->flags & FMT_CRX;
   switch (print_flags)
@@ -334,10 +352,10 @@ build_mask (void)
 static int
 match_opcode (void)
 {
-  unsigned int mask;
+  unsigned long mask;
 
   /* The instruction 'constant' opcode doewsn't exceed 32 bits.  */
-  unsigned int doubleWord = words[1] + ((unsigned) words[0] << 16);
+  unsigned long doubleWord = (words[1] + (words[0] << 16)) & 0xffffffff;
 
   /* Start searching from end of instruction table.  */
   instruction = &crx_instruction[NUMOPCODES - 2];
@@ -516,8 +534,8 @@ print_arg (argument *a, bfd_vma memaddr, struct disassemble_info *info)
 
       else if (INST_HAS_REG_LIST)
         {
-	  REG_ARG_TYPE reg_arg_type = IS_INSN_TYPE (COP_REG_INS) ?
-				 COP_ARG : IS_INSN_TYPE (COPS_REG_INS) ?
+	  REG_ARG_TYPE reg_arg_type = IS_INSN_TYPE (COP_REG_INS) ? 
+				 COP_ARG : IS_INSN_TYPE (COPS_REG_INS) ? 
 				 COPS_ARG : (instruction->flags & USER_REG) ?
 				 USER_REG_ARG : REG_ARG;
 
@@ -696,7 +714,9 @@ get_words_at_PC (bfd_vma memaddr, struct disassemble_info *info)
 /* Prints the instruction by calling print_arguments after proper matching.  */
 
 int
-print_insn_crx (bfd_vma memaddr, struct disassemble_info *info)
+print_insn_crx (memaddr, info)
+     bfd_vma memaddr;
+     struct disassemble_info *info;
 {
   int is_decoded;     /* Nonzero means instruction has a match.  */
 
@@ -709,7 +729,7 @@ print_insn_crx (bfd_vma memaddr, struct disassemble_info *info)
   /* Find a matching opcode in table.  */
   is_decoded = match_opcode ();
   /* If found, print the instruction's mnemonic and arguments.  */
-  if (is_decoded > 0 && (words[0] != 0 || words[1] != 0))
+  if (is_decoded > 0 && (words[0] << 16 || words[1]) != 0)
     {
       info->fprintf_func (info->stream, "%s", instruction->mnemonic);
       if ((currInsn.nargs = get_number_of_operands ()) != 0)

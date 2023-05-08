@@ -1,6 +1,6 @@
 /* Objective-C language support definitions for GDB, the GNU debugger.
 
-   Copyright (C) 1992-2020 Free Software Foundation, Inc.
+   Copyright (C) 1992-2014 Free Software Foundation, Inc.
 
    Contributed by Apple Computer, Inc.
 
@@ -20,23 +20,24 @@
 #if !defined(OBJC_LANG_H)
 #define OBJC_LANG_H
 
+#include "cp-support.h"		/* For VEC (const_char_ptr) */
+
 struct stoken;
 
 struct value;
 struct block;
-struct parser_state;
 
 extern CORE_ADDR lookup_objc_class     (struct gdbarch *gdbarch,
-					const char *classname);
+					char *classname);
 extern CORE_ADDR lookup_child_selector (struct gdbarch *gdbarch,
-					const char *methodname);
+					char *methodname);
 
 extern char *objc_demangle (const char *mangled, int options);
 
 extern int find_objc_msgcall (CORE_ADDR pc, CORE_ADDR *new_pc);
 
-extern const char *find_imps (const char *method,
-			      std::vector<const char *> *symbol_names);
+extern const char *
+  find_imps (const char *method, VEC (const_char_ptr) **symbol_names);
 
 extern struct value *value_nsstring (struct gdbarch *gdbarch,
 				     char *ptr, int len);
@@ -44,10 +45,9 @@ extern struct value *value_nsstring (struct gdbarch *gdbarch,
 /* for parsing Objective C */
 extern void start_msglist (void);
 extern void add_msglist (struct stoken *str, int addcolon);
-extern int end_msglist (struct parser_state *);
+extern int end_msglist (void);
 
-struct symbol *lookup_struct_typedef (const char *name,
-				      const struct block *block,
+struct symbol *lookup_struct_typedef (char *name, const struct block *block,
 				      int noerr);
 
 #endif

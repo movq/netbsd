@@ -1,5 +1,7 @@
 /* MMIX-specific support for 64-bit ELF.
-   Copyright (C) 2001-2020 Free Software Foundation, Inc.
+   Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2009, 2010, 2011,
+   2012
+   Free Software Foundation, Inc.
    Contributed by Hans-Peter Nilsson <hp@bitrange.com>
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -172,7 +174,7 @@ extern void mmix_elf_symbol_processing (bfd *, asymbol *);
 
 /* Only intended to be called from a debugger.  */
 extern void mmix_dump_bpo_gregs
-  (struct bfd_link_info *, void (*) (const char *, ...));
+  (struct bfd_link_info *, bfd_error_handler_type);
 
 static void
 mmix_set_relaxable_size (bfd *, asection *, void *);
@@ -192,11 +194,11 @@ static reloc_howto_type elf_mmix_howto_table[] =
   /* This reloc does nothing.  */
   HOWTO (R_MMIX_NONE,		/* type */
 	 0,			/* rightshift */
-	 3,			/* size (0 = byte, 1 = short, 2 = long) */
-	 0,			/* bitsize */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 32,			/* bitsize */
 	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
-	 complain_overflow_dont, /* complain_on_overflow */
+	 complain_overflow_bitfield, /* complain_on_overflow */
 	 bfd_elf_generic_reloc,	/* special_function */
 	 "R_MMIX_NONE",		/* name */
 	 FALSE,			/* partial_inplace */
@@ -460,7 +462,7 @@ static reloc_howto_type elf_mmix_howto_table[] =
 	 FALSE,			/* partial_inplace */
 	 ~0x0100ffff,		/* src_mask */
 	 0x0100ffff,		/* dst_mask */
-	 TRUE),			/* pcrel_offset */
+	 TRUE),		       	/* pcrel_offset */
 
   HOWTO (R_MMIX_CBRANCH_J,	/* type */
 	 2,			/* rightshift */
@@ -982,10 +984,10 @@ mmix_elf_perform_relocation (asection *isec, reloc_howto_type *howto,
 		     a verbose message.  */
 		  *error_message
 		    = _("invalid input relocation when producing"
-			" non-ELF, non-mmo format output;"
-			" please use the objcopy program to convert from"
+			" non-ELF, non-mmo format output."
+			"\n Please use the objcopy program to convert from"
 			" ELF or mmo,"
-			" or assemble using"
+			"\n or assemble using"
 			" \"-no-expand\" (for gcc, \"-Wa,-no-expand\"");
 		  mmix_elf_section_data (isec)->has_warned_pushj = TRUE;
 		  return bfd_reloc_dangerous;
@@ -1166,10 +1168,10 @@ mmix_elf_perform_relocation (asection *isec, reloc_howto_type *howto,
 		   a verbose message.  */
 		*error_message
 		  = _("invalid input relocation when producing"
-		      " non-ELF, non-mmo format output;"
-		      " please use the objcopy program to convert from"
+		      " non-ELF, non-mmo format output."
+		      "\n Please use the objcopy program to convert from"
 		      " ELF or mmo,"
-		      " or compile using the gcc-option"
+		      "\n or compile using the gcc-option"
 		      " \"-mno-base-addresses\".");
 		mmix_elf_section_data (isec)->has_warned_bpo = TRUE;
 		return bfd_reloc_dangerous;
@@ -1190,13 +1192,14 @@ mmix_elf_perform_relocation (asection *isec, reloc_howto_type *howto,
 	   doesn't cost much, so can be left in at all times.  */
 	if (value != gregdata->reloc_request[bpo_index].value)
 	  {
-	    _bfd_error_handler
-	      /* xgettext:c-format */
-	      (_("%pB: Internal inconsistency error for value for\n\
- linker-allocated global register: linked: %#" PRIx64 " != relaxed: %#" PRIx64 ""),
-	       isec->owner,
-	       (uint64_t) value,
-	       (uint64_t) gregdata->reloc_request[bpo_index].value);
+	    (*_bfd_error_handler)
+	      (_("%s: Internal inconsistency error for value for\n\
+ linker-allocated global register: linked: 0x%lx%08lx != relaxed: 0x%lx%08lx\n"),
+	       bfd_get_filename (isec->owner),
+	       (unsigned long) (value >> 32), (unsigned long) value,
+	       (unsigned long) (gregdata->reloc_request[bpo_index].value
+				>> 32),
+	       (unsigned long) gregdata->reloc_request[bpo_index].value);
 	    bfd_set_error (bfd_error_bad_value);
 	    return bfd_reloc_overflow;
 	  }
@@ -1250,24 +1253,16 @@ mmix_elf_perform_relocation (asection *isec, reloc_howto_type *howto,
 
 /* Set the howto pointer for an MMIX ELF reloc (type RELA).  */
 
-static bfd_boolean
-mmix_info_to_howto_rela (bfd *abfd,
+static void
+mmix_info_to_howto_rela (bfd *abfd ATTRIBUTE_UNUSED,
 			 arelent *cache_ptr,
 			 Elf_Internal_Rela *dst)
 {
   unsigned int r_type;
 
   r_type = ELF64_R_TYPE (dst->r_info);
-  if (r_type >= (unsigned int) R_MMIX_max)
-    {
-      /* xgettext:c-format */
-      _bfd_error_handler (_("%pB: unsupported relocation type %#x"),
-			  abfd, r_type);
-      bfd_set_error (bfd_error_bad_value);
-      return FALSE;
-    }
+  BFD_ASSERT (r_type < (unsigned int) R_MMIX_max);
   cache_ptr->howto = &elf_mmix_howto_table[r_type];
-  return TRUE;
 }
 
 /* Any MMIX-specific relocation gets here at assembly time or when linking
@@ -1315,7 +1310,7 @@ mmix_elf_reloc (bfd *abfd,
   else
     relocation = symbol->value;
 
-  reloc_target_output_section = bfd_asymbol_section (symbol)->output_section;
+  reloc_target_output_section = bfd_get_output_section (symbol);
 
   /* Here the variable relocation holds the final address of the symbol we
      are relocating against, plus any addend.  */
@@ -1414,17 +1409,16 @@ mmix_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 						  symtab_hdr->sh_link,
 						  sym->st_name);
 	  if (name == NULL)
-	    name = bfd_section_name (sec);
+	    name = bfd_section_name (input_bfd, sec);
 	}
       else
 	{
-	  bfd_boolean unresolved_reloc, ignored;
+	  bfd_boolean unresolved_reloc;
 
 	  RELOC_FOR_GLOBAL_SYMBOL (info, input_bfd, input_section, rel,
 				   r_symndx, symtab_hdr, sym_hashes,
 				   h, sec, relocation,
-				   unresolved_reloc, undefined_signalled,
-				   ignored);
+				   unresolved_reloc, undefined_signalled);
 	  name = h->root.root.string;
 	}
 
@@ -1432,7 +1426,7 @@ mmix_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 	RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
 					 rel, 1, relend, howto, 0, contents);
 
-      if (bfd_link_relocatable (info))
+      if (info->relocatable)
 	{
 	  /* This is a relocatable link.  For most relocs we don't have to
 	     change anything, unless the reloc is against a section
@@ -1519,12 +1513,13 @@ mmix_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 
       if (r != bfd_reloc_ok)
 	{
+	  bfd_boolean check_ok = TRUE;
 	  const char * msg = (const char *) NULL;
 
 	  switch (r)
 	    {
 	    case bfd_reloc_overflow:
-	      info->callbacks->reloc_overflow
+	      check_ok = info->callbacks->reloc_overflow
 		(info, (h ? &h->root : NULL), name, howto->name,
 		 (bfd_vma) 0, input_bfd, input_section, rel->r_offset);
 	      break;
@@ -1532,8 +1527,9 @@ mmix_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 	    case bfd_reloc_undefined:
 	      /* We may have sent this message above.  */
 	      if (! undefined_signalled)
-		info->callbacks->undefined_symbol
-		  (info, name, input_bfd, input_section, rel->r_offset, TRUE);
+		check_ok = info->callbacks->undefined_symbol
+		  (info, name, input_bfd, input_section, rel->r_offset,
+		   TRUE);
 	      undefined_signalled = TRUE;
 	      break;
 
@@ -1555,8 +1551,11 @@ mmix_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 	    }
 
 	  if (msg)
-	    (*info->callbacks->warning) (info, msg, name, input_bfd,
-					 input_section, rel->r_offset);
+	    check_ok = info->callbacks->warning
+	      (info, msg, name, input_bfd, input_section, rel->r_offset);
+
+	  if (! check_ok)
+	    return FALSE;
 	}
     }
 
@@ -1606,25 +1605,23 @@ mmix_final_link_relocate (reloc_howto_type *howto, asection *input_section,
 	return bfd_reloc_undefined;
 
       /* Check that we're not relocating against a register symbol.  */
-      if (strcmp (bfd_section_name (symsec),
+      if (strcmp (bfd_get_section_name (symsec->owner, symsec),
 		  MMIX_REG_CONTENTS_SECTION_NAME) == 0
-	  || strcmp (bfd_section_name (symsec),
+	  || strcmp (bfd_get_section_name (symsec->owner, symsec),
 		     MMIX_REG_SECTION_NAME) == 0)
 	{
 	  /* Note: This is separated out into two messages in order
 	     to ease the translation into other languages.  */
 	  if (symname == NULL || *symname == 0)
-	    _bfd_error_handler
-	      /* xgettext:c-format */
-	      (_("%pB: base-plus-offset relocation against register symbol:"
-		 " (unknown) in %pA"),
-	       input_section->owner, symsec);
+	    (*_bfd_error_handler)
+	      (_("%s: base-plus-offset relocation against register symbol: (unknown) in %s"),
+	       bfd_get_filename (input_section->owner),
+	       bfd_get_section_name (symsec->owner, symsec));
 	  else
-	    _bfd_error_handler
-	      /* xgettext:c-format */
-	      (_("%pB: base-plus-offset relocation against register symbol:"
-		 " %s in %pA"),
-	       input_section->owner, symname, symsec);
+	    (*_bfd_error_handler)
+	      (_("%s: base-plus-offset relocation against register symbol: %s in %s"),
+	       bfd_get_filename (input_section->owner), symname,
+	       bfd_get_section_name (symsec->owner, symsec));
 	  return bfd_reloc_overflow;
 	}
       goto do_mmix_reloc;
@@ -1641,7 +1638,7 @@ mmix_final_link_relocate (reloc_howto_type *howto, asection *input_section,
       if (symsec == NULL)
 	return bfd_reloc_undefined;
 
-      if (strcmp (bfd_section_name (symsec),
+      if (strcmp (bfd_get_section_name (symsec->owner, symsec),
 		  MMIX_REG_CONTENTS_SECTION_NAME) == 0)
 	{
 	  if ((srel & 7) != 0 || srel < 32*8 || srel > 255*8)
@@ -1652,7 +1649,7 @@ mmix_final_link_relocate (reloc_howto_type *howto, asection *input_section,
 	    }
 	  srel /= 8;
 	}
-      else if (strcmp (bfd_section_name (symsec),
+      else if (strcmp (bfd_get_section_name (symsec->owner, symsec),
 		       MMIX_REG_SECTION_NAME) == 0)
 	{
 	  if (srel < 0 || srel > 255)
@@ -1665,17 +1662,15 @@ mmix_final_link_relocate (reloc_howto_type *howto, asection *input_section,
 	  /* Note: This is separated out into two messages in order
 	     to ease the translation into other languages.  */
 	  if (symname == NULL || *symname == 0)
-	    _bfd_error_handler
-	      /* xgettext:c-format */
-	      (_("%pB: register relocation against non-register symbol:"
-		 " (unknown) in %pA"),
-	       input_section->owner, symsec);
+	    (*_bfd_error_handler)
+	      (_("%s: register relocation against non-register symbol: (unknown) in %s"),
+	       bfd_get_filename (input_section->owner),
+	       bfd_get_section_name (symsec->owner, symsec));
 	  else
-	    _bfd_error_handler
-	      /* xgettext:c-format */
-	      (_("%pB: register relocation against non-register symbol:"
-		 " %s in %pA"),
-	       input_section->owner, symname, symsec);
+	    (*_bfd_error_handler)
+	      (_("%s: register relocation against non-register symbol: %s in %s"),
+	       bfd_get_filename (input_section->owner), symname,
+	       bfd_get_section_name (symsec->owner, symsec));
 
 	  /* The bfd_reloc_outofrange return value, though intuitively a
 	     better value, will not get us an error.  */
@@ -1704,14 +1699,14 @@ mmix_final_link_relocate (reloc_howto_type *howto, asection *input_section,
 	   accidentally handling it.  */
 	if (!bfd_is_abs_section (symsec)
 	    && !bfd_is_und_section (symsec)
-	    && strcmp (bfd_section_name (symsec),
+	    && strcmp (bfd_get_section_name (symsec->owner, symsec),
 		       MMIX_REG_CONTENTS_SECTION_NAME) != 0
-	    && strcmp (bfd_section_name (symsec),
+	    && strcmp (bfd_get_section_name (symsec->owner, symsec),
 		       MMIX_REG_SECTION_NAME) != 0)
 	{
-	  _bfd_error_handler
-	    (_("%pB: directive LOCAL valid only with a register or absolute value"),
-	     input_section->owner);
+	  (*_bfd_error_handler)
+	    (_("%s: directive LOCAL valid only with a register or absolute value"),
+	     bfd_get_filename (input_section->owner));
 
 	  return bfd_reloc_overflow;
 	}
@@ -1722,8 +1717,10 @@ mmix_final_link_relocate (reloc_howto_type *howto, asection *input_section,
 	first_global = 255;
       else
 	{
-	  first_global = bfd_section_vma (regsec) / 8;
-	  if (strcmp (bfd_section_name (symsec),
+	  first_global
+	    = bfd_get_section_vma (input_section->output_section->owner,
+				   regsec) / 8;
+	  if (strcmp (bfd_get_section_name (symsec->owner, symsec),
 		      MMIX_REG_CONTENTS_SECTION_NAME) == 0)
 	    {
 	      if ((srel & 7) != 0 || srel < 32*8 || srel > 255*8)
@@ -1737,12 +1734,9 @@ mmix_final_link_relocate (reloc_howto_type *howto, asection *input_section,
 	if ((bfd_vma) srel >= first_global)
 	  {
 	    /* FIXME: Better error message.  */
-	    _bfd_error_handler
-	      /* xgettext:c-format */
-	      (_("%pB: LOCAL directive: "
-		 "register $%" PRId64 " is not a local register;"
-		 " first global register is $%" PRId64),
-	       input_section->owner, (int64_t) srel, (int64_t) first_global);
+	    (*_bfd_error_handler)
+	      (_("%s: LOCAL directive: Register $%ld is not a local register.  First global register is $%ld."),
+	       bfd_get_filename (input_section->owner), (long) srel, (long) first_global);
 
 	    return bfd_reloc_overflow;
 	  }
@@ -1778,6 +1772,33 @@ mmix_elf_gc_mark_hook (asection *sec,
       }
 
   return _bfd_elf_gc_mark_hook (sec, info, rel, h, sym);
+}
+
+/* Update relocation info for a GC-excluded section.  We could supposedly
+   perform the allocation after GC, but there's no suitable hook between
+   GC (or section merge) and the point when all input sections must be
+   present.  Better to waste some memory and (perhaps) a little time.  */
+
+static bfd_boolean
+mmix_elf_gc_sweep_hook (bfd *abfd ATTRIBUTE_UNUSED,
+			struct bfd_link_info *info ATTRIBUTE_UNUSED,
+			asection *sec,
+			const Elf_Internal_Rela *relocs ATTRIBUTE_UNUSED)
+{
+  struct bpo_reloc_section_info *bpodata
+    = mmix_elf_section_data (sec)->bpo.reloc;
+  asection *allocated_gregs_section;
+
+  /* If no bpodata here, we have nothing to do.  */
+  if (bpodata == NULL)
+    return TRUE;
+
+  allocated_gregs_section = bpodata->bpo_greg_section;
+
+  mmix_elf_section_data (allocated_gregs_section)->bpo.greg->n_bpo_relocs
+    -= bpodata->n_bpo_relocs_this_section;
+
+  return TRUE;
 }
 
 /* Sort register relocs to come before expanding relocs.  */
@@ -1838,7 +1859,7 @@ mmix_elf_check_common_relocs  (bfd *abfd,
   for (rel = relocs; rel < rel_end; rel++)
     {
       switch (ELF64_R_TYPE (rel->r_info))
-	{
+        {
 	  /* This relocation causes a GREG allocation.  We need to count
 	     them, and we need to create a section for them, so we need an
 	     object to fake as the owner of that section.  We can't use
@@ -1846,7 +1867,7 @@ mmix_elf_check_common_relocs  (bfd *abfd,
 	     DSO-related stuff if that member is non-NULL.  */
 	case R_MMIX_BASE_PLUS_OFFSET:
 	  /* We don't do anything with this reloc for a relocatable link.  */
-	  if (bfd_link_relocatable (info))
+	  if (info->relocatable)
 	    break;
 
 	  if (bpo_greg_owner == NULL)
@@ -1874,7 +1895,9 @@ mmix_elf_check_common_relocs  (bfd *abfd,
 		 those flags, as that is what currently happens for usual
 		 GREG allocations, and that works.  */
 	      if (allocated_gregs_section == NULL
-		  || !bfd_set_section_alignment (allocated_gregs_section, 3))
+		  || !bfd_set_section_alignment (bpo_greg_owner,
+						 allocated_gregs_section,
+						 3))
 		return FALSE;
 
 	      gregdata = (struct bpo_greg_section_info *)
@@ -1968,7 +1991,7 @@ mmix_elf_check_relocs (bfd *abfd,
   if (!mmix_elf_check_common_relocs (abfd, info, sec, relocs))
     return FALSE;
 
-  if (bfd_link_relocatable (info))
+  if (info->relocatable)
     return TRUE;
 
   rel_end = relocs + sec->reloc_count;
@@ -1979,7 +2002,7 @@ mmix_elf_check_relocs (bfd *abfd,
 
       r_symndx = ELF64_R_SYM (rel->r_info);
       if (r_symndx < symtab_hdr->sh_info)
-	h = NULL;
+        h = NULL;
       else
 	{
 	  h = sym_hashes[r_symndx - symtab_hdr->sh_info];
@@ -1990,19 +2013,21 @@ mmix_elf_check_relocs (bfd *abfd,
 
       switch (ELF64_R_TYPE (rel->r_info))
 	{
-	/* This relocation describes the C++ object vtable hierarchy.
-	   Reconstruct it for later use during GC.  */
-	case R_MMIX_GNU_VTINHERIT:
-	  if (!bfd_elf_gc_record_vtinherit (abfd, sec, h, rel->r_offset))
-	    return FALSE;
-	  break;
+        /* This relocation describes the C++ object vtable hierarchy.
+           Reconstruct it for later use during GC.  */
+        case R_MMIX_GNU_VTINHERIT:
+          if (!bfd_elf_gc_record_vtinherit (abfd, sec, h, rel->r_offset))
+            return FALSE;
+          break;
 
-	/* This relocation describes which C++ vtable entries are actually
-	   used.  Record for later use during GC.  */
-	case R_MMIX_GNU_VTENTRY:
-	  if (!bfd_elf_gc_record_vtentry (abfd, sec, h, rel->r_addend))
-	    return FALSE;
-	  break;
+        /* This relocation describes which C++ vtable entries are actually
+           used.  Record for later use during GC.  */
+        case R_MMIX_GNU_VTENTRY:
+          BFD_ASSERT (h != NULL);
+          if (h != NULL
+              && !bfd_elf_gc_record_vtentry (abfd, sec, h, rel->r_addend))
+            return FALSE;
+          break;
 	}
     }
 
@@ -2082,7 +2107,9 @@ static asymbol *mmix_elf_reg_section_symbol_ptr;
 /* Handle the special section numbers that a symbol may use.  */
 
 void
-mmix_elf_symbol_processing (bfd *abfd ATTRIBUTE_UNUSED, asymbol *asym)
+mmix_elf_symbol_processing (abfd, asym)
+     bfd *abfd ATTRIBUTE_UNUSED;
+     asymbol *asym;
 {
   elf_symbol_type *elfsym;
 
@@ -2119,7 +2146,7 @@ mmix_elf_section_from_bfd_section (bfd *       abfd ATTRIBUTE_UNUSED,
 				   asection *  sec,
 				   int *       retval)
 {
-  if (strcmp (bfd_section_name (sec), MMIX_REG_SECTION_NAME) == 0)
+  if (strcmp (bfd_get_section_name (abfd, sec), MMIX_REG_SECTION_NAME) == 0)
     *retval = SHN_REGISTER;
   else
     return FALSE;
@@ -2162,12 +2189,10 @@ mmix_elf_add_symbol_hook (bfd *abfd,
 	{
 	  /* How do we get the asymbol (or really: the filename) from h?
 	     h->u.def.section->owner is NULL.  */
-	  _bfd_error_handler
-	    /* xgettext:c-format */
-	    (_("%pB: error: multiple definition of `%s'; start of %s "
-	       "is set in a earlier linked file"),
-	     abfd, *namep,
-	     *namep + strlen (MMIX_LOC_SECTION_START_SYMBOL_PREFIX));
+	  ((*_bfd_error_handler)
+	   (_("%s: Error: multiple definition of `%s'; start of %s is set in a earlier linked file\n"),
+	    bfd_get_filename (abfd), *namep,
+	    *namep + strlen (MMIX_LOC_SECTION_START_SYMBOL_PREFIX)));
 	   bfd_set_error (bfd_error_bad_value);
 	   return FALSE;
 	}
@@ -2218,8 +2243,8 @@ mmix_elf_final_link (bfd *abfd, struct bfd_link_info *info)
   if (reg_section != NULL)
     {
       /* FIXME: Pass error state gracefully.  */
-      if (bfd_section_flags (reg_section) & SEC_HAS_CONTENTS)
-	_bfd_abort (__FILE__, __LINE__, _("register section has contents\n"));
+      if (bfd_get_section_flags (abfd, reg_section) & SEC_HAS_CONTENTS)
+	_bfd_abort (__FILE__, __LINE__, _("Register section has contents\n"));
 
       /* Really remove the section, if it hasn't already been done.  */
       if (!bfd_section_removed_from_list (abfd, reg_section))
@@ -2271,7 +2296,7 @@ mmix_set_relaxable_size (bfd *abfd ATTRIBUTE_UNUSED,
 
   /* For use in relocatable link, we start with a max stubs size.  See
      mmix_elf_relax_section.  */
-  if (bfd_link_relocatable (info) && sec->output_section)
+  if (info->relocatable && sec->output_section)
     mmix_elf_section_data (sec->output_section)->pjs.stubs_size_sum
       += (mmix_elf_section_data (sec)->pjs.n_pushj_relocs
 	  * MAX_PUSHJ_STUB_SIZE);
@@ -2294,7 +2319,7 @@ _bfd_mmix_before_linker_allocation (bfd *abfd ATTRIBUTE_UNUSED,
   bfd *ibfd;
 
   /* Set the initial size of sections.  */
-  for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
+  for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link_next)
     bfd_map_over_sections (ibfd, mmix_set_relaxable_size, info);
 
   /* The bpo_greg_owner bfd is supposed to have been set by
@@ -2326,7 +2351,7 @@ _bfd_mmix_before_linker_allocation (bfd *abfd ATTRIBUTE_UNUSED,
   /* Set the zeroth-order estimate for the GREGs size.  */
   gregs_size = n_gregs * 8;
 
-  if (!bfd_set_section_size (bpo_gregs_section, gregs_size))
+  if (!bfd_set_section_size (bpo_greg_owner, bpo_gregs_section, gregs_size))
     return FALSE;
 
   /* Allocate and set up the GREG arrays.  They're filled in at relaxation
@@ -2407,12 +2432,11 @@ _bfd_mmix_after_linker_allocation (bfd *abfd ATTRIBUTE_UNUSED,
   if (gregdata->n_remaining_bpo_relocs_this_relaxation_round
       != gregdata->n_bpo_relocs)
     {
-      _bfd_error_handler
-	/* xgettext:c-format */
-	(_("internal inconsistency: remaining %lu != max %lu;"
-	   " please report this bug"),
-	 (unsigned long) gregdata->n_remaining_bpo_relocs_this_relaxation_round,
-	 (unsigned long) gregdata->n_bpo_relocs);
+      (*_bfd_error_handler)
+	(_("Internal inconsistency: remaining %u != max %u.\n\
+  Please report this bug."),
+	 gregdata->n_remaining_bpo_relocs_this_relaxation_round,
+	 gregdata->n_bpo_relocs);
       return FALSE;
     }
 
@@ -2460,8 +2484,9 @@ bpo_reloc_request_sort_fn (const void * p1, const void * p2)
    from base-plus-offset relocs.  */
 
 void
-mmix_dump_bpo_gregs (struct bfd_link_info *link_info,
-		     void (*pf) (const char *fmt, ...))
+mmix_dump_bpo_gregs (link_info, pf)
+     struct bfd_link_info *link_info;
+     bfd_error_handler_type pf;
 {
   bfd *bpo_greg_owner;
   asection *bpo_gregs_section;
@@ -2553,7 +2578,7 @@ mmix_elf_relax_section (bfd *abfd,
       || (sec->flags & SEC_CODE) == 0
       || (sec->flags & SEC_LINKER_CREATED) != 0
       /* If no R_MMIX_BASE_PLUS_OFFSET relocs and no PUSHJ-stub relocs,
-	 then nothing to do.  */
+         then nothing to do.  */
       || (bpodata == NULL
 	  && mmix_elf_section_data (sec)->pjs.n_pushj_relocs == 0))
     return TRUE;
@@ -2592,7 +2617,7 @@ mmix_elf_relax_section (bfd *abfd,
       /* We process relocs in a distinctly different way when this is a
 	 relocatable link (for one, we don't look at symbols), so we avoid
 	 mixing its code with that for the "normal" relaxation.  */
-      if (bfd_link_relocatable (link_info))
+      if (link_info->relocatable)
 	{
 	  /* The only transformation in a relocatable link is to generate
 	     a full stub at the location of the stub calculated for the
@@ -2677,21 +2702,8 @@ mmix_elf_relax_section (bfd *abfd,
 	  indx = ELF64_R_SYM (irel->r_info) - symtab_hdr->sh_info;
 	  h = elf_sym_hashes (abfd)[indx];
 	  BFD_ASSERT (h != NULL);
-	  if (h->root.type == bfd_link_hash_undefweak)
-	    /* FIXME: for R_MMIX_PUSHJ_STUBBABLE, there are alternatives to
-	       the canonical value 0 for an unresolved weak symbol to
-	       consider: as the debug-friendly approach, resolve to "abort"
-	       (or a port-specific function), or as the space-friendly
-	       approach resolve to the next instruction (like some other
-	       ports, notably ARM and AArch64).  These alternatives require
-	       matching code in mmix_elf_perform_relocation or its caller.  */
-	    symval = 0;
-	  else if (h->root.type == bfd_link_hash_defined
-		   || h->root.type == bfd_link_hash_defweak)
-	    symval = (h->root.u.def.value
-		      + h->root.u.def.section->output_section->vma
-		      + h->root.u.def.section->output_offset);
-	  else
+	  if (h->root.type != bfd_link_hash_defined
+	      && h->root.type != bfd_link_hash_defweak)
 	    {
 	      /* This appears to be a reference to an undefined symbol.  Just
 		 ignore it--it will be caught by the regular reloc processing.
@@ -2705,6 +2717,10 @@ mmix_elf_relax_section (bfd *abfd,
 		}
 	      continue;
 	    }
+
+	  symval = (h->root.u.def.value
+		    + h->root.u.def.section->output_section->vma
+		    + h->root.u.def.section->output_offset);
 	}
 
       if (ELF64_R_TYPE (irel->r_info) == (int) R_MMIX_PUSHJ_STUBBABLE)
@@ -2842,8 +2858,6 @@ mmix_elf_relax_section (bfd *abfd,
 	}
     }
 
-  BFD_ASSERT(pjsno == mmix_elf_section_data (sec)->pjs.n_pushj_relocs);
-
   if (internal_relocs != NULL
       && elf_section_data (sec)->relocs != internal_relocs)
     free (internal_relocs);
@@ -2869,7 +2883,7 @@ mmix_elf_relax_section (bfd *abfd,
 }
 
 #define ELF_ARCH		bfd_arch_mmix
-#define ELF_MACHINE_CODE	EM_MMIX
+#define ELF_MACHINE_CODE 	EM_MMIX
 
 /* According to mmix-doc page 36 (paragraph 45), this should be (1LL << 48LL).
    However, that's too much for something somewhere in the linker part of
@@ -2885,13 +2899,14 @@ mmix_elf_relax_section (bfd *abfd,
    alignment.  */
 #define ELF_MAXPAGESIZE 0x100
 
-#define TARGET_BIG_SYM		mmix_elf64_vec
+#define TARGET_BIG_SYM		bfd_elf64_mmix_vec
 #define TARGET_BIG_NAME		"elf64-mmix"
 
 #define elf_info_to_howto_rel		NULL
 #define elf_info_to_howto		mmix_info_to_howto_rela
 #define elf_backend_relocate_section	mmix_elf_relocate_section
 #define elf_backend_gc_mark_hook	mmix_elf_gc_mark_hook
+#define elf_backend_gc_sweep_hook	mmix_elf_gc_sweep_hook
 
 #define elf_backend_link_output_symbol_hook \
 	mmix_elf_link_output_symbol_hook
@@ -2899,10 +2914,8 @@ mmix_elf_relax_section (bfd *abfd,
 
 #define elf_backend_check_relocs	mmix_elf_check_relocs
 #define elf_backend_symbol_processing	mmix_elf_symbol_processing
-#define elf_backend_omit_section_dynsym _bfd_elf_omit_section_dynsym_all
-
-#define bfd_elf64_bfd_copy_link_hash_symbol_type \
-  _bfd_generic_copy_link_hash_symbol_type
+#define elf_backend_omit_section_dynsym \
+  ((bfd_boolean (*) (bfd *, struct bfd_link_info *, asection *)) bfd_true)
 
 #define bfd_elf64_bfd_is_local_label_name \
 	mmix_elf_is_local_label_name

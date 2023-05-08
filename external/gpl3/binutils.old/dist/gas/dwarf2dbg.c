@@ -1,5 +1,6 @@
 /* dwarf2dbg.c - DWARF2 debug support
-   Copyright (C) 1999-2020 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   Free Software Foundation, Inc.
    Contributed by David Mosberger-Tang <davidm@hpl.hp.com>
 
    This file is part of GAS, the GNU Assembler.
@@ -97,9 +98,9 @@
 #define DWARF2_ARANGES_VERSION 2
 #endif
 
-/* This implementation outputs version 3 .debug_line information.  */
+/* This implementation output version 2 .debug_line information. */
 #ifndef DWARF2_LINE_VERSION
-#define DWARF2_LINE_VERSION 3
+#define DWARF2_LINE_VERSION 2
 #endif
 
 #include "subsegs.h"
@@ -121,7 +122,7 @@
 # define DWARF2_USE_FIXED_ADVANCE_PC	linkrelax
 #endif
 
-/* First special line opcode - leave room for the standard opcodes.
+/* First special line opcde - leave room for the standard opcodes.
    Note: If you want to change this, you'll have to update the
    "standard_opcode_lengths" table that is emitted below in
    out_debug_line().  */
@@ -158,33 +159,20 @@
 /* The maximum address skip amount that can be encoded with a special op.  */
 #define MAX_SPECIAL_ADDR_DELTA		SPECIAL_ADDR(255)
 
-#ifndef TC_PARSE_CONS_RETURN_NONE
-#define TC_PARSE_CONS_RETURN_NONE BFD_RELOC_NONE
-#endif
-
-struct line_entry
-{
+struct line_entry {
   struct line_entry *next;
   symbolS *label;
   struct dwarf2_line_info loc;
 };
 
-/* Don't change the offset of next in line_entry.  set_or_check_view
-   calls in dwarf2_gen_line_info_1 depend on it.  */
-static char unused[offsetof(struct line_entry, next) ? -1 : 1]
-ATTRIBUTE_UNUSED;
-
-struct line_subseg
-{
+struct line_subseg {
   struct line_subseg *next;
   subsegT subseg;
   struct line_entry *head;
   struct line_entry **ptail;
-  struct line_entry **pmove_tail;
 };
 
-struct line_seg
-{
+struct line_seg {
   struct line_seg *next;
   segT seg;
   struct line_subseg *head;
@@ -194,10 +182,12 @@ struct line_seg
 
 /* Collects data for all line table entries during assembly.  */
 static struct line_seg *all_segs;
+/* Hash used to quickly lookup a segment by name, avoiding the need to search
+   through the all_segs list.  */
+static struct hash_control *all_segs_hash;
 static struct line_seg **last_seg_ptr;
 
-struct file_entry
-{
+struct file_entry {
   const char *filename;
   unsigned int dir;
 };
@@ -221,20 +211,15 @@ bfd_boolean dwarf2_loc_directive_seen;
 bfd_boolean dwarf2_loc_mark_labels;
 
 /* Current location as indicated by the most recent .loc directive.  */
-static struct dwarf2_line_info current =
-{
+static struct dwarf2_line_info current = {
   1, 1, 0, 0,
   DWARF2_LINE_DEFAULT_IS_STMT ? DWARF2_FLAG_IS_STMT : 0,
-  0, NULL
+  0
 };
 
-/* This symbol is used to recognize view number forced resets in loc
-   lists.  */
-static symbolS *force_reset_view;
-
-/* This symbol evaluates to an expression that, if nonzero, indicates
-   some view assert check failed.  */
-static symbolS *view_assert_failed;
+/* Lines that are at the same location as CURRENT, and which are waiting
+   for a label.  */
+static struct line_entry *pending_lines, **pending_lines_tail = &pending_lines;
 
 /* The size of an address on the target.  */
 static unsigned int sizeof_address;
@@ -251,7 +236,6 @@ generic_dwarf2_emit_offset (symbolS *symbol, unsigned int size)
 {
   expressionS exp;
 
-  memset (&exp, 0, sizeof exp);
   exp.X_op = O_symbol;
   exp.X_add_symbol = symbol;
   exp.X_add_number = 0;
@@ -259,26 +243,31 @@ generic_dwarf2_emit_offset (symbolS *symbol, unsigned int size)
 }
 #endif
 
-/* Find or create (if CREATE_P) an entry for SEG+SUBSEG in ALL_SEGS.  */
+/* Find or create an entry for SEG+SUBSEG in ALL_SEGS.  */
 
 static struct line_subseg *
-get_line_subseg (segT seg, subsegT subseg, bfd_boolean create_p)
+get_line_subseg (segT seg, subsegT subseg)
 {
-  struct line_seg *s = seg_info (seg)->dwarf2_line_seg;
+  static segT last_seg;
+  static subsegT last_subseg;
+  static struct line_subseg *last_line_subseg;
+
+  struct line_seg *s;
   struct line_subseg **pss, *lss;
 
+  if (seg == last_seg && subseg == last_subseg)
+    return last_line_subseg;
+
+  s = (struct line_seg *) hash_find (all_segs_hash, seg->name);
   if (s == NULL)
     {
-      if (!create_p)
-	return NULL;
-
-      s = XNEW (struct line_seg);
+      s = (struct line_seg *) xmalloc (sizeof (*s));
       s->next = NULL;
       s->seg = seg;
       s->head = NULL;
       *last_seg_ptr = s;
       last_seg_ptr = &s->next;
-      seg_info (seg)->dwarf2_line_seg = s;
+      hash_insert (all_segs_hash, seg->name, s);
     }
   gas_assert (seg == s->seg);
 
@@ -290,219 +279,62 @@ get_line_subseg (segT seg, subsegT subseg, bfd_boolean create_p)
 	break;
     }
 
-  lss = XNEW (struct line_subseg);
+  lss = (struct line_subseg *) xmalloc (sizeof (*lss));
   lss->next = *pss;
   lss->subseg = subseg;
   lss->head = NULL;
   lss->ptail = &lss->head;
-  lss->pmove_tail = &lss->head;
   *pss = lss;
 
  found_subseg:
+  last_seg = seg;
+  last_subseg = subseg;
+  last_line_subseg = lss;
+
   return lss;
 }
 
-/* (Un)reverse the line_entry list starting from H.  */
-
-static struct line_entry *
-reverse_line_entry_list (struct line_entry *h)
-{
-  struct line_entry *p = NULL, *e, *n;
-
-  for (e = h; e; e = n)
-    {
-      n = e->next;
-      e->next = p;
-      p = e;
-    }
-  return p;
-}
-
-/* Compute the view for E based on the previous entry P.  If we
-   introduce an (undefined) view symbol for P, and H is given (P must
-   be the tail in this case), introduce view symbols for earlier list
-   entries as well, until one of them is constant.  */
+/* Push LOC onto the pending lines list.  */
 
 static void
-set_or_check_view (struct line_entry *e, struct line_entry *p,
-		   struct line_entry *h)
+dwarf2_push_line (struct dwarf2_line_info *loc)
 {
-  expressionS viewx;
-
-  memset (&viewx, 0, sizeof (viewx));
-  viewx.X_unsigned = 1;
-
-  /* First, compute !(E->label > P->label), to tell whether or not
-     we're to reset the view number.  If we can't resolve it to a
-     constant, keep it symbolic.  */
-  if (!p || (e->loc.view == force_reset_view && force_reset_view))
-    {
-      viewx.X_op = O_constant;
-      viewx.X_add_number = 0;
-      viewx.X_add_symbol = NULL;
-      viewx.X_op_symbol = NULL;
-    }
-  else
-    {
-      viewx.X_op = O_gt;
-      viewx.X_add_number = 0;
-      viewx.X_add_symbol = e->label;
-      viewx.X_op_symbol = p->label;
-      resolve_expression (&viewx);
-      if (viewx.X_op == O_constant)
-	viewx.X_add_number = !viewx.X_add_number;
-      else
-	{
-	  viewx.X_add_symbol = make_expr_symbol (&viewx);
-	  viewx.X_add_number = 0;
-	  viewx.X_op_symbol = NULL;
-	  viewx.X_op = O_logical_not;
-	}
-    }
-
-  if (S_IS_DEFINED (e->loc.view) && symbol_constant_p (e->loc.view))
-    {
-      expressionS *value = symbol_get_value_expression (e->loc.view);
-      /* We can't compare the view numbers at this point, because in
-	 VIEWX we've only determined whether we're to reset it so
-	 far.  */
-      if (viewx.X_op == O_constant)
-	{
-	  if (!value->X_add_number != !viewx.X_add_number)
-	    as_bad (_("view number mismatch"));
-	}
-      /* Record the expression to check it later.  It is the result of
-	 a logical not, thus 0 or 1.  We just add up all such deferred
-	 expressions, and resolve it at the end.  */
-      else if (!value->X_add_number)
-	{
-	  symbolS *deferred = make_expr_symbol (&viewx);
-	  if (view_assert_failed)
-	    {
-	      expressionS chk;
-
-	      memset (&chk, 0, sizeof (chk));
-	      chk.X_unsigned = 1;
-	      chk.X_op = O_add;
-	      chk.X_add_number = 0;
-	      chk.X_add_symbol = view_assert_failed;
-	      chk.X_op_symbol = deferred;
-	      deferred = make_expr_symbol (&chk);
-	    }
-	  view_assert_failed = deferred;
-	}
-    }
-
-  if (viewx.X_op != O_constant || viewx.X_add_number)
-    {
-      expressionS incv;
-
-      if (!p->loc.view)
-	{
-	  p->loc.view = symbol_temp_make ();
-	  gas_assert (!S_IS_DEFINED (p->loc.view));
-	}
-
-      memset (&incv, 0, sizeof (incv));
-      incv.X_unsigned = 1;
-      incv.X_op = O_symbol;
-      incv.X_add_symbol = p->loc.view;
-      incv.X_add_number = 1;
-
-      if (viewx.X_op == O_constant)
-	{
-	  gas_assert (viewx.X_add_number == 1);
-	  viewx = incv;
-	}
-      else
-	{
-	  viewx.X_add_symbol = make_expr_symbol (&viewx);
-	  viewx.X_add_number = 0;
-	  viewx.X_op_symbol = make_expr_symbol (&incv);
-	  viewx.X_op = O_multiply;
-	}
-    }
-
-  if (!S_IS_DEFINED (e->loc.view))
-    {
-      symbol_set_value_expression (e->loc.view, &viewx);
-      S_SET_SEGMENT (e->loc.view, expr_section);
-      symbol_set_frag (e->loc.view, &zero_address_frag);
-    }
-
-  /* Define and attempt to simplify any earlier views needed to
-     compute E's.  */
-  if (h && p && p->loc.view && !S_IS_DEFINED (p->loc.view))
-    {
-      struct line_entry *h2;
-      /* Reverse the list to avoid quadratic behavior going backwards
-	 in a single-linked list.  */
-      struct line_entry *r = reverse_line_entry_list (h);
-
-      gas_assert (r == p);
-      /* Set or check views until we find a defined or absent view.  */
-      do
-	{
-	  /* Do not define the head of a (sub?)segment view while
-	     handling others.  It would be defined too early, without
-	     regard to the last view of other subsegments.
-	     set_or_check_view will be called for every head segment
-	     that needs it.  */
-	  if (r == h)
-	    break;
-	  set_or_check_view (r, r->next, NULL);
-	}
-      while (r->next && r->next->loc.view && !S_IS_DEFINED (r->next->loc.view)
-	     && (r = r->next));
-
-      /* Unreverse the list, so that we can go forward again.  */
-      h2 = reverse_line_entry_list (p);
-      gas_assert (h2 == h);
-
-      /* Starting from the last view we just defined, attempt to
-	 simplify the view expressions, until we do so to P.  */
-      do
-	{
-	  /* The head view of a subsegment may remain undefined while
-	     handling other elements, before it is linked to the last
-	     view of the previous subsegment.  */
-	  if (r == h)
-	    continue;
-	  gas_assert (S_IS_DEFINED (r->loc.view));
-	  resolve_expression (symbol_get_value_expression (r->loc.view));
-	}
-      while (r != p && (r = r->next));
-
-      /* Now that we've defined and computed all earlier views that might
-	 be needed to compute E's, attempt to simplify it.  */
-      resolve_expression (symbol_get_value_expression (e->loc.view));
-    }
-}
-
-/* Record an entry for LOC occurring at LABEL.  */
-
-static void
-dwarf2_gen_line_info_1 (symbolS *label, struct dwarf2_line_info *loc)
-{
-  struct line_subseg *lss;
   struct line_entry *e;
 
-  e = XNEW (struct line_entry);
+  e = (struct line_entry *) xmalloc (sizeof (*e));
   e->next = NULL;
-  e->label = label;
+  e->label = NULL;
   e->loc = *loc;
 
-  lss = get_line_subseg (now_seg, now_subseg, TRUE);
+  *pending_lines_tail = e;
+  pending_lines_tail = &(*pending_lines_tail)->next;
+}
 
-  /* Subseg heads are chained to previous subsegs in
-     dwarf2_finish.  */
-  if (loc->view && lss->head)
-    set_or_check_view (e,
-		       (struct line_entry *)lss->ptail,
-		       lss->head);
+/* Emit all pending line information.  LABEL is the label with which the
+   lines should be associated, or null if they should be associated with
+   the current position.  */
 
-  *lss->ptail = e;
-  lss->ptail = &e->next;
+static void
+dwarf2_flush_pending_lines (symbolS *label)
+{
+  if (pending_lines)
+    {
+      struct line_subseg *lss;
+      struct line_entry *e;
+
+      if (!label)
+	label = symbol_temp_new_now ();
+
+      for (e = pending_lines; e; e = e->next)
+	e->label = label;
+
+      lss = get_line_subseg (now_seg, now_subseg);
+      *lss->ptail = pending_lines;
+      lss->ptail = pending_lines_tail;
+
+      pending_lines = NULL;
+      pending_lines_tail = &pending_lines;
+    }
 }
 
 /* Record an entry for LOC occurring at OFS within the current fragment.  */
@@ -512,8 +344,6 @@ dwarf2_gen_line_info (addressT ofs, struct dwarf2_line_info *loc)
 {
   static unsigned int line = -1;
   static unsigned int filenum = -1;
-
-  symbolS *sym;
 
   /* Early out for as-yet incomplete location information.  */
   if (loc->filenum == 0 || loc->line == 0)
@@ -530,6 +360,7 @@ dwarf2_gen_line_info (addressT ofs, struct dwarf2_line_info *loc)
   line = loc->line;
   filenum = loc->filenum;
 
+  dwarf2_push_line (loc);
   if (linkrelax)
     {
       char name[120];
@@ -537,11 +368,10 @@ dwarf2_gen_line_info (addressT ofs, struct dwarf2_line_info *loc)
       /* Use a non-fake name for the line number location,
 	 so that it can be referred to by relocations.  */
       sprintf (name, ".Loc.%u.%u", line, filenum);
-      sym = symbol_new (name, now_seg, ofs, frag_now);
+      dwarf2_flush_pending_lines (symbol_new (name, now_seg, ofs, frag_now));
     }
   else
-    sym = symbol_temp_new (now_seg, ofs, frag_now);
-  dwarf2_gen_line_info_1 (sym, loc);
+    dwarf2_flush_pending_lines (symbol_temp_new (now_seg, ofs, frag_now));
 }
 
 /* Returns the current source information.  If .file directives have
@@ -554,16 +384,13 @@ dwarf2_where (struct dwarf2_line_info *line)
 {
   if (debug_type == DEBUG_DWARF2)
     {
-      const char *filename;
-
-      memset (line, 0, sizeof (*line));
-      filename = as_where (&line->line);
+      char *filename;
+      as_where (&filename, &line->line);
       line->filenum = get_filenum (filename, 0);
       line->column = 0;
       line->flags = DWARF2_FLAG_IS_STMT;
       line->isa = current.isa;
       line->discriminator = current.discriminator;
-      line->view = NULL;
     }
   else
     *line = current;
@@ -588,42 +415,13 @@ dwarf2_emit_insn (int size)
 {
   struct dwarf2_line_info loc;
 
-  if (debug_type != DEBUG_DWARF2
-      ? !dwarf2_loc_directive_seen
-      : !seen_at_least_1_file ())
+  if (!dwarf2_loc_directive_seen && debug_type != DEBUG_DWARF2)
     return;
 
   dwarf2_where (&loc);
 
-  dwarf2_gen_line_info ((frag_now_fix_octets () - size) / OCTETS_PER_BYTE, &loc);
+  dwarf2_gen_line_info (frag_now_fix () - size, &loc);
   dwarf2_consume_line_info ();
-}
-
-/* Move all previously-emitted line entries for the current position by
-   DELTA bytes.  This function cannot be used to move the same entries
-   twice.  */
-
-void
-dwarf2_move_insn (int delta)
-{
-  struct line_subseg *lss;
-  struct line_entry *e;
-  valueT now;
-
-  if (delta == 0)
-    return;
-
-  lss = get_line_subseg (now_seg, now_subseg, FALSE);
-  if (!lss)
-    return;
-
-  now = frag_now_fix ();
-  while ((e = *lss->pmove_tail))
-    {
-      if (S_GET_VALUE (e->label) == now)
-	S_SET_VALUE (e->label, now + delta);
-      lss->pmove_tail = &e->next;
-    }
 }
 
 /* Called after the current line information has been either used with
@@ -634,6 +432,11 @@ dwarf2_move_insn (int delta)
 void
 dwarf2_consume_line_info (void)
 {
+  /* If the consumer has stashed the current location away for later use,
+     assume that any earlier location information should be associated
+     with ".".  */
+  dwarf2_flush_pending_lines (NULL);
+
   /* Unless we generate DWARF2 debugging information for each
      assembler line, we only emit one line symbol for one LOC.  */
   dwarf2_loc_directive_seen = FALSE;
@@ -642,7 +445,6 @@ dwarf2_consume_line_info (void)
 		     | DWARF2_FLAG_PROLOGUE_END
 		     | DWARF2_FLAG_EPILOGUE_BEGIN);
   current.discriminator = 0;
-  current.view = NULL;
 }
 
 /* Called for each (preferably code) label.  If dwarf2_loc_mark_labels
@@ -657,7 +459,7 @@ dwarf2_emit_label (symbolS *label)
     return;
   if (S_GET_SEGMENT (label) != now_seg)
     return;
-  if (!(bfd_section_flags (now_seg) & SEC_CODE))
+  if (!(bfd_get_section_flags (stdoutput, now_seg) & SEC_CODE))
     return;
   if (files_in_use == 0 && debug_type != DEBUG_DWARF2)
     return;
@@ -666,7 +468,8 @@ dwarf2_emit_label (symbolS *label)
 
   loc.flags |= DWARF2_FLAG_BASIC_BLOCK;
 
-  dwarf2_gen_line_info_1 (label, &loc);
+  dwarf2_push_line (&loc);
+  dwarf2_flush_pending_lines (label);
   dwarf2_consume_line_info ();
 }
 
@@ -723,10 +526,13 @@ get_filenum (const char *filename, unsigned int num)
 	  if (dir >= dirs_allocated)
 	    {
 	      dirs_allocated = dir + 32;
-	      dirs = XRESIZEVEC (char *, dirs, dirs_allocated);
+	      dirs = (char **)
+		     xrealloc (dirs, (dir + 32) * sizeof (const char *));
 	    }
 
-	  dirs[dir] = xmemdup0 (filename, dir_len);
+	  dirs[dir] = (char *) xmalloc (dir_len + 1);
+	  memcpy (dirs[dir], filename, dir_len);
+	  dirs[dir][dir_len] = '\0';
 	  dirs_in_use = dir + 1;
 	}
     }
@@ -751,18 +557,13 @@ get_filenum (const char *filename, unsigned int num)
       unsigned int old = files_allocated;
 
       files_allocated = i + 32;
-      /* Catch wraparound.  */
-      if (files_allocated <= old)
-	{
-	  as_bad (_("file number %lu is too big"), (unsigned long) i);
-	  return 0;
-	}
+      files = (struct file_entry *)
+	xrealloc (files, (i + 32) * sizeof (struct file_entry));
 
-      files = XRESIZEVEC (struct file_entry, files, files_allocated);
       memset (files + old, 0, (i + 32 - old) * sizeof (struct file_entry));
     }
 
-  files[i].filename = file;
+  files[i].filename = num ? file : xstrdup (file);
   files[i].dir = dir;
   if (files_in_use < i + 1)
     files_in_use = i + 1;
@@ -776,12 +577,12 @@ get_filenum (const char *filename, unsigned int num)
    - Pass .file "source.c" to s_app_file
    - Handle .file 1 "source.c" by adding an entry to the DWARF-2 file table
 
-   If an entry is added to the file table, return a pointer to the filename.  */
+   If an entry is added to the file table, return a pointer to the filename. */
 
 char *
-dwarf2_directive_filename (void)
+dwarf2_directive_file (int dummy ATTRIBUTE_UNUSED)
 {
-  valueT num;
+  offsetT num;
   char *filename;
   int filename_len;
 
@@ -799,7 +600,7 @@ dwarf2_directive_filename (void)
     return NULL;
   demand_empty_rest_of_line ();
 
-  if ((offsetT) num < 1)
+  if (num < 1)
     {
       as_bad (_("file number less than one"));
       return NULL;
@@ -809,30 +610,15 @@ dwarf2_directive_filename (void)
      being supplied.  Turn off gas generated debug info.  */
   debug_type = DEBUG_NONE;
 
-  if (num != (unsigned int) num
-      || num >= (size_t) -1 / sizeof (struct file_entry) - 32)
+  if (num < (int) files_in_use && files[num].filename != 0)
     {
-      as_bad (_("file number %lu is too big"), (unsigned long) num);
-      return NULL;
-    }
-  if (num < files_in_use && files[num].filename != 0)
-    {
-      as_bad (_("file number %u already allocated"), (unsigned int) num);
+      as_bad (_("file number %ld already allocated"), (long) num);
       return NULL;
     }
 
-  get_filenum (filename, (unsigned int) num);
+  get_filenum (filename, num);
 
   return filename;
-}
-
-/* Calls dwarf2_directive_filename, but discards its result.
-   Used in pseudo-op tables where the function result is ignored.  */
-
-void
-dwarf2_directive_file (int dummy ATTRIBUTE_UNUSED)
-{
-  (void) dwarf2_directive_filename ();
 }
 
 void
@@ -843,7 +629,7 @@ dwarf2_directive_loc (int dummy ATTRIBUTE_UNUSED)
   /* If we see two .loc directives in a row, force the first one to be
      output now.  */
   if (dwarf2_loc_directive_seen)
-    dwarf2_emit_insn (0);
+    dwarf2_push_line (&current);
 
   filenum = get_absolute_expression ();
   SKIP_WHITESPACE ();
@@ -871,14 +657,13 @@ dwarf2_directive_loc (int dummy ATTRIBUTE_UNUSED)
 	{
 	  size_t dir_len = strlen (dirs[files[filenum].dir]);
 	  size_t file_len = strlen (files[filenum].filename);
-	  char *cp = XNEWVEC (char, dir_len + 1 + file_len + 1);
+	  char *cp = (char *) alloca (dir_len + 1 + file_len + 1);
 
 	  memcpy (cp, dirs[files[filenum].dir], dir_len);
 	  INSERT_DIR_SEPARATOR (cp, dir_len);
 	  memcpy (cp + dir_len + 1, files[filenum].filename, file_len);
 	  cp[dir_len + file_len + 1] = '\0';
 	  listing_source_file (cp);
-	  free (cp);
 	}
       else
 	listing_source_file (files[filenum].filename);
@@ -898,7 +683,8 @@ dwarf2_directive_loc (int dummy ATTRIBUTE_UNUSED)
       char *p, c;
       offsetT value;
 
-      c = get_symbol_name (& p);
+      p = input_line_pointer;
+      c = get_symbol_end ();
 
       if (strcmp (p, "basic_block") == 0)
 	{
@@ -917,7 +703,7 @@ dwarf2_directive_loc (int dummy ATTRIBUTE_UNUSED)
 	}
       else if (strcmp (p, "is_stmt") == 0)
 	{
-	  (void) restore_line_pointer (c);
+	  *input_line_pointer = c;
 	  value = get_absolute_expression ();
 	  if (value == 0)
 	    current.flags &= ~DWARF2_FLAG_IS_STMT;
@@ -931,7 +717,7 @@ dwarf2_directive_loc (int dummy ATTRIBUTE_UNUSED)
 	}
       else if (strcmp (p, "isa") == 0)
 	{
-	  (void) restore_line_pointer (c);
+	  *input_line_pointer = c;
 	  value = get_absolute_expression ();
 	  if (value >= 0)
 	    current.isa = value;
@@ -943,7 +729,7 @@ dwarf2_directive_loc (int dummy ATTRIBUTE_UNUSED)
 	}
       else if (strcmp (p, "discriminator") == 0)
 	{
-	  (void) restore_line_pointer (c);
+	  *input_line_pointer = c;
 	  value = get_absolute_expression ();
 	  if (value >= 0)
 	    current.discriminator = value;
@@ -953,74 +739,19 @@ dwarf2_directive_loc (int dummy ATTRIBUTE_UNUSED)
 	      return;
 	    }
 	}
-      else if (strcmp (p, "view") == 0)
-	{
-	  symbolS *sym;
-
-	  (void) restore_line_pointer (c);
-	  SKIP_WHITESPACE ();
-
-	  if (ISDIGIT (*input_line_pointer)
-	      || *input_line_pointer == '-')
-	    {
-	      bfd_boolean force_reset = *input_line_pointer == '-';
-
-	      value = get_absolute_expression ();
-	      if (value != 0)
-		{
-		  as_bad (_("numeric view can only be asserted to zero"));
-		  return;
-		}
-	      if (force_reset && force_reset_view)
-		sym = force_reset_view;
-	      else
-		{
-		  sym = symbol_temp_new (absolute_section, value,
-					 &zero_address_frag);
-		  if (force_reset)
-		    force_reset_view = sym;
-		}
-	    }
-	  else
-	    {
-	      char *name = read_symbol_name ();
-
-	      if (!name)
-		return;
-	      sym = symbol_find_or_make (name);
-	      if (S_IS_DEFINED (sym) || symbol_equated_p (sym))
-		{
-		  if (S_IS_VOLATILE (sym))
-		    sym = symbol_clone (sym, 1);
-		  else if (!S_CAN_BE_REDEFINED (sym))
-		    {
-		      as_bad (_("symbol `%s' is already defined"), name);
-		      return;
-		    }
-		}
-	      S_SET_SEGMENT (sym, undefined_section);
-	      S_SET_VALUE (sym, 0);
-	      symbol_set_frag (sym, &zero_address_frag);
-	    }
-	  current.view = sym;
-	}
       else
 	{
 	  as_bad (_("unknown .loc sub-directive `%s'"), p);
-	  (void) restore_line_pointer (c);
+	  *input_line_pointer = c;
 	  return;
 	}
 
-      SKIP_WHITESPACE_AFTER_NAME ();
+      SKIP_WHITESPACE ();
     }
 
   demand_empty_rest_of_line ();
   dwarf2_loc_directive_seen = TRUE;
   debug_type = DEBUG_NONE;
-
-  /* If we were given a view id, emit the row right away.  */
-  if (current.view)
-    dwarf2_emit_insn (0);
 }
 
 void
@@ -1141,7 +872,6 @@ out_set_addr (symbolS *sym)
 {
   expressionS exp;
 
-  memset (&exp, 0, sizeof exp);
   out_opcode (DW_LNS_extended_op);
   out_uleb128 (sizeof_address + 1);
 
@@ -1161,10 +891,10 @@ scale_addr_delta (addressT *addr_delta)
   if (DWARF2_LINE_MIN_INSN_LENGTH > 1)
     {
       if (*addr_delta % DWARF2_LINE_MIN_INSN_LENGTH != 0  && !printed_this)
-	{
+        {
 	  as_bad("unaligned opcodes detected in executable segment");
-	  printed_this = 1;
-	}
+          printed_this = 1;
+        }
       *addr_delta /= DWARF2_LINE_MIN_INSN_LENGTH;
     }
 }
@@ -1192,7 +922,7 @@ size_inc_line_addr (int line_delta, addressT addr_delta)
     {
       if (addr_delta == MAX_SPECIAL_ADDR_DELTA)
 	len = 1;
-      else if (addr_delta)
+      else
 	len = 1 + sizeof_leb128 (addr_delta, 0);
       return len + 3;
     }
@@ -1256,7 +986,7 @@ emit_inc_line_addr (int line_delta, addressT addr_delta, char *p, int len)
     {
       if (addr_delta == MAX_SPECIAL_ADDR_DELTA)
 	*p++ = DW_LNS_const_add_pc;
-      else if (addr_delta)
+      else
 	{
 	  *p++ = DW_LNS_advance_pc;
 	  p += output_leb128 (p, addr_delta, 0);
@@ -1379,14 +1109,12 @@ emit_fixed_inc_line_addr (int line_delta, addressT addr_delta, fragS *frag,
 			  char *p, int len)
 {
   expressionS *pexp;
+  segT line_seg;
   char *end = p + len;
 
   /* Line number sequences cannot go backward in addresses.  This means
      we've incorrectly ordered the statements in the sequence.  */
   gas_assert ((offsetT) addr_delta >= 0);
-
-  /* Verify that we have kept in sync with size_fixed_inc_line_addr.  */
-  gas_assert (len == size_fixed_inc_line_addr (line_delta, addr_delta));
 
   /* INT_MAX is a signal that this is actually a DW_LNE_end_sequence.  */
   if (line_delta != INT_MAX)
@@ -1396,6 +1124,7 @@ emit_fixed_inc_line_addr (int line_delta, addressT addr_delta, fragS *frag,
     }
 
   pexp = symbol_get_value_expression (frag->fr_symbol);
+  line_seg = subseg_get (".debug_line", 0);
 
   /* The DW_LNS_fixed_advance_pc opcode has a 2-byte operand so it can
      advance the address by at most 64K.  Linker relaxation (without
@@ -1407,7 +1136,6 @@ emit_fixed_inc_line_addr (int line_delta, addressT addr_delta, fragS *frag,
       symbolS *to_sym;
       expressionS exp;
 
-      memset (&exp, 0, sizeof exp);
       gas_assert (pexp->X_op == O_subtract);
       to_sym = pexp->X_add_symbol;
 
@@ -1417,13 +1145,15 @@ emit_fixed_inc_line_addr (int line_delta, addressT addr_delta, fragS *frag,
       exp.X_op = O_symbol;
       exp.X_add_symbol = to_sym;
       exp.X_add_number = 0;
-      emit_expr_fix (&exp, sizeof_address, frag, p, TC_PARSE_CONS_RETURN_NONE);
+      subseg_change (line_seg, 0);
+      emit_expr_fix (&exp, sizeof_address, frag, p);
       p += sizeof_address;
     }
   else
     {
       *p++ = DW_LNS_fixed_advance_pc;
-      emit_expr_fix (pexp, 2, frag, p, TC_PARSE_CONS_RETURN_NONE);
+      subseg_change (line_seg, 0);
+      emit_expr_fix (pexp, 2, frag, p);
       p += 2;
     }
 
@@ -1448,7 +1178,6 @@ relax_inc_line_addr (int line_delta, symbolS *to_sym, symbolS *from_sym)
   expressionS exp;
   int max_chars;
 
-  memset (&exp, 0, sizeof exp);
   exp.X_op = O_subtract;
   exp.X_add_symbol = to_sym;
   exp.X_op_symbol = from_sym;
@@ -1513,7 +1242,7 @@ dwarf2dbg_convert_frag (fragS *frag)
 
   if (DWARF2_USE_FIXED_ADVANCE_PC)
     {
-      /* If linker relaxation is enabled then the distance between the two
+      /* If linker relaxation is enabled then the distance bewteen the two
 	 symbols in the frag->fr_symbol expression might change.  Hence we
 	 cannot rely upon the value computed by resolve_symbol_value.
 	 Instead we leave the expression unfinalized and allow
@@ -1564,36 +1293,6 @@ process_entries (segT seg, struct line_entry *e)
   addressT last_frag_ofs = 0, frag_ofs;
   symbolS *last_lab = NULL, *lab;
   struct line_entry *next;
-
-  if (flag_dwarf_sections)
-    {
-      char * name;
-      const char * sec_name;
-
-      /* Switch to the relevant sub-section before we start to emit
-	 the line number table.
-
-	 FIXME: These sub-sections do not have a normal Line Number
-	 Program Header, thus strictly speaking they are not valid
-	 DWARF sections.  Unfortunately the DWARF standard assumes
-	 a one-to-one relationship between compilation units and
-	 line number tables.  Thus we have to have a .debug_line
-	 section, as well as our sub-sections, and we have to ensure
-	 that all of the sub-sections are merged into a proper
-	 .debug_line section before a debugger sees them.  */
-
-      sec_name = bfd_section_name (seg);
-      if (strcmp (sec_name, ".text") != 0)
-	{
-	  name = concat (".debug_line", sec_name, (char *) NULL);
-	  subseg_set (subseg_get (name, FALSE), 0);
-	}
-      else
-	/* Don't create a .debug_line.text section -
-	   that is redundant.  Instead just switch back to the
-	   normal .debug_line section.  */
-	subseg_set (subseg_get (".debug_line", FALSE), 0);
-    }
 
   do
     {
@@ -1652,19 +1351,7 @@ process_entries (segT seg, struct line_entry *e)
       frag = symbol_get_frag (lab);
       frag_ofs = S_GET_VALUE (lab);
 
-      if (last_frag == NULL
-	  || (e->loc.view == force_reset_view && force_reset_view
-	      /* If we're going to reset the view, but we know we're
-		 advancing the PC, we don't have to force with
-		 set_address.  We know we do when we're at the same
-		 address of the same frag, and we know we might when
-		 we're in the beginning of a frag, and we were at the
-		 end of the previous frag.  */
-	      && (frag == last_frag
-		  ? (last_frag_ofs == frag_ofs)
-		  : (frag_ofs == 0
-		     && ((offsetT)last_frag_ofs
-			 >= get_frag_fix (last_frag, seg))))))
+      if (last_frag == NULL)
 	{
 	  out_set_addr (lab);
 	  out_inc_line_addr (line_delta, 0);
@@ -1739,10 +1426,10 @@ out_file_list (void)
       out_uleb128 (files[i].dir);	/* directory number */
       /* Output the last modification timestamp.  */
       out_uleb128 (DWARF2_FILE_TIME_NAME (files[i].filename,
-					  files[i].dir ? dirs [files [i].dir] : ""));
+				          files[i].dir ? dirs [files [i].dir] : ""));
       /* Output the filesize.  */
       out_uleb128 (DWARF2_FILE_SIZE_NAME (files[i].filename,
-					  files[i].dir ? dirs [files [i].dir] : ""));
+				          files[i].dir ? dirs [files [i].dir] : ""));
     }
 
   /* Terminate filename list.  */
@@ -1751,8 +1438,7 @@ out_file_list (void)
 
 /* Switch to SEC and output a header length field.  Return the size of
    offsets used in SEC.  The caller must set EXPR->X_add_symbol value
-   to the end of the section.  EXPR->X_add_number will be set to the
-   negative size of the header.  */
+   to the end of the section.  */
 
 static int
 out_header (asection *sec, expressionS *exp)
@@ -1761,21 +1447,8 @@ out_header (asection *sec, expressionS *exp)
   symbolS *end_sym;
 
   subseg_set (sec, 0);
-
-  if (flag_dwarf_sections)
-    {
-      /* If we are going to put the start and end symbols in different
-	 sections, then we need real symbols, not just fake, local ones.  */
-      frag_now_fix ();
-      start_sym = symbol_make (".Ldebug_line_start");
-      end_sym = symbol_make (".Ldebug_line_end");
-      symbol_set_value_now (start_sym);
-    }
-  else
-    {
-      start_sym = symbol_temp_new_now_octets ();
-      end_sym = symbol_temp_make ();
-    }
+  start_sym = symbol_temp_new_now ();;
+  end_sym = symbol_temp_make ();
 
   /* Total length of the information.  */
   exp->X_op = O_subtract;
@@ -1811,12 +1484,11 @@ static void
 out_debug_line (segT line_seg)
 {
   expressionS exp;
-  symbolS *prologue_start, *prologue_end;
+  symbolS *prologue_end;
   symbolS *line_end;
   struct line_seg *s;
   int sizeof_offset;
 
-  memset (&exp, 0, sizeof exp);
   sizeof_offset = out_header (line_seg, &exp);
   line_end = exp.X_add_symbol;
 
@@ -1824,14 +1496,10 @@ out_debug_line (segT line_seg)
   out_two (DWARF2_LINE_VERSION);
 
   /* Length of the prologue following this length.  */
-  prologue_start = symbol_temp_make ();
   prologue_end = symbol_temp_make ();
-  exp.X_op = O_subtract;
   exp.X_add_symbol = prologue_end;
-  exp.X_op_symbol = prologue_start;
-  exp.X_add_number = 0;
+  exp.X_add_number = - (4 + 2 + 4);
   emit_expr (&exp, sizeof_offset);
-  symbol_set_value_now (prologue_start);
 
   /* Parameters of the state machine.  */
   out_byte (DWARF2_LINE_MIN_INSN_LENGTH);
@@ -1866,16 +1534,6 @@ out_debug_line (segT line_seg)
       as_warn ("dwarf line number information for %s ignored",
 	       segment_name (s->seg));
 
-  if (flag_dwarf_sections)
-    /* We have to switch to the special .debug_line_end section
-       before emitting the end-of-debug_line symbol.  The linker
-       script arranges for this section to be placed after all the
-       (potentially garbage collected) .debug_line.<foo> sections.
-       This section contains the line_end symbol which is used to
-       compute the size of the linked .debug_line section, as seen
-       in the DWARF Line Number header.  */
-    subseg_set (subseg_get (".debug_line_end", FALSE), 0);
-
   symbol_set_value_now (line_end);
 }
 
@@ -1887,7 +1545,6 @@ out_debug_ranges (segT ranges_seg)
   expressionS exp;
   unsigned int i;
 
-  memset (&exp, 0, sizeof exp);
   subseg_set (ranges_seg, 0);
 
   /* Base Address Entry.  */
@@ -1934,37 +1591,29 @@ static void
 out_debug_aranges (segT aranges_seg, segT info_seg)
 {
   unsigned int addr_size = sizeof_address;
-  offsetT size;
   struct line_seg *s;
   expressionS exp;
   symbolS *aranges_end;
   char *p;
   int sizeof_offset;
 
-  memset (&exp, 0, sizeof exp);
   sizeof_offset = out_header (aranges_seg, &exp);
   aranges_end = exp.X_add_symbol;
-  size = -exp.X_add_number;
 
   /* Version.  */
   out_two (DWARF2_ARANGES_VERSION);
-  size += 2;
 
   /* Offset to .debug_info.  */
   TC_DWARF2_EMIT_OFFSET (section_symbol (info_seg), sizeof_offset);
-  size += sizeof_offset;
 
   /* Size of an address (offset portion).  */
   out_byte (addr_size);
-  size++;
 
   /* Size of a segment descriptor.  */
   out_byte (0);
-  size++;
 
   /* Align the header.  */
-  while ((size++ % (2 * addr_size)) > 0)
-    out_byte (0);
+  frag_align (ffs (2 * addr_size) - 1, 0, 0);
 
   for (s = all_segs; s; s = s->next)
     {
@@ -2031,9 +1680,9 @@ out_debug_abbrev (segT abbrev_seg,
       else
 	out_abbrev (DW_AT_ranges, DW_FORM_data8);
     }
-  out_abbrev (DW_AT_name, DW_FORM_strp);
-  out_abbrev (DW_AT_comp_dir, DW_FORM_strp);
-  out_abbrev (DW_AT_producer, DW_FORM_strp);
+  out_abbrev (DW_AT_name, DW_FORM_string);
+  out_abbrev (DW_AT_comp_dir, DW_FORM_string);
+  out_abbrev (DW_AT_producer, DW_FORM_string);
   out_abbrev (DW_AT_language, DW_FORM_data2);
   out_abbrev (0, 0);
 
@@ -2044,14 +1693,17 @@ out_debug_abbrev (segT abbrev_seg,
 /* Emit a description of this compilation unit for .debug_info.  */
 
 static void
-out_debug_info (segT info_seg, segT abbrev_seg, segT line_seg, segT ranges_seg,
-		symbolS *name_sym, symbolS *comp_dir_sym, symbolS *producer_sym)
+out_debug_info (segT info_seg, segT abbrev_seg, segT line_seg, segT ranges_seg)
 {
+  char producer[128];
+  const char *comp_dir;
+  const char *dirname;
   expressionS exp;
   symbolS *info_end;
+  char *p;
+  int len;
   int sizeof_offset;
 
-  memset (&exp, 0, sizeof exp);
   sizeof_offset = out_header (info_seg, &exp);
   info_end = exp.X_add_symbol;
 
@@ -2100,38 +1752,10 @@ out_debug_info (segT info_seg, segT abbrev_seg, segT line_seg, segT ranges_seg,
       TC_DWARF2_EMIT_OFFSET (section_symbol (ranges_seg), sizeof_offset);
     }
 
-  /* DW_AT_name, DW_AT_comp_dir and DW_AT_producer.  Symbols in .debug_str
-     setup in out_debug_str below.  */
-  TC_DWARF2_EMIT_OFFSET (name_sym, sizeof_offset);
-  TC_DWARF2_EMIT_OFFSET (comp_dir_sym, sizeof_offset);
-  TC_DWARF2_EMIT_OFFSET (producer_sym, sizeof_offset);
-
-  /* DW_AT_language.  Yes, this is probably not really MIPS, but the
-     dwarf2 draft has no standard code for assembler.  */
-  out_two (DW_LANG_Mips_Assembler);
-
-  symbol_set_value_now (info_end);
-}
-
-/* Emit the three debug strings needed in .debug_str and setup symbols
-   to them for use in out_debug_info.  */
-static void
-out_debug_str (segT str_seg, symbolS **name_sym, symbolS **comp_dir_sym,
-	       symbolS **producer_sym)
-{
-  char producer[128];
-  const char *comp_dir;
-  const char *dirname;
-  char *p;
-  int len;
-
-  subseg_set (str_seg, 0);
-
   /* DW_AT_name.  We don't have the actual file name that was present
      on the command line, so assume files[1] is the main input file.
      We're not supposed to get called unless at least one line number
      entry was emitted, so this should always be defined.  */
-  *name_sym = symbol_temp_new_now_octets ();
   if (files_in_use == 0)
     abort ();
   if (files[1].dir)
@@ -2153,35 +1777,29 @@ out_debug_str (segT str_seg, symbolS **name_sym, symbolS **comp_dir_sym,
   memcpy (p, files[1].filename, len);
 
   /* DW_AT_comp_dir */
-  *comp_dir_sym = symbol_temp_new_now_octets ();
   comp_dir = remap_debug_filename (getpwd ());
   len = strlen (comp_dir) + 1;
   p = frag_more (len);
   memcpy (p, comp_dir, len);
 
   /* DW_AT_producer */
-  *producer_sym = symbol_temp_new_now_octets ();
   sprintf (producer, "GNU AS %s", VERSION);
   len = strlen (producer) + 1;
   p = frag_more (len);
   memcpy (p, producer, len);
+
+  /* DW_AT_language.  Yes, this is probably not really MIPS, but the
+     dwarf2 draft has no standard code for assembler.  */
+  out_two (DW_LANG_Mips_Assembler);
+
+  symbol_set_value_now (info_end);
 }
 
 void
 dwarf2_init (void)
 {
+  all_segs_hash = hash_new ();
   last_seg_ptr = &all_segs;
-
-  /* Select the default CIE version to produce here.  The global
-     starts with a value of -1 and will be modified to a valid value
-     either by the user providing a command line option, or some
-     targets will select their own default in md_after_parse_args.  If
-     we get here and the global still contains -1 then it is up to us
-     to pick a sane default.  The default we choose is 1, this is the
-     CIE version gas has produced for a long time, and there seems no
-     reason to change it yet.  */
-  if (flag_dwarf_cie_version == -1)
-    flag_dwarf_cie_version = 1;
 }
 
 
@@ -2226,7 +1844,7 @@ dwarf2_finish (void)
 
   /* Create and switch to the line number section.  */
   line_seg = subseg_new (".debug_line", 0);
-  bfd_set_section_flags (line_seg, SEC_READONLY | SEC_DEBUGGING | SEC_OCTETS);
+  bfd_set_section_flags (stdoutput, line_seg, SEC_READONLY | SEC_DEBUGGING);
 
   /* For each subsection, chain the debug entries together.  */
   for (s = all_segs; s; s = s->next)
@@ -2234,19 +1852,8 @@ dwarf2_finish (void)
       struct line_subseg *lss = s->head;
       struct line_entry **ptail = lss->ptail;
 
-      /* Reset the initial view of the first subsection of the
-	 section.  */
-      if (lss->head && lss->head->loc.view)
-	set_or_check_view (lss->head, NULL, NULL);
-
       while ((lss = lss->next) != NULL)
 	{
-	  /* Link the first view of subsequent subsections to the
-	     previous view.  */
-	  if (lss->head && lss->head->loc.view)
-	    set_or_check_view (lss->head,
-			       !s->head ? NULL : (struct line_entry *)ptail,
-			       s->head ? s->head->head : NULL);
 	  *ptail = lss->head;
 	  ptail = lss->ptail;
 	}
@@ -2255,33 +1862,26 @@ dwarf2_finish (void)
   out_debug_line (line_seg);
 
   /* If this is assembler generated line info, and there is no
-     debug_info already, we need .debug_info, .debug_abbrev and
-     .debug_str sections as well.  */
+     debug_info already, we need .debug_info and .debug_abbrev
+     sections as well.  */
   if (emit_other_sections)
     {
       segT abbrev_seg;
       segT aranges_seg;
       segT ranges_seg;
-      segT str_seg;
-      symbolS *name_sym, *comp_dir_sym, *producer_sym;
 
       gas_assert (all_segs);
 
       info_seg = subseg_new (".debug_info", 0);
       abbrev_seg = subseg_new (".debug_abbrev", 0);
       aranges_seg = subseg_new (".debug_aranges", 0);
-      str_seg = subseg_new (".debug_str", 0);
 
-      bfd_set_section_flags (info_seg,
-			      SEC_READONLY | SEC_DEBUGGING | SEC_OCTETS);
-      bfd_set_section_flags (abbrev_seg,
-			      SEC_READONLY | SEC_DEBUGGING | SEC_OCTETS);
-      bfd_set_section_flags (aranges_seg,
-			      SEC_READONLY | SEC_DEBUGGING | SEC_OCTETS);
-      bfd_set_section_flags (str_seg,
-			      SEC_READONLY | SEC_DEBUGGING | SEC_OCTETS
-				       | SEC_MERGE | SEC_STRINGS);
-      str_seg->entsize = 1;
+      bfd_set_section_flags (stdoutput, info_seg,
+			     SEC_READONLY | SEC_DEBUGGING);
+      bfd_set_section_flags (stdoutput, abbrev_seg,
+			     SEC_READONLY | SEC_DEBUGGING);
+      bfd_set_section_flags (stdoutput, aranges_seg,
+			     SEC_READONLY | SEC_DEBUGGING);
 
       record_alignment (aranges_seg, ffs (2 * sizeof_address) - 1);
 
@@ -2290,55 +1890,14 @@ dwarf2_finish (void)
       else
 	{
 	  ranges_seg = subseg_new (".debug_ranges", 0);
-	  bfd_set_section_flags (ranges_seg,
-				 SEC_READONLY | SEC_DEBUGGING | SEC_OCTETS);
+	  bfd_set_section_flags (stdoutput, ranges_seg,
+				 SEC_READONLY | SEC_DEBUGGING);
 	  record_alignment (ranges_seg, ffs (2 * sizeof_address) - 1);
 	  out_debug_ranges (ranges_seg);
 	}
 
       out_debug_aranges (aranges_seg, info_seg);
       out_debug_abbrev (abbrev_seg, info_seg, line_seg);
-      out_debug_str (str_seg, &name_sym, &comp_dir_sym, &producer_sym);
-      out_debug_info (info_seg, abbrev_seg, line_seg, ranges_seg,
-		      name_sym, comp_dir_sym, producer_sym);
-    }
-}
-
-/* Perform any deferred checks pertaining to debug information.  */
-
-void
-dwarf2dbg_final_check (void)
-{
-  /* Perform reset-view checks.  Don't evaluate view_assert_failed
-     recursively: it could be very deep.  It's a chain of adds, with
-     each chain element pointing to the next in X_add_symbol, and
-     holding the check value in X_op_symbol.  */
-  while (view_assert_failed)
-    {
-      expressionS *exp;
-      symbolS *sym;
-      offsetT failed;
-
-      gas_assert (!symbol_resolved_p (view_assert_failed));
-
-      exp = symbol_get_value_expression (view_assert_failed);
-      sym = view_assert_failed;
-
-      /* If view_assert_failed looks like a compound check in the
-	 chain, break it up.  */
-      if (exp->X_op == O_add && exp->X_add_number == 0 && exp->X_unsigned)
-	{
-	  view_assert_failed = exp->X_add_symbol;
-	  sym = exp->X_op_symbol;
-	}
-      else
-	view_assert_failed = NULL;
-
-      failed = resolve_symbol_value (sym);
-      if (!symbol_resolved_p (sym) || failed)
-	{
-	  as_bad (_("view number mismatch"));
-	  break;
-	}
+      out_debug_info (info_seg, abbrev_seg, line_seg, ranges_seg);
     }
 }

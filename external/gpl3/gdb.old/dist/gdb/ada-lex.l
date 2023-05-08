@@ -1,5 +1,5 @@
 /* FLEX lexer for Ada expressions, for GDB.
-   Copyright (C) 1994-2020 Free Software Foundation, Inc.
+   Copyright (C) 1994-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -41,16 +41,6 @@ POSEXP  (e"+"?{NUM10})
 
 %{
 
-#include "diagnostics.h"
-
-/* Some old versions of flex generate code that uses the "register" keyword,
-   which clang warns about.  This was observed for example with flex 2.5.35,
-   as shipped with macOS 10.12.  The same happens with flex 2.5.37 and g++ 11
-   which defaults to ISO C++17, that does not allow register storage class
-   specifiers.  */
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE_DEPRECATED_REGISTER
-
 #define NUMERAL_WIDTH 256
 #define LONGEST_SIGN ((ULONGEST) 1 << (sizeof(LONGEST) * HOST_CHAR_BIT - 1))
 
@@ -58,9 +48,8 @@ DIAGNOSTIC_IGNORE_DEPRECATED_REGISTER
 static char numbuf[NUMERAL_WIDTH];
  static void canonicalizeNumeral (char *s1, const char *);
 static struct stoken processString (const char*, int);
-static int processInt (struct parser_state *, const char *, const char *,
-		       const char *);
-static int processReal (struct parser_state *, const char *);
+static int processInt (const char *, const char *, const char *);
+static int processReal (const char *);
 static struct stoken processId (const char *, int);
 static int processAttribute (const char *);
 static int find_dot_all (const char *);
@@ -75,23 +64,20 @@ static void rewind_to_char (int);
 
 #undef YY_INPUT
 #define YY_INPUT(BUF, RESULT, MAX_SIZE) \
-    if ( *pstate->lexptr == '\000' ) \
+    if ( *lexptr == '\000' ) \
       (RESULT) = YY_NULL; \
     else \
       { \
-        *(BUF) = *pstate->lexptr; \
+        *(BUF) = *lexptr; \
         (RESULT) = 1; \
-	pstate->lexptr += 1; \
+	lexptr += 1; \
       }
 
 static int find_dot_all (const char *);
 
-/* Depth of parentheses.  */
-static int paren_depth;
-
 %}
 
-%option case-insensitive interactive nodefault noyywrap
+%option case-insensitive interactive nodefault
 
 %s BEFORE_QUAL_QUOTE
 
@@ -103,42 +89,40 @@ static int paren_depth;
 
 {NUM10}{POSEXP}  {
 		   canonicalizeNumeral (numbuf, yytext);
-		   return processInt (pstate, NULL, numbuf,
-				      strrchr (numbuf, 'e') + 1);
+		   return processInt (NULL, numbuf, strrchr(numbuf, 'e')+1);
 		 }
 
 {NUM10}          {
 		   canonicalizeNumeral (numbuf, yytext);
-		   return processInt (pstate, NULL, numbuf, NULL);
+		   return processInt (NULL, numbuf, NULL);
 		 }
 
 {NUM10}"#"{HEXDIG}({HEXDIG}|_)*"#"{POSEXP} {
 		   canonicalizeNumeral (numbuf, yytext);
-		   return processInt (pstate, numbuf,
+    		   return processInt (numbuf,
 				      strchr (numbuf, '#') + 1,
 				      strrchr(numbuf, '#') + 1);
 		 }
 
 {NUM10}"#"{HEXDIG}({HEXDIG}|_)*"#" {
 		   canonicalizeNumeral (numbuf, yytext);
-		   return processInt (pstate, numbuf, strchr (numbuf, '#') + 1,
-				      NULL);
+    		   return processInt (numbuf, strchr (numbuf, '#') + 1, NULL);
 		 }
 
 "0x"{HEXDIG}+	{
 		  canonicalizeNumeral (numbuf, yytext+2);
-		  return processInt (pstate, "16#", numbuf, NULL);
+		  return processInt ("16#", numbuf, NULL);
 		}
 
 
 {NUM10}"."{NUM10}{EXP} {
 		   canonicalizeNumeral (numbuf, yytext);
-		   return processReal (pstate, numbuf);
+		   return processReal (numbuf);
 		}
 
 {NUM10}"."{NUM10} {
 		   canonicalizeNumeral (numbuf, yytext);
-		   return processReal (pstate, numbuf);
+		   return processReal (numbuf);
 		}
 
 {NUM10}"#"{NUM16}"."{NUM16}"#"{EXP} {
@@ -150,14 +134,14 @@ static int paren_depth;
 		}
 
 <INITIAL>"'"({GRAPHIC}|\")"'" {
-		   yylval.typed_val.type = type_char (pstate);
+		   yylval.typed_val.type = type_char ();
 		   yylval.typed_val.val = yytext[1];
 		   return CHARLIT;
 		}
 
 <INITIAL>"'[\""{HEXDIG}{2}"\"]'"   {
                    int v;
-                   yylval.typed_val.type = type_char (pstate);
+                   yylval.typed_val.type = type_char ();
 		   sscanf (yytext+3, "%2x", &v);
 		   yylval.typed_val.val = v;
 		   return CHARLIT;
@@ -218,7 +202,7 @@ false		{ return FALSEKEYWORD; }
 
         /* ATTRIBUTES */
 
-{TICK}[a-zA-Z][a-zA-Z_]+ { BEGIN INITIAL; return processAttribute (yytext+1); }
+{TICK}[a-zA-Z][a-zA-Z]+ { return processAttribute (yytext+1); }
 
 	/* PUNCTUATION */
 
@@ -234,7 +218,7 @@ false		{ return FALSEKEYWORD; }
 
 [-&*+./:<>=|;\[\]] { return yytext[0]; }
 
-","		{ if (paren_depth == 0 && pstate->comma_terminates)
+","		{ if (paren_depth == 0 && comma_terminates)
 		    {
 		      rewind_to_char (',');
 		      return 0;
@@ -295,7 +279,7 @@ false		{ return FALSEKEYWORD; }
 "$"({LETTER}|{DIG}|"$")*  {
 		  yylval.sval.ptr = yytext;
 		  yylval.sval.length = yyleng;
-		  return DOLLAR_VARIABLE;
+		  return SPECIAL_VARIABLE;
 		}
 
 	/* CATCH-ALL ERROR CASE */
@@ -304,13 +288,14 @@ false		{ return FALSEKEYWORD; }
 %%
 
 #include <ctype.h>
+#include <string.h>
+
 /* Initialize the lexer for processing new expression. */
 
 static void
 lexer_init (FILE *inp)
 {
   BEGIN INITIAL;
-  paren_depth = 0;
   yyrestart (inp);
 }
 
@@ -339,8 +324,7 @@ canonicalizeNumeral (char *s1, const char *s2)
  */
 
 static int
-processInt (struct parser_state *par_state, const char *base0,
-	    const char *num0, const char *exp0)
+processInt (const char *base0, const char *num0, const char *exp0)
 {
   ULONGEST result;
   long exp;
@@ -376,11 +360,11 @@ processInt (struct parser_state *par_state, const char *base0,
       exp -= 1;
     }
 
-  if ((result >> (gdbarch_int_bit (par_state->gdbarch ())-1)) == 0)
-    yylval.typed_val.type = type_int (par_state);
-  else if ((result >> (gdbarch_long_bit (par_state->gdbarch ())-1)) == 0)
-    yylval.typed_val.type = type_long (par_state);
-  else if (((result >> (gdbarch_long_bit (par_state->gdbarch ())-1)) >> 1) == 0)
+  if ((result >> (gdbarch_int_bit (parse_gdbarch)-1)) == 0)
+    yylval.typed_val.type = type_int ();
+  else if ((result >> (gdbarch_long_bit (parse_gdbarch)-1)) == 0)
+    yylval.typed_val.type = type_long ();
+  else if (((result >> (gdbarch_long_bit (parse_gdbarch)-1)) >> 1) == 0)
     {
       /* We have a number representable as an unsigned integer quantity.
          For consistency with the C treatment, we will treat it as an
@@ -390,7 +374,7 @@ processInt (struct parser_state *par_state, const char *base0,
          assignment does the trick (no, it doesn't; read the reference manual).
        */
       yylval.typed_val.type
-	= builtin_type (par_state->gdbarch ())->builtin_unsigned_long;
+	= builtin_type (parse_gdbarch)->builtin_unsigned_long;
       if (result & LONGEST_SIGN)
 	yylval.typed_val.val =
 	  (LONGEST) (result & ~LONGEST_SIGN)
@@ -400,21 +384,25 @@ processInt (struct parser_state *par_state, const char *base0,
       return INT;
     }
   else
-    yylval.typed_val.type = type_long_long (par_state);
+    yylval.typed_val.type = type_long_long ();
 
   yylval.typed_val.val = (LONGEST) result;
   return INT;
 }
 
 static int
-processReal (struct parser_state *par_state, const char *num0)
+processReal (const char *num0)
 {
-  yylval.typed_val_float.type = type_long_double (par_state);
+  sscanf (num0, "%" DOUBLEST_SCAN_FORMAT, &yylval.typed_val_float.dval);
 
-  bool parsed = parse_float (num0, strlen (num0),
-			     yylval.typed_val_float.type,
-			     yylval.typed_val_float.val);
-  gdb_assert (parsed);
+  yylval.typed_val_float.type = type_float ();
+  if (sizeof(DOUBLEST) >= gdbarch_double_bit (parse_gdbarch)
+			    / TARGET_CHAR_BIT)
+    yylval.typed_val_float.type = type_double ();
+  if (sizeof(DOUBLEST) >= gdbarch_long_double_bit (parse_gdbarch)
+			    / TARGET_CHAR_BIT)
+    yylval.typed_val_float.type = type_long_double ();
+
   return FLOAT;
 }
 
@@ -422,12 +410,13 @@ processReal (struct parser_state *par_state, const char *num0)
 /* Store a canonicalized version of NAME0[0..LEN-1] in yylval.ssym.  The
    resulting string is valid until the next call to ada_parse.  If
    NAME0 contains the substring "___", it is assumed to be already
-   encoded and the resulting name is equal to it.  Similarly, if the name
-   starts with '<', it is copied verbatim.  Otherwise, it differs
+   encoded and the resulting name is equal to it.  Otherwise, it differs
    from NAME0 in that:
-    + Characters between '...' are transfered verbatim to yylval.ssym.
-    + Trailing "'" characters in quoted sequences are removed (a leading quote is
-      preserved to indicate that the name is not to be GNAT-encoded).
+    + Characters between '...' or <...> are transfered verbatim to 
+      yylval.ssym.
+    + <, >, and trailing "'" characters in quoted sequences are removed
+      (a leading quote is preserved to indicate that the name is not to be
+      GNAT-encoded).
     + Unquoted whitespace is removed.
     + Unquoted alphabetic characters are mapped to lower case.
    Result is returned as a struct stoken, but for convenience, the string
@@ -437,7 +426,7 @@ processReal (struct parser_state *par_state, const char *num0)
 static struct stoken
 processId (const char *name0, int len)
 {
-  char *name = (char *) obstack_alloc (&temp_parse_space, len + 11);
+  char *name = obstack_alloc (&temp_parse_space, len + 11);
   int i0, i;
   struct stoken result;
 
@@ -445,7 +434,7 @@ processId (const char *name0, int len)
   while (len > 0 && isspace (name0[len-1]))
     len -= 1;
 
-  if (name0[0] == '<' || strstr (name0, "___") != NULL)
+  if (strstr (name0, "___") != NULL)
     {
       strncpy (name, name0, len);
       name[len] = '\000';
@@ -479,6 +468,15 @@ processId (const char *name0, int len)
 	  while (i0 < len && name0[i0] != '\'');
 	  i0 += 1;
 	  break;
+	case '<':
+	  i0 += 1;
+	  while (i0 < len && name0[i0] != '>')
+	    {
+	      name[i] = name0[i0];
+	      i += 1; i0 += 1;
+	    }
+	  i0 += 1;
+	  break;
 	}
     }
   name[i] = '\000';
@@ -499,7 +497,7 @@ processString (const char *text, int len)
   const char *lim = text + len;
   struct stoken result;
 
-  q = (char *) obstack_alloc (&temp_parse_space, len);
+  q = obstack_alloc (&temp_parse_space, len);
   result.ptr = q;
   p = text;
   while (p < lim)
@@ -630,10 +628,16 @@ processAttribute (const char *str)
 static void
 rewind_to_char (int ch)
 {
-  pstate->lexptr -= yyleng;
-  while (toupper (*pstate->lexptr) != toupper (ch))
-    pstate->lexptr -= 1;
+  lexptr -= yyleng;
+  while (toupper (*lexptr) != toupper (ch))
+    lexptr -= 1;
   yyrestart (NULL);
+}
+
+int
+yywrap(void)
+{
+  return 1;
 }
 
 /* Dummy definition to suppress warnings about unused static definitions. */
@@ -642,5 +646,3 @@ dummy_function ada_flex_use[] =
 { 
   (dummy_function) yyunput
 };
-
-DIAGNOSTIC_POP

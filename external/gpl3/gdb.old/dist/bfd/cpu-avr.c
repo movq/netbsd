@@ -1,5 +1,6 @@
 /* BFD library support routines for the AVR architecture.
-   Copyright (C) 1999-2020 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2002, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
    Contributed by Denis Chertykov <denisc@overta.ru>
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -48,7 +49,7 @@ compatible (const bfd_arch_info_type * a,
     {
       /* Special case for ATmega[16]03 (avr:3) and ATmega83 (avr:4).  */
       if ((a->mach == bfd_mach_avr3 && b->mach == bfd_mach_avr4)
-	 || (a->mach == bfd_mach_avr4 && b->mach == bfd_mach_avr3))
+         || (a->mach == bfd_mach_avr4 && b->mach == bfd_mach_avr3))
        return NULL;
 
       if (a->mach <= b->mach)
@@ -67,6 +68,7 @@ compatible (const bfd_arch_info_type * a,
     return a;
   if (a->mach == bfd_mach_avr31 && b->mach == bfd_mach_avr3)
     return b;
+
   if (a->mach == bfd_mach_avr3 && b->mach == bfd_mach_avr35)
     return a;
   if (a->mach == bfd_mach_avr35 && b->mach == bfd_mach_avr3)
@@ -77,14 +79,15 @@ compatible (const bfd_arch_info_type * a,
   if (a->mach == bfd_mach_avr51 && b->mach == bfd_mach_avr5)
     return b;
 
+
   return NULL;
 }
 
 #define N(addr_bits, machine, print, default, next)		\
 {								\
-  8,				/* Bits in a word.  */		\
-  addr_bits,			/* Bits in an address.  */	\
-  8,				/* Bits in a byte.  */		\
+  8,				/* 8 bits in a word.  */	\
+  addr_bits,			/* bits in an address.  */	\
+  8,				/* 8 bits in a byte.  */	\
   bfd_arch_avr,							\
   machine,			/* Machine number.  */		\
   "avr",			/* Architecture name.   */	\
@@ -94,8 +97,7 @@ compatible (const bfd_arch_info_type * a,
   compatible,							\
   bfd_default_scan,						\
   bfd_arch_default_fill,					\
-  next,								\
-  0 /* Maximum offset of a reloc from the start of an insn.  */	\
+  next								\
 }
 
 static const bfd_arch_info_type arch_info_struct[] =
@@ -134,28 +136,25 @@ static const bfd_arch_info_type arch_info_struct[] =
   /* 3-Byte PC.  */
   N (22, bfd_mach_avr6, "avr:6", FALSE, & arch_info_struct[10]),
 
-  /* Tiny core (AVR Tiny).  */
-  N (16, bfd_mach_avrtiny, "avr:100", FALSE, & arch_info_struct[11]),
+  /* Xmega 1 */
+  N (24, bfd_mach_avrxmega1, "avr:101", FALSE, & arch_info_struct[11]),
 
-  /* Xmega 1.  */
-  N (24, bfd_mach_avrxmega1, "avr:101", FALSE, & arch_info_struct[12]),
+  /* Xmega 2 */
+  N (24, bfd_mach_avrxmega2, "avr:102", FALSE, & arch_info_struct[12]),
 
-  /* Xmega 2.  */
-  N (24, bfd_mach_avrxmega2, "avr:102", FALSE, & arch_info_struct[13]),
+  /* Xmega 3 */
+  N (24, bfd_mach_avrxmega3, "avr:103", FALSE, & arch_info_struct[13]),
 
-  /* Xmega 3.  */
-  N (24, bfd_mach_avrxmega3, "avr:103", FALSE, & arch_info_struct[14]),
+  /* Xmega 4 */
+  N (24, bfd_mach_avrxmega4, "avr:104", FALSE, & arch_info_struct[14]),
 
-  /* Xmega 4.  */
-  N (24, bfd_mach_avrxmega4, "avr:104", FALSE, & arch_info_struct[15]),
+  /* Xmega 5 */
+  N (24, bfd_mach_avrxmega5, "avr:105", FALSE, & arch_info_struct[15]),
 
-  /* Xmega 5.  */
-  N (24, bfd_mach_avrxmega5, "avr:105", FALSE, & arch_info_struct[16]),
+  /* Xmega 6 */
+  N (24, bfd_mach_avrxmega6, "avr:106", FALSE, & arch_info_struct[16]),
 
-  /* Xmega 6.  */
-  N (24, bfd_mach_avrxmega6, "avr:106", FALSE, & arch_info_struct[17]),
-
-  /* Xmega 7.  */
+  /* Xmega 7 */
   N (24, bfd_mach_avrxmega7, "avr:107", FALSE, NULL)
 
 };

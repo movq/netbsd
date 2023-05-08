@@ -1,6 +1,6 @@
 /* Target-dependent code for the NEC V850 for GDB, the GNU debugger.
 
-   Copyright (C) 1996-2020 Free Software Foundation, Inc.
+   Copyright (C) 1996-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,9 +22,11 @@
 #include "frame-base.h"
 #include "trad-frame.h"
 #include "frame-unwind.h"
-#include "dwarf2/frame.h"
+#include "dwarf2-frame.h"
 #include "gdbtypes.h"
 #include "inferior.h"
+#include <string.h>
+#include "gdb_assert.h"
 #include "gdbcore.h"
 #include "arch-utils.h"
 #include "regcache.h"
@@ -498,9 +500,9 @@ v850_register_type (struct gdbarch *gdbarch, int regnum)
 static int
 v850_type_is_scalar (struct type *t)
 {
-  return (t->code () != TYPE_CODE_STRUCT
-	  && t->code () != TYPE_CODE_UNION
-	  && t->code () != TYPE_CODE_ARRAY);
+  return (TYPE_CODE (t) != TYPE_CODE_STRUCT
+	  && TYPE_CODE (t) != TYPE_CODE_UNION
+	  && TYPE_CODE (t) != TYPE_CODE_ARRAY);
 }
 
 /* Should call_function allocate stack space for a struct return?  */
@@ -530,15 +532,15 @@ v850_use_struct_convention (struct gdbarch *gdbarch, struct type *type)
   /* The value is a structure or union with a single element and that
      element is either a single basic type or an array of a single basic
      type whose size is greater than or equal to 4 -> returned in register.  */
-  if ((type->code () == TYPE_CODE_STRUCT
-       || type->code () == TYPE_CODE_UNION)
-       && type->num_fields () == 1)
+  if ((TYPE_CODE (type) == TYPE_CODE_STRUCT
+       || TYPE_CODE (type) == TYPE_CODE_UNION)
+       && TYPE_NFIELDS (type) == 1)
     {
-      fld_type = type->field (0).type ();
+      fld_type = TYPE_FIELD_TYPE (type, 0);
       if (v850_type_is_scalar (fld_type) && TYPE_LENGTH (fld_type) >= 4)
 	return 0;
 
-      if (fld_type->code () == TYPE_CODE_ARRAY)
+      if (TYPE_CODE (fld_type) == TYPE_CODE_ARRAY)
         {
 	  tgt_type = TYPE_TARGET_TYPE (fld_type);
 	  if (v850_type_is_scalar (tgt_type) && TYPE_LENGTH (tgt_type) >= 4)
@@ -549,17 +551,17 @@ v850_use_struct_convention (struct gdbarch *gdbarch, struct type *type)
   /* The value is a structure whose first element is an integer or a float,
      and which contains no arrays of more than two elements -> returned in
      register.  */
-  if (type->code () == TYPE_CODE_STRUCT
-      && v850_type_is_scalar (type->field (0).type ())
-      && TYPE_LENGTH (type->field (0).type ()) == 4)
+  if (TYPE_CODE (type) == TYPE_CODE_STRUCT
+      && v850_type_is_scalar (TYPE_FIELD_TYPE (type, 0))
+      && TYPE_LENGTH (TYPE_FIELD_TYPE (type, 0)) == 4)
     {
-      for (i = 1; i < type->num_fields (); ++i)
+      for (i = 1; i < TYPE_NFIELDS (type); ++i)
         {
-	  fld_type = type->field (0).type ();
-	  if (fld_type->code () == TYPE_CODE_ARRAY)
+	  fld_type = TYPE_FIELD_TYPE (type, 0);
+	  if (TYPE_CODE (fld_type) == TYPE_CODE_ARRAY)
 	    {
 	      tgt_type = TYPE_TARGET_TYPE (fld_type);
-	      if (TYPE_LENGTH (tgt_type) > 0
+	      if (TYPE_LENGTH (fld_type) >= 0 && TYPE_LENGTH (tgt_type) >= 0
 		  && TYPE_LENGTH (fld_type) / TYPE_LENGTH (tgt_type) > 2)
 		return 1;
 	    }
@@ -570,11 +572,11 @@ v850_use_struct_convention (struct gdbarch *gdbarch, struct type *type)
   /* The value is a union which contains at least one field which
      would be returned in registers according to these rules ->
      returned in register.  */
-  if (type->code () == TYPE_CODE_UNION)
+  if (TYPE_CODE (type) == TYPE_CODE_UNION)
     {
-      for (i = 0; i < type->num_fields (); ++i)
+      for (i = 0; i < TYPE_NFIELDS (type); ++i)
         {
-	  fld_type = type->field (0).type ();
+	  fld_type = TYPE_FIELD_TYPE (type, 0);
 	  if (!v850_use_struct_convention (gdbarch, fld_type))
 	    return 0;
 	}
@@ -981,9 +983,9 @@ v850_eight_byte_align_p (struct type *type)
     {
       int i;
 
-      for (i = 0; i < type->num_fields (); i++)
+      for (i = 0; i < TYPE_NFIELDS (type); i++)
 	{
-	  if (v850_eight_byte_align_p (type->field (i).type ()))
+	  if (v850_eight_byte_align_p (TYPE_FIELD_TYPE (type, i)))
 	    return 1;
 	}
     }
@@ -1013,13 +1015,13 @@ v850_push_dummy_call (struct gdbarch *gdbarch,
 		      int nargs,
 		      struct value **args,
 		      CORE_ADDR sp,
-		      function_call_return_method return_method,
+		      int struct_return,
 		      CORE_ADDR struct_addr)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   int argreg;
   int argnum;
-  int arg_space = 0;
+  int len = 0;
   int stack_offset;
 
   if (gdbarch_tdep (gdbarch)->abi == V850_ABI_RH850)
@@ -1034,12 +1036,12 @@ v850_push_dummy_call (struct gdbarch *gdbarch,
 
   /* Now make space on the stack for the args.  */
   for (argnum = 0; argnum < nargs; argnum++)
-    arg_space += ((TYPE_LENGTH (value_type (args[argnum])) + 3) & ~3);
-  sp -= arg_space + stack_offset;
+    len += ((TYPE_LENGTH (value_type (args[argnum])) + 3) & ~3);
+  sp -= len + stack_offset;
 
   argreg = E_ARG0_REGNUM;
   /* The struct_return pointer occupies the first parameter register.  */
-  if (return_method == return_method_struct)
+  if (struct_return)
     regcache_cooked_write_unsigned (regcache, argreg++, struct_addr);
 
   /* Now load as many as possible of the first arguments into
@@ -1111,7 +1113,7 @@ static void
 v850_extract_return_value (struct type *type, struct regcache *regcache,
 			   gdb_byte *valbuf)
 {
-  struct gdbarch *gdbarch = regcache->arch ();
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   int len = TYPE_LENGTH (type);
 
@@ -1128,7 +1130,7 @@ v850_extract_return_value (struct type *type, struct regcache *regcache,
       gdb_byte buf[v850_reg_size];
       for (i = 0; len > 0; i += 4, len -= 4)
 	{
-	  regcache->raw_read (regnum++, buf);
+	  regcache_raw_read (regcache, regnum++, buf);
 	  memcpy (valbuf + i, buf, len > 4 ? 4 : len);
 	}
     }
@@ -1138,7 +1140,7 @@ static void
 v850_store_return_value (struct type *type, struct regcache *regcache,
 			 const gdb_byte *valbuf)
 {
-  struct gdbarch *gdbarch = regcache->arch ();
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   int len = TYPE_LENGTH (type);
 
@@ -1150,7 +1152,7 @@ v850_store_return_value (struct type *type, struct regcache *regcache,
     {
       int i, regnum = E_V0_REGNUM;
       for (i = 0; i < len; i += 4)
-	regcache->raw_write (regnum++, valbuf + i);
+	regcache_raw_write (regcache, regnum++, valbuf + i);
     }
 }
 
@@ -1168,44 +1170,28 @@ v850_return_value (struct gdbarch *gdbarch, struct value *function,
   return RETURN_VALUE_REGISTER_CONVENTION;
 }
 
-/* Implement the breakpoint_kind_from_pc gdbarch method.  */
-
-static int
-v850_breakpoint_kind_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr)
+static const unsigned char *
+v850_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
+                         int *lenptr)
 {
-  return 2;
+  static unsigned char breakpoint[] = { 0x85, 0x05 };
+
+  *lenptr = sizeof (breakpoint);
+  return breakpoint;
 }
 
-/* Implement the sw_breakpoint_from_kind gdbarch method.  */
+/* Implement software breakpoints by using the dbtrap instruction. 
+   Older architectures had no such instruction.  For those, an
+   unconditional branch to self instruction is used.  */
 
-static const gdb_byte *
-v850_sw_breakpoint_from_kind (struct gdbarch *gdbarch, int kind, int *size)
+static const unsigned char *
+v850_dbtrap_breakpoint_from_pc (struct gdbarch *gdbarch,
+                                CORE_ADDR *pcptr, int *lenptr)
 {
-  *size = kind;
+  static unsigned char breakpoint[] = { 0x40, 0xf8 };
 
-    switch (gdbarch_bfd_arch_info (gdbarch)->mach)
-    {
-    case bfd_mach_v850e2:
-    case bfd_mach_v850e2v3:
-    case bfd_mach_v850e3v5:
-      {
-	/* Implement software breakpoints by using the dbtrap instruction.
-	   Older architectures had no such instruction.  For those, an
-	   unconditional branch to self instruction is used.  */
-
-	static unsigned char dbtrap_breakpoint[] = { 0x40, 0xf8 };
-
-	return dbtrap_breakpoint;
-      }
-      break;
-    default:
-      {
-	static unsigned char breakpoint[] = { 0x85, 0x05 };
-
-	return breakpoint;
-      }
-      break;
-    }
+  *lenptr = sizeof (breakpoint);
+  return breakpoint;
 }
 
 static struct v850_frame_cache *
@@ -1236,7 +1222,7 @@ v850_frame_cache (struct frame_info *this_frame, void **this_cache)
   int i;
 
   if (*this_cache)
-    return (struct v850_frame_cache *) *this_cache;
+    return *this_cache;
 
   cache = v850_alloc_frame_cache (this_frame);
   *this_cache = cache;
@@ -1327,6 +1313,28 @@ static const struct frame_unwind v850_frame_unwind = {
 };
 
 static CORE_ADDR
+v850_unwind_sp (struct gdbarch *gdbarch, struct frame_info *next_frame)
+{
+  return frame_unwind_register_unsigned (next_frame,
+					 gdbarch_sp_regnum (gdbarch));
+} 
+
+static CORE_ADDR
+v850_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
+{
+  return frame_unwind_register_unsigned (next_frame,
+					 gdbarch_pc_regnum (gdbarch));
+}
+
+static struct frame_id
+v850_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
+{
+  CORE_ADDR sp = get_frame_register_unsigned (this_frame,
+					      gdbarch_sp_regnum (gdbarch));
+  return frame_id_build (sp, get_frame_pc (this_frame));
+}
+  
+static CORE_ADDR
 v850_frame_base_address (struct frame_info *this_frame, void **this_cache)
 {
   struct v850_frame_cache *cache = v850_frame_cache (this_frame, this_cache);
@@ -1374,7 +1382,7 @@ v850_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
       return arches->gdbarch;
     }
-  tdep = XCNEW (struct gdbarch_tdep);
+  tdep = (struct gdbarch_tdep *) xmalloc (sizeof (struct gdbarch_tdep));
   tdep->e_flags = e_flags;
   tdep->e_machine = e_machine;
 
@@ -1434,14 +1442,28 @@ v850_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_addr_bit (gdbarch, 4 * TARGET_CHAR_BIT);
 
   set_gdbarch_inner_than (gdbarch, core_addr_lessthan);
+  switch (info.bfd_arch_info->mach)
+    {
+    case bfd_mach_v850e2:
+    case bfd_mach_v850e2v3:
+    case bfd_mach_v850e3v5:
+      set_gdbarch_breakpoint_from_pc (gdbarch, v850_dbtrap_breakpoint_from_pc);
+      break;
+    default:
+      set_gdbarch_breakpoint_from_pc (gdbarch, v850_breakpoint_from_pc);
+      break;
+    }
 
-  set_gdbarch_breakpoint_kind_from_pc (gdbarch, v850_breakpoint_kind_from_pc);
-  set_gdbarch_sw_breakpoint_from_kind (gdbarch, v850_sw_breakpoint_from_kind);
   set_gdbarch_return_value (gdbarch, v850_return_value);
   set_gdbarch_push_dummy_call (gdbarch, v850_push_dummy_call);
   set_gdbarch_skip_prologue (gdbarch, v850_skip_prologue);
 
+  set_gdbarch_print_insn (gdbarch, print_insn_v850);
+
   set_gdbarch_frame_align (gdbarch, v850_frame_align);
+  set_gdbarch_unwind_sp (gdbarch, v850_unwind_sp);
+  set_gdbarch_unwind_pc (gdbarch, v850_unwind_pc);
+  set_gdbarch_dummy_id (gdbarch, v850_dummy_id);
   frame_base_set_default (gdbarch, &v850_frame_base);
 
   /* Hook in ABI-specific overrides, if they have been registered.  */
@@ -1453,9 +1475,10 @@ v850_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   return gdbarch;
 }
 
-void _initialize_v850_tdep ();
+extern initialize_file_ftype _initialize_v850_tdep; /* -Wmissing-prototypes */
+
 void
-_initialize_v850_tdep ()
+_initialize_v850_tdep (void)
 {
   register_gdbarch_init (bfd_arch_v850, v850_gdbarch_init);
   register_gdbarch_init (bfd_arch_v850_rh850, v850_gdbarch_init);

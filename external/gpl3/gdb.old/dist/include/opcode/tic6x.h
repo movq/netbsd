@@ -1,5 +1,5 @@
 /* TI C6X opcode information.
-   Copyright (C) 2010-2020 Free Software Foundation, Inc.
+   Copyright 2010-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -21,10 +21,6 @@
 
 #include "bfd.h"
 #include "symcat.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /* A field in an instruction format.  The names are based on those
    used in the architecture manuals.  */
@@ -718,9 +714,5 @@ typedef struct
   /* P-bits.  */
   bfd_boolean p_bits[14];
 } tic6x_fetch_packet_header;
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* OPCODE_TIC6X_H */

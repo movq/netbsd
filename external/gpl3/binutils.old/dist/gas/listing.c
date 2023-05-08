@@ -1,5 +1,7 @@
 /* listing.c - maintain assembly listings
-   Copyright (C) 1991-2020 Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
+   2001, 2002, 2003, 2005, 2006, 2007, 2008, 2009, 2010
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -41,7 +43,7 @@
   will affect the page they are on, as well as any subsequent page
 
  .eject
- 	Throw a page
+ 	Thow a page
  .list
  	Increment the enable listing counter
  .nolist
@@ -89,6 +91,7 @@
 
 #include "as.h"
 #include "filenames.h"
+#include "obstack.h"
 #include "safe-ctype.h"
 #include "input-file.h"
 #include "subsegs.h"
@@ -223,8 +226,7 @@ static file_info_type *file_info (const char *);
 static void new_frag (void);
 static void listing_page (list_info_type *);
 static unsigned int calc_hex (list_info_type *);
-static void print_lines (list_info_type *, unsigned int, const char *,
-			 unsigned int);
+static void print_lines (list_info_type *, unsigned int, char *, unsigned int);
 static void list_symbol_table (void);
 static int debugging_pseudo (list_info_type *, const char *);
 static void listing_listing (char *);
@@ -234,8 +236,11 @@ listing_message (const char *name, const char *message)
 {
   if (listing_tail != (list_info_type *) NULL)
     {
-      char *n = concat (name, message, (char *) NULL);
-      struct list_message *lm = XNEW (struct list_message);
+      unsigned int l = strlen (name) + strlen (message) + 1;
+      char *n = (char *) xmalloc (l);
+      struct list_message *lm = xmalloc (sizeof *lm);
+      strcpy (n, name);
+      strcat (n, message);
       lm->message = n;
       lm->next = NULL;
 
@@ -250,13 +255,13 @@ listing_message (const char *name, const char *message)
 void
 listing_warning (const char *message)
 {
-  listing_message (_("Warning: "), message);
+  listing_message (_("Warning:"), message);
 }
 
 void
 listing_error (const char *message)
 {
-  listing_message (_("Error: "), message);
+  listing_message (_("Error:"), message);
 }
 
 static file_info_type *
@@ -273,7 +278,7 @@ file_info (const char *file_name)
     }
 
   /* Make new entry.  */
-  p = XNEW (file_info_type);
+  p = (file_info_type *) xmalloc (sizeof (file_info_type));
   p->next = file_info_head;
   file_info_head = p;
   p->filename = xstrdup (file_name);
@@ -294,10 +299,10 @@ new_frag (void)
 void
 listing_newline (char *ps)
 {
-  const char *file;
+  char *file;
   unsigned int line;
   static unsigned int last_line = 0xffff;
-  static const char *last_file = NULL;
+  static char *last_file = NULL;
   list_info_type *new_i = NULL;
 
   if (listing == 0)
@@ -324,20 +329,14 @@ listing_newline (char *ps)
     }
 #endif
 
-  /* PR 21977 - use the physical file name not the logical one unless high
-     level source files are being included in the listing.  */
-  if (listing & LISTING_HLL)
-    file = as_where (&line);
-  else
-    file = as_where_physical (&line);
-
+  as_where (&file, &line);
   if (ps == NULL)
     {
       if (line == last_line
 	  && !(last_file && file && filename_cmp (file, last_file)))
 	return;
 
-      new_i = XNEW (list_info_type);
+      new_i = (list_info_type *) xmalloc (sizeof (list_info_type));
 
       /* Detect if we are reading from stdin by examining the file
 	 name returned by as_where().
@@ -353,7 +352,7 @@ listing_newline (char *ps)
       if (strcmp (file, _("{standard input}")) == 0
 	  && input_line_pointer != NULL)
 	{
-	  char *copy, *src, *dest;
+	  char *copy;
 	  int len;
 	  int seen_quote = 0;
 	  int seen_slash = 0;
@@ -373,21 +372,24 @@ listing_newline (char *ps)
 
 	  len = copy - input_line_pointer + 1;
 
-	  copy = XNEWVEC (char, len);
+	  copy = (char *) xmalloc (len);
 
-	  src = input_line_pointer;
-	  dest = copy;
-
-	  while (--len)
+	  if (copy != NULL)
 	    {
-	      unsigned char c = *src++;
+	      char *src = input_line_pointer;
+	      char *dest = copy;
 
-	      /* Omit control characters in the listing.  */
-	      if (!ISCNTRL (c))
-		*dest++ = c;
+	      while (--len)
+		{
+		  unsigned char c = *src++;
+
+		  /* Omit control characters in the listing.  */
+		  if (!ISCNTRL (c))
+		    *dest++ = c;
+		}
+
+	      *dest = 0;
 	    }
-
-	  *dest = 0;
 
 	  new_i->line_contents = copy;
 	}
@@ -396,7 +398,7 @@ listing_newline (char *ps)
     }
   else
     {
-      new_i = XNEW (list_info_type);
+      new_i = (list_info_type *) xmalloc (sizeof (list_info_type));
       new_i->line_contents = ps;
     }
 
@@ -473,7 +475,7 @@ listing_prev_line (void)
    truncated to size.  It appends a fake line to the end of each input
    file to make using the returned buffer simpler.  */
 
-static const char *
+static char *
 buffer_line (file_info_type *file, char *line, unsigned int size)
 {
   unsigned int count = 0;
@@ -553,23 +555,21 @@ buffer_line (file_info_type *file, char *line, unsigned int size)
    reads it in again into the buffer provided and then restores the file
    back to its original location.  */
 
-static void
+static char *
 rebuffer_line (file_info_type *  file,
 	       unsigned int      linenum,
 	       char *            buffer,
 	       unsigned int      size)
 {
   unsigned int count = 0;
-  unsigned int current_line;
+  unsigned int current_line = 1;
   char * p = buffer;
   long pos;
-  long pos2;
   int c;
-  bfd_boolean found = FALSE;
 
   /* Sanity checks.  */
-  if (file == NULL || buffer == NULL || size <= 1 || file->linenum <= linenum)
-    return;
+  if (file == NULL || buffer == NULL || size == 0 || file->linenum <= linenum)
+    return "";
 
   /* Check the cache and see if we last used this file.  */
   if (last_open_file_info == NULL || file != last_open_file_info)
@@ -587,7 +587,7 @@ rebuffer_line (file_info_type *  file,
       if (last_open_file == NULL)
 	{
 	  file->at_end = 1;
-	  return;
+	  return "";
 	}
 
       /* Seek to where we were last time this file was open.  */
@@ -596,71 +596,38 @@ rebuffer_line (file_info_type *  file,
     }
 
   /* Remember where we are in the current file.  */
-  pos2 = pos = ftell (last_open_file);
-  if (pos < 3)
-    return;
-  current_line = file->linenum;
+  pos = ftell (last_open_file);
+
+  /* Go back to the beginning.  */
+  fseek (last_open_file, 0, SEEK_SET);
+
+  /* Skip lines prior to the one we are interested in.  */
+  while (current_line < linenum)
+    {
+      /* fgets only stops on newlines and has a size limit,
+	 so we read one character at a time instead.  */
+      do
+	{
+	  c = fgetc (last_open_file);
+	}
+      while (c != EOF && c != '\n' && c != '\r');
+
+      ++ current_line;
+
+      if (c == '\r' || c == '\n')
+	{
+	  int next = fgetc (last_open_file);
+
+	  /* If '\r' is followed by '\n', swallow that.  Likewise, if '\n'
+	     is followed by '\r', swallow that as well.  */
+	  if ((c == '\r' && next != '\n')
+	      || (c == '\n' && next != '\r'))
+	    ungetc (next, last_open_file);
+	}
+    }
 
   /* Leave room for the nul at the end of the buffer.  */
   size -= 1;
-  buffer[size] = 0;
-
-  /* Increment the current line count by one.
-     This is to allow for the fact that we are searching for the
-     start of a previous line, but we do this by detecting end-of-line
-     character(s) not start-of-line characters.  */
-  ++ current_line;
-
-  while (pos2 > 0 && ! found)
-    {
-      char * ptr;
-
-      /* Move backwards through the file, looking for earlier lines.  */
-      pos2 = (long) size > pos2 ? 0 : pos2 - size;
-      fseek (last_open_file, pos2, SEEK_SET);
-
-      /* Our caller has kindly provided us with a buffer, so we use it.  */
-      if (fread (buffer, 1, size, last_open_file) != size)
-	{
-	  as_warn (_("unable to rebuffer file: %s\n"), file->filename);
-	  return;
-	}
-
-      for (ptr = buffer + size; ptr >= buffer; -- ptr)
-	{
-	  if (*ptr == '\n')
-	    {
-	      -- current_line;
-
-	      if (current_line == linenum)
-		{
-		  /* We have found the start of the line we seek.  */
-		  found = TRUE;
-
-		  /* FIXME: We could skip the read-in-the-line code
-		     below if we know that we already have the whole
-		     line in the buffer.  */
-
-		  /* Advance pos2 to the newline character we have just located.  */
-		  pos2 += (ptr - buffer);
-
-		  /* Skip the newline and, if present, the carriage return.  */
-		  if (ptr + 1 == buffer + size)
-		    {
-		      ++pos2;
-		      if (fgetc (last_open_file) == '\r')
-			++ pos2;
-		    }
-		  else
-		    pos2 += (ptr[1] == '\r' ? 2 : 1);
-
-		  /* Move the file pointer to this location.  */
-		  fseek (last_open_file, pos2, SEEK_SET);
-		  break;
-		}
-	    }
-	}
-    }
 
   /* Read in the line.  */
   c = fgetc (last_open_file);
@@ -690,14 +657,17 @@ rebuffer_line (file_info_type *  file,
 
   /* Reset the file position.  */
   fseek (last_open_file, pos, SEEK_SET);
+
+  return buffer;
 }
 
 static const char *fn;
-static unsigned int eject;	/* Eject pending.  */
-static unsigned int page;	/* Current page number.  */
-static const char *title;	/* Current title.  */
-static const char *subtitle;	/* Current subtitle.  */
-static unsigned int on_page;	/* Number of lines printed on current page.  */
+
+static unsigned int eject;	/* Eject pending */
+static unsigned int page;	/* Current page number */
+static char *title;		/* Current title */
+static char *subtitle;		/* Current subtitle */
+static unsigned int on_page;	/* Number of lines printed on current page */
 
 static void
 listing_page (list_info_type *list)
@@ -783,7 +753,7 @@ calc_hex (list_info_type *list)
     {
       /* Print as many bytes from the fixed part as is sensible.  */
       octet_in_frag = 0;
-      while (octet_in_frag < frag_ptr->fr_fix
+      while ((offsetT) octet_in_frag < frag_ptr->fr_fix
 	     && data_buffer_size < MAX_BYTES - 3)
 	{
 	  if (address == ~(unsigned int) 0)
@@ -801,8 +771,8 @@ calc_hex (list_info_type *list)
 	  unsigned int var_rep_idx = octet_in_frag;
 
 	  /* Print as many bytes from the variable part as is sensible.  */
-	  while ((octet_in_frag
-		  < frag_ptr->fr_fix + frag_ptr->fr_var * frag_ptr->fr_offset)
+	  while (((offsetT) octet_in_frag
+		  < (frag_ptr->fr_fix + frag_ptr->fr_var * frag_ptr->fr_offset))
 		 && data_buffer_size < MAX_BYTES - 3)
 	    {
 	      if (address == ~(unsigned int) 0)
@@ -816,7 +786,7 @@ calc_hex (list_info_type *list)
 	      var_rep_idx++;
 	      octet_in_frag++;
 
-	      if (var_rep_idx >= frag_ptr->fr_fix + frag_ptr->fr_var)
+	      if ((offsetT) var_rep_idx >= frag_ptr->fr_fix + frag_ptr->fr_var)
 		var_rep_idx = var_rep_max;
 	    }
 	}
@@ -829,7 +799,7 @@ calc_hex (list_info_type *list)
 
 static void
 print_lines (list_info_type *list, unsigned int lineno,
-	     const char *string, unsigned int address)
+	     char *string, unsigned int address)
 {
   unsigned int idx;
   unsigned int nchars;
@@ -1092,7 +1062,7 @@ print_source (file_info_type *  current_file,
       while (current_file->linenum < list->hll_line
 	     && !current_file->at_end)
 	{
-	  const char *p;
+	  char *p;
 
 	  cache = cached_lines + next_free_line;
 	  cache->file = current_file;
@@ -1199,12 +1169,12 @@ listing_listing (char *name ATTRIBUTE_UNUSED)
   list_info_type *list = head;
   file_info_type *current_hll_file = (file_info_type *) NULL;
   char *buffer;
-  const char *p;
+  char *p;
   int show_listing = 1;
   unsigned int width;
 
-  buffer = XNEWVEC (char, listing_rhs_width);
-  data_buffer = XNEWVEC (char, MAX_BYTES);
+  buffer = (char *) xmalloc (listing_rhs_width);
+  data_buffer = (char *) xmalloc (MAX_BYTES);
   eject = 1;
   list = head->next;
 
@@ -1555,7 +1525,9 @@ listing_title (int depth)
 	  if (listing)
 	    {
 	      length = input_line_pointer - start;
-	      ttl = xmemdup0 (start, length);
+	      ttl = (char *) xmalloc (length + 1);
+	      memcpy (ttl, start, length);
+	      ttl[length] = 0;
 	      listing_tail->edict = depth ? EDICT_SBTTL : EDICT_TITLE;
 	      listing_tail->edict_arg = ttl;
 	    }

@@ -1,4 +1,4 @@
-# Copyright 2012-2020 Free Software Foundation, Inc.
+# Copyright 2012-2014 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -32,16 +32,24 @@ if {![is_remote host] && ![is_remote target]} {
 
 if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" \
 	   executable \
-	   [list debug nowarnings nopie\
+	   [list debug nowarnings \
 		"additional_flags=-DTFILE_DIR=\"$tfile_dir\""]] \
 	  != "" } {
-     untested "failed to compile"
+     untested ${testfile}.exp
      return -1
 }
 
 # Make sure we are starting fresh.
 remote_file host delete $tfile_basic
 remote_file target delete $tfile_basic
+
+remote_exec target "$binfile"
+
+if {!$purely_local} {
+    # Copy tracefile from target to host.
+    remote_download host [remote_upload target tfile-basic.tf] \
+	tfile-basic.tf
+}
 
 proc test_tfind_tfile { } {
     with_test_prefix "tfile" {
@@ -80,17 +88,7 @@ proc test_tfind_tfile { } {
     }
 }
 
-# If tracefile is generated successfully, copy tracefile to host and
-# run tests.
-if [generate_tracefile $binfile] {
-    if {!$purely_local} {
-	# Copy tracefile from target to host.
-	remote_download host [remote_upload target tfile-basic.tf] \
-	    tfile-basic.tf
-    }
-
-    test_tfind_tfile
-}
+test_tfind_tfile
 
 # Change to a different test case in order to run it on target, and get
 # several traceframes.
@@ -101,7 +99,7 @@ set executable $testfile
 
 if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" \
 	   executable {debug nowarnings}] != "" } {
-     untested "failed to compile"
+     untested ${testfile}.exp
      return -1
 }
 
@@ -110,12 +108,12 @@ if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" \
 clean_restart $executable
 
 if ![runto_main] {
-    fail "can't run to main to check for trace support"
+    fail "Can't run to main to check for trace support"
     return -1
 }
 
 if ![gdb_target_supports_trace] {
-    unsupported "current target does not support trace"
+    unsupported "Current target does not support trace"
     return -1
 }
 

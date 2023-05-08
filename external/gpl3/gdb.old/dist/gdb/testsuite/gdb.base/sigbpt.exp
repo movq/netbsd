@@ -1,6 +1,6 @@
 # This testcase is part of GDB, the GNU debugger.
 
-# Copyright 2004-2020 Free Software Foundation, Inc.
+# Copyright 2004-2014 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -36,7 +36,8 @@ if [target_info exists gdb,nosignals] {
 
 standard_testfile
 
-if {[prepare_for_testing "failed to prepare" $testfile $srcfile debug]} {
+if {[prepare_for_testing $testfile.exp $testfile $srcfile debug]} {
+    untested $testfile.exp
     return -1
 }
 
@@ -45,8 +46,7 @@ if {[prepare_for_testing "failed to prepare" $testfile $srcfile debug]} {
 #
 
 if ![runto_main] then {
-    fail "can't run to main"
-    return 0
+    gdb_suppress_tests
 }
 
 # If we can examine what's at memory address 0, it is possible that we
@@ -55,9 +55,13 @@ if ![runto_main] then {
 # especially on targets without an MMU.  Don't run the tests in that
 # case.
 
-if { [is_address_zero_readable] } {
-    untested "memory at address 0 is possibly executable"
-    return
+gdb_test_multiple "x 0" "memory at address 0" {
+    -re "0x0:.*Cannot access memory at address 0x0.*$gdb_prompt $" { }
+    -re "0x0:.*Error accessing memory address 0x0.*$gdb_prompt $" { }
+    -re ".*$gdb_prompt $" {
+	untested "Memory at address 0 is possibly executable"
+	return
+    }
 }
 
 gdb_test "break keeper"
@@ -72,7 +76,7 @@ gdb_test "break keeper"
 set bowler_addrs bowler
 set segv_addr none
 gdb_test {display/i $pc}
-gdb_test "advance bowler" "bowler.*" "advance to the bowler"
+gdb_test "advance *bowler" "bowler.*" "advance to the bowler"
 set test "stepping to fault"
 set signame "SIGSEGV"
 gdb_test_multiple "stepi" "$test" {
@@ -119,7 +123,7 @@ proc after_segv { } {
 
 # Check that the address table and SIGSEGV correspond.
 
-set test "verify that ${signame} occurs at the last STEPI insn"
+set test "Verify that ${signame} occurs at the last STEPI insn"
 if {[string compare $segv_addr [at_segv]] == 0} {
     pass "$test"
 } else {
@@ -138,9 +142,7 @@ proc stepi_out { name args } {
     # disable SIGSEGV, ensuring that further signals stop the
     # inferior.  Stops a SIGSEGV infinite loop when a broke system
     # keeps re-executing the faulting instruction.
-    with_test_prefix $name {
-	rerun_to_main
-    }
+    rerun_to_main
     gdb_test "handle ${signame} nostop print pass" ".*" "${name}; pass ${signame}"
     gdb_test "continue" "keeper.*" "${name}; continue to keeper"
     gdb_test "handle ${signame} stop print nopass" ".*" "${name}; nopass ${signame}"
@@ -158,11 +160,7 @@ proc stepi_out { name args } {
     set test "${name}; stepi out of handler"
     gdb_test_multiple "stepi" "$test" {
 	-re "Could not insert single-step breakpoint.*$gdb_prompt $" {
-	    setup_kfail gdb/8841 "sparc*-*-openbsd*"
-	    fail "$test (could not insert single-step breakpoint)"
-	}
-	-re "Cannot insert breakpoint.*Cannot access memory.*$gdb_prompt $" {
-	    setup_kfail gdb/8841 "nios2*-*-linux*"
+	    setup_kfail gdb/1736 "sparc*-*-openbsd*"
 	    fail "$test (could not insert single-step breakpoint)"
 	}
 	-re "keeper.*$gdb_prompt $" {
@@ -174,22 +172,22 @@ proc stepi_out { name args } {
 	    exp_continue
 	}
 	-re "Program received signal SIGSEGV.*$gdb_prompt $" {
-	    kfail gdb/8807 "$test (executed fault insn)"
+	    kfail gdb/1702 "$test (executed fault insn)"
 	}
 	-re "Breakpoint.*pc(\r\n| *)[at_segv] .*bowler.*$gdb_prompt $" {
 	    pass "$test (at breakpoint)"
 	}
 	-re "Breakpoint.*pc(\r\n| *)[after_segv] .*bowler.*$gdb_prompt $" {
-	    kfail gdb/8807 "$test (executed breakpoint)"
+	    kfail gdb/1702 "$test (executed breakpoint)"
 	}
 	-re "pc(\r\n| *)[at_segv] .*bowler.*$gdb_prompt $" {
 	    pass "$test"
 	}
 	-re "pc(\r\n| *)[after_segv] .*bowler.*$gdb_prompt $" {
-	    kfail gdb/8807 "$test (skipped fault insn)"
+	    kfail gdb/1702 "$test (skipped fault insn)"
 	}
 	-re "pc(\r\n| *)=> 0x\[a-z0-9\]* .*bowler.*$gdb_prompt $" {
-	    kfail gdb/8807 "$test (corrupt pc)"
+	    kfail gdb/1702 "$test (corrupt pc)"
 	}
     }
 
@@ -214,9 +212,7 @@ proc cont_out { name args } {
     # disable SIGSEGV, ensuring that further signals stop the
     # inferior.  Stops a SIGSEGV infinite loop when a broke system
     # keeps re-executing the faulting instruction.
-    with_test_prefix $name {
-	rerun_to_main
-    }
+    rerun_to_main
     gdb_test "handle ${signame} nostop print pass" ".*" "${name}; pass ${signame}"
     gdb_test "continue" "keeper.*" "${name}; continue to keeper"
     gdb_test "handle ${signame} stop print nopass" ".*" "${name}; nopass ${signame}"

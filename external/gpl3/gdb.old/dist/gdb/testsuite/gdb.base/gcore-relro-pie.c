@@ -1,4 +1,4 @@
-/* Copyright 2013-2020 Free Software Foundation, Inc.
+/* Copyright 2013-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,7 +18,7 @@
 void
 break_here (void)
 {
-  *(volatile int *) 0 = 0;
+  *(int *) 0 = 0;
 }
 
 void

@@ -1,6 +1,6 @@
 /* The common simulator framework for GDB, the GNU Debugger.
 
-   Copyright 2002-2020 Free Software Foundation, Inc.
+   Copyright 2002-2014 Free Software Foundation, Inc.
 
    Contributed by Andrew Cagney and Red Hat.
 
@@ -32,8 +32,6 @@
 #if HAVE_UNISTD_H
 #include <unistd.h>
 #endif
-
-#include <stdlib.h>
 
 /* Define the rate at which the simulator should poll the host
    for a quit. */
@@ -393,11 +391,11 @@ sim_io_poll_read (SIM_DESC sd,
 int
 sim_io_stat (SIM_DESC sd, const char *path, struct stat *buf)
 {
-  return STATE_CALLBACK (sd)->to_stat (STATE_CALLBACK (sd), path, buf);
+  return STATE_CALLBACK (sd)->stat (STATE_CALLBACK (sd), path, buf);
 }
 
 int
 sim_io_fstat (SIM_DESC sd, int fd, struct stat *buf)
 {
-  return STATE_CALLBACK (sd)->to_fstat (STATE_CALLBACK (sd), fd, buf);
+  return STATE_CALLBACK (sd)->fstat (STATE_CALLBACK (sd), fd, buf);
 }

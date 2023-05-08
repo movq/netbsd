@@ -1,5 +1,6 @@
 # This shell script emits a C file. -*- C -*-
-#   Copyright (C) 2004-2020 Free Software Foundation, Inc.
+#   Copyright 2004, 2005, 2007, 2009
+#   Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -19,12 +20,14 @@
 # MA 02110-1301, USA.
 #
 
-# This file is sourced from elf.em, and defines extra crx-elf
+# This file is sourced from elf32.em, and defines extra crx-elf
 # specific routines.
 #
 fragment <<EOF
 
 #include "ldctor.h"
+
+static void crxelf_after_parse (void);
 
 static void
 crxelf_after_parse (void)
@@ -40,7 +43,7 @@ crxelf_after_parse (void)
      is true the link sometimes fails.  */
   config.magic_demand_paged = FALSE;
 
-  ldelf_after_parse ();
+  after_parse_default ();
 }
 
 /* This is called after the sections have been attached to output

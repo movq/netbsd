@@ -1,5 +1,6 @@
 /* An expandable hash tables datatype.  
-   Copyright (C) 1999-2020 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2002, 2003, 2004, 2005, 2009, 2010
+   Free Software Foundation, Inc.
    Contributed by Vladimir Makarov (vmakarov@cygnus.com).
 
 This program is free software; you can redistribute it and/or modify
@@ -37,6 +38,10 @@ extern "C" {
 #endif /* __cplusplus */
 
 #include "ansidecl.h"
+
+#ifndef GTY
+#define GTY(X)
+#endif
 
 /* The type for a hash code.  */
 typedef unsigned int hashval_t;
@@ -92,7 +97,7 @@ typedef void (*htab_free_with_arg) (void *, void *);
    functions mentioned below.  The size of this structure is subject to
    change.  */
 
-struct htab {
+struct GTY(()) htab {
   /* Pointer to hash function.  */
   htab_hash hash_f;
 
@@ -103,7 +108,7 @@ struct htab {
   htab_del del_f;
 
   /* Table itself.  */
-  void **entries;
+  void ** GTY ((use_param, length ("%h.size"))) entries;
 
   /* Current size (in entries) of the hash table.  */
   size_t size;
@@ -127,7 +132,7 @@ struct htab {
   htab_free free_f;
 
   /* Alternate allocate/free functions, which take an extra argument.  */
-  void *alloc_arg;
+  void * GTY((skip)) alloc_arg;
   htab_alloc_with_arg alloc_with_arg_f;
   htab_free_with_arg free_with_arg_f;
 
@@ -173,8 +178,8 @@ extern void *	htab_find_with_hash (htab_t, const void *, hashval_t);
 extern void **	htab_find_slot_with_hash (htab_t, const void *,
 					  hashval_t, enum insert_option);
 extern void	htab_clear_slot	(htab_t, void **);
-extern void	htab_remove_elt	(htab_t, const void *);
-extern void	htab_remove_elt_with_hash (htab_t, const void *, hashval_t);
+extern void	htab_remove_elt	(htab_t, void *);
+extern void	htab_remove_elt_with_hash (htab_t, void *, hashval_t);
 
 extern void	htab_traverse (htab_t, htab_trav, void *);
 extern void	htab_traverse_noresize (htab_t, htab_trav, void *);

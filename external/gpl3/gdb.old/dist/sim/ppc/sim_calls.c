@@ -63,7 +63,7 @@ SIM_DESC
 sim_open (SIM_OPEN_KIND kind,
 	  host_callback *callback,
 	  struct bfd *abfd,
-	  char * const *argv)
+	  char **argv)
 {
   callbacks = callback;
 
@@ -77,8 +77,7 @@ sim_open (SIM_OPEN_KIND kind,
   root_device = psim_tree();
   simulator = NULL;
 
-  if (psim_options (root_device, argv + 1, kind) == NULL)
-    return NULL;
+  psim_options(root_device, argv + 1);
 
   if (ppc_trace[trace_opts])
     print_options ();
@@ -98,7 +97,7 @@ sim_close (SIM_DESC sd, int quitting)
 
 
 SIM_RC
-sim_load (SIM_DESC sd, const char *prog, bfd *abfd, int from_tty)
+sim_load (SIM_DESC sd, char *prog, bfd *abfd, int from_tty)
 {
   TRACE(trace_gdb, ("sim_load(prog=%s, from_tty=%d) called\n",
 		    prog, from_tty));
@@ -165,8 +164,8 @@ sim_info (SIM_DESC sd, int verbose)
 SIM_RC
 sim_create_inferior (SIM_DESC sd,
 		     struct bfd *abfd,
-		     char * const *argv,
-		     char * const *envp)
+		     char **argv,
+		     char **envp)
 {
   unsigned_word entry_point;
   TRACE(trace_gdb, ("sim_create_inferior(start_address=0x%x, ...)\n",
@@ -248,7 +247,7 @@ sim_resume (SIM_DESC sd, int step, int siggnal)
 }
 
 void
-sim_do_command (SIM_DESC sd, const char *cmd)
+sim_do_command (SIM_DESC sd, char *cmd)
 {
   TRACE(trace_gdb, ("sim_do_commands(cmd=%s) called\n",
 		    cmd ? cmd : "(null)"));
@@ -385,16 +384,6 @@ sim_io_error (SIM_DESC sd, const char *fmt, ...)
 }
 
 /****/
-
-void NORETURN
-error (const char *msg, ...)
-{
-  va_list ap;
-  va_start(ap, msg);
-  callbacks->evprintf_filtered (callbacks, msg, ap);
-  va_end(ap);
-  callbacks->error (callbacks, "");
-}
 
 void *
 zalloc(long size)

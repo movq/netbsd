@@ -14,7 +14,7 @@ Makefile.*; configure; configure.ac; src-release
 		gdb-patches@sourceware.org
 
 bfd/; binutils/; elfcpp/; gas/; gold/; gprof/; ld/; opcodes/; cpu/;
-libctf/; BFD's and libctf's parts of include/
+BFD's part of include/
 
 	binutils: http://sourceware.org/binutils/
 	Patches to binutils@sourceware.org.
@@ -41,16 +41,13 @@ config.guess; config.sub; readline/support/config.{sub,guess}
 depcomp; mkinstalldirs
         Send bug reports and patches to bug-automake@gnu.org.
 
-gdb/; gdbserver/; gdbsupport/; gnulib/; readline/; sim/; GDB's part of include/
+gdb/; readline/; sim/; GDB's part of include/
 	GDB: http://www.gnu.org/software/gdb/
 	Patches to gdb-patches@sourceware.org.
 	See also gdb/MAINTAINERS and sim/MAINTAINERS.
 
 include/
-	The rule is that if the file exists in the gcc tree
-	then gcc owns it.  Thus you have to look at the gcc tree
-	to know whether any particular file is owned by gcc.
-	See also binutils/, gdb/, sid/, gcc/, libiberty/ etc.
+	See binutils/, gdb/, sid/, gcc/, libiberty/ etc.
 
 intl/; config.rhost; libiberty/; libiberty's part of include/;
 compile; depcomp; install-sh; missing; ylwrap; config/

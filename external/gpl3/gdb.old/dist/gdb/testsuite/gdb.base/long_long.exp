@@ -1,6 +1,6 @@
 # This testcase is part of GDB, the GNU debugger.
 
-# Copyright 1997-2020 Free Software Foundation, Inc.
+# Copyright 1997-2014 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -30,8 +30,14 @@ if [get_compiler_info] {
     return -1
 }
 
-if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable [concat debug nowarnings]] != "" } {
-     untested "failed to compile"
+if {$hp_cc_compiler} {
+    set flag "+e"
+} else {
+    set flag ""
+}
+
+if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable [concat debug additional_flags=$flag nowarnings]] != "" } {
+     untested long_long.exp
      return -1
 }
 
@@ -67,23 +73,19 @@ proc pat2 { n pats } {
     return [lindex $pats $i]
 }
 
-proc gdb_test_xxx { test pat args } {
+proc gdb_test_xxx { test pat name } {
     if { $pat == "" } {
 	setup_kfail gdb/1672 *-*-*
-	set pat "xxx"
-    }
-    if { [llength $args] == 1 } {
-	set name [lindex $args 0]
+	gdb_test $test "xxx" $name
+    } else {
 	gdb_test $test $pat $name
     }
-
-    gdb_test $test $pat
 }
 
 proc gdb_test_ptr { test args } {
     global sizeof_data_ptr
 
-    gdb_test_xxx $test [pat2 $sizeof_data_ptr $args]
+    gdb_test_xxx $test [pat2 $sizeof_data_ptr $args] $test
 }
 
 proc gdb_test_xptr { examine args } {
@@ -95,27 +97,27 @@ proc gdb_test_xptr { examine args } {
 
 proc gdb_test_char { test args } {
     global sizeof_char
-    gdb_test_xxx $test [pat2 $sizeof_char $args]
+    gdb_test_xxx $test [pat2 $sizeof_char $args] $test
 }
 
 proc gdb_test_short { test args } {
     global sizeof_short
-    gdb_test_xxx $test [pat2 $sizeof_short $args]
+    gdb_test_xxx $test [pat2 $sizeof_short $args] $test
 }
 
 proc gdb_test_int { test args } {
     global sizeof_int
-    gdb_test_xxx $test [pat2 $sizeof_int $args]
+    gdb_test_xxx $test [pat2 $sizeof_int $args] $test
 }
 
 proc gdb_test_long { test args } {
     global sizeof_long
-    gdb_test_xxx $test [pat2 $sizeof_long $args]
+    gdb_test_xxx $test [pat2 $sizeof_long $args] $test
 }
 
 proc gdb_test_long_long { test args } {
     global sizeof_long_long
-    gdb_test_xxx $test [pat2 $sizeof_long_long $args]
+    gdb_test_xxx $test [pat2 $sizeof_long_long $args] $test
 }
 
 gdb_breakpoint [gdb_get_line_number "Stop here and look"]
@@ -283,11 +285,6 @@ gdb_test "x/2gt g" "000000010010001101000101011001111000100110101011110011011110
 gdb_test_ptr "x/2ga g" "" "" "0x89abcdef.*0x77053977" "0x123456789abcdef.*0xa72ee53977053977"
 gdb_test "x/2gc g" "-17 '.\[0-9\]*'.*119 'w'"
 gdb_test "x/2gf g" "3.5127005640885037e-303.*-5.9822653797615723e-120"
-
-# Repeat behavior.
-gdb_test "x/2bx b" "0x01.*0xa7" "set up for repeat"
-send_gdb "\n"
-gdb_test "" "0x00.*0x00" "repeat x command"
 
 gdb_exit
 return 0

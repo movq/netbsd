@@ -1,6 +1,6 @@
 /* Target-dependent code for the GNU C Library (glibc).
 
-   Copyright (C) 2002-2020 Free Software Foundation, Inc.
+   Copyright (C) 2002-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -54,19 +54,19 @@ glibc_skip_solib_resolver (struct gdbarch *gdbarch, CORE_ADDR pc)
      debugging programs that use shared libraries.  */
 
   struct bound_minimal_symbol resolver 
-    = lookup_bound_minimal_symbol ("_dl_runtime_resolve");
+    = lookup_minimal_symbol_and_objfile ("_dl_runtime_resolve");
 
   if (resolver.minsym)
     {
       /* The dynamic linker began using this name in early 2005.  */
-      struct bound_minimal_symbol fixup
+      struct minimal_symbol *fixup
 	= lookup_minimal_symbol ("_dl_fixup", NULL, resolver.objfile);
       
       /* This is the name used in older versions.  */
-      if (! fixup.minsym)
+      if (! fixup)
         fixup = lookup_minimal_symbol ("fixup", NULL, resolver.objfile);
 
-      if (fixup.minsym && BMSYMBOL_VALUE_ADDRESS (fixup) == pc)
+      if (fixup && SYMBOL_VALUE_ADDRESS (fixup) == pc)
 	return frame_unwind_caller_pc (get_current_frame ());
     }
 

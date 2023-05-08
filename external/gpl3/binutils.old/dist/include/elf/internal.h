@@ -1,5 +1,6 @@
 /* ELF support for BFD.
-   Copyright (C) 1991-2020 Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1993, 1994, 1995, 1997, 1998, 2000, 2001, 2002,
+   2003, 2006, 2007, 2008, 2010, 2011 Free Software Foundation, Inc.
 
    Written by Fred Fish @ Cygnus Support, from information published
    in "UNIX System V Release 4, Programmers Guide: ANSI C and
@@ -114,14 +115,6 @@ typedef struct elf_internal_shdr {
   asection *	bfd_section;		/* Associated BFD section.  */
   unsigned char *contents;		/* Section contents.  */
 } Elf_Internal_Shdr;
-
-/* Compression header */
-
-typedef struct elf_internal_chdr {
-  unsigned int	ch_type;		/* Type of compression */
-  bfd_size_type	ch_size;		/* Size of uncompressed data in bytes */
-  bfd_vma	ch_addralign;		/* Alignment of uncompressed data */
-} Elf_Internal_Chdr;
 
 /* Symbol table entry */
 
@@ -273,6 +266,8 @@ struct elf_segment_map
   bfd_vma p_align;
   /* Segment size in file and memory */
   bfd_vma p_size;
+  /* Required size of filehdr + phdrs, if non-zero */
+  bfd_vma header_size;
   /* Whether the p_flags field is valid; if not, the flags are based
      on the section flags.  */
   unsigned int p_flags_valid : 1;
@@ -289,13 +284,6 @@ struct elf_segment_map
   unsigned int includes_filehdr : 1;
   /* Whether this segment includes the program headers.  */
   unsigned int includes_phdrs : 1;
-  /* Assume this PT_LOAD header has an lma of zero when sorting
-     headers before assigning file offsets.  PT_LOAD headers with this
-     flag set are placed after one with includes_filehdr set, and
-     before PT_LOAD headers without this flag set.  */
-  unsigned int no_sort_lma : 1;
-  /* Index holding original order before sorting segments.  */
-  unsigned int idx;
   /* Number of sections (may be 0).  */
   unsigned int count;
   /* Sections.  Actual number of elements is in count field.  */
@@ -316,8 +304,8 @@ struct elf_segment_map
    VMAs are checked for alloc sections.  If STRICT, then a zero size
    section won't match at the end of a segment, unless the segment
    is also zero size.  Regardless of STRICT and CHECK_VMA, zero size
-   sections won't match at the start or end of PT_DYNAMIC nor PT_NOTE,
-   unless PT_DYNAMIC and PT_NOTE are themselves zero sized.  */
+   sections won't match at the start or end of PT_DYNAMIC, unless
+   PT_DYNAMIC is itself zero sized.  */
 #define ELF_SECTION_IN_SEGMENT_1(sec_hdr, segment, check_vma, strict)	\
   ((/* Only PT_LOAD, PT_GNU_RELRO and PT_TLS segments can contain	\
        SHF_TLS sections.  */						\
@@ -330,15 +318,6 @@ struct elf_segment_map
     || (((sec_hdr)->sh_flags & SHF_TLS) == 0				\
 	&& (segment)->p_type != PT_TLS					\
 	&& (segment)->p_type != PT_PHDR))				\
-   /* PT_LOAD and similar segments only have SHF_ALLOC sections.  */	\
-   && !(((sec_hdr)->sh_flags & SHF_ALLOC) == 0				\
-	&& ((segment)->p_type == PT_LOAD				\
-	    || (segment)->p_type == PT_DYNAMIC				\
-	    || (segment)->p_type == PT_GNU_EH_FRAME			\
-	    || (segment)->p_type == PT_GNU_STACK			\
-	    || (segment)->p_type == PT_GNU_RELRO			\
-	    || ((segment)->p_type >= PT_GNU_MBIND_LO			\
-		&& (segment)->p_type <= PT_GNU_MBIND_HI)))		\
    /* Any section besides one of type SHT_NOBITS must have file		\
       offsets within the segment.  */					\
    && ((sec_hdr)->sh_type == SHT_NOBITS					\
@@ -359,10 +338,8 @@ struct elf_segment_map
 	   && (((sec_hdr)->sh_addr - (segment)->p_vaddr			\
 		+ ELF_SECTION_SIZE(sec_hdr, segment))			\
 	       <= (segment)->p_memsz)))					\
-   /* No zero size sections at start or end of PT_DYNAMIC nor		\
-      PT_NOTE.  */							\
-   && (((segment)->p_type != PT_DYNAMIC					\
-	&& (segment)->p_type != PT_NOTE)				\
+   /* No zero size sections at start or end of PT_DYNAMIC.  */		\
+   && ((segment)->p_type != PT_DYNAMIC					\
        || (sec_hdr)->sh_size != 0					\
        || (segment)->p_memsz == 0					\
        || (((sec_hdr)->sh_type == SHT_NOBITS				\

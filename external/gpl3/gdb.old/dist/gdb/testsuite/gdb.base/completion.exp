@@ -1,4 +1,4 @@
-# Copyright 1998-2020 Free Software Foundation, Inc.
+# Copyright 1998-2014 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -56,8 +56,9 @@ if [get_compiler_info] {
     return -1
 }
 
-if {[prepare_for_testing "failed to prepare" $testfile \
+if {[prepare_for_testing $testfile.exp $testfile \
 	 [list $srcfile $srcfile2] {debug nowarnings}]} {
+    untested $testfile.exp
     return -1
 }
 
@@ -65,112 +66,8 @@ if ![runto_main] then {
         perror "tests suppressed"
 }
 
+set oldtimeout1 $timeout
 set timeout 30
-gdb_test_no_output "set max-completions unlimited"
-
-gdb_test_no_output "complete print values\[0\].x." \
-    "field completion with invalid field"
-
-# If there is a non-deprecated completion, it should be returned.
-gdb_test "complete sav" "save" "test non-deprecated completion"
-# If there is only a deprecated completion, then it should be returned.
-gdb_test "complete save-t" "save-tracepoints" "test deprecated completion"
-
-
-#
-# Tag name completion.
-#
-
-gdb_test "complete ptype struct some_" "ptype struct some_struct"
-gdb_test "complete ptype enum some_" "ptype enum some_enum"
-gdb_test "complete ptype union some_" "ptype union some_union"
-
-
-gdb_test "complete set gnutarget aut" "set gnutarget auto"
-
-
-gdb_test "complete set cp-abi aut" "set cp-abi auto"
-
-# Test that completion of commands 'target FOO' works well.
-set targets [list "core" "tfile" "exec"]
-
-# Test that completion of command 'target ctf' if GDB supports ctf
-# target.
-gdb_test_multiple "target ctf" "" {
-    -re "Undefined target command: \"ctf\"\.  Try \"help target\"\.\r\n$gdb_prompt $" {
-    }
-    -re "No CTF directory specified.*\r\n$gdb_prompt $" {
-	lappend targets "ctf"
-    }
-}
-
-# Test artifacts are put in different locations depending on test
-# is a parallel run or not.  Firstly check file exists, and then
-# do the test on file completion.
-
-foreach dir1 [ list "./gdb.base" "./outputs/gdb.base/completion" ] {
-    if { [remote_file host exists ${dir1}/completion]
-	 && [remote_file host exists ${dir1}/completion0.o]
-	 && [remote_file host exists ${dir1}/completion1.o] } {
-	foreach target_name ${targets} {
-	    gdb_test "complete target ${target_name} ${dir1}/completion" \
-		"target ${target_name} ${dir1}/completion.*${dir1}/completion0\\.o.*${dir1}/completion1\\.o.*" \
-		"complete target ${target_name}"
-	}
-	break
-    }
-}
-
-#
-# "set foo unlimited" completion.
-#
-
-# A var_uinteger command.
-gdb_test "complete set height " "set height unlimited"
-gdb_test "complete set height u" "set height unlimited"
-
-# A var_integer command.
-gdb_test "complete set listsize " "set listsize unlimited"
-gdb_test "complete set listsize unl" "set listsize unlimited"
-
-# A var_zuinteger_unlimited command.
-gdb_test "complete set trace-buffer-size " "set trace-buffer-size unlimited"
-gdb_test "complete set trace-buffer-size unl" "set trace-buffer-size unlimited"
-
-# Test "info registers" completion: First determine this
-# architecture's registers and reggroups...
-
-set regs_output [capture_command_output "mt print registers" \
-		     ".*Name.*Nr.*Rel.*Offset.*Size.*Type.\[^\n\]*\n"]
-append regs_output "\n"
-append regs_output [capture_command_output "mt print reggroups" \
-			".*Group.*Type\[^\n]*\n"]
-append regs_output "\n"
-append regs_output [capture_command_output "mt print user-registers" \
-		     ".*Name.*Nr\[^\n]*\n"]
-set all_regs {}
-foreach {- reg} [regexp -all -inline -line {^\s+(\w+)} $regs_output] {
-    lappend all_regs $reg
-}
-
-set all_regs [join [lsort -unique $all_regs]]
-
-# ... and then compare them to the completion of "info registers".
-
-set regs_output [capture_command_output "complete info registers " ""]
-set completed_regs {}
-foreach {-> reg} [regexp -all -inline -line {^info registers (\w+\S*)} $regs_output] {
-    lappend completed_regs $reg
-}
-set completed_regs [join [lsort $completed_regs]]
-gdb_assert {{$all_regs eq $completed_regs}} "complete 'info registers '"
-
-# Tests below are about tab-completion, which doesn't work if readline
-# library isn't used.  Check it first.
-
-if { ![readline_is_used] } {
-    return -1
-}
 
 set test "complete 'hfgfh'"
 send_gdb "hfgfh\t"
@@ -310,7 +207,7 @@ gdb_test_multiple "" "$test" {
     -re "^info $" {
 	send_gdb "\n"
 	gdb_test_multiple "" "$test" {
-	    -re "List of info subcommands.*$gdb_prompt $" {
+	    -re "\"info\" must be followed by the name of an info command\\.\r\nList of info subcommands.*$gdb_prompt $" {
 		pass "$test"
 	    }
 	}
@@ -323,7 +220,7 @@ gdb_test_multiple "" "$test" {
     -re "^info \\\x07$" {
 	send_gdb "\n"
 	gdb_test_multiple "" "$test" {
-	    -re "List of info subcommands:\r\n\r\n.*$gdb_prompt $" {
+	    -re "\"info\" must be followed by the name of an info command\\.\r\nList of info subcommands:\r\n\r\n.*$gdb_prompt $" {
 		pass "$test"
 	    }
 	}
@@ -339,7 +236,7 @@ gdb_test_multiple "" "$test" {
 	    -re "address.*types.*$gdb_prompt " {
 		send_gdb "\n"
 		gdb_test_multiple "" "$test" {
-		    -re "allowed if unambiguous\\..*$gdb_prompt $" {
+		    -re "\"info\".*unambiguous\\..*$gdb_prompt $" {
 			pass "$test"
 		    }
 		}
@@ -665,7 +562,7 @@ gdb_test "complete whatis &values\[0\]->z" \
 # strategy on Tuesdays to get the cursor in the right place, that's
 # not something the testsuite should care about.
 #
-# So, we avoid long lines.  We `cd' to ${srcdir} first, and then do
+# So, we avoid long lines.  We `cd' to ${objdir} first, and then do
 # the completion relative to the current directory.
 
 # ${srcdir} may be a relative path.  We want to make sure we end up
@@ -716,19 +613,19 @@ gdb_expect {
 }
 
 # Empty COMMAND sends no newline while " " sends the newline we need.
-gdb_test " " "Source directories searched: .*" "glob remaining of directory test"
+gdb_test " " "Source directories searched: .*" "Glob remaining of directory test"
 
 gdb_test "complete file ./gdb.base/compl" \
     "file ./gdb.base/completion\\.exp.*" \
     "complete-command 'file ./gdb.base/compl'"
 
-set test "complete 'file ./gdb.base/completi'"
-send_gdb "file ./gdb.base/completi\t"
+set test "complete 'file ./gdb.base/complet'"
+send_gdb "file ./gdb.base/complet\t"
 gdb_test_multiple "" "$test" {
     -re "^file ./gdb.base/completion\\.exp $" {
 	send_gdb "\n"
 	# Ignore the exact error message.
-	gdb_test_multiple "" "complete 'file ./gdb.base/completi'" {
+	gdb_test_multiple "" "complete 'file ./gdb.base/complet'" {
 	    -re "\r\nA program is being debugged already\\.\[\r\n\]+Are you sure you want to change the file\\? \\(y or n\\) $" {
 		send_gdb "n\n"
 		exp_continue
@@ -749,7 +646,7 @@ gdb_test_multiple "" "$test" {
 	    -re "marker1.*$gdb_prompt " {
 		send_gdb "\n"
 		gdb_test_multiple "" "$test" {
-		    -re "All functions matching regular expression \"marker\":.*File.*break1.c:.*\tint marker1\\((void|)\\);\r\n.*:\tint marker2\\(int\\).*marker3\\(char.*char.*\\).*marker4\\(long( int)?\\);.*$gdb_prompt $" {
+		    -re "All functions matching regular expression \"marker\":.*File.*break1.c:\r\nint marker1\\((void|)\\);\r\nint marker2\\(int\\).*marker3\\(char.*char.*\\).*marker4\\(long( int)?\\);.*$gdb_prompt $" {
 			pass "$test"
 		    }
 		}
@@ -775,150 +672,64 @@ gdb_test_multiple "" "$test" {
     }
 }
 
-#
-# Tests for the location completer
-#
+gdb_test_no_output "complete print values\[0\].x." \
+    "field completion with invalid field"
 
-# Turn off pending breakpoint support so that we don't get queried
-# all the time.
-gdb_test_no_output "set breakpoint pending off"
+# If there is a non-deprecated completion, it should be returned.
+gdb_test "complete sav" "save" "test non-deprecated completion"
+# If there is only a deprecated completion, then it should be returned.
+gdb_test "complete save-t" "save-tracepoints" "test deprecated completion"
 
-set subsrc [string range $srcfile 0 [expr {[string length $srcfile] - 3}]]
-set test "tab complete break $subsrc"
-send_gdb "break $subsrc\t\t"
-gdb_test_multiple "" $test {
-    -re "break\.c.*break1\.c.*$gdb_prompt " {
-	send_gdb "1\t\n"
-	gdb_test_multiple "" $test {
-	    -re "malformed linespec error: unexpected end of input\r\n$gdb_prompt " {
-		pass $test
-	    }
-	    -re "$gdb_prompt p$" {
-		fail $test
-	    }
-	}
-    }
-
-    -re "$gdb_prompt p$" {
-	fail $test
-    }
-}
-
-gdb_test "complete break $subsrc" "break\.c.*break1\.c"
-
-set test "tab complete break need"
-send_gdb "break need\t"
-gdb_test_multiple "" $test {
-    -re "break need_malloc " {
-	send_gdb "\n"
-	gdb_test_multiple "" $test {
-	    -re ".*Breakpoint.*at .*/$srcfile, line .*$gdb_prompt " {
-		pass $test
-		gdb_test_no_output "delete breakpoint \$bpnum" \
-		    "delete breakpoint for $test"
-	    }
-	    -re "$gdb_prompt p$" {
-		fail $test
-	    }
-	}
-    }
-    -re "$gdb_prompt p$" {
-	fail $test
-    }
-}
-
-gdb_test "complete break need" "need_malloc"
-
-# gdb/17960
-# Enabling max-completions is necessary to trigger the bug.
-gdb_test_no_output "set max-completions 10"
-set test "tab complete break $srcfile:ma"
-send_gdb "break $srcfile:ma\t"
-gdb_test_multiple "" $test {
-    -re "break $srcfile:main " {
-	send_gdb "\n"
-	gdb_test_multiple "" $test {
-	    -re ".*Breakpoint.*at .*/$srcfile, line .*$gdb_prompt " {
-		pass $test
-		gdb_test_no_output "delete breakpoint \$bpnum" \
-		    "delete breakpoint for $test"
-	    }
-	    -re "$gdb_prompt p$" {
-		fail $test
-	    }
-	}
-    }
-    -re "$gdb_prompt p$" {
-	fail $test
-    }
-}
-
-gdb_test "complete break $srcfile:ma" "break\.c:main"
-
-# End of gdb/17960 testing.
 
 #
-# Completion limiting.
+# Tag name completion.
 #
 
-gdb_test_no_output "set max-completions 5"
+gdb_test "complete ptype struct some_" "ptype struct some_struct"
+gdb_test "complete ptype enum some_" "ptype enum some_enum"
+gdb_test "complete ptype union some_" "ptype union some_union"
 
-proc ignore_and_resync {cmd result test} {
-    global gdb_prompt
 
-    gdb_test_multiple "" "$test" {
-	-re "^${cmd}$" {
-	    # Complete the command and ignore the output
-	    # to resync gdb for the next test.
-	    send_gdb "\n"
-	    gdb_test_multiple "" "$test" {
-		-re "$gdb_prompt $" {
-		    $result $test
-		}
-	    }
-	}
+gdb_test "complete set gnutarget aut" "set gnutarget auto"
+
+
+gdb_test "complete set cp-abi aut" "set cp-abi auto"
+
+# Test that completion of commands 'target FOO' works well.
+set targets [list "core" "tfile" "exec"]
+
+# Test that completion of command 'target ctf' if GDB supports ctf
+# target.
+gdb_test_multiple "target ctf" "" {
+    -re "Undefined target command: \"ctf\"\.  Try \"help target\"\.\r\n$gdb_prompt $" {
+    }
+    -re "No CTF directory specified.*\r\n$gdb_prompt $" {
+	lappend targets "ctf"
     }
 }
 
-proc test_tab_complete {cmd test} {
-    global gdb_prompt
-
-    send_gdb "${cmd}\t"
-    gdb_test_multiple "" "$test" {
-	-re "^${cmd}\\\x07$" {
-	    send_gdb "\t"
-	    gdb_test_multiple "" "$test" {
-		-re "List may be truncated, max-completions reached.*\r\n$gdb_prompt " {
-		    ignore_and_resync $cmd pass $test
-		}
-		-re "$gdb_prompt " {
-		    ignore_and_resync $cmd fail $test
-		}
-	    }
-	}
-    }
+foreach target_name ${targets} {
+    gdb_test "complete target ${target_name} ./gdb.base/completion" \
+	"target ${target_name} ./gdb.base/completion\\.exp.*"
 }
 
-test_tab_complete "p" \
-    "command-name completion limiting using tab character"
+#
+# "set foo unlimited" completion.
+#
 
-set test "command-name completion limiting using complete command"
-send_gdb "complete p\n"
-gdb_test_multiple "" "$test" {
-    -re "List may be truncated, max-completions reached.*\r\n$gdb_prompt $" {
-	pass "$test"
-    }
-}
+# A var_uinteger command.
+gdb_test "complete set height " "set height unlimited"
+gdb_test "complete set height u" "set height unlimited"
 
-gdb_test_no_output "set max-completions 3"
+# A var_integer command.
+gdb_test "complete set listsize " "set listsize unlimited"
+gdb_test "complete set listsize unl" "set listsize unlimited"
 
-test_tab_complete "p marker" \
-    "symbol-name completion limiting using tab character"
+# A var_zuinteger_unlimited command.
+gdb_test "complete set trace-buffer-size " "set trace-buffer-size unlimited"
+gdb_test "complete set trace-buffer-size unl" "set trace-buffer-size unlimited"
 
-set test "symbol-name completion limiting using complete command"
-send_gdb "complete p mark\n"
-gdb_test_multiple "" "$test" {
-    -re "List may be truncated, max-completions reached.*\r\n$gdb_prompt $" {
-	pass "$test"
-    }
-}
+# Restore globals modified in this test...
+set timeout $oldtimeout1
+
+return 0

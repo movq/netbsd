@@ -1,5 +1,5 @@
 /* Definitions for expressions designed to be executed on the agent
-   Copyright (C) 1998-2020 Free Software Foundation, Inc.
+   Copyright (C) 1998-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -16,8 +16,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef AX_H
-#define AX_H
+#ifndef AGENTEXPR_H
+#define AGENTEXPR_H
+
+#include "doublest.h"		/* For DOUBLEST.  */
+#include "vec.h"
 
 /* It's sometimes useful to be able to debug programs that you can't
    really stop for more than a fraction of a second.  To this end, the
@@ -77,14 +80,20 @@ enum agent_flaws
 
 /* Agent expression data structures.  */
 
+/* The type of an element of the agent expression stack.
+   The bytecode operation indicates which element we should access;
+   the value itself has no typing information.  GDB generates all
+   bytecode streams, so we don't have to worry about type errors.  */
+
+union agent_val
+  {
+    LONGEST l;
+    DOUBLEST d;
+  };
+
 /* A buffer containing a agent expression.  */
 struct agent_expr
   {
-    /* Construct an empty agent expression.  */
-    explicit agent_expr (struct gdbarch *gdbarch, CORE_ADDR scope);
-
-    ~agent_expr ();
-
     /* The bytes of the expression.  */
     unsigned char *buf;
 
@@ -153,8 +162,11 @@ struct agent_expr
     int trace_string;
   };
 
-/* An agent_expr owning pointer.  */
-typedef std::unique_ptr<agent_expr> agent_expr_up;
+/* Pointer to an agent_expr structure.  */
+typedef struct agent_expr *agent_expr_p;
+
+/* Vector of pointers to agent expressions.  */
+DEF_VEC_P (agent_expr_p);
 
 /* The actual values of the various bytecode operations.  */
 
@@ -162,7 +174,7 @@ enum agent_op
   {
 #define DEFOP(NAME, SIZE, DATA_SIZE, CONSUMED, PRODUCED, VALUE)  \
     aop_ ## NAME = VALUE,
-#include "gdbsupport/ax.def"
+#include "ax.def"
 #undef DEFOP
     aop_last
   };
@@ -171,8 +183,12 @@ enum agent_op
 
 /* Functions for building expressions.  */
 
-/* Append a raw byte to EXPR.  */
-extern void ax_raw_byte (struct agent_expr *expr, gdb_byte byte);
+/* Allocate a new, empty agent expression.  */
+extern struct agent_expr *new_agent_expr (struct gdbarch *, CORE_ADDR);
+
+/* Free a agent expression.  */
+extern void free_agent_expr (struct agent_expr *);
+extern struct cleanup *make_cleanup_free_agent_expr (struct agent_expr *);
 
 /* Append a simple operator OP to EXPR.  */
 extern void ax_simple (struct agent_expr *EXPR, enum agent_op OP);
@@ -265,4 +281,4 @@ extern struct aop_map aop_map[];
 
 extern void ax_reqs (struct agent_expr *ax);
 
-#endif /* AX_H */
+#endif /* AGENTEXPR_H */

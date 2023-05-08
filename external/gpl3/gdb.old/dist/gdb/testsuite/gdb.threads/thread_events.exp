@@ -1,4 +1,4 @@
-# Copyright (C) 2007-2020 Free Software Foundation, Inc.
+# Copyright (C) 2007-2014 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -27,10 +27,9 @@ if ![istarget *-*-linux*] then {
     return
 }
 
-# When using the RSP, we don't get notifications about new threads.
-# This is expected, so don't test for that.
-if {[target_info gdb_protocol] == "remote"
-    || [target_info gdb_protocol] == "extended-remote"} {
+# When using gdbserver, even on Linux, we don't get notifications
+# about new threads.  This is expected, so don't test for that.
+if [is_remote target] then {
     return
 }
 
@@ -113,7 +112,7 @@ proc test_thread_messages {enabled} {
   # The initial thread may log a 'New Thread' message, but we don't
   # check for it.
   if ![runto_main] then {
-     fail "can't run to main $enabled_string"
+     fail "Can't run to main $enabled_string"
      return 1
   }
 

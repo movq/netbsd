@@ -548,7 +548,7 @@
 
 2013-12-03  Walfred Tedeschi  <walfred.tedeschi@intel.com>
 
-	* NEWS:  Add section for Intel Architecture Instructions
+	* NEWS:  Add section for Intel(R) Architecture Instructions
 	Extesions mentioning MPX.
 
 2013-12-03  Joel Brobecker  <brobecker@adacore.com>
@@ -6265,9 +6265,9 @@
 
 2013-06-21  Joel Brobecker  <brobecker@adacore.com>
 
-	* gnulib/Makefile.in: Update date in copyright header.
-	* gnulib/configure.ac: Ditto.
-	* gnulib/update-gnulib.sh: Ditto.
+	* gdb/gnulib/Makefile.in: Update date in copyright header.
+	* gdb/gnulib/configure.ac: Ditto.
+	* gdb/gnulib/update-gnulib.sh: Ditto.
 
 2013-06-21  Joel Brobecker  <brobecker@adacore.com>
 

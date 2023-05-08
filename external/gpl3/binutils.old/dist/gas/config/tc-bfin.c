@@ -1,5 +1,6 @@
 /* tc-bfin.c -- Assembler for the ADI Blackfin.
-   Copyright (C) 2005-2020 Free Software Foundation, Inc.
+   Copyright 2005, 2006, 2007, 2008, 2009, 2010
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -19,12 +20,14 @@
    02110-1301, USA.  */
 
 #include "as.h"
+#include "struc-symbol.h"
 #include "bfin-defs.h"
 #include "obstack.h"
 #include "safe-ctype.h"
 #ifdef OBJ_ELF
 #include "dwarf2dbg.h"
 #endif
+#include "libbfd.h"
 #include "elf/common.h"
 #include "elf/bfin.h"
 
@@ -109,7 +112,7 @@ bfin_pic_ptr (int nbytes)
 static void
 bfin_s_bss (int ignore ATTRIBUTE_UNUSED)
 {
-  int temp;
+  register int temp;
 
   temp = get_absolute_expression ();
   subseg_set (bss_section, (subsegT) temp);
@@ -322,6 +325,8 @@ struct bfin_cpu bfin_cpus[] =
 
   {"bf592", BFIN_CPU_BF592, 0x0001, AC_05000074},
   {"bf592", BFIN_CPU_BF592, 0x0000, AC_05000074},
+
+  {NULL, 0, 0, 0}
 };
 
 /* Define bfin-specific command-line options (there are none). */
@@ -344,7 +349,7 @@ size_t md_longopts_size = sizeof (md_longopts);
 
 
 int
-md_parse_option (int c ATTRIBUTE_UNUSED, const char *arg ATTRIBUTE_UNUSED)
+md_parse_option (int c ATTRIBUTE_UNUSED, char *arg ATTRIBUTE_UNUSED)
 {
   switch (c)
     {
@@ -353,22 +358,23 @@ md_parse_option (int c ATTRIBUTE_UNUSED, const char *arg ATTRIBUTE_UNUSED)
 
     case OPTION_MCPU:
       {
-	const char *q;
-	unsigned int i;
+	const char *p, *q;
+	int i;
 
-	for (i = 0; i < ARRAY_SIZE (bfin_cpus); i++)
+	i = 0;
+	while ((p = bfin_cpus[i].name) != NULL)
 	  {
-	    const char *p = bfin_cpus[i].name;
 	    if (strncmp (arg, p, strlen (p)) == 0)
 	      break;
+	    i++;
 	  }
 
-	if (i == ARRAY_SIZE (bfin_cpus))
+	if (p == NULL)
 	  as_fatal ("-mcpu=%s is not valid", arg);
 
 	bfin_cpu_type = bfin_cpus[i].type;
 
-	q = arg + strlen (bfin_cpus[i].name);
+	q = arg + strlen (p);
 
 	if (*q == '\0')
 	  {
@@ -380,8 +386,7 @@ md_parse_option (int c ATTRIBUTE_UNUSED, const char *arg ATTRIBUTE_UNUSED)
       	else if (strcmp (q, "-any") == 0)
 	  {
 	    bfin_si_revision = 0xffff;
-	    while (i < ARRAY_SIZE (bfin_cpus)
-		   && bfin_cpus[i].type == bfin_cpu_type)
+	    while (bfin_cpus[i].type == bfin_cpu_type)
 	      {
 		bfin_anomaly_checks |= bfin_cpus[i].anomaly_checks;
 		i++;
@@ -404,13 +409,11 @@ md_parse_option (int c ATTRIBUTE_UNUSED, const char *arg ATTRIBUTE_UNUSED)
 
 	    bfin_si_revision = (si_major << 8) | si_minor;
 
-	    while (i < ARRAY_SIZE (bfin_cpus)
-		   && bfin_cpus[i].type == bfin_cpu_type
+	    while (bfin_cpus[i].type == bfin_cpu_type
 		   && bfin_cpus[i].si_revision != bfin_si_revision)
 	      i++;
 
-	    if (i == ARRAY_SIZE (bfin_cpus)
-	       	|| bfin_cpus[i].type != bfin_cpu_type)
+	    if (bfin_cpus[i].type != bfin_cpu_type)
 	      goto invalid_silicon_revision;
 
 	    bfin_anomaly_checks |= bfin_cpus[i].anomaly_checks;
@@ -444,7 +447,7 @@ md_show_usage (FILE * stream)
 
 /* Perform machine-specific initializations.  */
 void
-md_begin (void)
+md_begin ()
 {
   /* Set the ELF flags if desired. */
   if (bfin_flags)
@@ -483,18 +486,20 @@ void
 md_assemble (char *line)
 {
   char *toP = 0;
+  extern char *current_inputline;
   int size, insn_size;
   struct bfin_insn *tmp_insn;
   size_t len;
   static size_t buffer_len = 0;
-  static char *current_inputline;
   parse_state state;
 
   len = strlen (line);
   if (len + 2 > buffer_len)
     {
+      if (buffer_len > 0)
+	free (current_inputline);
       buffer_len = len + 40;
-      current_inputline = XRESIZEVEC (char, current_inputline, buffer_len);
+      current_inputline = xmalloc (buffer_len);
     }
   memcpy (current_inputline, line, len);
   current_inputline[len] = ';';
@@ -787,14 +792,16 @@ md_apply_fix (fixS *fixP, valueT *valueP, segT seg ATTRIBUTE_UNUSED)
 
 /* Round up a section size to the appropriate boundary.  */
 valueT
-md_section_align (segT segment, valueT size)
+md_section_align (segment, size)
+     segT segment;
+     valueT size;
 {
-  int boundary = bfd_section_alignment (segment);
-  return ((size + (1 << boundary) - 1) & -(1 << boundary));
+  int boundary = bfd_get_section_alignment (stdoutput, segment);
+  return ((size + (1 << boundary) - 1) & (-1 << boundary));
 }
 
 
-const char *
+char *
 md_atof (int type, char * litP, int * sizeP)
 {
   return ieee_md_atof (type, litP, sizeP, FALSE);
@@ -805,12 +812,14 @@ md_atof (int type, char * litP, int * sizeP)
    then it is done here.  */
 
 arelent *
-tc_gen_reloc (asection *seg ATTRIBUTE_UNUSED, fixS *fixp)
+tc_gen_reloc (seg, fixp)
+     asection *seg ATTRIBUTE_UNUSED;
+     fixS *fixp;
 {
   arelent *reloc;
 
-  reloc		      = XNEW (arelent);
-  reloc->sym_ptr_ptr  = XNEW (asymbol *);
+  reloc		      = (arelent *) xmalloc (sizeof (arelent));
+  reloc->sym_ptr_ptr  = (asymbol **) xmalloc (sizeof (asymbol *));
   *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixp->fx_addsy);
   reloc->address      = fixp->fx_frag->fr_address + fixp->fx_where;
 
@@ -836,7 +845,9 @@ tc_gen_reloc (asection *seg ATTRIBUTE_UNUSED, fixS *fixp)
     given a PC relative reloc.  */
 
 long
-md_pcrel_from_section (fixS *fixP, segT sec)
+md_pcrel_from_section (fixP, sec)
+     fixS *fixP;
+     segT sec;
 {
   if (fixP->fx_addsy != (symbolS *) NULL
       && (!S_IS_DEFINED (fixP->fx_addsy)
@@ -927,7 +938,7 @@ note_reloc2 (INSTR_T code, const char *symbol, int reloc, int value, int pcrel)
 INSTR_T
 gencode (unsigned long x)
 {
-  INSTR_T cell = XOBNEW (&mempool, struct bfin_insn);
+  INSTR_T cell = obstack_alloc (&mempool, sizeof (struct bfin_insn));
   memset (cell, 0, sizeof (struct bfin_insn));
   cell->value = (x);
   return cell;
@@ -938,7 +949,7 @@ int ninsns;
 int count_insns;
 
 static void *
-allocate (size_t n)
+allocate (int n)
 {
   return obstack_alloc (&mempool, n);
 }
@@ -967,13 +978,13 @@ INSTR_T Expr_Node_Gen_Reloc (Expr_Node *head, int parent_reloc);
 INSTR_T
 Expr_Node_Gen_Reloc (Expr_Node * head, int parent_reloc)
 {
-  /* Top level relocation expression generator VDSP style.
+  /* Top level reloction expression generator VDSP style.
    If the relocation is just by itself, generate one item
    else generate this convoluted expression.  */
 
   INSTR_T note = NULL_CODE;
   INSTR_T note1 = NULL_CODE;
-  int pcrel = 1;  /* Is the parent reloc pc-relative?
+  int pcrel = 1;  /* Is the parent reloc pcrelative?
 		  This calculation here and HOWTO should match.  */
 
   if (parent_reloc)
@@ -1929,7 +1940,7 @@ bfin_loop_beginend (Expr_Node *exp, int begin)
   /* LOOP_END follows the last instruction in the loop.
      Adjust label address.  */
   if (!begin)
-    *symbol_X_add_number (linelabel) -= last_insn_size;
+    ((struct local_symbol *) linelabel)->lsy_value -= last_insn_size;
 }
 
 bfd_boolean
@@ -1960,9 +1971,9 @@ bfin_eol_in_insn (char *line)
 }
 
 bfd_boolean
-bfin_start_label (char *s)
+bfin_start_label (char *s, char *ptr)
 {
-  while (*s != 0)
+  while (s != ptr)
     {
       if (*s == '(' || *s == '[')
 	return FALSE;

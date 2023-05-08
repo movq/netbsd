@@ -1,5 +1,6 @@
 /* tc-c30.c -- Assembly code for the Texas Instruments TMS320C30
-   Copyright (C) 1998-2020 Free Software Foundation, Inc.
+   Copyright 1998, 1999, 2000, 2001, 2002, 2003, 2005, 2006, 2007, 2009
+   Free Software Foundation, Inc.
    Contributed by Steven Haworth (steve@pm.cse.rmit.edu.au)
 
    This file is part of GAS, the GNU Assembler.
@@ -31,7 +32,7 @@
 /* Put here all non-digit non-letter characters that may occur in an
    operand.  */
 static char operand_special_chars[] = "%$-+(,)*._~/<>&^!:[@]";
-static const char *ordinal_names[] =
+static char *ordinal_names[] =
 {
   N_("first"), N_("second"), N_("third"), N_("fourth"), N_("fifth")
 };
@@ -84,11 +85,11 @@ debug (const char *string, ...)
   if (flag_debug)
     {
       char str[100];
-      va_list argptr;
 
-      va_start (argptr, string);
+      VA_OPEN (argptr, string);
+      VA_FIXEDARG (argptr, const char *, string);
       vsprintf (str, string, argptr);
-      va_end (argptr);
+      VA_CLOSE (argptr);
       if (str[0] == '\0')
 	return (0);
       fputs (str, USE_STDOUT ? stdout : stderr);
@@ -280,7 +281,7 @@ output_invalid (char c)
     snprintf (output_invalid_buf, sizeof (output_invalid_buf),
 	      "'%c'", c);
   else
-    snprintf (output_invalid_buf, sizeof (output_invalid_buf),
+    snprintf (output_invalid_buf, sizeof (output_invalid_buf), 
 	      "(0x%x)", (unsigned char) c);
   return output_invalid_buf;
 }
@@ -380,10 +381,11 @@ tic30_find_parallel_insn (char *current_line, char *next_line)
 	}
       }
   }
-
-  parallel_insn = concat ("q_", first_opcode, "_", second_opcode, " ",
-			  first_operands, " | ", second_operands,
-			  (char *) NULL);
+  parallel_insn = malloc (strlen (first_opcode) + strlen (first_operands)
+			  + strlen (second_opcode) + strlen (second_operands) + 8);
+  sprintf (parallel_insn, "q_%s_%s %s | %s",
+	   first_opcode, second_opcode,
+	   first_operands, second_operands);
   debug ("parallel insn = %s\n", parallel_insn);
   return parallel_insn;
 }
@@ -398,10 +400,12 @@ static operand *
 tic30_operand (char *token)
 {
   unsigned int count;
+  char ind_buffer[strlen (token)];
   operand *current_op;
 
   debug ("In tic30_operand with %s\n", token);
-  current_op = XCNEW (operand);
+  current_op = malloc (sizeof (* current_op));
+  memset (current_op, '\0', sizeof (operand));
 
   if (*token == DIRECT_REFERENCE)
     {
@@ -460,9 +464,6 @@ tic30_operand (char *token)
       int disp_number = 0;
       int buffer_posn = 1;
       ind_addr_type *ind_addr_op;
-      char * ind_buffer;
-
-      ind_buffer = XNEWVEC (char, strlen (token));
 
       debug ("Found indirect reference\n");
       ind_buffer[0] = *token;
@@ -480,13 +481,11 @@ tic30_operand (char *token)
 	      if (found_ar)
 		{
 		  as_bad (_("More than one AR register found in indirect reference"));
-		  free (ind_buffer);
 		  return NULL;
 		}
 	      if (*(token + count + 1) < '0' || *(token + count + 1) > '7')
 		{
 		  as_bad (_("Illegal AR register in indirect reference"));
-		  free (ind_buffer);
 		  return NULL;
 		}
 	      ar_number = *(token + count + 1) - '0';
@@ -507,7 +506,6 @@ tic30_operand (char *token)
 		  if (found_disp)
 		    {
 		      as_bad (_("More than one displacement found in indirect reference"));
-		      free (ind_buffer);
 		      return NULL;
 		    }
 		  count++;
@@ -516,7 +514,6 @@ tic30_operand (char *token)
 		      if (!is_digit_char (*(token + count)))
 			{
 			  as_bad (_("Invalid displacement in indirect reference"));
-			  free (ind_buffer);
 			  return NULL;
 			}
 		      disp[disp_posn++] = *(token + (count++));
@@ -534,7 +531,6 @@ tic30_operand (char *token)
       if (!found_ar)
 	{
 	  as_bad (_("AR register not found in indirect reference"));
-	  free (ind_buffer);
 	  return NULL;
 	}
 
@@ -551,21 +547,18 @@ tic30_operand (char *token)
 	    {
 	      /* Maybe an implied displacement of 1 again.  */
 	      as_bad (_("required displacement wasn't given in indirect reference"));
-	      free (ind_buffer);
-	      return NULL;
+	      return 0;
 	    }
 	}
       else
 	{
 	  as_bad (_("illegal indirect reference"));
-	  free (ind_buffer);
 	  return NULL;
 	}
 
       if (found_disp && (disp_number < 0 || disp_number > 255))
 	{
 	  as_bad (_("displacement must be an unsigned 8-bit number"));
-	  free (ind_buffer);
 	  return NULL;
 	}
 
@@ -573,7 +566,6 @@ tic30_operand (char *token)
       current_op->indirect.disp = disp_number;
       current_op->indirect.ARnum = ar_number;
       current_op->op_type = Indirect;
-      free (ind_buffer);
     }
   else
     {
@@ -602,7 +594,9 @@ tic30_operand (char *token)
 	      segT retval;
 
 	      debug ("Probably a label: %s\n", token);
-	      current_op->immediate.label = xstrdup (token);
+	      current_op->immediate.label = malloc (strlen (token) + 1);
+	      strcpy (current_op->immediate.label, token);
+	      current_op->immediate.label[strlen (token)] = '\0';
 	      save_input_line_pointer = input_line_pointer;
 	      input_line_pointer = token;
 
@@ -630,7 +624,9 @@ tic30_operand (char *token)
 	      for (count = 0; count < strlen (token); count++)
 		if (*(token + count) == '.')
 		  current_op->immediate.decimal_found = 1;
-	      current_op->immediate.label = xstrdup (token);
+	      current_op->immediate.label = malloc (strlen (token) + 1);
+	      strcpy (current_op->immediate.label, token);
+	      current_op->immediate.label[strlen (token)] = '\0';
 	      current_op->immediate.f_number = (float) atof (token);
 	      current_op->immediate.s_number = (int) atoi (token);
 	      current_op->immediate.u_number = (unsigned int) atoi (token);
@@ -1121,7 +1117,7 @@ md_estimate_size_before_relax (fragS *fragP ATTRIBUTE_UNUSED,
 void
 md_convert_frag (bfd *abfd ATTRIBUTE_UNUSED,
 		 segT sec ATTRIBUTE_UNUSED,
-		 fragS *fragP ATTRIBUTE_UNUSED)
+		 register fragS *fragP ATTRIBUTE_UNUSED)
 {
   debug ("In md_convert_frag()\n");
 }
@@ -1157,7 +1153,7 @@ md_apply_fix (fixS *fixP,
 
 int
 md_parse_option (int c ATTRIBUTE_UNUSED,
-		 const char *arg ATTRIBUTE_UNUSED)
+		 char *arg ATTRIBUTE_UNUSED)
 {
   debug ("In md_parse_option()\n");
   return 0;
@@ -1212,7 +1208,7 @@ md_pcrel_from (fixS *fixP)
   return fixP->fx_where - fixP->fx_size + (INSN_SIZE * offset);
 }
 
-const char *
+char *
 md_atof (int what_statement_type,
 	 char *literalP,
 	 int *sizeP)
@@ -1389,9 +1385,9 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixP)
 #undef MAP
 #undef F
 
-  rel = XNEW (arelent);
+  rel = xmalloc (sizeof (* rel));
   gas_assert (rel != 0);
-  rel->sym_ptr_ptr = XNEW (asymbol *);
+  rel->sym_ptr_ptr = xmalloc (sizeof (asymbol *));
   *rel->sym_ptr_ptr = symbol_get_bfdsym (fixP->fx_addsy);
   rel->address = fixP->fx_frag->fr_address + fixP->fx_where;
   rel->addend = 0;

@@ -1,5 +1,7 @@
 /* ldlang.h - linker command language support
-   Copyright (C) 1991-2020 Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
+   2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012
+   Free Software Foundation, Inc.
 
    This file is part of the GNU Binutils.
 
@@ -55,10 +57,8 @@ typedef struct memory_region_struct
 {
   lang_memory_region_name name_list;
   struct memory_region_struct *next;
-  union etree_union *origin_exp;
   bfd_vma origin;
   bfd_size_type length;
-  union etree_union *length_exp;
   bfd_vma current;
   union lang_statement_union *last_os;
   flagword flags;
@@ -68,27 +68,26 @@ typedef struct memory_region_struct
 
 enum statement_enum
 {
-  lang_address_statement_enum,
-  lang_assignment_statement_enum,
-  lang_data_statement_enum,
-  lang_fill_statement_enum,
-  lang_group_statement_enum,
-  lang_input_section_enum,
-  lang_input_statement_enum,
-  lang_insert_statement_enum,
   lang_output_section_statement_enum,
-  lang_output_statement_enum,
-  lang_padding_statement_enum,
+  lang_assignment_statement_enum,
+  lang_input_statement_enum,
+  lang_address_statement_enum,
+  lang_wild_statement_enum,
+  lang_input_section_enum,
+  lang_object_symbols_statement_enum,
+  lang_fill_statement_enum,
+  lang_data_statement_enum,
   lang_reloc_statement_enum,
   lang_target_statement_enum,
-  lang_wild_statement_enum,
-  lang_constructors_statement_enum,
-  lang_object_symbols_statement_enum
+  lang_output_statement_enum,
+  lang_padding_statement_enum,
+  lang_group_statement_enum,
+  lang_insert_statement_enum,
+  lang_constructors_statement_enum
 };
 
 typedef struct lang_statement_header_struct
 {
-  /* Next pointer for statement_list statement list.  */
   union lang_statement_union *next;
   enum statement_enum type;
 } lang_statement_header_type;
@@ -116,7 +115,6 @@ typedef struct lang_output_statement_struct
 enum section_type
 {
   normal_section,
-  first_overlay_section,
   overlay_section,
   noload_section,
   noalloc_section
@@ -145,8 +143,6 @@ typedef struct lang_output_section_statement_struct
   fill_type *fill;
   union etree_union *addr_tree;
   union etree_union *load_base;
-  union etree_union *section_alignment;
-  union etree_union *subsection_alignment;
 
   /* If non-null, an expression to evaluate after setting the section's
      size.  The expression is evaluated inside REGION (above) with '.'
@@ -157,6 +153,8 @@ typedef struct lang_output_section_statement_struct
   lang_output_section_phdr_list *phdrs;
 
   unsigned int block_value;
+  int subsection_alignment;	/* Alignment of components.  */
+  int section_alignment;	/* Alignment of start of section.  */
   int constraint;
   flagword flags;
   enum section_type sectype;
@@ -164,14 +162,22 @@ typedef struct lang_output_section_statement_struct
   unsigned int processed_lma : 1;
   unsigned int all_input_readonly : 1;
   /* If this section should be ignored.  */
-  unsigned int ignored : 1;
+  unsigned int ignored : 1; 
   /* If this section should update "dot".  Prevents section being ignored.  */
-  unsigned int update_dot : 1;
+  unsigned int update_dot : 1; 
   /* If this section is after assignment to _end.  */
   unsigned int after_end : 1;
-  /* If this section uses the alignment of its input sections.  */
-  unsigned int align_lma_with_input : 1;
 } lang_output_section_statement_type;
+
+typedef struct
+{
+  lang_statement_header_type header;
+} lang_common_statement_type;
+
+typedef struct
+{
+  lang_statement_header_type header;
+} lang_object_symbols_statement_type;
 
 typedef struct
 {
@@ -229,9 +235,6 @@ struct lang_input_statement_flags
   /* 1 means this file was specified in a -l option.  */
   unsigned int maybe_archive : 1;
 
-  /* 1 means this file was specified in a -l:namespec option.  */
-  unsigned int full_name_provided : 1;
-
   /* 1 means search a set of directories for this file.  */
   unsigned int search_dirs : 1;
 
@@ -266,9 +269,6 @@ struct lang_input_statement_flags
   /* Set if the file does not exist.  */
   unsigned int missing_file : 1;
 
-  /* Set if reloading an archive or --as-needed lib.  */
-  unsigned int reload : 1;
-
 #ifdef ENABLE_PLUGINS
   /* Set if the file was claimed by a plugin.  */
   unsigned int claimed : 1;
@@ -276,12 +276,9 @@ struct lang_input_statement_flags
   /* Set if the file was claimed from an archive.  */
   unsigned int claim_archive : 1;
 
-  /* Set if added by the lto plugin add_input_file callback.  */
-  unsigned int lto_output : 1;
+  /* Set if reloading an --as-needed lib.  */
+  unsigned int reload : 1;
 #endif /* ENABLE_PLUGINS */
-
-  /* Head of list of pushed flags.  */
-  struct lang_input_statement_flags *pushed;
 };
 
 typedef struct lang_input_statement_struct
@@ -296,15 +293,14 @@ typedef struct lang_input_statement_struct
 
   bfd *the_bfd;
 
-  ctf_archive_t *the_ctf;
-
   struct flag_info *section_flag_list;
 
-  /* Next pointer for file_chain statement list.  */
-  struct lang_input_statement_struct *next;
+  /* Point to the next file - whatever it is, wanders up and down
+     archives */
+  union lang_statement_union *next;
 
-  /* Next pointer for input_file_chain statement list.  */
-  struct lang_input_statement_struct *next_real_file;
+  /* Point to the next file, but skips archive contents.  */
+  union lang_statement_union *next_real_file;
 
   const char *target;
 
@@ -316,27 +312,6 @@ typedef struct
   lang_statement_header_type header;
   asection *section;
 } lang_input_section_type;
-
-struct map_symbol_def {
-  struct bfd_link_hash_entry *entry;
-  struct map_symbol_def *next;
-};
-
-/* For input sections, when writing a map file: head / tail of a linked
-   list of hash table entries for symbols defined in this section.  */
-typedef struct input_section_userdata_struct
-{
-  struct map_symbol_def *map_symbol_def_head;
-  struct map_symbol_def **map_symbol_def_tail;
-  unsigned long map_symbol_def_count;
-} input_section_userdata_type;
-
-static inline bfd_boolean
-bfd_input_just_syms (const bfd *abfd)
-{
-  lang_input_statement_type *is = bfd_usrdata (abfd);
-  return is != NULL && is->flags.just_syms;
-}
 
 typedef struct lang_wild_statement_struct lang_wild_statement_type;
 
@@ -369,7 +344,6 @@ struct lang_wild_statement_struct
   struct wildcard_list *section_list;
   bfd_boolean keep_sections;
   lang_statement_list_type children;
-  struct name_list *exclude_name_list;
 
   walk_wild_section_handler_t walk_wild_section_handler;
   struct wildcard_list *handler_data[4];
@@ -415,20 +389,22 @@ typedef struct
 typedef union lang_statement_union
 {
   lang_statement_header_type header;
-  lang_address_statement_type address_statement;
-  lang_assignment_statement_type assignment_statement;
-  lang_data_statement_type data_statement;
-  lang_fill_statement_type fill_statement;
-  lang_group_statement_type group_statement;
-  lang_input_section_type input_section;
-  lang_input_statement_type input_statement;
-  lang_insert_statement_type insert_statement;
-  lang_output_section_statement_type output_section_statement;
-  lang_output_statement_type output_statement;
-  lang_padding_statement_type padding_statement;
-  lang_reloc_statement_type reloc_statement;
-  lang_target_statement_type target_statement;
   lang_wild_statement_type wild_statement;
+  lang_data_statement_type data_statement;
+  lang_reloc_statement_type reloc_statement;
+  lang_address_statement_type address_statement;
+  lang_output_section_statement_type output_section_statement;
+  lang_assignment_statement_type assignment_statement;
+  lang_input_statement_type input_statement;
+  lang_target_statement_type target_statement;
+  lang_output_statement_type output_statement;
+  lang_input_section_type input_section;
+  lang_common_statement_type common_statement;
+  lang_object_symbols_statement_type object_symbols_statement;
+  lang_fill_statement_type fill_statement;
+  lang_padding_statement_type padding_statement;
+  lang_group_statement_type group_statement;
+  lang_insert_statement_type insert_statement;
 } lang_statement_union_type;
 
 /* This structure holds information about a program header, from the
@@ -460,7 +436,6 @@ struct lang_nocrossrefs
 {
   struct lang_nocrossrefs *next;
   lang_nocrossref_type *list;
-  bfd_boolean onlyfirst;
 };
 
 /* This structure is used to hold a list of input section names which
@@ -470,6 +445,15 @@ struct unique_sections
 {
   struct unique_sections *next;
   const char *name;
+};
+
+/* This structure records symbols for which we need to keep track of
+   definedness for use in the DEFINED () test.  */
+
+struct lang_definedness_hash_entry
+{
+  struct bfd_hash_entry root;
+  int iteration;
 };
 
 /* Used by place_orphan to keep track of orphan sections and statements.  */
@@ -484,21 +468,14 @@ struct orphan_save
   lang_output_section_statement_type **os_tail;
 };
 
-struct asneeded_minfo
-{
-  struct asneeded_minfo *next;
-  const char *soname;
-  bfd *ref;
-  const char *name;
-};
-
 extern struct lang_phdr *lang_phdr_list;
 extern struct lang_nocrossrefs *nocrossref_list;
 extern const char *output_target;
 extern lang_output_section_statement_type *abs_output_section;
-extern lang_statement_list_type lang_os_list;
+extern lang_statement_list_type lang_output_section_statement;
 extern struct lang_input_statement_flags input_flags;
 extern bfd_boolean lang_has_input_file;
+extern etree_type *base;
 extern lang_statement_list_type *stat_ptr;
 extern bfd_boolean delete_output_file_on_failure;
 
@@ -509,9 +486,6 @@ extern lang_statement_list_type file_chain;
 extern lang_statement_list_type input_file_chain;
 
 extern int lang_statement_iteration;
-extern struct asneeded_minfo **asneeded_list_tail;
-
-extern void (*output_bfd_hash_table_free_fn) (struct bfd_link_hash_table *);
 
 extern void lang_init
   (void);
@@ -528,8 +502,12 @@ extern void lang_set_flags
 extern void lang_add_output
   (const char *, int from_script);
 extern lang_output_section_statement_type *lang_enter_output_section_statement
-  (const char *, etree_type *, enum section_type, etree_type *, etree_type *,
-   etree_type *, int, int);
+  (const char *output_section_statement_name,
+   etree_type *address_exp,
+   enum section_type sectype,
+   etree_type *align,
+   etree_type *subalign,
+   etree_type *, int);
 extern void lang_final
   (void);
 extern void lang_relax_sections
@@ -561,6 +539,9 @@ extern void lang_float
 extern void lang_leave_output_section_statement
   (fill_type *, const char *, lang_output_section_phdr_list *,
    const char *);
+extern void lang_statement_append
+  (lang_statement_list_type *, lang_statement_union_type *,
+   lang_statement_union_type **);
 extern void lang_for_each_input_file
   (void (*dothis) (lang_input_statement_type *));
 extern void lang_for_each_file
@@ -575,8 +556,8 @@ extern asection *section_for_dot
 #define LANG_FOR_EACH_INPUT_STATEMENT(statement)			\
   lang_input_statement_type *statement;					\
   for (statement = (lang_input_statement_type *) file_chain.head;	\
-       statement != NULL;						\
-       statement = statement->next)
+       statement != (lang_input_statement_type *) NULL;			\
+       statement = (lang_input_statement_type *) statement->next)	\
 
 #define lang_output_section_find(NAME) \
   lang_output_section_statement_lookup (NAME, 0, FALSE)
@@ -586,7 +567,7 @@ extern void lang_process
 extern void ldlang_add_file
   (lang_input_statement_type *);
 extern lang_output_section_statement_type *lang_output_section_find_by_flags
-  (const asection *, flagword, lang_output_section_statement_type **,
+  (const asection *, lang_output_section_statement_type **,
    lang_match_sec_type_func);
 extern lang_output_section_statement_type *lang_insert_orphan
   (asection *, const char *, int, lang_output_section_statement_type *,
@@ -595,16 +576,12 @@ extern lang_input_statement_type *lang_add_input_file
   (const char *, lang_input_file_enum_type, const char *);
 extern void lang_add_keepsyms_file
   (const char *);
-extern lang_output_section_statement_type *lang_output_section_get
-  (const asection *);
 extern lang_output_section_statement_type *lang_output_section_statement_lookup
   (const char *, int, bfd_boolean);
 extern lang_output_section_statement_type *next_matching_output_section_statement
   (lang_output_section_statement_type *, int);
 extern void ldlang_add_undef
   (const char *const, bfd_boolean);
-extern void ldlang_add_require_defined
-  (const char *const);
 extern void lang_add_output_format
   (const char *, const char *, const char *, int);
 extern void lang_list_init
@@ -626,8 +603,6 @@ extern void *stat_alloc
   (size_t);
 extern void strip_excluded_output_sections
   (void);
-extern void lang_clear_os_map
-  (void);
 extern void dprint_statement
   (lang_statement_union_type *, int);
 extern void lang_size_sections
@@ -647,8 +622,6 @@ extern void lang_new_phdr
   (const char *, etree_type *, bfd_boolean, bfd_boolean, etree_type *,
    etree_type *);
 extern void lang_add_nocrossref
-  (lang_nocrossref_type *);
-extern void lang_add_nocrossref_to
   (lang_nocrossref_type *);
 extern void lang_enter_overlay
   (etree_type *, etree_type *);
@@ -675,27 +648,20 @@ extern void lang_add_unique
   (const char *);
 extern const char *lang_get_output_target
   (void);
+extern void lang_track_definedness (const char *);
+extern int lang_symbol_definition_iteration (const char *);
+extern void lang_update_definedness
+  (const char *, struct bfd_link_hash_entry *);
+
 extern void add_excluded_libs (const char *);
 extern bfd_boolean load_symbols
   (lang_input_statement_type *, lang_statement_list_type *);
 
-struct elf_sym_strtab;
-struct elf_strtab_hash;
-extern void ldlang_ctf_apply_strsym
-  (struct elf_sym_strtab *, bfd_size_type, struct elf_strtab_hash *);
-extern void ldlang_write_ctf_late
-  (void);
 extern bfd_boolean
 ldlang_override_segment_assignment
   (struct bfd_link_info *, bfd *, asection *, asection *, bfd_boolean);
 
 extern void
 lang_ld_feature (char *);
-
-extern void
-lang_print_memory_usage (void);
-
-extern void
-lang_add_gc_name (const char *);
 
 #endif

@@ -1,5 +1,6 @@
 /* BFD back-end for Irix core files.
-   Copyright (C) 1993-2020 Free Software Foundation, Inc.
+   Copyright 1993, 1994, 1996, 1999, 2001, 2002, 2004, 2005, 2006, 2007,
+   2010, 2011, 2012  Free Software Foundation, Inc.
    Written by Stu Grossman, Cygnus Support.
    Converted to back-end form by Ian Lance Taylor, Cygnus Support
 
@@ -146,11 +147,11 @@ do_sections (bfd *abfd, struct coreout *coreout)
 
 static asection *
 make_bfd_asection (bfd *abfd,
-		   const char *name,
-		   flagword flags,
-		   bfd_size_type size,
-		   bfd_vma vma,
-		   file_ptr filepos)
+                   const char *name,
+                   flagword flags,
+                   bfd_size_type size,
+                   bfd_vma vma,
+                   file_ptr filepos)
 {
   asection *asect;
 
@@ -279,7 +280,7 @@ swap_abort(void)
 #define	NO_PUT64 ((void (*) (bfd_uint64_t, void *)) swap_abort)
 #define	NO_GETS64 ((bfd_int64_t (*) (const void *)) swap_abort)
 
-const bfd_target core_irix_vec =
+const bfd_target irix_core_vec =
   {
     "irix-core",
     bfd_target_unknown_flavour,
@@ -289,7 +290,7 @@ const bfd_target core_irix_vec =
      HAS_LINENO | HAS_DEBUG |
      HAS_SYMS | HAS_LOCALS | WP_TEXT | D_PAGED),
     (SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_RELOC), /* section flags */
-    0,							   /* symbol prefix */
+    0,			                                   /* symbol prefix */
     ' ',						   /* ar_pad_char */
     16,							   /* ar_max_namelen */
     0,							   /* match_priority */
@@ -307,16 +308,12 @@ const bfd_target core_irix_vec =
       irix_core_core_file_p		/* a core file */
     },
     {				/* bfd_set_format */
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error
+      bfd_false, bfd_false,
+      bfd_false, bfd_false
     },
     {				/* bfd_write_contents */
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error,
-      _bfd_bool_bfd_false_error
+      bfd_false, bfd_false,
+      bfd_false, bfd_false
     },
 
     BFD_JUMP_TABLE_GENERIC (_bfd_generic),

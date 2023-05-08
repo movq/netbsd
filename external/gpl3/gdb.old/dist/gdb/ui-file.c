@@ -1,6 +1,6 @@
 /* UI_FILE - a generic STDIO like output stream.
 
-   Copyright (C) 1999-2020 Free Software Foundation, Inc.
+   Copyright (C) 1999-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,367 +22,807 @@
 #include "defs.h"
 #include "ui-file.h"
 #include "gdb_obstack.h"
-#include "gdbsupport/gdb_select.h"
-#include "gdbsupport/filestuff.h"
-#include "cli/cli-style.h"
+#include <string.h>
+#include "gdb_select.h"
+#include "filestuff.h"
 
-null_file null_stream;
+#include <errno.h>
 
-ui_file::ui_file ()
-{}
+static ui_file_isatty_ftype null_file_isatty;
+static ui_file_write_ftype null_file_write;
+static ui_file_write_ftype null_file_write_async_safe;
+static ui_file_fputs_ftype null_file_fputs;
+static ui_file_read_ftype null_file_read;
+static ui_file_flush_ftype null_file_flush;
+static ui_file_delete_ftype null_file_delete;
+static ui_file_rewind_ftype null_file_rewind;
+static ui_file_put_ftype null_file_put;
+static ui_file_fseek_ftype null_file_fseek;
 
-ui_file::~ui_file ()
-{}
+struct ui_file
+  {
+    int *magic;
+    ui_file_flush_ftype *to_flush;
+    ui_file_write_ftype *to_write;
+    ui_file_write_async_safe_ftype *to_write_async_safe;
+    ui_file_fputs_ftype *to_fputs;
+    ui_file_read_ftype *to_read;
+    ui_file_delete_ftype *to_delete;
+    ui_file_isatty_ftype *to_isatty;
+    ui_file_rewind_ftype *to_rewind;
+    ui_file_put_ftype *to_put;
+    ui_file_fseek_ftype *to_fseek;
+    void *to_data;
+  };
+int ui_file_magic;
 
-void
-ui_file::printf (const char *format, ...)
+struct ui_file *
+ui_file_new (void)
 {
-  va_list args;
+  struct ui_file *file = xmalloc (sizeof (struct ui_file));
 
-  va_start (args, format);
-  vfprintf_unfiltered (this, format, args);
-  va_end (args);
+  file->magic = &ui_file_magic;
+  set_ui_file_data (file, NULL, null_file_delete);
+  set_ui_file_flush (file, null_file_flush);
+  set_ui_file_write (file, null_file_write);
+  set_ui_file_write_async_safe (file, null_file_write_async_safe);
+  set_ui_file_fputs (file, null_file_fputs);
+  set_ui_file_read (file, null_file_read);
+  set_ui_file_isatty (file, null_file_isatty);
+  set_ui_file_rewind (file, null_file_rewind);
+  set_ui_file_put (file, null_file_put);
+  set_ui_file_fseek (file, null_file_fseek);
+  return file;
 }
 
 void
-ui_file::putstr (const char *str, int quoter)
+ui_file_delete (struct ui_file *file)
 {
-  fputstr_unfiltered (str, quoter, this);
+  file->to_delete (file);
+  xfree (file);
+}
+
+static int
+null_file_isatty (struct ui_file *file)
+{
+  return 0;
+}
+
+static void
+null_file_rewind (struct ui_file *file)
+{
+  return;
+}
+
+static void
+null_file_put (struct ui_file *file,
+	       ui_file_put_method_ftype *write,
+	       void *dest)
+{
+  return;
+}
+
+static void
+null_file_flush (struct ui_file *file)
+{
+  return;
+}
+
+static void
+null_file_write (struct ui_file *file,
+		 const char *buf,
+		 long sizeof_buf)
+{
+  if (file->to_fputs == null_file_fputs)
+    /* Both the write and fputs methods are null.  Discard the
+       request.  */
+    return;
+  else
+    {
+      /* The fputs method isn't null, slowly pass the write request
+         onto that.  FYI, this isn't as bad as it may look - the
+         current (as of 1999-11-07) printf_* function calls fputc and
+         fputc does exactly the below.  By having a write function it
+         is possible to clean up that code.  */
+      int i;
+      char b[2];
+
+      b[1] = '\0';
+      for (i = 0; i < sizeof_buf; i++)
+	{
+	  b[0] = buf[i];
+	  file->to_fputs (b, file);
+	}
+      return;
+    }
+}
+
+static long
+null_file_read (struct ui_file *file,
+		char *buf,
+		long sizeof_buf)
+{
+  errno = EBADF;
+  return 0;
+}
+
+static void
+null_file_fputs (const char *buf, struct ui_file *file)
+{
+  if (file->to_write == null_file_write)
+    /* Both the write and fputs methods are null.  Discard the
+       request.  */
+    return;
+  else
+    {
+      /* The write method was implemented, use that.  */
+      file->to_write (file, buf, strlen (buf));
+    }
+}
+
+static void
+null_file_write_async_safe (struct ui_file *file,
+			    const char *buf,
+			    long sizeof_buf)
+{
+  return;
+}
+
+static void
+null_file_delete (struct ui_file *file)
+{
+  return;
+}
+
+static int
+null_file_fseek (struct ui_file *stream, long offset, int whence)
+{
+  errno = EBADF;
+
+  return -1;
+}
+
+void *
+ui_file_data (struct ui_file *file)
+{
+  if (file->magic != &ui_file_magic)
+    internal_error (__FILE__, __LINE__,
+		    _("ui_file_data: bad magic number"));
+  return file->to_data;
 }
 
 void
-ui_file::putstrn (const char *str, int n, int quoter)
+gdb_flush (struct ui_file *file)
 {
-  fputstrn_unfiltered (str, n, quoter, fputc_unfiltered, this);
+  file->to_flush (file);
 }
 
 int
-ui_file::putc (int c)
+ui_file_isatty (struct ui_file *file)
 {
-  return fputc_unfiltered (c, this);
+  return file->to_isatty (file);
 }
 
 void
-ui_file::vprintf (const char *format, va_list args)
+ui_file_rewind (struct ui_file *file)
 {
-  vfprintf_unfiltered (this, format, args);
-}
-
-
-
-void
-null_file::write (const char *buf, long sizeof_buf)
-{
-  /* Discard the request.  */
+  file->to_rewind (file);
 }
 
 void
-null_file::puts (const char *)
+ui_file_put (struct ui_file *file,
+	      ui_file_put_method_ftype *write,
+	      void *dest)
 {
-  /* Discard the request.  */
+  file->to_put (file, write, dest);
 }
 
 void
-null_file::write_async_safe (const char *buf, long sizeof_buf)
+ui_file_write (struct ui_file *file,
+		const char *buf,
+		long length_buf)
 {
-  /* Discard the request.  */
-}
-
-
-
-/* true if the gdb terminal supports styling, and styling is enabled.  */
-
-static bool
-term_cli_styling ()
-{
-  if (!cli_styling)
-    return false;
-
-  const char *term = getenv ("TERM");
-  /* Windows doesn't by default define $TERM, but can support styles
-     regardless.  */
-#ifndef _WIN32
-  if (term == nullptr || !strcmp (term, "dumb"))
-    return false;
-#else
-  /* But if they do define $TERM, let us behave the same as on Posix
-     platforms, for the benefit of programs which invoke GDB as their
-     back-end.  */
-  if (term && !strcmp (term, "dumb"))
-    return false;
-#endif
-  return true;
-}
-
-
-
-string_file::~string_file ()
-{}
-
-void
-string_file::write (const char *buf, long length_buf)
-{
-  m_string.append (buf, length_buf);
-}
-
-/* See ui-file.h.  */
-
-bool
-string_file::term_out ()
-{
-  return m_term_out;
-}
-
-/* See ui-file.h.  */
-
-bool
-string_file::can_emit_style_escape ()
-{
-  return m_term_out && term_cli_styling ();
-}
-
-
-
-stdio_file::stdio_file (FILE *file, bool close_p)
-{
-  set_stream (file);
-  m_close_p = close_p;
-}
-
-stdio_file::stdio_file ()
-  : m_file (NULL),
-    m_fd (-1),
-    m_close_p (false)
-{}
-
-stdio_file::~stdio_file ()
-{
-  if (m_close_p)
-    fclose (m_file);
+  file->to_write (file, buf, length_buf);
 }
 
 void
-stdio_file::set_stream (FILE *file)
+ui_file_write_async_safe (struct ui_file *file,
+			  const char *buf,
+			  long length_buf)
 {
-  m_file = file;
-  m_fd = fileno (file);
-}
-
-bool
-stdio_file::open (const char *name, const char *mode)
-{
-  /* Close the previous stream, if we own it.  */
-  if (m_close_p)
-    {
-      fclose (m_file);
-      m_close_p = false;
-    }
-
-  gdb_file_up f = gdb_fopen_cloexec (name, mode);
-
-  if (f == NULL)
-    return false;
-
-  set_stream (f.release ());
-  m_close_p = true;
-
-  return true;
-}
-
-void
-stdio_file::flush ()
-{
-  fflush (m_file);
+  file->to_write_async_safe (file, buf, length_buf);
 }
 
 long
-stdio_file::read (char *buf, long length_buf)
+ui_file_read (struct ui_file *file, char *buf, long length_buf)
 {
-  /* Wait until at least one byte of data is available, or we get
-     interrupted with Control-C.  */
+  return file->to_read (file, buf, length_buf); 
+}
+
+int
+ui_file_fseek (struct ui_file *file, long offset, int whence)
+{
+  return file->to_fseek (file, offset, whence);
+}
+
+void
+fputs_unfiltered (const char *buf, struct ui_file *file)
+{
+  file->to_fputs (buf, file);
+}
+
+void
+set_ui_file_flush (struct ui_file *file, ui_file_flush_ftype *flush_ptr)
+{
+  file->to_flush = flush_ptr;
+}
+
+void
+set_ui_file_isatty (struct ui_file *file, ui_file_isatty_ftype *isatty_ptr)
+{
+  file->to_isatty = isatty_ptr;
+}
+
+void
+set_ui_file_rewind (struct ui_file *file, ui_file_rewind_ftype *rewind_ptr)
+{
+  file->to_rewind = rewind_ptr;
+}
+
+void
+set_ui_file_put (struct ui_file *file, ui_file_put_ftype *put_ptr)
+{
+  file->to_put = put_ptr;
+}
+
+void
+set_ui_file_write (struct ui_file *file,
+		    ui_file_write_ftype *write_ptr)
+{
+  file->to_write = write_ptr;
+}
+
+void
+set_ui_file_write_async_safe (struct ui_file *file,
+			      ui_file_write_async_safe_ftype *write_async_safe_ptr)
+{
+  file->to_write_async_safe = write_async_safe_ptr;
+}
+
+void
+set_ui_file_read (struct ui_file *file, ui_file_read_ftype *read_ptr)
+{
+  file->to_read = read_ptr;
+}
+
+void
+set_ui_file_fputs (struct ui_file *file, ui_file_fputs_ftype *fputs_ptr)
+{
+  file->to_fputs = fputs_ptr;
+}
+
+void
+set_ui_file_fseek (struct ui_file *file, ui_file_fseek_ftype *fseek_ptr)
+{
+  file->to_fseek = fseek_ptr;
+}
+
+void
+set_ui_file_data (struct ui_file *file, void *data,
+		  ui_file_delete_ftype *delete_ptr)
+{
+  file->to_data = data;
+  file->to_delete = delete_ptr;
+}
+
+/* ui_file utility function for converting a ``struct ui_file'' into
+   a memory buffer.  */
+
+struct accumulated_ui_file
+{
+  char *buffer;
+  long length;
+};
+
+static void
+do_ui_file_xstrdup (void *context, const char *buffer, long length)
+{
+  struct accumulated_ui_file *acc = context;
+
+  if (acc->buffer == NULL)
+    acc->buffer = xmalloc (length + 1);
+  else
+    acc->buffer = xrealloc (acc->buffer, acc->length + length + 1);
+  memcpy (acc->buffer + acc->length, buffer, length);
+  acc->length += length;
+  acc->buffer[acc->length] = '\0';
+}
+
+char *
+ui_file_xstrdup (struct ui_file *file, long *length)
+{
+  struct accumulated_ui_file acc;
+
+  acc.buffer = NULL;
+  acc.length = 0;
+  ui_file_put (file, do_ui_file_xstrdup, &acc);
+  if (acc.buffer == NULL)
+    acc.buffer = xstrdup ("");
+  if (length != NULL)
+    *length = acc.length;
+  return acc.buffer;
+}
+
+static void
+do_ui_file_obsavestring (void *context, const char *buffer, long length)
+{
+  struct obstack *obstack = (struct obstack *) context;
+
+  obstack_grow (obstack, buffer, length);
+}
+
+char *
+ui_file_obsavestring (struct ui_file *file, struct obstack *obstack,
+		      long *length)
+{
+  ui_file_put (file, do_ui_file_obsavestring, obstack);
+  *length = obstack_object_size (obstack);
+  obstack_1grow (obstack, '\0');
+  return obstack_finish (obstack);
+}
+
+/* A pure memory based ``struct ui_file'' that can be used an output
+   buffer.  The buffers accumulated contents are available via
+   ui_file_put().  */
+
+struct mem_file
+  {
+    int *magic;
+    char *buffer;
+    int sizeof_buffer;
+    int length_buffer;
+  };
+
+static ui_file_rewind_ftype mem_file_rewind;
+static ui_file_put_ftype mem_file_put;
+static ui_file_write_ftype mem_file_write;
+static ui_file_delete_ftype mem_file_delete;
+static struct ui_file *mem_file_new (void);
+static int mem_file_magic;
+
+static struct ui_file *
+mem_file_new (void)
+{
+  struct mem_file *stream = XMALLOC (struct mem_file);
+  struct ui_file *file = ui_file_new ();
+
+  set_ui_file_data (file, stream, mem_file_delete);
+  set_ui_file_rewind (file, mem_file_rewind);
+  set_ui_file_put (file, mem_file_put);
+  set_ui_file_write (file, mem_file_write);
+  stream->magic = &mem_file_magic;
+  stream->buffer = NULL;
+  stream->sizeof_buffer = 0;
+  stream->length_buffer = 0;
+  return file;
+}
+
+static void
+mem_file_delete (struct ui_file *file)
+{
+  struct mem_file *stream = ui_file_data (file);
+
+  if (stream->magic != &mem_file_magic)
+    internal_error (__FILE__, __LINE__,
+		    _("mem_file_delete: bad magic number"));
+  if (stream->buffer != NULL)
+    xfree (stream->buffer);
+  xfree (stream);
+}
+
+struct ui_file *
+mem_fileopen (void)
+{
+  return mem_file_new ();
+}
+
+static void
+mem_file_rewind (struct ui_file *file)
+{
+  struct mem_file *stream = ui_file_data (file);
+
+  if (stream->magic != &mem_file_magic)
+    internal_error (__FILE__, __LINE__,
+		    _("mem_file_rewind: bad magic number"));
+  stream->length_buffer = 0;
+}
+
+static void
+mem_file_put (struct ui_file *file,
+	      ui_file_put_method_ftype *write,
+	      void *dest)
+{
+  struct mem_file *stream = ui_file_data (file);
+
+  if (stream->magic != &mem_file_magic)
+    internal_error (__FILE__, __LINE__,
+		    _("mem_file_put: bad magic number"));
+  if (stream->length_buffer > 0)
+    write (dest, stream->buffer, stream->length_buffer);
+}
+
+void
+mem_file_write (struct ui_file *file,
+		const char *buffer,
+		long length_buffer)
+{
+  struct mem_file *stream = ui_file_data (file);
+
+  if (stream->magic != &mem_file_magic)
+    internal_error (__FILE__, __LINE__,
+		    _("mem_file_write: bad magic number"));
+  if (stream->buffer == NULL)
+    {
+      stream->length_buffer = length_buffer;
+      stream->sizeof_buffer = length_buffer;
+      stream->buffer = xmalloc (stream->sizeof_buffer);
+      memcpy (stream->buffer, buffer, length_buffer);
+    }
+  else
+    {
+      int new_length = stream->length_buffer + length_buffer;
+
+      if (new_length >= stream->sizeof_buffer)
+	{
+	  stream->sizeof_buffer = new_length;
+	  stream->buffer = xrealloc (stream->buffer, stream->sizeof_buffer);
+	}
+      memcpy (stream->buffer + stream->length_buffer, buffer, length_buffer);
+      stream->length_buffer = new_length;
+    }
+}
+
+/* ``struct ui_file'' implementation that maps directly onto
+   <stdio.h>'s FILE.  */
+
+static ui_file_write_ftype stdio_file_write;
+static ui_file_write_async_safe_ftype stdio_file_write_async_safe;
+static ui_file_fputs_ftype stdio_file_fputs;
+static ui_file_read_ftype stdio_file_read;
+static ui_file_isatty_ftype stdio_file_isatty;
+static ui_file_delete_ftype stdio_file_delete;
+static struct ui_file *stdio_file_new (FILE *file, int close_p);
+static ui_file_flush_ftype stdio_file_flush;
+static ui_file_fseek_ftype stdio_file_fseek;
+
+static int stdio_file_magic;
+
+struct stdio_file
+  {
+    int *magic;
+    FILE *file;
+    /* The associated file descriptor is extracted ahead of time for
+       stdio_file_write_async_safe's benefit, in case fileno isn't async-safe.  */
+    int fd;
+    int close_p;
+  };
+
+static struct ui_file *
+stdio_file_new (FILE *file, int close_p)
+{
+  struct ui_file *ui_file = ui_file_new ();
+  struct stdio_file *stdio = xmalloc (sizeof (struct stdio_file));
+
+  stdio->magic = &stdio_file_magic;
+  stdio->file = file;
+  stdio->fd = fileno (file);
+  stdio->close_p = close_p;
+  set_ui_file_data (ui_file, stdio, stdio_file_delete);
+  set_ui_file_flush (ui_file, stdio_file_flush);
+  set_ui_file_write (ui_file, stdio_file_write);
+  set_ui_file_write_async_safe (ui_file, stdio_file_write_async_safe);
+  set_ui_file_fputs (ui_file, stdio_file_fputs);
+  set_ui_file_read (ui_file, stdio_file_read);
+  set_ui_file_isatty (ui_file, stdio_file_isatty);
+  set_ui_file_fseek (ui_file, stdio_file_fseek);
+  return ui_file;
+}
+
+static void
+stdio_file_delete (struct ui_file *file)
+{
+  struct stdio_file *stdio = ui_file_data (file);
+
+  if (stdio->magic != &stdio_file_magic)
+    internal_error (__FILE__, __LINE__,
+		    _("stdio_file_delete: bad magic number"));
+  if (stdio->close_p)
+    {
+      fclose (stdio->file);
+    }
+  xfree (stdio);
+}
+
+static void
+stdio_file_flush (struct ui_file *file)
+{
+  struct stdio_file *stdio = ui_file_data (file);
+
+  if (stdio->magic != &stdio_file_magic)
+    internal_error (__FILE__, __LINE__,
+		    _("stdio_file_flush: bad magic number"));
+  fflush (stdio->file);
+}
+
+static long
+stdio_file_read (struct ui_file *file, char *buf, long length_buf)
+{
+  struct stdio_file *stdio = ui_file_data (file);
+
+  if (stdio->magic != &stdio_file_magic)
+    internal_error (__FILE__, __LINE__,
+		    _("stdio_file_read: bad magic number"));
+
+  /* For the benefit of Windows, call gdb_select before reading from
+     the file.  Wait until at least one byte of data is available.
+     Control-C can interrupt gdb_select, but not read.  */
   {
     fd_set readfds;
-
     FD_ZERO (&readfds);
-    FD_SET (m_fd, &readfds);
-    if (interruptible_select (m_fd + 1, &readfds, NULL, NULL, NULL) == -1)
+    FD_SET (stdio->fd, &readfds);
+    if (gdb_select (stdio->fd + 1, &readfds, NULL, NULL, NULL) == -1)
       return -1;
   }
 
-  return ::read (m_fd, buf, length_buf);
+  return read (stdio->fd, buf, length_buf);
 }
 
-void
-stdio_file::write (const char *buf, long length_buf)
+static void
+stdio_file_write (struct ui_file *file, const char *buf, long length_buf)
 {
+  struct stdio_file *stdio = ui_file_data (file);
+
+  if (stdio->magic != &stdio_file_magic)
+    internal_error (__FILE__, __LINE__,
+		    _("stdio_file_write: bad magic number"));
   /* Calling error crashes when we are called from the exception framework.  */
-  if (fwrite (buf, length_buf, 1, m_file))
+  if (fwrite (buf, length_buf, 1, stdio->file))
     {
       /* Nothing.  */
     }
 }
 
-void
-stdio_file::write_async_safe (const char *buf, long length_buf)
+static void
+stdio_file_write_async_safe (struct ui_file *file,
+			     const char *buf, long length_buf)
 {
+  struct stdio_file *stdio = ui_file_data (file);
+
+  if (stdio->magic != &stdio_file_magic)
+    {
+      /* gettext isn't necessarily async safe, so we can't use _("error message") here.
+	 We could extract the correct translation ahead of time, but this is an extremely
+	 rare event, and one of the other stdio_file_* routines will presumably catch
+	 the problem anyway.  For now keep it simple and ignore the error here.  */
+      return;
+    }
+
   /* This is written the way it is to avoid a warning from gcc about not using the
      result of write (since it can be declared with attribute warn_unused_result).
      Alas casting to void doesn't work for this.  */
-  if (::write (m_fd, buf, length_buf))
+  if (write (stdio->fd, buf, length_buf))
     {
       /* Nothing.  */
     }
 }
 
-void
-stdio_file::puts (const char *linebuffer)
+static void
+stdio_file_fputs (const char *linebuffer, struct ui_file *file)
 {
-  /* This host-dependent function (with implementations in
-     posix-hdep.c and mingw-hdep.c) is given the opportunity to
-     process the output first in host-dependent way.  If it does, it
-     should return non-zero, to avoid calling fputs below.  */
-  if (gdb_console_fputs (linebuffer, m_file))
-    return;
+  struct stdio_file *stdio = ui_file_data (file);
+
+  if (stdio->magic != &stdio_file_magic)
+    internal_error (__FILE__, __LINE__,
+		    _("stdio_file_fputs: bad magic number"));
   /* Calling error crashes when we are called from the exception framework.  */
-  if (fputs (linebuffer, m_file))
+  if (fputs (linebuffer, stdio->file))
     {
       /* Nothing.  */
     }
 }
 
-bool
-stdio_file::isatty ()
+static int
+stdio_file_isatty (struct ui_file *file)
 {
-  return ::isatty (m_fd);
+  struct stdio_file *stdio = ui_file_data (file);
+
+  if (stdio->magic != &stdio_file_magic)
+    internal_error (__FILE__, __LINE__,
+		    _("stdio_file_isatty: bad magic number"));
+  return (isatty (stdio->fd));
 }
 
-/* See ui-file.h.  */
-
-bool
-stdio_file::can_emit_style_escape ()
+static int
+stdio_file_fseek (struct ui_file *file, long offset, int whence)
 {
-  return ((this == gdb_stdout || this == gdb_stderr)
-	  && this->isatty ()
-	  && term_cli_styling ());
+  struct stdio_file *stdio = ui_file_data (file);
+
+  if (stdio->magic != &stdio_file_magic)
+    internal_error (__FILE__, __LINE__,
+		    _("stdio_file_fseek: bad magic number"));
+
+  return fseek (stdio->file, offset, whence);
 }
 
-
-
-/* This is the implementation of ui_file method 'write' for stderr.
+#ifdef __MINGW32__
+/* This is the implementation of ui_file method to_write for stderr.
    gdb_stdout is flushed before writing to gdb_stderr.  */
 
-void
-stderr_file::write (const char *buf, long length_buf)
+static void
+stderr_file_write (struct ui_file *file, const char *buf, long length_buf)
 {
-  gdb_stdout->flush ();
-  stdio_file::write (buf, length_buf);
+  gdb_flush (gdb_stdout);
+  stdio_file_write (file, buf, length_buf);
 }
 
-/* This is the implementation of ui_file method 'puts' for stderr.
+/* This is the implementation of ui_file method to_fputs for stderr.
    gdb_stdout is flushed before writing to gdb_stderr.  */
 
-void
-stderr_file::puts (const char *linebuffer)
+static void
+stderr_file_fputs (const char *linebuffer, struct ui_file *file)
 {
-  gdb_stdout->flush ();
-  stdio_file::puts (linebuffer);
+  gdb_flush (gdb_stdout);
+  stdio_file_fputs (linebuffer, file);
+}
+#endif
+
+struct ui_file *
+stderr_fileopen (void)
+{
+  struct ui_file *ui_file = stdio_fileopen (stderr);
+
+#ifdef __MINGW32__
+  /* There is no real line-buffering on Windows, see
+     http://msdn.microsoft.com/en-us/library/86cebhfs%28v=vs.71%29.aspx
+     so the stdout is either fully-buffered or non-buffered.  We can't
+     make stdout non-buffered, because of two concerns,
+     1.  non-buffering hurts performance,
+     2.  non-buffering may change GDB's behavior when it is interacting
+     with front-end, such as Emacs.
+
+     We decided to leave stdout as fully buffered, but flush it first
+     when something is written to stderr.  */
+
+  /* Method 'to_write_async_safe' is not overwritten, because there's
+     no way to flush a stream in an async-safe manner.  Fortunately,
+     it doesn't really matter, because:
+     - that method is only used for printing internal debug output
+       from signal handlers.
+     - Windows hosts don't have a concept of async-safeness.  Signal
+       handlers run in a separate thread, so they can call
+       the regular non-async-safe output routines freely.  */
+  set_ui_file_write (ui_file, stderr_file_write);
+  set_ui_file_fputs (ui_file, stderr_file_fputs);
+#endif
+
+  return ui_file;
 }
 
-stderr_file::stderr_file (FILE *stream)
-  : stdio_file (stream)
-{}
+/* Like fdopen().  Create a ui_file from a previously opened FILE.  */
 
-
-
-tee_file::tee_file (ui_file *one, ui_file_up &&two)
-  : m_one (one),
-    m_two (std::move (two))
-{}
-
-tee_file::~tee_file ()
+struct ui_file *
+stdio_fileopen (FILE *file)
 {
+  return stdio_file_new (file, 0);
 }
 
-void
-tee_file::flush ()
+struct ui_file *
+gdb_fopen (const char *name, const char *mode)
 {
-  m_one->flush ();
-  m_two->flush ();
+  FILE *f = gdb_fopen_cloexec (name, mode);
+
+  if (f == NULL)
+    return NULL;
+  return stdio_file_new (f, 1);
 }
 
-void
-tee_file::write (const char *buf, long length_buf)
+/* ``struct ui_file'' implementation that maps onto two ui-file objects.  */
+
+static ui_file_write_ftype tee_file_write;
+static ui_file_fputs_ftype tee_file_fputs;
+static ui_file_isatty_ftype tee_file_isatty;
+static ui_file_delete_ftype tee_file_delete;
+static ui_file_flush_ftype tee_file_flush;
+
+static int tee_file_magic;
+
+struct tee_file
+  {
+    int *magic;
+    struct ui_file *one, *two;
+    int close_one, close_two;
+  };
+
+struct ui_file *
+tee_file_new (struct ui_file *one, int close_one,
+	      struct ui_file *two, int close_two)
 {
-  m_one->write (buf, length_buf);
-  m_two->write (buf, length_buf);
+  struct ui_file *ui_file = ui_file_new ();
+  struct tee_file *tee = xmalloc (sizeof (struct tee_file));
+
+  tee->magic = &tee_file_magic;
+  tee->one = one;
+  tee->two = two;
+  tee->close_one = close_one;
+  tee->close_two = close_two;
+  set_ui_file_data (ui_file, tee, tee_file_delete);
+  set_ui_file_flush (ui_file, tee_file_flush);
+  set_ui_file_write (ui_file, tee_file_write);
+  set_ui_file_fputs (ui_file, tee_file_fputs);
+  set_ui_file_isatty (ui_file, tee_file_isatty);
+  return ui_file;
 }
 
-void
-tee_file::write_async_safe (const char *buf, long length_buf)
+static void
+tee_file_delete (struct ui_file *file)
 {
-  m_one->write_async_safe (buf, length_buf);
-  m_two->write_async_safe (buf, length_buf);
+  struct tee_file *tee = ui_file_data (file);
+
+  if (tee->magic != &tee_file_magic)
+    internal_error (__FILE__, __LINE__,
+		    _("tee_file_delete: bad magic number"));
+  if (tee->close_one)
+    ui_file_delete (tee->one);
+  if (tee->close_two)
+    ui_file_delete (tee->two);
+
+  xfree (tee);
 }
 
-void
-tee_file::puts (const char *linebuffer)
+static void
+tee_file_flush (struct ui_file *file)
 {
-  m_one->puts (linebuffer);
-  m_two->puts (linebuffer);
+  struct tee_file *tee = ui_file_data (file);
+
+  if (tee->magic != &tee_file_magic)
+    internal_error (__FILE__, __LINE__,
+		    _("tee_file_flush: bad magic number"));
+  tee->one->to_flush (tee->one);
+  tee->two->to_flush (tee->two);
 }
 
-bool
-tee_file::isatty ()
+static void
+tee_file_write (struct ui_file *file, const char *buf, long length_buf)
 {
-  return m_one->isatty ();
+  struct tee_file *tee = ui_file_data (file);
+
+  if (tee->magic != &tee_file_magic)
+    internal_error (__FILE__, __LINE__,
+		    _("tee_file_write: bad magic number"));
+  ui_file_write (tee->one, buf, length_buf);
+  ui_file_write (tee->two, buf, length_buf);
 }
 
-/* See ui-file.h.  */
-
-bool
-tee_file::term_out ()
+static void
+tee_file_fputs (const char *linebuffer, struct ui_file *file)
 {
-  return m_one->term_out ();
+  struct tee_file *tee = ui_file_data (file);
+
+  if (tee->magic != &tee_file_magic)
+    internal_error (__FILE__, __LINE__,
+		    _("tee_file_fputs: bad magic number"));
+  tee->one->to_fputs (linebuffer, tee->one);
+  tee->two->to_fputs (linebuffer, tee->two);
 }
 
-/* See ui-file.h.  */
-
-bool
-tee_file::can_emit_style_escape ()
+static int
+tee_file_isatty (struct ui_file *file)
 {
-  return ((this == gdb_stdout || this == gdb_stderr)
-	  && m_one->term_out ()
-	  && term_cli_styling ());
-}
+  struct tee_file *tee = ui_file_data (file);
 
-/* See ui-file.h.  */
+  if (tee->magic != &tee_file_magic)
+    internal_error (__FILE__, __LINE__,
+		    _("tee_file_isatty: bad magic number"));
 
-void
-no_terminal_escape_file::write (const char *buf, long length_buf)
-{
-  std::string copy (buf, length_buf);
-  this->puts (copy.c_str ());
-}
-
-/* See ui-file.h.  */
-
-void
-no_terminal_escape_file::puts (const char *buf)
-{
-  while (*buf != '\0')
-    {
-      const char *esc = strchr (buf, '\033');
-      if (esc == nullptr)
-	break;
-
-      int n_read = 0;
-      if (!skip_ansi_escape (esc, &n_read))
-	++esc;
-
-      this->stdio_file::write (buf, esc - buf);
-      buf = esc + n_read;
-    }
-
-  if (*buf != '\0')
-    this->stdio_file::write (buf, strlen (buf));
+  return ui_file_isatty (tee->one);
 }

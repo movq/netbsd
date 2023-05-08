@@ -24,8 +24,3 @@ int NameSpace::overload(double x)
 {
   return (int) x - 23;
 }
-
-int z2 ()
-{
-  return 0;
-}

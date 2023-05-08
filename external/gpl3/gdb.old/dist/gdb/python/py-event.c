@@ -1,6 +1,6 @@
 /* Python interface to inferior events.
 
-   Copyright (C) 2009-2020 Free Software Foundation, Inc.
+   Copyright (C) 2009-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -27,18 +27,24 @@ evpy_dealloc (PyObject *self)
   Py_TYPE (self)->tp_free (self);
 }
 
-gdbpy_ref<>
+PyObject *
 create_event_object (PyTypeObject *py_type)
 {
-  gdbpy_ref<event_object> event_obj (PyObject_New (event_object, py_type));
-  if (event_obj == NULL)
-    return NULL;
+  event_object *event_obj;
+
+  event_obj = PyObject_New (event_object, py_type);
+  if (!event_obj)
+    goto fail;
 
   event_obj->dict = PyDict_New ();
   if (!event_obj->dict)
-    return NULL;
+    goto fail;
 
-  return gdbpy_ref<> ((PyObject *) event_obj.release ());
+  return (PyObject*) event_obj;
+
+ fail:
+  Py_XDECREF (event_obj);
+  return NULL;
 }
 
 /* Add the attribute ATTR to the event object EVENT.  In
@@ -47,7 +53,7 @@ create_event_object (PyTypeObject *py_type)
    function acquires a new reference to ATTR.  */
 
 int
-evpy_add_attribute (PyObject *event, const char *name, PyObject *attr)
+evpy_add_attribute (PyObject *event, char *name, PyObject *attr)
 {
   return PyObject_SetAttrString (event, name, attr);
 }
@@ -67,7 +73,7 @@ gdbpy_initialize_event (void)
 
 int
 gdbpy_initialize_event_generic (PyTypeObject *type,
-                                const char *name)
+                                char *name)
 {
   if (PyType_Ready (type) < 0)
     return -1;
@@ -83,25 +89,26 @@ int
 evpy_emit_event (PyObject *event,
                  eventregistry_object *registry)
 {
+  PyObject *callback_list_copy = NULL;
   Py_ssize_t i;
 
   /* Create a copy of call back list and use that for
      notifying listeners to avoid skipping callbacks
      in the case of a callback being disconnected during
      a notification.  */
-  gdbpy_ref<> callback_list_copy (PySequence_List (registry->callbacks));
-  if (callback_list_copy == NULL)
-    return -1;
+  callback_list_copy = PySequence_List (registry->callbacks);
+  if (!callback_list_copy)
+    goto fail;
 
-  for (i = 0; i < PyList_Size (callback_list_copy.get ()); i++)
+  for (i = 0; i < PyList_Size (callback_list_copy); i++)
     {
-      PyObject *func = PyList_GetItem (callback_list_copy.get (), i);
+      PyObject *func = PyList_GetItem (callback_list_copy, i);
+      PyObject *func_result;
 
       if (func == NULL)
-	return -1;
+	goto fail;
 
-      gdbpy_ref<> func_result (PyObject_CallFunctionObjArgs (func, event,
-							     NULL));
+      func_result = PyObject_CallFunctionObjArgs (func, event, NULL);
 
       if (func_result == NULL)
 	{
@@ -109,12 +116,24 @@ evpy_emit_event (PyObject *event,
 	     call all of the callbacks even if one is broken.  */
 	  gdbpy_print_stack ();
 	}
+      else
+	{
+	  Py_DECREF (func_result);
+	}
     }
 
+  Py_XDECREF (callback_list_copy);
+  Py_XDECREF (event);
   return 0;
+
+ fail:
+  gdbpy_print_stack ();
+  Py_XDECREF (callback_list_copy);
+  Py_XDECREF (event);
+  return -1;
 }
 
-static gdb_PyGetSetDef event_object_getset[] =
+static PyGetSetDef event_object_getset[] =
 {
   { "__dict__", gdb_py_generic_dict, NULL,
     "The __dict__ for this event.", &event_object_type },

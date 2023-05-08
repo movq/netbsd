@@ -1,4 +1,4 @@
-# Copyright 1999-2020 Free Software Foundation, Inc.
+# Copyright 1999-2014 Free Software Foundation, Inc.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -30,7 +30,7 @@ if [mi_gdb_start] {
 standard_testfile var-cmd.c
 
 if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug}] != "" } {
-    untested "failed to compile"
+    untested mi-var-cmd.exp
     return -1
 }
 
@@ -50,12 +50,6 @@ mi_gdb_load ${binfile}
 
 mi_create_varobj "global_simple" "global_simple" "create global variable"
 
-# PR mi/15863
-# Attempt to update the varobj before running the inferior.
-mi_gdb_test "-var-update *" \
-	"\\^done,changelist=\\\[\\\]" \
-	"update varobj before running inferior"
-
 # Test: c_variable-1.2
 # Desc: Create non-existent variable
 
@@ -70,9 +64,7 @@ mi_gdb_test "113-var-create argc * argc" \
 	"113\\^error,msg=\"-var-create: unable to create variable object\"" \
 	"create out of scope variable"
 
-with_test_prefix "first run" {
-  mi_runto do_locals_tests
-}
+mi_runto do_locals_tests
 
 set line_dlt_first_real [gdb_get_line_number "linteger = 1234;"]
 
@@ -255,7 +247,7 @@ mi_gdb_test "-var-assign global_simple 0" \
 
 mi_gdb_test "-var-assign linteger 3333" \
 	"\\^done,value=\"3333\"" \
-	"assign to linteger, 1st"
+	"assign to linteger"
 
 # Allow lpcharacter to update, optionally.  Because it points to a
 # char variable instead of a zero-terminated string, if linteger is
@@ -280,7 +272,7 @@ mi_gdb_test "-var-evaluate-expression linteger" \
 
 mi_gdb_test "-var-assign lpinteger \"&linteger + 3\"" \
 	"\\^done,value=\"$hex\"" \
-	"assign to lpinteger, 1st"
+	"assign to lpinteger"
 
 mi_gdb_test "-var-update *" \
 	"\\^done,changelist=\\\[\{name=\"lpinteger\",in_scope=\"true\",type_changed=\"false\",has_more=\"0\"\}\\\]" \
@@ -298,11 +290,11 @@ mi_gdb_test "-var-evaluate-expression lpinteger" \
 
 mi_gdb_test "-var-assign linteger 4321" \
 	"\\^done,value=\"4321\"" \
-	"assign to linteger, 2nd"
+	"assign to linteger"
 
 mi_gdb_test "-var-assign lpinteger &linteger" \
 	"\\^done,value=\"$hex\"" \
-	"assign to lpinteger, 2nd"
+	"assign to lpinteger"
 
 mi_gdb_test "-var-assign lcharacter 'z'" \
 	"\\^done,value=\"122 'z'\"" \
@@ -314,33 +306,33 @@ mi_gdb_test "-var-evaluate-expression lcharacter" \
 
 mi_gdb_test "-var-assign llong 1313L" \
 	"\\^done,value=\"1313\"" \
-	"assign to llong, 1st"
+	"assign to llong"
 mi_gdb_test "-var-evaluate-expression llong" \
 	"\\^done,value=\"1313\"" \
 	"eval llong"
 mi_gdb_test "-var-assign llong 1212L" \
 	"\\^done,value=\"1212\"" \
-	"assign to llong, 2nd"
+	"assign to llong"
 
 mi_gdb_test "-var-assign lplong &llong+4" \
 	"\\^done,value=\"$hex\"" \
-	"assign to lplong, 1st"
+	"assign to lplong"
 mi_gdb_test "-var-evaluate-expression lplong" \
 	"\\^done,value=\"$hex\"" \
 	"eval lplong"
 mi_gdb_test "-var-assign lplong &llong" \
 	"\\^done,value=\"$hex\"" \
-	"assign to lplong, 2nd"
+	"assign to lplong"
 
 mi_gdb_test "-var-assign lfloat 3.4567" \
 	"\\^done,value=\"3.45.*\"" \
-	"assign to lfloat, 1st"
+	"assign to lfloat"
 mi_gdb_test "-var-evaluate-expression lfloat" \
 	"\\^done,value=\"3.45.*\"" \
 	"eval lfloat"
 mi_gdb_test "-var-assign lfloat 1.2345" \
 	"\\^done,value=\"1.23.*\"" \
-	"assign to lfloat, 2nd"
+	"assign to lfloat"
 
 mi_gdb_test "-var-assign lpfloat &lfloat+4" \
 	"\\^done,value=\"$hex\"" \
@@ -650,9 +642,7 @@ mi_gdb_test "-var-delete endvar" \
 
 mi_delete_breakpoints
 
-with_test_prefix "second run" {
-  mi_runto do_locals_tests
-}
+mi_runto do_locals_tests
 
 mi_create_varobj "L" "lsimple" "in-and-out-of-scope: create varobj"
 mi_check_varobj_value "L" "{...}" "in-and-out-of-scope: check initial value"

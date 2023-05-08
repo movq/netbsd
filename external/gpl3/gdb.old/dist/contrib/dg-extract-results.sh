@@ -298,8 +298,6 @@ BEGIN {
   cnt=0
   print_using=0
   need_close=0
-  has_timeout=0
-  timeout_cnt=0
 }
 /^EXPFILE: / {
   expfiles[expfileno] = \$2
@@ -326,51 +324,23 @@ BEGIN {
   }
 }
 /^\t\t=== .* ===$/ { curvar = ""; next }
-/^(PASS|XPASS|FAIL|XFAIL|UNRESOLVED|WARNING|ERROR|UNSUPPORTED|UNTESTED|KFAIL|KPASS|PATH|DUPLICATE):/ {
+/^(PASS|XPASS|FAIL|XFAIL|UNRESOLVED|WARNING|ERROR|UNSUPPORTED|UNTESTED|KFAIL):/ {
   testname=\$2
   # Ugly hack for gfortran.dg/dg.exp
   if ("$TOOL" == "gfortran" && testname ~ /^gfortran.dg\/g77\//)
     testname="h"testname
-  if ("$MODE" == "sum") {
-    if (\$0 ~ /^WARNING: program timed out/) {
-      has_timeout=1
-      timeout_cnt=cnt+1
-    } else {
-      # Prepare timeout replacement message in case it's needed
-      timeout_msg=\$0
-      sub(\$1, "WARNING:", timeout_msg)
-    }
-  }
 }
 /^$/ { if ("$MODE" == "sum") next }
 { if (variant == curvar && curfile) {
     if ("$MODE" == "sum") {
-      # Do not print anything if the current line is a timeout
-      if (has_timeout == 0) {
-	# If the previous line was a timeout,
-	# insert the full current message without keyword
-	if (timeout_cnt != 0) {
-	  printf "%s %08d|%s program timed out.\n", testname, timeout_cnt-1, timeout_msg >> curfile
-	  timeout_cnt = 0
-	  cnt = cnt + 1
-	}
-	printf "%s %08d|", testname, cnt >> curfile
-	cnt = cnt + 1
-	filewritten[curfile]=1
-	need_close=1
-	print >> curfile
-      }
-      has_timeout=0
-    } else {
-      filewritten[curfile]=1
-      need_close=1
-      print >> curfile
+      printf "%s %08d|", testname, cnt >> curfile
+      cnt = cnt + 1
     }
-  } else {
-    has_timeout=0
-    timeout_cnt=0
+    filewritten[curfile]=1
+    need_close=1
+    print >> curfile
+  } else
     next
-  }
 }
 END {
   n=1
@@ -400,7 +370,6 @@ BEGIN {
   variant="$VAR"
   tool="$TOOL"
   passcnt=0; failcnt=0; untstcnt=0; xpasscnt=0; xfailcnt=0; kpasscnt=0; kfailcnt=0; unsupcnt=0; unrescnt=0; dgerrorcnt=0;
-  pathcnt=0; dupcnt=0
   curvar=""; insummary=0
 }
 /^Running target /		{ curvar = \$3; next }
@@ -415,8 +384,6 @@ BEGIN {
 /^# of untested testcases/	{ if (insummary == 1) untstcnt += \$5; next; }
 /^# of unresolved testcases/	{ if (insummary == 1) unrescnt += \$5; next; }
 /^# of unsupported tests/	{ if (insummary == 1) unsupcnt += \$5; next; }
-/^# of paths in test names/	{ if (insummary == 1) pathcnt += \$7; next; }
-/^# of duplicate test names/	{ if (insummary == 1) dupcnt += \$6; next; }
 /^$/				{ if (insummary == 1)
 				    { insummary = 0; curvar = "" }
 				  next
@@ -434,8 +401,6 @@ END {
   if (untstcnt != 0) printf ("# of untested testcases\t\t%d\n", untstcnt)
   if (unrescnt != 0) printf ("# of unresolved testcases\t%d\n", unrescnt)
   if (unsupcnt != 0) printf ("# of unsupported tests\t\t%d\n", unsupcnt)
-  if (pathcnt != 0) printf ("# of paths in test names\t%d\n", pathcnt)
-  if (dupcnt != 0) printf ("# of duplicate test names\t%d\n", dupcnt)
 }
 EOF
 
@@ -457,7 +422,6 @@ cat << EOF > $TOTAL_AWK
 BEGIN {
   tool="$TOOL"
   passcnt=0; failcnt=0; untstcnt=0; xpasscnt=0; xfailcnt=0; kfailcnt=0; unsupcnt=0; unrescnt=0; dgerrorcnt=0
-  pathcnt=0; dupcnt=0
 }
 /^# of DejaGnu errors/		{ dgerrorcnt += \$5 }
 /^# of expected passes/		{ passcnt += \$5 }
@@ -469,8 +433,6 @@ BEGIN {
 /^# of untested testcases/	{ untstcnt += \$5 }
 /^# of unresolved testcases/	{ unrescnt += \$5 }
 /^# of unsupported tests/	{ unsupcnt += \$5 }
-/^# of paths in test names/	{ pathcnt += \$7 }
-/^# of duplicate test names/	{ dupcnt += \$6 }
 END {
   printf ("\n\t\t=== %s Summary ===\n\n", tool)
   if (dgerrorcnt != 0) printf ("# of DejaGnu errors\t\t%d\n", dgerrorcnt)
@@ -483,8 +445,6 @@ END {
   if (untstcnt != 0) printf ("# of untested testcases\t\t%d\n", untstcnt)
   if (unrescnt != 0) printf ("# of unresolved testcases\t%d\n", unrescnt)
   if (unsupcnt != 0) printf ("# of unsupported tests\t\t%d\n", unsupcnt)
-  if (pathcnt != 0) printf ("# of paths in test names\t%d\n", pathcnt)
-  if (dupcnt != 0) printf ("# of duplicate test names\t%d\n", dupcnt)
 }
 EOF
 

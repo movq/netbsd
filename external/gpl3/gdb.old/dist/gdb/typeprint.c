@@ -1,6 +1,6 @@
 /* Language independent support for printing types for GDB, the GNU debugger.
 
-   Copyright (C) 1986-2020 Free Software Foundation, Inc.
+   Copyright (C) 1986-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -31,20 +31,28 @@
 #include "language.h"
 #include "cp-abi.h"
 #include "typeprint.h"
+#include <string.h>
+#include "exceptions.h"
 #include "valprint.h"
+#include <errno.h>
 #include <ctype.h>
 #include "cli/cli-utils.h"
-#include "extension.h"
+#include "python/python.h"
 #include "completer.h"
-#include "cli/cli-style.h"
+
+extern void _initialize_typeprint (void);
+
+static void ptype_command (char *, int);
+
+static void whatis_command (char *, int);
+
+static void whatis_exp (char *, int);
 
 const struct type_print_options type_print_raw_options =
 {
   1,				/* raw */
   1,				/* print_methods */
   1,				/* print_typedefs */
-  0,				/* print_offsets */
-  0,				/* print_nested_type_limit  */
   NULL,				/* local_typedefs */
   NULL,				/* global_table */
   NULL				/* global_printers */
@@ -57,8 +65,6 @@ static struct type_print_options default_ptype_flags =
   0,				/* raw */
   1,				/* print_methods */
   1,				/* print_typedefs */
-  0,				/* print_offsets */
-  0,				/* print_nested_type_limit  */
   NULL,				/* local_typedefs */
   NULL,				/* global_table */
   NULL				/* global_printers */
@@ -66,121 +72,25 @@ static struct type_print_options default_ptype_flags =
 
 
 
-/* See typeprint.h.  */
+/* A hash table holding typedef_field objects.  This is more
+   complicated than an ordinary hash because it must also track the
+   lifetime of some -- but not all -- of the contained objects.  */
 
-const int print_offset_data::indentation = 23;
-
-
-/* See typeprint.h.  */
-
-void
-print_offset_data::maybe_print_hole (struct ui_file *stream,
-				     unsigned int bitpos,
-				     const char *for_what)
+struct typedef_hash_table
 {
-  /* We check for END_BITPOS > 0 because there is a specific
-     scenario when END_BITPOS can be zero and BITPOS can be >
-     0: when we are dealing with a struct/class with a virtual method.
-     Because of the vtable, the first field of the struct/class will
-     have an offset of sizeof (void *) (the size of the vtable).  If
-     we do not check for END_BITPOS > 0 here, GDB will report
-     a hole before the first field, which is not accurate.  */
-  if (end_bitpos > 0 && end_bitpos < bitpos)
-    {
-      /* If END_BITPOS is smaller than the current type's
-	 bitpos, it means there's a hole in the struct, so we report
-	 it here.  */
-      unsigned int hole = bitpos - end_bitpos;
-      unsigned int hole_byte = hole / TARGET_CHAR_BIT;
-      unsigned int hole_bit = hole % TARGET_CHAR_BIT;
+  /* The actual hash table.  */
+  htab_t table;
 
-      if (hole_bit > 0)
-	fprintf_filtered (stream, "/* XXX %2u-bit %s   */\n", hole_bit,
-			  for_what);
-
-      if (hole_byte > 0)
-	fprintf_filtered (stream, "/* XXX %2u-byte %s  */\n", hole_byte,
-			  for_what);
-    }
-}
-
-/* See typeprint.h.  */
-
-void
-print_offset_data::update (struct type *type, unsigned int field_idx,
-			   struct ui_file *stream)
-{
-  if (field_is_static (&type->field (field_idx)))
-    {
-      print_spaces_filtered (indentation, stream);
-      return;
-    }
-
-  struct type *ftype = check_typedef (type->field (field_idx).type ());
-  if (type->code () == TYPE_CODE_UNION)
-    {
-      /* Since union fields don't have the concept of offsets, we just
-	 print their sizes.  */
-      fprintf_filtered (stream, "/*              %4s */",
-			pulongest (TYPE_LENGTH (ftype)));
-      return;
-    }
-
-  unsigned int bitpos = TYPE_FIELD_BITPOS (type, field_idx);
-  unsigned int fieldsize_byte = TYPE_LENGTH (ftype);
-  unsigned int fieldsize_bit = fieldsize_byte * TARGET_CHAR_BIT;
-
-  maybe_print_hole (stream, bitpos, "hole");
-
-  if (TYPE_FIELD_PACKED (type, field_idx)
-      || offset_bitpos % TARGET_CHAR_BIT != 0)
-    {
-      /* We're dealing with a bitfield.  Print the bit offset.  */
-      fieldsize_bit = TYPE_FIELD_BITSIZE (type, field_idx);
-
-      unsigned real_bitpos = bitpos + offset_bitpos;
-
-      fprintf_filtered (stream, "/* %4u:%2u", real_bitpos / TARGET_CHAR_BIT,
-			real_bitpos % TARGET_CHAR_BIT);
-    }
-  else
-    {
-      /* The position of the field, relative to the beginning of the
-	 struct.  */
-      fprintf_filtered (stream, "/* %4u",
-			(bitpos + offset_bitpos) / TARGET_CHAR_BIT);
-
-      fprintf_filtered (stream, "   ");
-    }
-
-  fprintf_filtered (stream, "   |  %4u */", fieldsize_byte);
-
-  end_bitpos = bitpos + fieldsize_bit;
-}
-
-/* See typeprint.h.  */
-
-void
-print_offset_data::finish (struct type *type, int level,
-			   struct ui_file *stream)
-{
-  unsigned int bitpos = TYPE_LENGTH (type) * TARGET_CHAR_BIT;
-  maybe_print_hole (stream, bitpos, "padding");
-
-  fputs_filtered ("\n", stream);
-  print_spaces_filtered (level + 4 + print_offset_data::indentation, stream);
-  fprintf_filtered (stream, "/* total size (bytes): %4s */\n",
-		    pulongest (TYPE_LENGTH (type)));
-}
-
-
+  /* Storage for typedef_field objects that must be synthesized.  */
+  struct obstack storage;
+};
 
 /* A hash function for a typedef_field.  */
 
 static hashval_t
 hash_typedef_field (const void *p)
 {
-  const struct decl_field *tf = (const struct decl_field *) p;
+  const struct typedef_field *tf = p;
   struct type *t = check_typedef (tf->type);
 
   return htab_hash_string (TYPE_SAFE_NAME (t));
@@ -191,25 +101,29 @@ hash_typedef_field (const void *p)
 static int
 eq_typedef_field (const void *a, const void *b)
 {
-  const struct decl_field *tfa = (const struct decl_field *) a;
-  const struct decl_field *tfb = (const struct decl_field *) b;
+  const struct typedef_field *tfa = a;
+  const struct typedef_field *tfb = b;
 
   return types_equal (tfa->type, tfb->type);
 }
 
-/* See typeprint.h.  */
+/* Add typedefs from T to the hash table TABLE.  */
 
 void
-typedef_hash_table::recursively_update (struct type *t)
+recursively_update_typedef_hash (struct typedef_hash_table *table,
+				 struct type *t)
 {
   int i;
 
+  if (table == NULL)
+    return;
+
   for (i = 0; i < TYPE_TYPEDEF_FIELD_COUNT (t); ++i)
     {
-      struct decl_field *tdef = &TYPE_TYPEDEF_FIELD (t, i);
+      struct typedef_field *tdef = &TYPE_TYPEDEF_FIELD (t, i);
       void **slot;
 
-      slot = htab_find_slot (m_table, tdef, INSERT);
+      slot = htab_find_slot (table->table, tdef, INSERT);
       /* Only add a given typedef name once.  Really this shouldn't
 	 happen; but it is safe enough to do the updates breadth-first
 	 and thus use the most specific typedef.  */
@@ -219,56 +133,88 @@ typedef_hash_table::recursively_update (struct type *t)
 
   /* Recurse into superclasses.  */
   for (i = 0; i < TYPE_N_BASECLASSES (t); ++i)
-    recursively_update (TYPE_BASECLASS (t, i));
+    recursively_update_typedef_hash (table, TYPE_BASECLASS (t, i));
 }
 
-/* See typeprint.h.  */
+/* Add template parameters from T to the typedef hash TABLE.  */
 
 void
-typedef_hash_table::add_template_parameters (struct type *t)
+add_template_parameters (struct typedef_hash_table *table, struct type *t)
 {
   int i;
 
+  if (table == NULL)
+    return;
+
   for (i = 0; i < TYPE_N_TEMPLATE_ARGUMENTS (t); ++i)
     {
-      struct decl_field *tf;
+      struct typedef_field *tf;
       void **slot;
 
       /* We only want type-valued template parameters in the hash.  */
       if (SYMBOL_CLASS (TYPE_TEMPLATE_ARGUMENT (t, i)) != LOC_TYPEDEF)
 	continue;
 
-      tf = XOBNEW (&m_storage, struct decl_field);
-      tf->name = TYPE_TEMPLATE_ARGUMENT (t, i)->linkage_name ();
+      tf = XOBNEW (&table->storage, struct typedef_field);
+      tf->name = SYMBOL_LINKAGE_NAME (TYPE_TEMPLATE_ARGUMENT (t, i));
       tf->type = SYMBOL_TYPE (TYPE_TEMPLATE_ARGUMENT (t, i));
 
-      slot = htab_find_slot (m_table, tf, INSERT);
+      slot = htab_find_slot (table->table, tf, INSERT);
       if (*slot == NULL)
 	*slot = tf;
     }
 }
 
-/* See typeprint.h.  */
+/* Create a new typedef-lookup hash table.  */
 
-typedef_hash_table::typedef_hash_table ()
+struct typedef_hash_table *
+create_typedef_hash (void)
 {
-  m_table = htab_create_alloc (10, hash_typedef_field, eq_typedef_field,
-			       NULL, xcalloc, xfree);
+  struct typedef_hash_table *result;
+
+  result = XNEW (struct typedef_hash_table);
+  result->table = htab_create_alloc (10, hash_typedef_field, eq_typedef_field,
+				     NULL, xcalloc, xfree);
+  obstack_init (&result->storage);
+
+  return result;
 }
 
 /* Free a typedef field table.  */
 
-typedef_hash_table::~typedef_hash_table ()
+void
+free_typedef_hash (struct typedef_hash_table *table)
 {
-  htab_delete (m_table);
+  if (table != NULL)
+    {
+      htab_delete (table->table);
+      obstack_free (&table->storage, NULL);
+      xfree (table);
+    }
 }
 
-/* Helper function for typedef_hash_table::copy.  */
+/* A cleanup for freeing a typedef_hash_table.  */
+
+static void
+do_free_typedef_hash (void *arg)
+{
+  free_typedef_hash (arg);
+}
+
+/* Return a new cleanup that frees TABLE.  */
+
+struct cleanup *
+make_cleanup_free_typedef_hash (struct typedef_hash_table *table)
+{
+  return make_cleanup (do_free_typedef_hash, table);
+}
+
+/* Helper function for copy_typedef_hash.  */
 
 static int
 copy_typedef_hash_element (void **slot, void *nt)
 {
-  htab_t new_table = (htab_t) nt;
+  htab_t new_table = nt;
   void **new_slot;
 
   new_slot = htab_find_slot (new_table, *slot, INSERT);
@@ -278,28 +224,56 @@ copy_typedef_hash_element (void **slot, void *nt)
   return 1;
 }
 
-/* See typeprint.h.  */
+/* Copy a typedef hash.  */
 
-typedef_hash_table::typedef_hash_table (const typedef_hash_table &table)
+struct typedef_hash_table *
+copy_typedef_hash (struct typedef_hash_table *table)
 {
-  m_table = htab_create_alloc (10, hash_typedef_field, eq_typedef_field,
-			       NULL, xcalloc, xfree);
-  htab_traverse_noresize (table.m_table, copy_typedef_hash_element,
-			  m_table);
+  struct typedef_hash_table *result;
+
+  if (table == NULL)
+    return NULL;
+
+  result = create_typedef_hash ();
+  htab_traverse_noresize (table->table, copy_typedef_hash_element,
+			  result->table);
+  return result;
+}
+
+/* A cleanup to free the global typedef hash.  */
+
+static void
+do_free_global_table (void *arg)
+{
+  struct type_print_options *flags = arg;
+
+  free_typedef_hash (flags->global_typedefs);
+  free_type_printers (flags->global_printers);
+}
+
+/* Create the global typedef hash.  */
+
+static struct cleanup *
+create_global_typedef_table (struct type_print_options *flags)
+{
+  gdb_assert (flags->global_typedefs == NULL && flags->global_printers == NULL);
+  flags->global_typedefs = create_typedef_hash ();
+  flags->global_printers = start_type_printers ();
+  return make_cleanup (do_free_global_table, flags);
 }
 
 /* Look up the type T in the global typedef hash.  If it is found,
    return the typedef name.  If it is not found, apply the
-   type-printers, if any, given by start_script_type_printers and return the
+   type-printers, if any, given by start_type_printers and return the
    result.  A NULL return means that the name was not found.  */
 
-const char *
-typedef_hash_table::find_global_typedef (const struct type_print_options *flags,
-					 struct type *t)
+static const char *
+find_global_typedef (const struct type_print_options *flags,
+		     struct type *t)
 {
   char *applied;
   void **slot;
-  struct decl_field tf, *new_tf;
+  struct typedef_field tf, *new_tf;
 
   if (flags->global_typedefs == NULL)
     return NULL;
@@ -307,47 +281,48 @@ typedef_hash_table::find_global_typedef (const struct type_print_options *flags,
   tf.name = NULL;
   tf.type = t;
 
-  slot = htab_find_slot (flags->global_typedefs->m_table, &tf, INSERT);
+  slot = htab_find_slot (flags->global_typedefs->table, &tf, INSERT);
   if (*slot != NULL)
     {
-      new_tf = (struct decl_field *) *slot;
+      new_tf = *slot;
       return new_tf->name;
     }
 
-  /* Put an entry into the hash table now, in case
-     apply_ext_lang_type_printers recurses.  */
-  new_tf = XOBNEW (&flags->global_typedefs->m_storage, struct decl_field);
+  /* Put an entry into the hash table now, in case apply_type_printers
+     recurses.  */
+  new_tf = XOBNEW (&flags->global_typedefs->storage, struct typedef_field);
   new_tf->name = NULL;
   new_tf->type = t;
 
   *slot = new_tf;
 
-  applied = apply_ext_lang_type_printers (flags->global_printers, t);
+  applied = apply_type_printers (flags->global_printers, t);
 
   if (applied != NULL)
     {
-      new_tf->name = obstack_strdup (&flags->global_typedefs->m_storage,
-				     applied);
+      new_tf->name = obstack_copy0 (&flags->global_typedefs->storage, applied,
+				    strlen (applied));
       xfree (applied);
     }
 
   return new_tf->name;
 }
 
-/* See typeprint.h.  */
+/* Look up the type T in the typedef hash table in with FLAGS.  If T
+   is in the table, return its short (class-relative) typedef name.
+   Otherwise return NULL.  If the table is NULL, this always returns
+   NULL.  */
 
 const char *
-typedef_hash_table::find_typedef (const struct type_print_options *flags,
-				  struct type *t)
+find_typedef_in_hash (const struct type_print_options *flags, struct type *t)
 {
   if (flags->local_typedefs != NULL)
     {
-      struct decl_field tf, *found;
+      struct typedef_field tf, *found;
 
       tf.name = NULL;
       tf.type = t;
-      found = (struct decl_field *) htab_find (flags->local_typedefs->m_table,
-					       &tf);
+      found = htab_find (flags->local_typedefs->table, &tf);
 
       if (found != NULL)
 	return found->name;
@@ -363,9 +338,18 @@ typedef_hash_table::find_typedef (const struct type_print_options *flags,
    NEW is the new name for a type TYPE.  */
 
 void
-typedef_print (struct type *type, struct symbol *newobj, struct ui_file *stream)
+typedef_print (struct type *type, struct symbol *new, struct ui_file *stream)
 {
-  LA_PRINT_TYPEDEF (type, newobj, stream);
+  LA_PRINT_TYPEDEF (type, new, stream);
+}
+
+/* The default way to print a typedef.  */
+
+void
+default_print_typedef (struct type *type, struct symbol *new_symbol,
+		       struct ui_file *stream)
+{
+  error (_("Language not supported."));
 }
 
 /* Print a description of a type TYPE in the form of a declaration of a
@@ -385,55 +369,48 @@ type_print (struct type *type, const char *varstring, struct ui_file *stream,
 /* Print TYPE to a string, returning it.  The caller is responsible for
    freeing the string.  */
 
-std::string
+char *
 type_to_string (struct type *type)
 {
-  try
+  char *s = NULL;
+  struct ui_file *stb;
+  struct cleanup *old_chain;
+  volatile struct gdb_exception except;
+
+  stb = mem_fileopen ();
+  old_chain = make_cleanup_ui_file_delete (stb);
+
+  TRY_CATCH (except, RETURN_MASK_ALL)
     {
-      string_file stb;
-
-      type_print (type, "", &stb, -1);
-      return std::move (stb.string ());
+      type_print (type, "", stb, -1);
+      s = ui_file_xstrdup (stb, NULL);
     }
-  catch (const gdb_exception &except)
-    {
-    }
+  if (except.reason < 0)
+    s = NULL;
 
-  return {};
-}
+  do_cleanups (old_chain);
 
-/* See typeprint.h.  */
-
-void
-type_print_unknown_return_type (struct ui_file *stream)
-{
-  fprintf_styled (stream, metadata_style.style (),
-		  _("<unknown return type>"));
-}
-
-/* See typeprint.h.  */
-
-void
-error_unknown_type (const char *sym_print_name)
-{
-  error (_("'%s' has unknown type; cast it to its declared type"),
-	 sym_print_name);
+  return s;
 }
 
 /* Print type of EXP, or last thing in value history if EXP == NULL.
    show is passed to type_print.  */
 
 static void
-whatis_exp (const char *exp, int show)
+whatis_exp (char *exp, int show)
 {
+  struct expression *expr;
   struct value *val;
+  struct cleanup *old_chain;
   struct type *real_type = NULL;
   struct type *type;
   int full = 0;
-  LONGEST top = -1;
+  int top = -1;
   int using_enc = 0;
   struct value_print_options opts;
   struct type_print_options flags = default_ptype_flags;
+
+  old_chain = make_cleanup (null_cleanup, NULL);
 
   if (exp)
     {
@@ -460,21 +437,6 @@ whatis_exp (const char *exp, int show)
 		case 'T':
 		  flags.print_typedefs = 1;
 		  break;
-		case 'o':
-		  {
-		    /* Filter out languages which don't implement the
-		       feature.  */
-		    if (show > 0
-			&& (current_language->la_language == language_c
-			    || current_language->la_language == language_cplus
-			    || current_language->la_language == language_rust))
-		      {
-			flags.print_offsets = 1;
-			flags.print_typedefs = 0;
-			flags.print_methods = 0;
-		      }
-		    break;
-		  }
 		default:
 		  error (_("unrecognized flag '%c'"), *exp);
 		}
@@ -488,73 +450,30 @@ whatis_exp (const char *exp, int show)
 	  exp = skip_spaces (exp);
 	}
 
-      expression_up expr = parse_expression (exp);
-
-      /* The behavior of "whatis" depends on whether the user
-	 expression names a type directly, or a language expression
-	 (including variable names).  If the former, then "whatis"
-	 strips one level of typedefs, only.  If an expression,
-	 "whatis" prints the type of the expression without stripping
-	 any typedef level.  "ptype" always strips all levels of
-	 typedefs.  */
-      if (show == -1 && expr->elts[0].opcode == OP_TYPE)
-	{
-	  /* The user expression names a type directly.  */
-	  type = expr->elts[1].type;
-
-	  /* If this is a typedef, then find its immediate target.
-	     Use check_typedef to resolve stubs, but ignore its result
-	     because we do not want to dig past all typedefs.  */
-	  check_typedef (type);
-	  if (type->code () == TYPE_CODE_TYPEDEF)
-	    type = TYPE_TARGET_TYPE (type);
-
-	  /* If the expression is actually a type, then there's no
-	     value to fetch the dynamic type from.  */
-	  val = NULL;
-	}
-      else
-	{
-	  /* The user expression names a type indirectly by naming an
-	     object or expression of that type.  Find that
-	     indirectly-named type.  */
-	  val = evaluate_type (expr.get ());
-	  type = value_type (val);
-	}
+      expr = parse_expression (exp);
+      make_cleanup (free_current_contents, &expr);
+      val = evaluate_type (expr);
     }
   else
-    {
-      val = access_value_history (0);
-      type = value_type (val);
-    }
+    val = access_value_history (0);
+
+  type = value_type (val);
 
   get_user_print_options (&opts);
-  if (val != NULL && opts.objectprint)
+  if (opts.objectprint)
     {
-      if (((type->code () == TYPE_CODE_PTR) || TYPE_IS_REFERENCE (type))
-	  && (TYPE_TARGET_TYPE (type)->code () == TYPE_CODE_STRUCT))
+      if (((TYPE_CODE (type) == TYPE_CODE_PTR)
+	   || (TYPE_CODE (type) == TYPE_CODE_REF))
+	  && (TYPE_CODE (TYPE_TARGET_TYPE (type)) == TYPE_CODE_CLASS))
         real_type = value_rtti_indirect_type (val, &full, &top, &using_enc);
-      else if (type->code () == TYPE_CODE_STRUCT)
+      else if (TYPE_CODE (type) == TYPE_CODE_CLASS)
 	real_type = value_rtti_type (val, &full, &top, &using_enc);
     }
 
-  if (flags.print_offsets
-      && (type->code () == TYPE_CODE_STRUCT
-	  || type->code () == TYPE_CODE_UNION))
-    fprintf_filtered (gdb_stdout, "/* offset    |  size */  ");
-
   printf_filtered ("type = ");
 
-  std::unique_ptr<typedef_hash_table> table_holder;
-  std::unique_ptr<ext_lang_type_printers> printer_holder;
   if (!flags.raw)
-    {
-      table_holder.reset (new typedef_hash_table);
-      flags.global_typedefs = table_holder.get ();
-
-      printer_holder.reset (new ext_lang_type_printers);
-      flags.global_printers = printer_holder.get ();
-    }
+    create_global_typedef_table (&flags);
 
   if (real_type)
     {
@@ -567,10 +486,12 @@ whatis_exp (const char *exp, int show)
 
   LA_PRINT_TYPE (type, "", gdb_stdout, show, 0, &flags);
   printf_filtered ("\n");
+
+  do_cleanups (old_chain);
 }
 
 static void
-whatis_command (const char *exp, int from_tty)
+whatis_command (char *exp, int from_tty)
 {
   /* Most of the time users do not want to see all the fields
      in a structure.  If they do they can use the "ptype" command.
@@ -581,9 +502,9 @@ whatis_command (const char *exp, int from_tty)
 /* TYPENAME is either the name of a type, or an expression.  */
 
 static void
-ptype_command (const char *type_name, int from_tty)
+ptype_command (char *typename, int from_tty)
 {
-  whatis_exp (type_name, 1);
+  whatis_exp (typename, 1);
 }
 
 /* Print integral scalar data VAL, of type TYPE, onto stdio stream STREAM.
@@ -604,13 +525,13 @@ print_type_scalar (struct type *type, LONGEST val, struct ui_file *stream)
   unsigned int i;
   unsigned len;
 
-  type = check_typedef (type);
+  CHECK_TYPEDEF (type);
 
-  switch (type->code ())
+  switch (TYPE_CODE (type))
     {
 
     case TYPE_CODE_ENUM:
-      len = type->num_fields ();
+      len = TYPE_NFIELDS (type);
       for (i = 0; i < len; i++)
 	{
 	  if (TYPE_FIELD_ENUMVAL (type, i) == val)
@@ -659,7 +580,6 @@ print_type_scalar (struct type *type, LONGEST val, struct ui_file *stream)
     case TYPE_CODE_METHODPTR:
     case TYPE_CODE_METHOD:
     case TYPE_CODE_REF:
-    case TYPE_CODE_RVALUE_REF:
     case TYPE_CODE_NAMESPACE:
       error (_("internal error: unhandled type in print_type_scalar"));
       break;
@@ -667,6 +587,7 @@ print_type_scalar (struct type *type, LONGEST val, struct ui_file *stream)
     default:
       error (_("Invalid type code in symbol table."));
     }
+  gdb_flush (stream);
 }
 
 /* Dump details of a type specified either directly or indirectly.
@@ -674,14 +595,17 @@ print_type_scalar (struct type *type, LONGEST val, struct ui_file *stream)
    and whatis_command().  */
 
 void
-maintenance_print_type (const char *type_name, int from_tty)
+maintenance_print_type (char *typename, int from_tty)
 {
   struct value *val;
   struct type *type;
+  struct cleanup *old_chain;
+  struct expression *expr;
 
-  if (type_name != NULL)
+  if (typename != NULL)
     {
-      expression_up expr = parse_expression (type_name);
+      expr = parse_expression (typename);
+      old_chain = make_cleanup (free_current_contents, &expr);
       if (expr->elts[0].opcode == OP_TYPE)
 	{
 	  /* The user expression names a type directly, just use that type.  */
@@ -691,13 +615,14 @@ maintenance_print_type (const char *type_name, int from_tty)
 	{
 	  /* The user expression may name a type indirectly by naming an
 	     object of that type.  Find that indirectly named type.  */
-	  val = evaluate_type (expr.get ());
+	  val = evaluate_type (expr);
 	  type = value_type (val);
 	}
       if (type != NULL)
 	{
 	  recursive_dump_type (type, 0);
 	}
+      do_cleanups (old_chain);
     }
 }
 
@@ -706,11 +631,24 @@ struct cmd_list_element *setprinttypelist;
 
 struct cmd_list_element *showprinttypelist;
 
-static bool print_methods = true;
+static void
+set_print_type (char *arg, int from_tty)
+{
+  printf_unfiltered (
+     "\"set print type\" must be followed by the name of a subcommand.\n");
+  help_list (setprintlist, "set print type ", -1, gdb_stdout);
+}
 
 static void
-set_print_type_methods (const char *args,
-			int from_tty, struct cmd_list_element *c)
+show_print_type (char *args, int from_tty)
+{
+  cmd_show_list (showprinttypelist, from_tty, "");
+}
+
+static int print_methods = 1;
+
+static void
+set_print_type_methods (char *args, int from_tty, struct cmd_list_element *c)
 {
   default_ptype_flags.print_methods = print_methods;
 }
@@ -723,11 +661,10 @@ show_print_type_methods (struct ui_file *file, int from_tty,
 		    value);
 }
 
-static bool print_typedefs = true;
+static int print_typedefs = 1;
 
 static void
-set_print_type_typedefs (const char *args,
-			 int from_tty, struct cmd_list_element *c)
+set_print_type_typedefs (char *args, int from_tty, struct cmd_list_element *c)
 {
   default_ptype_flags.print_typedefs = print_typedefs;
 }
@@ -740,44 +677,8 @@ show_print_type_typedefs (struct ui_file *file, int from_tty,
 		    value);
 }
 
-/* Limit on the number of nested type definitions to print or -1 to print
-   all nested type definitions in a class.  By default, we do not print
-   nested definitions.  */
-
-static int print_nested_type_limit = 0;
-
-/* Set how many nested type definitions should be printed by the type
-   printer.  */
-
-static void
-set_print_type_nested_types (const char *args, int from_tty,
-			     struct cmd_list_element *c)
-{
-  default_ptype_flags.print_nested_type_limit = print_nested_type_limit;
-}
-
-/* Show how many nested type definitions the type printer will print.  */
-
-static void
-show_print_type_nested_types  (struct ui_file *file, int from_tty,
-			       struct cmd_list_element *c, const char *value)
-{
-  if (*value == '0')
-    {
-      fprintf_filtered (file,
-			_("Will not print nested types defined in a class\n"));
-    }
-  else
-    {
-      fprintf_filtered (file,
-			_("Will print %s nested types defined in a class\n"),
-			value);
-    }
-}
-
-void _initialize_typeprint ();
 void
-_initialize_typeprint ()
+_initialize_typeprint (void)
 {
   struct cmd_list_element *c;
 
@@ -795,8 +696,7 @@ Available FLAGS are:\n\
   /m    do not print methods defined in a class\n\
   /M    print methods defined in a class\n\
   /t    do not print typedefs defined in a class\n\
-  /T    print typedefs defined in a class\n\
-  /o    print offsets and sizes of fields in a struct (like pahole)"));
+  /T    print typedefs defined in a class"));
   set_cmd_completer (c, expression_completer);
 
   c = add_com ("whatis", class_vars, whatis_command,
@@ -804,14 +704,12 @@ Available FLAGS are:\n\
 Only one level of typedefs is unrolled.  See also \"ptype\"."));
   set_cmd_completer (c, expression_completer);
 
-  add_show_prefix_cmd ("type", no_class,
-		       _("Generic command for showing type-printing settings."),
-		       &showprinttypelist, "show print type ", 0,
-		       &showprintlist);
-  add_basic_prefix_cmd ("type", no_class,
-			_("Generic command for setting how types print."),
-			&setprinttypelist, "set print type ", 0,
-			&setprintlist);
+  add_prefix_cmd ("type", no_class, show_print_type,
+		  _("Generic command for showing type-printing settings."),
+		  &showprinttypelist, "show print type ", 0, &showprintlist);
+  add_prefix_cmd ("type", no_class, set_print_type,
+		  _("Generic command for setting how types print."),
+		  &setprinttypelist, "show print type ", 0, &setprintlist);
 
   add_setshow_boolean_cmd ("methods", no_class, &print_methods,
 			   _("\
@@ -827,30 +725,4 @@ Show printing of typedefs defined in classes."), NULL,
 			   set_print_type_typedefs,
 			   show_print_type_typedefs,
 			   &setprinttypelist, &showprinttypelist);
-
-  add_setshow_zuinteger_unlimited_cmd ("nested-type-limit", no_class,
-				       &print_nested_type_limit,
-				       _("\
-Set the number of recursive nested type definitions to print \
-(\"unlimited\" or -1 to show all)."), _("\
-Show the number of recursive nested type definitions to print."), NULL,
-				       set_print_type_nested_types,
-				       show_print_type_nested_types,
-				       &setprinttypelist, &showprinttypelist);
-}
-
-/* Print <not allocated> status to stream STREAM.  */
-
-void
-val_print_not_allocated (struct ui_file *stream)
-{
-  fprintf_styled (stream, metadata_style.style (), _("<not allocated>"));
-}
-
-/* Print <not associated> status to stream STREAM.  */
-
-void
-val_print_not_associated (struct ui_file *stream)
-{
-  fprintf_styled (stream, metadata_style.style (), _("<not associated>"));
 }

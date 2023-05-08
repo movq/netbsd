@@ -1,6 +1,6 @@
 /* Target-dependent definitions for AMD64.
 
-   Copyright (C) 2001-2020 Free Software Foundation, Inc.
+   Copyright (C) 2001-2014 Free Software Foundation, Inc.
    Contributed by Jiri Smid, SuSE Labs.
 
    This file is part of GDB.
@@ -26,7 +26,6 @@ struct frame_info;
 struct regcache;
 
 #include "i386-tdep.h"
-#include "infrun.h"
 
 /* Register numbers of various important registers.  */
 
@@ -69,26 +68,15 @@ enum amd64_regnum
   AMD64_BND0R_REGNUM = AMD64_YMM15H_REGNUM + 1,
   AMD64_BND3R_REGNUM = AMD64_BND0R_REGNUM + 3,
   AMD64_BNDCFGU_REGNUM,
-  AMD64_BNDSTATUS_REGNUM,
-  AMD64_XMM16_REGNUM,
-  AMD64_XMM31_REGNUM = AMD64_XMM16_REGNUM + 15,
-  AMD64_YMM16H_REGNUM,
-  AMD64_YMM31H_REGNUM = AMD64_YMM16H_REGNUM + 15,
-  AMD64_K0_REGNUM,
-  AMD64_K7_REGNUM = AMD64_K0_REGNUM + 7,
-  AMD64_ZMM0H_REGNUM,
-  AMD64_ZMM31H_REGNUM = AMD64_ZMM0H_REGNUM + 31,
-  AMD64_PKRU_REGNUM,
-  AMD64_FSBASE_REGNUM,
-  AMD64_GSBASE_REGNUM
+  AMD64_BNDSTATUS_REGNUM
 };
 
 /* Number of general purpose registers.  */
 #define AMD64_NUM_GREGS		24
 
-#define AMD64_NUM_REGS		(AMD64_GSBASE_REGNUM + 1)
+#define AMD64_NUM_REGS		(AMD64_BNDSTATUS_REGNUM + 1)
 
-extern displaced_step_closure_up amd64_displaced_step_copy_insn
+extern struct displaced_step_closure *amd64_displaced_step_copy_insn
   (struct gdbarch *gdbarch, CORE_ADDR from, CORE_ADDR to,
    struct regcache *regs);
 extern void amd64_displaced_step_fixup (struct gdbarch *gdbarch,
@@ -96,19 +84,9 @@ extern void amd64_displaced_step_fixup (struct gdbarch *gdbarch,
 					CORE_ADDR from, CORE_ADDR to,
 					struct regcache *regs);
 
-/* Initialize the ABI for amd64.  Uses DEFAULT_TDESC as fallback
-   tdesc, if INFO does not specify one.  */
-extern void amd64_init_abi (struct gdbarch_info info,
-			    struct gdbarch *gdbarch,
-			    const target_desc *default_tdesc);
-
-/* Initialize the ABI for x32.  Uses DEFAULT_TDESC as fallback tdesc,
-   if INFO does not specify one.  */
+extern void amd64_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch);
 extern void amd64_x32_init_abi (struct gdbarch_info info,
-				struct gdbarch *gdbarch,
-				const target_desc *default_tdesc);
-extern const struct target_desc *amd64_target_description (uint64_t xcr0,
-							   bool segments);
+				struct gdbarch *gdbarch);
 
 /* Fill register REGNUM in REGCACHE with the appropriate
    floating-point or SSE register value from *FXSAVE.  If REGNUM is
@@ -133,19 +111,17 @@ extern void amd64_collect_fxsave (const struct regcache *regcache, int regnum,
 extern void amd64_collect_xsave (const struct regcache *regcache,
 				 int regnum, void *xsave, int gcore);
 
-/* Floating-point register set. */
-extern const struct regset amd64_fpregset;
 
 /* Variables exported from amd64-linux-tdep.c.  */
 extern int amd64_linux_gregset_reg_offset[];
 
-/* Variables exported from amd64-nbsd-tdep.c.  */
+/* Variables exported from amd64nbsd-tdep.c.  */
 extern int amd64nbsd_r_reg_offset[];
 
-/* Variables exported from amd64-obsd-tdep.c.  */
+/* Variables exported from amd64obsd-tdep.c.  */
 extern int amd64obsd_r_reg_offset[];
 
-/* Variables exported from amd64-fbsd-tdep.c.  */
+/* Variables exported from amd64fbsd-tdep.c.  */
 extern CORE_ADDR amd64fbsd_sigtramp_start_addr;
 extern CORE_ADDR amd64fbsd_sigtramp_end_addr;
 extern int amd64fbsd_sc_reg_offset[];

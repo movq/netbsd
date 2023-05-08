@@ -1,5 +1,5 @@
 /* tc-aarch64.h -- Header file for tc-aarch64.c.
-   Copyright (C) 2009-2020 Free Software Foundation, Inc.
+   Copyright 2009, 2010, 2011, 2012  Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of GAS.
@@ -78,45 +78,6 @@ struct aarch64_fix
 /* We also need to mark assembler created symbols:  */
 #define tc_frob_fake_label(S) aarch64_frob_label (S)
 
-#define tc_frob_section(S) aarch64_frob_section (S)
-
-/* The key used to sign a function's return address.  */
-enum pointer_auth_key {
-  AARCH64_PAUTH_KEY_A,
-  AARCH64_PAUTH_KEY_B
-};
-
-/* The extra fields required by AArch64 in fde_entry and cie_entry.  Currently
-   only used to store the key used to sign the frame's return address.  */
-#define tc_fde_entry_extras enum pointer_auth_key pauth_key;
-#define tc_cie_entry_extras enum pointer_auth_key pauth_key;
-
-/* The extra initialisation steps needed by AArch64 in alloc_fde_entry.
-   Currently only used to initialise the key used to sign the return
-   address.  */
-#define tc_fde_entry_init_extra(fde) fde->pauth_key = AARCH64_PAUTH_KEY_A;
-
-/* Extra checks required by AArch64 when outputting the current cie_entry.
-   Currently only used to output a 'B' if the return address is signed with the
-   B key.  */
-#define tc_output_cie_extra(cie) \
-    do \
-      { \
-	if (cie->pauth_key == AARCH64_PAUTH_KEY_B) \
-	  out_one ('B'); \
-      } \
-    while (0)
-
-/* Extra equivalence checks required by AArch64 when selecting the correct cie
-   for some fde.  Currently only used to check for quivalence between keys used
-   to sign ther return address.  */
-#define tc_cie_fde_equivalent_extra(cie, fde) (cie->pauth_key == fde->pauth_key)
-
-/* The extra initialisation steps needed by AArch64 in select_cie_for_fde.
-   Currently only used to initialise the key used to sign the return
-   address.  */
-#define tc_cie_entry_init_extra(cie, fde) cie->pauth_key = fde->pauth_key;
-
 #define TC_FIX_TYPE struct aarch64_fix
 #define TC_INIT_FIX_DATA(FIX) { (FIX)->tc_fix_data.inst = NULL;	\
     (FIX)->tc_fix_data.opnd = AARCH64_OPND_NIL; }
@@ -130,14 +91,8 @@ void aarch64_copy_symbol_attributes (symbolS *, symbolS *);
   (aarch64_copy_symbol_attributes (DEST, SRC))
 #endif
 
-#ifdef OBJ_ELF
-void aarch64_elf_copy_symbol_attributes (symbolS *, symbolS *);
-#define OBJ_COPY_SYMBOL_ATTRIBUTES(DEST, SRC) \
-  aarch64_elf_copy_symbol_attributes (DEST, SRC)
-#endif
-
-#define TC_START_LABEL(STR, NUL_CHAR, NEXT_CHAR)			\
-  (NEXT_CHAR == ':' || (NEXT_CHAR == '/' && aarch64_data_in_code ()))
+#define TC_START_LABEL(C,S,STR)           ((C) == ':' \
+					   || ((C) == '/' && aarch64_data_in_code ()))
 #define tc_canonicalize_symbol_name(str) aarch64_canonicalize_symbol_name (str);
 #define obj_adjust_symtab() 		 aarch64_adjust_symtab ()
 
@@ -154,15 +109,15 @@ void aarch64_elf_copy_symbol_attributes (symbolS *, symbolS *);
    pcrel, but it is easier to be safe than sorry.  */
 
 #define TC_FORCE_RELOCATION_LOCAL(FIX)			\
-  (GENERIC_FORCE_RELOCATION_LOCAL (FIX)			\
+  (!(FIX)->fx_pcrel					\
    || (FIX)->fx_r_type == BFD_RELOC_64			\
-   || (FIX)->fx_r_type == BFD_RELOC_32)
+   || (FIX)->fx_r_type == BFD_RELOC_32			\
+   || TC_FORCE_RELOCATION (FIX))
 
-#define TC_CONS_FIX_NEW(f,w,s,e,r) cons_fix_new_aarch64 ((f), (w), (s), (e))
+#define TC_CONS_FIX_NEW cons_fix_new_aarch64
 
-/* Max space for a rs_align_code fragment is 3 unaligned bytes
-   (fr_fix) plus 4 bytes to contain the repeating NOP (fr_var).  */
-#define MAX_MEM_FOR_RS_ALIGN_CODE 7
+/* Max code alignment is 32 bytes */
+#define MAX_MEM_FOR_RS_ALIGN_CODE 31
 
 /* For frags in code sections we need to record whether they contain
    code or data.  */
@@ -179,28 +134,24 @@ struct aarch64_frag_type
 };
 
 #define TC_FRAG_TYPE		struct aarch64_frag_type
-#define TC_FRAG_INIT(fragp, max_bytes) aarch64_init_frag (fragp, max_bytes)
+/* NOTE: max_chars is a local variable from frag_var / frag_variant.  */
+#define TC_FRAG_INIT(fragp)	aarch64_init_frag (fragp, max_chars)
 #define HANDLE_ALIGN(fragp)	aarch64_handle_align (fragp)
 
 #define md_do_align(N, FILL, LEN, MAX, LABEL)					\
   if (FILL == NULL && (N) != 0 && ! need_pass_2 && subseg_text_p (now_seg))	\
     {										\
-      frag_align_code (N, MAX);							\
+      aarch64_frag_align_code (N, MAX);						\
       goto LABEL;								\
     }
 
-#define SUB_SEGMENT_ALIGN(SEG, FRCHAIN) 0
-
-#define DWARF2_LINE_MIN_INSN_LENGTH 	4
+#define DWARF2_LINE_MIN_INSN_LENGTH 	2
 
 /* The lr register is r30.  */
 #define DWARF2_DEFAULT_RETURN_COLUMN  30
 
 /* Registers are generally saved at negative offsets to the CFA.  */
-#define DWARF2_CIE_DATA_ALIGNMENT     (-8)
-
-extern int aarch64_dwarf2_addr_size (void);
-#define DWARF2_ADDR_SIZE(bfd) aarch64_dwarf2_addr_size ()
+#define DWARF2_CIE_DATA_ALIGNMENT     (-4)
 
 #ifdef OBJ_ELF
 # define obj_frob_symbol(sym, punt)	aarch64elf_frob_symbol ((sym), & (punt))
@@ -227,7 +178,6 @@ struct aarch64_segment_info_type
 {
   enum mstate mapstate;
   unsigned int marked_pr_dependency;
-  aarch64_instr_sequence insn_sequence;
 };
 
 /* We want .cfi_* pseudo-ops for generating unwind info.  */
@@ -236,9 +186,6 @@ struct aarch64_segment_info_type
 /* CFI hooks.  */
 #define tc_regname_to_dw2regnum            tc_aarch64_regname_to_dw2regnum
 #define tc_cfi_frame_initial_instructions  tc_aarch64_frame_initial_instructions
-
-extern void aarch64_after_parse_args (void);
-#define md_after_parse_args() aarch64_after_parse_args ()
 
 #else /* Not OBJ_ELF.  */
 #define GLOBAL_OFFSET_TABLE_NAME "__GLOBAL_OFFSET_TABLE_"
@@ -262,7 +209,6 @@ extern int aarch64_force_relocation (struct fix *);
 extern void aarch64_cleanup (void);
 extern void aarch64_start_line_hook (void);
 extern void aarch64_frob_label (symbolS *);
-extern void aarch64_frob_section (asection *sec);
 extern int aarch64_data_in_code (void);
 extern char * aarch64_canonicalize_symbol_name (char *);
 extern void aarch64_adjust_symtab (void);

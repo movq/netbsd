@@ -1,5 +1,7 @@
 /* tc-hppa.h -- Header file for the PA
-   Copyright (C) 1989-2020 Free Software Foundation, Inc.
+   Copyright 1989, 1993, 1994, 1995, 1997, 1998, 1999, 2000, 2001, 2002,
+   2003, 2004, 2005, 2006, 2007, 2008, 2009, 2012
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -90,8 +92,8 @@
 
 /* pa_define_label gets used outside of tc-hppa.c via tc_frob_label.  */
 extern void pa_define_label (symbolS *);
-extern int parse_cons_expression_hppa (expressionS *);
-extern void cons_fix_new_hppa (fragS *, int, int, expressionS *, int);
+extern void parse_cons_expression_hppa (expressionS *);
+extern void cons_fix_new_hppa (fragS *, int, int, expressionS *);
 extern int hppa_force_relocation (struct fix *);
 
 /* This gets called before writing the object file to make sure
@@ -112,8 +114,6 @@ extern const char	hppa_symbol_chars[];
 #define TC_PARSE_CONS_EXPRESSION(EXP, NBYTES) \
   parse_cons_expression_hppa (EXP)
 #define TC_CONS_FIX_NEW cons_fix_new_hppa
-#define TC_PARSE_CONS_RETURN_TYPE int
-#define TC_PARSE_CONS_RETURN_NONE e_fsel
 
 /* On the PA, an exclamation point can appear in an instruction.  It is
    used in FP comparison instructions and as an end of line marker.
@@ -166,7 +166,7 @@ int hppa_fix_adjustable (struct fix *);
    limitations as those for the 32-bit SOM target.  */
 #define DIFF_EXPR_OK 1
 
-/* Handle .type pseudo.  Given a type string of `millicode', set the
+/* Handle .type psuedo.  Given a type string of `millicode', set the
    internal elf symbol type to STT_PARISC_MILLI, and return
    BSF_FUNCTION for the BFD symbol type.  */
 #define md_elf_symbol_type(name, sym, elf)				\
@@ -176,14 +176,6 @@ int hppa_fix_adjustable (struct fix *);
        (ELF_ST_BIND ((elf)->internal_elf_sym.st_info), STT_PARISC_MILLI)\
        ), BSF_FUNCTION)							\
    : -1)
-
-/* Handle type change from .type pseudo: Zap STT_PARISC_MILLI when
-   switching to a non-function type.  */
-#define md_elf_symbol_type_change(sym, elf, type)			\
-  ((type) != BSF_FUNCTION						\
-   && (((elf)->internal_elf_sym.st_info = 				\
-	ELF_ST_INFO (ELF_ST_BIND ((elf)->internal_elf_sym.st_info),	\
-		     STT_NOTYPE)), 0))
 
 #define tc_frob_symbol(sym,punt) \
   { \

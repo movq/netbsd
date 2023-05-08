@@ -1,6 +1,6 @@
 /* Self tests for ui_file_style
 
-   Copyright (C) 2018-2020 Free Software Foundation, Inc.
+   Copyright (C) 2018-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,7 +18,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
-#include "gdbsupport/selftest.h"
+#include "common/selftest.h"
 #include "ui-style.h"
 
 namespace selftests {
@@ -101,7 +101,6 @@ run_tests ()
 } /* namespace style */
 } /* namespace selftests */
 
-void _initialize_style_selftest ();
 void
 _initialize_style_selftest ()
 {

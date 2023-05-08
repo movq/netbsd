@@ -1,6 +1,6 @@
 /* TUI support I/O functions.
 
-   Copyright (C) 1998-2020 Free Software Foundation, Inc.
+   Copyright (C) 1998-2014 Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
 
@@ -19,20 +19,13 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef TUI_TUI_IO_H
-#define TUI_TUI_IO_H
-
-#include "gdb_curses.h"
+#ifndef TUI_IO_H
+#define TUI_IO_H
 
 struct ui_out;
-class cli_ui_out;
 
 /* Print the string in the curses command window.  */
-extern void tui_puts (const char *, WINDOW * = nullptr);
-
-/* Print LENGTH characters from the buffer pointed to by BUF to the
-   curses command window.  */
-extern void tui_write (const char *buf, size_t length);
+extern void tui_puts (const char *);
 
 /* Setup the IO for curses or non-curses mode.  */
 extern void tui_setup_io (int mode);
@@ -40,18 +33,20 @@ extern void tui_setup_io (int mode);
 /* Initialize the IO for gdb in curses mode.  */
 extern void tui_initialize_io (void);
 
+/* Get a character from the command window.  */
+extern int tui_getc (FILE *);
+
 /* Readline callback.
    Redisplay the command line with its prompt after readline has
    changed the edited text.  */
 extern void tui_redisplay_readline (void);
 
-/* Enter/leave reverse video mode.  */
-extern void tui_set_reverse_mode (WINDOW *w, bool reverse);
-
-/* Apply STYLE to the window.  */
-extern void tui_apply_style (WINDOW *w, ui_file_style style);
-
 extern struct ui_out *tui_out;
-extern cli_ui_out *tui_old_uiout;
+extern struct ui_out *tui_old_uiout;
 
-#endif /* TUI_TUI_IO_H */
+extern int key_is_start_sequence (int ch);
+extern int key_is_end_sequence (int ch);
+extern int key_is_backspace (int ch);
+extern int key_is_command_char (int ch);
+
+#endif

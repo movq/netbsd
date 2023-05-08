@@ -1,5 +1,6 @@
 /* mri.c -- handle MRI style linker scripts
-   Copyright (C) 1991-2020 Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1993, 1994, 1996, 1997, 1998, 1999, 2000, 2001,
+   2002, 2003, 2004, 2005, 2007, 2011 Free Software Foundation, Inc.
    Contributed by Steve Chamberlain <sac@cygnus.com>.
 
    This file is part of the GNU Binutils.
@@ -25,8 +26,6 @@
 
 #include "sysdep.h"
 #include "bfd.h"
-#include "bfdlink.h"
-#include "ctf-api.h"
 #include "ld.h"
 #include "ldexp.h"
 #include "ldlang.h"
@@ -46,8 +45,6 @@ struct section_name_struct {
 };
 
 static unsigned int symbol_truncate = 10000;
-static etree_type *base; /* Relocation base - or null */
-
 static struct section_name_struct *order;
 static struct section_name_struct *only_load;
 static struct section_name_struct *address;
@@ -211,7 +208,7 @@ mri_draw_tree (void)
 
 	  lang_enter_output_section_statement (p->name, base,
 					       p->ok_to_load ? normal_section : noload_section,
-					       align, subalign, NULL, 0, 0);
+					       align, subalign, NULL, 0);
 	  base = 0;
 	  tmp = (struct wildcard_list *) xmalloc (sizeof *tmp);
 	  tmp->next = NULL;
@@ -287,8 +284,14 @@ mri_format (const char *name)
   if (strcmp (name, "S") == 0)
     lang_add_output_format ("srec", NULL, NULL, 1);
 
+  else if (strcmp (name, "IEEE") == 0)
+    lang_add_output_format ("ieee", NULL, NULL, 1);
+
+  else if (strcmp (name, "COFF") == 0)
+    lang_add_output_format ("coff-m68k", NULL, NULL, 1);
+
   else
-    einfo (_("%F%P: unknown format type %s\n"), name);
+    einfo (_("%P%F: unknown format type %s\n"), name);
 }
 
 void

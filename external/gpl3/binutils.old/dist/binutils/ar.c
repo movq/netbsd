@@ -1,5 +1,7 @@
 /* ar.c - Archive modify and extract.
-   Copyright (C) 1991-2020 Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
+   2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013
+   Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -29,13 +31,12 @@
 #include "progress.h"
 #include "getopt.h"
 #include "aout/ar.h"
+#include "libbfd.h"
 #include "bucomm.h"
 #include "arsup.h"
 #include "filenames.h"
 #include "binemul.h"
-#include "plugin-api.h"
 #include "plugin.h"
-#include "ansidecl.h"
 
 #ifdef __GO32___
 #define EXT_NAME_LEN 3		/* Bufflen of addition to name if it's MS-DOS.  */
@@ -75,9 +76,6 @@ int silent_create = 0;
 
 /* Nonzero means describe each action performed.  */
 int verbose = 0;
-
-/* Nonzero means display offsets of files in the archive.  */
-int display_offsets = 0;
 
 /* Nonzero means preserve dates of members when extracting them.  */
 int preserve_dates = 0;
@@ -142,22 +140,12 @@ static int show_version = 0;
 
 static int show_help = 0;
 
-#if BFD_SUPPORTS_PLUGINS
-static const char *plugin_target = "plugin";
-#else
 static const char *plugin_target = NULL;
-#endif
 
 static const char *target = NULL;
 
-enum long_option_numbers
-{
-  OPTION_PLUGIN = 201,
-  OPTION_TARGET,
-  OPTION_OUTPUT
-};
-
-static const char * output_dir = NULL;
+#define OPTION_PLUGIN 201
+#define OPTION_TARGET 202
 
 static struct option long_options[] =
 {
@@ -165,7 +153,6 @@ static struct option long_options[] =
   {"plugin", required_argument, NULL, OPTION_PLUGIN},
   {"target", required_argument, NULL, OPTION_TARGET},
   {"version", no_argument, &show_version, 1},
-  {"output", required_argument, NULL, OPTION_OUTPUT},
   {NULL, no_argument, NULL, 0}
 };
 
@@ -204,9 +191,6 @@ map_over_members (bfd *arch, void (*function)(bfd *), char **files, int count)
      mapping over each file each time -- we want to hack multiple
      references.  */
 
-  for (head = arch->archive_next; head; head = head->archive_next)
-    head->archive_pass = 0;
-
   for (; count > 0; files++, count--)
     {
       bfd_boolean found = FALSE;
@@ -217,14 +201,6 @@ map_over_members (bfd *arch, void (*function)(bfd *), char **files, int count)
 	  const char * filename;
 
 	  PROGRESS (1);
-	  /* PR binutils/15796: Once an archive element has been matched
-	     do not match it again.  If the user provides multiple same-named
-	     parameters on the command line their intent is to match multiple
-	     same-named entries in the archive, not the same entry multiple
-	     times.  */
-	  if (head->archive_pass)
-	    continue;
-
 	  filename = head->filename;
 	  if (filename == NULL)
 	    {
@@ -253,13 +229,6 @@ map_over_members (bfd *arch, void (*function)(bfd *), char **files, int count)
 
 	      found = TRUE;
 	      function (head);
-	      head->archive_pass = 1;
-	      /* PR binutils/15796: Once a file has been matched, do not
-		 match any more same-named files in the archive.  If the
-		 user does want to match multiple same-name files in an
-		 archive they should provide multiple same-name parameters
-		 to the ar command.  */
-	      break;
 	    }
 	}
 
@@ -276,20 +245,20 @@ usage (int help)
 {
   FILE *s;
 
+  s = help ? stdout : stderr;
+
 #if BFD_SUPPORTS_PLUGINS
   /* xgettext:c-format */
   const char *command_line
-    = _("Usage: %s [emulation options] [-]{dmpqrstx}[abcDfilMNoOPsSTuvV]"
+    = _("Usage: %s [emulation options] [-]{dmpqrstx}[abcDfilMNoPsSTuvV]"
 	" [--plugin <name>] [member-name] [count] archive-file file...\n");
 
 #else
   /* xgettext:c-format */
   const char *command_line
-    = _("Usage: %s [emulation options] [-]{dmpqrstx}[abcDfilMNoOPsSTuvV]"
+    = _("Usage: %s [emulation options] [-]{dmpqrstx}[abcDfilMNoPsSTuvV]"
 	" [member-name] [count] archive-file file...\n");
 #endif
-  s = help ? stdout : stderr;
-
   fprintf (s, command_line, program_name);
 
   /* xgettext:c-format */
@@ -301,7 +270,7 @@ usage (int help)
   fprintf (s, _("  q[f]         - quick append file(s) to the archive\n"));
   fprintf (s, _("  r[ab][f][u]  - replace existing or insert new file(s) into the archive\n"));
   fprintf (s, _("  s            - act as ranlib\n"));
-  fprintf (s, _("  t[O][v]      - display contents of the archive\n"));
+  fprintf (s, _("  t            - display contents of archive\n"));
   fprintf (s, _("  x[o]         - extract file(s) from the archive\n"));
   fprintf (s, _(" command specific modifiers:\n"));
   fprintf (s, _("  [a]          - put file(s) after [member-name]\n"));
@@ -324,7 +293,6 @@ usage (int help)
   fprintf (s, _("  [f]          - truncate inserted file names\n"));
   fprintf (s, _("  [P]          - use full path names when matching\n"));
   fprintf (s, _("  [o]          - preserve original dates\n"));
-  fprintf (s, _("  [O]          - display offsets of files in the archive\n"));
   fprintf (s, _("  [u]          - only replace files that are newer than current archive contents\n"));
   fprintf (s, _(" generic modifiers:\n"));
   fprintf (s, _("  [c]          - do not warn if the library had to be created\n"));
@@ -335,7 +303,6 @@ usage (int help)
   fprintf (s, _("  [V]          - display the version number\n"));
   fprintf (s, _("  @<file>      - read options from <file>\n"));
   fprintf (s, _("  --target=BFDNAME - specify the target object format as BFDNAME\n"));
-  fprintf (s, _("  --output=DIRNAME - specify the output directory for extraction operations\n"));
 #if BFD_SUPPORTS_PLUGINS
   fprintf (s, _(" optional:\n"));
   fprintf (s, _("  --plugin <p> - load the specified plugin\n"));
@@ -441,10 +408,9 @@ decode_options (int argc, char **argv)
 {
   int c;
 
-  /* Convert old-style ar call by exploding option element and rearranging
+  /* Convert old-style tar call by exploding option element and rearranging
      options accordingly.  */
 
- restart:
   if (argc > 1 && argv[1][0] != '-')
     {
       int new_argc;		/* argc value for rearranged arguments */
@@ -487,7 +453,7 @@ decode_options (int argc, char **argv)
       argv = new_argv;
     }
 
-  while ((c = getopt_long (argc, argv, "hdmpqrtxlcoOVsSuvabiMNfPTDU",
+  while ((c = getopt_long (argc, argv, "hdmpqrtxlcoVsSuvabiMNfPTDU",
 			   long_options, NULL)) != EOF)
     {
       switch (c)
@@ -542,9 +508,6 @@ decode_options (int argc, char **argv)
         case 'o':
           preserve_dates = 1;
           break;
-        case 'O':
-          display_offsets = 1;
-          break;
         case 'V':
           show_version = TRUE;
           break;
@@ -592,6 +555,7 @@ decode_options (int argc, char **argv)
           break;
 	case OPTION_PLUGIN:
 #if BFD_SUPPORTS_PLUGINS
+	  plugin_target = "plugin";
 	  bfd_plugin_set_plugin (optarg);
 #else
 	  fprintf (stderr, _("sorry - this program has been built without plugin support\n"));
@@ -601,26 +565,11 @@ decode_options (int argc, char **argv)
 	case OPTION_TARGET:
 	  target = optarg;
 	  break;
-	case OPTION_OUTPUT:
-	  output_dir = optarg;
-	  break;
 	case 0:		/* A long option that just sets a flag.  */
 	  break;
         default:
           usage (0);
         }
-    }
-
-  /* PR 13256: Allow for the possibility that the first command line option
-     started with a dash (eg --plugin) but then the following option(s) are
-     old style, non-dash-prefixed versions.  */
-  if (operation == none && write_armap != 1 && !mri_mode
-      && optind > 0 && optind < argc)
-    {
-      argv += (optind - 1);
-      argc -= (optind - 1);
-      optind = 0;
-      goto restart;
     }
 
   return &argv[optind];
@@ -667,6 +616,7 @@ ranlib_main (int argc, char **argv)
 	  /* PR binutils/13493: Support plugins.  */
 	case OPTION_PLUGIN:
 #if BFD_SUPPORTS_PLUGINS
+	  plugin_target = "plugin";
 	  bfd_plugin_set_plugin (optarg);
 #else
 	  fprintf (stderr, _("sorry - this program has been built without plugin support\n"));
@@ -723,7 +673,6 @@ main (int argc, char **argv)
 
   program_name = argv[0];
   xmalloc_set_program_name (program_name);
-  bfd_set_error_program_name (program_name);
 #if BFD_SUPPORTS_PLUGINS
   bfd_plugin_set_program_name (program_name);
 #endif
@@ -743,8 +692,7 @@ main (int argc, char **argv)
 
   START_PROGRESS (program_name, 0);
 
-  if (bfd_init () != BFD_INIT_MAGIC)
-    fatal (_("fatal error: libbfd ABI mismatch"));
+  bfd_init ();
   set_default_bfd_target ();
 
   xatexit (remove_output);
@@ -773,18 +721,11 @@ main (int argc, char **argv)
 
   if (mri_mode)
     {
-      default_deterministic ();
       mri_emul ();
     }
   else
     {
       bfd *arch;
-
-      /* Fail if no files are specified on the command line.
-	 (But not for MRI mode which allows for reading arguments
-	 and filenames from stdin).  */
-      if (argv[arg_index] == NULL)
-	usage (0);
 
       /* We don't use do_quick_append any more.  Too many systems
 	 expect ar to always rebuild the symbol table even when q is
@@ -815,26 +756,18 @@ main (int argc, char **argv)
       default_deterministic ();
 
       if (postype != pos_default)
-	{
-	  posname = argv[arg_index++];
-	  if (posname == NULL)
-	    fatal (_("missing position arg."));
-	}
+	posname = argv[arg_index++];
 
       if (counted_name_mode)
 	{
 	  if (operation != extract && operation != del)
 	    fatal (_("`N' is only meaningful with the `x' and `d' options."));
-	  if (argv[arg_index] == NULL)
-	    fatal (_("`N' missing value."));
 	  counted_name_counter = atoi (argv[arg_index++]);
 	  if (counted_name_counter <= 0)
 	    fatal (_("Value for `N' must be positive."));
 	}
 
       inarch_filename = argv[arg_index++];
-      if (inarch_filename == NULL)
-	usage (0);
 
       for (file_count = 0; argv[arg_index + file_count] != NULL; file_count++)
 	continue;
@@ -985,25 +918,6 @@ open_inarch (const char *archive_filename, const char *file)
       xexit (1);
     }
 
-  if ((operation == replace || operation == quick_append)
-      && bfd_openr_next_archived_file (arch, NULL) != NULL)
-    {
-      /* PR 15140: Catch attempts to convert a normal
-	 archive into a thin archive or vice versa.  */
-      if (make_thin_archive && ! bfd_is_thin_archive (arch))
-	{
-	  fatal (_("Cannot convert existing library %s to thin format"),
-		 bfd_get_filename (arch));
-	  goto bloser;
-	}
-      else if (! make_thin_archive && bfd_is_thin_archive (arch))
-	{
-	  fatal (_("Cannot convert existing thin library %s to normal format"),
-		 bfd_get_filename (arch));
-	  goto bloser;
-	}
-    }
-
   last_one = &(arch->archive_next);
   /* Read all the contents right away, regardless.  */
   for (next_one = bfd_openr_next_archived_file (arch, NULL);
@@ -1050,7 +964,7 @@ print_contents (bfd *abfd)
       if (nread != tocopy)
 	/* xgettext:c-format */
 	fatal (_("%s is not a valid archive"),
-	       bfd_get_filename (abfd->my_archive));
+	       bfd_get_filename (bfd_my_archive (abfd)));
 
       /* fwrite in mingw32 may return int instead of bfd_size_type. Cast the
 	 return value to bfd_size_type to avoid comparison between signed and
@@ -1060,53 +974,6 @@ print_contents (bfd *abfd)
       ncopied += tocopy;
     }
   free (cbuf);
-}
-
-
-static FILE * open_output_file (bfd *) ATTRIBUTE_RETURNS_NONNULL;
-
-static FILE *
-open_output_file (bfd * abfd)
-{
-  output_filename = bfd_get_filename (abfd);
-
-  /* PR binutils/17533: Do not allow directory traversal
-     outside of the current directory tree - unless the
-     user has explicitly specified an output directory.  */
-  if (! is_valid_archive_path (output_filename))
-    {
-      char * base = (char *) lbasename (output_filename);
-
-      non_fatal (_("illegal output pathname for archive member: %s, using '%s' instead"),
-		 output_filename, base);
-      output_filename = base;
-    }
-  
-  if (output_dir)
-    {
-      size_t len = strlen (output_dir);
-
-      if (len > 0)
-	{
-	  /* FIXME: There is a memory leak here, but it is not serious.  */
-	  if (IS_DIR_SEPARATOR (output_dir [len - 1]))
-	    output_filename = concat (output_dir, output_filename, NULL);
-	  else
-	    output_filename = concat (output_dir, "/", output_filename, NULL);
-	}
-    }
-
-  if (verbose)
-    printf ("x - %s\n", output_filename);
-  
-  FILE * ostream = fopen (output_filename, FOPEN_WB);
-  if (ostream == NULL)
-    {
-      perror (output_filename);
-      xexit (1);
-    }
-
-  return ostream;
 }
 
 /* Extract a member of the archive into its own file.
@@ -1122,6 +989,10 @@ open_output_file (bfd * abfd)
 void
 extract_file (bfd *abfd)
 {
+  FILE *ostream;
+  char *cbuf = (char *) xmalloc (BUFSIZE);
+  bfd_size_type nread, tocopy;
+  bfd_size_type ncopied = 0;
   bfd_size_type size;
   struct stat buf;
 
@@ -1130,63 +1001,80 @@ extract_file (bfd *abfd)
     fatal (_("internal stat error on %s"), bfd_get_filename (abfd));
   size = buf.st_size;
 
+  if (verbose)
+    printf ("x - %s\n", bfd_get_filename (abfd));
+
   bfd_seek (abfd, (file_ptr) 0, SEEK_SET);
 
-  output_file = NULL;
+  ostream = NULL;
   if (size == 0)
     {
-      output_file = open_output_file (abfd);
-    }
-  else
-    {
-      bfd_size_type ncopied = 0;
-      char *cbuf = (char *) xmalloc (BUFSIZE);
+      /* Seems like an abstraction violation, eh?  Well it's OK! */
+      output_filename = bfd_get_filename (abfd);
 
-      while (ncopied < size)
+      ostream = fopen (bfd_get_filename (abfd), FOPEN_WB);
+      if (ostream == NULL)
 	{
-	  bfd_size_type nread, tocopy;
-
-	  tocopy = size - ncopied;
-	  if (tocopy > BUFSIZE)
-	    tocopy = BUFSIZE;
-
-	  nread = bfd_bread (cbuf, tocopy, abfd);
-	  if (nread != tocopy)
-	    /* xgettext:c-format */
-	    fatal (_("%s is not a valid archive"),
-		   bfd_get_filename (abfd->my_archive));
-
-	  /* See comment above; this saves disk arm motion.  */
-	  if (output_file == NULL)
-	    output_file = open_output_file (abfd);
-
-	  /* fwrite in mingw32 may return int instead of bfd_size_type. Cast
-	     the return value to bfd_size_type to avoid comparison between
-	     signed and unsigned values.  */
-	  if ((bfd_size_type) fwrite (cbuf, 1, nread, output_file) != nread)
-	    fatal ("%s: %s", output_filename, strerror (errno));
-
-	  ncopied += tocopy;
+	  perror (bfd_get_filename (abfd));
+	  xexit (1);
 	}
 
-      free (cbuf);
+      output_file = ostream;
     }
+  else
+    while (ncopied < size)
+      {
+	tocopy = size - ncopied;
+	if (tocopy > BUFSIZE)
+	  tocopy = BUFSIZE;
 
-  fclose (output_file);
+	nread = bfd_bread (cbuf, tocopy, abfd);
+	if (nread != tocopy)
+	  /* xgettext:c-format */
+	  fatal (_("%s is not a valid archive"),
+		 bfd_get_filename (bfd_my_archive (abfd)));
+
+	/* See comment above; this saves disk arm motion */
+	if (ostream == NULL)
+	  {
+	    /* Seems like an abstraction violation, eh?  Well it's OK! */
+	    output_filename = bfd_get_filename (abfd);
+
+	    ostream = fopen (bfd_get_filename (abfd), FOPEN_WB);
+	    if (ostream == NULL)
+	      {
+		perror (bfd_get_filename (abfd));
+		xexit (1);
+	      }
+
+	    output_file = ostream;
+	  }
+
+	/* fwrite in mingw32 may return int instead of bfd_size_type. Cast
+	   the return value to bfd_size_type to avoid comparison between
+	   signed and unsigned values.  */
+	if ((bfd_size_type) fwrite (cbuf, 1, nread, ostream) != nread)
+	  fatal ("%s: %s", output_filename, strerror (errno));
+	ncopied += tocopy;
+      }
+
+  if (ostream != NULL)
+    fclose (ostream);
 
   output_file = NULL;
+  output_filename = NULL;
 
-  chmod (output_filename, buf.st_mode);
+  chmod (bfd_get_filename (abfd), buf.st_mode);
 
   if (preserve_dates)
     {
       /* Set access time to modification time.  Only st_mtime is
 	 initialized by bfd_stat_arch_elt.  */
       buf.st_atime = buf.st_mtime;
-      set_times (output_filename, &buf);
+      set_times (bfd_get_filename (abfd), &buf);
     }
 
-  output_filename = NULL;
+  free (cbuf);
 }
 
 static void
@@ -1228,11 +1116,8 @@ write_archive (bfd *iarch)
   if (deterministic)
     obfd->flags |= BFD_DETERMINISTIC_OUTPUT;
 
-  if (full_pathname)
-    obfd->flags |= BFD_ARCHIVE_FULL_PATH;
-
   if (make_thin_archive || bfd_is_thin_archive (iarch))
-    bfd_set_thin_archive (obfd, TRUE);
+    bfd_is_thin_archive (obfd) = 1;
 
   if (!bfd_set_archive_head (obfd, contents_head))
     bfd_fatal (old_name);
@@ -1249,7 +1134,6 @@ write_archive (bfd *iarch)
   if (smart_rename (new_name, old_name, 0) != 0)
     xexit (1);
   free (old_name);
-  free (new_name);
 }
 
 /* Return a pointer to the pointer to the entry which should be rplacd'd
@@ -1555,5 +1439,5 @@ ranlib_touch (const char *archname)
 static void
 print_descr (bfd *abfd)
 {
-  print_arelt_descr (stdout, abfd, verbose, display_offsets);
+  print_arelt_descr (stdout, abfd, verbose);
 }

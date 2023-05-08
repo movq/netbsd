@@ -1,6 +1,6 @@
 /* Code dealing with blocks for GDB.
 
-   Copyright (C) 2003-2020 Free Software Foundation, Inc.
+   Copyright (C) 2003-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,42 +25,11 @@
 /* Opaque declarations.  */
 
 struct symbol;
-struct compunit_symtab;
+struct symtab;
 struct block_namespace_info;
 struct using_direct;
 struct obstack;
 struct addrmap;
-
-/* Blocks can occupy non-contiguous address ranges.  When this occurs,
-   startaddr and endaddr within struct block (still) specify the lowest
-   and highest addresses of all ranges, but each individual range is
-   specified by the addresses in struct blockrange.  */
-
-struct blockrange
-{
-  blockrange (CORE_ADDR startaddr_, CORE_ADDR endaddr_)
-    : startaddr (startaddr_),
-      endaddr (endaddr_)
-  {
-  }
-
-  /* Lowest address in this range.  */
-
-  CORE_ADDR startaddr;
-
-  /* One past the highest address in the range.  */
-
-  CORE_ADDR endaddr;
-};
-
-/* Two or more non-contiguous ranges in the same order as that provided
-   via the debug info.  */
-
-struct blockranges
-{
-  int nranges;
-  struct blockrange range[1];
-};
 
 /* All of the name-scope contours of the program
    are represented by `struct block' objects.
@@ -107,26 +76,31 @@ struct block
      case of C) is the STATIC_BLOCK.  The superblock of the
      STATIC_BLOCK is the GLOBAL_BLOCK.  */
 
-  const struct block *superblock;
+  struct block *superblock;
 
   /* This is used to store the symbols in the block.  */
 
-  struct multidictionary *multidict;
+  struct dictionary *dict;
 
-  /* Contains information about namespace-related info relevant to this block:
-     using directives and the current namespace scope.  */
+  /* Used for language-specific info.  */
 
-  struct block_namespace_info *namespace_info;
-
-  /* Address ranges for blocks with non-contiguous ranges.  If this
-     is NULL, then there is only one range which is specified by
-     startaddr and endaddr above.  */
-
-  struct blockranges *ranges;
+  union
+  {
+    struct
+    {
+      /* Contains information about namespace-related info relevant to
+	 this block: using directives and the current namespace
+	 scope.  */
+      
+      struct block_namespace_info *namespace;
+    }
+    cplus_specific;
+  }
+  language_specific;
 };
 
 /* The global block is singled out so that we can provide a back-link
-   to the compunit symtab.  */
+   to the primary symtab.  */
 
 struct global_block
 {
@@ -134,60 +108,18 @@ struct global_block
 
   struct block block;
 
-  /* This holds a pointer to the compunit symtab holding this block.  */
+  /* This holds a pointer to the primary symtab holding this
+     block.  */
 
-  struct compunit_symtab *compunit_symtab;
+  struct symtab *symtab;
 };
 
 #define BLOCK_START(bl)		(bl)->startaddr
 #define BLOCK_END(bl)		(bl)->endaddr
 #define BLOCK_FUNCTION(bl)	(bl)->function
 #define BLOCK_SUPERBLOCK(bl)	(bl)->superblock
-#define BLOCK_MULTIDICT(bl)	(bl)->multidict
-#define BLOCK_NAMESPACE(bl)	(bl)->namespace_info
-
-/* Accessor for ranges field within block BL.  */
-
-#define BLOCK_RANGES(bl)	(bl)->ranges
-
-/* Number of ranges within a block.  */
-
-#define BLOCK_NRANGES(bl)	(bl)->ranges->nranges
-
-/* Access range array for block BL.  */
-
-#define BLOCK_RANGE(bl)		(bl)->ranges->range
-
-/* Are all addresses within a block contiguous?  */
-
-#define BLOCK_CONTIGUOUS_P(bl)	(BLOCK_RANGES (bl) == nullptr \
-				 || BLOCK_NRANGES (bl) <= 1)
-
-/* Obtain the start address of the Nth range for block BL.  */
-
-#define BLOCK_RANGE_START(bl,n) (BLOCK_RANGE (bl)[n].startaddr)
-
-/* Obtain the end address of the Nth range for block BL.  */
-
-#define BLOCK_RANGE_END(bl,n)	(BLOCK_RANGE (bl)[n].endaddr)
-
-/* Define the "entry pc" for a block BL to be the lowest (start) address
-   for the block when all addresses within the block are contiguous.  If
-   non-contiguous, then use the start address for the first range in the
-   block.
-
-   At the moment, this almost matches what DWARF specifies as the entry
-   pc.  (The missing bit is support for DW_AT_entry_pc which should be
-   preferred over range data and the low_pc.)
-
-   Once support for DW_AT_entry_pc is added, I expect that an entry_pc
-   field will be added to one of these data structures.  Once that's done,
-   the entry_pc field can be set from the dwarf reader (and other readers
-   too).  BLOCK_ENTRY_PC can then be redefined to be less DWARF-centric.  */
-
-#define BLOCK_ENTRY_PC(bl)	(BLOCK_CONTIGUOUS_P (bl) \
-				 ? BLOCK_START (bl) \
-				 : BLOCK_RANGE_START (bl,0))
+#define BLOCK_DICT(bl)		(bl)->dict
+#define BLOCK_NAMESPACE(bl)   (bl)->language_specific.cplus_specific.namespace
 
 struct blockvector
 {
@@ -205,45 +137,29 @@ struct blockvector
 #define BLOCKVECTOR_BLOCK(blocklist,n) (blocklist)->block[n]
 #define BLOCKVECTOR_MAP(blocklist) ((blocklist)->map)
 
-/* Return the objfile of BLOCK, which must be non-NULL.  */
-
-extern struct objfile *block_objfile (const struct block *block);
-
-/* Return the architecture of BLOCK, which must be non-NULL.  */
-
-extern struct gdbarch *block_gdbarch (const struct block *block);
-
 extern struct symbol *block_linkage_function (const struct block *);
 
 extern struct symbol *block_containing_function (const struct block *);
 
 extern int block_inlined_p (const struct block *block);
 
-/* Return true if block A is lexically nested within block B, or if a
-   and b have the same pc range.  Return false otherwise.  If
-   ALLOW_NESTED is true, then block A is considered to be in block B
-   if A is in a nested function in B's function.  If ALLOW_NESTED is
-   false (the default), then blocks in nested functions are not
-   considered to be contained.  */
+extern int contained_in (const struct block *, const struct block *);
 
-extern bool contained_in (const struct block *a, const struct block *b,
-			  bool allow_nested = false);
+extern struct blockvector *blockvector_for_pc (CORE_ADDR, struct block **);
 
-extern const struct blockvector *blockvector_for_pc (CORE_ADDR,
-					       const struct block **);
+extern struct blockvector *blockvector_for_pc_sect (CORE_ADDR, 
+						    struct obj_section *,
+						    struct block **,
+                                                    struct symtab *);
 
-extern const struct blockvector *
-  blockvector_for_pc_sect (CORE_ADDR, struct obj_section *,
-			   const struct block **, struct compunit_symtab *);
-
-extern int blockvector_contains_pc (const struct blockvector *bv, CORE_ADDR pc);
+extern int blockvector_contains_pc (struct blockvector *bv, CORE_ADDR pc);
 
 extern struct call_site *call_site_for_pc (struct gdbarch *gdbarch,
 					   CORE_ADDR pc);
 
-extern const struct block *block_for_pc (CORE_ADDR);
+extern struct block *block_for_pc (CORE_ADDR);
 
-extern const struct block *block_for_pc_sect (CORE_ADDR, struct obj_section *);
+extern struct block *block_for_pc_sect (CORE_ADDR, struct obj_section *);
 
 extern const char *block_scope (const struct block *block);
 
@@ -253,7 +169,7 @@ extern void block_set_scope (struct block *block, const char *scope,
 extern struct using_direct *block_using (const struct block *block);
 
 extern void block_set_using (struct block *block,
-			     struct using_direct *using_decl,
+			     struct using_direct *using,
 			     struct obstack *obstack);
 
 extern const struct block *block_static_block (const struct block *block);
@@ -264,19 +180,7 @@ extern struct block *allocate_block (struct obstack *obstack);
 
 extern struct block *allocate_global_block (struct obstack *obstack);
 
-extern void set_block_compunit_symtab (struct block *,
-				       struct compunit_symtab *);
-
-/* Return a property to evaluate the static link associated to BLOCK.
-
-   In the context of nested functions (available in Pascal, Ada and GNU C, for
-   instance), a static link (as in DWARF's DW_AT_static_link attribute) for a
-   function is a way to get the frame corresponding to the enclosing function.
-
-   Note that only objfile-owned and function-level blocks can have a static
-   link.  Return NULL if there is no such property.  */
-
-extern struct dynamic_prop *block_static_link (const struct block *block);
+extern void set_block_symtab (struct block *, struct symtab *);
 
 /* A block iterator.  This structure should be treated as though it
    were opaque; it is only defined here because we want to support
@@ -285,11 +189,11 @@ extern struct dynamic_prop *block_static_link (const struct block *block);
 struct block_iterator
 {
   /* If we're iterating over a single block, this holds the block.
-     Otherwise, it holds the canonical compunit.  */
+     Otherwise, it holds the canonical symtab.  */
 
   union
   {
-    struct compunit_symtab *compunit_symtab;
+    struct symtab *symtab;
     const struct block *block;
   } d;
 
@@ -306,9 +210,9 @@ struct block_iterator
 
   enum block_enum which;
 
-  /* The underlying multidictionary iterator.  */
+  /* The underlying dictionary iterator.  */
 
-  struct mdict_iterator mdict_iter;
+  struct dict_iterator dict_iter;
 };
 
 /* Initialize ITERATOR to point at the first symbol in BLOCK, and
@@ -325,104 +229,54 @@ extern struct symbol *block_iterator_first (const struct block *block,
 extern struct symbol *block_iterator_next (struct block_iterator *iterator);
 
 /* Initialize ITERATOR to point at the first symbol in BLOCK whose
-   search_name () matches NAME, and return that first symbol, or
-   NULL if there are no such symbols.  */
+   SYMBOL_SEARCH_NAME is NAME (as tested using strcmp_iw), and return
+   that first symbol, or NULL if there are no such symbols.  */
+
+extern struct symbol *block_iter_name_first (const struct block *block,
+					     const char *name,
+					     struct block_iterator *iterator);
+
+/* Advance ITERATOR to point at the next symbol in BLOCK whose
+   SYMBOL_SEARCH_NAME is NAME (as tested using strcmp_iw), or NULL if
+   there are no more such symbols.  Don't call this if you've
+   previously received NULL from block_iterator_first or
+   block_iterator_next on this iteration.  And don't call it unless
+   ITERATOR was created by a previous call to block_iter_name_first
+   with the same NAME.  */
+
+extern struct symbol *block_iter_name_next (const char *name,
+					    struct block_iterator *iterator);
+
+/* Initialize ITERATOR to point at the first symbol in BLOCK whose
+   SYMBOL_SEARCH_NAME is NAME, as tested using COMPARE (which must use
+   the same conventions as strcmp_iw and be compatible with any
+   block hashing function), and return that first symbol, or NULL
+   if there are no such symbols.  */
 
 extern struct symbol *block_iter_match_first (const struct block *block,
-					      const lookup_name_info &name,
+					      const char *name,
+					      symbol_compare_ftype *compare,
 					      struct block_iterator *iterator);
 
 /* Advance ITERATOR to point at the next symbol in BLOCK whose
-   search_name () matches NAME, or NULL if there are no more such
-   symbols.  Don't call this if you've previously received NULL from
+   SYMBOL_SEARCH_NAME is NAME, as tested using COMPARE (see
+   block_iter_match_first), or NULL if there are no more such symbols.
+   Don't call this if you've previously received NULL from 
    block_iterator_match_first or block_iterator_match_next on this
    iteration.  And don't call it unless ITERATOR was created by a
-   previous call to block_iter_match_first with the same NAME.  */
+   previous call to block_iter_match_first with the same NAME and COMPARE.  */
 
-extern struct symbol *block_iter_match_next
-  (const lookup_name_info &name, struct block_iterator *iterator);
+extern struct symbol *block_iter_match_next (const char *name,
+					     symbol_compare_ftype *compare,
+					     struct block_iterator *iterator);
 
-/* Return true if symbol A is the best match possible for DOMAIN.  */
-
-extern bool best_symbol (struct symbol *a, const domain_enum domain);
-
-/* Return symbol B if it is a better match than symbol A for DOMAIN.
-   Otherwise return A.  */
-
-extern struct symbol *better_symbol (struct symbol *a, struct symbol *b,
-				     const domain_enum domain);
-
-/* Search BLOCK for symbol NAME in DOMAIN.  */
-
-extern struct symbol *block_lookup_symbol (const struct block *block,
-					   const char *name,
-					   symbol_name_match_type match_type,
-					   const domain_enum domain);
-
-/* Search BLOCK for symbol NAME in DOMAIN but only in primary symbol table of
-   BLOCK.  BLOCK must be STATIC_BLOCK or GLOBAL_BLOCK.  Function is useful if
-   one iterates all global/static blocks of an objfile.  */
-
-extern struct symbol *block_lookup_symbol_primary (const struct block *block,
-						   const char *name,
-						   const domain_enum domain);
-
-/* The type of the MATCHER argument to block_find_symbol.  */
-
-typedef int (block_symbol_matcher_ftype) (struct symbol *, void *);
-
-/* Find symbol NAME in BLOCK and in DOMAIN that satisfies MATCHER.
-   DATA is passed unchanged to MATCHER.
-   BLOCK must be STATIC_BLOCK or GLOBAL_BLOCK.  */
-
-extern struct symbol *block_find_symbol (const struct block *block,
-					 const char *name,
-					 const domain_enum domain,
-					 block_symbol_matcher_ftype *matcher,
-					 void *data);
-
-/* A matcher function for block_find_symbol to find only symbols with
-   non-opaque types.  */
-
-extern int block_find_non_opaque_type (struct symbol *sym, void *data);
-
-/* A matcher function for block_find_symbol to prefer symbols with
-   non-opaque types.  The way to use this function is as follows:
-
-   struct symbol *with_opaque = NULL;
-   struct symbol *sym
-     = block_find_symbol (block, name, domain,
-                          block_find_non_opaque_type_preferred, &with_opaque);
-
-   At this point if SYM is non-NULL then a non-opaque type has been found.
-   Otherwise, if WITH_OPAQUE is non-NULL then an opaque type has been found.
-   Otherwise, the symbol was not found.  */
-
-extern int block_find_non_opaque_type_preferred (struct symbol *sym,
-						 void *data);
-
-/* Macro to loop through all symbols in BLOCK, in no particular
-   order.  ITER helps keep track of the iteration, and must be a
+/* Macro to loop through all symbols in a block BL, in no particular
+   order.  ITER helps keep track of the iteration, and should be a
    struct block_iterator.  SYM points to the current symbol.  */
 
 #define ALL_BLOCK_SYMBOLS(block, iter, sym)		\
   for ((sym) = block_iterator_first ((block), &(iter));	\
        (sym);						\
        (sym) = block_iterator_next (&(iter)))
-
-/* Macro to loop through all symbols in BLOCK with a name that matches
-   NAME, in no particular order.  ITER helps keep track of the
-   iteration, and must be a struct block_iterator.  SYM points to the
-   current symbol.  */
-
-#define ALL_BLOCK_SYMBOLS_WITH_NAME(block, name, iter, sym)		\
-  for ((sym) = block_iter_match_first ((block), (name), &(iter));	\
-       (sym) != NULL;							\
-       (sym) = block_iter_match_next ((name), &(iter)))
-
-/* Given a vector of pairs, allocate and build an obstack allocated
-   blockranges struct for a block.  */
-struct blockranges *make_blockranges (struct objfile *objfile,
-                                      const std::vector<blockrange> &rangevec);
 
 #endif /* BLOCK_H */

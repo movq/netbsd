@@ -1,4 +1,4 @@
-# Copyright 2016-2020 Free Software Foundation, Inc.
+# Copyright 2016 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,14 +16,12 @@
 standard_testfile ".f90"
 load_lib "fortran.exp"
 
-if {[skip_fortran_tests]} { return -1 }
-
-if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} \
+if { [prepare_for_testing ${testfile}.exp ${testfile} ${srcfile} \
      {debug f90 quiet}] } {
     return -1
 }
 
-if ![fortran_runto_main] {
+if ![runto_main] {
     untested "could not run to main"
     return -1
 }
@@ -33,12 +31,8 @@ set int [fortran_int4]
 
 # Check if not allocated VLA in type does not break
 # the debugger when accessing it.
-# break main for Flang compiler already breaks here
-if ![test_compiler_info "clang-*"] {
-    gdb_breakpoint [gdb_get_line_number "before-allocated"]
-    gdb_continue_to_breakpoint "before-allocated"
-}
-
+gdb_breakpoint [gdb_get_line_number "before-allocated"]
+gdb_continue_to_breakpoint "before-allocated"
 gdb_test "print twov" " = \\\( ivla1 = <not allocated>, ivla2 = <not allocated> \\\)" \
   "print twov before allocated"
 gdb_test "print twov%ivla1" " = <not allocated>" \
@@ -52,7 +46,7 @@ gdb_test "print onev%ivla(1, 2, 3)" " = 123"
 gdb_test "print onev%ivla(3, 2, 1)" " = 321"
 gdb_test "ptype onev" \
          [multi_line "type = Type one" \
-                     "\\s+$int, allocatable :: ivla\\\(11,22,33\\\)" \
+                     "\\s+$int :: ivla\\\(11,22,33\\\)" \
                      "End Type one" ]
 
 # Check type with two VLA's inside
@@ -63,8 +57,8 @@ gdb_test "print twov%ivla1(1, 2, 3)" " = 123"
 gdb_test "print twov%ivla1(3, 2, 1)" " = 321"
 gdb_test "ptype twov" \
          [multi_line "type = Type two" \
-                     "\\s+$int, allocatable :: ivla1\\\(5,12,99\\\)" \
-                     "\\s+$int, allocatable :: ivla2\\\(9,12\\\)" \
+                     "\\s+$int :: ivla1\\\(5,12,99\\\)" \
+                     "\\s+$int :: ivla2\\\(9,12\\\)" \
                      "End Type two" ]
 gdb_test "print twov" " = \\\( ivla1 = \\\(\\\( \\\( 1, 1, 1, 1, 1\\\)\
  \\\( 1, 1, 321, 1, 1\\\)\
@@ -80,7 +74,7 @@ gdb_test "print threev%ivar" " = 3"
 gdb_test "ptype threev" \
          [multi_line "type = Type three" \
                      "\\s+$int :: ivar" \
-                     "\\s+$int, allocatable :: ivla\\\(20\\\)" \
+                     "\\s+$int :: ivla\\\(20\\\)" \
                      "End Type three" ]
 
 # Check type with attribute at end of type
@@ -93,7 +87,7 @@ gdb_test "print fourv%ivla(12)" "no such vector element"
 gdb_test "print fourv%ivar" " = 3"
 gdb_test "ptype fourv" \
          [multi_line "type = Type four" \
-                     "\\s+$int, allocatable :: ivla\\\(10\\\)" \
+                     "\\s+$int :: ivla\\\(10\\\)" \
                      "\\s+$int :: ivar" \
                      "End Type four" ]
 
@@ -109,7 +103,7 @@ gdb_test "ptype fivev" \
                      "End Type five" ]
 gdb_test "ptype fivev%tone" \
          [multi_line "type = Type one" \
-                     "    $int, allocatable :: ivla\\(10,10,10\\)" \
+                     "    $int :: ivla\\(10,10,10\\)" \
                      "End Type one" ]
 
 # Check array of types containing a VLA
@@ -126,7 +120,7 @@ gdb_test "ptype fivearr(1)" \
                      "End Type five" ]
 gdb_test "ptype fivearr(1)%tone" \
          [multi_line "type = Type one" \
-                     "    $int, allocatable :: ivla\\(2,4,6\\)" \
+                     "    $int :: ivla\\(2,4,6\\)" \
                      "End Type one" ]
 gdb_test "ptype fivearr(2)" \
          [multi_line "type = Type five" \
@@ -134,14 +128,11 @@ gdb_test "ptype fivearr(2)" \
                      "End Type five" ]
 gdb_test "ptype fivearr(2)%tone" \
          [multi_line "type = Type one" \
-                     "    $int, allocatable :: ivla\\(12,14,16\\)" \
+                     "    $int :: ivla\\(12,14,16\\)" \
                      "End Type one" ]
 
 # Check allocation status of dynamic array and it's dynamic members
-gdb_test "ptype fivedynarr" \
-         [multi_line "type = Type five" \
-                     "    Type one :: tone" \
-                     "End Type five, allocatable \\(:\\)" ]
+gdb_test "ptype fivedynarr" "type = <not allocated>"
 gdb_test "next" ""
 gdb_test "ptype fivedynarr(2)" \
          [multi_line "type = Type five" \
@@ -150,7 +141,7 @@ gdb_test "ptype fivedynarr(2)" \
          "ptype fivedynarr(2), tone is not allocated"
 gdb_test "ptype fivedynarr(2)%tone" \
          [multi_line "type = Type one" \
-                     "    $int, allocatable :: ivla\\(:,:,:\\)" \
+                     "    $int :: ivla\\(<not allocated>\\)" \
                      "End Type one" ] \
          "ptype fivedynarr(2)%tone, not allocated"
 
@@ -168,7 +159,7 @@ gdb_test "ptype fivedynarr(1)" \
                      "End Type five" ]
 gdb_test "ptype fivedynarr(1)%tone" \
          [multi_line "type = Type one" \
-                     "    $int, allocatable :: ivla\\(2,4,6\\)" \
+                     "    $int :: ivla\\(2,4,6\\)" \
                      "End Type one" ]
 gdb_test "ptype fivedynarr(2)" \
          [multi_line "type = Type five" \
@@ -176,5 +167,5 @@ gdb_test "ptype fivedynarr(2)" \
                      "End Type five" ]
 gdb_test "ptype fivedynarr(2)%tone" \
          [multi_line "type = Type one" \
-                     "    $int, allocatable :: ivla\\(12,14,16\\)" \
+                     "    $int :: ivla\\(12,14,16\\)" \
                      "End Type one" ]

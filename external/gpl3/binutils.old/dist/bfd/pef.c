@@ -1,5 +1,6 @@
 /* PEF support for BFD.
-   Copyright (C) 1999-2020 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008,
+   2009, 2011  Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -34,43 +35,38 @@
 #define BFD_IO_FUNCS 0
 #endif
 
-#define bfd_pef_close_and_cleanup		    _bfd_generic_close_and_cleanup
-#define bfd_pef_bfd_free_cached_info		    _bfd_generic_bfd_free_cached_info
-#define bfd_pef_new_section_hook		    _bfd_generic_new_section_hook
-#define bfd_pef_bfd_is_local_label_name		    bfd_generic_is_local_label_name
-#define bfd_pef_bfd_is_target_special_symbol        _bfd_bool_bfd_asymbol_false
-#define bfd_pef_get_lineno			    _bfd_nosymbols_get_lineno
-#define bfd_pef_find_nearest_line		    _bfd_nosymbols_find_nearest_line
-#define bfd_pef_find_line			    _bfd_nosymbols_find_line
-#define bfd_pef_find_inliner_info		    _bfd_nosymbols_find_inliner_info
-#define bfd_pef_get_symbol_version_string	    _bfd_nosymbols_get_symbol_version_string
-#define bfd_pef_bfd_make_debug_symbol		    _bfd_nosymbols_bfd_make_debug_symbol
-#define bfd_pef_read_minisymbols		    _bfd_generic_read_minisymbols
-#define bfd_pef_minisymbol_to_symbol		    _bfd_generic_minisymbol_to_symbol
-#define bfd_pef_set_arch_mach			    _bfd_generic_set_arch_mach
-#define bfd_pef_get_section_contents		    _bfd_generic_get_section_contents
-#define bfd_pef_set_section_contents		    _bfd_generic_set_section_contents
+#define bfd_pef_close_and_cleanup                   _bfd_generic_close_and_cleanup
+#define bfd_pef_bfd_free_cached_info                _bfd_generic_bfd_free_cached_info
+#define bfd_pef_new_section_hook                    _bfd_generic_new_section_hook
+#define bfd_pef_bfd_is_local_label_name             bfd_generic_is_local_label_name
+#define bfd_pef_bfd_is_target_special_symbol ((bfd_boolean (*) (bfd *, asymbol *)) bfd_false)
+#define bfd_pef_get_lineno                          _bfd_nosymbols_get_lineno
+#define bfd_pef_find_nearest_line                   _bfd_nosymbols_find_nearest_line
+#define bfd_pef_find_inliner_info                   _bfd_nosymbols_find_inliner_info
+#define bfd_pef_bfd_make_debug_symbol               _bfd_nosymbols_bfd_make_debug_symbol
+#define bfd_pef_read_minisymbols                    _bfd_generic_read_minisymbols
+#define bfd_pef_minisymbol_to_symbol                _bfd_generic_minisymbol_to_symbol
+#define bfd_pef_set_arch_mach                       _bfd_generic_set_arch_mach
+#define bfd_pef_get_section_contents                _bfd_generic_get_section_contents
+#define bfd_pef_set_section_contents                _bfd_generic_set_section_contents
 #define bfd_pef_bfd_get_relocated_section_contents  bfd_generic_get_relocated_section_contents
-#define bfd_pef_bfd_relax_section		    bfd_generic_relax_section
-#define bfd_pef_bfd_gc_sections			    bfd_generic_gc_sections
-#define bfd_pef_bfd_lookup_section_flags	    bfd_generic_lookup_section_flags
-#define bfd_pef_bfd_merge_sections		    bfd_generic_merge_sections
+#define bfd_pef_bfd_relax_section                   bfd_generic_relax_section
+#define bfd_pef_bfd_gc_sections                     bfd_generic_gc_sections
+#define bfd_pef_bfd_lookup_section_flags            bfd_generic_lookup_section_flags
+#define bfd_pef_bfd_merge_sections                  bfd_generic_merge_sections
 #define bfd_pef_bfd_is_group_section		    bfd_generic_is_group_section
-#define bfd_pef_bfd_group_name			    bfd_generic_group_name
-#define bfd_pef_bfd_discard_group		    bfd_generic_discard_group
-#define bfd_pef_section_already_linked		    _bfd_generic_section_already_linked
-#define bfd_pef_bfd_define_common_symbol	    bfd_generic_define_common_symbol
-#define bfd_pef_bfd_link_hide_symbol		    _bfd_generic_link_hide_symbol
-#define bfd_pef_bfd_define_start_stop		    bfd_generic_define_start_stop
-#define bfd_pef_bfd_link_hash_table_create	    _bfd_generic_link_hash_table_create
-#define bfd_pef_bfd_link_add_symbols		    _bfd_generic_link_add_symbols
-#define bfd_pef_bfd_link_just_syms		    _bfd_generic_link_just_syms
+#define bfd_pef_bfd_discard_group                   bfd_generic_discard_group
+#define bfd_pef_section_already_linked	            _bfd_generic_section_already_linked
+#define bfd_pef_bfd_define_common_symbol            bfd_generic_define_common_symbol
+#define bfd_pef_bfd_link_hash_table_create          _bfd_generic_link_hash_table_create
+#define bfd_pef_bfd_link_hash_table_free            _bfd_generic_link_hash_table_free
+#define bfd_pef_bfd_link_add_symbols                _bfd_generic_link_add_symbols
+#define bfd_pef_bfd_link_just_syms                  _bfd_generic_link_just_syms
 #define bfd_pef_bfd_copy_link_hash_symbol_type \
   _bfd_generic_copy_link_hash_symbol_type
-#define bfd_pef_bfd_final_link			    _bfd_generic_final_link
-#define bfd_pef_bfd_link_split_section		    _bfd_generic_link_split_section
-#define bfd_pef_get_section_contents_in_window	    _bfd_generic_get_section_contents_in_window
-#define bfd_pef_bfd_link_check_relocs		    _bfd_generic_link_check_relocs
+#define bfd_pef_bfd_final_link                      _bfd_generic_final_link
+#define bfd_pef_bfd_link_split_section              _bfd_generic_link_split_section
+#define bfd_pef_get_section_contents_in_window      _bfd_generic_get_section_contents_in_window
 
 static int
 bfd_pef_parse_traceback_table (bfd *abfd,
@@ -221,18 +217,16 @@ bfd_pef_print_symbol (bfd *abfd,
       fprintf (file, " %-5s %s", symbol->section->name, symbol->name);
       if (CONST_STRNEQ (symbol->name, "__traceback_"))
 	{
-	  unsigned char *buf;
+	  unsigned char *buf = alloca (symbol->udata.i);
 	  size_t offset = symbol->value + 4;
 	  size_t len = symbol->udata.i;
+	  int ret;
 
-	  buf = bfd_malloc (len);
-	  if (buf == NULL
-	      || !bfd_get_section_contents (abfd, symbol->section, buf,
-					    offset, len)
-	      || bfd_pef_parse_traceback_table (abfd, symbol->section, buf,
-						len, 0, NULL, file) < 0)
+	  bfd_get_section_contents (abfd, symbol->section, buf, offset, len);
+	  ret = bfd_pef_parse_traceback_table (abfd, symbol->section, buf,
+					       len, 0, NULL, file);
+	  if (ret < 0)
 	    fprintf (file, " [ERROR]");
-	  free (buf);
 	}
     }
 }
@@ -447,8 +441,6 @@ bfd_pef_print_loader_section (bfd *abfd, FILE *file)
 
   loaderlen = loadersec->size;
   loaderbuf = bfd_malloc (loaderlen);
-  if (loaderbuf == NULL)
-    return -1;
 
   if (bfd_seek (abfd, loadersec->filepos, SEEK_SET) < 0
       || bfd_bread ((void *) loaderbuf, loaderlen, abfd) != loaderlen
@@ -480,9 +472,6 @@ bfd_pef_scan_start_address (bfd *abfd)
 
   loaderlen = loadersec->size;
   loaderbuf = bfd_malloc (loaderlen);
-  if (loaderbuf == NULL)
-    goto end;
-
   if (bfd_seek (abfd, loadersec->filepos, SEEK_SET) < 0)
     goto error;
   if (bfd_bread ((void *) loaderbuf, loaderlen, abfd) != loaderlen)
@@ -498,7 +487,7 @@ bfd_pef_scan_start_address (bfd *abfd)
     goto end;
 
   for (section = abfd->sections; section != NULL; section = section->next)
-    if ((long) (section->index + 1) == header.main_section)
+    if ((section->index + 1) == header.main_section)
       break;
 
   if (section == NULL)
@@ -531,8 +520,8 @@ bfd_pef_scan (bfd *abfd,
   bfd_pef_convert_architecture (header->architecture, &cputype, &cpusubtype);
   if (cputype == bfd_arch_unknown)
     {
-      _bfd_error_handler (_("bfd_pef_scan: unknown architecture 0x%lx"),
-			  header->architecture);
+      (*_bfd_error_handler) (_("bfd_pef_scan: unknown architecture 0x%lx"),
+			       header->architecture);
       return -1;
     }
   bfd_set_arch_mach (abfd, cputype, cpusubtype);
@@ -594,28 +583,34 @@ bfd_pef_read_header (bfd *abfd, bfd_pef_header *header)
 static const bfd_target *
 bfd_pef_object_p (bfd *abfd)
 {
+  struct bfd_preserve preserve;
   bfd_pef_header header;
-  bfd_pef_data_struct *mdata;
 
+  preserve.marker = NULL;
   if (bfd_pef_read_header (abfd, &header) != 0)
     goto wrong;
 
   if (header.tag1 != BFD_PEF_TAG1 || header.tag2 != BFD_PEF_TAG2)
     goto wrong;
 
-  mdata = (bfd_pef_data_struct *) bfd_zalloc (abfd, sizeof (*mdata));
-  if (mdata == NULL)
+  preserve.marker = bfd_zalloc (abfd, sizeof (bfd_pef_data_struct));
+  if (preserve.marker == NULL
+      || !bfd_preserve_save (abfd, &preserve))
     goto fail;
 
-  if (bfd_pef_scan (abfd, &header, mdata))
+  if (bfd_pef_scan (abfd, &header,
+		    (bfd_pef_data_struct *) preserve.marker) != 0)
     goto wrong;
 
+  bfd_preserve_finish (abfd, &preserve);
   return abfd->xvec;
 
  wrong:
   bfd_set_error (bfd_error_wrong_format);
 
  fail:
+  if (preserve.marker != NULL)
+    bfd_preserve_restore (abfd, &preserve);
   return NULL;
 }
 
@@ -758,8 +753,6 @@ bfd_pef_parse_function_stubs (bfd *abfd,
     (header.imported_library_count * sizeof (bfd_pef_imported_library));
   imports = bfd_malloc
     (header.total_imported_symbol_count * sizeof (bfd_pef_imported_symbol));
-  if (libraries == NULL || imports == NULL)
-    goto error;
 
   if (loaderlen < (56 + (header.imported_library_count * 24)))
     goto error;
@@ -806,7 +799,7 @@ bfd_pef_parse_function_stubs (bfd *abfd,
 	  codepos += 4;
 	}
 
-      if ((codepos + 24) > codelen)
+      if ((codepos + 4) > codelen)
 	break;
 
       ret = bfd_pef_parse_function_stub (abfd, codebuf + codepos, 24, &sym_index);
@@ -904,8 +897,6 @@ bfd_pef_parse_symbols (bfd *abfd, asymbol **csym)
     {
       codelen = codesec->size;
       codebuf = bfd_malloc (codelen);
-      if (codebuf == NULL)
-	goto end;
       if (bfd_seek (abfd, codesec->filepos, SEEK_SET) < 0)
 	goto end;
       if (bfd_bread ((void *) codebuf, codelen, abfd) != codelen)
@@ -917,8 +908,6 @@ bfd_pef_parse_symbols (bfd *abfd, asymbol **csym)
     {
       loaderlen = loadersec->size;
       loaderbuf = bfd_malloc (loaderlen);
-      if (loaderbuf == NULL)
-	goto end;
       if (bfd_seek (abfd, loadersec->filepos, SEEK_SET) < 0)
 	goto end;
       if (bfd_bread ((void *) loaderbuf, loaderlen, abfd) != loaderlen)
@@ -1044,16 +1033,16 @@ const bfd_target pef_vec =
     _bfd_dummy_target,
   },
   {				/* bfd_set_format.  */
-    _bfd_bool_bfd_false_error,
+    bfd_false,
     bfd_pef_mkobject,
-    _bfd_bool_bfd_false_error,
-    _bfd_bool_bfd_false_error,
+    bfd_false,
+    bfd_false,
   },
   {				/* bfd_write_contents.  */
-    _bfd_bool_bfd_false_error,
-    _bfd_bool_bfd_true,
-    _bfd_bool_bfd_false_error,
-    _bfd_bool_bfd_false_error,
+    bfd_false,
+    bfd_true,
+    bfd_false,
+    bfd_false,
   },
 
   BFD_JUMP_TABLE_GENERIC (bfd_pef),
@@ -1071,22 +1060,22 @@ const bfd_target pef_vec =
   NULL
 };
 
-#define bfd_pef_xlib_close_and_cleanup		    _bfd_generic_close_and_cleanup
-#define bfd_pef_xlib_bfd_free_cached_info	    _bfd_generic_bfd_free_cached_info
-#define bfd_pef_xlib_new_section_hook		    _bfd_generic_new_section_hook
-#define bfd_pef_xlib_get_section_contents	    _bfd_generic_get_section_contents
-#define bfd_pef_xlib_set_section_contents	    _bfd_generic_set_section_contents
+#define bfd_pef_xlib_close_and_cleanup              _bfd_generic_close_and_cleanup
+#define bfd_pef_xlib_bfd_free_cached_info           _bfd_generic_bfd_free_cached_info
+#define bfd_pef_xlib_new_section_hook               _bfd_generic_new_section_hook
+#define bfd_pef_xlib_get_section_contents           _bfd_generic_get_section_contents
+#define bfd_pef_xlib_set_section_contents           _bfd_generic_set_section_contents
 #define bfd_pef_xlib_get_section_contents_in_window _bfd_generic_get_section_contents_in_window
 #define bfd_pef_xlib_set_section_contents_in_window _bfd_generic_set_section_contents_in_window
 
 static int
 bfd_pef_xlib_read_header (bfd *abfd, bfd_pef_xlib_header *header)
 {
-  unsigned char buf[80];
+  unsigned char buf[76];
 
   bfd_seek (abfd, 0, SEEK_SET);
 
-  if (bfd_bread ((void *) buf, sizeof buf, abfd) != sizeof buf)
+  if (bfd_bread ((void *) buf, 76, abfd) != 76)
     return -1;
 
   header->tag1 = bfd_getb32 (buf);
@@ -1135,6 +1124,7 @@ bfd_pef_xlib_scan (bfd *abfd, bfd_pef_xlib_header *header)
 static const bfd_target *
 bfd_pef_xlib_object_p (bfd *abfd)
 {
+  struct bfd_preserve preserve;
   bfd_pef_xlib_header header;
 
   if (bfd_pef_xlib_read_header (abfd, &header) != 0)
@@ -1151,12 +1141,20 @@ bfd_pef_xlib_object_p (bfd *abfd)
       return NULL;
     }
 
-  if (bfd_pef_xlib_scan (abfd, &header) != 0)
+  if (! bfd_preserve_save (abfd, &preserve))
     {
       bfd_set_error (bfd_error_wrong_format);
       return NULL;
     }
 
+  if (bfd_pef_xlib_scan (abfd, &header) != 0)
+    {
+      bfd_preserve_restore (abfd, &preserve);
+      bfd_set_error (bfd_error_wrong_format);
+      return NULL;
+    }
+
+  bfd_preserve_finish (abfd, &preserve);
   return abfd->xvec;
 }
 
@@ -1188,16 +1186,16 @@ const bfd_target pef_xlib_vec =
     _bfd_dummy_target,
   },
   {				/* bfd_set_format.  */
-    _bfd_bool_bfd_false_error,
+    bfd_false,
     bfd_pef_mkobject,
-    _bfd_bool_bfd_false_error,
-    _bfd_bool_bfd_false_error,
+    bfd_false,
+    bfd_false,
   },
   {				/* bfd_write_contents.  */
-    _bfd_bool_bfd_false_error,
-    _bfd_bool_bfd_true,
-    _bfd_bool_bfd_false_error,
-    _bfd_bool_bfd_false_error,
+    bfd_false,
+    bfd_true,
+    bfd_false,
+    bfd_false,
   },
 
   BFD_JUMP_TABLE_GENERIC (bfd_pef_xlib),

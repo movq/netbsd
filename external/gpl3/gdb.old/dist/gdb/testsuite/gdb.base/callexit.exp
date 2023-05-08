@@ -1,4 +1,4 @@
-# Copyright 2008-2020 Free Software Foundation, Inc.
+# Copyright 2008-2014 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,14 +17,15 @@
 standard_testfile .c
 
 if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug}] != "" } {
-     untested "failed to compile"
+     untested callexit.exp
      return -1
 }
 
 # Some targets can't do function calls, so don't even bother with this
 # test.
 if [target_info exists gdb,cannot_call_functions] {
-    unsupported "this target can not call functions"
+    setup_xfail "*-*-*" 2416
+    fail "This target can not call functions"
     continue
 }
 
@@ -33,16 +34,9 @@ if [target_info exists gdb,cannot_call_functions] {
 clean_restart ${binfile}
 
 if { ![runto_main] } {
-    fail "can't run to main"
+    fail "Can't run to main"
     return 0
 }
-
-# Verify set may-call-functions behaviour.
-gdb_test_no_output "set may-call-functions off"
-gdb_test "call callexit()" \
-    "Cannot call functions in the program: may-call-functions is off." \
-    "inferior function call refused in off state"
-gdb_test_no_output "set may-call-functions on"
 
 # Call function (causing the program to exit), and see if gdb handles
 # it properly.

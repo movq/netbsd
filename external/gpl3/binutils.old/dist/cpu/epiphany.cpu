@@ -149,11 +149,11 @@
 
 (df f-simm8	  "branch displacement"   (PCREL-ADDR RELOC) 15 8 INT
     ((value pc) (sra SI (sub SI value pc) 1))
-    ((value pc) (add SI (mul SI value 2) pc)))
+    ((value pc) (add SI (sll SI value 1) pc)))
 
 (df f-simm24     "branch displacement"	  (PCREL-ADDR RELOC) 31 24 INT
     ((value pc) (sra SI (sub SI value pc) 1))
-    ((value pc) (add SI (mul SI value 2) pc)))
+    ((value pc) (add SI (sll SI value 1) pc)))
 
 (df f-sdisp3     "signed immediate 3 bit"      ()     9 3  INT #f #f)
 
@@ -228,11 +228,10 @@
 		(set (ifield f-disp3)  (and SI (ifield f-sdisp11) 7)))
       (sequence ()			;decode
 		(set (ifield f-sdisp11)
-		     (sub SI (xor (and (or (sll (ifield f-disp8) 3)
-					   (ifield f-disp3))
-				       #x7ff)
-				  #x400)
-			  #x400)))
+		     (sra SI (sll SI (or SI (sll (ifield f-disp8) 3)
+					 (ifield f-disp3))
+				  21)
+			  21)))
       )
 
 (dnmf f-imm16 "Short immediate for move/add/sub" () UINT (f-imm8 f-imm-27-8)
@@ -353,7 +352,7 @@
   (prefix "")
   (values
 ; some preferred aliases
-   (fp 11) (sp 13) (lr 14)
+   (sb 9) (sl 10) (fp 11) (ip 12) (sp 13) (lr 14)
 ; the default register names
    (r0  0)  (r1  1)  (r2  2)  (r3  3)  (r4  4)  (r5  5)  (r6  6)  (r7  7)
    (r8  8)  (r9  9) (r10 10) (r11 11) (r12 12) (r13 13) (r14 14) (r15 15)
@@ -366,7 +365,6 @@
 ; some less popular aliases
    (a1  0) (a2  1) (a3  2) (a4  3) (v1  4) (v2  5) (v3  6) (v4  7)
    (v5  8) (v6  9) (v7 10) (v8 11)
-   (sb 9) (sl 10) (ip 12)
    )
   )
 
@@ -1430,7 +1428,7 @@
 
     (dnmi (.sym name "x")
 	  (.str "load " mode " indexed")
-	  (NO-DIS)
+	  ()
 	  (.str name ".l $rd6,[$rn6,$direction$rm6]")
 	  (emit  (.sym name "x.l") rd6 rn6 direction rm6)
 	  )
@@ -1455,7 +1453,7 @@
 
     (dnmi (.sym name "p")
 	  (.str "load " mode " postmodify")
-	  (NO-DIS)
+	  ()
 	  (.str name ".l $rd6,[$rn6],$direction$rm6")
 	  (emit  (.sym name "p.l") rd6 rn6 direction rm6)
 	  )
@@ -1496,7 +1494,7 @@
 
     (dnmi (.sym name "d")
 	  (.str "load " mode " displacement")
-	  (NO-DIS)
+	  ()
 	  (.str name ".l $rd6,[$rn6,$dpmi$disp11]")
 	  (emit  (.sym name "d.l") rd6 rn6  dpmi disp11)
 	  )
@@ -1521,7 +1519,7 @@
 
     (dnmi (.sym name "dpm")
 	  (.str "load " mode " displacement post-modify")
-	  (NO-DIS)
+	  ()
 	  (.str name ".l $rd6,[$rn6],$dpmi$disp11")
 	  (emit  (.sym name "dpm.l") rd6 rn6  dpmi disp11)
 	  )
@@ -1534,12 +1532,12 @@
 	  (emit (.sym name "d16.s") rd rn (disp3 0))
 	  )
     (dnmi (.sym name "dl0") "load with 0 disp"
-    	  (NO-DIS)
+    	  ()
 	  (.str name " $rd6,[$rn6]")
 	  (emit (.sym name "d.l") rd6 rn6 (dpmi 0) (disp11 0))
 	  )
     (dnmi (.sym name "dl0.l") "load with 0 disp"
-    	  (NO-DIS)
+    	  ()
 	  (.str name ".l $rd6,[$rn6]")
 	  (emit (.sym name "d.l") rd6 rn6 (dpmi 0) (disp11 0))
 	  )
@@ -1596,7 +1594,7 @@
 
     (dnmi  (.sym name "t.l")
 	   (.str "testset " mode ".l indexed")
-	   (NO-DIS)
+	   ()
 	   (.str name ".l $rd6,[$rn6,$direction$rm6]")
 	   (emit (.sym name "t") rd6 rn6 direction rm6)
 	   )
@@ -1642,7 +1640,7 @@
 
     (dnmi (.sym name "x.l")
 	  (.str "store" mode " indexed")
-	  (NO-DIS)
+	  ()
 	  (.str name ".l $rd6,[$rn6,$direction$rm6]")
 	  (emit  (.sym name "x")  rd6 rn6 direction rm6)
 	  )
@@ -1678,7 +1676,7 @@
 		 )
     (dnmi (.sym name "p.l")
 	  (.str "store " mode " postmodify")
-	  (NO-DIS)
+	  ()
 	  (.str name ".l $rd6,[$rn6],$direction$rm6")
 	  (emit (.sym name "p") rd6 rn6 direction rm6)
 	  )
@@ -1716,7 +1714,7 @@
 
     (dnmi (.sym name "d.l")
 	  (.str "store " mode " displacement")
-	  (NO-DIS)
+	  ()
 	  (.str name ".l $rd6,[$rn6,$dpmi$disp11]")
 	  (emit (.sym name "d") rd6 rn6 dpmi disp11)
 	  )
@@ -1739,7 +1737,7 @@
 		 )
     (dnmi (.sym name "dpm.l")
 	  (.str "store " mode " displacement post-modify")
-	  (NO-DIS)
+	  ()
 	  (.str name ".l $rd6,[$rn6],$dpmi$disp11")
 	  (emit (.sym name "dpm") rd6 rn6 dpmi disp11)
 	  )
@@ -1758,7 +1756,7 @@
 	  )
 
     (dnmi (.sym name "dl0.l")  "store w 0 disp"
-	  (NO-DIS)
+	  ()
 	  (.str name ".l $rd6,[$rn6]")
 	  (emit (.sym name "d") rd6 rn6 (dpmi 0) (disp11 0))
 	  )
@@ -1800,7 +1798,7 @@
 		 )
     (dnmi (.sym "cmov.l" cond)
 	  (.str "move register " cond)
-	  (NO-DIS)
+	  ()
 	  (.str "mov" name ".l $rd6,$rn6")
 	  (emit (.sym "cmov" cond) rd6 rn6)
 	  )
@@ -1861,7 +1859,7 @@
 
     (dnmi (.sym "movts.l" name)
 	  (.str "move to " name)
-	  (NO-DIS)
+	  ()
 	  (.str "movts.l $" sdreg ",$rd6")
 	  (emit (.sym "movts" name) sdreg rd6)
 	  )
@@ -1905,7 +1903,7 @@
 
     (dnmi (.sym "movfs.l" name)
 	  (.str "move from " name)
-	  (NO-DIS)
+	  ()
 	  (.str "movfs.l $rd6,$" snreg)
 	  (emit (.sym "movfs" name) rd6 snreg)
 	  )
@@ -2167,7 +2165,7 @@
 
     (dnmi (.sym name ".l")
 	  (.str name)
-	  (NO-DIS)
+	  ()
 	  (.str name ".l $rd6,$rn6,$rm6")
 	  (emit (.sym name) rd6 rn6 rm6)
 	  )
@@ -2309,7 +2307,7 @@
 
     (dnmi (.sym name ".l")
 	  (.str name)
-	  (NO-DIS)
+	  ()
 	  (.str name ".l $rd6,$rn6,$rm6")
 	  (emit (.sym name) rd6 rn6 rm6)
 	  )
@@ -2351,7 +2349,7 @@
 
     (dnmi (.sym name "i32.l")
 	  (.str name)
-	  (NO-DIS)
+	  ()
 	  (.str name ".l $rd6,$rn6,$shift")
 	  (emit (.sym name "i32") rd6  rn6 shift)
 	  )
@@ -2413,7 +2411,7 @@
 	     ()
 	     )
 (dnmi bitrl "bit reverse l"
-      (NO-DIS)
+      ()
       ("bitr.l $rd6,$rn6")
       (emit bitr rd6 rn6)
       )
@@ -2443,7 +2441,7 @@
 
     (dnmi (.sym name ".l")
 	  (.str name)
-	  (NO-DIS)
+	  ()
 	  (.str name ".l $rd6,$rn6,$rm6")
 	  (emit (.sym name) rd6  rn6 rm6)
 	  )
@@ -2498,7 +2496,7 @@
 	     )
 (dnmi movtl
       "movt imm16"
-      (NO-DIS)
+      ()
       "movt.l $rd6,$imm16"
       (emit movt rd6 imm16)
       )
@@ -2583,7 +2581,7 @@
 
 	    (if (or (and invExcEnbit bisbit)
 		    (or (and ovfExcEnbit bvsbit) (and unExcEnbit busbit)))
-		(sequence ()
+		(sequence ()	
 		  (set expcause0bit (const 1))
 		  (set expcause1bit (const 1))
 		  (call-exception #x4 #x2)))
@@ -2604,7 +2602,7 @@
 
     (dnmi (.sym "f_" name "f32.l")
 	  (.str "f_" name)
-	  (NO-DIS)
+	  ()
 	  (.str "f" name ".l $rd6,$rn6,$rm6")
 	  (emit  (.sym "f_" name "f32") rd6  rn6 rm6)
 	  )
@@ -2688,7 +2686,7 @@
 
     (dnmi  (.sym "f_" name "f32.l")
 	   (.str "f_" name)
-	   (NO-DIS)
+	   ()
 	   (.str "f" name ".l $rd6,$rn6")
 	   (emit (.sym "f_" name "f32") rd6  rn6)
 	   )
@@ -2748,7 +2746,7 @@
 
     (dnmi (.sym "f_" name "f32.l")
 	  (.str "f_" name)
-	  (NO-DIS)
+	  ()
 	  (.str "f" name ".l $rd6,$rn6")
 	  (emit (.sym "f_" name "f32")  rd6 rn6)
 	  )
@@ -2832,7 +2830,7 @@
 
     (dnmi (.sym "f_" name "f32.l")
 	  (.str "f_" name)
-	  (NO-DIS)
+	  ()
 	  (.str "f" name ".l $rd6,$rn6")
 	  (emit (.sym "f_" name "f32") rd6  rn6)
 	  )
@@ -2921,7 +2919,7 @@
 
     (dnmi (.sym "f_" name "f32.l")
 	  (.str "f_" name)
-	  (NO-DIS)
+	  ()
 	  (.str "f" name ".l $frd6,$frn6")
 	  (emit (.sym "f_" name "f32") frd6 frn6)
 	  )

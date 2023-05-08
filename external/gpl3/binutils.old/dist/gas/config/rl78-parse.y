@@ -1,5 +1,6 @@
 /* rl78-parse.y  Renesas RL78 parser
-   Copyright (C) 2011-2020 Free Software Foundation, Inc.
+   Copyright 2011
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -96,8 +97,6 @@ static int    rl78_bit_insn = 0;
 #define NOT_SADDR  rl78_error ("Expression not 0xFFE20 to 0xFFF1F")
 #define SA(e) if (!expr_is_saddr (e)) NOT_SADDR;
 
-#define SET_SA(e) e.X_md = BFD_RELOC_RL78_SADDR
-
 #define NOT_SFR  rl78_error ("Expression not 0xFFF00 to 0xFFFFF")
 #define SFR(e) if (!expr_is_sfr (e)) NOT_SFR;
 
@@ -106,10 +105,6 @@ static int    rl78_bit_insn = 0;
 #define NOT_ES if (rl78_has_prefix()) rl78_error ("ES: prefix not allowed here");
 
 #define WA(x) if (!expr_is_word_aligned (x)) rl78_error ("Expression not word-aligned");
-
-#define ISA_G10(s) if (!rl78_isa_g10()) rl78_error (s " is only supported on the G10")
-#define ISA_G13(s) if (!rl78_isa_g13()) rl78_error (s " is only supported on the G13")
-#define ISA_G14(s) if (!rl78_isa_g14()) rl78_error (s " is only supported on the G14")
 
 static void check_expr_is_bit_index (expressionS);
 #define Bit(e) check_expr_is_bit_index (e);
@@ -209,7 +204,7 @@ statement :
 	  { B1 (0x0c|$1); O1 ($5); }
 
 	| addsub EXPR {SA($2)} ',' '#' EXPR
-	  { B1 (0x0a|$1); SET_SA ($2); O1 ($2); O1 ($6); }
+	  { B1 (0x0a|$1); O1 ($2); O1 ($6); }
 
 	| addsub A ',' A
 	  { B2 (0x61, 0x01|$1); }
@@ -221,7 +216,7 @@ statement :
 	  { B2 (0x61, 0x00|$1); F ($2, 13, 3); }
 
 	| addsub A ',' EXPR {SA($4)}
-	  { B1 (0x0b|$1); SET_SA ($4); O1 ($4); }
+	  { B1 (0x0b|$1); O1 ($4); }
 
 	| addsub A ',' opt_es '!' EXPR
 	  { B1 (0x0f|$1); O2 ($6); rl78_linkrelax_addr16 (); }
@@ -237,6 +232,8 @@ statement :
 
 	| addsub A ',' opt_es '[' HL '+' C ']'
 	  { B2 (0x61, 0x82|$1); }
+
+
 
 	| addsub opt_es '!' EXPR ',' '#' EXPR
 	  { if ($1 != 0x40)
@@ -254,7 +251,7 @@ statement :
 	  { B1 (0x01|$1); F ($4, 5, 2); }
 
 	| addsubw AX ',' EXPR {SA($4)}
-	  { B1 (0x06|$1); SET_SA ($4); O1 ($4); }
+	  { B1 (0x06|$1); O1 ($4); }
 
 	| addsubw AX ',' opt_es '!' EXPR
 	  { B1 (0x02|$1); O2 ($6); rl78_linkrelax_addr16 (); }
@@ -263,7 +260,7 @@ statement :
 	  { B2 (0x61, 0x09|$1); O1 ($8); }
 
 	| addsubw AX ',' opt_es '[' HL ']'
-	  { B3 (0x61, 0x09|$1, 0); }
+	  { B4 (0x61, 0x09|$1, 0, 0); }
 
 	| addsubw SP ',' '#' EXPR
 	  { B1 ($1 ? 0x20 : 0x10); O1 ($5);
@@ -280,7 +277,7 @@ statement :
 	  { if (expr_is_sfr ($4))
 	      { B2 (0x71, 0x08|$1); FE ($6, 9, 3); O1 ($4); }
 	    else if (expr_is_saddr ($4))
-	      { B2 (0x71, 0x00|$1); FE ($6, 9, 3); SET_SA ($4); O1 ($4); }
+	      { B2 (0x71, 0x00|$1); FE ($6, 9, 3); O1 ($4); }
 	    else
 	      NOT_SFR_OR_SADDR;
 	  }
@@ -294,22 +291,22 @@ statement :
 /* ---------------------------------------------------------------------- */
 
 	| BC '$' EXPR
-	  { B1 (0xdc); PC1 ($3); rl78_linkrelax_branch (); }
+	  { B1 (0xdc); PC1 ($3); }
 
 	| BNC '$' EXPR
-	  { B1 (0xde); PC1 ($3); rl78_linkrelax_branch (); }
+	  { B1 (0xde); PC1 ($3); }
 
 	| BZ '$' EXPR
-	  { B1 (0xdd); PC1 ($3); rl78_linkrelax_branch (); }
+	  { B1 (0xdd); PC1 ($3); }
 
 	| BNZ '$' EXPR
-	  { B1 (0xdf); PC1 ($3); rl78_linkrelax_branch (); }
+	  { B1 (0xdf); PC1 ($3); }
 
 	| BH '$' EXPR
-	  { B2 (0x61, 0xc3); PC1 ($3); rl78_linkrelax_branch (); }
+	  { B2 (0x61, 0xc3); PC1 ($3); }
 
 	| BNH '$' EXPR
-	  { B2 (0x61, 0xd3); PC1 ($3); rl78_linkrelax_branch (); }
+	  { B2 (0x61, 0xd3); PC1 ($3); }
 
 /* ---------------------------------------------------------------------- */
 
@@ -320,7 +317,7 @@ statement :
 	  { if (expr_is_sfr ($2))
 	      { B2 (0x31, 0x80|$1); FE ($4, 9, 3); O1 ($2); PC1 ($7); }
 	    else if (expr_is_saddr ($2))
-	      { B2 (0x31, 0x00|$1); FE ($4, 9, 3); SET_SA ($2); O1 ($2); PC1 ($7); }
+	      { B2 (0x31, 0x00|$1); FE ($4, 9, 3); O1 ($2); PC1 ($7); }
 	    else
 	      NOT_SFR_OR_SADDR;
 	  }
@@ -337,7 +334,7 @@ statement :
 	  { B2 (0x61, 0xcb); }
 
 	| BR '$' EXPR
-	  { B1 (0xef); PC1 ($3); rl78_linkrelax_branch (); }
+	  { B1 (0xef); PC1 ($3); }
 
 	| BR '$' '!' EXPR
 	  { B1 (0xee); PC2 ($4); rl78_linkrelax_branch (); }
@@ -401,7 +398,7 @@ statement :
 	  { if (expr_is_sfr ($2))
 	      { B2 (0x71, 0x0a|$1); FE ($4, 9, 3); O1 ($2); }
 	    else if (expr_is_saddr ($2))
-	      { B2 (0x71, 0x02|$1); FE ($4, 9, 3); SET_SA ($2); O1 ($2); }
+	      { B2 (0x71, 0x02|$1); FE ($4, 9, 3); O1 ($2); }
 	    else
 	      NOT_SFR_OR_SADDR;
 	  }
@@ -427,7 +424,7 @@ statement :
 	  { B1 (0xe2|$1); }
 
 	| oneclrb EXPR {SA($2)}
-	  { B1 (0xe4|$1); SET_SA ($2); O1 ($2); }
+	  { B1 (0xe4|$1); O1 ($2); }
 
 	| oneclrb opt_es '!' EXPR
 	  { B1 (0xe5|$1); O2 ($4); rl78_linkrelax_addr16 (); }
@@ -454,7 +451,7 @@ statement :
 	  { B1 (0xd2); }
 
 	| CMP0 EXPR {SA($2)}
-	  { B1 (0xd4); SET_SA ($2); O1 ($2); }
+	  { B1 (0xd4); O1 ($2); }
 
 	| CMP0 opt_es '!' EXPR
 	  { B1 (0xd5); O2 ($4); rl78_linkrelax_addr16 (); }
@@ -470,7 +467,7 @@ statement :
 	  { B1 (0x80|$1); F ($2, 5, 3); }
 
 	| incdec EXPR {SA($2)}
-	  { B1 (0xa4|$1); SET_SA ($2); O1 ($2); }
+	  { B1 (0xa4|$1); O1 ($2); }
 	| incdec '!' EXPR
 	  { B1 (0xa0|$1); O2 ($3); rl78_linkrelax_addr16 (); }
 	| incdec ES ':' '!' EXPR
@@ -486,7 +483,7 @@ statement :
 	  { B1 (0xa1|$1); F ($2, 5, 2); }
 
 	| incdecw EXPR {SA($2)}
-	  { B1 (0xa6|$1); SET_SA ($2); O1 ($2); }
+	  { B1 (0xa6|$1); O1 ($2); }
 
 	| incdecw opt_es '!' EXPR
 	  { B1 (0xa2|$1); O2 ($4); rl78_linkrelax_addr16 (); }
@@ -504,30 +501,25 @@ statement :
 
 /* ---------------------------------------------------------------------- */
 
-	| MULHU { ISA_G14 ("MULHU"); }
+	| MULHU
 	  { B3 (0xce, 0xfb, 0x01); }
 
-	| MULH { ISA_G14 ("MULH"); }
+	| MULH
 	  { B3 (0xce, 0xfb, 0x02); }
 
 	| MULU X
 	  { B1 (0xd6); }
 
-	| DIVHU { ISA_G14 ("DIVHU"); }
+	| DIVHU
 	  { B3 (0xce, 0xfb, 0x03); }
 
-/* Note that the DIVWU encoding was changed from [0xce,0xfb,0x04] to
-   [0xce,0xfb,0x0b].  Different versions of the Software Manual exist
-   with the same version number, but varying encodings.  The version
-   here matches the hardware.  */
+	| DIVWU
+	  { B3 (0xce, 0xfb, 0x04); }
 
-	| DIVWU { ISA_G14 ("DIVWU"); }
-	  { B3 (0xce, 0xfb, 0x0b); }
-
-	| MACHU { ISA_G14 ("MACHU"); }
+	| MACHU
 	  { B3 (0xce, 0xfb, 0x05); }
 
-	| MACH { ISA_G14 ("MACH"); }
+	| MACH
 	  { B3 (0xce, 0xfb, 0x06); }
 
 /* ---------------------------------------------------------------------- */
@@ -556,7 +548,7 @@ statement :
 	  { if (expr_is_sfr ($3))
 	      { B1 (0xce); O1 ($3); O1 ($6); }
 	    else if (expr_is_saddr ($3))
-	      { B1 (0xcd); SET_SA ($3); O1 ($3); O1 ($6); }
+	      { B1 (0xcd); O1 ($3); O1 ($6); }
 	    else
 	      NOT_SFR_OR_SADDR;
 	  }
@@ -577,7 +569,7 @@ statement :
 	  { if (expr_is_sfr ($3))
 	      { B1 (0x9e); O1 ($3); }
 	    else if (expr_is_saddr ($3))
-	      { B1 (0x9d); SET_SA ($3); O1 ($3); }
+	      { B1 (0x9d); O1 ($3); }
 	    else
 	      NOT_SFR_OR_SADDR;
 	  }
@@ -596,7 +588,7 @@ statement :
 
 	| MOV A ',' opt_es EXPR  {NOT_ES}
 	  { if (expr_is_saddr ($5))
-	      { B1 (0x8d); SET_SA ($5); O1 ($5); }
+	      { B1 (0x8d); O1 ($5); }
 	    else if (expr_is_sfr ($5))
 	      { B1 (0x8e); O1 ($5); }
 	    else
@@ -604,7 +596,7 @@ statement :
 	  }
 
 	| MOV regb_na ',' opt_es EXPR {SA($5)} {NOT_ES}
-	  { B1 (0xc8|reg_xbc($2)); SET_SA ($5); O1 ($5); }
+	  { B1 (0xc8|reg_xbc($2)); O1 ($5); }
 
 	| MOV A ',' sfr
 	  { B2 (0x8e, $4); }
@@ -620,7 +612,7 @@ statement :
 	  { if ($2 != 0xfd)
 	      rl78_error ("Only ES allowed here");
 	    else
-	      { B2 (0x61, 0xb8); SET_SA ($5); O1 ($5); }
+	      { B2 (0x61, 0xb8); O1 ($5); }
 	  }
 
 	| MOV A ',' opt_es '[' DE ']'
@@ -723,7 +715,7 @@ statement :
 
 	| mov1 CY ',' EXPR '.' EXPR
 	  { if (expr_is_saddr ($4))
-	      { B2 (0x71, 0x04); FE ($6, 9, 3); SET_SA ($4); O1 ($4); }
+	      { B2 (0x71, 0x04); FE ($6, 9, 3); O1 ($4); }
 	    else if (expr_is_sfr ($4))
 	      { B2 (0x71, 0x0c); FE ($6, 9, 3); O1 ($4); }
 	    else
@@ -741,7 +733,7 @@ statement :
 
 	| mov1 EXPR '.' EXPR ',' CY
 	  { if (expr_is_saddr ($2))
-	      { B2 (0x71, 0x01); FE ($4, 9, 3); SET_SA ($2); O1 ($2); }
+	      { B2 (0x71, 0x01); FE ($4, 9, 3); O1 ($2); }
 	    else if (expr_is_sfr ($2))
 	      { B2 (0x71, 0x09); FE ($4, 9, 3); O1 ($2); }
 	    else
@@ -772,7 +764,7 @@ statement :
 
 	| MOVW opt_es EXPR ',' '#' EXPR {NOT_ES}
 	  { if (expr_is_saddr ($3))
-	      { B1 (0xc9); SET_SA ($3); O1 ($3); O2 ($6); }
+	      { B1 (0xc9); O1 ($3); O2 ($6); }
 	    else if (expr_is_sfr ($3))
 	      { B1 (0xcb); O1 ($3); O2 ($6); }
 	    else
@@ -781,7 +773,7 @@ statement :
 
 	| MOVW AX ',' opt_es EXPR {NOT_ES}
 	  { if (expr_is_saddr ($5))
-	      { B1 (0xad); SET_SA ($5); O1 ($5); WA($5); }
+	      { B1 (0xad); O1 ($5); WA($5); }
 	    else if (expr_is_sfr ($5))
 	      { B1 (0xae); O1 ($5); WA($5); }
 	    else
@@ -790,7 +782,7 @@ statement :
 
 	| MOVW opt_es EXPR ',' AX {NOT_ES}
 	  { if (expr_is_saddr ($3))
-	      { B1 (0xbd); SET_SA ($3); O1 ($3); WA($3); }
+	      { B1 (0xbd); O1 ($3); WA($3); }
 	    else if (expr_is_sfr ($3))
 	      { B1 (0xbe); O1 ($3); WA($3); }
 	    else
@@ -870,7 +862,7 @@ statement :
 	  { B2 (0xb8, 0); }
 
 	| MOVW regw_na ',' EXPR {SA($4)}
-	  { B1 (0xca); F ($2, 2, 2); SET_SA ($4); O1 ($4); WA($4); }
+	  { B1 (0xca); F ($2, 2, 2); O1 ($4); WA($4); }
 
 	| MOVW regw_na ',' opt_es '!' EXPR
 	  { B1 (0xcb); F ($2, 2, 2); O2 ($6); WA($6); rl78_linkrelax_addr16 (); }
@@ -1022,22 +1014,22 @@ statement :
 /* ---------------------------------------------------------------------- */
 
 	| SKC
-	  { B2 (0x61, 0xc8); rl78_relax (RL78_RELAX_BRANCH, 0); }
+	  { B2 (0x61, 0xc8); rl78_linkrelax_branch (); }
 
 	| SKH
-	  { B2 (0x61, 0xe3); rl78_relax (RL78_RELAX_BRANCH, 0); }
+	  { B2 (0x61, 0xe3); rl78_linkrelax_branch (); }
 
 	| SKNC
-	  { B2 (0x61, 0xd8); rl78_relax (RL78_RELAX_BRANCH, 0); }
+	  { B2 (0x61, 0xd8); rl78_linkrelax_branch (); }
 
 	| SKNH
-	  { B2 (0x61, 0xf3); rl78_relax (RL78_RELAX_BRANCH, 0); }
+	  { B2 (0x61, 0xf3); rl78_linkrelax_branch (); }
 
 	| SKNZ
-	  { B2 (0x61, 0xf8); rl78_relax (RL78_RELAX_BRANCH, 0); }
+	  { B2 (0x61, 0xf8); rl78_linkrelax_branch (); }
 
 	| SKZ
-	  { B2 (0x61, 0xe8); rl78_relax (RL78_RELAX_BRANCH, 0); }
+	  { B2 (0x61, 0xe8); rl78_linkrelax_branch (); }
 
 /* ---------------------------------------------------------------------- */
 
@@ -1078,7 +1070,7 @@ statement :
 	  { if (expr_is_sfr ($4))
 	      { B2 (0x61, 0xab); O1 ($4); }
 	    else if (expr_is_saddr ($4))
-	      { B2 (0x61, 0xa8); SET_SA ($4); O1 ($4); }
+	      { B2 (0x61, 0xa8); O1 ($4); }
 	    else
 	      NOT_SFR_OR_SADDR;
 	  }
@@ -1157,12 +1149,12 @@ addsubw	: ADDW  { $$ = 0x00; }
 	;
 
 andor1	: AND1 { $$ = 0x05; rl78_bit_insn = 1; }
-	| OR1  { $$ = 0x06; rl78_bit_insn = 1; }
+	| OR1  { $$ = 0x06; rl78_bit_insn = 1;}
 	| XOR1 { $$ = 0x07; rl78_bit_insn = 1; }
 	;
 
-bt_bf	: BT { $$ = 0x02;    rl78_bit_insn = 1; rl78_linkrelax_branch (); }
-	| BF { $$ = 0x04;    rl78_bit_insn = 1; rl78_linkrelax_branch (); }
+bt_bf	: BT { $$ = 0x02;    rl78_bit_insn = 1;}
+	| BF { $$ = 0x04;    rl78_bit_insn = 1; }
 	| BTCLR { $$ = 0x00; rl78_bit_insn = 1; }
 	;
 
@@ -1531,7 +1523,7 @@ expr_is_saddr (expressionS exp)
   unsigned long v;
 
   if (exp.X_op != O_constant)
-    return 1;
+    return 0;
 
   v = exp.X_add_number;
   if (0xFFE20 <= v && v <= 0xFFF1F)
@@ -1551,7 +1543,7 @@ expr_is_word_aligned (expressionS exp)
   if (v & 1)
     return 0;
   return 1;
-
+  
 }
 
 static void
@@ -1598,3 +1590,5 @@ check_expr_is_const (expressionS e, int vmin, int vmax)
     }
   return 1;
 }
+
+

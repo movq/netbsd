@@ -3,7 +3,8 @@
    (Implements POSIX draft P1003.2/D11.2, except for some of the
    internationalization features.)
 
-   Copyright (C) 1993-2020 Free Software Foundation, Inc.
+   Copyright (C) 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001,
+   2002, 2005, 2010, 2013 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -150,7 +151,7 @@ char *realloc ();
 #    include <string.h>
 #    ifndef bzero
 #     ifndef _LIBC
-#      define bzero(s, n)	((void) memset (s, '\0', n))
+#      define bzero(s, n)	(memset (s, '\0', n), (s))
 #     else
 #      define bzero(s, n)	__bzero (s, n)
 #     endif
@@ -684,7 +685,7 @@ typedef enum
 #  define EXTRACT_NUMBER(destination, source)				\
   do {									\
     (destination) = *(source) & 0377;					\
-    (destination) += ((unsigned) SIGN_EXTEND_CHAR (*((source) + 1))) << 8; \
+    (destination) += SIGN_EXTEND_CHAR (*((source) + 1)) << 8;		\
   } while (0)
 # endif
 
@@ -2492,7 +2493,6 @@ PREFIX(regex_compile) (const char *ARG_PREFIX(pattern),
           if ((syntax & RE_BK_PLUS_QM)
               || (syntax & RE_LIMITED_OPS))
             goto normal_char;
-	  /* Fall through.  */
         handle_plus:
         case '*':
           /* If there is no previous pattern... */
@@ -6697,7 +6697,6 @@ byte_re_match_2_internal (struct re_pattern_buffer *bufp,
                 {
                   case jump_n:
 		    is_a_jump_n = true;
-		    /* Fall through.  */
                   case pop_failure_jump:
 		  case maybe_pop_jump:
 		  case jump:
@@ -7126,7 +7125,7 @@ byte_re_match_2_internal (struct re_pattern_buffer *bufp,
               DEBUG_PRINT1 ("  Match => jump.\n");
 	      goto unconditional_jump;
 	    }
-        /* Fall through.  */
+        /* Note fall through.  */
 
 
 	/* The end of a simple repeat has a pop_failure_jump back to
@@ -7151,7 +7150,7 @@ byte_re_match_2_internal (struct re_pattern_buffer *bufp,
                                dummy_low_reg, dummy_high_reg,
                                reg_dummy, reg_dummy, reg_info_dummy);
           }
-	  /* Fall through.  */
+	  /* Note fall through.  */
 
 	unconditional_jump:
 #ifdef _LIBC
@@ -7454,7 +7453,6 @@ byte_re_match_2_internal (struct re_pattern_buffer *bufp,
                 {
                 case jump_n:
                   is_a_jump_n = true;
-		  /* Fall through.  */
                 case maybe_pop_jump:
                 case pop_failure_jump:
                 case jump:
@@ -7720,7 +7718,6 @@ PREFIX(common_op_match_null_string_p) (UCHAR_T **p, UCHAR_T *end,
 
     case set_number_at:
       p1 += 2 * OFFSET_ADDRESS_SIZE;
-      return false;
 
     default:
       /* All other opcodes mean we cannot match the empty string.  */
@@ -8096,12 +8093,12 @@ regerror (int errcode, const regex_t *preg ATTRIBUTE_UNUSED,
 #if defined HAVE_MEMPCPY || defined _LIBC
 	  *((char *) mempcpy (errbuf, msg, errbuf_size - 1)) = '\0';
 #else
-          (void) memcpy (errbuf, msg, errbuf_size - 1);
+          memcpy (errbuf, msg, errbuf_size - 1);
           errbuf[errbuf_size - 1] = 0;
 #endif
         }
       else
-        (void) memcpy (errbuf, msg, msg_size);
+        memcpy (errbuf, msg, msg_size);
     }
 
   return msg_size;

@@ -1,6 +1,8 @@
-#	$NetBSD: Makefile,v 1.8 2022/12/23 17:09:55 christos Exp $
+#	$NetBSD: Makefile,v 1.1 2016/01/26 17:27:00 christos Exp $
 
 PROG=		ranlib
+
+.include <bsd.own.mk>
 
 COPTS.arparse.c = -Wno-stack-protector
 CPPFLAGS+=-Dbin_dummy_emulation=bin_vanilla_emulation

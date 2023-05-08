@@ -1,5 +1,6 @@
 /* BFD back-end for i386 a.out binaries under LynxOS.
-   Copyright (C) 1990-2020 Free Software Foundation, Inc.
+   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1999, 2001, 2002,
+   2003, 2005, 2007, 2009, 2010, 2012  Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -26,7 +27,7 @@
 /* Do not "beautify" the CONCAT* macro args.  Traditional C will not
    remove whitespace added here, and thus will fail to concatenate
    the tokens.  */
-#define MY(OP) CONCAT2 (i386_aout_lynx_,OP)
+#define MY(OP) CONCAT2 (i386lynx_aout_,OP)
 #define TARGETNAME "a.out-i386-lynx"
 
 #include "sysdep.h"
@@ -36,12 +37,14 @@
 #ifndef WRITE_HEADERS
 #define WRITE_HEADERS(abfd, execp)					      \
       {									      \
+	bfd_size_type text_size; /* dummy vars */			      \
+	file_ptr text_end;						      \
 	if (adata(abfd).magic == undecided_magic)			      \
-	  NAME(aout,adjust_sizes_and_vmas) (abfd);			      \
-									      \
+	  NAME(aout,adjust_sizes_and_vmas) (abfd, &text_size, &text_end);     \
+    									      \
 	execp->a_syms = bfd_get_symcount (abfd) * EXTERNAL_NLIST_SIZE;	      \
 	execp->a_entry = bfd_get_start_address (abfd);			      \
-									      \
+    									      \
 	execp->a_trsize = ((obj_textsec (abfd)->reloc_count) *		      \
 			   obj_reloc_entry_size (abfd));		      \
 	execp->a_drsize = ((obj_datasec (abfd)->reloc_count) *		      \
@@ -53,24 +56,24 @@
 			  abfd) != EXEC_BYTES_SIZE)			      \
 	  return FALSE;							      \
 	/* Now write out reloc info, followed by syms and strings */	      \
-									      \
-	if (bfd_get_symcount (abfd) != 0)				      \
+  									      \
+	if (bfd_get_symcount (abfd) != 0) 				      \
 	    {								      \
-	      if (bfd_seek (abfd, (file_ptr) (N_SYMOFF (execp)), SEEK_SET)    \
+	      if (bfd_seek (abfd, (file_ptr) (N_SYMOFF(*execp)), SEEK_SET)    \
 		  != 0)							      \
-		return FALSE;						      \
+	        return FALSE;						      \
 									      \
 	      if (! NAME(aout,write_syms) (abfd)) return FALSE;		      \
 									      \
-	      if (bfd_seek (abfd, (file_ptr) (N_TRELOFF (execp)), SEEK_SET)   \
+	      if (bfd_seek (abfd, (file_ptr) (N_TRELOFF(*execp)), SEEK_SET)   \
 		  != 0)							      \
-		return FALSE;						      \
+	        return FALSE;						      \
 									      \
 	      if (!NAME(lynx,squirt_out_relocs) (abfd, obj_textsec (abfd)))   \
 		return FALSE;						      \
-	      if (bfd_seek (abfd, (file_ptr) (N_DRELOFF (execp)), SEEK_SET)   \
+	      if (bfd_seek (abfd, (file_ptr) (N_DRELOFF(*execp)), SEEK_SET)   \
 		  != 0)							      \
-		return 0;						      \
+	        return 0;						      \
 									      \
 	      if (!NAME(lynx,squirt_out_relocs) (abfd, obj_datasec (abfd)))   \
 		return FALSE;						      \
@@ -279,7 +282,7 @@ NAME(lynx,swap_ext_reloc_out) (bfd *abfd,
    to give the true offset from the section */
 
 
-#define MOVE_ADDRESS(ad)						\
+#define MOVE_ADDRESS(ad)       						\
   if (r_extern)								\
     {									\
    /* undefined symbol */						\
@@ -288,7 +291,7 @@ NAME(lynx,swap_ext_reloc_out) (bfd *abfd,
     }									\
   else									\
     {									\
-    /* defined, section relative. replace symbol with pointer to	\
+    /* defined, section relative. replace symbol with pointer to    	\
        symbol which points to section  */				\
     switch (r_index) {							\
     case N_TEXT:							\
@@ -313,7 +316,7 @@ NAME(lynx,swap_ext_reloc_out) (bfd *abfd,
       cache_ptr->addend = ad;						\
       break;								\
     }									\
-  }									\
+  }     								\
 
 static void
 NAME(lynx,swap_ext_reloc_in) (bfd *abfd,
@@ -399,7 +402,7 @@ NAME(lynx,slurp_reloc_table) (bfd *abfd,
   bfd_set_error (bfd_error_invalid_operation);
   return FALSE;
 
- doit:
+doit:
   if (bfd_seek (abfd, asect->rel_filepos, SEEK_SET) != 0)
     return FALSE;
   each_size = obj_reloc_entry_size (abfd);
@@ -411,9 +414,16 @@ NAME(lynx,slurp_reloc_table) (bfd *abfd,
   if (!reloc_cache && count != 0)
     return FALSE;
 
-  relocs = _bfd_alloc_and_read (abfd, reloc_size, reloc_size);
+  relocs = bfd_alloc (abfd, reloc_size);
   if (!relocs && reloc_size != 0)
     {
+      free (reloc_cache);
+      return FALSE;
+    }
+
+  if (bfd_bread (relocs, reloc_size, abfd) != reloc_size)
+    {
+      bfd_release (abfd, relocs);
       free (reloc_cache);
       return FALSE;
     }

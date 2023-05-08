@@ -1,4 +1,4 @@
-/* Copyright (C) 2017-2020 Free Software Foundation, Inc.
+/* Copyright (C) 2017-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -15,10 +15,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "gdbsupport/common-defs.h"
+#include "common/common-defs.h"
 #include "i386.h"
-#include "gdbsupport/tdesc.h"
-#include "gdbsupport/x86-xstate.h"
+#include "common/tdesc.h"
+#include "common/x86-xstate.h"
 #include <stdlib.h>
 
 #include "../features/i386/32bit-core.c"
@@ -28,12 +28,11 @@
 #include "../features/i386/32bit-avx512.c"
 #include "../features/i386/32bit-mpx.c"
 #include "../features/i386/32bit-pkeys.c"
-#include "../features/i386/32bit-segments.c"
 
 /* Create i386 target descriptions according to XCR0.  */
 
 target_desc *
-i386_create_target_description (uint64_t xcr0, bool is_linux, bool segments)
+i386_create_target_description (uint64_t xcr0, bool is_linux)
 {
   target_desc *tdesc = allocate_target_description ();
 
@@ -53,9 +52,6 @@ i386_create_target_description (uint64_t xcr0, bool is_linux, bool segments)
 
   if (is_linux)
     regnum = create_feature_i386_32bit_linux (tdesc, regnum);
-
-  if (segments)
-    regnum = create_feature_i386_32bit_segments (tdesc, regnum);
 
   if (xcr0 & X86_XSTATE_AVX)
     regnum = create_feature_i386_32bit_avx (tdesc, regnum);

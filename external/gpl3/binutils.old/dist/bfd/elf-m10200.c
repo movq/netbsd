@@ -1,5 +1,7 @@
 /* Matsushita 10200 specific support for 32-bit ELF
-   Copyright (C) 1996-2020 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+   2007, 2010, 2012
+   Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -46,11 +48,11 @@ static reloc_howto_type elf_mn10200_howto_table[] =
   /* Dummy relocation.  Does nothing.  */
   HOWTO (R_MN10200_NONE,
 	 0,
-	 3,
-	 0,
+	 2,
+	 16,
 	 FALSE,
 	 0,
-	 complain_overflow_dont,
+	 complain_overflow_bitfield,
 	 bfd_elf_generic_reloc,
 	 "R_MN10200_NONE",
 	 FALSE,
@@ -212,25 +214,16 @@ bfd_elf32_bfd_reloc_name_lookup (bfd *abfd ATTRIBUTE_UNUSED,
 
 /* Set the howto pointer for an MN10200 ELF reloc.  */
 
-static bfd_boolean
-mn10200_info_to_howto (bfd *abfd,
+static void
+mn10200_info_to_howto (bfd *abfd ATTRIBUTE_UNUSED,
 		       arelent *cache_ptr,
 		       Elf_Internal_Rela *dst)
 {
   unsigned int r_type;
 
   r_type = ELF32_R_TYPE (dst->r_info);
-  if (r_type >= (unsigned int) R_MN10200_MAX)
-    {
-      /* xgettext:c-format */
-      _bfd_error_handler (_("%pB: unsupported relocation type %#x"),
-			  abfd, r_type);
-      bfd_set_error (bfd_error_bad_value);
-      return FALSE;
-    }
-
+  BFD_ASSERT (r_type < (unsigned int) R_MN10200_MAX);
   cache_ptr->howto = &elf_mn10200_howto_table[r_type];
-  return cache_ptr->howto != NULL;
 }
 
 /* Perform a relocation as part of a final link.  */
@@ -380,19 +373,19 @@ mn10200_elf_relocate_section (bfd *output_bfd,
 	}
       else
 	{
-	  bfd_boolean unresolved_reloc, warned, ignored;
+	  bfd_boolean unresolved_reloc, warned;
 
 	  RELOC_FOR_GLOBAL_SYMBOL (info, input_bfd, input_section, rel,
 				   r_symndx, symtab_hdr, sym_hashes,
 				   h, sec, relocation,
-				   unresolved_reloc, warned, ignored);
+				   unresolved_reloc, warned);
 	}
 
       if (sec != NULL && discarded_section (sec))
 	RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
 					 rel, 1, relend, howto, 0, contents);
 
-      if (bfd_link_relocatable (info))
+      if (info->relocatable)
 	continue;
 
       r = mn10200_elf_final_link_relocate (howto, input_bfd, output_bfd,
@@ -413,21 +406,24 @@ mn10200_elf_relocate_section (bfd *output_bfd,
 	      name = (bfd_elf_string_from_elf_section
 		      (input_bfd, symtab_hdr->sh_link, sym->st_name));
 	      if (name == NULL || *name == '\0')
-		name = bfd_section_name (sec);
+		name = bfd_section_name (input_bfd, sec);
 	    }
 
 	  switch (r)
 	    {
 	    case bfd_reloc_overflow:
-	      (*info->callbacks->reloc_overflow)
-		(info, (h ? &h->root : NULL), name, howto->name,
-		 (bfd_vma) 0, input_bfd, input_section, rel->r_offset);
+	      if (! ((*info->callbacks->reloc_overflow)
+		     (info, (h ? &h->root : NULL), name, howto->name,
+		      (bfd_vma) 0, input_bfd, input_section,
+		      rel->r_offset)))
+		return FALSE;
 	      break;
 
 	    case bfd_reloc_undefined:
-	      (*info->callbacks->undefined_symbol) (info, name, input_bfd,
-						    input_section,
-						    rel->r_offset, TRUE);
+	      if (! ((*info->callbacks->undefined_symbol)
+		     (info, name, input_bfd, input_section,
+		      rel->r_offset, TRUE)))
+		return FALSE;
 	      break;
 
 	    case bfd_reloc_outofrange:
@@ -447,8 +443,10 @@ mn10200_elf_relocate_section (bfd *output_bfd,
 	      /* fall through */
 
 	    common_error:
-	      (*info->callbacks->warning) (info, msg, name, input_bfd,
-					   input_section, rel->r_offset);
+	      if (!((*info->callbacks->warning)
+		    (info, msg, name, input_bfd, input_section,
+		     rel->r_offset)))
+		return FALSE;
 	      break;
 	    }
 	}
@@ -533,7 +531,7 @@ mn10200_elf_relax_delete_bytes (bfd *abfd, asection *sec,
 
    There are quite a few relaxing opportunities available on the mn10200:
 
-	* jsr:24 -> jsr:16					   2 bytes
+	* jsr:24 -> jsr:16 					   2 bytes
 
 	* jmp:24 -> jmp:16					   2 bytes
 	* jmp:16 -> bra:8					   1 byte
@@ -576,7 +574,7 @@ mn10200_elf_relax_section (bfd *abfd,
   /* We don't have to do anything for a relocatable link, if
      this section does not have relocs, or if this is not a
      code section.  */
-  if (bfd_link_relocatable (link_info)
+  if (link_info->relocatable
       || (sec->flags & SEC_RELOC) == 0
       || sec->reloc_count == 0
       || (sec->flags & SEC_CODE) == 0)
@@ -663,8 +661,8 @@ mn10200_elf_relax_section (bfd *abfd,
 	      && h->root.type != bfd_link_hash_defweak)
 	    {
 	      /* This appears to be a reference to an undefined
-		 symbol.  Just ignore it--it will be caught by the
-		 regular reloc processing.  */
+                 symbol.  Just ignore it--it will be caught by the
+                 regular reloc processing.  */
 	      continue;
 	    }
 
@@ -1378,7 +1376,7 @@ mn10200_elf_get_relocated_section_contents (bfd *output_bfd,
   return NULL;
 }
 
-#define TARGET_LITTLE_SYM	mn10200_elf32_vec
+#define TARGET_LITTLE_SYM	bfd_elf32_mn10200_vec
 #define TARGET_LITTLE_NAME	"elf32-mn10200"
 #define ELF_ARCH		bfd_arch_mn10200
 #define ELF_MACHINE_CODE	EM_MN10200
@@ -1387,7 +1385,7 @@ mn10200_elf_get_relocated_section_contents (bfd *output_bfd,
 
 #define elf_backend_rela_normal 1
 #define elf_info_to_howto	mn10200_info_to_howto
-#define elf_info_to_howto_rel	NULL
+#define elf_info_to_howto_rel	0
 #define elf_backend_relocate_section mn10200_elf_relocate_section
 #define bfd_elf32_bfd_relax_section	mn10200_elf_relax_section
 #define bfd_elf32_bfd_get_relocated_section_contents \

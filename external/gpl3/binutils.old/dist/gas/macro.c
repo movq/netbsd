@@ -1,5 +1,6 @@
 /* macro.c - macro support for gas
-   Copyright (C) 1994-2020 Free Software Foundation, Inc.
+   Copyright 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003,
+   2004, 2005, 2006, 2007, 2008, 2011, 2012, 2013 Free Software Foundation, Inc.
 
    Written by Steve and Judy Chamberlain of Cygnus Support,
       sac@cygnus.com
@@ -211,27 +212,6 @@ buffer_and_nest (const char *from, const char *to, sb *ptr,
 		  break;
 		}
 	    }
-
-	  /* PR gas/16908
-	     Apply and discard .linefile directives that appear within
-	     the macro.  For long macros, one might want to report the
-	     line number information associated with the lines within
-	     the macro definition, but we would need more infrastructure
-	     to make that happen correctly (e.g. resetting the line
-	     number when expanding the macro), and since for short
-	     macros we clearly prefer reporting the point of expansion
-	     anyway, there's not an obviously better fix here.  */
-	  if (strncasecmp (ptr->ptr + i, "linefile", 8) == 0)
-	    {
-	      char saved_eol_char = ptr->ptr[ptr->len];
-
-	      ptr->ptr[ptr->len] = '\0';
-	      temp_ilp (ptr->ptr + i + 8);
-	      s_app_line (0);
-	      restore_ilp ();
-	      ptr->ptr[ptr->len] = saved_eol_char;
-	      ptr->len = line_start;
-	    }
 	}
 
       /* Add the original end-of-line char to the end and keep running.  */
@@ -284,8 +264,8 @@ getstring (size_t idx, sb *in, sb *acc)
 	{
 	  int nest = 0;
 	  idx++;
-	  while (idx < in->len
-		 && (in->ptr[idx] != '>' || nest))
+	  while ((in->ptr[idx] != '>' || nest)
+		 && idx < in->len)
 	    {
 	      if (in->ptr[idx] == '!')
 		{
@@ -368,13 +348,13 @@ get_any_string (size_t idx, sb *in, sb *out)
     {
       if (in->len > idx + 2 && in->ptr[idx + 1] == '\'' && ISBASE (in->ptr[idx]))
 	{
-	  while (idx < in->len && !ISSEP (in->ptr[idx]))
+	  while (!ISSEP (in->ptr[idx]))
 	    sb_add_char (out, in->ptr[idx++]);
 	}
       else if (in->ptr[idx] == '%' && macro_alternate)
 	{
 	  offsetT val;
-	  char buf[64];
+	  char buf[20];
 
 	  /* Turns the next expression into a string.  */
 	  /* xgettext: no-c-format */
@@ -403,7 +383,7 @@ get_any_string (size_t idx, sb *in, sb *out)
 	}
       else
 	{
-	  char *br_buf = XNEWVEC (char, 1);
+	  char *br_buf = (char *) xmalloc (1);
 	  char *in_br = br_buf;
 
 	  *in_br = '\0';
@@ -437,7 +417,7 @@ get_any_string (size_t idx, sb *in, sb *out)
 		    --in_br;
 		  else
 		    {
-		      br_buf = XNEWVEC (char, strlen (in_br) + 2);
+		      br_buf = (char *) xmalloc (strlen (in_br) + 2);
 		      strcpy (br_buf + 1, in_br);
 		      free (in_br);
 		      in_br = br_buf;
@@ -470,7 +450,7 @@ new_formal (void)
 {
   formal_entry *formal;
 
-  formal = XNEW (formal_entry);
+  formal = (formal_entry *) xmalloc (sizeof (formal_entry));
 
   sb_new (&formal->name);
   sb_new (&formal->def);
@@ -647,14 +627,14 @@ free_macro (macro_entry *macro)
 const char *
 define_macro (size_t idx, sb *in, sb *label,
 	      size_t (*get_line) (sb *),
-	      const char *file, unsigned int line,
+	      char *file, unsigned int line,
 	      const char **namep)
 {
   macro_entry *macro;
   sb name;
   const char *error = NULL;
 
-  macro = XNEW (macro_entry);
+  macro = (macro_entry *) xmalloc (sizeof (macro_entry));
   sb_new (&macro->sub);
   sb_new (&name);
   macro->file = file;
@@ -814,7 +794,7 @@ macro_expand_body (sb *in, sb *out, formal_entry *formals,
 	    }
 	  else
 	    {
-	      /* Permit macro parameter substitution delineated with
+	      /* Permit macro parameter substition delineated with
 		 an '&' prefix and optional '&' suffix.  */
 	      src = sub_actual (src + 1, in, &t, formal_hash, '&', out, 0);
 	    }
@@ -841,7 +821,7 @@ macro_expand_body (sb *in, sb *out, formal_entry *formals,
 	    {
 	      /* Sub in the macro invocation number.  */
 
-	      char buffer[12];
+	      char buffer[10];
 	      src++;
 	      sprintf (buffer, "%d", macro_number);
 	      sb_add_string (out, buffer);
@@ -1249,12 +1229,13 @@ check_macro (const char *line, sb *expand,
   if (is_name_ender (*s))
     ++s;
 
-  copy = xmemdup0 (line, s - line);
+  copy = (char *) alloca (s - line + 1);
+  memcpy (copy, line, s - line);
+  copy[s - line] = '\0';
   for (cls = copy; *cls != '\0'; cls ++)
     *cls = TOLOWER (*cls);
 
   macro = (macro_entry *) hash_find (macro_hash, copy);
-  free (copy);
 
   if (macro == NULL)
     return 0;
@@ -1286,7 +1267,7 @@ delete_macro (const char *name)
   macro_entry *macro;
 
   len = strlen (name);
-  copy = XNEWVEC (char, len + 1);
+  copy = (char *) alloca (len + 1);
   for (i = 0; i < len; ++i)
     copy[i] = TOLOWER (name[i]);
   copy[i] = '\0';
@@ -1300,8 +1281,7 @@ delete_macro (const char *name)
       free_macro (macro);
     }
   else
-    as_warn (_("Attempt to purge non-existing macro `%s'"), copy);
-  free (copy);
+    as_warn (_("Attempt to purge non-existant macro `%s'"), copy);
 }
 
 /* Handle the MRI IRP and IRPC pseudo-ops.  These are handled as a

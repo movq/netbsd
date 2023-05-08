@@ -1,7 +1,7 @@
 /* Main simulator entry points specific to Lattice Mico32.
    Contributed by Jon Beniston <jon@beniston.com>
    
-   Copyright (C) 2009-2020 Free Software Foundation, Inc.
+   Copyright (C) 2009-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -26,6 +26,27 @@
 #ifdef HAVE_STDLIB_H
 #include <stdlib.h>
 #endif
+
+static void free_state (SIM_DESC);
+static void print_lm32_misc_cpu (SIM_CPU * cpu, int verbose);
+static DECLARE_OPTION_HANDLER (lm32_option_handler);
+
+enum
+{
+  OPTION_ENDIAN = OPTION_START,
+};
+
+/* GDB passes -E, even though it's fixed, so we have to handle it here. common code only handles it if SIM_HAVE_BIENDIAN is defined, which it isn't for lm32.  */
+static const OPTION lm32_options[] = {
+  {{"endian", required_argument, NULL, OPTION_ENDIAN},
+   'E', "big", "Set endianness",
+   lm32_option_handler},
+  {{NULL, no_argument, NULL, 0}, '\0', NULL, NULL, NULL}
+};
+
+/* Records simulator descriptor so utilities like lm32_dump_regs can be
+   called from gdb.  */
+SIM_DESC current_state;
 
 /* Cover function of sim_state_free to free the cpu buffers as well.  */
 
@@ -50,33 +71,61 @@ find_base (bfd *prog_bfd)
   found = 0;
   for (s = prog_bfd->sections; s; s = s->next)
     {
-      if ((strcmp (bfd_section_name (s), ".boot") == 0)
-	  || (strcmp (bfd_section_name (s), ".text") == 0)
-	  || (strcmp (bfd_section_name (s), ".data") == 0)
-	  || (strcmp (bfd_section_name (s), ".bss") == 0))
+      if ((strcmp (bfd_get_section_name (prog_bfd, s), ".boot") == 0)
+	  || (strcmp (bfd_get_section_name (prog_bfd, s), ".text") == 0)
+	  || (strcmp (bfd_get_section_name (prog_bfd, s), ".data") == 0)
+	  || (strcmp (bfd_get_section_name (prog_bfd, s), ".bss") == 0))
 	{
 	  if (!found)
 	    {
-	      base = bfd_section_vma (s);
+	      base = bfd_get_section_vma (prog_bfd, s);
 	      found = 1;
 	    }
 	  else
-	    base = bfd_section_vma (s) < base ? bfd_section_vma (s) : base;
+	    base =
+	      bfd_get_section_vma (prog_bfd,
+				   s) < base ? bfd_get_section_vma (prog_bfd,
+								    s) : base;
 	}
     }
   return base & ~(0xffffUL);
 }
 
 static unsigned long
-find_limit (SIM_DESC sd)
+find_limit (bfd *prog_bfd)
 {
-  bfd_vma addr;
+  struct bfd_symbol **asymbols;
+  long symsize;
+  long symbol_count;
+  long s;
 
-  addr = trace_sym_value (sd, "_fstack");
-  if (addr == -1)
+  symsize = bfd_get_symtab_upper_bound (prog_bfd);
+  if (symsize < 0)
+    return 0;
+  asymbols = (asymbol **) xmalloc (symsize);
+  symbol_count = bfd_canonicalize_symtab (prog_bfd, asymbols);
+  if (symbol_count < 0)
     return 0;
 
-  return (addr + 65536) & ~(0xffffUL);
+  for (s = 0; s < symbol_count; s++)
+    {
+      if (!strcmp (asymbols[s]->name, "_fstack"))
+	return (asymbols[s]->value + 65536) & ~(0xffffUL);
+    }
+  return 0;
+}
+
+/* Handle lm32 specific options.  */
+
+static SIM_RC
+lm32_option_handler (sd, cpu, opt, arg, is_command)
+     SIM_DESC sd;
+     sim_cpu *cpu;
+     int opt;
+     char *arg;
+     int is_command;
+{
+  return SIM_RC_OK;
 }
 
 /* Create an instance of the simulator.  */
@@ -86,7 +135,7 @@ sim_open (kind, callback, abfd, argv)
      SIM_OPEN_KIND kind;
      host_callback *callback;
      struct bfd *abfd;
-     char * const *argv;
+     char **argv;
 {
   SIM_DESC sd = sim_state_alloc (kind, callback);
   char c;
@@ -105,8 +154,11 @@ sim_open (kind, callback, abfd, argv)
       free_state (sd);
       return 0;
     }
+  sim_add_option_table (sd, NULL, lm32_options);
 
-  /* The parser will print an error message for us, so we silently return.  */
+  /* getopt will print the error message so we just have to exit if this fails.
+     FIXME: Hmmm...  in the case of gdb we need getopt to call
+     print_filtered.  */
   if (sim_parse_args (sd, argv) != SIM_RC_OK)
     {
       free_state (sd);
@@ -144,7 +196,7 @@ sim_open (kind, callback, abfd, argv)
 	{
 	  /* It doesn't, so we should try to allocate enough memory to hold program.  */
 	  base = find_base (STATE_PROG_BFD (sd));
-	  limit = find_limit (sd);
+	  limit = find_limit (STATE_PROG_BFD (sd));
 	  if (limit == 0)
 	    {
 	      sim_io_eprintf (sd,
@@ -188,15 +240,28 @@ sim_open (kind, callback, abfd, argv)
      Must be done after lm32_cgen_cpu_open.  */
   cgen_init (sd);
 
+  /* Store in a global so things like lm32_dump_regs can be invoked
+     from the gdb command line.  */
+  current_state = sd;
+
   return sd;
+}
+
+void
+sim_close (sd, quitting)
+     SIM_DESC sd;
+     int quitting;
+{
+  lm32_cgen_cpu_close (CPU_CPU_DESC (STATE_CPU (sd, 0)));
+  sim_module_uninstall (sd);
 }
 
 SIM_RC
 sim_create_inferior (sd, abfd, argv, envp)
      SIM_DESC sd;
      struct bfd *abfd;
-     char * const *argv;
-     char * const *envp;
+     char **argv;
+     char **envp;
 {
   SIM_CPU *current_cpu = STATE_CPU (sd, 0);
   SIM_ADDR addr;
@@ -207,15 +272,10 @@ sim_create_inferior (sd, abfd, argv, envp)
     addr = 0;
   sim_pc_set (current_cpu, addr);
 
-  /* Standalone mode (i.e. `run`) will take care of the argv for us in
-     sim_open() -> sim_parse_args().  But in debug mode (i.e. 'target sim'
-     with `gdb`), we need to handle it because the user can change the
-     argv on the fly via gdb's 'run'.  */
-  if (STATE_PROG_ARGV (sd) != argv)
-    {
-      freeargv (STATE_PROG_ARGV (sd));
-      STATE_PROG_ARGV (sd) = dupargv (argv);
-    }
+#if 0
+  STATE_ARGV (sd) = sim_copy_argv (argv);
+  STATE_ENVP (sd) = sim_copy_argv (envp);
+#endif
 
   return SIM_RC_OK;
 }

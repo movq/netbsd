@@ -1,4 +1,4 @@
-/* Copyright (C) 2008-2020 Free Software Foundation, Inc.
+/* Copyright (C) 2008-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,16 +17,13 @@
 
 #include "defs.h"
 #include "windows-nat.h"
-#include "x86-nat.h"
+#include "i386-nat.h"
 #include "i386-tdep.h"
 
 #include <windows.h>
 
-#ifdef __x86_64__
-#define CONTEXT WOW64_CONTEXT
-#endif
-#define context_offset(x) ((int)(size_t)&(((CONTEXT *)NULL)->x))
-const int i386_mappings[] =
+#define context_offset(x) ((int)&(((CONTEXT *)NULL)->x))
+static const int mappings[] =
 {
   context_offset (Eax),
   context_offset (Ecx),
@@ -73,21 +70,22 @@ const int i386_mappings[] =
   context_offset (ExtendedRegisters[24])
 };
 #undef context_offset
-#undef CONTEXT
 
 /* segment_register_p_ftype implementation for x86.  */
 
-int
+static int
 i386_windows_segment_register_p (int regnum)
 {
   return regnum >= I386_CS_REGNUM && regnum <= I386_GS_REGNUM;
 }
 
-void _initialize_i386_windows_nat ();
+/* -Wmissing-prototypes */
+extern initialize_file_ftype _initialize_i386_windows_nat;
+
 void
-_initialize_i386_windows_nat ()
+_initialize_i386_windows_nat (void)
 {
-#ifndef __x86_64__
-  x86_set_debug_register_length (4);
-#endif
+  windows_set_context_register_offsets (mappings);
+  windows_set_segment_register_p (i386_windows_segment_register_p);
+  i386_set_debug_register_length (4);
 }

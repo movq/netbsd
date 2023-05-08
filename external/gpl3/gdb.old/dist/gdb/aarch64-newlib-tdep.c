@@ -1,6 +1,6 @@
 /* Target-dependent code for Newlib AArch64.
 
-   Copyright (C) 2011-2020 Free Software Foundation, Inc.
+   Copyright (C) 2011-2014 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of GDB.
@@ -36,9 +36,11 @@ aarch64_newlib_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   tdep->jb_pc = 11;
 }
 
-void _initialize_aarch64_newlib_tdep ();
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+extern initialize_file_ftype _initialize_aarch64_newlib_tdep;
+
 void
-_initialize_aarch64_newlib_tdep ()
+_initialize_aarch64_newlib_tdep (void)
 {
   gdbarch_register_osabi (bfd_arch_aarch64, 0, GDB_OSABI_NEWLIB,
 			  aarch64_newlib_init_abi);

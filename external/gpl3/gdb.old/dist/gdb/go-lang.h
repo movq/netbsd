@@ -1,6 +1,6 @@
 /* Go language support definitions for GDB, the GNU debugger.
 
-   Copyright (C) 2012-2020 Free Software Foundation, Inc.
+   Copyright (C) 2012-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,8 +25,6 @@ struct type_print_options;
 #include "gdbtypes.h"
 #include "symtab.h"
 #include "value.h"
-
-struct parser_state;
 
 struct builtin_go_type
 {
@@ -58,7 +56,9 @@ enum go_type
 
 /* Defined in go-exp.y.  */
 
-extern int go_parse (struct parser_state *);
+extern int go_parse (void);
+
+extern void go_error (char *);
 
 /* Defined in go-lang.c.  */
 
@@ -80,10 +80,12 @@ extern void go_print_type (struct type *type, const char *varstring,
 			   struct ui_file *stream, int show, int level,
 			   const struct type_print_options *flags);
 
-/* Implement la_value_print_inner for Go.  */
+/* Defined in go-valprint.c.  */
 
-extern void go_value_print_inner (struct value *value,
-				  struct ui_file *stream, int recurse,
-				  const struct value_print_options *options);
+extern void go_val_print (struct type *type, const gdb_byte *valaddr,
+			  int embedded_offset, CORE_ADDR address,
+			  struct ui_file *stream, int recurse,
+			  const struct value *val,
+			  const struct value_print_options *options);
 
 #endif /* !defined (GO_LANG_H) */

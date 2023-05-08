@@ -1,5 +1,5 @@
 /* Darwin support for GDB, the GNU debugger.
-   Copyright (C) 1997-2020 Free Software Foundation, Inc.
+   Copyright (C) 1997-2014 Free Software Foundation, Inc.
 
    Contributed by Apple Computer, Inc.
 
@@ -23,19 +23,21 @@
 #include "inferior.h"
 #include "gdbcore.h"
 #include "target.h"
+#include "floatformat.h"
 #include "symtab.h"
 #include "regcache.h"
+#include "libbfd.h"
 #include "objfiles.h"
 
 #include "i387-tdep.h"
 #include "i386-tdep.h"
 #include "osabi.h"
 #include "ui-out.h"
+#include "gdb_assert.h"
 #include "i386-darwin-tdep.h"
 #include "solib.h"
 #include "solib-darwin.h"
-#include "dwarf2/frame.h"
-#include <algorithm>
+#include "dwarf2-frame.h"
 
 /* Offsets into the struct i386_thread_state where we'll find the saved regs.
    From <mach/i386/thread_status.h> and i386-tdep.h.  */
@@ -104,12 +106,12 @@ darwin_dwarf_signal_frame_p (struct gdbarch *gdbarch,
   return i386_sigtramp_p (this_frame);
 }
 
-/* Check whether TYPE is a 128-bit vector (__m128, __m128d or __m128i).  */
+/* Check wether TYPE is a 128-bit vector (__m128, __m128d or __m128i).  */
 
 static int
 i386_m128_p (struct type *type)
 {
-  return (type->code () == TYPE_CODE_ARRAY && TYPE_VECTOR (type)
+  return (TYPE_CODE (type) == TYPE_CODE_ARRAY && TYPE_VECTOR (type)
           && TYPE_LENGTH (type) == 16);
 }
 
@@ -124,25 +126,21 @@ i386_darwin_arg_type_alignment (struct type *type)
          aligned to 8-byte boundaries.
      7.  [...]  The caller aligns 128-bit vectors in the parameter area to
          16-byte boundaries.  */
-  if (type->code () == TYPE_CODE_ARRAY && TYPE_VECTOR (type))
+  if (TYPE_CODE (type) == TYPE_CODE_ARRAY && TYPE_VECTOR (type))
     return TYPE_LENGTH (type);
   /* 4.  The caller places all the fields of structures (or unions) with no
          vector elements in the parameter area.  These structures are 4-byte
          aligned.
      5.  The caller places structures with vector elements on the stack,
          16-byte aligned.  */
-  if (type->code () == TYPE_CODE_STRUCT
-      || type->code () == TYPE_CODE_UNION)
+  if (TYPE_CODE (type) == TYPE_CODE_STRUCT
+      || TYPE_CODE (type) == TYPE_CODE_UNION)
     {
       int i;
       int res = 4;
-      for (i = 0; i < type->num_fields (); i++)
-	{
-	  int align
-	    = i386_darwin_arg_type_alignment (type->field (i).type ());
-
-	  res = std::max (res, align);
-	}
+      for (i = 0; i < TYPE_NFIELDS (type); i++)
+        res = max (res,
+                   i386_darwin_arg_type_alignment (TYPE_FIELD_TYPE (type, i)));
       return res;
     }
   /* 2.  The caller aligns nonvector arguments to 4-byte boundaries.  */
@@ -153,8 +151,7 @@ static CORE_ADDR
 i386_darwin_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 			     struct regcache *regcache, CORE_ADDR bp_addr,
 			     int nargs, struct value **args, CORE_ADDR sp,
-			     function_call_return_method return_method,
-			     CORE_ADDR struct_addr)
+			     int struct_return, CORE_ADDR struct_addr)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
@@ -170,7 +167,7 @@ i386_darwin_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       int args_space = 0;
       int num_m128 = 0;
 
-      if (return_method == return_method_struct)
+      if (struct_return)
 	{
 	  if (write_pass)
 	    {
@@ -190,7 +187,8 @@ i386_darwin_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
               if (write_pass)
                 {
                   const gdb_byte *val = value_contents_all (args[i]);
-                  regcache->raw_write (I387_MM0_REGNUM(tdep) + num_m128, val);
+                  regcache_raw_write
+                    (regcache, I387_MM0_REGNUM(tdep) + num_m128, val);
                 }
               num_m128++;
             }
@@ -228,10 +226,10 @@ i386_darwin_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
   /* Finally, update the stack pointer...  */
   store_unsigned_integer (buf, 4, byte_order, sp);
-  regcache->cooked_write (I386_ESP_REGNUM, buf);
+  regcache_cooked_write (regcache, I386_ESP_REGNUM, buf);
 
   /* ...and fake a frame pointer.  */
-  regcache->cooked_write (I386_EBP_REGNUM, buf);
+  regcache_cooked_write (regcache, I386_EBP_REGNUM, buf);
 
   /* MarkK wrote: This "+ 8" is all over the place:
      (i386_frame_this_id, i386_sigtramp_frame_this_id,
@@ -286,9 +284,11 @@ i386_mach_o_osabi_sniffer (bfd *abfd)
   return GDB_OSABI_UNKNOWN;
 }
 
-void _initialize_i386_darwin_tdep ();
+/* -Wmissing-prototypes */
+extern initialize_file_ftype _initialize_i386_darwin_tdep;
+
 void
-_initialize_i386_darwin_tdep ()
+_initialize_i386_darwin_tdep (void)
 {
   gdbarch_register_osabi_sniffer (bfd_arch_unknown, bfd_target_mach_o_flavour,
                                   i386_mach_o_osabi_sniffer);

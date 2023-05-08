@@ -1,5 +1,6 @@
 /* Coff file dumper.
-   Copyright (C) 1994-2020 Free Software Foundation, Inc.
+   Copyright 1994, 1995, 1998, 1999, 2000, 2001, 2002, 2003, 2005, 2007,
+   2011 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -267,7 +268,6 @@ dump_coff_where (struct coff_where *p)
       break;
     case coff_where_strtag:
       printf ("STRTAG");
-      break;
     case coff_where_entag:
       printf ("ENTAG");
       break;
@@ -418,23 +418,21 @@ dump_coff_sfile (struct coff_sfile *p)
 static void
 dump_coff_section (struct coff_section *ptr)
 {
-  unsigned int i;
+  int i;
 
   tab (1);
-  printf (_("section %s %d %d address %x size %x number %d nrelocs %u"),
+  printf (_("section %s %d %d address %x size %x number %d nrelocs %d"),
 	  ptr->name, ptr->code, ptr->data, ptr->address,ptr->size,
 	  ptr->number, ptr->nrelocs);
   nl ();
 
   for (i = 0; i < ptr->nrelocs; i++)
     {
-      struct coff_reloc * r = ptr->relocs + i;
       tab (0);
       printf ("(%x %s %x)",
-	      r->offset,
-	      /* PR 17512: file: 0a38fb7c.  */
-	      r->symbol == NULL ? _("<no sym>") : r->symbol->name,
-	      r->addend);
+	      ptr->relocs[i].offset,
+	      ptr->relocs[i].symbol->name,
+	      ptr->relocs[i].addend);
       nl ();
     }
 
@@ -501,7 +499,6 @@ main (int ac, char **av)
 
   program_name = av[0];
   xmalloc_set_program_name (program_name);
-  bfd_set_error_program_name (program_name);
 
   expandargv (&ac, &av);
 
@@ -553,11 +550,9 @@ main (int ac, char **av)
     }
 
   tree = coff_grok (abfd);
-  if (tree)
-    {
-      coff_dump (tree);
-      printf ("\n");
-    }
+
+  coff_dump (tree);
+  printf ("\n");
 
   return 0;
 }

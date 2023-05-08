@@ -1,4 +1,4 @@
-# Copyright 2016-2020 Free Software Foundation, Inc.
+# Copyright 2016 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,18 +20,12 @@
 # commands, MI should not process further commands until the inferior
 # stops again.  See PR gdb/20418.
 
-# Do not run if gdb debug is enabled as it doesn't work for separate-mi-tty.
-if [gdb_debug_enabled] {
-    untested "debug is enabled"
-    return 0
-}
-
 load_lib mi-support.exp
 
 standard_testfile
 
 if {[build_executable $testfile.exp $testfile ${srcfile} "debug"] == -1} {
-    untested "failed to compile"
+    untested "failed to compile $testfile"
     return -1
 }
 
@@ -46,7 +40,7 @@ proc do_test {sync_command} {
     mi_gdb_exit
 
     if {[mi_gdb_start "separate-mi-tty"] != 0} {
-	fail "could not start gdb"
+	fail "Could not start gdb"
 	return
     }
 
@@ -83,7 +77,7 @@ proc do_test {sync_command} {
     # in the separate MI UI.  Note the "run" variant usually triggers
     # =thread-group-started/=thread-created/=library-loaded as well.
     with_spawn_id $gdb_main_spawn_id {
-	gdb_test "add-inferior" "Added inferior 2 on connection .*"
+	gdb_test "add-inferior" "Added inferior 2"
     }
 
     # Interrupt the program.

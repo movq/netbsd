@@ -1,6 +1,6 @@
 /* TUI window generic functions.
 
-   Copyright (C) 1998-2020 Free Software Foundation, Inc.
+   Copyright (C) 1998-2014 Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
 
@@ -19,15 +19,22 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef TUI_TUI_WIN_H
-#define TUI_TUI_WIN_H
+#ifndef TUI_WIN_H
+#define TUI_WIN_H
 
 #include "tui/tui-data.h"
 
+struct tui_win_info;
+
+extern void tui_scroll_forward (struct tui_win_info *, int);
+extern void tui_scroll_backward (struct tui_win_info *, int);
+extern void tui_scroll_left (struct tui_win_info *, int);
+extern void tui_scroll_right (struct tui_win_info *, int);
+extern void tui_scroll (enum tui_scroll_direction, 
+			struct tui_win_info *, int);
 extern void tui_set_win_focus_to (struct tui_win_info *);
 extern void tui_resize_all (void);
 extern void tui_refresh_all_win (void);
-extern void tui_rehighlight_all (void);
 
 extern chtype tui_border_ulcorner;
 extern chtype tui_border_urcorner;
@@ -38,7 +45,7 @@ extern chtype tui_border_hline;
 extern int tui_border_attrs;
 extern int tui_active_border_attrs;
 
-extern bool tui_update_variables ();
+extern int tui_update_variables (void);
 
 extern void tui_initialize_win (void);
 
@@ -48,7 +55,4 @@ extern void tui_update_gdb_sizes (void);
 /* Create or get the TUI command list.  */
 struct cmd_list_element **tui_get_cmd_list (void);
 
-/* Whether compact source display should be used.  */
-extern bool compact_source;
-
-#endif /* TUI_TUI_WIN_H */
+#endif

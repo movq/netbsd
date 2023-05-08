@@ -1,7 +1,7 @@
 /* Target-dependent code for the IQ2000 architecture, for GDB, the GNU
    Debugger.
 
-   Copyright (C) 2000-2020 Free Software Foundation, Inc.
+   Copyright (C) 2000-2014 Free Software Foundation, Inc.
 
    Contributed by Red Hat.
 
@@ -24,10 +24,11 @@
 #include "frame.h"
 #include "frame-base.h"
 #include "frame-unwind.h"
-#include "dwarf2/frame.h"
+#include "dwarf2-frame.h"
 #include "gdbtypes.h"
 #include "value.h"
 #include "dis-asm.h"
+#include <string.h>
 #include "arch-utils.h"
 #include "regcache.h"
 #include "osabi.h"
@@ -89,7 +90,7 @@ iq2000_pointer_to_address (struct gdbarch *gdbarch,
 			   struct type * type, const gdb_byte * buf)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
-  enum type_code target = TYPE_TARGET_TYPE (type)->code ();
+  enum type_code target = TYPE_CODE (TYPE_TARGET_TYPE (type));
   CORE_ADDR addr
     = extract_unsigned_integer (buf, TYPE_LENGTH (type), byte_order);
 
@@ -109,7 +110,7 @@ iq2000_address_to_pointer (struct gdbarch *gdbarch,
 			   struct type *type, gdb_byte *buf, CORE_ADDR addr)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
-  enum type_code target = TYPE_TARGET_TYPE (type)->code ();
+  enum type_code target = TYPE_CODE (TYPE_TARGET_TYPE (type));
 
   if (target == TYPE_CODE_FUNC || target == TYPE_CODE_METHOD)
     addr = insn_ptr_from_addr (addr);
@@ -206,6 +207,8 @@ iq2000_scan_prologue (struct gdbarch *gdbarch,
   struct symtab_and_line sal;
   CORE_ADDR pc;
   CORE_ADDR loop_end;
+  int found_store_lr = 0;
+  int found_decr_sp = 0;
   int srcreg;
   int tgtreg;
   signed short offset;
@@ -248,6 +251,8 @@ iq2000_scan_prologue (struct gdbarch *gdbarch,
 	  if (tgtreg >= 0 && tgtreg < E_NUM_REGS)
 	    cache->saved_regs[tgtreg] = -((signed short) (insn & 0xffff));
 
+	  if (tgtreg == E_LR_REGNUM)
+	    found_store_lr = 1;
 	  continue;
 	}
 
@@ -255,6 +260,7 @@ iq2000_scan_prologue (struct gdbarch *gdbarch,
 	{
 	  /* addi %1, %1, -N == addi %sp, %sp, -N */
 	  /* LEGACY -- from assembly-only port.  */
+	  found_decr_sp = 1;
 	  cache->framesize = -((signed short) (insn & 0xffff));
 	  continue;
 	}
@@ -367,13 +373,15 @@ iq2000_frame_cache (struct frame_info *this_frame, void **this_cache)
   int i;
 
   if (*this_cache)
-    return (struct iq2000_frame_cache *) *this_cache;
+    return *this_cache;
 
   cache = FRAME_OBSTACK_ZALLOC (struct iq2000_frame_cache);
   iq2000_init_frame_cache (cache);
   *this_cache = cache;
 
   cache->base = get_frame_register_unsigned (this_frame, E_FP_REGNUM);
+  //if (cache->base == 0)
+    //return cache;
 
   current_pc = get_frame_pc (this_frame);
   find_pc_partial_function (current_pc, NULL, &cache->pc, NULL);
@@ -435,6 +443,25 @@ static const struct frame_unwind iq2000_frame_unwind = {
 };
 
 static CORE_ADDR
+iq2000_unwind_sp (struct gdbarch *gdbarch, struct frame_info *next_frame)
+{
+  return frame_unwind_register_unsigned (next_frame, E_SP_REGNUM);
+}   
+
+static CORE_ADDR
+iq2000_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
+{
+  return frame_unwind_register_unsigned (next_frame, E_PC_REGNUM);
+}
+
+static struct frame_id
+iq2000_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
+{
+  CORE_ADDR sp = get_frame_register_unsigned (this_frame, E_SP_REGNUM);
+  return frame_id_build (sp, get_frame_pc (this_frame));
+}
+
+static CORE_ADDR
 iq2000_frame_base_address (struct frame_info *this_frame, void **this_cache)
 {
   struct iq2000_frame_cache *cache = iq2000_frame_cache (this_frame,
@@ -450,23 +477,18 @@ static const struct frame_base iq2000_frame_base = {
   iq2000_frame_base_address
 };
 
-static int
-iq2000_breakpoint_kind_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr)
+static const unsigned char *
+iq2000_breakpoint_from_pc (struct gdbarch *gdbarch, CORE_ADDR *pcptr,
+			   int *lenptr)
 {
+  static const unsigned char big_breakpoint[] = { 0x00, 0x00, 0x00, 0x0d };
+  static const unsigned char little_breakpoint[] = { 0x0d, 0x00, 0x00, 0x00 };
+
   if ((*pcptr & 3) != 0)
     error (_("breakpoint_from_pc: invalid breakpoint address 0x%lx"),
 	   (long) *pcptr);
 
-  return 4;
-}
-
-static const gdb_byte *
-iq2000_sw_breakpoint_from_kind (struct gdbarch *gdbarch, int kind, int *size)
-{
-  static const unsigned char big_breakpoint[] = { 0x00, 0x00, 0x00, 0x0d };
-  static const unsigned char little_breakpoint[] = { 0x0d, 0x00, 0x00, 0x00 };
-  *size = kind;
-
+  *lenptr = 4;
   return (gdbarch_byte_order (gdbarch)
 	  == BFD_ENDIAN_BIG) ? big_breakpoint : little_breakpoint;
 }
@@ -491,7 +513,7 @@ iq2000_store_return_value (struct type *type, struct regcache *regcache,
 
       memset (buf, 0, 4);
       memcpy (buf + 4 - size, valbuf, size);
-      regcache->raw_write (regno++, buf);
+      regcache_raw_write (regcache, regno++, buf);
       len -= size;
       valbuf = ((char *) valbuf) + size;
     }
@@ -504,8 +526,8 @@ iq2000_store_return_value (struct type *type, struct regcache *regcache,
 static int
 iq2000_use_struct_convention (struct type *type)
 {
-  return ((type->code () == TYPE_CODE_STRUCT)
-	  || (type->code () == TYPE_CODE_UNION))
+  return ((TYPE_CODE (type) == TYPE_CODE_STRUCT)
+	  || (TYPE_CODE (type) == TYPE_CODE_UNION))
 	 && TYPE_LENGTH (type) > 8;
 }
 
@@ -518,9 +540,9 @@ iq2000_use_struct_convention (struct type *type)
 
 static void
 iq2000_extract_return_value (struct type *type, struct regcache *regcache,
-			     gdb_byte *valbuf)
+			     void *valbuf)
 {
-  struct gdbarch *gdbarch = regcache->arch ();
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
 
   /* If the function's return value is 8 bytes or less, it is
@@ -545,7 +567,7 @@ iq2000_extract_return_value (struct type *type, struct regcache *regcache,
 	  regcache_cooked_read_unsigned (regcache, regno++, &tmp);
 	  store_unsigned_integer (valbuf, size, byte_order, tmp);
 	  len -= size;
-	  valbuf += size;
+	  valbuf = ((char *) valbuf) + size;
 	}
     }
   else
@@ -597,26 +619,26 @@ iq2000_pass_8bytetype_by_address (struct type *type)
   struct type *ftype;
 
   /* Skip typedefs.  */
-  while (type->code () == TYPE_CODE_TYPEDEF)
+  while (TYPE_CODE (type) == TYPE_CODE_TYPEDEF)
     type = TYPE_TARGET_TYPE (type);
   /* Non-struct and non-union types are always passed by value.  */
-  if (type->code () != TYPE_CODE_STRUCT
-      && type->code () != TYPE_CODE_UNION)
+  if (TYPE_CODE (type) != TYPE_CODE_STRUCT
+      && TYPE_CODE (type) != TYPE_CODE_UNION)
     return 0;
   /* Structs with more than 1 field are always passed by address.  */
-  if (type->num_fields () != 1)
+  if (TYPE_NFIELDS (type) != 1)
     return 1;
   /* Get field type.  */
-  ftype = type->field (0).type ();
+  ftype = (TYPE_FIELDS (type))[0].type;
   /* The field type must have size 8, otherwise pass by address.  */
   if (TYPE_LENGTH (ftype) != 8)
     return 1;
   /* Skip typedefs of field type.  */
-  while (ftype->code () == TYPE_CODE_TYPEDEF)
+  while (TYPE_CODE (ftype) == TYPE_CODE_TYPEDEF)
     ftype = TYPE_TARGET_TYPE (ftype);
   /* If field is int or float, pass by value.  */
-  if (ftype->code () == TYPE_CODE_FLT
-      || ftype->code () == TYPE_CODE_INT)
+  if (TYPE_CODE (ftype) == TYPE_CODE_FLT
+      || TYPE_CODE (ftype) == TYPE_CODE_INT)
     return 0;
   /* Everything else, pass by address.  */
   return 1;
@@ -626,8 +648,7 @@ static CORE_ADDR
 iq2000_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 		        struct regcache *regcache, CORE_ADDR bp_addr,
 		        int nargs, struct value **args, CORE_ADDR sp,
-			function_call_return_method return_method,
-			CORE_ADDR struct_addr)
+		        int struct_return, CORE_ADDR struct_addr)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   const bfd_byte *val;
@@ -639,9 +660,7 @@ iq2000_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   CORE_ADDR struct_ptr;
 
   /* First determine how much stack space we will need.  */
-  for (i = 0, argreg = E_1ST_ARGREG + (return_method == return_method_struct);
-       i < nargs;
-       i++)
+  for (i = 0, argreg = E_1ST_ARGREG + (struct_return != 0); i < nargs; i++)
     {
       type = value_type (args[i]);
       typelen = TYPE_LENGTH (type);
@@ -700,7 +719,7 @@ iq2000_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   stackspace = 0;
 
   argreg = E_1ST_ARGREG;
-  if (return_method == return_method_struct)
+  if (struct_return)
     {
       /* A function that returns a struct will consume one argreg to do so.
        */
@@ -721,7 +740,7 @@ iq2000_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
           if (argreg <= E_LAST_ARGREG)
             {
               /* Passed in a register.  */
-	      regcache->raw_write (argreg++, buf);
+	      regcache_raw_write (regcache, argreg++, buf);
             }
           else
             {
@@ -740,8 +759,8 @@ iq2000_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
                  (must start with an even-numbered reg).  */
               if (((argreg - E_1ST_ARGREG) % 2) != 0)
                 argreg++;
-	      regcache->raw_write (argreg++, val);
-	      regcache->raw_write (argreg++, val + 4);
+	      regcache_raw_write (regcache, argreg++, val);
+	      regcache_raw_write (regcache, argreg++, val + 4);
             }
           else
             {
@@ -815,15 +834,16 @@ iq2000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_double_format        (gdbarch, floatformats_ieee_double);
   set_gdbarch_long_double_format   (gdbarch, floatformats_ieee_double);
   set_gdbarch_return_value	   (gdbarch, iq2000_return_value);
-  set_gdbarch_breakpoint_kind_from_pc (gdbarch,
-				       iq2000_breakpoint_kind_from_pc);
-  set_gdbarch_sw_breakpoint_from_kind (gdbarch,
-				       iq2000_sw_breakpoint_from_kind);
+  set_gdbarch_breakpoint_from_pc   (gdbarch, iq2000_breakpoint_from_pc);
   set_gdbarch_frame_args_skip      (gdbarch, 0);
   set_gdbarch_skip_prologue        (gdbarch, iq2000_skip_prologue);
   set_gdbarch_inner_than           (gdbarch, core_addr_lessthan);
+  set_gdbarch_print_insn           (gdbarch, print_insn_iq2000);
   set_gdbarch_register_type (gdbarch, iq2000_register_type);
   set_gdbarch_frame_align (gdbarch, iq2000_frame_align);
+  set_gdbarch_unwind_sp (gdbarch, iq2000_unwind_sp);
+  set_gdbarch_unwind_pc (gdbarch, iq2000_unwind_pc);
+  set_gdbarch_dummy_id (gdbarch, iq2000_dummy_id);
   frame_base_set_default (gdbarch, &iq2000_frame_base);
   set_gdbarch_push_dummy_call (gdbarch, iq2000_push_dummy_call);
 
@@ -839,9 +859,11 @@ iq2000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
    Initializer function for the iq2000 module.
    Called by gdb at start-up.  */
 
-void _initialize_iq2000_tdep ();
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+extern initialize_file_ftype _initialize_iq2000_tdep;
+
 void
-_initialize_iq2000_tdep ()
+_initialize_iq2000_tdep (void)
 {
   register_gdbarch_init (bfd_arch_iq2000, iq2000_gdbarch_init);
 }

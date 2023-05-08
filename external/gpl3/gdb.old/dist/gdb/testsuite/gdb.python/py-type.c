@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2009-2020 Free Software Foundation, Inc.
+   Copyright 2009-2014 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -30,31 +30,11 @@ struct SS
 typedef struct s TS;
 TS ts;
 
-int aligncheck;
-
 #ifdef __cplusplus
 struct C
 {
   int c;
   int d;
-
-  int
-  a_method (int x, char y)
-    {
-      return x + y;
-    }
-
-  int
-  a_const_method (int x, char y) const
-    {
-      return x + y;
-    }
-
-  static int
-  a_static_method (int x, char y)
-    {
-      return x + y;
-    }
 };
 
 struct D : C
@@ -79,12 +59,6 @@ enum E
 struct s vec_data_1 = {1, 1};
 struct s vec_data_2 = {1, 2};
 
-static int
-a_function (int x, char y)
-{
-  return x + y;
-}
-
 int
 main ()
 {
@@ -98,21 +72,15 @@ main ()
   D d;
   d.e = 3;
   d.f = 4;
-
-  c.a_method (0, 1);
-  c.a_const_method (0, 1);
-  C::a_static_method (0, 1);
 #endif
   enum E e;
-
+  
   st.a = 3;
   st.b = 5;
 
   e = v2;
 
   ss.x = 100;
-
-  a_function (0, 1);
-
+  
   return 0;      /* break to inspect struct and array.  */
 }

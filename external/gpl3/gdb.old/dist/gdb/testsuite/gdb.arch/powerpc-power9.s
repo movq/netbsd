@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2014-2020 Free Software Foundation, Inc.
+   Copyright 2014-2017 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -321,7 +321,7 @@ func:
 	.long  0xf1319d6f    /* xscvdphp vs41,vs51         */
 	.long  0xf158a76f    /* xvcvhpsp vs42,vs52         */
 	.long  0xf179af6f    /* xvcvsphp vs43,vs53         */
-	.long  0x4c600004    /* lnia r3                    */
+	.long  0x4c600004    /* addpcis r3,0               */
 	.long  0x4c600004    /* addpcis r3,0               */
 	.long  0x4c800005    /* addpcis r4,1               */
 	.long  0x4c800005    /* addpcis r4,1               */
@@ -366,6 +366,8 @@ func:
 	.long  0x7eede58c    /* stwat   r23,r13,28         */
 	.long  0x4c000264    /* urfid                      */
 	.long  0x7c00f6e4    /* rmieg   r30                */
+	.long  0x7d407a6a    /* ldmx    r10,0,r15          */
+	.long  0x7d437a6a    /* ldmx    r10,r3,r15         */
 	.long  0x4c0002e4    /* stop                       */
 	.long  0x7c00003c    /* wait                       */
 	.long  0x7c00003c    /* wait                       */

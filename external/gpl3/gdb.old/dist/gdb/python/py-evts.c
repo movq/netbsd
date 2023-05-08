@@ -1,6 +1,6 @@
 /* Python interface to inferior events.
 
-   Copyright (C) 2009-2020 Free Software Foundation, Inc.
+   Copyright (C) 2009-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -38,8 +38,10 @@ static struct PyModuleDef EventModuleDef =
 /* Initialize python events.  */
 
 static int CPYCHECKER_NEGATIVE_RESULT_SETS_EXCEPTION
-add_new_registry (eventregistry_object **registryp, const char *name)
+add_new_registry (eventregistry_object **registryp, char *name)
 {
+  int result;
+
   *registryp = create_eventregistry_object ();
 
   if (*registryp == NULL)
@@ -62,11 +64,17 @@ gdbpy_initialize_py_events (void)
   if (!gdb_py_events.module)
     return -1;
 
-#define GDB_PY_DEFINE_EVENT(name)				\
-  if (add_new_registry (&gdb_py_events.name, #name) < 0)	\
+  if (add_new_registry (&gdb_py_events.stop, "stop") < 0)
     return -1;
-#include "py-all-events.def"
-#undef GDB_PY_DEFINE_EVENT
+
+  if (add_new_registry (&gdb_py_events.cont, "cont") < 0)
+    return -1;
+
+  if (add_new_registry (&gdb_py_events.exited, "exited") < 0)
+    return -1;
+
+  if (add_new_registry (&gdb_py_events.new_objfile, "new_objfile") < 0)
+    return -1;
 
   if (gdb_pymodule_addobject (gdb_module,
 			      "events",

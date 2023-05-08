@@ -1,4 +1,4 @@
-/* Copyright 1999-2020 Free Software Foundation, Inc.
+/* Copyright 1999-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -182,20 +182,6 @@ nothing ()
 {
 }
 
-struct _struct_decl
-nothing1 (int a, char *b, long c)
-{
-  struct _struct_decl foo;
-
-  return foo;
-}
-
-struct _struct_decl *
-nothing2 (int a, char *b, long c)
-{
-  return (struct _struct_decl *) 0;
-}
-
 void
 subroutine1 (int i, long *l)
 {
@@ -267,8 +253,6 @@ do_children_tests (void)
   struct_declarations.long_array[9] = 1234;
 
   weird->func_ptr = nothing;
-  weird->func_ptr_struct = nothing1;
-  weird->func_ptr_ptr = nothing2;
 
   /* Struct/pointer/array tests */
   a0[0] = '0';
@@ -366,25 +350,23 @@ void do_frozen_tests ()
 
   int v2 = 4;
   /*: 
-    with_test_prefix "create varobj V1 and V2" {
-	mi_create_varobj V1 v1 "create varobj for v1"
-	mi_create_varobj V2 v2 "create varobj for v2"
+    mi_create_varobj V1 v1 "create varobj for v1" 
+    mi_create_varobj V2 v2 "create varobj for v2"
 
-	mi_list_varobj_children "V1" {
-	    {"V1.i" "i" "0" "int"}
-	    {"V1.nested" "nested" "2" "struct {...}"}
-	} "list children of v1"
+    mi_list_varobj_children "V1" {
+        {"V1.i" "i" "0" "int"}
+	{"V1.nested" "nested" "2" "struct {...}"}
+    } "list children of v1"
 
-	mi_list_varobj_children "V1.nested" {
-	    {"V1.nested.j" "j" "0" "int"}
-	    {"V1.nested.k" "k" "0" "int"}
-	} "list children of v1.nested"
+    mi_list_varobj_children "V1.nested" {
+        {"V1.nested.j" "j" "0" "int"}
+        {"V1.nested.k" "k" "0" "int"}
+    } "list children of v1.nested"
 
-	mi_check_varobj_value V1.i 1 "check V1.i: 1"
-	mi_check_varobj_value V1.nested.j 2 "check V1.nested.j: 2"
-	mi_check_varobj_value V1.nested.k 3 "check V1.nested.k: 3"
-	mi_check_varobj_value V2 4 "check V2: 4"
-    }
+    mi_check_varobj_value V1.i 1 "check V1.i: 1"
+    mi_check_varobj_value V1.nested.j 2 "check V1.nested.j: 2"
+    mi_check_varobj_value V1.nested.k 3 "check V1.nested.k: 3"
+    mi_check_varobj_value V2 4 "check V2: 4"
   :*/
   v2 = 5;
   /*: 
@@ -402,50 +384,40 @@ void do_frozen_tests ()
   v1.nested.j = 8;
   v1.nested.k = 9;
   /*:
-    with_test_prefix "frozen V1" {
-	set_frozen V1 1
-	mi_varobj_update * {} "update varobjs: nothing changed"
-	mi_check_varobj_value V1.i 1 "check V1.i: 1"
-	mi_check_varobj_value V1.nested.j 2 "check V1.nested.j: 2"
-	mi_check_varobj_value V1.nested.k 3 "check V1.nested.k: 3"
-    }
+    set_frozen V1 1
+    mi_varobj_update * {} "update varobjs: nothing changed"
+    mi_check_varobj_value V1.i 1 "check V1.i: 1"
+    mi_check_varobj_value V1.nested.j 2 "check V1.nested.j: 2"
+    mi_check_varobj_value V1.nested.k 3 "check V1.nested.k: 3"    
     # Check that explicit update for elements of structures
     # works.
-    with_test_prefix "update v1.j" {
-	# Update v1.j
-	mi_varobj_update V1.nested.j {V1.nested.j} "update V1.nested.j"
-	mi_check_varobj_value V1.i 1 "check V1.i: 1"
-	mi_check_varobj_value V1.nested.j 8 "check V1.nested.j: 8"
-	mi_check_varobj_value V1.nested.k 3 "check V1.nested.k: 3"
-    }
-    with_test_prefix "update v1.nested" {
-	# Update v1.nested, check that children is updated.
-	mi_varobj_update V1.nested {V1.nested.k} "update V1.nested"
-	mi_check_varobj_value V1.i 1 "check V1.i: 1"
-	mi_check_varobj_value V1.nested.j 8 "check V1.nested.j: 8"
-	mi_check_varobj_value V1.nested.k 9 "check V1.nested.k: 9"
-    }
-    with_test_prefix "update v1.i" {
-	# Update v1.i
-	mi_varobj_update V1.i {V1.i} "update V1.i"
-	mi_check_varobj_value V1.i 7 "check V1.i: 7"
-    }
+    # Update v1.j
+    mi_varobj_update V1.nested.j {V1.nested.j} "update V1.nested.j"
+    mi_check_varobj_value V1.i 1 "check V1.i: 1"
+    mi_check_varobj_value V1.nested.j 8 "check V1.nested.j: 8"
+    mi_check_varobj_value V1.nested.k 3 "check V1.nested.k: 3"    
+    # Update v1.nested, check that children is updated.
+    mi_varobj_update V1.nested {V1.nested.k} "update V1.nested"
+    mi_check_varobj_value V1.i 1 "check V1.i: 1"
+    mi_check_varobj_value V1.nested.j 8 "check V1.nested.j: 8"
+    mi_check_varobj_value V1.nested.k 9 "check V1.nested.k: 9"    
+    # Update v1.i
+    mi_varobj_update V1.i {V1.i} "update V1.i"
+    mi_check_varobj_value V1.i 7 "check V1.i: 7"
   :*/
   v1.i = 10;
   v1.nested.j = 11;
   v1.nested.k = 12;
   /*:
     # Check that unfreeze itself does not updates the values.
-    with_test_prefix "unfrozen V1" {
-	set_frozen V1 0
-	mi_check_varobj_value V1.i 7 "check V1.i: 7"
-	mi_check_varobj_value V1.nested.j 8 "check V1.nested.j: 8"
-	mi_check_varobj_value V1.nested.k 9 "check V1.nested.k: 9"
-	mi_varobj_update V1 {V1.i V1.nested.j V1.nested.k} "update V1"
-	mi_check_varobj_value V1.i 10 "check V1.i: 10"
-	mi_check_varobj_value V1.nested.j 11 "check V1.nested.j: 11"
-	mi_check_varobj_value V1.nested.k 12 "check V1.nested.k: 12"
-    }
+    set_frozen V1 0
+    mi_check_varobj_value V1.i 7 "check V1.i: 7"
+    mi_check_varobj_value V1.nested.j 8 "check V1.nested.j: 8"
+    mi_check_varobj_value V1.nested.k 9 "check V1.nested.k: 9"    
+    mi_varobj_update V1 {V1.i V1.nested.j V1.nested.k} "update V1"
+    mi_check_varobj_value V1.i 10 "check V1.i: 10"
+    mi_check_varobj_value V1.nested.j 11 "check V1.nested.j: 11"
+    mi_check_varobj_value V1.nested.k 12 "check V1.nested.k: 12"    
   :*/    
   
   /*: END: frozen :*/
@@ -580,73 +552,6 @@ do_anonymous_type_tests (void)
   return; /* anonymous type tests breakpoint */
 }
 
-void
-do_nested_struct_union_tests (void)
-{
-  struct s_a
-  {
-    int a;
-  };
-  struct s_b
-  {
-    int b;
-  };
-  union u_ab
-  {
-    struct s_a a;
-    struct s_b b;
-  };
-  struct ss
-  {
-    struct s_a a1;
-    struct s_b b1;
-    union u_ab u1;
-
-    /* Anonymous union.  */
-    union
-    {
-      struct s_a a2;
-      struct s_b b2;
-    };
-
-    union
-    {
-      struct s_a a3;
-      struct s_b b3;
-    } u2;
-  };
-
-  typedef struct
-  {
-    int a;
-  } td_s_a;
-
-  typedef struct
-  {
-    int b;
-  } td_s_b;
-
-  typedef union
-  {
-    td_s_a a;
-    td_s_b b;
-  } td_u_ab;
-
-  struct ss var;
-  struct
-  {
-    td_u_ab ab;
-  } var2;
-
-  struct ss *ss_ptr;
-
-  memset (&var, 0, sizeof (var));
-  memset (&var2, 0, sizeof (var2));
-  ss_ptr = &var;
-
-  return; /* nested struct union tests breakpoint */
-}
-
 int
 main (int argc, char *argv [])
 {
@@ -658,7 +563,6 @@ main (int argc, char *argv [])
   do_at_tests ();
   do_bitfield_tests ();
   do_anonymous_type_tests ();
-  do_nested_struct_union_tests ();
   exit (0);
 }
 

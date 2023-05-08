@@ -1,5 +1,5 @@
 /* Native debugging support for Intel x86 running DJGPP.
-   Copyright (C) 1997-2020 Free Software Foundation, Inc.
+   Copyright (C) 1997-2014 Free Software Foundation, Inc.
    Written by Robert Hoehne.
 
    This file is part of GDB.
@@ -85,26 +85,28 @@
 
 #include <fcntl.h>
 
-#include "x86-nat.h"
+#include "i386-nat.h"
 #include "inferior.h"
-#include "infrun.h"
 #include "gdbthread.h"
-#include "gdbsupport/gdb_wait.h"
+#include "gdb_wait.h"
 #include "gdbcore.h"
 #include "command.h"
 #include "gdbcmd.h"
 #include "floatformat.h"
-#include "buildsym-legacy.h"
+#include "buildsym.h"
 #include "i387-tdep.h"
 #include "i386-tdep.h"
-#include "nat/x86-cpuid.h"
+#include "i386-cpuid.h"
 #include "value.h"
 #include "regcache.h"
+#include <string.h>
 #include "top.h"
 #include "cli/cli-utils.h"
-#include "inf-child.h"
 
+#include <stdio.h>		/* might be required for __DJGPP_MINOR__ */
+#include <stdlib.h>
 #include <ctype.h>
+#include <errno.h>
 #include <unistd.h>
 #include <sys/utsname.h>
 #include <io.h>
@@ -233,6 +235,10 @@ static int dr_ref_count[4];
 
 static int prog_has_started = 0;
 
+static void go32_mourn_inferior (struct target_ops *ops);
+
+static struct target_ops go32_ops;
+
 #define r_ofs(x) (offsetof(TSS,x))
 
 static struct
@@ -334,67 +340,36 @@ static struct {
   {GDB_SIGNAL_LAST, -1}
 };
 
-/* The go32 target.  */
-
-struct go32_nat_target final : public x86_nat_target<inf_child_target>
+static void
+go32_open (char *name, int from_tty)
 {
-  void attach (const char *, int) override;
+  printf_unfiltered ("Done.  Use the \"run\" command to run the program.\n");
+}
 
-  void resume (ptid_t, int, enum gdb_signal) override;
+static void
+go32_close (void)
+{
+}
 
-  ptid_t wait (ptid_t, struct target_waitstatus *, int) override;
-
-  void fetch_registers (struct regcache *, int) override;
-  void store_registers (struct regcache *, int) override;
-
-  enum target_xfer_status xfer_partial (enum target_object object,
-					const char *annex,
-					gdb_byte *readbuf,
-					const gdb_byte *writebuf,
-					ULONGEST offset, ULONGEST len,
-					ULONGEST *xfered_len) override;
-
-  void files_info () override;
-
-  void terminal_init () override;
-
-  void terminal_inferior () override;
-
-  void terminal_ours_for_output () override;
-
-  void terminal_ours () override;
-
-  void terminal_info (const char *, int) override;
-
-  void pass_ctrlc () override;
-
-  void kill () override;
-
-  void create_inferior (const char *, const std::string &,
-			char **, int) override;
-
-  void mourn_inferior () override;
-
-  bool thread_alive (ptid_t ptid) override;
-
-  std::string pid_to_str (ptid_t) override;
-};
-
-static go32_nat_target the_go32_nat_target;
-
-void
-go32_nat_target::attach (const char *args, int from_tty)
+static void
+go32_attach (struct target_ops *ops, char *args, int from_tty)
 {
   error (_("\
 You cannot attach to a running program on this platform.\n\
 Use the `run' command to run DJGPP programs."));
 }
 
+static void
+go32_detach (struct target_ops *ops, const char *args, int from_tty)
+{
+}
+
 static int resume_is_step;
 static int resume_signal = -1;
 
-void
-go32_nat_target::resume (ptid_t ptid, int step, enum gdb_signal siggnal)
+static void
+go32_resume (struct target_ops *ops,
+	     ptid_t ptid, int step, enum gdb_signal siggnal)
 {
   int i;
 
@@ -417,9 +392,9 @@ go32_nat_target::resume (ptid_t ptid, int step, enum gdb_signal siggnal)
 
 static char child_cwd[FILENAME_MAX];
 
-ptid_t
-go32_nat_target::wait (ptid_t ptid, struct target_waitstatus *status,
-		       int options)
+static ptid_t
+go32_wait (struct target_ops *ops,
+	   ptid_t ptid, struct target_waitstatus *status, int options)
 {
   int i;
   unsigned char saved_opcode;
@@ -507,8 +482,7 @@ go32_nat_target::wait (ptid_t ptid, struct target_waitstatus *status,
     }
 
   getcwd (child_cwd, sizeof (child_cwd)); /* in case it has changed */
-  if (current_directory != NULL)
-    chdir (current_directory);
+  chdir (current_directory);
 
   if (a_tss.tss_irqn == 0x21)
     {
@@ -534,16 +508,16 @@ go32_nat_target::wait (ptid_t ptid, struct target_waitstatus *status,
 	    }
 	}
     }
-  return ptid_t (SOME_PID);
+  return pid_to_ptid (SOME_PID);
 }
 
 static void
 fetch_register (struct regcache *regcache, int regno)
 {
-  struct gdbarch *gdbarch = regcache->arch ();
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   if (regno < gdbarch_fp0_regnum (gdbarch))
-    regcache->raw_supply (regno,
-			  (char *) &a_tss + regno_mapping[regno].tss_ofs);
+    regcache_raw_supply (regcache, regno,
+			 (char *) &a_tss + regno_mapping[regno].tss_ofs);
   else if (i386_fp_regnum_p (gdbarch, regno) || i386_fpc_regnum_p (gdbarch,
 								   regno))
     i387_supply_fsave (regcache, regno, &npx);
@@ -552,15 +526,16 @@ fetch_register (struct regcache *regcache, int regno)
 		    _("Invalid register no. %d in fetch_register."), regno);
 }
 
-void
-go32_nat_target::fetch_registers (struct regcache *regcache, int regno)
+static void
+go32_fetch_registers (struct target_ops *ops,
+		      struct regcache *regcache, int regno)
 {
   if (regno >= 0)
     fetch_register (regcache, regno);
   else
     {
       for (regno = 0;
-	   regno < gdbarch_fp0_regnum (regcache->arch ());
+	   regno < gdbarch_fp0_regnum (get_regcache_arch (regcache));
 	   regno++)
 	fetch_register (regcache, regno);
       i387_supply_fsave (regcache, -1, &npx);
@@ -570,10 +545,10 @@ go32_nat_target::fetch_registers (struct regcache *regcache, int regno)
 static void
 store_register (const struct regcache *regcache, int regno)
 {
-  struct gdbarch *gdbarch = regcache->arch ();
+  struct gdbarch *gdbarch = get_regcache_arch (regcache);
   if (regno < gdbarch_fp0_regnum (gdbarch))
-    regcache->raw_collect (regno,
-			   (char *) &a_tss + regno_mapping[regno].tss_ofs);
+    regcache_raw_collect (regcache, regno,
+			  (char *) &a_tss + regno_mapping[regno].tss_ofs);
   else if (i386_fp_regnum_p (gdbarch, regno) || i386_fpc_regnum_p (gdbarch,
 								   regno))
     i387_collect_fsave (regcache, regno, &npx);
@@ -582,8 +557,9 @@ store_register (const struct regcache *regcache, int regno)
 		    _("Invalid register no. %d in store_register."), regno);
 }
 
-void
-go32_nat_target::store_registers (struct regcache *regcache, int regno)
+static void
+go32_store_registers (struct target_ops *ops,
+		      struct regcache *regcache, int regno)
 {
   unsigned r;
 
@@ -591,95 +567,62 @@ go32_nat_target::store_registers (struct regcache *regcache, int regno)
     store_register (regcache, regno);
   else
     {
-      for (r = 0; r < gdbarch_fp0_regnum (regcache->arch ()); r++)
+      for (r = 0; r < gdbarch_fp0_regnum (get_regcache_arch (regcache)); r++)
 	store_register (regcache, r);
       i387_collect_fsave (regcache, -1, &npx);
     }
 }
 
-/* Const-correct version of DJGPP's write_child, which unfortunately
-   takes a non-const buffer pointer.  */
+static void
+go32_prepare_to_store (struct regcache *regcache)
+{
+}
 
 static int
-my_write_child (unsigned child_addr, const void *buf, unsigned len)
+go32_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len, int write,
+		  struct mem_attrib *attrib, struct target_ops *target)
 {
-  static void *buffer = NULL;
-  static unsigned buffer_len = 0;
-  int res;
-
-  if (buffer_len < len)
+  if (write)
     {
-      buffer = xrealloc (buffer, len);
-      buffer_len = len;
+      if (write_child (memaddr, myaddr, len))
+	{
+	  return 0;
+	}
+      else
+	{
+	  return len;
+	}
     }
-
-  memcpy (buffer, buf, len);
-  res = write_child (child_addr, buffer, len);
-  return res;
-}
-
-/* Helper for go32_xfer_partial that handles memory transfers.
-   Arguments are like target_xfer_partial.  */
-
-static enum target_xfer_status
-go32_xfer_memory (gdb_byte *readbuf, const gdb_byte *writebuf,
-		  ULONGEST memaddr, ULONGEST len, ULONGEST *xfered_len)
-{
-  int res;
-
-  if (writebuf != NULL)
-    res = my_write_child (memaddr, writebuf, len);
   else
-    res = read_child (memaddr, readbuf, len);
-
-  /* read_child and write_child return zero on success, non-zero on
-     failure.  */
-  if (res != 0)
-    return TARGET_XFER_E_IO;
-
-  *xfered_len = len;
-  return TARGET_XFER_OK;
-}
-
-/* Target to_xfer_partial implementation.  */
-
-enum target_xfer_status
-go32_nat_target::xfer_partial (enum target_object object,
-			       const char *annex, gdb_byte *readbuf,
-			       const gdb_byte *writebuf, ULONGEST offset,
-			       ULONGEST len,
-			       ULONGEST *xfered_len)
-{
-  switch (object)
     {
-    case TARGET_OBJECT_MEMORY:
-      return go32_xfer_memory (readbuf, writebuf, offset, len, xfered_len);
-
-    default:
-      return this->beneath ()->xfer_partial (object, annex,
-					     readbuf, writebuf, offset, len,
-					     xfered_len);
+      if (read_child (memaddr, myaddr, len))
+	{
+	  return 0;
+	}
+      else
+	{
+	  return len;
+	}
     }
 }
 
 static cmdline_t child_cmd;	/* Parsed child's command line kept here.  */
 
-void
-go32_nat_target::files_info ()
+static void
+go32_files_info (struct target_ops *target)
 {
   printf_unfiltered ("You are running a DJGPP V2 program.\n");
 }
 
-void
-go32_nat_target::kill_inferior ()
+static void
+go32_kill_inferior (struct target_ops *ops)
 {
-  mourn_inferior ();
+  go32_mourn_inferior (ops);
 }
 
-void
-go32_nat_target::create_inferior (const char *exec_file,
-				  const std::string &allargs,
-				  char **env, int from_tty)
+static void
+go32_create_inferior (struct target_ops *ops, char *exec_file,
+		      char *args, char **env, int from_tty)
 {
   extern char **environ;
   jmp_buf start_state;
@@ -687,8 +630,6 @@ go32_nat_target::create_inferior (const char *exec_file,
   char **env_save = environ;
   size_t cmdlen;
   struct inferior *inf;
-  int result;
-  const char *args = allargs.c_str ();
 
   /* If no exec file handed to us, get it from the exec-file command -- with
      a good, common error message if none is specified.  */
@@ -725,7 +666,7 @@ go32_nat_target::create_inferior (const char *exec_file,
   if (cmdlen > 1024*1024)
     error (_("Command line too long."));
 
-  cmdline = (char *) xmalloc (cmdlen + 4);
+  cmdline = xmalloc (cmdlen + 4);
   strcpy (cmdline + 1, args);
   /* If the command-line length fits into DOS 126-char limits, use the
      DOS command tail format; otherwise, tell v2loadimage to pass it
@@ -740,36 +681,38 @@ go32_nat_target::create_inferior (const char *exec_file,
 
   environ = env;
 
-  result = v2loadimage (exec_file, cmdline, start_state);
-
+  if (v2loadimage (exec_file, cmdline, start_state))
+    {
+      environ = env_save;
+      printf_unfiltered ("Load failed for image %s\n", exec_file);
+      exit (1);
+    }
   environ = env_save;
   xfree (cmdline);
-
-  if (result != 0)
-    error (_("Load failed for image %s"), exec_file);
 
   edi_init (start_state);
 #if __DJGPP_MINOR__ < 3
   save_npx ();
 #endif
 
+  inferior_ptid = pid_to_ptid (SOME_PID);
   inf = current_inferior ();
   inferior_appeared (inf, SOME_PID);
 
-  if (!target_is_pushed (this))
-    push_target (this);
+  push_target (&go32_ops);
 
-  thread_info *thr = add_thread_silent (ptid_t (SOME_PID));
-  switch_to_thread (thr);
+  add_thread_silent (inferior_ptid);
 
-  clear_proceed_status (0);
+  clear_proceed_status ();
   insert_breakpoints ();
   prog_has_started = 1;
 }
 
-void
-go32_nat_target::mourn_inferior ()
+static void
+go32_mourn_inferior (struct target_ops *ops)
 {
+  ptid_t ptid;
+
   redir_cmdline_delete (&child_cmd);
   resume_signal = -1;
   resume_is_step = 0;
@@ -783,12 +726,21 @@ go32_nat_target::mourn_inferior ()
      be nice if GDB itself would take care to remove all breakpoints
      at all times, but it doesn't, probably under an assumption that
      the OS cleans up when the debuggee exits.  */
-  x86_cleanup_dregs ();
+  i386_cleanup_dregs ();
 
+  ptid = inferior_ptid;
+  inferior_ptid = null_ptid;
+  delete_thread_silent (ptid);
   prog_has_started = 0;
 
+  unpush_target (ops);
   generic_mourn_inferior ();
-  maybe_unpush_target ();
+}
+
+static int
+go32_can_run (void)
+{
+  return 1;
 }
 
 /* Hardware watchpoint support.  */
@@ -893,15 +845,15 @@ static int inf_terminal_mode;
    second call will always see GDB's own cooked terminal.  */
 static int terminal_is_ours = 1;
 
-void
-go32_nat_target::terminal_init ()
+static void
+go32_terminal_init (void)
 {
   inf_mode_valid = 0;	/* Reinitialize, in case they are restarting child.  */
   terminal_is_ours = 1;
 }
 
-void
-go32_nat_target::terminal_info (const char *args, int from_tty)
+static void
+go32_terminal_info (const char *args, int from_tty)
 {
   printf_unfiltered ("Inferior's terminal is in %s mode.\n",
 		     !inf_mode_valid
@@ -930,8 +882,8 @@ go32_nat_target::terminal_info (const char *args, int from_tty)
 #endif
 }
 
-void
-go32_nat_target::terminal_inferior ()
+static void
+go32_terminal_inferior (void)
 {
   /* Redirect standard handles as child wants them.  */
   errno = 0;
@@ -951,8 +903,8 @@ go32_nat_target::terminal_inferior ()
   }
 }
 
-void
-go32_nat_target::terminal_ours ()
+static void
+go32_terminal_ours (void)
 {
   /* Switch to cooked mode on the gdb terminal and save the inferior
      terminal mode to be restored when it is resumed.  */
@@ -978,21 +930,80 @@ go32_nat_target::terminal_ours ()
   }
 }
 
-void
-go32_nat_target::pass_ctrlc ()
+static int
+go32_thread_alive (struct target_ops *ops, ptid_t ptid)
 {
+  return !ptid_equal (inferior_ptid, null_ptid);
 }
 
-bool
-go32_nat_target::thread_alive (ptid_t ptid)
-{
-  return ptid != null_ptid;
-}
-
-std::string
-go32_nat_target::pid_to_str (ptid_t ptid)
+static char *
+go32_pid_to_str (struct target_ops *ops, ptid_t ptid)
 {
   return normal_pid_to_str (ptid);
+}
+
+static void
+init_go32_ops (void)
+{
+  go32_ops.to_shortname = "djgpp";
+  go32_ops.to_longname = "djgpp target process";
+  go32_ops.to_doc =
+    "Program loaded by djgpp, when gdb is used as an external debugger";
+  go32_ops.to_open = go32_open;
+  go32_ops.to_close = go32_close;
+  go32_ops.to_attach = go32_attach;
+  go32_ops.to_detach = go32_detach;
+  go32_ops.to_resume = go32_resume;
+  go32_ops.to_wait = go32_wait;
+  go32_ops.to_fetch_registers = go32_fetch_registers;
+  go32_ops.to_store_registers = go32_store_registers;
+  go32_ops.to_prepare_to_store = go32_prepare_to_store;
+  go32_ops.deprecated_xfer_memory = go32_xfer_memory;
+  go32_ops.to_files_info = go32_files_info;
+  go32_ops.to_insert_breakpoint = memory_insert_breakpoint;
+  go32_ops.to_remove_breakpoint = memory_remove_breakpoint;
+  go32_ops.to_terminal_init = go32_terminal_init;
+  go32_ops.to_terminal_inferior = go32_terminal_inferior;
+  go32_ops.to_terminal_ours_for_output = go32_terminal_ours;
+  go32_ops.to_terminal_ours = go32_terminal_ours;
+  go32_ops.to_terminal_info = go32_terminal_info;
+  go32_ops.to_kill = go32_kill_inferior;
+  go32_ops.to_create_inferior = go32_create_inferior;
+  go32_ops.to_mourn_inferior = go32_mourn_inferior;
+  go32_ops.to_can_run = go32_can_run;
+  go32_ops.to_thread_alive = go32_thread_alive;
+  go32_ops.to_pid_to_str = go32_pid_to_str;
+  go32_ops.to_stratum = process_stratum;
+  go32_ops.to_has_all_memory = default_child_has_all_memory;
+  go32_ops.to_has_memory = default_child_has_memory;
+  go32_ops.to_has_stack = default_child_has_stack;
+  go32_ops.to_has_registers = default_child_has_registers;
+  go32_ops.to_has_execution = default_child_has_execution;
+
+  i386_use_watchpoints (&go32_ops);
+
+
+  i386_dr_low.set_control = go32_set_dr7;
+  i386_dr_low.set_addr = go32_set_dr;
+  i386_dr_low.get_status = go32_get_dr6;
+  i386_dr_low.get_control = go32_get_dr7;
+  i386_dr_low.get_addr = go32_get_dr;
+  i386_set_debug_register_length (4);
+
+  go32_ops.to_magic = OPS_MAGIC;
+
+  /* Initialize child's cwd as empty to be initialized when starting
+     the child.  */
+  *child_cwd = 0;
+
+  /* Initialize child's command line storage.  */
+  if (redir_debug_init (&child_cmd) == -1)
+    internal_error (__FILE__, __LINE__,
+		    _("Cannot allocate redirection storage: "
+		      "not enough memory.\n"));
+
+  /* We are always processing GCC-compiled programs.  */
+  processing_gcc_compilation = 2;
 }
 
 /* Return the current DOS codepage number.  */
@@ -1079,7 +1090,7 @@ print_mem (unsigned long datum, const char *header, int in_pages_p)
 
 /* Display assorted information about the underlying OS.  */
 static void
-go32_sysinfo (const char *arg, int from_tty)
+go32_sysinfo (char *arg, int from_tty)
 {
   static const char test_pattern[] =
     "deadbeafdeadbeafdeadbeafdeadbeafdeadbeaf"
@@ -1105,12 +1116,12 @@ go32_sysinfo (const char *arg, int from_tty)
     {
       /* CPUID with EAX = 0 returns the Vendor ID.  */
 #if 0
-      /* Ideally we would use x86_cpuid(), but it needs someone to run
+      /* Ideally we would use i386_cpuid(), but it needs someone to run
          native tests first to make sure things actually work.  They should.
          http://sourceware.org/ml/gdb-patches/2013-05/msg00164.html  */
       unsigned int eax, ebx, ecx, edx;
 
-      if (x86_cpuid (0, &eax, &ebx, &ecx, &edx))
+      if (i386_cpuid (0, &eax, &ebx, &ecx, &edx))
 	{
 	  cpuid_max = eax;
 	  memcpy (&vendor[0], &ebx, 4);
@@ -1146,7 +1157,7 @@ go32_sysinfo (const char *arg, int from_tty)
   /* CPUID with EAX = 1 returns processor signature and features.  */
   if (cpuid_max >= 1)
     {
-      static const char *brand_name[] = {
+      static char *brand_name[] = {
 	"",
 	" Celeron",
 	" III",
@@ -1159,12 +1170,11 @@ go32_sysinfo (const char *arg, int from_tty)
       unsigned brand_idx;
       int intel_p = strcmp (cpuid_vendor, "GenuineIntel") == 0;
       int amd_p = strcmp (cpuid_vendor, "AuthenticAMD") == 0;
-      int hygon_p = strcmp (cpuid_vendor, "HygonGenuine") == 0;
       unsigned cpu_family, cpu_model;
 
 #if 0
       /* See comment above about cpuid usage.  */
-      x86_cpuid (1, &cpuid_eax, &cpuid_ebx, NULL, &cpuid_edx);
+      i386_cpuid (1, &cpuid_eax, &cpuid_ebx, NULL, &cpuid_edx);
 #else
       __asm__ __volatile__ ("movl   $1, %%eax;"
 			    "cpuid;"
@@ -1259,12 +1269,12 @@ go32_sysinfo (const char *arg, int from_tty)
 	    }
 	}
       xsnprintf (cpu_string, sizeof (cpu_string), "%s%s Model %d Stepping %d",
-	         intel_p ? "Pentium" : (amd_p ? "AMD" : (hygon_p ? "Hygon" : "ix86")),
+	         intel_p ? "Pentium" : (amd_p ? "AMD" : "ix86"),
 	         cpu_brand, cpu_model, cpuid_eax & 0xf);
       printfi_filtered (31, "%s\n", cpu_string);
       if (((cpuid_edx & (6 | (0x0d << 23))) != 0)
 	  || ((cpuid_edx & 1) == 0)
-	  || ((amd_p || hygon_p) && (cpuid_edx & (3 << 30)) != 0))
+	  || (amd_p && (cpuid_edx & (3 << 30)) != 0))
 	{
 	  puts_filtered ("CPU Features...................");
 	  /* We only list features which might be useful in the DPMI
@@ -1283,7 +1293,7 @@ go32_sysinfo (const char *arg, int from_tty)
 	    puts_filtered ("SSE ");
 	  if ((cpuid_edx & (1 << 26)) != 0)
 	    puts_filtered ("SSE2 ");
-	  if (amd_p || hygon_p)
+	  if (amd_p)
 	    {
 	      if ((cpuid_edx & (1 << 31)) != 0)
 		puts_filtered ("3DNow! ");
@@ -1677,7 +1687,7 @@ display_descriptor (unsigned type, unsigned long base_addr, int idx, int force)
 }
 
 static void
-go32_sldt (const char *arg, int from_tty)
+go32_sldt (char *arg, int from_tty)
 {
   struct dtr_reg gdtr;
   unsigned short ldtr = 0;
@@ -1750,7 +1760,7 @@ go32_sldt (const char *arg, int from_tty)
 }
 
 static void
-go32_sgdt (const char *arg, int from_tty)
+go32_sgdt (char *arg, int from_tty)
 {
   struct dtr_reg gdtr;
   long gdt_entry = -1L;
@@ -1791,7 +1801,7 @@ go32_sgdt (const char *arg, int from_tty)
 }
 
 static void
-go32_sidt (const char *arg, int from_tty)
+go32_sidt (char *arg, int from_tty)
 {
   struct dtr_reg idtr;
   long idt_entry = -1L;
@@ -1874,13 +1884,13 @@ get_cr3 (void)
   cr3 = _farnspeekl (taskbase + 0x1c) & ~0xfff;
   if (cr3 > 0xfffff)
     {
-#if 0  /* Not fully supported yet.  */
+#if 0  /* Not fullly supported yet.  */
       /* The Page Directory is in UMBs.  In that case, CWSDPMI puts
 	 the first Page Table right below the Page Directory.  Thus,
 	 the first Page Table's entry for its own address and the Page
 	 Directory entry for that Page Table will hold the same
 	 physical address.  The loop below searches the entire UMB
-	 range of addresses for such an occurrence.  */
+	 range of addresses for such an occurence.  */
       unsigned long addr, pte_idx;
 
       for (addr = 0xb0000, pte_idx = 0xb0;
@@ -1963,7 +1973,7 @@ display_ptable_entry (unsigned long entry, int is_dir, int force, unsigned off)
 }
 
 static void
-go32_pde (const char *arg, int from_tty)
+go32_pde (char *arg, int from_tty)
 {
   long pde_idx = -1, i;
 
@@ -2013,7 +2023,7 @@ display_page_table (long n, int force)
 }
 
 static void
-go32_pte (const char *arg, int from_tty)
+go32_pte (char *arg, int from_tty)
 {
   long pde_idx = -1L, i;
 
@@ -2040,7 +2050,7 @@ go32_pte (const char *arg, int from_tty)
 }
 
 static void
-go32_pte_for_address (const char *arg, int from_tty)
+go32_pte_for_address (char *arg, int from_tty)
 {
   CORE_ADDR addr = 0, i;
 
@@ -2071,35 +2081,24 @@ go32_pte_for_address (const char *arg, int from_tty)
 
 static struct cmd_list_element *info_dos_cmdlist = NULL;
 
-void _initialize_go32_nat ();
-void
-_initialize_go32_nat ()
+static void
+go32_info_dos_command (char *args, int from_tty)
 {
-  x86_dr_low.set_control = go32_set_dr7;
-  x86_dr_low.set_addr = go32_set_dr;
-  x86_dr_low.get_status = go32_get_dr6;
-  x86_dr_low.get_control = go32_get_dr7;
-  x86_dr_low.get_addr = go32_get_dr;
-  x86_set_debug_register_length (4);
+  help_list (info_dos_cmdlist, "info dos ", class_info, gdb_stdout);
+}
 
-  add_inf_child_target (&the_go32_nat_target);
+/* -Wmissing-prototypes */
+extern initialize_file_ftype _initialize_go32_nat;
 
-  /* Initialize child's cwd as empty to be initialized when starting
-     the child.  */
-  *child_cwd = 0;
+void
+_initialize_go32_nat (void)
+{
+  init_go32_ops ();
+  add_target (&go32_ops);
 
-  /* Initialize child's command line storage.  */
-  if (redir_debug_init (&child_cmd) == -1)
-    internal_error (__FILE__, __LINE__,
-		    _("Cannot allocate redirection storage: "
-		      "not enough memory.\n"));
-
-  /* We are always processing GCC-compiled programs.  */
-  processing_gcc_compilation = 2;
-
-  add_basic_prefix_cmd ("dos", class_info, _("\
+  add_prefix_cmd ("dos", class_info, go32_info_dos_command, _("\
 Print information specific to DJGPP (aka MS-DOS) debugging."),
-			&info_dos_cmdlist, "info dos ", 0, &infolist);
+		  &info_dos_cmdlist, "info dos ", 0, &infolist);
 
   add_cmd ("sysinfo", class_info, go32_sysinfo, _("\
 Display information about the target system, including CPU, OS, DPMI, etc."),

@@ -1,4 +1,4 @@
-/* Copyright 2014-2020 Free Software Foundation, Inc.
+/* Copyright 2014-2015 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,6 +25,4 @@ main (void)
 {
   hello ();
   world ();
-
-  return 0;
 }

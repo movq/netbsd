@@ -1,5 +1,6 @@
 /* Disassemble SH instructions.
-   Copyright (C) 1993-2020 Free Software Foundation, Inc.
+   Copyright 1993, 1994, 1995, 1997, 1998, 2000, 2001, 2002, 2003, 2004, 2005,
+   2006, 2007, 2012  Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -25,7 +26,11 @@
 #define DEFINE_TABLE
 
 #include "sh-opc.h"
-#include "disassemble.h"
+#include "dis-asm.h"
+
+#ifdef ARCH_all
+#define INCLUDE_SHMEDIA
+#endif
 
 static void
 print_movxy (const sh_opcode_info *op,
@@ -102,7 +107,8 @@ print_movxy (const sh_opcode_info *op,
 
 /* Print a double data transfer insn.  INSN is just the lower three
    nibbles of the insn, i.e. field a and the bit that indicates if
-   a parallel processing insn follows.  */
+   a parallel processing insn follows.
+   Return nonzero if a field b of a parallel processing insns follows.  */
 
 static void
 print_insn_ddt (int insn, struct disassemble_info *info)
@@ -112,10 +118,7 @@ print_insn_ddt (int insn, struct disassemble_info *info)
 
   /* If this is just a nop, make sure to emit something.  */
   if (insn == 0x000)
-    {
-      fprintf_fn (stream, "nopx\tnopy");
-      return;
-    }
+    fprintf_fn (stream, "nopx\tnopy");
 
   /* If a parallel processing insn was printed before,
      and we got a non-nop, emit a tab.  */
@@ -123,8 +126,8 @@ print_insn_ddt (int insn, struct disassemble_info *info)
     fprintf_fn (stream, "\t");
 
   /* Check if either the x or y part is invalid.  */
-  if (((insn & 3) != 0 && (insn & 0xc) == 0 && (insn & 0x2a0))
-      || ((insn & 3) == 0 && (insn & 0xc) != 0 && (insn & 0x150)))
+  if (((insn & 0xc) == 0 && (insn & 0x2a0))
+      || ((insn & 3) == 0 && (insn & 0x150)))
     if (info->mach != bfd_mach_sh_dsp
         && info->mach != bfd_mach_sh3_dsp)
       {
@@ -150,7 +153,7 @@ print_insn_ddt (int insn, struct disassemble_info *info)
 	while (op->nibbles[2] != (unsigned) ((insn >> 4) & 3)
 	       || op->nibbles[3] != (unsigned) (insn & 0xf))
 	  op++;
-
+	
 	print_movxy (op,
 		     (4 * ((insn & (is_movy ? 0x200 : 0x100)) == 0)
 		      + 2 * is_movy
@@ -159,7 +162,7 @@ print_insn_ddt (int insn, struct disassemble_info *info)
 		     fprintf_fn, stream);
       }
     else
-      fprintf_fn (stream, ".word 0x%x", insn | 0xf000);
+      fprintf_fn (stream, ".word 0x%x", insn);
   else
     {
       static const sh_opcode_info *first_movx, *first_movy;
@@ -191,8 +194,6 @@ print_insn_ddt (int insn, struct disassemble_info *info)
 	  print_movxy (opy, ((insn >> 8) & 1) + 6, (insn >> 6) & 1,
 		       fprintf_fn, stream);
 	}
-      if (!insn_x && !insn_y && ((insn & 0x3ff) != 0 || (insn & 0x800) == 0))
-	fprintf_fn (stream, ".word 0x%x", insn | 0xf000);
     }
 }
 
@@ -403,6 +404,16 @@ print_insn_sh (bfd_vma memaddr, struct disassemble_info *info)
       if (info->symbols
 	  && bfd_asymbol_flavour(*info->symbols) == bfd_target_coff_flavour)
 	target_arch = arch_sh4;
+      break;
+    case bfd_mach_sh5:
+#ifdef INCLUDE_SHMEDIA
+      status = print_insn_sh64 (memaddr, info);
+      if (status != -2)
+	return status;
+#endif
+      /* When we get here for sh64, it's because we want to disassemble
+	 SHcompact, i.e. arch_sh4.  */
+      target_arch = arch_sh4;
       break;
     default:
       target_arch = sh_get_arch_from_bfd_mach (info->mach);
@@ -826,7 +837,6 @@ print_insn_sh (bfd_vma memaddr, struct disassemble_info *info)
 		  fprintf_fn (stream, "xd%d", rn & ~1);
 		  break;
 		}
-	      /* Fall through.  */
 	    case D_REG_N:
 	      fprintf_fn (stream, "dr%d", rn);
 	      break;
@@ -836,7 +846,6 @@ print_insn_sh (bfd_vma memaddr, struct disassemble_info *info)
 		  fprintf_fn (stream, "xd%d", rm & ~1);
 		  break;
 		}
-	      /* Fall through.  */
 	    case D_REG_M:
 	      fprintf_fn (stream, "dr%d", rm);
 	      break;
@@ -897,8 +906,6 @@ print_insn_sh (bfd_vma memaddr, struct disassemble_info *info)
 	    size = 2;
 	  else
 	    size = 4;
-	  /* Not reading an instruction - disable stop_vma.  */
-	  info->stop_vma = 0;
 	  status = info->read_memory_func (disp_pc_addr, bytes, size, info);
 	  if (status == 0)
 	    {

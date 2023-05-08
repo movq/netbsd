@@ -111,6 +111,4 @@ main (int argc, char **argv)
   macscp3_2 ();
   macscp1_3 ();
   macscp_expr ();
-
-  return 0;
 }

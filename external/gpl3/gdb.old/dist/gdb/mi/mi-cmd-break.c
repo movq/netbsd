@@ -1,5 +1,5 @@
 /* MI Command Set - breakpoint and watchpoint commands.
-   Copyright (C) 2000-2020 Free Software Foundation, Inc.
+   Copyright (C) 2000-2014 Free Software Foundation, Inc.
    Contributed by Cygnus Solutions (a Red Hat company).
 
    This file is part of GDB.
@@ -23,16 +23,15 @@
 #include "ui-out.h"
 #include "mi-out.h"
 #include "breakpoint.h"
+#include <string.h>
 #include "mi-getopt.h"
-#include "observable.h"
+#include "gdb.h"
+#include "exceptions.h"
+#include "observer.h"
 #include "mi-main.h"
 #include "mi-cmd-break.h"
-#include "language.h"
-#include "location.h"
-#include "linespec.h"
 #include "gdb_obstack.h"
 #include <ctype.h>
-#include "tracepoint.h"
 
 enum
   {
@@ -53,16 +52,7 @@ static void
 breakpoint_notify (struct breakpoint *b)
 {
   if (mi_can_breakpoint_notify)
-    {
-      try
-	{
-	  print_breakpoint (b);
-	}
-      catch (const gdb_exception &ex)
-	{
-	  exception_print (gdb_stderr, ex);
-	}
-    }
+    gdb_breakpoint_query (current_uiout, b->number, NULL);
 }
 
 enum bp_type
@@ -73,91 +63,102 @@ enum bp_type
   };
 
 /* Arrange for all new breakpoints and catchpoints to be reported to
-   CURRENT_UIOUT until the destructor of the returned scoped_restore
-   is run.
+   CURRENT_UIOUT until the cleanup returned by this function is run.
 
    Note that MI output will be probably invalid if more than one
    breakpoint is created inside one MI command.  */
 
-scoped_restore_tmpl<int>
+struct cleanup *
 setup_breakpoint_reporting (void)
 {
+  struct cleanup *rev_flag;
+
   if (! mi_breakpoint_observers_installed)
     {
-      gdb::observers::breakpoint_created.attach (breakpoint_notify);
+      observer_attach_breakpoint_created (breakpoint_notify);
       mi_breakpoint_observers_installed = 1;
     }
 
-  return make_scoped_restore (&mi_can_breakpoint_notify, 1);
+  rev_flag = make_cleanup_restore_integer (&mi_can_breakpoint_notify);
+  mi_can_breakpoint_notify = 1;
+
+  return rev_flag;
 }
 
 
 /* Convert arguments in ARGV to the string in "format",argv,argv...
    and return it.  */
 
-static std::string
+static char *
 mi_argv_to_format (char **argv, int argc)
 {
   int i;
-  std::string result;
+  struct obstack obstack;
+  char *ret;
+
+  obstack_init (&obstack);
 
   /* Convert ARGV[OIND + 1] to format string and save to FORMAT.  */
-  result += '\"';
+  obstack_1grow (&obstack, '\"');
   for (i = 0; i < strlen (argv[0]); i++)
     {
       switch (argv[0][i])
 	{
 	case '\\':
-	  result += "\\\\";
+	  obstack_grow (&obstack, "\\\\", 2);
 	  break;
 	case '\a':
-	  result += "\\a";
+	  obstack_grow (&obstack, "\\a", 2);
 	  break;
 	case '\b':
-	  result += "\\b";
+	  obstack_grow (&obstack, "\\b", 2);
 	  break;
 	case '\f':
-	  result += "\\f";
+	  obstack_grow (&obstack, "\\f", 2);
 	  break;
 	case '\n':
-	  result += "\\n";
+	  obstack_grow (&obstack, "\\n", 2);
 	  break;
 	case '\r':
-	  result += "\\r";
+	  obstack_grow (&obstack, "\\r", 2);
 	  break;
 	case '\t':
-	  result += "\\t";
+	  obstack_grow (&obstack, "\\t", 2);
 	  break;
 	case '\v':
-	  result += "\\v";
+	  obstack_grow (&obstack, "\\v", 2);
 	  break;
 	case '"':
-	  result += "\\\"";
+	  obstack_grow (&obstack, "\\\"", 2);
 	  break;
 	default:
 	  if (isprint (argv[0][i]))
-	    result += argv[0][i];
+	    obstack_grow (&obstack, argv[0] + i, 1);
 	  else
 	    {
 	      char tmp[5];
 
 	      xsnprintf (tmp, sizeof (tmp), "\\%o",
 			 (unsigned char) argv[0][i]);
-	      result += tmp;
+	      obstack_grow (&obstack, tmp, strlen (tmp));
 	    }
 	  break;
 	}
     }
-  result += '\"';
+  obstack_1grow (&obstack, '\"');
 
   /* Apply other argv to FORMAT.  */
   for (i = 1; i < argc; i++)
     {
-      result += ',';
-      result += argv[i];
+      obstack_1grow (&obstack, ',');
+      obstack_grow (&obstack, argv[i], strlen (argv[i]));
     }
+  obstack_1grow (&obstack, '\0');
 
-  return result;
+  ret = xstrdup (obstack_finish (&obstack));
+  obstack_free (&obstack, NULL);
+
+  return ret;
 }
 
 /* Insert breakpoint.
@@ -165,9 +166,9 @@ mi_argv_to_format (char **argv, int argc)
    If not, it will insert other type breakpoint.  */
 
 static void
-mi_cmd_break_insert_1 (int dprintf, const char *command, char **argv, int argc)
+mi_cmd_break_insert_1 (int dprintf, char *command, char **argv, int argc)
 {
-  const char *address = NULL;
+  char *address = NULL;
   int hardware = 0;
   int temp_p = 0;
   int thread = -1;
@@ -176,22 +177,16 @@ mi_cmd_break_insert_1 (int dprintf, const char *command, char **argv, int argc)
   int pending = 0;
   int enabled = 1;
   int tracepoint = 0;
-  symbol_name_match_type match_type = symbol_name_match_type::WILD;
+  struct cleanup *back_to = make_cleanup (null_cleanup, NULL);
   enum bptype type_wanted;
-  event_location_up location;
   struct breakpoint_ops *ops;
-  int is_explicit = 0;
-  struct explicit_location explicit_loc;
-  std::string extra_string;
+  char *extra_string = NULL;
 
   enum opt
     {
       HARDWARE_OPT, TEMP_OPT, CONDITION_OPT,
       IGNORE_COUNT_OPT, THREAD_OPT, PENDING_OPT, DISABLE_OPT,
       TRACEPOINT_OPT,
-      QUALIFIED_OPT,
-      EXPLICIT_SOURCE_OPT, EXPLICIT_FUNC_OPT,
-      EXPLICIT_LABEL_OPT, EXPLICIT_LINE_OPT
     };
   static const struct mi_opt opts[] =
   {
@@ -203,11 +198,6 @@ mi_cmd_break_insert_1 (int dprintf, const char *command, char **argv, int argc)
     {"f", PENDING_OPT, 0},
     {"d", DISABLE_OPT, 0},
     {"a", TRACEPOINT_OPT, 0},
-    {"-qualified", QUALIFIED_OPT, 0},
-    {"-source" , EXPLICIT_SOURCE_OPT, 1},
-    {"-function", EXPLICIT_FUNC_OPT, 1},
-    {"-label", EXPLICIT_LABEL_OPT, 1},
-    {"-line", EXPLICIT_LINE_OPT, 1},
     { 0, 0, 0 }
   };
 
@@ -215,8 +205,6 @@ mi_cmd_break_insert_1 (int dprintf, const char *command, char **argv, int argc)
      to denote the end of the option list. */
   int oind = 0;
   char *oarg;
-
-  initialize_explicit_location (&explicit_loc);
 
   while (1)
     {
@@ -250,34 +238,16 @@ mi_cmd_break_insert_1 (int dprintf, const char *command, char **argv, int argc)
 	case TRACEPOINT_OPT:
 	  tracepoint = 1;
 	  break;
-	case QUALIFIED_OPT:
-	  match_type = symbol_name_match_type::FULL;
-	  break;
-	case EXPLICIT_SOURCE_OPT:
-	  is_explicit = 1;
-	  explicit_loc.source_filename = oarg;
-	  break;
-	case EXPLICIT_FUNC_OPT:
-	  is_explicit = 1;
-	  explicit_loc.function_name = oarg;
-	  break;
-	case EXPLICIT_LABEL_OPT:
-	  is_explicit = 1;
-	  explicit_loc.label_name = oarg;
-	  break;
-	case EXPLICIT_LINE_OPT:
-	  is_explicit = 1;
-	  explicit_loc.line_offset = linespec_parse_line_offset (oarg);
-	  break;
 	}
     }
 
-  if (oind >= argc && !is_explicit)
+  if (oind >= argc)
     error (_("-%s-insert: Missing <location>"),
 	   dprintf ? "dprintf" : "break");
+  address = argv[oind];
   if (dprintf)
     {
-      int format_num = is_explicit ? oind : oind + 1;
+      int format_num = oind + 1;
 
       if (hardware || tracepoint)
 	error (_("-dprintf-insert: does not support -h or -a"));
@@ -285,25 +255,16 @@ mi_cmd_break_insert_1 (int dprintf, const char *command, char **argv, int argc)
 	error (_("-dprintf-insert: Missing <format>"));
 
       extra_string = mi_argv_to_format (argv + format_num, argc - format_num);
-      address = argv[oind];
+      make_cleanup (xfree, extra_string);
     }
   else
     {
-      if (is_explicit)
-	{
-	  if (oind < argc)
-	    error (_("-break-insert: Garbage following explicit location"));
-	}
-      else
-	{
-	  if (oind < argc - 1)
-	    error (_("-break-insert: Garbage following <location>"));
-	  address = argv[oind];
-	}
+      if (oind < argc - 1)
+	error (_("-break-insert: Garbage following <location>"));
     }
 
   /* Now we have what we need, let's insert the breakpoint!  */
-  scoped_restore restore_breakpoint_reporting = setup_breakpoint_reporting ();
+  setup_breakpoint_reporting ();
 
   if (tracepoint)
     {
@@ -328,43 +289,21 @@ mi_cmd_break_insert_1 (int dprintf, const char *command, char **argv, int argc)
       ops = &bkpt_breakpoint_ops;
     }
 
-  if (is_explicit)
-    {
-      /* Error check -- we must have one of the other
-	 parameters specified.  */
-      if (explicit_loc.source_filename != NULL
-	  && explicit_loc.function_name == NULL
-	  && explicit_loc.label_name == NULL
-	  && explicit_loc.line_offset.sign == LINE_OFFSET_UNKNOWN)
-	error (_("-%s-insert: --source option requires --function, --label,"
-		 " or --line"), dprintf ? "dprintf" : "break");
-
-      explicit_loc.func_name_match_type = match_type;
-
-      location = new_explicit_location (&explicit_loc);
-    }
-  else
-    {
-      location = string_to_event_location_basic (&address, current_language,
-						 match_type);
-      if (*address)
-	error (_("Garbage '%s' at end of location"), address);
-    }
-
-  create_breakpoint (get_current_arch (), location.get (), condition, thread,
-		     extra_string.c_str (),
+  create_breakpoint (get_current_arch (), address, condition, thread,
+		     extra_string,
 		     0 /* condition and thread are valid.  */,
 		     temp_p, type_wanted,
 		     ignore_count,
 		     pending ? AUTO_BOOLEAN_TRUE : AUTO_BOOLEAN_FALSE,
 		     ops, 0, enabled, 0, 0);
+  do_cleanups (back_to);
 }
 
 /* Implements the -break-insert command.
    See the MI manual for the list of possible options.  */
 
 void
-mi_cmd_break_insert (const char *command, char **argv, int argc)
+mi_cmd_break_insert (char *command, char **argv, int argc)
 {
   mi_cmd_break_insert_1 (0, command, argv, argc);
 }
@@ -373,7 +312,7 @@ mi_cmd_break_insert (const char *command, char **argv, int argc)
    See the MI manual for the list of possible options.  */
 
 void
-mi_cmd_dprintf_insert (const char *command, char **argv, int argc)
+mi_cmd_dprintf_insert (char *command, char **argv, int argc)
 {
   mi_cmd_break_insert_1 (1, command, argv, argc);
 }
@@ -386,7 +325,7 @@ enum wp_type
 };
 
 void
-mi_cmd_break_passcount (const char *command, char **argv, int argc)
+mi_cmd_break_passcount (char *command, char **argv, int argc)
 {
   int n;
   int p;
@@ -402,7 +341,7 @@ mi_cmd_break_passcount (const char *command, char **argv, int argc)
   if (t)
     {
       t->pass_count = p;
-      gdb::observers::breakpoint_modified.notify (t);
+      observer_notify_breakpoint_modified (&t->base);
     }
   else
     {
@@ -417,7 +356,7 @@ mi_cmd_break_passcount (const char *command, char **argv, int argc)
    -break-watch -a <expr> --> insert an access wp.  */
 
 void
-mi_cmd_break_watch (const char *command, char **argv, int argc)
+mi_cmd_break_watch (char *command, char **argv, int argc)
 {
   char *expr = NULL;
   enum wp_type type = REG_WP;
@@ -476,10 +415,28 @@ mi_cmd_break_watch (const char *command, char **argv, int argc)
     }
 }
 
-void
-mi_cmd_break_commands (const char *command, char **argv, int argc)
+/* The mi_read_next_line consults these variable to return successive
+   command lines.  While it would be clearer to use a closure pointer,
+   it is not expected that any future code will use read_command_lines_1,
+   therefore no point of overengineering.  */
+
+static char **mi_command_line_array;
+static int mi_command_line_array_cnt;
+static int mi_command_line_array_ptr;
+
+static char *
+mi_read_next_line (void)
 {
-  counted_command_line break_command;
+  if (mi_command_line_array_ptr == mi_command_line_array_cnt)
+    return NULL;
+  else
+    return mi_command_line_array[mi_command_line_array_ptr++];
+}
+
+void
+mi_cmd_break_commands (char *command, char **argv, int argc)
+{
+  struct command_line *break_command;
   char *endptr;
   int bnum;
   struct breakpoint *b;
@@ -499,25 +456,16 @@ mi_cmd_break_commands (const char *command, char **argv, int argc)
   if (b == NULL)
     error (_("breakpoint %d not found."), bnum);
 
-  int count = 1;
-  auto reader
-    = [&] ()
-      {
-	const char *result = nullptr;
-	if (count < argc)
-	  result = argv[count++];
-	return result;
-      };
+  mi_command_line_array = argv;
+  mi_command_line_array_ptr = 1;
+  mi_command_line_array_cnt = argc;
 
   if (is_tracepoint (b))
-    break_command = read_command_lines_1 (reader, 1,
-					  [=] (const char *line)
-					    {
-					      validate_actionline (line, b);
-					    });
+    break_command = read_command_lines_1 (mi_read_next_line, 1,
+					  check_tracepoint_command, b);
   else
-    break_command = read_command_lines_1 (reader, 1, 0);
+    break_command = read_command_lines_1 (mi_read_next_line, 1, 0, 0);
 
-  breakpoint_set_commands (b, std::move (break_command));
+  breakpoint_set_commands (b, break_command);
 }
 

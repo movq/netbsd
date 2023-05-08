@@ -1,4 +1,4 @@
-// Copyright (C) 2016-2020 Free Software Foundation, Inc.
+// Copyright (C) 2016 Free Software Foundation, Inc.
 
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -63,44 +63,6 @@ enum SpaceSaver {
     Nothing,
 }
 
-enum Univariant {
-    Foo {a: u8}
-}
-enum UnivariantAnon {
-    Foo(u8)
-}
-
-enum ParametrizedEnum<T> {
-    Val { val: T },
-    Empty,
-}
-
-struct ParametrizedStruct<T> {
-    next: ParametrizedEnum<Box<ParametrizedStruct<T>>>,
-    value: T
-}
-
-struct StringAtOffset {
-    pub field1: &'static str,
-    pub field2: i32,
-    pub field3: &'static str,
-}
-
-// A simple structure whose layout won't be changed by the compiler,
-// so that ptype/o testing will work on any platform.
-struct SimpleLayout {
-    f1: u16,
-    f2: u16
-}
-
-enum EmptyEnum {}
-
-#[derive(Debug)]
-struct EnumWithNonzeroOffset {
-    a: Option<u8>,
-    b: Option<u8>,
-}
-
 fn main () {
     let a = ();
     let b : [i32; 0] = [];
@@ -115,8 +77,6 @@ fn main () {
     let f = "hi bob";
     let g = b"hi bob";
     let h = b'9';
-
-    let fslice = &f[3..];
 
     let i = ["whatever"; 8];
 
@@ -133,12 +93,6 @@ fn main () {
     let y = HiBob {field1: 7, field2: 8};
     let z = ByeBob(7, 8);
 
-    let field1 = 77;
-    let field2 = 88;
-
-    let univariant = Univariant::Foo {a : 1};
-    let univariant_anon = UnivariantAnon::Foo(1);
-
     let slice = &w[2..3];
     let fromslice = slice[0];
     let slice2 = &slice[0..1];
@@ -152,8 +106,6 @@ fn main () {
     let to1 = &w[..3];
     let to2 = &slice[..1];
 
-    let st = StringAtOffset { field1: "hello", field2: 1, field3: "world" };
-
     // tests for enum optimizations
 
     let str_some = Some("hi".to_string());
@@ -164,22 +116,6 @@ fn main () {
     let int_none = None::<u8>;
     let custom_some = NonZeroOptimized::Value("hi".into());
     let custom_none = NonZeroOptimized::Empty;
-
-    let parametrized = ParametrizedStruct {
-        next: ParametrizedEnum::Val {
-            val: Box::new(ParametrizedStruct {
-                next: ParametrizedEnum::Empty,
-                value: 1,
-            })
-        },
-        value: 0,
-    };
-
-    let simplelayout = SimpleLayout { f1: 8, f2: 9 };
-
-    let empty_enum_value: EmptyEnum;
-
-    let nonzero_offset = EnumWithNonzeroOffset { a: Some(1), b: None };
 
     println!("{}, {}", x.0, x.1);        // set breakpoint here
     println!("{}", diff2(92, 45));

@@ -8,11 +8,10 @@ msgstr ""
 "Project-Id-Version: gas 2.21.53\n"
 "Report-Msgid-Bugs-To: bug-binutils@gnu.org\n"
 "POT-Creation-Date: 2011-06-02 14:30+0100\n"
-"PO-Revision-Date: 2011-10-28 20:50+0900\n"
+"PO-Revision-Date: 2011-10-28 10:22+0900\n"
 "Last-Translator: Yasuaki Taniguchi <yasuakit@gmail.com>\n"
 "Language-Team: Japanese <translation-team-ja@lists.sourceforge.net>\n"
 "Language: ja\n"
-"X-Bugs: Report translation errors to the Language-Team address.\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -853,12 +852,12 @@ msgstr ".symver 内の名前の後にはコンマ (,) が予期されます"
 #: config/obj-elf.c:1303
 #, c-format
 msgid "missing version name in `%s' for symbol `%s'"
-msgstr "`%s' 内にシンボル `%s' 用のバージョン名がありません"
+msgstr ""
 
 #: config/obj-elf.c:1314
 #, c-format
 msgid "multiple versions [`%s'|`%s'] for symbol `%s'"
-msgstr "複数のバージョン [`%s'|`%s'] がシンボル `%s' 用にあります"
+msgstr ""
 
 #: config/obj-elf.c:1351
 #, c-format
@@ -867,44 +866,44 @@ msgstr ""
 
 #: config/obj-elf.c:1361
 msgid "expected comma after name in .vtable_inherit"
-msgstr ".vtable_inherit 内の名前の後にはコンマ (,) が予期されます"
+msgstr ""
 
 #: config/obj-elf.c:1414
 msgid "expected comma after name in .vtable_entry"
-msgstr ".vtable_entry 内の名前の後にはコンマ (,) が予期されます"
+msgstr ""
 
 #: config/obj-elf.c:1537
 msgid "expected quoted string"
-msgstr "引用符付き文字列が予期されます"
+msgstr ""
 
 #: config/obj-elf.c:1557
 #, c-format
 msgid "expected comma after name `%s' in .size directive"
-msgstr ".size 指示内の名前 `%s' の後にはコンマ (,) が予期されます"
+msgstr ""
 
 #: config/obj-elf.c:1566
 msgid "missing expression in .size directive"
-msgstr ".size 指示内に式がありません"
+msgstr ""
 
 #: config/obj-elf.c:1690
 #, c-format
 msgid "symbol '%s' is already defined"
-msgstr "シンボル '%s' はすでに定義されています"
+msgstr ""
 
 #: config/obj-elf.c:1710 config/obj-elf.c:1722
 #, c-format
 msgid "symbol type \"%s\" is supported only by GNU targets"
-msgstr "シンボル型 \"%s\" は GNU ターゲットでのみサポートされます"
+msgstr ""
 
 #: config/obj-elf.c:1733
 #, c-format
 msgid "unrecognized symbol type \"%s\""
-msgstr "認識できないシンボル型 \"%s\" です"
+msgstr ""
 
 #: config/obj-elf.c:1903 config/obj-elf.c:1906
 #, c-format
 msgid ".size expression for %s does not evaluate to a constant"
-msgstr "%s 用の .size 式の評価結果が定数値ではありません"
+msgstr ""
 
 #: config/obj-elf.c:1938
 #, c-format
@@ -914,7 +913,7 @@ msgstr ""
 #: config/obj-elf.c:1999 ecoff.c:3608
 #, c-format
 msgid "symbol `%s' can not be both weak and common"
-msgstr "シンボル `%s' は弱いシンボルと共通シンボルの両方に同時になることはできません"
+msgstr ""
 
 #: config/obj-elf.c:2116
 #, c-format
@@ -924,91 +923,91 @@ msgstr ""
 #: config/obj-elf.c:2128
 #, c-format
 msgid "can't create group: %s"
-msgstr "グループを作成できません: %s"
+msgstr ""
 
 #: config/obj-elf.c:2267
 #, c-format
 msgid "failed to set up debugging information: %s"
-msgstr "デバッグ情報のセットアップに失敗しました: %s"
+msgstr ""
 
 #: config/obj-elf.c:2287
 #, c-format
 msgid "can't start writing .mdebug section: %s"
-msgstr ".mdebug セクションの書き込みを開始できません: %s"
+msgstr ""
 
 #: config/obj-elf.c:2295
 #, c-format
 msgid "could not write .mdebug section: %s"
-msgstr ".mdebug セクションを書き込めませんでした: %s"
+msgstr ""
 
 #: config/obj-som.c:58
 msgid "Only one .compiler pseudo-op per file!"
-msgstr "ファイルごと含められる .compiler 疑似命令は一つのみです!"
+msgstr ""
 
 #: config/obj-som.c:75 config/obj-som.c:146 config/obj-som.c:188
 msgid "Expected quoted string"
-msgstr "引用符付き文字列が予期されます"
+msgstr ""
 
 #: config/obj-som.c:88
 msgid ".compiler directive missing language and version"
-msgstr ".compiler 指示に言語とバージョンがありません"
+msgstr ""
 
 #: config/obj-som.c:98
 msgid ".compiler directive missing version"
-msgstr ".compiler 指示にバージョンがありません"
+msgstr ""
 
 #: config/obj-som.c:114
 #, c-format
 msgid "FATAL: Attaching compiler header %s"
-msgstr "致命的: コンパイラヘッダ %s を付加中"
+msgstr ""
 
 #: config/obj-som.c:129
 msgid "Only one .version pseudo-op per file!"
-msgstr "ファイルごとに含められる .version 疑似命令は一つだけです!"
+msgstr ""
 
 #: config/obj-som.c:153
 #, c-format
 msgid "attaching version header %s: %s"
-msgstr "バージョンヘッダ %s を付加中: %s"
+msgstr ""
 
 #: config/obj-som.c:171
 msgid "Only one .copyright pseudo-op per file!"
-msgstr "ファイルごとに含められる .copyright 疑似命令は一つだけです!"
+msgstr ""
 
 #: config/obj-som.c:195
 #, c-format
 msgid "attaching copyright header %s: %s"
-msgstr "著作権ヘッダ %s を付加中: %s"
+msgstr ""
 
 #: config/tc-alpha.c:656
 #, c-format
 msgid "No !literal!%ld was found"
-msgstr "!literal!%ld が見つかりませんでした"
+msgstr ""
 
 #: config/tc-alpha.c:663
 #, c-format
 msgid "No !tlsgd!%ld was found"
-msgstr "!tlsgd!%ld が見つかりませんでした"
+msgstr ""
 
 #: config/tc-alpha.c:670
 #, c-format
 msgid "No !tlsldm!%ld was found"
-msgstr "!tlsldm!%ld が見つかりませんでした"
+msgstr ""
 
 #: config/tc-alpha.c:679
 #, c-format
 msgid "No ldah !gpdisp!%ld was found"
-msgstr "ldah !gpdisp!%ld が見つかりませんでした"
+msgstr ""
 
 #: config/tc-alpha.c:729
 #, c-format
 msgid "too many !literal!%ld for %s"
-msgstr "!literal!%ld (%s 用) が多すぎます"
+msgstr ""
 
 #: config/tc-alpha.c:759
 #, c-format
 msgid "No lda !gpdisp!%ld was found"
-msgstr "lda !gpdisp!%ld が見つかりませんでした"
+msgstr ""
 
 #. Only support one relocation op per insn.
 #: config/tc-alpha.c:918
@@ -1017,43 +1016,43 @@ msgstr ""
 
 #: config/tc-alpha.c:934
 msgid "No relocation operand"
-msgstr "再配置被演算子がありません"
+msgstr ""
 
 #: config/tc-alpha.c:944
 #, c-format
 msgid "Unknown relocation operand: !%s"
-msgstr "不明な再配置被演算子です: !%s"
+msgstr ""
 
 #: config/tc-alpha.c:954
 #, c-format
 msgid "no sequence number after !%s"
-msgstr "!%s の後に順序番号がありません"
+msgstr ""
 
 #: config/tc-alpha.c:964
 #, c-format
 msgid "!%s does not use a sequence number"
-msgstr "!%s は順序番号を使用しません"
+msgstr ""
 
 #: config/tc-alpha.c:974
 #, c-format
 msgid "Bad sequence number: !%s!%s"
-msgstr "間違った順序番号です: !%s!%s"
+msgstr ""
 
 #: config/tc-alpha.c:1189 config/tc-alpha.c:3364
 #, c-format
 msgid "inappropriate arguments for opcode `%s'"
-msgstr "命令コード `%s' に対する不適切な引数です"
+msgstr ""
 
 #: config/tc-alpha.c:1191 config/tc-alpha.c:3366
 #, c-format
 msgid "opcode `%s' not supported for target %s"
-msgstr "命令コード `%s' はターゲット %s 用にはサポートされていません"
+msgstr ""
 
 #: config/tc-alpha.c:1195 config/tc-alpha.c:3370 config/tc-avr.c:1441
 #: config/tc-msp430.c:1828
 #, c-format
 msgid "unknown opcode `%s'"
-msgstr "不明な命令コード `%s' です"
+msgstr ""
 
 #: config/tc-alpha.c:1276 config/tc-alpha.c:1537
 msgid "overflow in literal (.lita) table"
@@ -1063,77 +1062,77 @@ msgstr ""
 #: config/tc-alpha.c:2237 config/tc-alpha.c:2282 config/tc-alpha.c:2351
 #: config/tc-alpha.c:2434 config/tc-alpha.c:2659 config/tc-alpha.c:2757
 msgid "macro requires $at register while noat in effect"
-msgstr "noat が有効な間は、マクロに $at レジスタが必要です"
+msgstr ""
 
 #: config/tc-alpha.c:1285 config/tc-alpha.c:1309 config/tc-alpha.c:1552
 msgid "macro requires $at while $at in use"
-msgstr "$at を使用中にはマクロに $at が必要です"
+msgstr ""
 
 #: config/tc-alpha.c:1495
 msgid "bignum invalid; zero assumed"
-msgstr "bignum iが無効です。 0 と見なされました"
+msgstr ""
 
 #: config/tc-alpha.c:1497
 msgid "floating point number invalid; zero assumed"
-msgstr "浮動小数が無効です。 0 と見なされました"
+msgstr ""
 
 #: config/tc-alpha.c:1502
 msgid "can't handle expression"
-msgstr "式を扱うことができません"
+msgstr ""
 
 #: config/tc-alpha.c:1543
 msgid "overflow in literal (.lit8) table"
-msgstr "リテラル (.lit8) 表内でオーバーフローが発生しました"
+msgstr ""
 
 #: config/tc-alpha.c:1840
 #, c-format
 msgid "too many ldah insns for !gpdisp!%ld"
-msgstr "!gpdisp!%ld 用の ldah 命令が多すぎます"
+msgstr ""
 
 #: config/tc-alpha.c:1842 config/tc-alpha.c:1854
 #, c-format
 msgid "both insns for !gpdisp!%ld must be in the same section"
-msgstr "both insns for !gpdisp!%ld 用の両方の命令は同じセクションになければいけません"
+msgstr ""
 
 #: config/tc-alpha.c:1852
 #, c-format
 msgid "too many lda insns for !gpdisp!%ld"
-msgstr "!gpdisp!%ld 用の lda 命令が多すぎます"
+msgstr ""
 
 #: config/tc-alpha.c:1908
 #, c-format
 msgid "too many lituse insns for !lituse_tlsgd!%ld"
-msgstr "!lituse_tlsgd!%ld 用の lituse 命令が多すぎます"
+msgstr ""
 
 #: config/tc-alpha.c:1911
 #, c-format
 msgid "too many lituse insns for !lituse_tlsldm!%ld"
-msgstr "!lituse_tlsldm!%ld 用の lituse 命令が多すぎます"
+msgstr ""
 
 #: config/tc-alpha.c:1928
 #, c-format
 msgid "duplicate !tlsgd!%ld"
-msgstr "重複した !tlsgd!%ld です"
+msgstr ""
 
 #: config/tc-alpha.c:1930
 #, c-format
 msgid "sequence number in use for !tlsldm!%ld"
-msgstr "!tlsldm!%ld 用の順序番号が使用中です"
+msgstr ""
 
 #: config/tc-alpha.c:1944
 #, c-format
 msgid "duplicate !tlsldm!%ld"
-msgstr "重複した !tlsldm!%ld です"
+msgstr ""
 
 #: config/tc-alpha.c:1946
 #, c-format
 msgid "sequence number in use for !tlsgd!%ld"
-msgstr "!tlsgd!%ld 用の順序番号が使用中です"
+msgstr ""
 
 #: config/tc-alpha.c:2001 config/tc-arc.c:292 config/tc-mn10200.c:856
 #: config/tc-mn10300.c:1148 config/tc-ppc.c:1730 config/tc-s390.c:638
 msgid "operand"
-msgstr "被演算子"
+msgstr ""
 
 #: config/tc-alpha.c:2140
 msgid "invalid relocation for instruction"
@@ -1145,67 +1144,67 @@ msgstr ""
 
 #: config/tc-alpha.c:2985
 msgid "can not resolve expression"
-msgstr "式を計算できません"
+msgstr ""
 
 #: config/tc-alpha.c:3524 config/tc-i370.c:1055 config/tc-microblaze.c:185
 #: config/tc-ppc.c:2055 config/tc-ppc.c:4892
 #, c-format
 msgid ".COMMon length (%ld.) <0! Ignored."
-msgstr ".COMMon 長 (%ld.) が 0 未満です! 無視されました。"
+msgstr ""
 
 #: config/tc-alpha.c:3535 config/tc-sparc.c:3820 config/tc-v850.c:298
 msgid "Ignoring attempt to re-define symbol"
-msgstr "シンボル再定義の試みを無視しています"
+msgstr ""
 
 #: config/tc-alpha.c:3627 config/tc-ppc.c:4929 config/tc-sparc.c:3828
 #, c-format
 msgid "Length of .comm \"%s\" is already %ld. Not changed to %ld."
-msgstr ".comm \"%s\" の長さはすでに %ld です。%ld へ変更されませんでした。"
+msgstr ""
 
 #: config/tc-alpha.c:3730 ecoff.c:3064
 msgid ".ent directive has no name"
-msgstr ".ent 指示に名前がありません"
+msgstr ""
 
 #: config/tc-alpha.c:3738
 msgid "nested .ent directives"
-msgstr ".ent 指示が入れ子になっています"
+msgstr ""
 
 #: config/tc-alpha.c:3783 ecoff.c:3015
 msgid ".end directive has no name"
-msgstr ".end 指示に名前がありません"
+msgstr ""
 
 #: config/tc-alpha.c:3792
 msgid ".end directive without matching .ent"
-msgstr "対応する .ent が無い .end 指示です"
+msgstr ""
 
 #: config/tc-alpha.c:3794
 msgid ".end directive names different symbol than .ent"
-msgstr ".end 指示の名前が .ent と異なるシンボルです"
+msgstr ""
 
 #: config/tc-alpha.c:3837 ecoff.c:3150
 msgid ".fmask outside of .ent"
-msgstr ".ent の外側に .fmask があります"
+msgstr ""
 
 #: config/tc-alpha.c:3839 config/tc-score.c:5601 ecoff.c:3214
 msgid ".mask outside of .ent"
-msgstr ".ent の外側に .mask があります"
+msgstr ""
 
 #: config/tc-alpha.c:3847 ecoff.c:3157
 msgid "bad .fmask directive"
-msgstr "間違った .fmask 指示です"
+msgstr ""
 
 #: config/tc-alpha.c:3849 ecoff.c:3221
 msgid "bad .mask directive"
-msgstr "間違った .mask 指示です"
+msgstr ""
 
 #: config/tc-alpha.c:3882 config/tc-mips.c:15469 config/tc-score.c:5743
 #: ecoff.c:3178
 msgid ".frame outside of .ent"
-msgstr ".ent の外側に .frame があります"
+msgstr ""
 
 #: config/tc-alpha.c:3893 ecoff.c:3189
 msgid "bad .frame directive"
-msgstr "間違った .frame 指示です"
+msgstr ""
 
 #: config/tc-alpha.c:3927
 msgid ".prologue directive without a preceding .ent directive"
@@ -1214,40 +1213,40 @@ msgstr ""
 #: config/tc-alpha.c:3945
 #, c-format
 msgid "Invalid argument %d to .prologue."
-msgstr ".prologue への無効な引数 %d です"
+msgstr ""
 
 #: config/tc-alpha.c:4036
 msgid "ECOFF debugging is disabled."
-msgstr "ECOFF デバッグが無効化されます。"
+msgstr ""
 
 #: config/tc-alpha.c:4050
 msgid ".ent directive without matching .end"
-msgstr "対応する .end が無い .ent 指示です"
+msgstr ""
 
 #: config/tc-alpha.c:4135
 msgid ".usepv directive has no name"
-msgstr ".usepv 指示に名前がありません"
+msgstr ""
 
 #: config/tc-alpha.c:4146
 msgid ".usepv directive has no type"
-msgstr ".usepv 指示に型がありません"
+msgstr ""
 
 #: config/tc-alpha.c:4161
 msgid "unknown argument for .usepv"
-msgstr ".usepv に対する無効な引数です"
+msgstr ""
 
 #: config/tc-alpha.c:4276
 #, c-format
 msgid "unknown section attribute %s"
-msgstr "不明なセクション属性 %s です"
+msgstr ""
 
 #: config/tc-alpha.c:4389
 msgid ".ent directive has no symbol"
-msgstr ".ent 指示にシンボルがありません"
+msgstr ""
 
 #: config/tc-alpha.c:4418
 msgid ".handler directive has no name"
-msgstr ".handler 指示に名前がありません"
+msgstr ""
 
 #: config/tc-alpha.c:4447
 msgid "Bad .frame directive 1./2. param"
@@ -1259,7 +1258,7 @@ msgstr ""
 
 #: config/tc-alpha.c:4497
 msgid ".pdesc directive not in link (.link) section"
-msgstr ".pdesc 指示がリンク (.link) セクション内にありません"
+msgstr ""
 
 #: config/tc-alpha.c:4505
 msgid ".pdesc directive has no entry symbol"
@@ -1267,11 +1266,11 @@ msgstr ""
 
 #: config/tc-alpha.c:4523
 msgid ".pdesc has no matching .ent"
-msgstr "対応する .ent が無い .pdesc です"
+msgstr ""
 
 #: config/tc-alpha.c:4541
 msgid "No comma after .pdesc <entryname>"
-msgstr ".pdesc <entryname> の後にコンマ (,) がありません"
+msgstr ""
 
 #: config/tc-alpha.c:4561
 msgid "unknown procedure kind"
@@ -1279,42 +1278,42 @@ msgstr ""
 
 #: config/tc-alpha.c:4673
 msgid ".name directive not in link (.link) section"
-msgstr ".name 指示がリンク (.link) セクション内にありません"
+msgstr ""
 
 #: config/tc-alpha.c:4681
 msgid ".name directive has no symbol"
-msgstr ".name 指示にシンボルがありません"
+msgstr ""
 
 #: config/tc-alpha.c:4716
 msgid "No symbol after .linkage"
-msgstr ".linkage の後にシンボルがありません"
+msgstr ""
 
 #: config/tc-alpha.c:4769
 msgid "No symbol after .code_address"
-msgstr ".code_address の後にシンボルがありません"
+msgstr ""
 
 #: config/tc-alpha.c:4796 config/tc-score.c:5607
 msgid "Bad .mask directive"
-msgstr "間違った .mask 指示です"
+msgstr ""
 
 #: config/tc-alpha.c:4814
 msgid "Bad .fmask directive"
-msgstr "間違った .fmask 指示です"
+msgstr ""
 
 #: config/tc-alpha.c:4971
 #, c-format
 msgid "Expected comma after name \"%s\""
-msgstr "名前\"%s\" の後にはコンマ (,) が予期されます"
+msgstr ""
 
 #: config/tc-alpha.c:4983
 #, c-format
 msgid "unhandled: .proc %s,%d"
-msgstr "取り扱われません: .proc %s,%d"
+msgstr ""
 
 #: config/tc-alpha.c:5017
 #, c-format
 msgid "Tried to .set unrecognized mode `%s'"
-msgstr "認識できないモード `%s' への .set が試みられました"
+msgstr ""
 
 #: config/tc-alpha.c:5043
 #, c-format
@@ -1333,7 +1332,7 @@ msgstr ""
 #: config/tc-alpha.c:5163 config/tc-alpha.c:5656
 #, c-format
 msgid "Unknown CPU identifier `%s'"
-msgstr "不明な CPU 識別子 `%s' です"
+msgstr ""
 
 #: config/tc-alpha.c:5354
 #, c-format
@@ -1342,17 +1341,17 @@ msgstr ""
 
 #: config/tc-alpha.c:5368
 msgid "bad .section directive: want a,s,w,x,M,S,G,T in string"
-msgstr "間違った .section 指示です: 文字列で a,s,w,x,M,S,G,T である必要があります"
+msgstr ""
 
 #: config/tc-alpha.c:5457
 #, c-format
 msgid "internal error: can't hash opcode `%s': %s"
-msgstr "内部エラー: 命令コード `%s' をハッシュ化できません: %s"
+msgstr ""
 
 #: config/tc-alpha.c:5493
 #, c-format
 msgid "internal error: can't hash macro `%s': %s"
-msgstr "内部エラー: マクロ `%s' をハッシュ化できません: %s"
+msgstr ""
 
 #: config/tc-alpha.c:5578 config/tc-arm.c:6746 config/tc-arm.c:6758
 #: config/tc-i960.c:708 config/tc-xtensa.c:5315 config/tc-xtensa.c:5393
@@ -1382,7 +1381,7 @@ msgstr ""
 #: config/tc-alpha.c:5968
 #, c-format
 msgid "unhandled relocation type %s"
-msgstr "取り扱われない再配置型 %s です"
+msgstr ""
 
 #: config/tc-alpha.c:5981
 msgid "non-absolute expression in constant field"
@@ -1395,12 +1394,12 @@ msgstr ""
 
 #: config/tc-alpha.c:6042 config/tc-alpha.c:6049 config/tc-mips.c:9793
 msgid "Used $at without \".set noat\""
-msgstr "\".set noat\" 無しで $at が使用されました"
+msgstr ""
 
 #: config/tc-alpha.c:6218
 #, c-format
 msgid "!samegp reloc against symbol without .prologue: %s"
-msgstr ".prologue が無いシンボルに対する !samegp 再配置です: %s"
+msgstr ""
 
 #: config/tc-alpha.c:6262 config/tc-xtensa.c:5999
 #, c-format
@@ -1410,7 +1409,7 @@ msgstr ""
 #: config/tc-alpha.c:6268
 #, c-format
 msgid "internal error? cannot generate `%s' relocation"
-msgstr "内部エラー? `%s' 再配置を生成できません"
+msgstr ""
 
 #: config/tc-alpha.c:6364
 #, c-format
@@ -1426,33 +1425,33 @@ msgstr ""
 #: config/tc-mn10300.c:2433 config/tc-xc16x.c:79 config/tc-xc16x.c:86
 #: config/tc-xc16x.c:93
 msgid "could not set architecture and machine"
-msgstr "アーキテクチャおよびマシンを設定できませんでした"
+msgstr ""
 
 #: config/tc-arc.c:212 config/tc-arm.c:22240 config/tc-score.c:6303
 #: config/tc-score.c:6532 config/tc-score.c:6537
 msgid "virtual memory exhausted"
-msgstr "仮想メモリが足りなくなりました"
+msgstr ""
 
 #: config/tc-arc.c:432 config/tc-arc.c:671
 msgid "expected comma after operand name"
-msgstr "被演算子名の後にはコンマ (,) が予期されます"
+msgstr ""
 
 #: config/tc-arc.c:443
 #, c-format
 msgid "negative operand number %d"
-msgstr "負の被演算子番号 %d です"
+msgstr ""
 
 #: config/tc-arc.c:455
 msgid "expected comma after register-number"
-msgstr "レジスタ番号の後にはコンマ (,) が予期されます"
+msgstr ""
 
 #: config/tc-arc.c:480
 msgid "invalid mode"
-msgstr "無効なモードです"
+msgstr ""
 
 #: config/tc-arc.c:497
 msgid "expected comma after register-mode"
-msgstr "レジスタモードの後にはコンマ (,) が予期されます"
+msgstr ""
 
 #: config/tc-arc.c:514
 msgid "shortcut designator invalid"
@@ -1466,12 +1465,12 @@ msgstr ""
 #: config/tc-arc.c:537
 #, c-format
 msgid "condition code value (%d) too large"
-msgstr "条件コード値 (%d) が大きすぎます"
+msgstr ""
 
 #: config/tc-arc.c:555
 #, c-format
 msgid "attempt to override symbol: %s"
-msgstr "シンボルを上書きする試みです: %s"
+msgstr ""
 
 #: config/tc-arc.c:626
 msgid "invalid opertype"
@@ -1479,7 +1478,7 @@ msgstr ""
 
 #: config/tc-arc.c:683
 msgid "expected comma after opcode"
-msgstr "命令コードの後にはコンマ (,) が予期されます"
+msgstr ""
 
 #: config/tc-arc.c:693
 #, c-format
@@ -1521,40 +1520,40 @@ msgstr ""
 
 #: config/tc-arc.c:862 config/tc-tic6x.c:582
 msgid "expected comma after symbol name"
-msgstr "シンボル名の後にはコンマ (,) が予期されます"
+msgstr ""
 
 #: config/tc-arc.c:872
 msgid "negative symbol length"
-msgstr "負のシンボル長です"
+msgstr ""
 
 #: config/tc-arc.c:883
 msgid "ignoring attempt to re-define symbol"
-msgstr "シンボル再定義の試みを無視しています"
+msgstr ""
 
 #: config/tc-arc.c:890
 #, c-format
 msgid "length of symbol \"%s\" already %ld, ignoring %d"
-msgstr "シンボル \"%s\" の長さはすでに %ld です。 %d を無視しています"
+msgstr ""
 
 #: config/tc-arc.c:904
 msgid "assuming symbol alignment of zero"
-msgstr "0 のシンボル整列と見なしています"
+msgstr ""
 
 #: config/tc-arc.c:971
 msgid "\".option\" directive must appear before any instructions"
-msgstr "\".option\" 指示はどんな命令より前に出現しなければいけません"
+msgstr ""
 
 #: config/tc-arc.c:981
 msgid "\".option\" directive conflicts with initial definition"
-msgstr "\".option\" 指示が初期定義と競合しています"
+msgstr ""
 
 #: config/tc-arc.c:989
 msgid "\".option\" directive overrides command-line (default) value"
-msgstr "\".option\" 指示がコマンドライン (デフォルト) 値を上書きします"
+msgstr ""
 
 #: config/tc-arc.c:999
 msgid "invalid identifier for \".option\""
-msgstr "\".option\" に対する無効な識別子です"
+msgstr ""
 
 #: config/tc-arc.c:1037 config/tc-i860.c:1035 config/tc-ip2k.c:249
 msgid "relaxation not supported\n"
@@ -1567,22 +1566,22 @@ msgstr ""
 #: config/tc-arc.c:1108
 #, c-format
 msgid "missing ')' in %%-op"
-msgstr "%%-op 内に ')' がありません"
+msgstr ""
 
 #: config/tc-arc.c:1364 config/tc-dlx.c:1201 config/tc-i960.c:2639
 #: config/tc-m32r.c:2281 config/tc-sparc.c:3508
 #, c-format
 msgid "internal error: can't export reloc type %d (`%s')"
-msgstr "内部エラー: 再配置型 %d (`%s') をエクスポートできません"
+msgstr ""
 
 #: config/tc-arc.c:1496
 #, c-format
 msgid "unknown syntax format character `%c'"
-msgstr "不明な構文書式文字 `%c' です"
+msgstr ""
 
 #: config/tc-arc.c:1635
 msgid "too many suffixes"
-msgstr "接尾辞が多すぎます"
+msgstr ""
 
 #: config/tc-arc.c:1674
 msgid "symbol as destination register"
@@ -1594,7 +1593,7 @@ msgstr ""
 #: config/tc-v850.c:2699
 #, c-format
 msgid "junk at end of line: `%s'"
-msgstr "行末にゴミがあります: `%s'"
+msgstr ""
 
 #: config/tc-arc.c:1798
 msgid "8 byte instruction in delay slot"

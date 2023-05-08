@@ -1,4 +1,4 @@
-/* Copyright (C) 1992-2020 Free Software Foundation, Inc.
+/* Copyright (C) 1992-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,16 +23,24 @@
 /* The target dcache is kept per-address-space.  This key lets us
    associate the cache with the address space.  */
 
-static const struct address_space_key<DCACHE, dcache_deleter>
-  target_dcache_aspace_key;
+static const struct address_space_data *target_dcache_aspace_key;
+
+/* Clean up dcache, represented by ARG, which is associated with
+   ASPACE.  */
+
+static void
+target_dcache_cleanup (struct address_space *aspace, void *arg)
+{
+  dcache_free (arg);
+}
 
 /* Target dcache is initialized or not.  */
 
 int
 target_dcache_init_p (void)
 {
-  DCACHE *dcache
-    = target_dcache_aspace_key.get (current_program_space->aspace);
+  DCACHE *dcache = address_space_data (current_program_space->aspace,
+				       target_dcache_aspace_key);
 
   return (dcache != NULL);
 }
@@ -42,8 +50,8 @@ target_dcache_init_p (void)
 void
 target_dcache_invalidate (void)
 {
-  DCACHE *dcache
-    = target_dcache_aspace_key.get (current_program_space->aspace);
+  DCACHE *dcache = address_space_data (current_program_space->aspace,
+				       target_dcache_aspace_key);
 
   if (dcache != NULL)
     dcache_invalidate (dcache);
@@ -55,7 +63,10 @@ target_dcache_invalidate (void)
 DCACHE *
 target_dcache_get (void)
 {
-  return target_dcache_aspace_key.get (current_program_space->aspace);
+  DCACHE *dcache = address_space_data (current_program_space->aspace,
+				       target_dcache_aspace_key);
+
+  return dcache;
 }
 
 /* Return the target dcache.  If it is not initialized yet, initialize
@@ -64,20 +75,21 @@ target_dcache_get (void)
 DCACHE *
 target_dcache_get_or_init (void)
 {
-  DCACHE *dcache
-    = target_dcache_aspace_key.get (current_program_space->aspace);
+  DCACHE *dcache = address_space_data (current_program_space->aspace,
+				       target_dcache_aspace_key);
 
   if (dcache == NULL)
     {
       dcache = dcache_init ();
-      target_dcache_aspace_key.set (current_program_space->aspace, dcache);
+      set_address_space_data (current_program_space->aspace,
+			      target_dcache_aspace_key, dcache);
     }
 
   return dcache;
 }
 
 /* The option sets this.  */
-static bool stack_cache_enabled_1 = true;
+static int stack_cache_enabled_1 = 1;
 /* And set_stack_cache updates this.
    The reason for the separation is so that we don't flush the cache for
    on->on transitions.  */
@@ -89,7 +101,7 @@ static int stack_cache_enabled = 1;
    except cleanliness.  */
 
 static void
-set_stack_cache (const char *args, int from_tty, struct cmd_list_element *c)
+set_stack_cache (char *args, int from_tty, struct cmd_list_element *c)
 {
   if (stack_cache_enabled != stack_cache_enabled_1)
     target_dcache_invalidate ();
@@ -114,7 +126,7 @@ stack_cache_enabled_p (void)
 
 /* The option sets this.  */
 
-static bool code_cache_enabled_1 = true;
+static int code_cache_enabled_1 = 1;
 
 /* And set_code_cache updates this.
    The reason for the separation is so that we don't flush the cache for
@@ -127,7 +139,7 @@ static int code_cache_enabled = 1;
    except cleanliness.  */
 
 static void
-set_code_cache (const char *args, int from_tty, struct cmd_list_element *c)
+set_code_cache (char *args, int from_tty, struct cmd_list_element *c)
 {
   if (code_cache_enabled != code_cache_enabled_1)
     target_dcache_invalidate ();
@@ -152,9 +164,11 @@ code_cache_enabled_p (void)
   return code_cache_enabled;
 }
 
-void _initialize_target_dcache ();
+/* -Wmissing-prototypes */
+extern initialize_file_ftype _initialize_target_dcache;
+
 void
-_initialize_target_dcache ()
+_initialize_target_dcache (void)
 {
   add_setshow_boolean_cmd ("stack-cache", class_support,
 			   &stack_cache_enabled_1, _("\
@@ -178,4 +192,8 @@ access is on."),
 			   set_code_cache,
 			   show_code_cache,
 			   &setlist, &showlist);
+
+  target_dcache_aspace_key
+    = register_address_space_data_with_cleanup (NULL,
+						target_dcache_cleanup);
 }

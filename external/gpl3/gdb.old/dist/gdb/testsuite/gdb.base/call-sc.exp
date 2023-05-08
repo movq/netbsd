@@ -1,6 +1,6 @@
 # This testcase is part of GDB, the GNU debugger.
 
-# Copyright 2004-2020 Free Software Foundation, Inc.
+# Copyright 2004-2014 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -23,7 +23,8 @@
 # test.
 
 if [target_info exists gdb,cannot_call_functions] {
-    unsupported "this target can not call functions"
+    setup_xfail "*-*-*"
+    fail "This target can not call functions"
     continue
 }
 
@@ -35,7 +36,6 @@ standard_testfile .c
 if [get_compiler_info] {
     return -1
 }
-set skip_float_test [gdb_skip_float_test]
 
 # Compile a variant of scalars.c using TYPE to specify the type of the
 # parameter and return-type.  Run the compiled program up to "main".
@@ -55,16 +55,25 @@ proc start_scalars_test { type } {
     set testfile "call-sc-${type}"
 
     set binfile [standard_output_file ${testfile}]
-    if { [prepare_for_testing "failed to prepare" $binfile $srcfile $flags] } {
-	return -1
+    if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable "${flags}"] != "" } {
+	# built the second test case since we can't use prototypes
+	warning "Prototypes not supported, rebuilding with -DNO_PROTOTYPES"
+	if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable "${flags} additional_flags=-DNO_PROTOTYPES"] != "" } {
+	    untested call-sc.exp
+	    return -1
+	}
     }
 
+    # Start with a fresh gdb.
+    gdb_exit
+    gdb_start
+    gdb_reinitialize_dir $srcdir/$subdir
+    gdb_load ${binfile}
+
     # Make certain that the output is consistent
-    with_test_prefix "testfile=$testfile" {
-	gdb_test_no_output "set print sevenbit-strings"
-	gdb_test_no_output "set print address off"
-	gdb_test_no_output "set width 0"
-    }
+    gdb_test_no_output "set print sevenbit-strings"
+    gdb_test_no_output "set print address off"
+    gdb_test_no_output "set width 0"
 
     # Advance to main
     if { ![runto_main] } then {
@@ -234,7 +243,7 @@ proc test_scalar_returns { } {
     #
     # This happens on ppc64 GNU/Linux with gcc 3.4.1 and a buggy GDB
 
-    set test "return foo; synchronize pc to main() for '${testfile}'"
+    set test "return foo; synchronize pc to main()"
     for {set loop_count 0} {$loop_count < 2} {incr loop_count} {
       gdb_test_multiple "backtrace 1" $test {
         -re "#0.*main \\(\\).*${gdb_prompt} $" {
@@ -377,6 +386,9 @@ proc test_scalar_returns { } {
 
 # NetBSD/PPC returns "unnatural" (3, 5, 6, 7) sized scalars in memory.
 
+# d10v is weird. 5/6 byte scalars go in memory.  2 or more char
+# scalars go in memory.  Everything else is in a register!
+
 # Test every single char struct from 1..17 in size.  This is what the
 # original "scalars" test was doing.
 
@@ -397,7 +409,9 @@ test_scalar_returns
 
 # The approx size of each structure it is computed assumed that tc=1,
 # ts=2, ti=4, tl=4, tll=8, tf=4, td=8, tld=16, and that all fields are
-# naturally aligned.  Padding being added where needed.
+# naturally aligned.  Padding being added where needed.  Note that
+# these numbers are just approx, the d10v has ti=2, a 64-bit has has
+# tl=8.
 
 # Approx size: 2, 4, ...
 start_scalars_test ts
@@ -419,7 +433,7 @@ start_scalars_test tll
 test_scalar_calls
 test_scalar_returns
 
-if {!$skip_float_test} {
+if ![target_info exists gdb,skip_float_tests] {
     # Approx size: 4, 8, ...
     start_scalars_test tf
     test_scalar_calls

@@ -1,6 +1,6 @@
 # This testcase is part of GDB, the GNU debugger.
 
-# Copyright 1997-2020 Free Software Foundation, Inc.
+# Copyright 1997-2014 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,14 +20,14 @@ standard_testfile .c
 
 remote_exec build "rm -f ${binfile}"
 if { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {debug}] != "" } {
-     untested "failed to compile"
+     untested step-test.exp
      return -1
 }
 
 clean_restart ${binfile}
 
 if ![runto_main] then {
-   fail "can't run to main"
+   fail "Can't run to main"
    return 0
 }
 
@@ -41,8 +41,8 @@ gdb_test "step" ".*${decimal}.*y = 2;.*" "step 1"
 
 # With count
 #
-gdb_test "next 2" ".*${decimal}.*w = w.*2;.*"
-gdb_test "step 3" ".*${decimal}.*z = z.*5;.*"
+gdb_test "next 2" ".*${decimal}.*w = w.*2;.*" "next 2"
+gdb_test "step 3" ".*${decimal}.*z = z.*5;.*" "step 3"
 gdb_test "next" ".*${decimal}.*callee.*OVER.*" "next 3"
 
 # Step over call
@@ -65,7 +65,7 @@ gdb_test "step" ".*${decimal}.*myglob.*"   "step into"
 # to the restoration of the global pointer (which is a caller-save).
 # Similarly on MIPS PIC targets.
 set test "step out"
-if { [istarget "ia64-*-*"] || [istarget "mips*-*-*"]} {
+if { [istarget "hppa2.0w-hp-hpux*"] || [istarget "ia64-*-*"] || [istarget "mips*-*-*"]} {
     gdb_test_multiple "finish" "$test" {
         -re ".*${decimal}.*a.*5.*= a.*3.*$gdb_prompt $" {
 	    pass "$test"
@@ -157,7 +157,7 @@ gdb_test_multiple "finish" "$test" {
 	# On IA-64, we end up on callee instead of on the following line due
 	# to the restoration of the global pointer.
 	# Similarly on MIPS PIC targets.
-	if { [istarget "ia64-*-*"] || [istarget "mips*-*-*"] } {
+	if { [istarget "hppa2.0w-hp-hpux*"] || [istarget "ia64-*-*"] || [istarget "mips*-*-*"] } {
 	    test_i "$test" "stepi" \
 		".*${decimal}.*callee.*STEPI"  ".*${decimal}.*callee.*NEXTI"
 	} else {

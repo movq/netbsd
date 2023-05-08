@@ -1,8 +1,4 @@
-
-
-/* The leading newlines here are intentional, do not remove.  They are used to
-   test that the source highlighter doesn't strip them.  */
-/* Copyright 2018-2020 Free Software Foundation, Inc.
+/* Copyright 2018-2019 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -19,28 +15,8 @@
 
 #define SOME_MACRO 23
 
-enum etype
-{
-  VALUE_ONE = 1,
-  VALUE_TWO = 2
-};
-
-struct some_struct
-{
-  int int_field;
-  char *string_field;
-  enum etype e_field;
-};
-
-struct some_struct struct_value = { 23, "skidoo", VALUE_TWO };
-
-int some_called_function (void)
-{
-  return 0;
-}
-
 int
 main (int argc, char **argv)
 {
-  return some_called_function (); /* break here */
+  return 0; /* break here */
 }

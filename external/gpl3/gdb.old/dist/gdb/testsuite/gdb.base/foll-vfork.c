@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 1997-2020 Free Software Foundation, Inc.
+   Copyright 1997-2014 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -18,30 +18,18 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#include <limits.h>
-#include <string.h>
-
-int
-main (int argc, char ** argv)
+#ifdef PROTOTYPES
+int main (void)
+#else
+main ()
+#endif
 {
   int  pid;
 
-  /* A statement before vfork to make sure a breakpoint on main isn't
-     set on vfork below.  */
-  pid = 1 + argc;
-  pid = vfork (); /* VFORK */
+  pid = vfork ();
   if (pid == 0) {
-    char prog[PATH_MAX];
-    int len;
-
-    strcpy (prog, argv[0]);
-    len = strlen (prog);
-    /* Replace "foll-vfork" with "vforked-prog".  */
-    memcpy (prog + len - 10, "vforked-prog", 12);
-    prog[len + 2] = 0;
-
     printf ("I'm the child!\n");
-    execlp (prog, prog, (char *) 0);
+    execlp (BASEDIR "/vforked-prog", BASEDIR "/vforked-prog", (char *)0);
     perror ("exec failed");
     _exit (1);
   }

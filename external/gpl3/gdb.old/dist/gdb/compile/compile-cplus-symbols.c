@@ -1,6 +1,6 @@
 /* Convert symbols from GDB to GCC
 
-   Copyright (C) 2014-2020 Free Software Foundation, Inc.
+   Copyright (C) 2014-2019 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -21,7 +21,7 @@
 #include "defs.h"
 #include "compile-internal.h"
 #include "compile-cplus.h"
-#include "gdbsupport/gdb_assert.h"
+#include "common/gdb_assert.h"
 #include "symtab.h"
 #include "parser-defs.h"
 #include "block.h"
@@ -30,7 +30,7 @@
 #include "value.h"
 #include "exceptions.h"
 #include "gdbtypes.h"
-#include "dwarf2/loc.h"
+#include "dwarf2loc.h"
 #include "cp-support.h"
 #include "gdbcmd.h"
 #include "compile-c.h"
@@ -73,9 +73,9 @@ convert_one_symbol (compile_cplus_instance *instance,
       switch (SYMBOL_CLASS (sym.symbol))
 	{
 	case LOC_TYPEDEF:
-	  if (SYMBOL_TYPE (sym.symbol)->code () == TYPE_CODE_TYPEDEF)
+	  if (TYPE_CODE (SYMBOL_TYPE (sym.symbol)) == TYPE_CODE_TYPEDEF)
 	    kind = GCC_CP_SYMBOL_TYPEDEF;
-	  else  if (SYMBOL_TYPE (sym.symbol)->code () == TYPE_CODE_NAMESPACE)
+	  else  if (TYPE_CODE (SYMBOL_TYPE (sym.symbol)) == TYPE_CODE_NAMESPACE)
 	    return;
 	  break;
 
@@ -94,33 +94,33 @@ convert_one_symbol (compile_cplus_instance *instance,
 	  break;
 
 	case LOC_CONST:
-	  if (SYMBOL_TYPE (sym.symbol)->code () == TYPE_CODE_ENUM)
+	  if (TYPE_CODE (SYMBOL_TYPE (sym.symbol)) == TYPE_CODE_ENUM)
 	    {
 	      /* Already handled by convert_enum.  */
 	      return;
 	    }
 	  instance->plugin ().build_constant
-	    (sym_type, sym.symbol->natural_name (),
+	    (sym_type, SYMBOL_NATURAL_NAME (sym.symbol),
 	     SYMBOL_VALUE (sym.symbol), filename, line);
 	  return;
 
 	case LOC_CONST_BYTES:
 	  error (_("Unsupported LOC_CONST_BYTES for symbol \"%s\"."),
-		 sym.symbol->print_name ());
+		 SYMBOL_PRINT_NAME (sym.symbol));
 
 	case LOC_UNDEF:
 	  internal_error (__FILE__, __LINE__, _("LOC_UNDEF found for \"%s\"."),
-			  sym.symbol->print_name ());
+			  SYMBOL_PRINT_NAME (sym.symbol));
 
 	case LOC_COMMON_BLOCK:
 	  error (_("Fortran common block is unsupported for compilation "
 		   "evaluaton of symbol \"%s\"."),
-		 sym.symbol->print_name ());
+		 SYMBOL_PRINT_NAME (sym.symbol));
 
 	case LOC_OPTIMIZED_OUT:
 	  error (_("Symbol \"%s\" cannot be used for compilation evaluation "
 		   "as it is optimized out."),
-		 sym.symbol->print_name ());
+		 SYMBOL_PRINT_NAME (sym.symbol));
 
 	case LOC_COMPUTED:
 	  if (is_local)
@@ -129,7 +129,7 @@ convert_one_symbol (compile_cplus_instance *instance,
 	  warning (_("Symbol \"%s\" is thread-local and currently can only "
 		     "be referenced from the current thread in "
 		     "compiled code."),
-		   sym.symbol->print_name ());
+		   SYMBOL_PRINT_NAME (sym.symbol));
 	  /* FALLTHROUGH */
 	case LOC_UNRESOLVED:
 	  /* 'symbol_name' cannot be used here as that one is used only for
@@ -146,14 +146,14 @@ convert_one_symbol (compile_cplus_instance *instance,
 		if (frame == nullptr)
 		  error (_("Symbol \"%s\" cannot be used because "
 			   "there is no selected frame"),
-			 sym.symbol->print_name ());
+			 SYMBOL_PRINT_NAME (sym.symbol));
 	      }
 
 	    val = read_var_value (sym.symbol, sym.block, frame);
 	    if (VALUE_LVAL (val) != lval_memory)
 	      error (_("Symbol \"%s\" cannot be used for compilation "
 		       "evaluation as its address has not been found."),
-		     sym.symbol->print_name ());
+		     SYMBOL_PRINT_NAME (sym.symbol));
 
 	    kind = GCC_CP_SYMBOL_VARIABLE;
 	    addr = value_address (val);
@@ -189,12 +189,12 @@ convert_one_symbol (compile_cplus_instance *instance,
 	  if (!is_local)
 	    {
 	      compile_scope scope
-		= instance->new_scope (sym.symbol->natural_name (),
+		= instance->new_scope (SYMBOL_NATURAL_NAME (sym.symbol),
 				       SYMBOL_TYPE (sym.symbol));
 	      if (scope.nested_type () != GCC_TYPE_NONE)
 		{
 		  /* We found a symbol for this type that was defined inside
-		     some other symbol, e.g., a class typedef defined.  */
+		     some other symbol, e.g., a class tyepdef defined.  */
 		  return;
 		}
 
@@ -202,9 +202,9 @@ convert_one_symbol (compile_cplus_instance *instance,
 	    }
 
 	  /* Get the `raw' name of the symbol.  */
-	  if (name.empty () && sym.symbol->natural_name () != nullptr)
+	  if (name.empty () && SYMBOL_NATURAL_NAME (sym.symbol) != nullptr)
 	    name = compile_cplus_instance::decl_name
-	      (sym.symbol->natural_name ()).get ();
+	      (SYMBOL_NATURAL_NAME (sym.symbol)).get ();
 
 	  /* Define the decl.  */
 	  instance->plugin ().build_decl
@@ -323,7 +323,7 @@ convert_symbol_bmsym (compile_cplus_instance *instance,
   sym_type = instance->convert_type (type);
   instance->plugin ().push_namespace ("");
   instance->plugin ().build_decl
-    ("minsym", msym->natural_name (), kind, sym_type, nullptr, addr,
+    ("minsym", MSYMBOL_NATURAL_NAME (msym), kind, sym_type, nullptr, addr,
      nullptr, 0);
   instance->plugin ().pop_binding_level ("");
 }
@@ -343,7 +343,7 @@ gcc_cplus_convert_symbol (void *datum,
   bool found = false;
   compile_cplus_instance *instance = (compile_cplus_instance *) datum;
 
-  try
+  TRY
     {
       /* Symbol searching is a three part process unfortunately.  */
 
@@ -388,12 +388,13 @@ gcc_cplus_convert_symbol (void *datum,
 	    }
 	}
     }
-  catch (const gdb_exception &e)
+  CATCH (e, RETURN_MASK_ALL)
     {
       /* We can't allow exceptions to escape out of this callback.  Safest
 	 is to simply emit a gcc error.  */
-      instance->plugin ().error (e.what ());
+      instance->plugin ().error (e.message);
     }
+  END_CATCH
 
   if (compile_debug && !found)
     fprintf_unfiltered (gdb_stdlog,
@@ -430,7 +431,7 @@ gcc_cplus_symbol_address (void *datum, struct gcc_cp_context *gcc_context,
 
   /* We can't allow exceptions to escape out of this callback.  Safest
      is to simply emit a gcc error.  */
-  try
+  TRY
     {
       struct symbol *sym
 	= lookup_symbol (identifier, nullptr, VAR_DOMAIN, nullptr).symbol;
@@ -466,10 +467,11 @@ gcc_cplus_symbol_address (void *datum, struct gcc_cp_context *gcc_context,
 	}
     }
 
-  catch (const gdb_exception_error &e)
+  CATCH (e, RETURN_MASK_ERROR)
     {
-      instance->plugin ().error (e.what ());
+      instance->plugin ().error (e.message);
     }
+  END_CATCH
 
   if (compile_debug && !found)
     fprintf_unfiltered (gdb_stdlog,

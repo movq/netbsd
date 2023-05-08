@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.9 2022/12/23 17:09:30 christos Exp $
+#	$NetBSD: Makefile,v 1.1 2016/01/26 17:26:57 christos Exp $
 
 NOLINKLIB=	# defined
 NOLINT=		# defined
@@ -6,7 +6,7 @@ NOMAN=		# defined
 NOPROFILE=	# defined
 NOCLANGERROR=	# defined
 
-.include <bsd.init.mk>
+.include <bsd.own.mk>
 
 # If the platform does not support shared libraries, we need to supply
 # *something* for BFD-using programs to link against.  Also provide an
@@ -21,49 +21,35 @@ LIB=		bfd
 BFD_MACHINE_ARCH?=	${MACHINE_ARCH:C/armv[4-7]/arm/}
 
 DEFS_MK=${.CURDIR}/arch/${BFD_MACHINE_ARCH}/defs.mk
-# XXX: Fix me
-BINDIR=/usr/bin
-BINDIR=/usr/lib
 
 .if exists(${DEFS_MK})
 .include "${DEFS_MK}"
 
-SHLIB_MAJOR=	17
+DIST=		${NETBSDSRCDIR}/external/gpl3/binutils/dist
+
+SHLIB_MAJOR=	13
 SHLIB_MINOR=	0
 
 LIBDPLIBS+=	z	${.CURDIR}/../../../../../lib/libz
 
 GCPPFLAGS=	${G_archdefs} ${G_DEFS} ${G_INCLUDES} ${G_TDEFAULTS}
-GCPPFLAGS+=	${G_HAVEVECS}
-
 CPPFLAGS+=	-I${.CURDIR}/arch/${BFD_MACHINE_ARCH} -I${DIST}/include -I. \
 		-I${DIST}/bfd ${GCPPFLAGS:M-D*} ${GCPPFLAGS:M-I*:N-I.*} \
-		-DDEBUGDIR=\"${DEBUGDIR}\" -DLIBDIR=\"${LIBDIR}\" \
-		-DBINDIR=\"${BINDIR}\"
+		-DDEBUGDIR=\"${DEBUGDIR}\"
 
 .if (${BFD_MACHINE_ARCH} == "vax")
 CPPFLAGS.elf.c +=	-O0
 .endif
-
-COPTS.pei-x86_64.c+=	-Wno-stack-protector
-COPTS.elfxx-mips.c+=	-Wno-stack-protector
-COPTS.elf.c+=		${${ACTIVE_CC} == "gcc" && ${HAVE_GCC:U0} >= 10:? -Wno-overflow :}
 
 GSRCS=		${G_libbfd_la_OBJECTS:libbfd.lo=lib_bfd.lo} \
 		${G_libbfd_la_DEPENDENCIES:M*.lo}
 SRCS=		${GSRCS:.lo=.c}
 
 DPSRCS+=	elf32-target.h elf64-target.h targmatch.h \
-		elf32-aarch64.c elf64-aarch64.c \
-		elf32-ia64.c elf64-ia64.c \
-		elf32-riscv.c elf64-riscv.c \
-		peigen.c pepigen.c \
+		elf32-ia64.c elf64-ia64.c peigen.c pepigen.c \
 		pex64igen.c
 CLEANFILES+=	elf32-target.h elf64-target.h targmatch.h \
-		elf32-aarch64.c elf64-aarch64.c \
-		elf32-ia64.c elf64-ia64.c \
-		elf32-riscv.c elf64-riscv.c \
-		peigen.c pepigen.c \
+		elf32-ia64.c elf64-ia64.c peigen.c pepigen.c \
 		pex64igen.c
 
 TEXINFO=	bfd.texinfo
@@ -89,14 +75,6 @@ elf32-target.h: elfxx-target.h
 	${TOOL_SED} -e s/NN/32/g < $> > $@
 
 elf64-target.h: elfxx-target.h
-	${_MKTARGET_CREATE}
-	${TOOL_SED} -e s/NN/64/g < $> > $@
-
-elf32-aarch64.c: elfnn-aarch64.c
-	${_MKTARGET_CREATE}
-	${TOOL_SED} -e s/NN/32/g < $> > $@
-
-elf64-aarch64.c: elfnn-aarch64.c
 	${_MKTARGET_CREATE}
 	${TOOL_SED} -e s/NN/64/g < $> > $@
 

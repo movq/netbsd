@@ -13,22 +13,20 @@ int bar (int y)
   return z;
 }
 
-int func2 ()
-{
-  x = 6;
-  return x;
-}
-
-void func(int c)
+void func()
 {
   x = x + 5;
   func2 ();
 }
 
+int func2 ()
+{
+  x = 6;
+}
+
 int func3 ()
 {
   x = 4;
-  return x;
 }
 
 void marker1 ()

@@ -1,5 +1,6 @@
 /* Definitions for opcode table for the sparc.
-   Copyright (C) 1989-2020 Free Software Foundation, Inc.
+   Copyright 1989, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 2000, 2002,
+   2003, 2005, 2010, 2011 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler, GDB, the GNU debugger, and
    the GNU Binutils.
@@ -21,10 +22,6 @@
 
 #include "ansidecl.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /* The SPARC opcode table (and other related data) is defined in
    the opcodes library in sparc-opc.c.  If you change anything here, make
    sure you fix up that file, and vice versa.  */
@@ -45,24 +42,17 @@ enum sparc_opcode_arch_val
   SPARC_OPCODE_ARCH_V6 = 0,
   SPARC_OPCODE_ARCH_V7,
   SPARC_OPCODE_ARCH_V8,
-  SPARC_OPCODE_ARCH_LEON,
   SPARC_OPCODE_ARCH_SPARCLET,
   SPARC_OPCODE_ARCH_SPARCLITE,
   /* V9 variants must appear last.  */
   SPARC_OPCODE_ARCH_V9,
   SPARC_OPCODE_ARCH_V9A, /* V9 with ultrasparc additions.  */
   SPARC_OPCODE_ARCH_V9B, /* V9 with ultrasparc and cheetah additions.  */
-  SPARC_OPCODE_ARCH_V9C, /* V9 with UA2005 and T1 additions.  */
-  SPARC_OPCODE_ARCH_V9D, /* V9 with UA2007 and T3 additions.  */
-  SPARC_OPCODE_ARCH_V9E, /* V9 with OSA2011 and T4 additions modulus integer multiply-add.  */
-  SPARC_OPCODE_ARCH_V9V, /* V9 with OSA2011 and T4 additions, integer
-                            multiply and Fujitsu fp multiply-add.  */
-  SPARC_OPCODE_ARCH_V9M, /* V9 with OSA2015 and M7 additions.  */
-  SPARC_OPCODE_ARCH_M8,  /* V9 with OSA2017 and M8 additions.  */
-  SPARC_OPCODE_ARCH_MAX = SPARC_OPCODE_ARCH_M8,
   SPARC_OPCODE_ARCH_BAD  /* Error return from sparc_opcode_lookup_arch.  */
 };
 
+/* The highest architecture in the table.  */
+#define SPARC_OPCODE_ARCH_MAX (SPARC_OPCODE_ARCH_BAD - 1)
 
 /* Given an enum sparc_opcode_arch_val, return the bitmask to use in
    insn encoding/decoding.  */
@@ -81,10 +71,6 @@ typedef struct sparc_opcode_arch
      (SPARC_OPCODE_ARCH_MASK (..._V6) | SPARC_OPCODE_ARCH_MASK (..._V7)).
      These are short's because sparc_opcode.architecture is.  */
   short supported;
-  /* Bitmaps describing the set of hardware capabilities implemented
-     by the opcode arch.  */
-  int hwcaps;
-  int hwcaps2;
 } sparc_opcode_arch;
 
 extern const struct sparc_opcode_arch sparc_opcode_archs[];
@@ -114,17 +100,8 @@ typedef struct sparc_opcode
   /* This was called "delayed" in versions before the flags.  */
   unsigned int flags;
   unsigned int hwcaps;
-  unsigned int hwcaps2;
   short architecture;	/* Bitmask of sparc_opcode_arch_val's.  */
 } sparc_opcode;
-
-/* Struct for ASIs - to handle ASIs introduced in a specific architecture */
-typedef struct
-{
-  int value;
-  const char *name;
-  short architecture;
-} sparc_asi;
 
 /* FIXME: Add F_ANACHRONISTIC flag for v9.  */
 #define	F_DELAYED	0x00000001 /* Delayed branch.  */
@@ -134,12 +111,8 @@ typedef struct
 #define	F_JSR		0x00000010 /* Subroutine call.  */
 #define F_FLOAT		0x00000020 /* Floating point instruction (not a branch).  */
 #define F_FBR		0x00000040 /* Floating point branch.  */
-#define F_PREFERRED	0x00000080 /* A preferred alias.  */
 
-#define F_PREF_ALIAS	(F_ALIAS|F_PREFERRED)
-
-/* These must match the ELF_SPARC_HWCAP_* and ELF_SPARC_HWCAP2_*
-   values precisely.  See include/elf/sparc.h.  */
+/* These must match the HWCAP_* values precisely.  */
 #define HWCAP_MUL32	0x00000001 /* umul/umulcc/smul/smulcc insns */
 #define HWCAP_DIV32	0x00000002 /* udiv/udivcc/sdiv/sdivcc insns */
 #define HWCAP_FSMULD	0x00000004 /* 'fsmuld' insn */
@@ -172,29 +145,6 @@ typedef struct
 #define HWCAP_CBCOND	0x10000000 /* Compare and Branch insns */
 #define HWCAP_CRC32C	0x20000000 /* CRC32C insn */
 
-#define HWCAP2_FJATHPLUS 0x00000001 /* Fujitsu Athena+ */
-#define HWCAP2_VIS3B     0x00000002 /* Subset of VIS3 present on sparc64 X+.  */
-#define HWCAP2_ADP       0x00000004 /* Application Data Protection */
-#define HWCAP2_SPARC5    0x00000008 /* The 29 new fp and sub instructions */
-#define HWCAP2_MWAIT     0x00000010 /* mwait instruction and load/monitor ASIs */
-#define HWCAP2_XMPMUL    0x00000020 /* XOR multiple precision multiply */
-#define HWCAP2_XMONT     0x00000040 /* XOR Montgomery mult/sqr instructions */
-#define HWCAP2_NSEC      \
-                         0x00000080 /* pause insn with support for nsec timings */
-#define HWCAP2_FJATHHPC  0x00001000 /* Fujitsu HPC instrs */
-#define HWCAP2_FJDES     0x00002000 /* Fujitsu DES instrs */
-#define HWCAP2_FJAES     0x00010000 /* Fujitsu AES instrs */
-
-#define HWCAP2_SPARC6    0x00020000 /* OSA2017 new instructions */
-#define HWCAP2_ONADDSUB  0x00040000 /* Oracle Number add/subtract */
-#define HWCAP2_ONMUL     0x00080000 /* Oracle Number multiply */
-#define HWCAP2_ONDIV     0x00100000 /* Oracle Number divide */
-#define HWCAP2_DICTUNP   0x00200000 /* Dictionary unpack instruction */
-#define HWCAP2_FPCMPSHL  0x00400000 /* Partition compare with shifted result */
-#define HWCAP2_RLE       0x00800000 /* Run-length encoded burst and length */
-#define HWCAP2_SHA3      0x01000000 /* SHA3 instruction */
-
-
 /* All sparc opcodes are 32 bits, except for the `set' instruction (really a
    macro), which is 64 bits. It is handled as a special case.
 
@@ -212,19 +162,14 @@ typedef struct
 	e	frs1 floating point register.
 	v	frs1 floating point register (double/even).
 	V	frs1 floating point register (quad/multiple of 4).
-	;	frs1 floating piont register (multiple of 8).
 	f	frs2 floating point register.
 	B	frs2 floating point register (double/even).
 	R	frs2 floating point register (quad/multiple of 4).
-	:	frs2 floating point register (multiple of 8).
-	'	rs2m floating point register (double/even) in FPCMPSHL. (m8)
 	4	frs3 floating point register.
 	5	frs3 floating point register (doube/even).
 	g	frsd floating point register.
 	H	frsd floating point register (double/even).
 	J	frsd floating point register (quad/multiple of 4).
-	}       frsd floating point register (double/even) that is == frs2
-	^	frsd floating piont register in ON instructions.
 	b	crs1 coprocessor register
 	c	crs2 coprocessor register
 	D	crsd coprocessor register
@@ -266,8 +211,6 @@ typedef struct
 	s	%fprs. (v9)
 	P	%pc.  (v9)
 	W	%tick.	(v9)
-	{	%mcdper. (v9b)
-	&	%entropy.  (m8)
 	o	%asi. (v9)
 	6	%fcc0. (v9)
 	7	%fcc1. (v9)
@@ -275,8 +218,6 @@ typedef struct
 	9	%fcc3. (v9)
 	!	Privileged Register in rd (v9)
 	?	Privileged Register in rs1 (v9)
-	%	Hyperprivileged Register in rd (v9b)
-	$	Hyperprivileged Register in rs1 (v9b)
 	*	Prefetch function constant. (v9)
 	x	OPF field (v9 impdep).
 	0	32/64 bit immediate for set or setx (v9) insns
@@ -284,8 +225,7 @@ typedef struct
 	/	Ancillary state register in rs1 (v9a)
 	(	entire floating point state register (%efsr)
 	)	5 bit immediate placed in RS3 field
-	=	2+8 bit PC relative immediate. (v9)
-	|	FPCMPSHL 2 bit immediate. (m8)  */
+	=	2+8 bit PC relative immediate. (v9)  */
 
 #define OP2(x)		(((x) & 0x7) << 22)  /* Op2 field of format2 insns.  */
 #define OP3(x)		(((x) & 0x3f) << 19) /* Op3 field of format3 insns.  */
@@ -293,12 +233,7 @@ typedef struct
 #define OPF(x)		(((x) & 0x1ff) << 5) /* Opf field of float insns.  */
 #define OPF_LOW5(x)	OPF ((x) & 0x1f)     /* V9.  */
 #define OPF_LOW4(x)	OPF ((x) & 0xf)      /* V9.  */
-#define OPM(x)		(((x) & 0x7) << 10)  /* opm field of misaligned load/store insns.  */
-#define OPMI(x)	(((x) & 0x1) << 9)   /* opm i field of misaligned load/store insns.  */
-#define ONFCN(x)	(((x) & 0x3) << 26)  /* fcn field of Oracle Number insns.  */
-#define REVFCN(x)	(((x) & 0x3) << 0)   /* fcn field of REV* insns.  */
 #define F3F(x, y, z)	(OP (x) | OP3 (y) | OPF (z)) /* Format3 float insns.  */
-#define F3F4(x, y, z)	(OP (x) | OP3 (y) | OPF_LOW4 (z))
 #define F3I(x)		(((x) & 0x1) << 13)  /* Immediate field of format 3 insns.  */
 #define F2(x, y)	(OP (x) | OP2(y))    /* Format 2 insns.  */
 #define F3(x, y, z)	(OP (x) | OP3(y) | F3I(z)) /* Format3 insns.  */
@@ -307,7 +242,6 @@ typedef struct
 #define ASI(x)		(((x) & 0xff) << 5)  /* Asi field of format3 insns.  */
 #define RS2(x)		((x) & 0x1f)         /* Rs2 field.  */
 #define SIMM13(x)	((x) & 0x1fff)       /* Simm13 field.  */
-#define SIMM10(x)	((x) & 0x3ff)	     /* Simm10 field.  */
 #define RD(x)		(((x) & 0x1f) << 25) /* Destination register field.  */
 #define RS1(x)		(((x) & 0x1f) << 14) /* Rs1 field.  */
 #define RS3(x)		(((x) & 0x1f) << 9)  /* Rs3 field.  */
@@ -325,7 +259,7 @@ typedef struct
 extern const struct sparc_opcode sparc_opcodes[];
 extern const int sparc_num_opcodes;
 
-extern const sparc_asi *sparc_encode_asi (const char *);
+extern int sparc_encode_asi (const char *);
 extern const char *sparc_decode_asi (int);
 extern int sparc_encode_membar (const char *);
 extern const char *sparc_decode_membar (int);
@@ -339,6 +273,3 @@ extern const char *sparc_decode_sparclet_cpreg (int);
    comment-column: 0
    End: */
 
-#ifdef __cplusplus
-}
-#endif

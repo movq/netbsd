@@ -50,10 +50,8 @@ int do_vars()
     return *p_i;
 }
 
-int
 main()
 {
     do_loops();
     do_vars();    
-    return 0;
 }
