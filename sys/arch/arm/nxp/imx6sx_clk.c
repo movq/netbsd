@@ -1,4 +1,4 @@
-/*	$NetBSD: imx6sx_clk.c,v 1.3 2023/05/05 09:34:09 bouyer Exp $	*/
+/*	$NetBSD: imx6sx_clk.c,v 1.3.2.2 2023/05/28 10:14:35 martin Exp $	*/
 
 /*-
  * Copyright (c) 2019 Genetec Corporation.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imx6sx_clk.c,v 1.3 2023/05/05 09:34:09 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imx6sx_clk.c,v 1.3.2.2 2023/05/28 10:14:35 martin Exp $");
 
 #include "opt_fdt.h"
 
