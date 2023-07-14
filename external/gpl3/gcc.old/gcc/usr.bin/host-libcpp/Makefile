@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2023/07/14 06:34:27 mrg Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2023/07/14 06:34:27 mrg Exp $
 
 BUILD_ENV= \
 		AR=${HOST_AR:Q} \
