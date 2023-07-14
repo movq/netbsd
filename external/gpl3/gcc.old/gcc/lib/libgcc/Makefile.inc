@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.1 2023/07/14 06:34:26 mrg Exp $
+#	$NetBSD: Makefile.inc,v 1.1.1.1 2023/07/14 06:34:26 mrg Exp $
 
 LIBGCC_MACHINE_ARCH?=${MACHINE_ARCH:S/earmv5/earm/}
 GCC_MACHINE_SUBDIR=${MACHINE_CPU:C/powerpc.*/rs6000/:C/x86_64/i386/}
