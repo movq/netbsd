@@ -1,4 +1,4 @@
-/*	$NetBSD: h_abuse_static.c,v 1.1 2023/06/01 22:26:40 riastradh Exp $	*/
+/*	$NetBSD: h_abuse_static.c,v 1.1.2.2 2023/08/01 16:34:58 martin Exp $	*/
 
 /*-
  * Copyright (c) 2023 The NetBSD Foundation, Inc.
