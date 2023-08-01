@@ -1,4 +1,4 @@
-/*	$NetBSD: hash.c,v 1.1 2023/07/30 09:20:14 riastradh Exp $	 */
+/*	$NetBSD: hash.c,v 1.1.2.2 2023/08/01 17:03:53 martin Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -40,7 +40,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hash.c,v 1.1 2023/07/30 09:20:14 riastradh Exp $");
+__RCSID("$NetBSD: hash.c,v 1.1.2.2 2023/08/01 17:03:53 martin Exp $");
 #endif /* not lint */
 
 #include <stdint.h>

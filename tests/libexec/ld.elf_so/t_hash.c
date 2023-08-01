@@ -1,4 +1,4 @@
-/*	$NetBSD: t_hash.c,v 1.1 2023/07/30 09:22:02 riastradh Exp $	*/
+/*	$NetBSD: t_hash.c,v 1.1.2.2 2023/08/01 17:03:53 martin Exp $	*/
 
 /*-
  * Copyright (c) 2023 The NetBSD Foundation, Inc.
