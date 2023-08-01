@@ -1,4 +1,4 @@
-/*	$NetBSD: powerpc.c,v 1.1 2023/04/12 17:53:32 riastradh Exp $	*/
+/*	$NetBSD: powerpc.c,v 1.1.2.2 2023/08/01 14:36:59 martin Exp $	*/
 
 /*-
  * Copyright (c) 2023 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: powerpc.c,v 1.1 2023/04/12 17:53:32 riastradh Exp $");
+__RCSID("$NetBSD: powerpc.c,v 1.1.2.2 2023/08/01 14:36:59 martin Exp $");
 
 #include <err.h>
 #include <kvm.h>

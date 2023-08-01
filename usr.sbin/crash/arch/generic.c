@@ -1,4 +1,4 @@
-/*	$NetBSD: generic.c,v 1.1 2009/03/07 22:08:08 ad Exp $	*/
+/*	$NetBSD: generic.c,v 1.1.58.1 2023/08/01 14:36:59 martin Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -31,8 +31,10 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: generic.c,v 1.1 2009/03/07 22:08:08 ad Exp $");
+__RCSID("$NetBSD: generic.c,v 1.1.58.1 2023/08/01 14:36:59 martin Exp $");
 #endif /* not lint */
+
+#include <sys/types.h>
 
 #include <ddb/ddb.h>
 
