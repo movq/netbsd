@@ -1,4 +1,4 @@
-/*	$NetBSD: t_tls_extern.c,v 1.12 2023/06/04 01:24:58 joerg Exp $	*/
+/*	$NetBSD: t_tls_extern.c,v 1.12.2.2 2023/08/01 16:34:58 martin Exp $	*/
 
 /*-
  * Copyright (c) 2023 The NetBSD Foundation, Inc.

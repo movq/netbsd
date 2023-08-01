@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2023/07/05 22:42:47 riastradh Exp $
+#	$NetBSD: Makefile,v 1.2.2.2 2023/08/01 16:34:59 martin Exp $
 
 LIB=		h_onlyctor_dynamic
 SRCS=		h_onlyctor_dynamic.c

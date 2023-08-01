@@ -1,4 +1,4 @@
-/*	$NetBSD: h_onlyuse_static.c,v 1.1 2023/06/02 19:08:49 riastradh Exp $	*/
+/*	$NetBSD: h_onlyuse_static.c,v 1.1.2.2 2023/08/01 16:34:56 martin Exp $	*/
 
 /*-
  * Copyright (c) 2023 The NetBSD Foundation, Inc.
