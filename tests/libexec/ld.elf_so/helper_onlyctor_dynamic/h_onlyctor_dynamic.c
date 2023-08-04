@@ -1,4 +1,4 @@
-/*	$NetBSD: h_onlyctor_dynamic.c,v 1.1 2023/06/02 19:09:11 riastradh Exp $	*/
+/*	$NetBSD: h_onlyctor_dynamic.c,v 1.1.4.2 2023/08/04 12:55:48 martin Exp $	*/
 
 /*-
  * Copyright (c) 2023 The NetBSD Foundation, Inc.

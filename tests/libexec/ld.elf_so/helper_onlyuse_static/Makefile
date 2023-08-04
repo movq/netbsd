@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2023/07/05 22:42:47 riastradh Exp $
+#	$NetBSD: Makefile,v 1.2.4.2 2023/08/04 12:55:44 martin Exp $
 
 LIB=		h_onlyuse_static
 SRCS=		h_onlyuse_static.c
