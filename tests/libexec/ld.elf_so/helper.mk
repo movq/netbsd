@@ -1,4 +1,4 @@
-#	$NetBSD: helper.mk,v 1.1 2023/07/05 22:42:46 riastradh Exp $
+#	$NetBSD: helper.mk,v 1.1.4.2 2023/08/04 12:55:46 martin Exp $
 
 # Makefile fragment for building a helper library used by ld.elf_so
 # tests.  All we need to install is lib${LIB}.so and lib${LIB}.so.1.

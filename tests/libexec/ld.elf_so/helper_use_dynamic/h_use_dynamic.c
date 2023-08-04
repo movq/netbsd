@@ -1,4 +1,4 @@
-/*	$NetBSD: h_use_dynamic.c,v 1.1 2023/06/01 20:50:19 riastradh Exp $	*/
+/*	$NetBSD: h_use_dynamic.c,v 1.1.4.2 2023/08/04 12:55:46 martin Exp $	*/
 
 /*-
  * Copyright (c) 2023 The NetBSD Foundation, Inc.
