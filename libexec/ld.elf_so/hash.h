@@ -1,4 +1,4 @@
-/*	$NetBSD: hash.h,v 1.1 2023/07/30 09:20:14 riastradh Exp $	 */
+/*	$NetBSD: hash.h,v 1.1.4.2 2023/08/09 16:16:40 martin Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -36,7 +36,6 @@
 
 #include <sys/exec_elf.h>
 
-Elf32_Word _rtld_sysv_hash(const char *);
-Elf32_Word _rtld_gnu_hash(const char *);
+Elf32_Word _rtld_elf_hash(const char *);
 
 #endif	/* RTLD_HASH_H */
