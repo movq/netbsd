@@ -1,4 +1,4 @@
-/*	$NetBSD: hash.c,v 1.1 2023/07/30 09:20:14 riastradh Exp $	 */
+/*	$NetBSD: hash.c,v 1.1.4.2 2023/08/09 16:16:40 martin Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -40,7 +40,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hash.c,v 1.1 2023/07/30 09:20:14 riastradh Exp $");
+__RCSID("$NetBSD: hash.c,v 1.1.4.2 2023/08/09 16:16:40 martin Exp $");
 #endif /* not lint */
 
 #include <stdint.h>
@@ -52,7 +52,7 @@ __RCSID("$NetBSD: hash.c,v 1.1 2023/07/30 09:20:14 riastradh Exp $");
  * version of the hash specified by the System V ABI.
  */
 Elf32_Word
-_rtld_sysv_hash(const char *name)
+_rtld_elf_hash(const char *name)
 {
 	const unsigned char *p = (const unsigned char *) name;
 	Elf32_Word h = 0;
@@ -62,20 +62,4 @@ _rtld_sysv_hash(const char *name)
 		h ^= (h >> 24) & 0xf0;
 	}
 	return (h & 0x0fffffff);
-}
-
-/*
- * Hash function for symbol table lookup.  Don't even think about changing
- * this.  It is specified by the GNU toolchain ABI.
- */
-Elf32_Word
-_rtld_gnu_hash(const char *name)
-{
-	const unsigned char *p = (const unsigned char *) name;
-	uint_fast32_t h = 5381;
-	unsigned char c;
-
-	for (c = *p; c != '\0'; c = *++p)
-		h = h * 33 + c;
-	return (h & 0xffffffff);
 }
