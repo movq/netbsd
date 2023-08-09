@@ -1,4 +1,4 @@
-/*	$NetBSD: db_syncobj.h,v 1.1 2023/07/09 17:10:47 riastradh Exp $	*/
+/*	$NetBSD: db_syncobj.h,v 1.1.2.2 2023/08/09 17:42:03 martin Exp $	*/
 
 /*-
  * Copyright (c) 2023 The NetBSD Foundation, Inc.
