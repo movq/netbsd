@@ -1,4 +1,4 @@
-/*	$NetBSD: db_syncobj.c,v 1.2 2023/07/12 12:50:46 riastradh Exp $	*/
+/*	$NetBSD: db_syncobj.c,v 1.2.2.2 2023/08/09 17:42:03 martin Exp $	*/
 
 /*-
  * Copyright (c) 2023 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
 #define	__RWLOCK_PRIVATE
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_syncobj.c,v 1.2 2023/07/12 12:50:46 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_syncobj.c,v 1.2.2.2 2023/08/09 17:42:03 martin Exp $");
 
 #include <sys/types.h>
 
