@@ -1,4 +1,4 @@
-/*	$NetBSD: ljumptab.h,v 1.2 2023/04/16 20:46:17 nikita Exp $	*/
+/*	$NetBSD: ljumptab.h,v 1.2.2.2 2023/08/11 16:22:07 martin Exp $	*/
 
 /*
 ** Id: ljumptab.h 
