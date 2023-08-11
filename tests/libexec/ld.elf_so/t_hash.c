@@ -1,4 +1,4 @@
-/*	$NetBSD: t_hash.c,v 1.1 2023/07/30 09:22:02 riastradh Exp $	*/
+/*	$NetBSD: t_hash.c,v 1.1.6.2 2023/08/11 12:13:10 sborrill Exp $	*/
 
 /*-
  * Copyright (c) 2023 The NetBSD Foundation, Inc.
@@ -101,10 +101,10 @@ ATF_TC_BODY(sysv, tc)
 	unsigned i;
 
 	for (i = 0; i < __arraycount(kat); i++) {
-		unsigned long long h = _rtld_sysv_hash(kat[i].in);
+		unsigned long long h = _rtld_elf_hash(kat[i].in);
 
 		ATF_CHECK_EQ_MSG(h, kat[i].out,
-		    "[%u] _rtld_hash_sysv(\"%s\") = 0x%08llx != 0x%08llx",
+		    "[%u] _rtld_elf_hash(\"%s\") = 0x%08llx != 0x%08llx",
 		    i, kat[i].in, h, kat[i].out);
 	}
 }
@@ -144,7 +144,7 @@ ATF_TC_BODY(sysv_broken, tc)
 		{ "ZZZZZ", 0x005ffffa },
 		{ "ZZZZZW", 0x05fffff7 },
 		{ "ZZZZZW9", 0x0ffffff9 },
-		{ "ZZZZZW9p", 0x100000000 },
+		{ "ZZZZZW9p", 0x100000000 }, /* XXX */
 		{ "pneumonoultramicroscopicsilicovolcanoconiosis",
 		  0x051706b3 },
 	};
@@ -159,58 +159,9 @@ ATF_TC_BODY(sysv_broken, tc)
 	}
 }
 
-ATF_TC(gnu);
-ATF_TC_HEAD(gnu, tc)
-{
-	atf_tc_set_md_var(tc, "descr", "GNU hash (djb2)");
-}
-ATF_TC_BODY(gnu, tc)
-{
-	static const struct kat kat[] = {
-		{ """", 0x00001505 },
-		{ "a", 0x0002b606 },
-		{ "aa", 0x00597727 },
-		{ "aaa", 0x0b885c68 },
-		{ "aaaa", 0x7c93e9c9 },
-		{ "aaaaa", 0x0f11234a },
-		{ "aaaaaa", 0xf1358ceb },
-		{ "aaaaaaa", 0x17e72aac },
-		{ "aaaaaaaa", 0x14cc808d },
-		{ "aaaaaaaaa", 0xae5c928e },
-		{ "ab", 0x00597728 },
-		{ "abc", 0x0b885c8b },
-		{ "abcd", 0x7c93ee4f },
-		{ "abcde", 0x0f11b894 },
-		{ "abcdef", 0xf148cb7a },
-		{ "abcdefg", 0x1a623b21 },
-		{ "abcdefgh", 0x66a99fa9 },
-		{ "abcdefghi", 0x3bdd9532 },
-		{ "Z", 0x0002b5ff },
-		{ "ZZ", 0x00597639 },
-		{ "ZZZ", 0x0b883db3 },
-		{ "ZZZZ", 0x7c8ff46d },
-		{ "ZZZZZ", 0x0e8e8267 },
-		{ "ZZZZZW", 0xe05ecf9e },
-		{ "ZZZZZW9", 0xec38c397 },
-		{ "ZZZZZW9p", 0x735136e7 },
-		{ "pneumonoultramicroscopicsilicovolcanoconiosis",
-		  0xee6245b5 },
-	};
-	unsigned i;
-
-	for (i = 0; i < __arraycount(kat); i++) {
-		unsigned long long h = _rtld_gnu_hash(kat[i].in);
-
-		ATF_CHECK_EQ_MSG(h, kat[i].out,
-		    "[%u] _rtld_gnu_hash(\"%s\") = 0x%08llx != 0x%08llx",
-		    i, kat[i].in, h, kat[i].out);
-	}
-}
-
 ATF_TP_ADD_TCS(tp)
 {
 
-	ATF_TP_ADD_TC(tp, gnu);
 	ATF_TP_ADD_TC(tp, sysv);
 	ATF_TP_ADD_TC(tp, sysv_broken);
 
