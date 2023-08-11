@@ -1,4 +1,4 @@
-#	$NetBSD: srcs.inc,v 1.1 2023/05/06 17:07:23 christos Exp $
+#	$NetBSD: srcs.inc,v 1.1.2.2 2023/08/11 13:42:14 martin Exp $
 
 DEFAULTINCS= \
 providers_common.inc \

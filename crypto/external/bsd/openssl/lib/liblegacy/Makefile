@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.7 2023/05/25 15:52:29 riastradh Exp $
+#	$NetBSD: Makefile,v 1.7.2.2 2023/08/11 13:42:15 martin Exp $
 
 # RCSid:
 #	Id: Makefile,v 1.33 1998/11/11 11:53:53 sjg Exp

@@ -1,4 +1,4 @@
-# $NetBSD: ec.inc,v 1.1 2023/05/16 19:10:23 christos Exp $
+# $NetBSD: ec.inc,v 1.1.2.2 2023/08/11 13:41:57 martin Exp $
 ECNI=yes
 ECNONISTZ=yes
 

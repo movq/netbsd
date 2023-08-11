@@ -1,4 +1,4 @@
-/*	$NetBSD: ui.h,v 1.2 2023/06/20 17:22:01 christos Exp $	*/
+/*	$NetBSD: ui.h,v 1.2.2.2 2023/08/11 13:40:05 martin Exp $	*/
 
 /*
  * Copyright (c) 2005 Kungliga Tekniska Högskolan

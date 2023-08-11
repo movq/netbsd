@@ -1,4 +1,4 @@
-#	$NetBSD: providers_implementations_storemgmt.inc,v 1.1 2023/05/06 17:07:23 christos Exp $
+#	$NetBSD: providers_implementations_storemgmt.inc,v 1.1.2.2 2023/08/11 13:42:14 martin Exp $
 
 .PATH:	${OPENSSLSRC}/providers/implementations/storemgmt
 
