@@ -1,4 +1,4 @@
-#	$NetBSD: providers_common.inc,v 1.1 2023/05/07 16:22:10 christos Exp $
+#	$NetBSD: providers_common.inc,v 1.1.2.2 2023/08/11 13:42:15 martin Exp $
 
 .PATH:	${OPENSSLSRC}/providers/common
 

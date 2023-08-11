@@ -1,4 +1,4 @@
-#	$NetBSD: ssl_record.inc,v 1.1 2023/05/06 17:07:22 christos Exp $
+#	$NetBSD: ssl_record.inc,v 1.1.2.2 2023/08/11 13:41:54 martin Exp $
 
 .PATH:	${OPENSSLSRC}/ssl/record
 
