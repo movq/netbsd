@@ -1,4 +1,4 @@
-/*	$NetBSD: is_simh.c,v 1.1 2023/08/18 18:36:49 christos Exp $	*/
+/*	$NetBSD: is_simh.c,v 1.1.1.1 2023/08/18 18:36:49 christos Exp $	*/
 
 /*-
  * Copyright (c) 2023 Christos Zoulas
@@ -38,7 +38,7 @@
 #if 0
 FILE_RCSID("@(#)$File: is_simh.c,v 1.10 2023/07/27 19:39:55 christos Exp $")
 #else
-__RCSID("$NetBSD: is_simh.c,v 1.1 2023/08/18 18:36:49 christos Exp $");
+__RCSID("$NetBSD: is_simh.c,v 1.1.1.1 2023/08/18 18:36:49 christos Exp $");
 #endif
 #endif
 
