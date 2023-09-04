@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2023/08/26 05:27:14 riastradh Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2023/09/04 17:33:27 martin Exp $
 #
 
 FILESDIR=	${TESTSDIR}/certs3

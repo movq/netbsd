@@ -1,6 +1,6 @@
 #!/bin/sh
 
-#	$NetBSD: certctl.sh,v 1.4 2023/09/02 17:41:43 riastradh Exp $
+#	$NetBSD: certctl.sh,v 1.4.2.2 2023/09/04 17:33:27 martin Exp $
 #
 # Copyright (c) 2023 The NetBSD Foundation, Inc.
 # All rights reserved.
