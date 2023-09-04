@@ -1,6 +1,6 @@
 #!/bin/sh
 
-#	$NetBSD: t_certctl.sh,v 1.8 2023/09/02 17:42:01 riastradh Exp $
+#	$NetBSD: t_certctl.sh,v 1.8.2.2 2023/09/04 17:33:27 martin Exp $
 #
 # Copyright (c) 2023 The NetBSD Foundation, Inc.
 # All rights reserved.

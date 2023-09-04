@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2023/09/02 17:39:52 riastradh Exp $
+#	$NetBSD: Makefile,v 1.2.2.2 2023/09/04 17:33:27 martin Exp $
 #
 
 MOZCERTS=	/usr/share/certs/mozilla
