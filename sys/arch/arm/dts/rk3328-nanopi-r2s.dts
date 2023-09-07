@@ -1,4 +1,4 @@
-/* $NetBSD: rk3328-nanopi-r2s.dts,v 1.1 2023/08/31 01:23:55 gutteridge Exp $ */
+/* $NetBSD: rk3328-nanopi-r2s.dts,v 1.1.2.2 2023/09/07 08:20:20 martin Exp $ */
 
 /*-
  * Copyright (c) 2023 David H. Gutteridge
