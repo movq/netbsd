@@ -1,4 +1,4 @@
-/*	$NetBSD: eficpufunc.c,v 1.1 2023/07/24 01:56:59 rin Exp $	*/
+/*	$NetBSD: eficpufunc.c,v 1.1.2.2 2023/09/11 13:25:42 martin Exp $	*/
 
 /*-
  * Copyright (c) 2023 The NetBSD Foundation, Inc.
