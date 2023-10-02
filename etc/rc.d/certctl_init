@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: certctl_init,v 1.1 2023/09/27 00:24:13 riastradh Exp $
+# $NetBSD: certctl_init,v 1.1.2.2 2023/10/02 13:26:04 martin Exp $
 #
 # PROVIDE: certctl_init
 # REQUIRE: mountcritremote
