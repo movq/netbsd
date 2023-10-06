@@ -1,4 +1,4 @@
-/*	$NetBSD: cmd.h,v 1.1 2023/10/06 04:29:18 simonb Exp $	*/
+/*	$NetBSD: cmd.h,v 1.1.1.1 2023/10/06 04:29:18 simonb Exp $	*/
 
 /*
  * Copyright (C) 1984-2023  Mark Nudelman

@@ -1,4 +1,4 @@
-/*	$NetBSD: funcs.h,v 1.1 2023/10/06 04:29:17 simonb Exp $	*/
+/*	$NetBSD: funcs.h,v 1.1.1.1 2023/10/06 04:29:17 simonb Exp $	*/
 
 public char * save(constant char *s);
 public void out_of_memory(void);

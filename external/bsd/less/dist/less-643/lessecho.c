@@ -1,4 +1,4 @@
-/*	$NetBSD: lessecho.c,v 1.1 2023/10/06 04:29:18 simonb Exp $	*/
+/*	$NetBSD: lessecho.c,v 1.1.1.1 2023/10/06 04:29:18 simonb Exp $	*/
 
 /*
  * Copyright (C) 1984-2023  Mark Nudelman
@@ -29,7 +29,7 @@
 
 #include "less.h"
 
-static char *version = "$Revision: 1.1 $";
+static char *version = "$Revision: 1.1.1.1 $";
 
 static int quote_all = 0;
 static char openquote = '"';

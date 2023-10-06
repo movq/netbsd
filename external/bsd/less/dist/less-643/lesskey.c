@@ -1,4 +1,4 @@
-/*	$NetBSD: lesskey.c,v 1.1 2023/10/06 04:29:17 simonb Exp $	*/
+/*	$NetBSD: lesskey.c,v 1.1.1.1 2023/10/06 04:29:17 simonb Exp $	*/
 
 /*
  * Copyright (C) 1984-2023  Mark Nudelman
