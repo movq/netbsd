@@ -1,7 +1,5 @@
-/*	$NetBSD: charset.h,v 1.1.1.2 2013/09/04 19:35:03 tron Exp $	*/
-
 /*
- * Copyright (C) 1984-2012  Mark Nudelman
+ * Copyright (C) 1984-2023  Mark Nudelman
  *
  * You may distribute under the terms of either the GNU General Public
  * License or the Less License, as specified in the README file.

@@ -1,7 +1,5 @@
-/*	$NetBSD: position.h,v 1.1.1.2 2013/09/04 19:35:04 tron Exp $	*/
-
 /*
- * Copyright (C) 1984-2012  Mark Nudelman
+ * Copyright (C) 1984-2023  Mark Nudelman
  *
  * You may distribute under the terms of either the GNU General Public
  * License or the Less License, as specified in the README file.
@@ -13,8 +11,8 @@
 /*
  * Include file for interfacing to position.c modules.
  */
-#define	TOP		(0)
-#define	TOP_PLUS_ONE	(1)
-#define	BOTTOM		(-1)
-#define	BOTTOM_PLUS_ONE	(-2)
-#define	MIDDLE		(-3)
+#define TOP             (0)
+#define TOP_PLUS_ONE    (1)
+#define BOTTOM          (-1)
+#define BOTTOM_PLUS_ONE (-2)
+#define MIDDLE          (-3)
