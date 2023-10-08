@@ -1,4 +1,4 @@
-/*	$NetBSD: igc_mac.h,v 1.2 2023/10/04 07:35:27 rin Exp $	*/
+/*	$NetBSD: igc_mac.h,v 1.2.2.2 2023/10/08 13:19:34 martin Exp $	*/
 /*	$OpenBSD: igc_mac.h,v 1.1 2021/10/31 14:52:57 patrick Exp $	*/
 /*-
  * Copyright 2021 Intel Corp
