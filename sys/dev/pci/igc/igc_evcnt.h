@@ -1,4 +1,4 @@
-/*	$NetBSD: igc_evcnt.h,v 1.1 2023/10/04 07:35:27 rin Exp $	*/
+/*	$NetBSD: igc_evcnt.h,v 1.1.2.2 2023/10/08 13:19:34 martin Exp $	*/
 
 /*-
  * Copyright (c) 2023 The NetBSD Foundation, Inc.

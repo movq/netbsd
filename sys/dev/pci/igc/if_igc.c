@@ -1,4 +1,4 @@
-/*	$NetBSD: if_igc.c,v 1.3 2023/10/04 07:41:55 rin Exp $	*/
+/*	$NetBSD: if_igc.c,v 1.3.2.2 2023/10/08 13:19:34 martin Exp $	*/
 /*	$OpenBSD: if_igc.c,v 1.13 2023/04/28 10:18:57 bluhm Exp $	*/
 /*-
  * SPDX-License-Identifier: BSD-2-Clause
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_igc.c,v 1.3 2023/10/04 07:41:55 rin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_igc.c,v 1.3.2.2 2023/10/08 13:19:34 martin Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_net_mpsafe.h"

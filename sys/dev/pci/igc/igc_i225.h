@@ -1,4 +1,4 @@
-/*	$NetBSD: igc_i225.h,v 1.2 2023/10/04 07:35:27 rin Exp $	*/
+/*	$NetBSD: igc_i225.h,v 1.2.2.2 2023/10/08 13:19:34 martin Exp $	*/
 /*	$OpenBSD: igc_i225.h,v 1.2 2023/02/03 11:31:52 mbuhl Exp $	*/
 /*-
  * Copyright 2021 Intel Corp

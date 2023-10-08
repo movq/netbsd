@@ -1,4 +1,4 @@
-/*	$NetBSD: if_igc.h,v 1.2 2023/10/04 07:35:27 rin Exp $	*/
+/*	$NetBSD: if_igc.h,v 1.2.2.2 2023/10/08 13:19:34 martin Exp $	*/
 /*	$OpenBSD: if_igc.h,v 1.2 2022/01/09 05:42:50 jsg Exp $	*/
 /*-
  * SPDX-License-Identifier: BSD-2-Clause
