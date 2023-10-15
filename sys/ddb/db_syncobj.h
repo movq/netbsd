@@ -1,4 +1,4 @@
-/*	$NetBSD: db_syncobj.h,v 1.1 2023/07/09 17:10:47 riastradh Exp $	*/
+/*	$NetBSD: db_syncobj.h,v 1.2 2023/10/15 10:27:11 riastradh Exp $	*/
 
 /*-
  * Copyright (c) 2023 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
 #ifndef	_DDB_DB_SYNCOBJ_H
 #define	_DDB_DB_SYNCOBJ_H
 
-#include <sys/syncobj.h>
+#include <sys/wchan.h>
 
 struct lwp;
 struct syncobj;
