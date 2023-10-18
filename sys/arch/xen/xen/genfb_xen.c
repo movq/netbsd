@@ -1,4 +1,4 @@
-/*      $NetBSD: genfb_xen.c,v 1.2 2023/10/17 16:09:12 bouyer Exp $      */
+/*      $NetBSD: genfb_xen.c,v 1.2.2.2 2023/10/18 16:53:03 martin Exp $      */
 
 /*
  * Copyright (c) 2023 Manuel Bouyer.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: genfb_xen.c,v 1.2 2023/10/17 16:09:12 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: genfb_xen.c,v 1.2.2.2 2023/10/18 16:53:03 martin Exp $");
 
 
 #include <sys/device.h>
