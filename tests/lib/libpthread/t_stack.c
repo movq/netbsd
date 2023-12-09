@@ -1,4 +1,4 @@
-/*	$NetBSD: t_stack.c,v 1.6 2023/11/28 02:54:33 riastradh Exp $	*/
+/*	$NetBSD: t_stack.c,v 1.6.4.2 2023/12/09 13:24:23 martin Exp $	*/
 
 /*-
  * Copyright (c) 2023 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
 #define	_KMEMUSER		/* __MACHINE_STACK_GROWS_UP */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_stack.c,v 1.6 2023/11/28 02:54:33 riastradh Exp $");
+__RCSID("$NetBSD: t_stack.c,v 1.6.4.2 2023/12/09 13:24:23 martin Exp $");
 
 #include <sys/mman.h>
 #include <sys/param.h>
