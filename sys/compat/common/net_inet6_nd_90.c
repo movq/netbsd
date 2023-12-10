@@ -1,6 +1,6 @@
-/*	$NetBSD: net_inet6_nd_90.c,v 1.2 2023/12/09 20:31:57 oster Exp $ */
+/*	$NetBSD: net_inet6_nd_90.c,v 1.2.2.2 2023/12/10 13:06:16 martin Exp $ */
 
-/*      $NetBSD: net_inet6_nd_90.c,v 1.2 2023/12/09 20:31:57 oster Exp $        */
+/*      $NetBSD: net_inet6_nd_90.c,v 1.2.2.2 2023/12/10 13:06:16 martin Exp $        */
 /*      $KAME: nd6.c,v 1.279 2002/06/08 11:16:51 itojun Exp $   */
 
 /*
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: net_inet6_nd_90.c,v 1.2 2023/12/09 20:31:57 oster Exp $");
+__KERNEL_RCSID(0, "$NetBSD: net_inet6_nd_90.c,v 1.2.2.2 2023/12/10 13:06:16 martin Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
