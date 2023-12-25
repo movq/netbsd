@@ -1,4 +1,4 @@
-/*	$NetBSD: config_known_tcp_ports.h,v 1.2 2022/10/08 16:12:45 christos Exp $	*/
+/*	$NetBSD: config_known_tcp_ports.h,v 1.2.4.2 2023/12/25 12:54:58 martin Exp $	*/
 
 #ifndef _CONFIG_KNOWN_TCP_PORTS_H_INCLUDED_
 #define _CONFIG_KNOWN_TCP_PORTS_H_INCLUDED_

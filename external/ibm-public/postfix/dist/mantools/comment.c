@@ -1,4 +1,4 @@
-/*	$NetBSD: comment.c,v 1.2 2022/10/08 16:12:44 christos Exp $	*/
+/*	$NetBSD: comment.c,v 1.2.4.2 2023/12/25 12:54:43 martin Exp $	*/
 
 #include <stdio.h>
 

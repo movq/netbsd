@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_level.c,v 1.3 2023/12/23 20:30:43 christos Exp $	*/
+/*	$NetBSD: compat_level.c,v 1.3.2.2 2023/12/25 12:54:57 martin Exp $	*/
 
 /*++
 /* NAME

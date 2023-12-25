@@ -1,4 +1,4 @@
-/*	$NetBSD: mkmap_open.c,v 1.2 2023/12/23 20:30:46 christos Exp $	*/
+/*	$NetBSD: mkmap_open.c,v 1.2.4.2 2023/12/25 12:55:32 martin Exp $	*/
 
 /*++
 /* NAME

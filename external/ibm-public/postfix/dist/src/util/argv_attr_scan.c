@@ -1,4 +1,4 @@
-/*	$NetBSD: argv_attr_scan.c,v 1.3 2022/10/08 16:12:50 christos Exp $	*/
+/*	$NetBSD: argv_attr_scan.c,v 1.3.4.2 2023/12/25 12:55:23 martin Exp $	*/
 
 /*++
 /* NAME

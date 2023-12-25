@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_file.c,v 1.3 2022/10/08 16:12:50 christos Exp $	*/
+/*	$NetBSD: dict_file.c,v 1.3.4.2 2023/12/25 12:55:26 martin Exp $	*/
 
 /*++
 /* NAME

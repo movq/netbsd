@@ -1,4 +1,4 @@
-/*	$NetBSD: login_sender_match.h,v 1.2 2022/10/08 16:12:45 christos Exp $	*/
+/*	$NetBSD: login_sender_match.h,v 1.2.4.2 2023/12/25 12:55:00 martin Exp $	*/
 
 #ifndef _LOGIN_SENDER_MATCH_H_INCLUDED_
 #define _LOGIN_SENDER_MATCH_H_INCLUDED_

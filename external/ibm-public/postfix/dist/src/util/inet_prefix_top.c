@@ -1,4 +1,4 @@
-/*	$NetBSD: inet_prefix_top.c,v 1.2 2023/12/23 20:30:46 christos Exp $	*/
+/*	$NetBSD: inet_prefix_top.c,v 1.2.4.2 2023/12/25 12:55:30 martin Exp $	*/
 
 /*++
 /* NAME

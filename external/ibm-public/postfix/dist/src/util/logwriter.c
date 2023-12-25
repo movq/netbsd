@@ -1,4 +1,4 @@
-/*	$NetBSD: logwriter.c,v 1.2 2020/03/18 19:05:21 christos Exp $	*/
+/*	$NetBSD: logwriter.c,v 1.2.10.2 2023/12/25 12:55:30 martin Exp $	*/
 
 /*++
 /* NAME
