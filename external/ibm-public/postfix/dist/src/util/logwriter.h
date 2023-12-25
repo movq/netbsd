@@ -1,4 +1,4 @@
-/*	$NetBSD: logwriter.h,v 1.2 2020/03/18 19:05:21 christos Exp $	*/
+/*	$NetBSD: logwriter.h,v 1.2.10.2 2023/12/25 12:55:31 martin Exp $	*/
 
 #ifndef _LOGWRITER_H_INCLUDED_
 #define _LOGWRITER_H_INCLUDED_

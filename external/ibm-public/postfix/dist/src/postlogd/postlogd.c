@@ -1,4 +1,4 @@
-/*	$NetBSD: postlogd.c,v 1.3 2022/10/08 16:12:47 christos Exp $	*/
+/*	$NetBSD: postlogd.c,v 1.3.4.2 2023/12/25 12:55:11 martin Exp $	*/
 
 /*++
 /* NAME

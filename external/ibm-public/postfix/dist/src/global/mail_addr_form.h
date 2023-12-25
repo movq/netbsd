@@ -1,4 +1,4 @@
-/*	$NetBSD: mail_addr_form.h,v 1.2 2020/03/18 19:05:16 christos Exp $	*/
+/*	$NetBSD: mail_addr_form.h,v 1.2.10.2 2023/12/25 12:55:01 martin Exp $	*/
 
 #ifndef _MAIL_ADDR_FORM_H_INCLUDED_
 #define _MAIL_ADDR_FORM_H_INCLUDED_

@@ -1,4 +1,4 @@
-/*	$NetBSD: tls_proxy_client_scan.c,v 1.4 2023/12/23 20:30:45 christos Exp $	*/
+/*	$NetBSD: tls_proxy_client_scan.c,v 1.4.2.2 2023/12/25 12:55:21 martin Exp $	*/
 
 /*++
 /* NAME

@@ -1,4 +1,4 @@
-/*	$NetBSD: dns_str_resflags.c,v 1.3 2023/12/23 20:30:43 christos Exp $	*/
+/*	$NetBSD: dns_str_resflags.c,v 1.3.2.2 2023/12/25 12:54:56 martin Exp $	*/
 
 /*++
 /* NAME

@@ -1,4 +1,4 @@
-/*	$NetBSD: hfrom_format.h,v 1.2 2022/10/08 16:12:45 christos Exp $	*/
+/*	$NetBSD: hfrom_format.h,v 1.2.4.2 2023/12/25 12:54:59 martin Exp $	*/
 
 #ifndef _HFROM_FORMAT_INCLUDED_
 #define _HFROM_FORMAT_INCLUDED_

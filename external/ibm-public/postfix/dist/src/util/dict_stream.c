@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_stream.c,v 1.2 2022/10/08 16:12:50 christos Exp $	*/
+/*	$NetBSD: dict_stream.c,v 1.2.4.2 2023/12/25 12:55:28 martin Exp $	*/
 
 /*++
 /* NAME

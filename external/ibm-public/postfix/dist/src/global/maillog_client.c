@@ -1,4 +1,4 @@
-/*	$NetBSD: maillog_client.c,v 1.3 2022/10/08 16:12:45 christos Exp $	*/
+/*	$NetBSD: maillog_client.c,v 1.3.4.2 2023/12/25 12:55:02 martin Exp $	*/
 
 /*++
 /* NAME

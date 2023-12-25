@@ -1,4 +1,4 @@
-/*	$NetBSD: hash_fnv.h,v 1.3 2023/12/23 20:30:46 christos Exp $	*/
+/*	$NetBSD: hash_fnv.h,v 1.3.2.2 2023/12/25 12:55:29 martin Exp $	*/
 
 #ifndef _HASH_FNV_H_INCLUDED_
 #define _HASH_FNV_H_INCLUDED_
