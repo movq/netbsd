@@ -1,4 +1,4 @@
-/*	$NetBSD: cipher-chachapoly-libcrypto.c,v 1.3 2023/10/25 20:19:57 christos Exp $	*/
+/*	$NetBSD: cipher-chachapoly-libcrypto.c,v 1.3.2.2 2023/12/25 12:31:03 martin Exp $	*/
 /* $OpenBSD: cipher-chachapoly-libcrypto.c,v 1.2 2023/07/17 05:26:38 djm Exp $ */
 
 /*
@@ -18,7 +18,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: cipher-chachapoly-libcrypto.c,v 1.3 2023/10/25 20:19:57 christos Exp $");
+__RCSID("$NetBSD: cipher-chachapoly-libcrypto.c,v 1.3.2.2 2023/12/25 12:31:03 martin Exp $");
 
 #include <sys/types.h>
 #include <stdarg.h> /* needed for log.h */

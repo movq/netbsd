@@ -1,4 +1,4 @@
-/*	$NetBSD: ssh-sk.c,v 1.8 2023/10/25 20:19:57 christos Exp $	*/
+/*	$NetBSD: ssh-sk.c,v 1.8.2.2 2023/12/25 12:31:08 martin Exp $	*/
 /* $OpenBSD: ssh-sk.c,v 1.40 2023/07/19 14:02:27 djm Exp $ */
 
 /*
@@ -17,7 +17,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include "includes.h"
-__RCSID("$NetBSD: ssh-sk.c,v 1.8 2023/10/25 20:19:57 christos Exp $");
+__RCSID("$NetBSD: ssh-sk.c,v 1.8.2.2 2023/12/25 12:31:08 martin Exp $");
 
 /* #define DEBUG_SK 1 */
 

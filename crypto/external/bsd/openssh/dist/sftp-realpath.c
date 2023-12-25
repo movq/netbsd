@@ -27,7 +27,7 @@
  * SUCH DAMAGE.
  */
 #include "includes.h"
-__RCSID("$NetBSD: sftp-realpath.c,v 1.3 2021/09/27 17:03:13 christos Exp $");
+__RCSID("$NetBSD: sftp-realpath.c,v 1.3.4.2 2023/12/25 12:31:06 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/stat.h>

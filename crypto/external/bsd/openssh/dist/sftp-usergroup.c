@@ -1,4 +1,4 @@
-/*	$NetBSD: sftp-usergroup.c,v 1.3 2023/10/25 20:19:57 christos Exp $	*/
+/*	$NetBSD: sftp-usergroup.c,v 1.3.2.2 2023/12/25 12:31:06 martin Exp $	*/
 
 /*
  * Copyright (c) 2022 Damien Miller <djm@mindrot.org>
@@ -18,7 +18,7 @@
 
 /* sftp client user/group lookup and caching */
 #include "includes.h"
-__RCSID("$NetBSD: sftp-usergroup.c,v 1.3 2023/10/25 20:19:57 christos Exp $");
+__RCSID("$NetBSD: sftp-usergroup.c,v 1.3.2.2 2023/12/25 12:31:06 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/tree.h>
