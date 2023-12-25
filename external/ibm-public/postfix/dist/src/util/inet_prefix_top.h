@@ -1,4 +1,4 @@
-/*	$NetBSD: inet_prefix_top.h,v 1.2 2023/12/23 20:30:46 christos Exp $	*/
+/*	$NetBSD: inet_prefix_top.h,v 1.2.2.2 2023/12/25 12:43:37 martin Exp $	*/
 
 #ifndef _INET_MASK_TOP_H_INCLUDED_
 #define _INET_MASK_TOP_H_INCLUDED_
