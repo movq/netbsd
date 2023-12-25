@@ -1,4 +1,4 @@
-/*	$NetBSD: srclimit.c,v 1.3 2021/04/19 14:40:15 christos Exp $	*/
+/*	$NetBSD: srclimit.c,v 1.3.8.2 2023/12/25 12:31:07 martin Exp $	*/
 
 /*
  * Copyright (c) 2020 Darren Tucker <dtucker@openbsd.org>
@@ -16,7 +16,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include "includes.h"
-__RCSID("$NetBSD: srclimit.c,v 1.3 2021/04/19 14:40:15 christos Exp $");
+__RCSID("$NetBSD: srclimit.c,v 1.3.8.2 2023/12/25 12:31:07 martin Exp $");
 
 #include <sys/socket.h>
 #include <sys/types.h>

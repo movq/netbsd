@@ -1,4 +1,4 @@
-/*	$NetBSD: sshsig.c,v 1.12 2023/12/20 17:15:21 christos Exp $	*/
+/*	$NetBSD: sshsig.c,v 1.12.2.2 2023/12/25 12:31:10 martin Exp $	*/
 /* $OpenBSD: sshsig.c,v 1.34 2023/12/08 09:18:39 markus Exp $ */
 
 /*
@@ -17,7 +17,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include "includes.h"
-__RCSID("$NetBSD: sshsig.c,v 1.12 2023/12/20 17:15:21 christos Exp $");
+__RCSID("$NetBSD: sshsig.c,v 1.12.2.2 2023/12/25 12:31:10 martin Exp $");
 
 #include <stdio.h>
 #include <stdlib.h>

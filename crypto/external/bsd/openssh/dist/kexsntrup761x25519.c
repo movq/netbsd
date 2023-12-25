@@ -1,4 +1,4 @@
-/*	$NetBSD: kexsntrup761x25519.c,v 1.3 2022/02/23 19:07:20 christos Exp $	*/
+/*	$NetBSD: kexsntrup761x25519.c,v 1.3.4.2 2023/12/25 12:31:04 martin Exp $	*/
 /* $OpenBSD: kexsntrup761x25519.c,v 1.2 2021/12/05 12:28:27 jsg Exp $ */
 /*
  * Copyright (c) 2019 Markus Friedl.  All rights reserved.
@@ -25,7 +25,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: kexsntrup761x25519.c,v 1.3 2022/02/23 19:07:20 christos Exp $");
+__RCSID("$NetBSD: kexsntrup761x25519.c,v 1.3.4.2 2023/12/25 12:31:04 martin Exp $");
 
 #include <sys/types.h>
 

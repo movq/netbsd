@@ -1,4 +1,4 @@
-/*	$NetBSD: sk-usbhid.c,v 1.9 2023/10/25 20:19:57 christos Exp $	*/
+/*	$NetBSD: sk-usbhid.c,v 1.9.2.2 2023/12/25 12:31:06 martin Exp $	*/
 /* $OpenBSD: sk-usbhid.c,v 1.46 2023/03/28 06:12:38 dtucker Exp $ */
 
 /*
@@ -18,7 +18,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include "includes.h"
-__RCSID("$NetBSD: sk-usbhid.c,v 1.9 2023/10/25 20:19:57 christos Exp $");
+__RCSID("$NetBSD: sk-usbhid.c,v 1.9.2.2 2023/12/25 12:31:06 martin Exp $");
 
 #include <stdint.h>
 #include <stdlib.h>

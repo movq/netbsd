@@ -1,4 +1,4 @@
-/*	$NetBSD: ssh-ecdsa-sk.c,v 1.4 2023/07/26 17:58:16 christos Exp $	*/
+/*	$NetBSD: ssh-ecdsa-sk.c,v 1.4.2.2 2023/12/25 12:31:07 martin Exp $	*/
 /* $OpenBSD: ssh-ecdsa-sk.c,v 1.18 2023/03/08 04:43:12 guenther Exp $ */
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
@@ -26,7 +26,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "includes.h"
-__RCSID("$NetBSD: ssh-ecdsa-sk.c,v 1.4 2023/07/26 17:58:16 christos Exp $");
+__RCSID("$NetBSD: ssh-ecdsa-sk.c,v 1.4.2.2 2023/12/25 12:31:07 martin Exp $");
 
 /* #define DEBUG_SK 1 */
 

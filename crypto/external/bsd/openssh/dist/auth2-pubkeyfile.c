@@ -1,4 +1,4 @@
-/*	$NetBSD: auth2-pubkeyfile.c,v 1.3 2023/07/26 17:58:15 christos Exp $	*/
+/*	$NetBSD: auth2-pubkeyfile.c,v 1.3.2.2 2023/12/25 12:31:03 martin Exp $	*/
 /* $OpenBSD: auth2-pubkeyfile.c,v 1.4 2023/03/05 05:34:09 dtucker Exp $ */
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: auth2-pubkeyfile.c,v 1.3 2023/07/26 17:58:15 christos Exp $");
+__RCSID("$NetBSD: auth2-pubkeyfile.c,v 1.3.2.2 2023/12/25 12:31:03 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/stat.h>

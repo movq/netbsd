@@ -1,4 +1,4 @@
-/*	$NetBSD: sntrup761.c,v 1.3 2023/07/26 17:58:15 christos Exp $	*/
+/*	$NetBSD: sntrup761.c,v 1.3.2.2 2023/12/25 12:31:07 martin Exp $	*/
 /*  $OpenBSD: sntrup761.c,v 1.6 2023/01/11 02:13:52 djm Exp $ */
 
 /*
@@ -9,7 +9,7 @@
  * - Christine van Vredendaal
  */
 #include "includes.h"
-__RCSID("$NetBSD: sntrup761.c,v 1.3 2023/07/26 17:58:15 christos Exp $");
+__RCSID("$NetBSD: sntrup761.c,v 1.3.2.2 2023/12/25 12:31:07 martin Exp $");
 
 #include <string.h>
 #include "crypto_api.h"
