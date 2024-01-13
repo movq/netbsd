@@ -1,4 +1,4 @@
-/*	$NetBSD: isr.h,v 1.7 2008/04/28 20:23:30 martin Exp $	*/
+/*	$NetBSD: isr.h,v 1.8 2024/01/13 23:59:47 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -30,22 +30,6 @@
  */
 
 #include <sys/queue.h>
-
-/*
- * The location and size of the autovectored interrupt portion
- * of the vector table.
- */
-#define ISRAUTOVEC	0x18
-#define NISRAUTOVEC	8
-
-#define NVECTORS	(ISRAUTOVEC + NISRAUTOVEC)
-
-/*
- * The location and size of the vectored interrupt portion
- * of the vector table.
- */
-#define ISRVECTORED	0x40
-#define NISRVECTORED	192
 
 /*
  * Autovectored interrupt handler cookie.
