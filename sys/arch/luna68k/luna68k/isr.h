@@ -1,4 +1,4 @@
-/*	$NetBSD: isr.h,v 1.4 2009/03/14 14:46:01 dsl Exp $	*/
+/*	$NetBSD: isr.h,v 1.5 2024/01/14 00:17:46 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -79,7 +79,4 @@ struct isr_vectored {
 
 void	isrinit(void);
 void	isrlink_autovec(int (*)(void *), void *, int, int);
-void	isrlink_vectored(int (*)(void *), void *, int, int);
-void	isrunlink_vectored(int);
 void	isrdispatch_autovec(int);
-void	isrdispatch_vectored(int, int, void *);
