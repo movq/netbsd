@@ -1,4 +1,4 @@
-/* $NetBSD: exi.h,v 1.1 2024/01/25 11:47:53 jmcneill Exp $ */
+/* $NetBSD: exi.h,v 1.1.2.2 2024/02/03 11:47:05 martin Exp $ */
 
 /*-
  * Copyright (c) 2024 Jared McNeill <jmcneill@invisible.ca>

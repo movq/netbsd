@@ -1,4 +1,4 @@
-/*	$NetBSD: wii_locore.S,v 1.2 2024/01/24 21:53:34 jmcneill Exp $	*/
+/*	$NetBSD: wii_locore.S,v 1.2.2.2 2024/02/03 11:47:07 martin Exp $	*/
 /*	$OpenBSD: locore.S,v 1.4 1997/01/26 09:06:38 rahnds Exp $	*/
 
 /*

@@ -1,4 +1,4 @@
-/* $NetBSD: hollywood.h,v 1.2 2024/01/23 21:56:07 jmcneill Exp $ */
+/* $NetBSD: hollywood.h,v 1.2.2.2 2024/02/03 11:47:04 martin Exp $ */
 
 /*-
  * Copyright (c) 2024 Jared McNeill <jmcneill@invisible.ca>

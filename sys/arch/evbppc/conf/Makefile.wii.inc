@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.wii.inc,v 1.2 2024/01/26 00:49:22 jmcneill Exp $
+#	$NetBSD: Makefile.wii.inc,v 1.2.2.2 2024/02/03 11:47:07 martin Exp $
 
 CFLAGS+=-mcpu=750
 AFLAGS+=-mcpu=750

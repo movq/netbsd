@@ -1,4 +1,4 @@
-/* $NetBSD: wii_mmuinit.S,v 1.1 2024/01/20 21:36:00 jmcneill Exp $ */
+/* $NetBSD: wii_mmuinit.S,v 1.1.2.2 2024/02/03 11:47:07 martin Exp $ */
 
 /*-
  * Copyright (C) 2012 Margarida Gouveia

@@ -1,4 +1,4 @@
-/* $NetBSD: mainbus.c,v 1.3 2024/01/25 11:47:53 jmcneill Exp $ */
+/* $NetBSD: mainbus.c,v 1.3.2.2 2024/02/03 11:47:07 martin Exp $ */
 
 /*
  * Copyright (c) 2002, 2024 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.3 2024/01/25 11:47:53 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.3.2.2 2024/02/03 11:47:07 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
