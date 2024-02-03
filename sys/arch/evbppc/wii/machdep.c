@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.4 2024/01/24 21:53:34 jmcneill Exp $ */
+/* $NetBSD: machdep.c,v 1.4.2.2 2024/02/03 11:47:07 martin Exp $ */
 
 /*
  * Copyright (c) 2002, 2024 The NetBSD Foundation, Inc.
@@ -63,7 +63,7 @@
 #define _POWERPC_BUS_DMA_PRIVATE
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.4 2024/01/24 21:53:34 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.4.2.2 2024/02/03 11:47:07 martin Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"

@@ -1,4 +1,4 @@
-/* $NetBSD: vireg.h,v 1.2 2024/01/21 13:05:29 jmcneill Exp $ */
+/* $NetBSD: vireg.h,v 1.2.2.2 2024/02/03 11:47:05 martin Exp $ */
 
 /*-
  * Copyright (c) 2024 Jared McNeill <jmcneill@invisible.ca>

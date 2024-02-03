@@ -1,4 +1,4 @@
-/* $NetBSD: hwgpio.c,v 1.1 2024/01/23 21:48:12 jmcneill Exp $ */
+/* $NetBSD: hwgpio.c,v 1.1.2.2 2024/02/03 11:47:04 martin Exp $ */
 
 /*-
  * Copyright (c) 2024 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hwgpio.c,v 1.1 2024/01/23 21:48:12 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hwgpio.c,v 1.1.2.2 2024/02/03 11:47:04 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

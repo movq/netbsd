@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.2 2024/01/24 21:53:34 jmcneill Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.2.2.2 2024/02/03 11:47:07 martin Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.2 2024/01/24 21:53:34 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.2.2.2 2024/02/03 11:47:07 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
