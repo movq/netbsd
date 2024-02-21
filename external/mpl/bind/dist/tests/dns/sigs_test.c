@@ -1,4 +1,4 @@
-/*	$NetBSD: sigs_test.c,v 1.1 2024/02/21 21:54:55 christos Exp $	*/
+/*	$NetBSD: sigs_test.c,v 1.1.1.1 2024/02/21 21:54:55 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

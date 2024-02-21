@@ -1,4 +1,4 @@
-/*	$NetBSD: resource.c,v 1.1 2024/02/21 21:54:49 christos Exp $	*/
+/*	$NetBSD: resource.c,v 1.1.1.1 2024/02/21 21:54:49 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
