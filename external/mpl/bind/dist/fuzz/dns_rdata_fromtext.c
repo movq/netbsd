@@ -1,4 +1,4 @@
-/*	$NetBSD: dns_rdata_fromtext.c,v 1.1 2024/02/21 21:54:46 christos Exp $	*/
+/*	$NetBSD: dns_rdata_fromtext.c,v 1.1.1.1 2024/02/21 21:54:46 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

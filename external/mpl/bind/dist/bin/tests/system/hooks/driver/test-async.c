@@ -1,4 +1,4 @@
-/*	$NetBSD: test-async.c,v 1.1 2024/02/21 21:54:19 christos Exp $	*/
+/*	$NetBSD: test-async.c,v 1.1.1.1 2024/02/21 21:54:19 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
