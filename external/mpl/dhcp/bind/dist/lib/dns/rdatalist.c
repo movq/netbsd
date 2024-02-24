@@ -1,4 +1,4 @@
-/*	$NetBSD: rdatalist.c,v 1.1 2024/02/18 20:57:33 christos Exp $	*/
+/*	$NetBSD: rdatalist.c,v 1.1.2.2 2024/02/24 13:07:00 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

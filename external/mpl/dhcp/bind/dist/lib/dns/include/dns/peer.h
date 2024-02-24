@@ -1,4 +1,4 @@
-/*	$NetBSD: peer.h,v 1.1 2024/02/18 20:57:37 christos Exp $	*/
+/*	$NetBSD: peer.h,v 1.1.2.2 2024/02/24 13:07:06 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
