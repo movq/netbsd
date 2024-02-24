@@ -1,4 +1,4 @@
-/*	$NetBSD: gen-unix.h,v 1.1 2024/02/18 20:57:31 christos Exp $	*/
+/*	$NetBSD: gen-unix.h,v 1.1.2.2 2024/02/24 13:06:58 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

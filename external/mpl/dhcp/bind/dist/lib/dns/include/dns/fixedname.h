@@ -1,4 +1,4 @@
-/*	$NetBSD: fixedname.h,v 1.1 2024/02/18 20:57:36 christos Exp $	*/
+/*	$NetBSD: fixedname.h,v 1.1.2.2 2024/02/24 13:07:04 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

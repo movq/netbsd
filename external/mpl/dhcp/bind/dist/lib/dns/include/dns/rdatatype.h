@@ -1,4 +1,4 @@
-/*	$NetBSD: rdatatype.h,v 1.1 2024/02/18 20:57:38 christos Exp $	*/
+/*	$NetBSD: rdatatype.h,v 1.1.2.2 2024/02/24 13:07:07 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

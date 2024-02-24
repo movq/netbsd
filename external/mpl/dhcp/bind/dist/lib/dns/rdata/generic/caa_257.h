@@ -1,4 +1,4 @@
-/*	$NetBSD: caa_257.h,v 1.1 2024/02/18 20:57:40 christos Exp $	*/
+/*	$NetBSD: caa_257.h,v 1.1.2.2 2024/02/24 13:07:09 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
