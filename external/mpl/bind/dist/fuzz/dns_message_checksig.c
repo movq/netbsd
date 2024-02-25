@@ -1,4 +1,4 @@
-/*	$NetBSD: dns_message_checksig.c,v 1.2 2024/02/21 22:51:58 christos Exp $	*/
+/*	$NetBSD: dns_message_checksig.c,v 1.2.2.2 2024/02/25 15:46:11 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
