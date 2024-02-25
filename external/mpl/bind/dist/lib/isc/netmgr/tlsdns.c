@@ -1,4 +1,4 @@
-/*	$NetBSD: tlsdns.c,v 1.5 2024/02/21 22:52:32 christos Exp $	*/
+/*	$NetBSD: tlsdns.c,v 1.5.2.2 2024/02/25 15:47:24 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

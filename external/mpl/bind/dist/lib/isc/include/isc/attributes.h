@@ -1,4 +1,4 @@
-/*	$NetBSD: attributes.h,v 1.2 2024/02/21 22:52:29 christos Exp $	*/
+/*	$NetBSD: attributes.h,v 1.2.2.2 2024/02/25 15:47:19 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

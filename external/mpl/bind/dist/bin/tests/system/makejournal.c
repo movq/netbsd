@@ -1,4 +1,4 @@
-/*	$NetBSD: makejournal.c,v 1.2 2024/02/21 22:51:17 christos Exp $	*/
+/*	$NetBSD: makejournal.c,v 1.2.2.2 2024/02/25 15:43:17 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

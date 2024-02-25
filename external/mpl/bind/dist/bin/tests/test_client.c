@@ -1,4 +1,4 @@
-/*	$NetBSD: test_client.c,v 1.2 2024/02/21 22:51:13 christos Exp $	*/
+/*	$NetBSD: test_client.c,v 1.2.2.2 2024/02/25 15:43:13 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

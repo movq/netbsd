@@ -1,4 +1,4 @@
-/*	$NetBSD: tls.h,v 1.3 2024/02/21 22:52:31 christos Exp $	*/
+/*	$NetBSD: tls.h,v 1.3.2.2 2024/02/25 15:47:23 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
