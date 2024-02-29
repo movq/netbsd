@@ -1,4 +1,4 @@
-/*	$NetBSD: svcb_64.c,v 1.4 2024/02/21 22:52:15 christos Exp $	*/
+/*	$NetBSD: svcb_64.c,v 1.4.2.2 2024/02/29 12:34:49 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

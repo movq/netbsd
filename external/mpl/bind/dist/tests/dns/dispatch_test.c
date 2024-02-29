@@ -1,4 +1,4 @@
-/*	$NetBSD: dispatch_test.c,v 1.2 2024/02/21 22:52:49 christos Exp $	*/
+/*	$NetBSD: dispatch_test.c,v 1.2.4.2 2024/02/29 12:35:38 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

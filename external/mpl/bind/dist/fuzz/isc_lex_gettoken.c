@@ -1,4 +1,4 @@
-/*	$NetBSD: isc_lex_gettoken.c,v 1.2 2024/02/21 22:51:58 christos Exp $	*/
+/*	$NetBSD: isc_lex_gettoken.c,v 1.2.4.2 2024/02/29 12:33:44 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

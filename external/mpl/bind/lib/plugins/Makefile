@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2022/03/11 16:24:22 christos Exp $
+#	$NetBSD: Makefile,v 1.4.4.2 2024/02/29 12:36:05 martin Exp $
 
 LIBISMODULE:=	yes
 LIB=	filter-aaaa

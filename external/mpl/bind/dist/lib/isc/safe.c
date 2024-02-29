@@ -1,4 +1,4 @@
-/*	$NetBSD: safe.c,v 1.6 2022/09/23 12:15:33 christos Exp $	*/
+/*	$NetBSD: safe.c,v 1.6.4.2 2024/02/29 12:35:03 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

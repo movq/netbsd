@@ -1,4 +1,4 @@
-/*	$NetBSD: duration.c,v 1.2 2024/02/21 22:52:44 christos Exp $	*/
+/*	$NetBSD: duration.c,v 1.2.4.2 2024/02/29 12:35:26 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

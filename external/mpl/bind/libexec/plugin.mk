@@ -1,4 +1,4 @@
-#	$NetBSD: plugin.mk,v 1.1 2021/03/31 04:37:50 christos Exp $
+#	$NetBSD: plugin.mk,v 1.1.8.2 2024/02/29 12:36:05 martin Exp $
 #
 # Based on src/lib/libpam/modules/mod.mk
 #	NetBSD: mod.mk,v 1.17 2020/05/23 00:43:33 rin Exp

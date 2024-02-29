@@ -1,4 +1,4 @@
-/*	$NetBSD: time_test.c,v 1.2 2024/02/21 22:52:50 christos Exp $	*/
+/*	$NetBSD: time_test.c,v 1.2.4.2 2024/02/29 12:35:39 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

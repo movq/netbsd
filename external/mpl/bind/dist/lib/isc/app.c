@@ -1,4 +1,4 @@
-/*	$NetBSD: app.c,v 1.9 2024/02/21 22:52:27 christos Exp $	*/
+/*	$NetBSD: app.c,v 1.9.2.2 2024/02/29 12:34:58 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

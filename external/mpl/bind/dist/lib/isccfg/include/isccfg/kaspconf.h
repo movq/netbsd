@@ -1,4 +1,4 @@
-/*	$NetBSD: kaspconf.h,v 1.5 2024/02/21 22:52:45 christos Exp $	*/
+/*	$NetBSD: kaspconf.h,v 1.5.2.2 2024/02/29 12:35:27 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
