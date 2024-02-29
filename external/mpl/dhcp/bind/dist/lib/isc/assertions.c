@@ -1,4 +1,4 @@
-/*	$NetBSD: assertions.c,v 1.1 2024/02/18 20:57:48 christos Exp $	*/
+/*	$NetBSD: assertions.c,v 1.1.4.2 2024/02/29 11:38:59 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

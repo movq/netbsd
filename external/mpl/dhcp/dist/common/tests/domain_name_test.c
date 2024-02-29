@@ -1,4 +1,4 @@
-/*	$NetBSD: domain_name_test.c,v 1.2 2020/08/03 21:10:56 christos Exp $	*/
+/*	$NetBSD: domain_name_test.c,v 1.2.8.2 2024/02/29 11:39:18 martin Exp $	*/
 
 /*
  * Copyright (C) 2019 Internet Systems Consortium, Inc. ("ISC")

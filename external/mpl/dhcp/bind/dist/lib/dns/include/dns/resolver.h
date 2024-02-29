@@ -1,4 +1,4 @@
-/*	$NetBSD: resolver.h,v 1.1 2024/02/18 20:57:38 christos Exp $	*/
+/*	$NetBSD: resolver.h,v 1.1.4.2 2024/02/29 11:38:47 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

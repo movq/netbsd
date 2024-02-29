@@ -1,4 +1,4 @@
-/*	$NetBSD: keama.h,v 1.3 2022/04/03 01:10:59 christos Exp $	*/
+/*	$NetBSD: keama.h,v 1.3.4.2 2024/02/29 11:39:21 martin Exp $	*/
 
 /*
  * Copyright (C) 2017-2022 Internet Systems Consortium, Inc. ("ISC")
