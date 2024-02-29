@@ -1,4 +1,4 @@
-/*	$NetBSD: mg_8.h,v 1.1 2024/02/18 20:57:43 christos Exp $	*/
+/*	$NetBSD: mg_8.h,v 1.1.4.2 2024/02/29 11:38:53 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
