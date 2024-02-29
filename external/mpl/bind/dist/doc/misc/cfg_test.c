@@ -1,4 +1,4 @@
-/*	$NetBSD: cfg_test.c,v 1.2 2024/02/21 22:51:54 christos Exp $	*/
+/*	$NetBSD: cfg_test.c,v 1.2.4.2 2024/02/29 12:33:37 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-/*	$NetBSD: managers.h,v 1.4 2024/02/21 22:52:30 christos Exp $	*/
+/*	$NetBSD: managers.h,v 1.4.2.2 2024/02/29 12:35:09 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

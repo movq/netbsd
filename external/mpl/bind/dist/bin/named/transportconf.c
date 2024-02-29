@@ -1,4 +1,4 @@
-/*	$NetBSD: transportconf.c,v 1.2 2024/02/21 22:51:05 christos Exp $	*/
+/*	$NetBSD: transportconf.c,v 1.2.4.2 2024/02/29 12:28:19 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

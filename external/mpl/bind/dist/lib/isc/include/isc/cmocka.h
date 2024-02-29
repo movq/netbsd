@@ -1,4 +1,4 @@
-/*	$NetBSD: cmocka.h,v 1.3 2022/09/23 12:15:33 christos Exp $	*/
+/*	$NetBSD: cmocka.h,v 1.3.4.2 2024/02/29 12:35:07 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

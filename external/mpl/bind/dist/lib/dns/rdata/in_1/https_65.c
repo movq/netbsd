@@ -1,4 +1,4 @@
-/*	$NetBSD: https_65.c,v 1.3 2024/02/21 22:52:14 christos Exp $	*/
+/*	$NetBSD: https_65.c,v 1.3.2.2 2024/02/29 12:34:48 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

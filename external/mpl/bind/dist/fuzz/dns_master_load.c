@@ -1,4 +1,4 @@
-/*	$NetBSD: dns_master_load.c,v 1.2 2024/02/21 22:51:58 christos Exp $	*/
+/*	$NetBSD: dns_master_load.c,v 1.2.4.2 2024/02/29 12:33:43 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

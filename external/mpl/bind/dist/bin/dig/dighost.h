@@ -1,4 +1,4 @@
-/*	$NetBSD: dighost.h,v 1.2 2024/02/21 22:51:01 christos Exp $	*/
+/*	$NetBSD: dighost.h,v 1.2.4.2 2024/02/29 12:28:12 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

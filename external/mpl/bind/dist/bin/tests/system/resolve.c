@@ -1,4 +1,4 @@
-/*	$NetBSD: resolve.c,v 1.5 2024/02/21 22:51:17 christos Exp $	*/
+/*	$NetBSD: resolve.c,v 1.5.2.2 2024/02/29 12:28:34 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
