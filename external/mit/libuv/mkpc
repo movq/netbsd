@@ -1,5 +1,5 @@
 #!/bin/sh
-#	$NetBSD: mkpc,v 1.1 2020/05/24 19:28:31 christos Exp $
+#	$NetBSD: mkpc,v 1.1.8.2 2024/03/01 11:43:31 martin Exp $
 
 set +x
 getversion() {
@@ -11,7 +11,7 @@ VERSION="$(getversion $1)"
 echo ${VERSION} 1>&2
 
 cat << EOF | sed -e s/@VERSION@/${VERSION}/
-# \$NetBSD: mkpc,v 1.1 2020/05/24 19:28:31 christos Exp $
+# \$NetBSD: mkpc,v 1.1.8.2 2024/03/01 11:43:31 martin Exp $
 prefix=/usr
 exec_prefix=/usr
 libdir=/usr/lib
