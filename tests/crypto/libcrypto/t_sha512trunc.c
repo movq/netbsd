@@ -1,4 +1,4 @@
-/*	$NetBSD: t_sha512trunc.c,v 1.2 2024/03/15 18:10:37 riastradh Exp $	*/
+/*	$NetBSD: t_sha512trunc.c,v 1.2.4.2 2024/03/25 14:26:15 martin Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_sha512trunc.c,v 1.2 2024/03/15 18:10:37 riastradh Exp $");
+__RCSID("$NetBSD: t_sha512trunc.c,v 1.2.4.2 2024/03/25 14:26:15 martin Exp $");
 
 #include <stddef.h>
 
