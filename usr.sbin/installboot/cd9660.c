@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660.c,v 1.2 2024/05/24 09:59:42 tsutsui Exp $	*/
+/*	$NetBSD: cd9660.c,v 1.2.2.2 2024/06/22 10:57:10 martin Exp $	*/
 
 /*-
  * Copyright (c) 2005 Izumi Tsutsui.  All rights reserved.
@@ -30,7 +30,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: cd9660.c,v 1.2 2024/05/24 09:59:42 tsutsui Exp $");
+__RCSID("$NetBSD: cd9660.c,v 1.2.2.2 2024/06/22 10:57:10 martin Exp $");
 #endif	/* !__lint */
 
 #include <sys/param.h>
