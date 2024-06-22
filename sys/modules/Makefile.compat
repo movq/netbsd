@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.compat,v 1.1 2024/06/16 21:52:01 pgoyette Exp $
+#	$NetBSD: Makefile.compat,v 1.1.2.2 2024/06/22 11:11:53 martin Exp $
 
 COMPAT_ARCH=	${MACHINE_CPU:C/x86_64/amd64/}
 
