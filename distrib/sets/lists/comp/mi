@@ -1,4 +1,4 @@
-#	$NetBSD: mi,v 1.2459 2024/06/22 20:17:25 riastradh Exp $
+#	$NetBSD: mi,v 1.2459.2.1 2024/06/29 19:43:24 perseant Exp $
 #
 # Note: don't delete entries from here - mark them as "obsolete" instead.
 ./etc/mtree/set.comp				comp-sys-root
@@ -974,6 +974,18 @@
 ./usr/include/fs/efs/efs.h			comp-c-include
 ./usr/include/fs/efs/efs_mount.h		comp-c-include
 ./usr/include/fs/efs/efs_sb.h			comp-c-include
+./usr/include/fs/exfatfs			comp-c-include	exfatfs
+./usr/include/fs/exfatfs/exfatfs.h		comp-c-include	exfatfs
+./usr/include/fs/exfatfs/exfatfs_cksum.h	comp-c-include	exfatfs
+./usr/include/fs/exfatfs/exfatfs_conv.h		comp-c-include	exfatfs
+./usr/include/fs/exfatfs/exfatfs_dirent.h	comp-c-include	exfatfs
+./usr/include/fs/exfatfs/exfatfs_extern.h	comp-c-include	exfatfs
+./usr/include/fs/exfatfs/exfatfs_inode.h	comp-c-include	exfatfs
+./usr/include/fs/exfatfs/exfatfs_mount.h	comp-c-include	exfatfs
+./usr/include/fs/exfatfs/exfatfs_tables.h	comp-c-include	exfatfs
+./usr/include/fs/exfatfs/exfatfs_trie.h		comp-c-include	exfatfs
+./usr/include/fs/exfatfs/exfatfs_vfsops.h	comp-c-include	exfatfs
+./usr/include/fs/exfatfs/exfatfs_vnops.h	comp-c-include	exfatfs
 ./usr/include/fs/hfs/hfs.h			comp-c-include
 ./usr/include/fs/hfs/libhfs.h			comp-c-include
 ./usr/include/fs/hfsp/hfsp.h			comp-obsolete		obsolete
@@ -4176,6 +4188,8 @@
 ./usr/lib/librumpfs_cd9660_p.a			comp-c-proflib		rump,profile
 ./usr/lib/librumpfs_efs.a			comp-c-lib		rump
 ./usr/lib/librumpfs_efs_p.a			comp-c-proflib		rump,profile
+./usr/lib/librumpfs_exfatfs.a			comp-c-lib		rump,exfatfs
+./usr/lib/librumpfs_exfatfs_p.a			comp-c-proflib		rump,profile,exfatfs
 ./usr/lib/librumpfs_ext2fs.a			comp-c-lib		rump
 ./usr/lib/librumpfs_ext2fs_p.a			comp-c-proflib		rump,profile
 ./usr/lib/librumpfs_fdesc.a			comp-c-lib		rump
