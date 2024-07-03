@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2024/05/31 20:52:59 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.1.4.2 2024/07/03 18:38:54 martin Exp $
 #
 
 HOSTPROGNAME=   ${_TOOL_PREFIX}mkhybrid

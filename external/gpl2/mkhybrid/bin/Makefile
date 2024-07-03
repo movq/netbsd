@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2024/05/31 20:41:50 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.3.4.2 2024/07/03 18:38:54 martin Exp $
 #	$OpenBSD: Makefile,v 1.8 2022/07/11 03:11:49 daniel Exp $
 
 # NOTE: The mkhybrid distrib also makes an "mkisofs" which is the same binary
