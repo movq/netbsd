@@ -1,4 +1,4 @@
-/*	$NetBSD: offset.h,v 1.1 2024/08/18 20:37:37 christos Exp $	*/
+/*	$NetBSD: offset.h,v 1.1.1.1 2024/08/18 20:37:37 christos Exp $	*/
 
 /*
  * Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")

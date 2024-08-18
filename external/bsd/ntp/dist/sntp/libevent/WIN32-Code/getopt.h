@@ -1,4 +1,4 @@
-/*	$NetBSD: getopt.h,v 1.1 2024/08/18 20:37:42 christos Exp $	*/
+/*	$NetBSD: getopt.h,v 1.1.1.1 2024/08/18 20:37:42 christos Exp $	*/
 
 #ifndef __GETOPT_H__
 #define __GETOPT_H__
