@@ -1,4 +1,4 @@
-/*	$NetBSD: save-flags.c,v 1.1 2024/08/18 20:37:44 christos Exp $	*/
+/*	$NetBSD: save-flags.c,v 1.1.1.1 2024/08/18 20:37:44 christos Exp $	*/
 
 /*   -*- buffer-read-only: t -*- vi: set ro:
  *

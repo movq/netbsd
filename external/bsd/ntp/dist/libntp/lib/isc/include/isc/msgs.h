@@ -1,4 +1,4 @@
-/*	$NetBSD: msgs.h,v 1.1 2024/08/18 20:37:37 christos Exp $	*/
+/*	$NetBSD: msgs.h,v 1.1.1.1 2024/08/18 20:37:37 christos Exp $	*/
 
 /*
  * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
