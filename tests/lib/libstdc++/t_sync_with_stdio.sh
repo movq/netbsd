@@ -1,4 +1,4 @@
-#	$NetBSD: t_sync_with_stdio.sh,v 1.2 2024/05/20 11:20:53 riastradh Exp $
+#	$NetBSD: t_sync_with_stdio.sh,v 1.2.6.2 2024/08/23 18:32:36 martin Exp $
 #
 # Copyright (c) 2024 The NetBSD Foundation, Inc.
 # All rights reserved.
