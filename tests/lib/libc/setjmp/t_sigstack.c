@@ -1,4 +1,4 @@
-/*	$NetBSD: t_sigstack.c,v 1.12 2024/07/17 07:11:57 uwe Exp $	*/
+/*	$NetBSD: t_sigstack.c,v 1.12.4.2 2024/08/23 16:59:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_sigstack.c,v 1.12 2024/07/17 07:11:57 uwe Exp $");
+__RCSID("$NetBSD: t_sigstack.c,v 1.12.4.2 2024/08/23 16:59:52 martin Exp $");
 
 #include <setjmp.h>
 #include <signal.h>
