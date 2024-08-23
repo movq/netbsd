@@ -1,4 +1,4 @@
-/*	$NetBSD: h_cin_nosync.cc,v 1.1 2024/04/28 01:21:27 riastradh Exp $	*/
+/*	$NetBSD: h_cin_nosync.cc,v 1.1.6.2 2024/08/23 18:32:35 martin Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
