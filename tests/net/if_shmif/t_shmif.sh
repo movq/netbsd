@@ -1,4 +1,4 @@
-# $NetBSD: t_shmif.sh,v 1.1 2024/08/20 08:20:19 ozaki-r Exp $
+# $NetBSD: t_shmif.sh,v 1.1.2.2 2024/08/24 16:42:25 martin Exp $
 #
 # Copyright (c) 2024 Internet Initiative Japan Inc.
 # All rights reserved.
