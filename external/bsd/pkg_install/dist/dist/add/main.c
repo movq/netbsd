@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.1 2024/08/25 06:38:34 wiz Exp $	*/
+/*	$NetBSD: main.c,v 1.1.1.1 2024/08/25 06:38:34 wiz Exp $	*/
 
 #if HAVE_CONFIG_H
 #include "config.h"
@@ -7,7 +7,7 @@
 #if HAVE_SYS_CDEFS_H
 #include <sys/cdefs.h>
 #endif
-__RCSID("$NetBSD: main.c,v 1.1 2024/08/25 06:38:34 wiz Exp $");
+__RCSID("$NetBSD: main.c,v 1.1.1.1 2024/08/25 06:38:34 wiz Exp $");
 
 /*
  *

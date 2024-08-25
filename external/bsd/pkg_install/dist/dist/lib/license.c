@@ -1,4 +1,4 @@
-/*	$NetBSD: license.c,v 1.1 2024/08/25 06:38:35 wiz Exp $	*/
+/*	$NetBSD: license.c,v 1.1.1.1 2024/08/25 06:38:35 wiz Exp $	*/
 
 /*-
  * Copyright (c) 2009 Joerg Sonnenberger <joerg@NetBSD.org>.

@@ -1,4 +1,4 @@
-/*	$NetBSD: fexec.c,v 1.1 2024/08/25 06:38:35 wiz Exp $	*/
+/*	$NetBSD: fexec.c,v 1.1.1.1 2024/08/25 06:38:35 wiz Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -94,7 +94,7 @@ extern char **environ;
 #endif
 #endif
 
-__RCSID("$NetBSD: fexec.c,v 1.1 2024/08/25 06:38:35 wiz Exp $");
+__RCSID("$NetBSD: fexec.c,v 1.1.1.1 2024/08/25 06:38:35 wiz Exp $");
 
 static int	vfcexec(const char *, int, const char *, va_list);
 

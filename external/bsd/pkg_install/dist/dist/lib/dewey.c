@@ -1,4 +1,4 @@
-/* $NetBSD: dewey.c,v 1.1 2024/08/25 06:38:35 wiz Exp $ */
+/* $NetBSD: dewey.c,v 1.1.1.1 2024/08/25 06:38:35 wiz Exp $ */
 
 /*
  * Copyright (c) 2002 Alistair G. Crooks.  All rights reserved.

@@ -1,4 +1,4 @@
-/*	$NetBSD: version.h,v 1.1 2024/08/25 06:38:36 wiz Exp $	*/
+/*	$NetBSD: version.h,v 1.1.1.1 2024/08/25 06:38:36 wiz Exp $	*/
 
 /*
  * Copyright (c) 2001 Thomas Klausner.  All rights reserved.

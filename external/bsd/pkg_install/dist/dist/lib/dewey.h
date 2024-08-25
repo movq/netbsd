@@ -1,4 +1,4 @@
-/* $NetBSD: dewey.h,v 1.1 2024/08/25 06:38:35 wiz Exp $ */
+/* $NetBSD: dewey.h,v 1.1.1.1 2024/08/25 06:38:35 wiz Exp $ */
 
 #ifndef _INST_LIB_DEWEY_H_
 #define _INST_LIB_DEWEY_H_

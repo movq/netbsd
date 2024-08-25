@@ -1,4 +1,4 @@
-/*	$NetBSD: conflicts.c,v 1.1 2024/08/25 06:38:35 wiz Exp $	*/
+/*	$NetBSD: conflicts.c,v 1.1.1.1 2024/08/25 06:38:35 wiz Exp $	*/
 
 /*-
  * Copyright (c) 2007 Roland Illig <rillig@NetBSD.org>.
@@ -48,7 +48,7 @@
 #include <sys/cdefs.h>
 #endif
 
-__RCSID("$NetBSD: conflicts.c,v 1.1 2024/08/25 06:38:35 wiz Exp $");
+__RCSID("$NetBSD: conflicts.c,v 1.1.1.1 2024/08/25 06:38:35 wiz Exp $");
 
 #if HAVE_ERR_H
 #include <err.h>

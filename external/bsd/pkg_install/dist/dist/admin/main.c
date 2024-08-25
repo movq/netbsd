@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.1 2024/08/25 06:38:34 wiz Exp $	*/
+/*	$NetBSD: main.c,v 1.1.1.1 2024/08/25 06:38:34 wiz Exp $	*/
 
 #ifdef HAVE_NBTOOL_CONFIG_H
 #include "nbtool_config.h"
@@ -11,7 +11,7 @@
 #include <sys/cdefs.h>
 #endif
 #endif
-__RCSID("$NetBSD: main.c,v 1.1 2024/08/25 06:38:34 wiz Exp $");
+__RCSID("$NetBSD: main.c,v 1.1.1.1 2024/08/25 06:38:34 wiz Exp $");
 
 /*-
  * Copyright (c) 1999-2019 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: iterate.c,v 1.1 2024/08/25 06:38:35 wiz Exp $	*/
+/*	$NetBSD: iterate.c,v 1.1.1.1 2024/08/25 06:38:35 wiz Exp $	*/
 
 /*-
  * Copyright (c) 2007 Joerg Sonnenberger <joerg@NetBSD.org>.
