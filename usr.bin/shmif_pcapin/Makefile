@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2024/09/02 05:14:45 ozaki-r Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2024/09/05 09:22:42 martin Exp $
 #
 
 PROG=		shmif_pcapin

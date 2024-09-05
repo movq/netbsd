@@ -1,4 +1,4 @@
-/*	$NetBSD: shmif_pcapin.c,v 1.1 2024/09/02 05:14:45 ozaki-r Exp $	*/
+/*	$NetBSD: shmif_pcapin.c,v 1.1.2.2 2024/09/05 09:22:42 martin Exp $	*/
 
 /*-
  * Copyright (c) 2017-2018 Internet Initiative Japan Inc.
@@ -30,7 +30,7 @@
 #include <rump/rumpuser_port.h>
 
 #ifndef lint
-__RCSID("$NetBSD: shmif_pcapin.c,v 1.1 2024/09/02 05:14:45 ozaki-r Exp $");
+__RCSID("$NetBSD: shmif_pcapin.c,v 1.1.2.2 2024/09/05 09:22:42 martin Exp $");
 #endif /* !lint */
 
 #include <stddef.h>
