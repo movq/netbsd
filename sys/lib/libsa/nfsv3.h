@@ -1,4 +1,4 @@
-/*	$NetBSD: nfsv3.h,v 1.1 2023/12/12 09:12:55 mlelstv Exp $	*/
+/*	$NetBSD: nfsv3.h,v 1.1.4.2 2024/09/20 11:31:31 martin Exp $	*/
 
 /*
  * Copyright (c) 2023 Michael van Elst
