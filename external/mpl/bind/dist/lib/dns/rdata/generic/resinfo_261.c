@@ -1,4 +1,4 @@
-/*	$NetBSD: resinfo_261.c,v 1.1 2024/09/22 00:06:18 christos Exp $	*/
+/*	$NetBSD: resinfo_261.c,v 1.1.1.1 2024/09/22 00:06:18 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
