@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.1 2024/09/23 12:52:54 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.1.1.1 2024/09/23 12:52:54 christos Exp $
 
 JEMALLOC:=${.PARSEDIR}/..
 
