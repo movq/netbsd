@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_vmgenid.c,v 1.3 2024/08/27 00:56:46 riastradh Exp $	*/
+/*	$NetBSD: acpi_vmgenid.c,v 1.3.2.2 2024/10/09 13:25:12 martin Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_vmgenid.c,v 1.3 2024/08/27 00:56:46 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_vmgenid.c,v 1.3.2.2 2024/10/09 13:25:12 martin Exp $");
 
 #include <sys/device.h>
 #include <sys/entropy.h>
@@ -306,11 +306,9 @@ acpivmgenid_reset(void *cookie)
 	 * Grab the current VM generation ID to put it into the entropy
 	 * pool; then force consolidation so it affects all subsequent
 	 * draws from the entropy pool and the entropy epoch advances.
-	 * Again we can't be interrupted by a signal so ignore return
-	 * value.
 	 */
 	acpivmgenid_set(sc, "cloned");
-	(void)entropy_consolidate();
+	entropy_consolidate();
 }
 
 static int
