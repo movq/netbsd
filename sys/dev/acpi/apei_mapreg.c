@@ -1,4 +1,4 @@
-/*	$NetBSD: apei_mapreg.c,v 1.4 2024/03/22 20:47:52 riastradh Exp $	*/
+/*	$NetBSD: apei_mapreg.c,v 1.4.4.2 2024/10/09 13:00:11 martin Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: apei_mapreg.c,v 1.4 2024/03/22 20:47:52 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: apei_mapreg.c,v 1.4.4.2 2024/10/09 13:00:11 martin Exp $");
 
 #include <sys/types.h>
 

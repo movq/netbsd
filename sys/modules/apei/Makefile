@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2024/03/20 17:11:44 riastradh Exp $
+#	$NetBSD: Makefile,v 1.1.4.2 2024/10/09 13:00:12 martin Exp $
 #
 
 .include "../Makefile.inc"
