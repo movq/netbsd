@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_hed.c,v 1.1 2024/03/21 02:36:01 riastradh Exp $	*/
+/*	$NetBSD: acpi_hed.c,v 1.1.4.2 2024/10/09 13:00:11 martin Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_hed.c,v 1.1 2024/03/21 02:36:01 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_hed.c,v 1.1.4.2 2024/10/09 13:00:11 martin Exp $");
 
 #include <sys/device.h>
 #include <sys/module.h>

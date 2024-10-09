@@ -1,4 +1,4 @@
-/*	$NetBSD: apei_erstvar.h,v 1.1 2024/03/20 17:11:43 riastradh Exp $	*/
+/*	$NetBSD: apei_erstvar.h,v 1.1.4.2 2024/10/09 13:00:11 martin Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: apei_reg.h,v 1.3 2024/03/22 20:48:14 riastradh Exp $	*/
+/*	$NetBSD: apei_reg.h,v 1.3.4.2 2024/10/09 13:00:11 martin Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.

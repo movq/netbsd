@@ -1,4 +1,4 @@
-/*	$NetBSD: apei_cper.h,v 1.2 2024/03/26 22:16:12 rillig Exp $	*/
+/*	$NetBSD: apei_cper.h,v 1.2.4.2 2024/10/09 13:00:10 martin Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.

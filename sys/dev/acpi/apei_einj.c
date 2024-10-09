@@ -1,4 +1,4 @@
-/*	$NetBSD: apei_einj.c,v 1.7 2024/03/28 13:40:08 riastradh Exp $	*/
+/*	$NetBSD: apei_einj.c,v 1.7.4.2 2024/10/09 13:00:11 martin Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: apei_einj.c,v 1.7 2024/03/28 13:40:08 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: apei_einj.c,v 1.7.4.2 2024/10/09 13:00:11 martin Exp $");
 
 #include <sys/types.h>
 
