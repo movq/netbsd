@@ -1,4 +1,4 @@
-/*	$NetBSD: t_errhandling.c,v 1.3 2024/09/10 17:36:12 riastradh Exp $	*/
+/*	$NetBSD: t_errhandling.c,v 1.3.2.2 2024/10/11 19:01:12 martin Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
 #define	__TEST_FENV
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_errhandling.c,v 1.3 2024/09/10 17:36:12 riastradh Exp $");
+__RCSID("$NetBSD: t_errhandling.c,v 1.3.2.2 2024/10/11 19:01:12 martin Exp $");
 
 #include <atf-c.h>
 #include <errno.h>
