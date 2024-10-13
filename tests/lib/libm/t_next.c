@@ -1,4 +1,4 @@
-/*	$NetBSD: t_next.c,v 1.7 2024/05/12 20:17:57 riastradh Exp $	*/
+/*	$NetBSD: t_next.c,v 1.7.4.2 2024/10/13 15:05:17 martin Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_next.c,v 1.7 2024/05/12 20:17:57 riastradh Exp $");
+__RCSID("$NetBSD: t_next.c,v 1.7.4.2 2024/10/13 15:05:17 martin Exp $");
 
 #include <atf-c.h>
 #include <float.h>
@@ -110,12 +110,10 @@ check(const double *x, unsigned n)
 	for (i = n; i --> 1;) {
 		ATF_REQUIRE_MSG(x[i - 1] < x[i], "i=%u", i);
 
-#ifdef __HAVE_LONG_DOUBLE
 		if (isnormal(x[i])) {
 			CHECK(i, nexttoward, x[i], x[i]*(1 - LDBL_EPSILON/2),
 			    x[i - 1]);
 		}
-#endif
 
 		CHECK(i, nextafter, x[i], x[i - 1], x[i - 1]);
 		CHECK(i, nexttoward, x[i], x[i - 1], x[i - 1]);
