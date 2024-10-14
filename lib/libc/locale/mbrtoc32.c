@@ -1,4 +1,4 @@
-/*	$NetBSD: mbrtoc32.c,v 1.9 2024/08/20 17:43:24 riastradh Exp $	*/
+/*	$NetBSD: mbrtoc32.c,v 1.9.2.2 2024/10/14 17:20:18 martin Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: mbrtoc32.c,v 1.9 2024/08/20 17:43:24 riastradh Exp $");
+__RCSID("$NetBSD: mbrtoc32.c,v 1.9.2.2 2024/10/14 17:20:18 martin Exp $");
 
 #include "namespace.h"
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: t_c32rtomb.c,v 1.1 2024/08/15 14:16:34 riastradh Exp $	*/
+/*	$NetBSD: t_c32rtomb.c,v 1.1.2.2 2024/10/14 17:20:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_c32rtomb.c,v 1.1 2024/08/15 14:16:34 riastradh Exp $");
+__RCSID("$NetBSD: t_c32rtomb.c,v 1.1.2.2 2024/10/14 17:20:19 martin Exp $");
 
 #include <atf-c.h>
 #include <locale.h>
