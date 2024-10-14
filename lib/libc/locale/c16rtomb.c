@@ -1,4 +1,4 @@
-/*	$NetBSD: c16rtomb.c,v 1.9 2024/10/09 14:28:56 riastradh Exp $	*/
+/*	$NetBSD: c16rtomb.c,v 1.9.2.2 2024/10/14 17:20:18 martin Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: c16rtomb.c,v 1.9 2024/10/09 14:28:56 riastradh Exp $");
+__RCSID("$NetBSD: c16rtomb.c,v 1.9.2.2 2024/10/14 17:20:18 martin Exp $");
 
 #include "namespace.h"
 
@@ -177,8 +177,9 @@ c16rtomb_l(char *restrict s, char16_t c16, mbstate_t *restrict ps,
 		}
 		const char16_t w1 = S->surrogate;
 		const char16_t w2 = c16;
-		c32 = __SHIFTIN(__SHIFTOUT(w1, __BITS(9,0)), __BITS(19,10)) |
-		    __SHIFTIN(__SHIFTOUT(w2, __BITS(9,0)), __BITS(9,0));
+		c32 = (char32_t)(
+		    __SHIFTIN(__SHIFTOUT(w1, __BITS(9,0)), __BITS(19,10)) |
+		    __SHIFTIN(__SHIFTOUT(w2, __BITS(9,0)), __BITS(9,0)));
 		c32 += 0x10000;
 		S->surrogate = 0;
 	} else if (c16 >= 0xd800 && c16 <= 0xdbff) { /* 3. high surrogate */

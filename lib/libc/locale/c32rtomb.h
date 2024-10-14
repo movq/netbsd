@@ -1,4 +1,4 @@
-/*	$NetBSD: c32rtomb.h,v 1.2 2024/08/19 16:22:10 riastradh Exp $	*/
+/*	$NetBSD: c32rtomb.h,v 1.2.2.2 2024/10/14 17:20:18 martin Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
