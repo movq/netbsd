@@ -1,12 +1,12 @@
-/* -*- Mode: C; tab-width: 4 -*-
+/* -*- Mode: C; tab-width: 4; c-file-style: "bsd"; c-basic-offset: 4; fill-column: 108; indent-tabs-mode: nil; -*-
  *
- * Copyright (c) 2003-2004 Apple Computer, Inc. All rights reserved.
+ * Copyright (c) 2003-2024 Apple Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -37,6 +37,7 @@
 #include <fcntl.h>
 #include <pwd.h>
 #include <sys/types.h>
+#include <sys/socket.h>
 
 #if __APPLE__
 #undef daemon
@@ -99,14 +100,13 @@ static void Reconfigure(mDNS *m)
 }
 
 // Do appropriate things at startup with command line arguments. Calls exit() if unhappy.
-mDNSlocal void ParseCmdLinArgs(int argc, char **argv)
+mDNSlocal void ParseCmdLineArgs(int argc, char **argv)
 {
     if (argc > 1)
     {
         if (0 == strcmp(argv[1], "-debug")) mDNS_DebugMode = mDNStrue;
         else printf("Usage: %s [-debug]\n", argv[0]);
     }
-
     if (!mDNS_DebugMode)
     {
         int result = daemon(0, 0);
@@ -121,9 +121,19 @@ mDNSlocal void ParseCmdLinArgs(int argc, char **argv)
 mDNSlocal void DumpStateLog()
 // Dump a little log of what we've been up to.
 {
-	LogMsg("---- BEGIN STATE LOG ----");
-    udsserver_info();
-    LogMsg("----  END STATE LOG  ----");
+    char timestamp[MIN_TIMESTAMP_STRING_LENGTH];
+
+    mDNSu32 major_version = _DNS_SD_H / 10000;
+    mDNSu32 minor_version1 = (_DNS_SD_H - major_version * 10000) / 100;
+    mDNSu32 minor_version2 = _DNS_SD_H % 100;
+
+    getLocalTimestampNow(timestamp, sizeof(timestamp));
+    LogRedact(MDNS_LOG_CATEGORY_DEFAULT, MDNS_LOG_DEFAULT, "---- BEGIN STATE LOG ---- (%s mDNSResponder Build %d.%02d.%02d)", timestamp, major_version, minor_version1, minor_version2);
+
+    udsserver_info_dump_to_fd(STDERR_FILENO);
+
+    getLocalTimestampNow(timestamp, sizeof(timestamp));
+    LogRedact(MDNS_LOG_CATEGORY_DEFAULT, MDNS_LOG_DEFAULT, "---- END STATE LOG ---- (%s mDNSResponder Build %d.%02d.%02d)", timestamp, major_version, minor_version1, minor_version2);
 }
 
 mDNSlocal mStatus MainLoop(mDNS *m) // Loop until we quit.
@@ -134,6 +144,7 @@ mDNSlocal mStatus MainLoop(mDNS *m) // Loop until we quit.
     mDNSPosixListenForSignalInEventLoop(SIGINT);
     mDNSPosixListenForSignalInEventLoop(SIGTERM);
     mDNSPosixListenForSignalInEventLoop(SIGUSR1);
+    mDNSPosixListenForSignalInEventLoop(SIGUSR2);
     mDNSPosixListenForSignalInEventLoop(SIGPIPE);
     mDNSPosixListenForSignalInEventLoop(SIGHUP) ;
 
@@ -161,6 +172,11 @@ mDNSlocal mStatus MainLoop(mDNS *m) // Loop until we quit.
 
         if (sigismember(&signals, SIGHUP )) Reconfigure(m);
         if (sigismember(&signals, SIGUSR1)) DumpStateLog();
+        if (sigismember(&signals, SIGUSR2))
+        {
+            mDNS_DebugLoggingEnabled = !mDNS_DebugLoggingEnabled;
+            LogMsg("Received SIGUSR2 - %s debug level logging.", mDNS_DebugLoggingEnabled ? "Enable" : "Disable");
+        }
         // SIGPIPE happens when we try to write to a dead client; death should be detected soon in request_callback() and cleaned up.
         if (sigismember(&signals, SIGPIPE)) LogMsg("Received SIGPIPE - ignoring");
         if (sigismember(&signals, SIGINT) || sigismember(&signals, SIGTERM)) break;
@@ -172,7 +188,10 @@ int main(int argc, char **argv)
 {
     mStatus err;
 
-    ParseCmdLinArgs(argc, argv);
+    ParseCmdLineArgs(argc, argv);
+
+    // Enable mDNSResponder logging by default.
+    mDNS_LoggingEnabled = mDNStrue;
 
     LogMsg("%s starting", mDNSResponderVersionString);
 
@@ -189,9 +208,21 @@ int main(int argc, char **argv)
     {
         const struct passwd *pw = getpwnam("nobody");
         if (pw != NULL)
-            setuid(pw->pw_uid);
+        {
+            if (setgid(pw->pw_gid) < 0)
+            {
+                LogRedact(MDNS_LOG_CATEGORY_DEFAULT, MDNS_LOG_ERROR,
+                          "WARNING: mdnsd continuing as group root because setgid to \"nobody\" failed with " PUB_S, strerror(errno));
+            }
+            if (setuid(pw->pw_uid) < 0)
+            {
+                LogMsg("WARNING: mdnsd continuing as root because setuid to \"nobody\" failed with %s", strerror(errno));
+            }
+        }
         else
+        {
             LogMsg("WARNING: mdnsd continuing as root because user \"nobody\" does not exist");
+        }
     }
 
     if (mStatus_NoError == err)
@@ -205,7 +236,7 @@ int main(int argc, char **argv)
         LogMsg("ExitCallback: udsserver_exit failed");
 
  #if MDNS_DEBUGMSGS > 0
-    printf("mDNSResponder exiting normally with %ld\n", err);
+    printf("mDNSResponder exiting normally with %d\n", err);
  #endif
 
     return err;
@@ -221,7 +252,7 @@ mStatus udsSupportAddFDToEventLoop(int fd, udsEventCallback callback, void *cont
     return mDNSPosixAddFDToEventLoop(fd, callback, context);
 }
 
-int udsSupportReadFD(dnssd_sock_t fd, char *buf, int len, int flags, void *platform_data)
+ssize_t udsSupportReadFD(dnssd_sock_t fd, char *buf, mDNSu32 len, int flags, void *platform_data)
 {
     (void) platform_data;
     return recv(fd, buf, len, flags);
