@@ -25,7 +25,7 @@
  3. This notice may not be removed or altered from any source distribution.
  */
 
-/* @(#) $Id: example.c,v 1.1 2024/10/27 22:44:15 christos Exp $ */
+/* @(#) $Id: example.c,v 1.1.1.1 2024/10/27 22:44:15 christos Exp $ */
 
 #include "zstd_zlibwrapper.h"
 #include <stdio.h>

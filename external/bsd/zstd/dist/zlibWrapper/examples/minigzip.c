@@ -16,7 +16,7 @@
  * or in pipe mode.
  */
 
-/* @(#) $Id: minigzip.c,v 1.1 2024/10/27 22:44:15 christos Exp $ */
+/* @(#) $Id: minigzip.c,v 1.1.1.1 2024/10/27 22:44:15 christos Exp $ */
 
 #define _POSIX_SOURCE /* fileno */
 
