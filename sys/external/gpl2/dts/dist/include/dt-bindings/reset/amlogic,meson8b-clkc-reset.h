@@ -1,4 +1,4 @@
-/*	$NetBSD: amlogic,meson8b-clkc-reset.h,v 1.1.1.1 2017/10/28 10:30:32 jmcneill Exp $	*/
+/*	$NetBSD: amlogic,meson8b-clkc-reset.h,v 1.1 2017/10/28 10:30:32 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 2017 Martin Blumenstingl <martin.blumenstingl@googlemail.com>.

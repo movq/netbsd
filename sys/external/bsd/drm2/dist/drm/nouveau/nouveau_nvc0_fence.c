@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvc0_fence.c,v 1.4 2021/12/18 23:45:32 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvc0_fence.c,v 1.1 2014/08/06 12:36:23 riastradh Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -25,9 +25,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvc0_fence.c,v 1.4 2021/12/18 23:45:32 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvc0_fence.c,v 1.1 2014/08/06 12:36:23 riastradh Exp $");
 
-#include "nouveau_drv.h"
+#include <core/object.h>
+#include <core/client.h>
+#include <core/class.h>
+
+#include <engine/fifo.h>
+
+#include "nouveau_drm.h"
 #include "nouveau_dma.h"
 #include "nouveau_fence.h"
 

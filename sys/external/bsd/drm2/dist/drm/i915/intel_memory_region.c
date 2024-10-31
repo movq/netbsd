@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_memory_region.c,v 1.4 2021/12/19 11:47:48 riastradh Exp $	*/
+/*	$NetBSD: intel_memory_region.c,v 1.1 2021/12/18 20:15:26 riastradh Exp $	*/
 
 // SPDX-License-Identifier: MIT
 /*
@@ -6,12 +6,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_memory_region.c,v 1.4 2021/12/19 11:47:48 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_memory_region.c,v 1.1 2021/12/18 20:15:26 riastradh Exp $");
 
 #include "intel_memory_region.h"
 #include "i915_drv.h"
-
-#include <linux/nbsd-namespace.h>
 
 /* XXX: Hysterical raisins. BIT(inst) needs to just be (inst) at some point. */
 #define REGION_MAP(type, inst) \
@@ -205,8 +203,6 @@ intel_memory_region_create(struct drm_i915_private *i915,
 	return mem;
 
 err_free:
-	mutex_destroy(&mem->mm_lock);
-	mutex_destroy(&mem->objects.lock);
 	kfree(mem);
 	return ERR_PTR(err);
 }

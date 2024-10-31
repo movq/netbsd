@@ -1,3 +1,0 @@
-#	$NetBSD: files.nist_hash_drbg,v 1.1 2019/09/02 20:09:29 riastradh Exp $
-
-file	crypto/nist_hash_drbg/nist_hash_drbg.c

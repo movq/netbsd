@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_vma_types.h,v 1.4 2021/12/19 11:33:30 riastradh Exp $	*/
+/*	$NetBSD: i915_vma_types.h,v 1.1 2021/12/18 20:15:26 riastradh Exp $	*/
 
 /* SPDX-License-Identifier: MIT */
 /*
@@ -158,12 +158,6 @@ struct i915_ggtt_view {
 	};
 };
 
-
-#ifdef __NetBSD__
-#  define	__i915_vma_iomem	/* write-combining */
-#  define	__iomem			__i915_vma_iomem
-#endif
-
 /**
  * DOC: Virtual Memory Address
  *
@@ -297,10 +291,6 @@ struct i915_vma {
 	struct hlist_node exec_node;
 	u32 exec_handle;
 };
-
-#ifdef __NetBSD__
-#  undef	__iomem
-#endif
 
 #endif
 

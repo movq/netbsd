@@ -1,4 +1,4 @@
-/*	$NetBSD: ttm_lock.h,v 1.3 2022/02/17 01:21:02 riastradh Exp $	*/
+/*	$NetBSD: ttm_lock.h,v 1.1 2021/12/18 20:15:54 riastradh Exp $	*/
 
 /**************************************************************************
  *
@@ -56,10 +56,6 @@
 
 #include "ttm_object.h"
 
-#ifdef __NetBSD__
-#include "drm_wait_netbsd.h"	/* XXX */
-#endif
-
 /**
  * struct ttm_lock
  *
@@ -73,7 +69,7 @@
 
 struct ttm_lock {
 	struct ttm_base_object base;
-	drm_waitqueue_t queue;
+	wait_queue_head_t queue;
 	spinlock_t lock;
 	int32_t rw;
 	uint32_t flags;

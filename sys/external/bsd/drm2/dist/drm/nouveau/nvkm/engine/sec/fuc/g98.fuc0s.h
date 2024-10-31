@@ -1,7 +1,6 @@
-/*	$NetBSD: g98.fuc0s.h,v 1.3 2021/12/18 23:45:37 riastradh Exp $	*/
+/*	$NetBSD: g98.fuc0s.h,v 1.1 2018/08/27 01:34:56 riastradh Exp $	*/
 
-/* SPDX-License-Identifier: MIT */
-static uint32_t g98_sec_data[] = {
+uint32_t g98_sec_data[] = {
 /* 0x0000: ctx_dma */
 /* 0x0000: ctx_dma_query */
 	0x00000000,
@@ -153,7 +152,7 @@ static uint32_t g98_sec_data[] = {
 	0x00000000,
 };
 
-static uint32_t g98_sec_code[] = {
+uint32_t g98_sec_code[] = {
 	0x17f004bd,
 	0x0010fe35,
 	0xf10004fe,

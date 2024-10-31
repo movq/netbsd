@@ -183,10 +183,15 @@
 					#address-cells = <1>;
 					#size-cells = <0>;
 
+					port@1 {
+						reg = <1>;
+						label = "internal_j9";
+					};
+
 					port@2 {
 						reg = <2>;
 						label = "eth_fc_1000_2";
-						phy-mode = "1000base-x";
+						phy-mode = "sgmii";
 						managed = "in-band-status";
 						sfp = <&sff1>;
 					};
@@ -194,7 +199,7 @@
 					port@3 {
 						reg = <3>;
 						label = "eth_fc_1000_3";
-						phy-mode = "1000base-x";
+						phy-mode = "sgmii";
 						managed = "in-band-status";
 						sfp = <&sff2>;
 					};
@@ -202,7 +207,7 @@
 					port@4 {
 						reg = <4>;
 						label = "eth_fc_1000_4";
-						phy-mode = "1000base-x";
+						phy-mode = "sgmii";
 						managed = "in-band-status";
 						sfp = <&sff3>;
 					};
@@ -210,7 +215,7 @@
 					port@5 {
 						reg = <5>;
 						label = "eth_fc_1000_5";
-						phy-mode = "1000base-x";
+						phy-mode = "sgmii";
 						managed = "in-band-status";
 						sfp = <&sff4>;
 					};
@@ -218,7 +223,7 @@
 					port@6 {
 						reg = <6>;
 						label = "eth_fc_1000_6";
-						phy-mode = "1000base-x";
+						phy-mode = "sgmii";
 						managed = "in-band-status";
 						sfp = <&sff5>;
 					};
@@ -226,7 +231,7 @@
 					port@7 {
 						reg = <7>;
 						label = "eth_fc_1000_7";
-						phy-mode = "1000base-x";
+						phy-mode = "sgmii";
 						managed = "in-band-status";
 						sfp = <&sff6>;
 					};
@@ -234,7 +239,7 @@
 					port@9 {
 						reg = <9>;
 						label = "eth_fc_1000_1";
-						phy-mode = "1000base-x";
+						phy-mode = "sgmii";
 						managed = "in-band-status";
 						sfp = <&sff0>;
 					};
@@ -266,10 +271,15 @@
 					#address-cells = <1>;
 					#size-cells = <0>;
 
+					port@1 {
+						reg = <1>;
+						label = "internal_j8";
+					};
+
 					port@2 {
 						reg = <2>;
 						label = "eth_fc_1000_8";
-						phy-mode = "1000base-x";
+						phy-mode = "sgmii";
 						managed = "in-band-status";
 						sfp = <&sff7>;
 					};
@@ -277,7 +287,7 @@
 					port@3 {
 						reg = <3>;
 						label = "eth_fc_1000_9";
-						phy-mode = "1000base-x";
+						phy-mode = "sgmii";
 						managed = "in-band-status";
 						sfp = <&sff8>;
 					};
@@ -285,7 +295,7 @@
 					port@4 {
 						reg = <4>;
 						label = "eth_fc_1000_10";
-						phy-mode = "1000base-x";
+						phy-mode = "sgmii";
 						managed = "in-band-status";
 						sfp = <&sff9>;
 					};
@@ -407,7 +417,7 @@
 	pinctrl-0 = <&pinctrl_dspi1>;
 	status = "okay";
 
-	flash@0 {
+	spi-flash@0 {
 		#address-cells = <1>;
 		#size-cells = <1>;
 		compatible = "jedec,spi-nor";
@@ -420,7 +430,7 @@
 		};
 	};
 
-	flash@1 {
+	spi-flash@1 {
 		#address-cells = <1>;
 		#size-cells = <1>;
 		compatible = "jedec,spi-nor";
@@ -495,36 +505,36 @@
 	pinctrl-0 = <&pinctrl_i2c0>;
 	status = "okay";
 
-	gpio5: io-expander@20 {
+	gpio5: pca9554@20 {
 		compatible = "nxp,pca9554";
 		reg = <0x20>;
 		gpio-controller;
 		#gpio-cells = <2>;
 	};
 
-	gpio6: io-expander@22 {
+	gpio6: pca9554@22 {
 		compatible = "nxp,pca9554";
 		reg = <0x22>;
 		gpio-controller;
 		#gpio-cells = <2>;
 	};
 
-	temp-sensor@48 {
+	lm75@48 {
 		compatible = "national,lm75";
 		reg = <0x48>;
 	};
 
-	eeprom@50 {
+	at24c04@50 {
 		compatible = "atmel,24c04";
 		reg = <0x50>;
 	};
 
-	eeprom@52 {
+	at24c04@52 {
 		compatible = "atmel,24c04";
 		reg = <0x52>;
 	};
 
-	elapsed-time-recorder@6b {
+	ds1682@6b {
 		compatible = "dallas,ds1682";
 		reg = <0x6b>;
 	};
@@ -536,12 +546,7 @@
 	pinctrl-0 = <&pinctrl_i2c1>;
 	status = "okay";
 
-	watchdog@38 {
-		compatible = "zii,rave-wdt";
-		reg = <0x38>;
-	};
-
-	adc@4a {
+	adt7411@4a {
 		compatible = "adi,adt7411";
 		reg = <0x4a>;
 	};
@@ -553,51 +558,48 @@
 	pinctrl-0 = <&pinctrl_i2c2>;
 	status = "okay";
 
-	gpio9: io-expander@20 {
+	gpio9: sx1503q@20 {
 		compatible = "semtech,sx1503q";
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_sx1503_20>;
 		#gpio-cells = <2>;
 		reg = <0x20>;
 		gpio-controller;
-		interrupt-parent = <&gpio1>;
-		interrupts = <31 IRQ_TYPE_EDGE_FALLING>;
 	};
 
-	temp-sensor@4e {
+	lm75@4e {
 		compatible = "national,lm75";
 		reg = <0x4e>;
 	};
 
-	temp-sensor@4f {
+	lm75@4f {
 		compatible = "national,lm75";
 		reg = <0x4f>;
 	};
 
-	gpio7: io-expander@23 {
+	gpio7: pca9555@23 {
 		compatible = "nxp,pca9555";
 		gpio-controller;
 		#gpio-cells = <2>;
 		reg = <0x23>;
 	};
 
-	adc@4a {
+	adt7411@4a {
 		compatible = "adi,adt7411";
 		reg = <0x4a>;
 	};
 
-	eeprom@54 {
+	at24c08@54 {
 		compatible = "atmel,24c08";
 		reg = <0x54>;
 	};
 
-	i2c-mux@70 {
+	tca9548@70 {
 		compatible = "nxp,pca9548";
 		pinctrl-names = "default";
 		#address-cells = <1>;
 		#size-cells = <0>;
 		reg = <0x70>;
-		i2c-mux-idle-disconnect;
 
 		sff0_i2c: i2c@1 {
 			#address-cells = <1>;
@@ -630,13 +632,12 @@
 		};
 	};
 
-	i2c-mux@71 {
+	tca9548@71 {
 		compatible = "nxp,pca9548";
 		pinctrl-names = "default";
 		reg = <0x71>;
 		#address-cells = <1>;
 		#size-cells = <0>;
-		i2c-mux-idle-disconnect;
 
 		sff5_i2c: i2c@1 {
 			#address-cells = <1>;
@@ -670,10 +671,6 @@
 	};
 };
 
-&snvsrtc {
-	status = "disabled";
-};
-
 &uart0 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart0>;
@@ -684,6 +681,7 @@
 	linux,rs485-enabled-at-boot-time;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart1>;
+	rs485-rts-delay = <0 200>;
 	status = "okay";
 };
 
@@ -691,6 +689,7 @@
 	linux,rs485-enabled-at-boot-time;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart2>;
+	rs485-rts-delay = <0 200>;
 	status = "okay";
 };
 
@@ -774,8 +773,7 @@
 			VF610_PAD_PTB15__I2C0_SDA		0x37ff
 		>;
 	};
-
-	pinctrl_i2c1: i2c1grp {
+		pinctrl_i2c1: i2c1grp {
 		fsl,pins = <
 			VF610_PAD_PTB16__I2C1_SCL		0x37ff
 			VF610_PAD_PTB17__I2C1_SDA		0x37ff
@@ -786,6 +784,13 @@
 		fsl,pins = <
 			VF610_PAD_PTA22__I2C2_SCL		0x37ff
 			VF610_PAD_PTA23__I2C2_SDA		0x37ff
+		>;
+	};
+
+	pinctrl_i2c3: i2c3grp {
+		fsl,pins = <
+			VF610_PAD_PTA30__I2C3_SCL		0x37ff
+			VF610_PAD_PTA31__I2C3_SDA		0x37ff
 		>;
 	};
 

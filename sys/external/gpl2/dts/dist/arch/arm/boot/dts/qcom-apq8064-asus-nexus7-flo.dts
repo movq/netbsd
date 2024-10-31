@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0
 #include "qcom-apq8064-v2.0.dtsi"
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
@@ -302,11 +301,11 @@
 		};
 
 		gsbi@16500000 {
-			status = "okay";
+			status = "ok";
 			qcom,mode = <GSBI_PROT_I2C_UART>;
 
 			serial@16540000 {
-				status = "okay";
+				status = "ok";
 
 				pinctrl-names = "default";
 				pinctrl-0 = <&gsbi6_uart_4pins>;
@@ -314,23 +313,29 @@
 		};
 
 		gsbi@16600000 {
-			status = "okay";
+			status = "ok";
 			qcom,mode = <GSBI_PROT_I2C_UART>;
 			serial@16640000 {
-				status = "okay";
+				status = "ok";
 			};
+		};
+
+		/* OTG */
+		phy@12500000 {
+			status		= "okay";
+			vddcx-supply	= <&pm8921_s3>;
+			v3p3-supply	= <&pm8921_l3>;
+			v1p8-supply	= <&pm8921_l4>;
+			dr_mode		= "otg";
+		};
+
+		gadget@12500000 {
+			status = "okay";
 		};
 
 		/* OTG */
 		usb@12500000 {
 			status = "okay";
-			dr_mode = "otg";
-			ulpi {
-				phy {
-					v3p3-supply = <&pm8921_l3>;
-					v1p8-supply = <&pm8921_l4>;
-				};
-			};
 		};
 
 		amba {

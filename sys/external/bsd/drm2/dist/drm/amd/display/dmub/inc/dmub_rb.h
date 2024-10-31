@@ -1,4 +1,4 @@
-/*	$NetBSD: dmub_rb.h,v 1.3 2021/12/19 10:59:02 riastradh Exp $	*/
+/*	$NetBSD: dmub_rb.h,v 1.1 2021/12/18 20:11:25 riastradh Exp $	*/
 
 /*
  * Copyright 2019 Advanced Micro Devices, Inc.
@@ -128,7 +128,7 @@ static inline void dmub_rb_flush_pending(const struct dmub_rb *rb)
 	while (rptr != wptr) {
 		uint64_t volatile *data = (uint64_t volatile *)rb->base_address + rptr / sizeof(uint64_t);
 		//uint64_t volatile *p = (uint64_t volatile *)data;
-		uint64_t temp __unused;
+		uint64_t temp;
 		int i;
 
 		for (i = 0; i < DMUB_RB_CMD_SIZE / sizeof(uint64_t); i++)

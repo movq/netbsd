@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_opregion.c,v 1.6 2022/02/27 21:22:01 riastradh Exp $	*/
+/*	$NetBSD: intel_opregion.c,v 1.1 2021/12/18 20:15:30 riastradh Exp $	*/
 
 /*
  * Copyright 2008 Intel Corporation <hong.liu@intel.com>
@@ -28,11 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_opregion.c,v 1.6 2022/02/27 21:22:01 riastradh Exp $");
-
-#ifdef __NetBSD__
-#include <dev/acpi/acpi_display.h>
-#endif
+__KERNEL_RCSID(0, "$NetBSD: intel_opregion.c,v 1.1 2021/12/18 20:15:30 riastradh Exp $");
 
 #include <linux/acpi.h>
 #include <linux/dmi.h>
@@ -459,12 +455,10 @@ static u32 asle_set_backlight(struct drm_i915_private *dev_priv, u32 bclp)
 
 	DRM_DEBUG_DRIVER("bclp = 0x%08x\n", bclp);
 
-#ifndef __NetBSD__ /* XXX backlight */
 	if (acpi_video_get_backlight_type() == acpi_backlight_native) {
 		DRM_DEBUG_KMS("opregion backlight request ignored\n");
 		return 0;
 	}
-#endif
 
 	if (!(bclp & ASLE_BCLP_VALID))
 		return ASLC_BACKLIGHT_FAILED;
@@ -626,27 +620,6 @@ void intel_opregion_asle_intr(struct drm_i915_private *dev_priv)
 #define ACPI_EV_LID            (1<<1)
 #define ACPI_EV_DOCK           (1<<2)
 
-#ifdef __NetBSD__
-static void
-intel_opregion_video_event(ACPI_HANDLE hdl, uint32_t notify, void *cookie)
-{
-	struct intel_opregion *opregion = cookie;
-	struct opregion_acpi *acpi = opregion->acpi;
-
-	DRM_DEBUG_DRIVER("notify=0x%08x csts=0x%02x cevt=0x%02x\n", notify,
-	    acpi->csts, acpi->cevt);
-
-	/*
-	 * The firmware sets CSTS to 0x03 `Dispatched (ASL)' before
-	 * issuing any graphics notification, and won't issue
-	 * additional notifications until the graphics driver sets CSTS
-	 * to 0x00 `Success (Driver)' to acknowledge it.
-	 */
-	if (acpi->csts != 0x03)
-		return;
-	acpi->csts = 0;
-}
-#else	/* !__NetBSD__ */
 /*
  * The only video events relevant to opregion are 0x80. These indicate either a
  * docking event, lid switch or display switch request. In Linux, these are
@@ -673,7 +646,6 @@ static int intel_opregion_video_event(struct notifier_block *nb,
 
 	return ret;
 }
-#endif
 
 /*
  * Initialise the DIDL field in opregion. This passes a list of devices to
@@ -898,7 +870,7 @@ static int intel_load_vbt_firmware(struct drm_i915_private *dev_priv)
 	if (!name || !*name)
 		return -ENOENT;
 
-	ret = request_firmware(&fw, name, pci_dev_dev(dev_priv->drm.pdev));
+	ret = request_firmware(&fw, name, &dev_priv->drm.pdev->dev);
 	if (ret) {
 		DRM_ERROR("Requesting VBT firmware \"%s\" failed (%d)\n",
 			  name, ret);
@@ -951,11 +923,7 @@ int intel_opregion_setup(struct drm_i915_private *dev_priv)
 
 	INIT_WORK(&opregion->asle_work, asle_work);
 
-#ifdef __NetBSD__
-	base = AcpiOsMapMemory(asls, OPREGION_SIZE);
-#else
 	base = memremap(asls, OPREGION_SIZE, MEMREMAP_WB);
-#endif
 	if (!base)
 		return -ENOMEM;
 
@@ -1026,12 +994,8 @@ int intel_opregion_setup(struct drm_i915_private *dev_priv)
 			rvda += asls;
 		}
 
-#ifdef __NetBSD__
-		opregion->rvda = AcpiOsMapMemory(rvda, opregion->asle->rvds);
-#else
 		opregion->rvda = memremap(rvda, opregion->asle->rvds,
 					  MEMREMAP_WB);
-#endif
 
 		vbt = opregion->rvda;
 		vbt_size = opregion->asle->rvds;
@@ -1042,12 +1006,7 @@ int intel_opregion_setup(struct drm_i915_private *dev_priv)
 			goto out;
 		} else {
 			DRM_DEBUG_KMS("Invalid VBT in ACPI OpRegion (RVDA)\n");
-#ifdef __NetBSD__
-			AcpiOsUnmapMemory(opregion->rvda,
-			    opregion->asle->rvds);
-#else
 			memunmap(opregion->rvda);
-#endif
 			opregion->rvda = NULL;
 		}
 	}
@@ -1075,11 +1034,7 @@ out:
 	return 0;
 
 err_out:
-#ifdef __NetBSD__
-	AcpiOsUnmapMemory(base, OPREGION_SIZE);
-#else
 	memunmap(base);
-#endif
 	return err;
 }
 
@@ -1146,15 +1101,9 @@ void intel_opregion_register(struct drm_i915_private *i915)
 		return;
 
 	if (opregion->acpi) {
-#ifdef __NetBSD__
-		opregion->acpi_notifier =
-		    acpidisp_register_notify(intel_opregion_video_event,
-			opregion);
-#else
 		opregion->acpi_notifier.notifier_call =
 			intel_opregion_video_event;
 		register_acpi_notifier(&opregion->acpi_notifier);
-#endif
 	}
 
 	intel_opregion_resume(i915);
@@ -1215,31 +1164,15 @@ void intel_opregion_unregister(struct drm_i915_private *i915)
 	if (!opregion->header)
 		return;
 
-#ifdef __NetBSD__
-	if (opregion->acpi_notifier) {
-		acpidisp_deregister_notify(opregion->acpi_notifier);
-		opregion->acpi_notifier = NULL;
-	}
-#else
 	if (opregion->acpi_notifier.notifier_call) {
 		unregister_acpi_notifier(&opregion->acpi_notifier);
 		opregion->acpi_notifier.notifier_call = NULL;
 	}
-#endif
 
 	/* just clear all opregion memory pointers now */
-#ifdef __NetBSD__
-	size_t rvds = opregion->asle->rvds;
-	AcpiOsUnmapMemory(opregion->header, OPREGION_SIZE);
-#else
 	memunmap(opregion->header);
-#endif
 	if (opregion->rvda) {
-#ifdef __NetBSD__
-		AcpiOsUnmapMemory(opregion->rvda, rvds);
-#else
 		memunmap(opregion->rvda);
-#endif
 		opregion->rvda = NULL;
 	}
 	if (opregion->vbt_firmware) {

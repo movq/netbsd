@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nv10_fence.c,v 1.6 2021/12/18 23:45:32 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nv10_fence.c,v 1.1 2014/08/06 12:36:23 riastradh Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -25,9 +25,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nv10_fence.c,v 1.6 2021/12/18 23:45:32 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nv10_fence.c,v 1.1 2014/08/06 12:36:23 riastradh Exp $");
 
-#include "nouveau_drv.h"
+#include <core/object.h>
+#include <core/class.h>
+
+#include "nouveau_drm.h"
 #include "nouveau_dma.h"
 #include "nv10_fence.h"
 
@@ -38,7 +41,7 @@ nv10_fence_emit(struct nouveau_fence *fence)
 	int ret = RING_SPACE(chan, 2);
 	if (ret == 0) {
 		BEGIN_NV04(chan, 0, NV10_SUBCHAN_REF_CNT, 1);
-		OUT_RING  (chan, fence->base.seqno);
+		OUT_RING  (chan, fence->sequence);
 		FIRE_RING (chan);
 	}
 	return ret;
@@ -55,7 +58,7 @@ nv10_fence_sync(struct nouveau_fence *fence,
 u32
 nv10_fence_read(struct nouveau_channel *chan)
 {
-	return nvif_rd32(&chan->user, 0x0048);
+	return nv_ro32(chan->object, 0x0048);
 }
 
 void
@@ -63,12 +66,11 @@ nv10_fence_context_del(struct nouveau_channel *chan)
 {
 	struct nv10_fence_chan *fctx = chan->fence;
 	nouveau_fence_context_del(&fctx->base);
-	nvif_object_fini(&fctx->sema);
 	chan->fence = NULL;
-	nouveau_fence_context_free(&fctx->base);
+	kfree(fctx);
 }
 
-static int
+int
 nv10_fence_context_new(struct nouveau_channel *chan)
 {
 	struct nv10_fence_chan *fctx;
@@ -77,7 +79,7 @@ nv10_fence_context_new(struct nouveau_channel *chan)
 	if (!fctx)
 		return -ENOMEM;
 
-	nouveau_fence_context_new(chan, &fctx->base);
+	nouveau_fence_context_new(&fctx->base);
 	fctx->base.emit = nv10_fence_emit;
 	fctx->base.read = nv10_fence_read;
 	fctx->base.sync = nv10_fence_sync;
@@ -93,7 +95,6 @@ nv10_fence_destroy(struct nouveau_drm *drm)
 		nouveau_bo_unpin(priv->bo);
 	nouveau_bo_ref(NULL, &priv->bo);
 	drm->fence = NULL;
-	spin_lock_destroy(&priv->lock);
 	kfree(priv);
 }
 

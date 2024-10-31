@@ -1,6 +1,5 @@
-/*	$NetBSD: tegra30-car.h,v 1.1.1.4 2021/11/07 16:50:00 jmcneill Exp $	*/
+/*	$NetBSD: tegra30-car.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
-/* SPDX-License-Identifier: GPL-2.0 */
 /*
  * This header provides constants for binding nvidia,tegra30-car.
  *
@@ -159,7 +158,7 @@
 /* 133 */
 /* 134 */
 /* 135 */
-#define TEGRA30_CLK_CEC 136
+/* 136 */
 /* 137 */
 /* 138 */
 /* 139 */
@@ -198,8 +197,6 @@
 #define TEGRA30_CLK_CLK_M 171
 #define TEGRA30_CLK_CLK_M_DIV2 172
 #define TEGRA30_CLK_CLK_M_DIV4 173
-#define TEGRA30_CLK_OSC_DIV2 172
-#define TEGRA30_CLK_OSC_DIV4 173
 #define TEGRA30_CLK_PLL_REF 174
 #define TEGRA30_CLK_PLL_C 175
 #define TEGRA30_CLK_PLL_C_OUT1 176
@@ -234,11 +231,11 @@
 #define TEGRA30_CLK_AUDIO3 204
 #define TEGRA30_CLK_AUDIO4 205
 #define TEGRA30_CLK_SPDIF 206
-/* 207 */
-/* 208 */
-/* 209 */
+#define TEGRA30_CLK_CLK_OUT_1 207 /* (extern1) */
+#define TEGRA30_CLK_CLK_OUT_2 208 /* (extern2) */
+#define TEGRA30_CLK_CLK_OUT_3 209 /* (extern3) */
 #define TEGRA30_CLK_SCLK 210
-/* 211 */
+#define TEGRA30_CLK_BLINK 211
 #define TEGRA30_CLK_CCLK_G 212
 #define TEGRA30_CLK_CCLK_LP 213
 #define TEGRA30_CLK_TWD 214
@@ -247,7 +244,7 @@
 #define TEGRA30_CLK_HCLK 217
 #define TEGRA30_CLK_PCLK 218
 /* 219 */
-#define TEGRA30_CLK_OSC 220
+/* 220 */
 /* 221 */
 /* 222 */
 /* 223 */
@@ -264,9 +261,9 @@
 /* 297 */
 /* 298 */
 /* 299 */
-/* 300 */
-/* 301 */
-/* 302 */
+#define TEGRA30_CLK_CLK_OUT_1_MUX 300
+#define TEGRA30_CLK_CLK_OUT_2_MUX 301
+#define TEGRA30_CLK_CLK_OUT_3_MUX 302
 #define TEGRA30_CLK_AUDIO0_MUX 303
 #define TEGRA30_CLK_AUDIO1_MUX 304
 #define TEGRA30_CLK_AUDIO2_MUX 305

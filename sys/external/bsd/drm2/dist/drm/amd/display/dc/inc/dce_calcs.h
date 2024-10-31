@@ -1,4 +1,4 @@
-/*	$NetBSD: dce_calcs.h,v 1.3 2021/12/19 11:23:38 riastradh Exp $	*/
+/*	$NetBSD: dce_calcs.h,v 1.1 2021/12/18 20:11:25 riastradh Exp $	*/
 
 /*
  * Copyright 2015-2017 Advanced Micro Devices, Inc.
@@ -482,7 +482,7 @@ void bw_calcs_init(
 bool bw_calcs(
 	struct dc_context *ctx,
 	const struct bw_calcs_dceip *dceip,
-	struct bw_calcs_vbios *vbios,
+	const struct bw_calcs_vbios *vbios,
 	const struct pipe_ctx *pipe,
 	int pipe_count,
 	struct dce_bw_output *calcs_output);

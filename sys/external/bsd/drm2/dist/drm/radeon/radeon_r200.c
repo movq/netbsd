@@ -1,4 +1,4 @@
-/*	$NetBSD: radeon_r200.c,v 1.2 2021/12/18 23:45:43 riastradh Exp $	*/
+/*	$NetBSD: radeon_r200.c,v 1.1 2018/08/27 14:38:20 riastradh Exp $	*/
 
 /*
  * Copyright 2008 Advanced Micro Devices, Inc.
@@ -27,10 +27,10 @@
  *          Alex Deucher
  *          Jerome Glisse
  */
-
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: radeon_r200.c,v 1.2 2021/12/18 23:45:43 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: radeon_r200.c,v 1.1 2018/08/27 14:38:20 riastradh Exp $");
 
+#include <drm/drmP.h>
 #include <drm/radeon_drm.h>
 #include "radeon_reg.h"
 #include "radeon.h"
@@ -89,7 +89,7 @@ struct radeon_fence *r200_copy_dma(struct radeon_device *rdev,
 				   uint64_t src_offset,
 				   uint64_t dst_offset,
 				   unsigned num_gpu_pages,
-				   struct dma_resv *resv)
+				   struct reservation_object *resv)
 {
 	struct radeon_ring *ring = &rdev->ring[RADEON_RING_TYPE_GFX_INDEX];
 	struct radeon_fence *fence;
@@ -481,8 +481,8 @@ int r200_packet0_check(struct radeon_cs_parser *p,
 			track->textures[i].use_pitch = 1;
 		} else {
 			track->textures[i].use_pitch = 0;
-			track->textures[i].width = 1 << ((idx_value & RADEON_TXFORMAT_WIDTH_MASK) >> RADEON_TXFORMAT_WIDTH_SHIFT);
-			track->textures[i].height = 1 << ((idx_value & RADEON_TXFORMAT_HEIGHT_MASK) >> RADEON_TXFORMAT_HEIGHT_SHIFT);
+			track->textures[i].width = 1 << ((idx_value >> RADEON_TXFORMAT_WIDTH_SHIFT) & RADEON_TXFORMAT_WIDTH_MASK);
+			track->textures[i].height = 1 << ((idx_value >> RADEON_TXFORMAT_HEIGHT_SHIFT) & RADEON_TXFORMAT_HEIGHT_MASK);
 		}
 		if (idx_value & R200_TXFORMAT_LOOKUP_DISABLE)
 			track->textures[i].lookup_disable = true;
@@ -542,7 +542,8 @@ int r200_packet0_check(struct radeon_cs_parser *p,
 		track->tex_dirty = true;
 		break;
 	default:
-		pr_err("Forbidden register 0x%04X in cs at %d\n", reg, idx);
+		printk(KERN_ERR "Forbidden register 0x%04X in cs at %d\n",
+		       reg, idx);
 		return -EINVAL;
 	}
 	return 0;

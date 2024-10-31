@@ -1,6 +1,5 @@
-/*	$NetBSD: tegra124-car-common.h,v 1.1.1.5 2021/11/07 16:49:58 jmcneill Exp $	*/
+/*	$NetBSD: tegra124-car-common.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
-/* SPDX-License-Identifier: GPL-2.0 */
 /*
  * This header provides constants for binding nvidia,tegra124-car or
  * nvidia,tegra132-car.
@@ -159,7 +158,7 @@
 /* 133 */
 /* 134 */
 /* 135 */
-#define TEGRA124_CLK_CEC 136
+/* 136 */
 /* 137 */
 /* 138 */
 /* 139 */
@@ -229,8 +228,6 @@
 #define TEGRA124_CLK_CLK_M 201
 #define TEGRA124_CLK_CLK_M_DIV2 202
 #define TEGRA124_CLK_CLK_M_DIV4 203
-#define TEGRA124_CLK_OSC_DIV2 202
-#define TEGRA124_CLK_OSC_DIV4 203
 #define TEGRA124_CLK_PLL_REF 204
 #define TEGRA124_CLK_PLL_C 205
 #define TEGRA124_CLK_PLL_C_OUT1 206
@@ -273,11 +270,11 @@
 #define TEGRA124_CLK_AUDIO3 242
 #define TEGRA124_CLK_AUDIO4 243
 #define TEGRA124_CLK_SPDIF 244
-/* 245 */
-/* 246 */
-/* 247 */
-/* 248 */
-#define TEGRA124_CLK_OSC 249
+#define TEGRA124_CLK_CLK_OUT_1 245
+#define TEGRA124_CLK_CLK_OUT_2 246
+#define TEGRA124_CLK_CLK_OUT_3 247
+#define TEGRA124_CLK_BLINK 248
+/* 249 */
 /* 250 */
 /* 251 */
 #define TEGRA124_CLK_XUSB_HOST_SRC 252
@@ -336,13 +333,12 @@
 #define TEGRA124_CLK_AUDIO3_MUX 303
 #define TEGRA124_CLK_AUDIO4_MUX 304
 #define TEGRA124_CLK_SPDIF_MUX 305
-/* 306 */
-/* 307 */
-/* 308 */
+#define TEGRA124_CLK_CLK_OUT_1_MUX 306
+#define TEGRA124_CLK_CLK_OUT_2_MUX 307
+#define TEGRA124_CLK_CLK_OUT_3_MUX 308
 /* 309 */
 /* 310 */
-#define TEGRA124_CLK_SOR0_LVDS 311 /* deprecated */
-#define TEGRA124_CLK_SOR0_OUT 311
+#define TEGRA124_CLK_SOR0_LVDS 311
 #define TEGRA124_CLK_XUSB_SS_DIV2 312
 
 #define TEGRA124_CLK_PLL_M_UD 313

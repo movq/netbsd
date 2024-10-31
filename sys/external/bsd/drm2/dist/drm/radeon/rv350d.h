@@ -1,5 +1,3 @@
-/*	$NetBSD: rv350d.h,v 1.3 2021/12/18 23:45:43 riastradh Exp $	*/
-
 /*
  * Copyright 2008 Advanced Micro Devices, Inc.
  * Copyright 2008 Red Hat Inc.

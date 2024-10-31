@@ -1,4 +1,4 @@
-/*	$NetBSD: kfd_events.h,v 1.3 2021/12/18 23:44:59 riastradh Exp $	*/
+/*	$NetBSD: kfd_events.h,v 1.1 2018/08/27 01:34:46 riastradh Exp $	*/
 
 /*
  * Copyright 2014 Advanced Micro Devices, Inc.
@@ -29,17 +29,12 @@
 #include <linux/hashtable.h>
 #include <linux/types.h>
 #include <linux/list.h>
-#include <linux/wait.h>
 #include "kfd_priv.h"
 #include <uapi/linux/kfd_ioctl.h>
 
-/*
- * IDR supports non-negative integer IDs. Small IDs are used for
- * signal events to match their signal slot. Use the upper half of the
- * ID space for non-signal events.
- */
-#define KFD_FIRST_NONSIGNAL_EVENT_ID ((INT_MAX >> 1) + 1)
-#define KFD_LAST_NONSIGNAL_EVENT_ID INT_MAX
+#define KFD_EVENT_ID_NONSIGNAL_MASK 0x80000000U
+#define KFD_FIRST_NONSIGNAL_EVENT_ID KFD_EVENT_ID_NONSIGNAL_MASK
+#define KFD_LAST_NONSIGNAL_EVENT_ID UINT_MAX
 
 /*
  * Written into kfd_signal_slot_t to indicate that the event is not signaled.
@@ -53,6 +48,9 @@ struct kfd_event_waiter;
 struct signal_page;
 
 struct kfd_event {
+	/* All events in process, rooted at kfd_process.events. */
+	struct hlist_node events;
+
 	u32 event_id;
 
 	bool signaled;
@@ -60,15 +58,16 @@ struct kfd_event {
 
 	int type;
 
-	wait_queue_head_t wq; /* List of event waiters. */
+	struct list_head waiters; /* List of kfd_event_waiter by waiters. */
 
 	/* Only for signal events. */
+	struct signal_page *signal_page;
+	unsigned int signal_slot_index;
 	uint64_t __user *user_signal_address;
 
 	/* type specific data */
 	union {
 		struct kfd_hsa_memory_exception_data memory_exception_data;
-		struct kfd_hsa_hw_exception_data hw_exception_data;
 	};
 };
 

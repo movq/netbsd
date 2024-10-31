@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_display_power.c,v 1.5 2021/12/19 12:32:15 riastradh Exp $	*/
+/*	$NetBSD: intel_display_power.c,v 1.1 2021/12/18 20:15:29 riastradh Exp $	*/
 
 /* SPDX-License-Identifier: MIT */
 /*
@@ -6,7 +6,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_display_power.c,v 1.5 2021/12/19 12:32:15 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_display_power.c,v 1.1 2021/12/18 20:15:29 riastradh Exp $");
 
 #include "display/intel_crt.h"
 #include "display/intel_dp.h"
@@ -23,8 +23,6 @@ __KERNEL_RCSID(0, "$NetBSD: intel_display_power.c,v 1.5 2021/12/19 12:32:15 rias
 #include "intel_sideband.h"
 #include "intel_tc.h"
 #include "intel_vga.h"
-
-#include <linux/nbsd-namespace.h>
 
 bool intel_display_power_well_is_enabled(struct drm_i915_private *dev_priv,
 					 enum i915_power_well_id power_well_id);
@@ -273,10 +271,8 @@ bool intel_display_power_is_enabled(struct drm_i915_private *dev_priv,
 static void hsw_power_well_post_enable(struct drm_i915_private *dev_priv,
 				       u8 irq_pipe_mask, bool has_vga)
 {
-#ifndef __NetBSD__ /* XXX We wait until intelfb is ready.  */
 	if (has_vga)
 		intel_vga_reset_io_mem(dev_priv);
-#endif
 
 	if (irq_pipe_mask)
 		gen8_irq_power_well_post_enable(dev_priv, irq_pipe_mask);
@@ -1318,11 +1314,7 @@ static void vlv_display_power_well_deinit(struct drm_i915_private *dev_priv)
 	intel_power_sequencer_reset(dev_priv);
 
 	/* Prevent us from re-enabling polling on accident in late suspend */
-#ifdef __NetBSD__
-	if (device_activation(dev_priv->drm.dev, DEVACT_LEVEL_FULL))
-#else
 	if (!dev_priv->drm.dev->power.is_suspended)
-#endif
 		intel_hpd_poll_init(dev_priv);
 }
 
@@ -4362,7 +4354,6 @@ int intel_power_domains_init(struct drm_i915_private *dev_priv)
 void intel_power_domains_cleanup(struct drm_i915_private *dev_priv)
 {
 	kfree(dev_priv->power_domains.power_wells);
-	mutex_destroy(&dev_priv->power_domains.lock);
 }
 
 static void intel_power_domains_sync_hw(struct drm_i915_private *dev_priv)

@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0
 /dts-v1/;
 
 #include "tegra124-nyan.dtsi"
@@ -18,7 +17,6 @@
 	panel: panel {
 		compatible = "samsung,ltn140at29-301";
 
-		power-supply = <&vdd_3v3_panel>;
 		backlight = <&backlight>;
 		ddc-i2c-bus = <&dpaux>;
 	};

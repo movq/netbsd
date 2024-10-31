@@ -1,5 +1,3 @@
-/*	$NetBSD: r600_dpm.h,v 1.3 2021/12/18 23:45:42 riastradh Exp $	*/
-
 /*
  * Copyright 2011 Advanced Micro Devices, Inc.
  *
@@ -24,8 +22,6 @@
  */
 #ifndef __R600_DPM_H__
 #define __R600_DPM_H__
-
-#include "radeon.h"
 
 #define R600_ASI_DFLT                                10000
 #define R600_BSP_DFLT                                0x41EB
@@ -99,9 +95,6 @@
 /* XXX are these ok? */
 #define R600_TEMP_RANGE_MIN (90 * 1000)
 #define R600_TEMP_RANGE_MAX (120 * 1000)
-
-#define FDO_PWM_MODE_STATIC  1
-#define FDO_PWM_MODE_STATIC_RPM 5
 
 enum r600_power_level {
 	R600_POWER_LEVEL_LOW = 0,

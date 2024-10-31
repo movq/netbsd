@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_file.h,v 1.8 2021/12/19 12:23:42 riastradh Exp $	*/
+/*	$NetBSD: drm_file.h,v 1.1 2021/12/18 20:15:57 riastradh Exp $	*/
 
 /*
  * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
@@ -40,10 +40,6 @@
 
 #include <drm/drm_prime.h>
 
-#ifdef __NetBSD__		/* XXX */
-#include <drm/drm_wait_netbsd.h>
-#endif
-
 struct dma_fence;
 struct drm_file;
 struct drm_device;
@@ -80,12 +76,10 @@ struct drm_minor {
 	struct device *kdev;		/* Linux device */
 	struct drm_device *dev;
 
-#ifndef __NetBSD__		/* XXX debugfs */
 	struct dentry *debugfs_root;
 
 	struct list_head debugfs_list;
 	struct mutex debugfs_lock; /* Protects debugfs_list. */
-#endif
 };
 
 /**
@@ -232,10 +226,8 @@ struct drm_file {
 	 */
 	struct drm_master *master;
 
-#ifndef __NetBSD__
 	/** @pid: Process that opened this file. */
 	struct pid *pid;
-#endif
 
 	/** @magic: Authentication magic, see @authenticated. */
 	drm_magic_t magic;
@@ -303,12 +295,7 @@ struct drm_file {
 	struct list_head blobs;
 
 	/** @event_wait: Waitqueue for new events added to @event_list. */
-#ifdef __NetBSD__
-	drm_waitqueue_t event_wait;
-	struct selinfo event_selq;
-#else
 	wait_queue_head_t event_wait;
-#endif
 
 	/**
 	 * @pending_event_list:
@@ -341,12 +328,7 @@ struct drm_file {
 	int event_space;
 
 	/** @event_read_lock: Serializes drm_read(). */
-#ifdef __NetBSD__
-	struct lwp *event_read_lock;
-	drm_waitqueue_t event_read_wq;
-#else
 	struct mutex event_read_lock;
-#endif
 
 	/**
 	 * @prime:
@@ -390,17 +372,11 @@ static inline bool drm_is_render_client(const struct drm_file *file_priv)
 	return file_priv->minor->type == DRM_MINOR_RENDER;
 }
 
-#ifdef __NetBSD__
-extern const struct fileops drm_fileops;
-int drm_open_file(struct drm_file *, void *, struct drm_minor *);
-void drm_close_file(struct drm_file *);
-#else
 int drm_open(struct inode *inode, struct file *filp);
 ssize_t drm_read(struct file *filp, char __user *buffer,
 		 size_t count, loff_t *offset);
 int drm_release(struct inode *inode, struct file *filp);
 __poll_t drm_poll(struct file *filp, struct poll_table_struct *wait);
-#endif
 int drm_event_reserve_init_locked(struct drm_device *dev,
 				  struct drm_file *file_priv,
 				  struct drm_pending_event *p,

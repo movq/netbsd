@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_guc_ct.c,v 1.4 2021/12/19 12:32:15 riastradh Exp $	*/
+/*	$NetBSD: intel_guc_ct.c,v 1.1 2021/12/18 20:15:33 riastradh Exp $	*/
 
 // SPDX-License-Identifier: MIT
 /*
@@ -6,7 +6,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_guc_ct.c,v 1.4 2021/12/19 12:32:15 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_guc_ct.c,v 1.1 2021/12/18 20:15:33 riastradh Exp $");
 
 #include "i915_drv.h"
 #include "intel_guc_ct.h"
@@ -191,7 +191,6 @@ void intel_guc_ct_fini(struct intel_guc_ct *ct)
 	GEM_BUG_ON(ct->enabled);
 
 	i915_vma_unpin_and_release(&ct->vma, I915_VMA_RELEASE_MAP);
-	spin_lock_destroy(&ct->requests.lock);
 }
 
 /**
@@ -388,22 +387,9 @@ static int wait_for_ctb_desc_update(struct guc_ct_buffer_desc *desc,
 	 * No GuC command should ever take longer than 10ms.
 	 */
 #define done (READ_ONCE(desc->fence) == fence)
-#ifdef __NetBSD__
-	int timo = 10;
-	err = 0;
-	while (!done) {
-		if (--timo == 0) {
-			kpause("intelguc", false, mstohz(10), NULL);
-			if (!done)
-				err = -ETIMEDOUT;
-			break;
-		}
-	}
-#else
 	err = wait_for_us(done, 10);
 	if (err)
 		err = wait_for(done, 10);
-#endif
 #undef done
 
 	if (unlikely(err)) {
@@ -447,22 +433,9 @@ static int wait_for_ct_request_update(struct ct_request *req, u32 *status)
 	 * No GuC command should ever take longer than 10ms.
 	 */
 #define done INTEL_GUC_MSG_IS_RESPONSE(READ_ONCE(req->status))
-#ifdef __NetBSD__
-	int timo = 10;
-	err = 0;
-	while (!done) {
-		if (--timo == 0) {
-			kpause("intelguc", false, mstohz(10), NULL);
-			if (!done)
-				err = -ETIMEDOUT;
-			break;
-		}
-	}
-#else
 	err = wait_for_us(done, 10);
 	if (err)
 		err = wait_for(done, 10);
-#endif
 #undef done
 
 	if (unlikely(err))

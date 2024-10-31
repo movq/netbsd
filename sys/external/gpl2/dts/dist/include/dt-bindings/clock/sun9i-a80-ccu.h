@@ -1,4 +1,4 @@
-/*	$NetBSD: sun9i-a80-ccu.h,v 1.1.1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
+/*	$NetBSD: sun9i-a80-ccu.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 /*
  * Copyright (C) 2016 Chen-Yu Tsai <wens@csie.org>

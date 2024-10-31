@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_active_types.h,v 1.3 2021/12/19 11:52:07 riastradh Exp $	*/
+/*	$NetBSD: i915_active_types.h,v 1.1 2021/12/18 20:15:24 riastradh Exp $	*/
 
 /*
  * SPDX-License-Identifier: MIT
@@ -17,14 +17,11 @@
 #include <linux/rcupdate.h>
 #include <linux/workqueue.h>
 
-#include <drm/drm_wait_netbsd.h> /* XXX */
-
 #include "i915_utils.h"
 
 struct i915_active_fence {
 	struct dma_fence __rcu *fence;
 	struct dma_fence_cb cb;
-	struct llist_node llist;
 };
 
 struct active_node;
@@ -39,7 +36,6 @@ struct i915_active {
 	struct mutex mutex;
 
 	spinlock_t tree_lock;
-	drm_waitqueue_t tree_wq;
 	struct active_node *cache;
 	struct rb_root tree;
 

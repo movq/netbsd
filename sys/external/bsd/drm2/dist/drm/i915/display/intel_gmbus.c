@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_gmbus.c,v 1.7 2022/05/22 21:18:12 riastradh Exp $	*/
+/*	$NetBSD: intel_gmbus.c,v 1.1 2021/12/18 20:15:30 riastradh Exp $	*/
 
 /*
  * Copyright (c) 2006 Dave Airlie <airlied@linux.ie>
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_gmbus.c,v 1.7 2022/05/22 21:18:12 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_gmbus.c,v 1.1 2021/12/18 20:15:30 riastradh Exp $");
 
 #include <linux/export.h>
 #include <linux/i2c-algo-bit.h>
@@ -42,8 +42,6 @@ __KERNEL_RCSID(0, "$NetBSD: intel_gmbus.c,v 1.7 2022/05/22 21:18:12 riastradh Ex
 #include "i915_drv.h"
 #include "intel_display_types.h"
 #include "intel_gmbus.h"
-
-#include <linux/nbsd-namespace.h>
 
 struct gmbus_pin {
 	const char *name;
@@ -332,6 +330,7 @@ intel_gpio_setup(struct intel_gmbus *bus, unsigned int pin)
 
 static int gmbus_wait(struct drm_i915_private *dev_priv, u32 status, u32 irq_en)
 {
+	DEFINE_WAIT(wait);
 	u32 gmbus2;
 	int ret;
 
@@ -341,55 +340,17 @@ static int gmbus_wait(struct drm_i915_private *dev_priv, u32 status, u32 irq_en)
 	 */
 	if (!HAS_GMBUS_IRQ(dev_priv))
 		irq_en = 0;
-#ifdef __NetBSD__
-	if (cold)
-		irq_en = 0;
-#endif
 
-	spin_lock(&dev_priv->gmbus_wait_lock);
+	add_wait_queue(&dev_priv->gmbus_wait_queue, &wait);
 	I915_WRITE_FW(GMBUS4, irq_en);
 
 	status |= GMBUS_SATOER;
-	if (!irq_en) {
-		unsigned timeout = 50*1000;
-
-		ret = 0;
-		while (((gmbus2 = intel_uncore_read_fw(&dev_priv->uncore,
-				GMBUS2)) & status) == 0) {
-			if (--timeout == 0) {
-				ret = -ETIMEDOUT;
-				break;
-			}
-			udelay(1);
-		}
-	} else {
-		DRM_SPIN_TIMED_WAIT_NOINTR_UNTIL(ret,
-		    &dev_priv->gmbus_wait_queue,
-		    &dev_priv->gmbus_wait_lock,
-		    msecs_to_jiffies_timeout(50),
-		    (((gmbus2 = intel_uncore_read_fw(&dev_priv->uncore,
-				GMBUS2))
-			    & status)
-			!= 0));
-		/*
-		 * After DRM_SPIN_TIMED_WAIT_NOINTR_UNTIL, ret<0 on
-		 * error (-ERESTARTSYS, interrupt), ret=0 on timeout,
-		 * ret>0 on success (time remaining).
-		 *
-		 * We want ret=-ETIMEDOUT on timeout and ret=0 on
-		 * success.
-		 */
-		if (ret < 0) {
-			/* error */
-		} else if (ret == 0) {
-			ret = -ETIMEDOUT;
-		} else {
-			ret = 0;
-		}
-	}
+	ret = wait_for_us((gmbus2 = I915_READ_FW(GMBUS2)) & status, 2);
+	if (ret)
+		ret = wait_for((gmbus2 = I915_READ_FW(GMBUS2)) & status, 50);
 
 	I915_WRITE_FW(GMBUS4, 0);
-	spin_unlock(&dev_priv->gmbus_wait_lock);
+	remove_wait_queue(&dev_priv->gmbus_wait_queue, &wait);
 
 	if (gmbus2 & GMBUS_SATOER)
 		return -ENXIO;
@@ -400,6 +361,7 @@ static int gmbus_wait(struct drm_i915_private *dev_priv, u32 status, u32 irq_en)
 static int
 gmbus_wait_idle(struct drm_i915_private *dev_priv)
 {
+	DEFINE_WAIT(wait);
 	u32 irq_enable;
 	int ret;
 
@@ -407,53 +369,16 @@ gmbus_wait_idle(struct drm_i915_private *dev_priv)
 	irq_enable = 0;
 	if (HAS_GMBUS_IRQ(dev_priv))
 		irq_enable = GMBUS_IDLE_EN;
-#ifdef __NetBSD__
-	if (cold)
-		irq_enable = 0;
-#endif
 
-	spin_lock(&dev_priv->gmbus_wait_lock);
+	add_wait_queue(&dev_priv->gmbus_wait_queue, &wait);
 	I915_WRITE_FW(GMBUS4, irq_enable);
 
-	if (!irq_enable) {
-		unsigned timeout = 10*1000;
-
-		ret = 0;
-		while (intel_uncore_read_fw(&dev_priv->uncore, GMBUS2)
-		    & GMBUS_ACTIVE) {
-			if (--timeout == 0) {
-				ret = -ETIMEDOUT;
-				break;
-			}
-			udelay(1);
-		}
-	} else {
-		DRM_SPIN_TIMED_WAIT_NOINTR_UNTIL(ret,
-		    &dev_priv->gmbus_wait_queue,
-		    &dev_priv->gmbus_wait_lock,
-		    msecs_to_jiffies_timeout(10),
-		    ((intel_uncore_read_fw(&dev_priv->uncore, GMBUS2)
-			    & GMBUS_ACTIVE)
-			== 0));
-		/*
-		 * After DRM_SPIN_TIMED_WAIT_NOINTR_UNTIL, ret<0 on
-		 * error (-ERESTARTSYS, interrupt), ret=0 on timeout,
-		 * ret>0 on success (time remaining).
-		 *
-		 * We want ret=-ETIMEDOUT on timeout and ret=0 on
-		 * success.
-		 */
-		if (ret < 0) {
-			/* error */
-		} else if (ret == 0) {
-			ret = -ETIMEDOUT;
-		} else {
-			ret = 0;
-		}
-	}
+	ret = intel_wait_for_register_fw(&dev_priv->uncore,
+					 GMBUS2, GMBUS_ACTIVE, 0,
+					 10);
 
 	I915_WRITE_FW(GMBUS4, 0);
-	spin_unlock(&dev_priv->gmbus_wait_lock);
+	remove_wait_queue(&dev_priv->gmbus_wait_queue, &wait);
 
 	return ret;
 }
@@ -911,6 +836,7 @@ static const struct i2c_lock_operations gmbus_lock_ops = {
  */
 int intel_gmbus_setup(struct drm_i915_private *dev_priv)
 {
+	struct pci_dev *pdev = dev_priv->drm.pdev;
 	struct intel_gmbus *bus;
 	unsigned int pin;
 	int ret;
@@ -928,9 +854,7 @@ int intel_gmbus_setup(struct drm_i915_private *dev_priv)
 		dev_priv->gpio_mmio_base = PCH_DISPLAY_BASE;
 
 	mutex_init(&dev_priv->gmbus_mutex);
-
-	spin_lock_init(&dev_priv->gmbus_wait_lock);
-	DRM_INIT_WAITQUEUE(&dev_priv->gmbus_wait_queue, "i915i2c");
+	init_waitqueue_head(&dev_priv->gmbus_wait_queue);
 
 	for (pin = 0; pin < ARRAY_SIZE(dev_priv->gmbus); pin++) {
 		if (!intel_gmbus_is_valid_pin(dev_priv, pin))
@@ -945,7 +869,7 @@ int intel_gmbus_setup(struct drm_i915_private *dev_priv)
 			 "i915 gmbus %s",
 			 get_gmbus_pin(dev_priv, pin)->name);
 
-		bus->adapter.dev.parent = dev_priv->drm.dev;
+		bus->adapter.dev.parent = &pdev->dev;
 		bus->dev_priv = dev_priv;
 
 		bus->adapter.algo = &gmbus_algorithm;
@@ -1036,8 +960,4 @@ void intel_gmbus_teardown(struct drm_i915_private *dev_priv)
 		bus = &dev_priv->gmbus[pin];
 		i2c_del_adapter(&bus->adapter);
 	}
-
-	DRM_DESTROY_WAITQUEUE(&dev_priv->gmbus_wait_queue);
-	spin_lock_destroy(&dev_priv->gmbus_wait_lock);
-	mutex_destroy(&dev_priv->gmbus_mutex);
 }

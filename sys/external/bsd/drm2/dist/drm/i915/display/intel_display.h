@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_display.h,v 1.6 2021/12/19 11:48:27 riastradh Exp $	*/
+/*	$NetBSD: intel_display.h,v 1.1 2021/12/18 20:15:28 riastradh Exp $	*/
 
 /*
  * Copyright © 2006-2019 Intel Corporation
@@ -26,26 +26,6 @@
 
 #ifndef _INTEL_DISPLAY_H_
 #define _INTEL_DISPLAY_H_
-
-/*
- * NetBSD already has struct pipe, and according to C99 6.2.3 there's
- * only one namespace for struct, union, and enum tags, but the i915
- * driver wants a type called enum pipe.
- *
- * So rename it to avoid conflicts which confuse tools like ctfmerge --
- * but make sure we include <sys/file.h> first to avoid having two
- * different versions of struct file, one with a pointer to struct pipe
- * and another with a pointer to struct i915_pipe.
- *
- * This will cause trouble if we ever have an API that involves `pipe'
- * as a member which we need to reference from within drm code.  But
- * for now that is not the case.
- *
- * XXX Yes, this is disgusting.  Sorry.
- */
-#include <sys/types.h>
-#include <sys/file.h>
-#define	pipe	pipe_drmhack
 
 #include <drm/drm_util.h>
 #include <drm/i915_drm.h>
@@ -481,7 +461,7 @@ enum phy_fia {
 	for_each_intel_plane_mask(((crtc_state)->uapi.state->dev), (plane), \
 				((crtc_state)->uapi.plane_mask)) \
 		for_each_if ((plane_state = \
-			      const_container_of(__drm_atomic_get_current_plane_state((crtc_state)->uapi.state, &plane->base), struct intel_plane_state, uapi)))
+			      to_intel_plane_state(__drm_atomic_get_current_plane_state((crtc_state)->uapi.state, &plane->base))))
 
 #define for_each_new_intel_connector_in_state(__state, connector, new_connector_state, __i) \
 	for ((__i) = 0; \

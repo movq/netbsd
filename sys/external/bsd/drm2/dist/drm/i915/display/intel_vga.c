@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_vga.c,v 1.4 2021/12/19 11:49:11 riastradh Exp $	*/
+/*	$NetBSD: intel_vga.c,v 1.1 2021/12/18 20:15:31 riastradh Exp $	*/
 
 // SPDX-License-Identifier: MIT
 /*
@@ -6,7 +6,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_vga.c,v 1.4 2021/12/19 11:49:11 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_vga.c,v 1.1 2021/12/18 20:15:31 riastradh Exp $");
 
 #include <linux/pci.h>
 #include <linux/vgaarb.h>
@@ -33,35 +33,12 @@ void intel_vga_disable(struct drm_i915_private *dev_priv)
 	i915_reg_t vga_reg = intel_vga_cntrl_reg(dev_priv);
 	u8 sr1;
 
-#ifdef __NetBSD__
-    {
-	const bus_addr_t vgabase = 0x3c0;
-	const bus_space_tag_t iot = pdev->pd_pa.pa_iot;
-	bus_space_handle_t ioh;
-	int error;
-
-	error = bus_space_map(iot, vgabase, 0x10, 0, &ioh);
-	if (error) {
-		aprint_error_dev(pdev->pd_dev,
-		    "unable to map VGA registers: %d\n", error);
-	} else {
-		BUILD_BUG_ON(!(vgabase <= VGA_SR_INDEX));
-		BUILD_BUG_ON(!(vgabase <= VGA_SR_DATA));
-		bus_space_write_1(iot, ioh, VGA_SR_INDEX - vgabase, SR01);
-		sr1 = bus_space_read_1(iot, ioh, VGA_SR_DATA - vgabase);
-		bus_space_write_1(iot, ioh, VGA_SR_DATA - vgabase,
-		    (sr1 | __BIT(5)));
-		bus_space_unmap(iot, ioh, 0x10);
-	}
-    }
-#else
 	/* WaEnableVGAAccessThroughIOPort:ctg,elk,ilk,snb,ivb,vlv,hsw */
 	vga_get_uninterruptible(pdev, VGA_RSRC_LEGACY_IO);
 	outb(SR01, VGA_SR_INDEX);
 	sr1 = inb(VGA_SR_DATA);
 	outb(sr1 | 1 << 5, VGA_SR_DATA);
 	vga_put(pdev, VGA_RSRC_LEGACY_IO);
-#endif
 	udelay(300);
 
 	I915_WRITE(vga_reg, VGA_DISP_DISABLE);
@@ -114,33 +91,11 @@ void intel_vga_reset_io_mem(struct drm_i915_private *i915)
 	 * sure vgacon can keep working normally without triggering interrupts
 	 * and error messages.
 	 */
-#ifdef __NetBSD__
-    {
-	const bus_addr_t vgabase = 0x3c0;
-	const bus_space_tag_t iot = pdev->pd_pa.pa_iot;
-	bus_space_handle_t ioh;
-	int error;
-
-	error = bus_space_map(iot, vgabase, 0x10, 0, &ioh);
-	if (error) {
-		aprint_error_dev(pdev->pd_dev,
-		    "unable to map VGA registers: %d\n", error);
-	} else {
-		BUILD_BUG_ON(!(vgabase <= VGA_MSR_READ));
-		BUILD_BUG_ON(!(vgabase <= VGA_MSR_WRITE));
-		bus_space_write_1(iot, ioh, VGA_MSR_WRITE,
-		    bus_space_read_1(iot, ioh, VGA_MSR_READ));
-		bus_space_unmap(iot, ioh, 0x10);
-	}
-    }
-#else
 	vga_get_uninterruptible(pdev, VGA_RSRC_LEGACY_IO);
 	outb(inb(VGA_MSR_READ), VGA_MSR_WRITE);
 	vga_put(pdev, VGA_RSRC_LEGACY_IO);
-#endif
 }
 
-#ifndef __NetBSD__
 static int
 intel_vga_set_state(struct drm_i915_private *i915, bool enable_decode)
 {
@@ -181,11 +136,9 @@ intel_vga_set_decode(void *cookie, bool enable_decode)
 	else
 		return VGA_RSRC_NORMAL_IO | VGA_RSRC_NORMAL_MEM;
 }
-#endif	/* __NetBSD__ */
 
 int intel_vga_register(struct drm_i915_private *i915)
 {
-#ifndef __NetBSD__
 	struct pci_dev *pdev = i915->drm.pdev;
 	int ret;
 
@@ -200,16 +153,13 @@ int intel_vga_register(struct drm_i915_private *i915)
 	ret = vga_client_register(pdev, i915, NULL, intel_vga_set_decode);
 	if (ret && ret != -ENODEV)
 		return ret;
-#endif
 
 	return 0;
 }
 
 void intel_vga_unregister(struct drm_i915_private *i915)
 {
-#ifndef __NetBSD__
 	struct pci_dev *pdev = i915->drm.pdev;
 
 	vga_client_register(pdev, NULL, NULL, NULL);
-#endif	/* __NetBSD__ */
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_engine.h,v 1.5 2021/12/19 12:40:59 riastradh Exp $	*/
+/*	$NetBSD: intel_engine.h,v 1.1 2021/12/18 20:15:32 riastradh Exp $	*/
 
 /* SPDX-License-Identifier: MIT */
 #ifndef _INTEL_RINGBUFFER_H_
@@ -112,22 +112,6 @@ execlists_active(const struct intel_engine_execlists *execlists)
 	return *READ_ONCE(execlists->active);
 }
 
-#ifdef __NetBSD__
-static inline int
-execlists_active_lock_bh(struct intel_engine_execlists *execlists)
-{
-	int s = splsoftserial(); /* prevent local softirq and lock recursion */
-	tasklet_lock(&execlists->tasklet);
-	return s;
-}
-
-static inline void
-execlists_active_unlock_bh(struct intel_engine_execlists *execlists, int s)
-{
-	tasklet_unlock(&execlists->tasklet);
-	splx(s); /* restore softirq, and kick ksoftirqd! */
-}
-#else
 static inline void
 execlists_active_lock_bh(struct intel_engine_execlists *execlists)
 {
@@ -141,7 +125,6 @@ execlists_active_unlock_bh(struct intel_engine_execlists *execlists)
 	tasklet_unlock(&execlists->tasklet);
 	local_bh_enable(); /* restore softirq, and kick ksoftirqd! */
 }
-#endif
 
 struct i915_request *
 execlists_unwind_incomplete_requests(struct intel_engine_execlists *execlists);

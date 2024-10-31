@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_atomic.c,v 1.5 2021/12/19 12:24:36 riastradh Exp $	*/
+/*	$NetBSD: intel_atomic.c,v 1.1 2021/12/18 20:15:27 riastradh Exp $	*/
 
 /*
  * Copyright © 2015 Intel Corporation
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_atomic.c,v 1.5 2021/12/19 12:24:36 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_atomic.c,v 1.1 2021/12/18 20:15:27 riastradh Exp $");
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
@@ -61,8 +61,8 @@ int intel_digital_connector_atomic_get_property(struct drm_connector *connector,
 {
 	struct drm_device *dev = connector->dev;
 	struct drm_i915_private *dev_priv = to_i915(dev);
-	const struct intel_digital_connector_state *intel_conn_state =
-		const_container_of(state, struct intel_digital_connector_state, base);
+	struct intel_digital_connector_state *intel_conn_state =
+		to_intel_digital_connector_state(state);
 
 	if (property == dev_priv->force_audio_property)
 		*val = intel_conn_state->force_audio;
@@ -495,8 +495,6 @@ intel_atomic_state_alloc(struct drm_device *dev)
 		kfree(state);
 		return NULL;
 	}
-
-	i915_sw_fence_init(&state->commit_ready, intel_atomic_commit_ready);
 
 	return &state->base;
 }

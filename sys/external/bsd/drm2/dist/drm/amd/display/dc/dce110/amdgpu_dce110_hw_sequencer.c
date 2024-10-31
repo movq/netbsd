@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_dce110_hw_sequencer.c,v 1.5 2021/12/19 11:59:30 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_dce110_hw_sequencer.c,v 1.1 2021/12/18 20:11:19 riastradh Exp $	*/
 
 /*
  * Copyright 2015 Advanced Micro Devices, Inc.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_dce110_hw_sequencer.c,v 1.5 2021/12/19 11:59:30 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_dce110_hw_sequencer.c,v 1.1 2021/12/18 20:11:19 riastradh Exp $");
 
 #include <linux/delay.h>
 

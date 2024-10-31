@@ -1,6 +1,5 @@
-/*	$NetBSD: event.h,v 1.3 2021/12/18 23:45:33 riastradh Exp $	*/
+/*	$NetBSD: event.h,v 1.1 2018/08/27 01:36:13 riastradh Exp $	*/
 
-/* SPDX-License-Identifier: MIT */
 #ifndef __NVKM_EVENT_H__
 #define __NVKM_EVENT_H__
 #include <core/os.h>

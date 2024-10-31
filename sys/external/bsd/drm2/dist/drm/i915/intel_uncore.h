@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_uncore.h,v 1.11 2021/12/19 12:40:43 riastradh Exp $	*/
+/*	$NetBSD: intel_uncore.h,v 1.1 2021/12/18 20:15:27 riastradh Exp $	*/
 
 /*
  * Copyright © 2017 Intel Corporation
@@ -108,20 +108,8 @@ struct intel_forcewake_range {
 	enum forcewake_domains domains;
 };
 
-
 struct intel_uncore {
-#ifdef __NetBSD__
-#  define	__iomem	/* XXX */
-#endif
 	void __iomem *regs;
-#ifdef __NetBSD__
-#  undef	__iomem
-#endif
-
-#ifdef __NetBSD__
-	bus_space_tag_t regs_bst;
-	bus_space_handle_t regs_bsh;
-#endif
 
 	struct drm_i915_private *i915;
 	struct intel_runtime_pm *rpm;
@@ -154,13 +142,8 @@ struct intel_uncore {
 		unsigned int wake_count;
 		bool active;
 		struct hrtimer timer;
-#ifdef __NetBSD__
-		bus_size_t reg_set;
-		bus_size_t reg_ack;
-#else
 		u32 __iomem *reg_set;
 		u32 __iomem *reg_ack;
-#endif
 	} *fw_domain[FW_DOMAIN_ID_COUNT];
 
 	unsigned int user_forcewake_count;
@@ -202,11 +185,7 @@ intel_uncore_has_fifo(const struct intel_uncore *uncore)
 
 void
 intel_uncore_mmio_debug_init_early(struct intel_uncore_mmio_debug *mmio_debug);
-void
-intel_uncore_mmio_debug_fini_early(struct intel_uncore_mmio_debug *mmio_debug);
 void intel_uncore_init_early(struct intel_uncore *uncore,
-			     struct drm_i915_private *i915);
-void intel_uncore_fini_early(struct intel_uncore *uncore,
 			     struct drm_i915_private *i915);
 int intel_uncore_init_mmio(struct intel_uncore *uncore);
 void intel_uncore_prune_mmio_domains(struct intel_uncore *uncore);
@@ -280,59 +259,6 @@ intel_wait_for_register_fw(struct intel_uncore *uncore,
 }
 
 /* register access functions */
-#ifdef __NetBSD__
-
-static inline uint8_t __raw_uncore_read8(const struct intel_uncore *uncore,
-						i915_reg_t reg) {
-	return bus_space_read_1(uncore->regs_bst, uncore->regs_bsh, i915_mmio_reg_offset(reg));
-}
-static inline uint16_t __raw_uncore_read16(const struct intel_uncore *uncore,
-						i915_reg_t reg) {
-	return bus_space_read_2(uncore->regs_bst, uncore->regs_bsh, i915_mmio_reg_offset(reg));
-}
-static inline uint32_t __raw_uncore_read32(const struct intel_uncore *uncore,
-						i915_reg_t reg) {
-	return bus_space_read_4(uncore->regs_bst, uncore->regs_bsh, i915_mmio_reg_offset(reg));
-}
-static inline uint64_t __raw_uncore_read64(const struct intel_uncore *uncore,
-						i915_reg_t reg) {
-#ifdef _LP64
-	return bus_space_read_8(uncore->regs_bst, uncore->regs_bsh, i915_mmio_reg_offset(reg));
-#else
-	uint64_t lo, hi;
-	lo = bus_space_read_4(uncore->regs_bst, uncore->regs_bsh,
-	    i915_mmio_reg_offset(reg));
-	hi = bus_space_read_4(uncore->regs_bst, uncore->regs_bsh,
-	    i915_mmio_reg_offset(reg) + 4);
-	return lo | (hi << 32);
-#endif
-}
-static inline void __raw_uncore_write8(const struct intel_uncore *uncore,
-						i915_reg_t reg, uint8_t val) {
-	bus_space_write_1(uncore->regs_bst, uncore->regs_bsh, i915_mmio_reg_offset(reg), val);
-}
-static inline void __raw_uncore_write16(const struct intel_uncore *uncore,
-						i915_reg_t reg, uint16_t val) {
-	bus_space_write_2(uncore->regs_bst, uncore->regs_bsh, i915_mmio_reg_offset(reg), val);
-}
-static inline void __raw_uncore_write32(const struct intel_uncore *uncore,
-						i915_reg_t reg, uint32_t val) {
-	bus_space_write_4(uncore->regs_bst, uncore->regs_bsh, i915_mmio_reg_offset(reg), val);
-}
-static inline void __raw_uncore_write64(const struct intel_uncore *uncore,
-						i915_reg_t reg, uint64_t val) {
-#ifdef _LP64
-	bus_space_write_8(uncore->regs_bst, uncore->regs_bsh, i915_mmio_reg_offset(reg), val);
-#else
-	bus_space_write_4(uncore->regs_bst, uncore->regs_bsh,
-	    i915_mmio_reg_offset(reg), val & 0xffffffffU);
-	bus_space_write_4(uncore->regs_bst, uncore->regs_bsh,
-	    i915_mmio_reg_offset(reg) + 4, val >> 32);
-#endif
-}
-
-#else  /* !__NetBSD__ */
-
 #define __raw_read(x__, s__) \
 static inline u##x__ __raw_uncore_read##x__(const struct intel_uncore *uncore, \
 					    i915_reg_t reg) \
@@ -358,8 +284,6 @@ __raw_write(64, q)
 
 #undef __raw_read
 #undef __raw_write
-
-#endif	/* __NetBSD__ */
 
 #define __uncore_read(name__, x__, s__, trace__) \
 static inline u##x__ intel_uncore_##name__(struct intel_uncore *uncore, \
@@ -487,18 +411,9 @@ static inline int intel_uncore_write_and_verify(struct intel_uncore *uncore,
 	return (reg_val & mask) != expected_val ? -EINVAL : 0;
 }
 
-#ifdef __NetBSD__
-#define	raw_reg_read(uncore, reg)					      \
-	bus_space_read_4((uncore)->regs_bst, (uncore)->regs_bsh,	      \
-	    i915_mmio_reg_offset(reg))
-#define	raw_reg_write(uncore, reg, value)				      \
-	bus_space_write_4((uncore)->regs_bst, (uncore)->regs_bsh,	      \
-	    i915_mmio_reg_offset(reg), (value))
-#else
 #define raw_reg_read(base, reg) \
 	readl(base + i915_mmio_reg_offset(reg))
 #define raw_reg_write(base, reg, value) \
 	writel(value, base + i915_mmio_reg_offset(reg))
-#endif
 
 #endif /* !__INTEL_UNCORE_H__ */

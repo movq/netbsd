@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_engine_disp_basegf119.c,v 1.3 2021/12/18 23:45:35 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_engine_disp_basegf119.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -24,9 +24,12 @@
  * Authors: Ben Skeggs
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_engine_disp_basegf119.c,v 1.3 2021/12/18 23:45:35 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_engine_disp_basegf119.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $");
 
-#include "channv50.h"
+#include "dmacnv50.h"
+#include "rootnv50.h"
+
+#include <nvif/class.h>
 
 static const struct nv50_disp_mthd_list
 gf119_disp_base_mthd_base = {
@@ -93,7 +96,7 @@ gf119_disp_base_mthd_image = {
 };
 
 const struct nv50_disp_chan_mthd
-gf119_disp_base_mthd = {
+gf119_disp_base_chan_mthd = {
 	.name = "Base",
 	.addr = 0x001000,
 	.prev = -0x020000,
@@ -104,10 +107,13 @@ gf119_disp_base_mthd = {
 	}
 };
 
-int
-gf119_disp_base_new(const struct nvkm_oclass *oclass, void *argv, u32 argc,
-		    struct nv50_disp *disp, struct nvkm_object **pobject)
-{
-	return nv50_disp_base_new_(&gf119_disp_dmac_func, &gf119_disp_base_mthd,
-				   disp, 1, oclass, argv, argc, pobject);
-}
+const struct nv50_disp_dmac_oclass
+gf119_disp_base_oclass = {
+	.base.oclass = GF110_DISP_BASE_CHANNEL_DMA,
+	.base.minver = 0,
+	.base.maxver = 0,
+	.ctor = nv50_disp_base_new,
+	.func = &gf119_disp_dmac_func,
+	.mthd = &gf119_disp_base_chan_mthd,
+	.chid = 1,
+};

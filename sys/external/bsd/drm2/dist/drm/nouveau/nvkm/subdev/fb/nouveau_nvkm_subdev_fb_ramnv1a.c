@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_subdev_fb_ramnv1a.c,v 1.4 2021/12/19 10:51:58 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_subdev_fb_ramnv1a.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $	*/
 
 /*
  * Copyright 2013 Red Hat Inc.
@@ -24,28 +24,17 @@
  * Authors: Ben Skeggs
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_fb_ramnv1a.c,v 1.4 2021/12/19 10:51:58 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_fb_ramnv1a.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $");
 
 #include "ram.h"
 
 int
 nv1a_ram_new(struct nvkm_fb *fb, struct nvkm_ram **pram)
 {
-#ifdef __NetBSD__		/* XXX pci */
-	return -ENODEV;
-#else
 	struct pci_dev *bridge;
 	u32 mem, mib;
-	int domain = 0;
-	struct pci_dev *pdev = NULL;
 
-	if (dev_is_pci(fb->subdev.device->dev))
-		pdev = to_pci_dev(fb->subdev.device->dev);
-
-	if (pdev)
-		domain = pci_domain_nr(pdev->bus);
-
-	bridge = pci_get_domain_bus_and_slot(domain, 0, PCI_DEVFN(0, 1));
+	bridge = pci_get_bus_and_slot(0, PCI_DEVFN(0, 1));
 	if (!bridge) {
 		nvkm_error(&fb->subdev, "no bridge device\n");
 		return -ENODEV;
@@ -60,6 +49,5 @@ nv1a_ram_new(struct nvkm_fb *fb, struct nvkm_ram **pram)
 	}
 
 	return nvkm_ram_new_(&nv04_ram_func, fb, NVKM_RAM_TYPE_STOLEN,
-			     mib * 1024 * 1024, pram);
-#endif
+			     mib * 1024 * 1024, 0, pram);
 }

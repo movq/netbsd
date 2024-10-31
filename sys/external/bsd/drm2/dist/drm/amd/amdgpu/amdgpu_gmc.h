@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_gmc.h,v 1.3 2021/12/19 12:21:29 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_gmc.h,v 1.1 2021/12/18 20:11:09 riastradh Exp $	*/
 
 /*
  * Copyright 2018 Advanced Micro Devices, Inc.
@@ -140,9 +140,6 @@ struct amdgpu_gmc {
 	 */
 	resource_size_t		aper_size;
 	resource_size_t		aper_base;
-#ifdef __NetBSD__
-	bus_space_tag_t		aper_tag;
-#endif
 	/* for some chips with <= 32MB we need to lie
 	 * about vram size near mc fb location */
 	u64			mc_vram_size;

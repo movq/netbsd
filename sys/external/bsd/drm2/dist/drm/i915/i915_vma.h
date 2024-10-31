@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_vma.h,v 1.9 2021/12/19 12:40:43 riastradh Exp $	*/
+/*	$NetBSD: i915_vma.h,v 1.1 2021/12/18 20:15:26 riastradh Exp $	*/
 
 /*
  * Copyright © 2016 Intel Corporation
@@ -41,8 +41,6 @@
 #include "i915_request.h"
 #include "i915_vma_types.h"
 
-void i915_vma_tree_init(struct drm_i915_gem_object *);
-
 struct i915_vma *
 i915_vma_instance(struct drm_i915_gem_object *obj,
 		  struct i915_address_space *vm,
@@ -51,7 +49,7 @@ i915_vma_instance(struct drm_i915_gem_object *obj,
 void i915_vma_unpin_and_release(struct i915_vma **p_vma, unsigned int flags);
 #define I915_VMA_RELEASE_MAP BIT(0)
 
-static inline bool i915_vma_is_active(struct i915_vma *vma)
+static inline bool i915_vma_is_active(const struct i915_vma *vma)
 {
 	return !i915_active_is_idle(&vma->active);
 }
@@ -62,23 +60,16 @@ int __must_check i915_vma_move_to_active(struct i915_vma *vma,
 					 struct i915_request *rq,
 					 unsigned int flags);
 
-#ifdef __NetBSD__
-#define __i915_vma_flags(v) ((unsigned long *)&(v)->flags)
-#define __i915_vma_flags_const(v) ((const unsigned long *)&(v)->flags)
-#else
 #define __i915_vma_flags(v) ((unsigned long *)&(v)->flags.counter)
-#define __i915_vma_flags_const(v) ((const unsigned long *)&(v)->flags.counter)
-#endif
-
 
 static inline bool i915_vma_is_ggtt(const struct i915_vma *vma)
 {
-	return test_bit(I915_VMA_GGTT_BIT, __i915_vma_flags_const(vma));
+	return test_bit(I915_VMA_GGTT_BIT, __i915_vma_flags(vma));
 }
 
 static inline bool i915_vma_has_ggtt_write(const struct i915_vma *vma)
 {
-	return test_bit(I915_VMA_GGTT_WRITE_BIT, __i915_vma_flags_const(vma));
+	return test_bit(I915_VMA_GGTT_WRITE_BIT, __i915_vma_flags(vma));
 }
 
 static inline void i915_vma_set_ggtt_write(struct i915_vma *vma)
@@ -97,7 +88,7 @@ void i915_vma_flush_writes(struct i915_vma *vma);
 
 static inline bool i915_vma_is_map_and_fenceable(const struct i915_vma *vma)
 {
-	return test_bit(I915_VMA_CAN_FENCE_BIT, __i915_vma_flags_const(vma));
+	return test_bit(I915_VMA_CAN_FENCE_BIT, __i915_vma_flags(vma));
 }
 
 static inline bool i915_vma_set_userfault(struct i915_vma *vma)
@@ -113,7 +104,7 @@ static inline void i915_vma_unset_userfault(struct i915_vma *vma)
 
 static inline bool i915_vma_has_userfault(const struct i915_vma *vma)
 {
-	return test_bit(I915_VMA_USERFAULT_BIT, __i915_vma_flags_const(vma));
+	return test_bit(I915_VMA_USERFAULT_BIT, __i915_vma_flags(vma));
 }
 
 static inline bool i915_vma_is_closed(const struct i915_vma *vma)
@@ -130,7 +121,7 @@ static inline u32 i915_ggtt_offset(const struct i915_vma *vma)
 	return lower_32_bits(vma->node.start);
 }
 
-static inline u32 i915_ggtt_pin_bias(const struct i915_vma *vma)
+static inline u32 i915_ggtt_pin_bias(struct i915_vma *vma)
 {
 	return i915_vm_to_ggtt(vma->vm)->pin_bias;
 }
@@ -250,12 +241,12 @@ int __must_check
 i915_vma_pin(struct i915_vma *vma, u64 size, u64 alignment, u64 flags);
 int i915_ggtt_pin(struct i915_vma *vma, u32 align, unsigned int flags);
 
-static inline int i915_vma_pin_count(struct i915_vma *vma)
+static inline int i915_vma_pin_count(const struct i915_vma *vma)
 {
 	return atomic_read(&vma->flags) & I915_VMA_PIN_MASK;
 }
 
-static inline bool i915_vma_is_pinned(struct i915_vma *vma)
+static inline bool i915_vma_is_pinned(const struct i915_vma *vma)
 {
 	return i915_vma_pin_count(vma);
 }
@@ -278,7 +269,7 @@ static inline void i915_vma_unpin(struct i915_vma *vma)
 	__i915_vma_unpin(vma);
 }
 
-static inline bool i915_vma_is_bound(struct i915_vma *vma,
+static inline bool i915_vma_is_bound(const struct i915_vma *vma,
 				     unsigned int where)
 {
 	return atomic_read(&vma->flags) & where;
@@ -301,14 +292,7 @@ static inline bool i915_node_color_differs(const struct drm_mm_node *node,
  *
  * Returns a valid iomapped pointer or ERR_PTR.
  */
-#ifdef __NetBSD__
-#  define	__iomem		__i915_vma_iomem
-#endif
 void __iomem *i915_vma_pin_iomap(struct i915_vma *vma);
-#ifdef __NetBSD__
-#  undef	__iomem
-#endif
-
 #define IO_ERR_PTR(x) ((void __iomem *)ERR_PTR(x))
 
 /**
@@ -325,11 +309,7 @@ void i915_vma_unpin_iomap(struct i915_vma *vma);
 static inline struct page *i915_vma_first_page(struct i915_vma *vma)
 {
 	GEM_BUG_ON(!vma->pages);
-#ifdef __NetBSD__
-	return vma->pages->sgl->sg_pgs[0];
-#else
 	return sg_page(vma->pages->sgl);
-#endif
 }
 
 /**

@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_vma.c,v 1.12 2021/12/19 12:27:49 riastradh Exp $	*/
+/*	$NetBSD: i915_vma.c,v 1.1 2021/12/18 20:15:26 riastradh Exp $	*/
 
 /*
  * Copyright © 2016 Intel Corporation
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i915_vma.c,v 1.12 2021/12/19 12:27:49 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i915_vma.c,v 1.1 2021/12/18 20:15:26 riastradh Exp $");
 
 #include <linux/sched/mm.h>
 #include <drm/drm_gem.h>
@@ -43,8 +43,6 @@ __KERNEL_RCSID(0, "$NetBSD: i915_vma.c,v 1.12 2021/12/19 12:27:49 riastradh Exp 
 #include "i915_trace.h"
 #include "i915_vma.h"
 
-#include <linux/nbsd-namespace.h>
-
 static struct i915_global_vma {
 	struct i915_global base;
 	struct kmem_cache *slab_vmas;
@@ -57,7 +55,6 @@ struct i915_vma *i915_vma_alloc(void)
 
 void i915_vma_free(struct i915_vma *vma)
 {
-	mutex_destroy(&vma->pages_mutex);
 	return kmem_cache_free(global.slab_vmas, vma);
 }
 
@@ -105,50 +102,6 @@ __i915_active_call
 static void __i915_vma_retire(struct i915_active *ref)
 {
 	i915_vma_put(active_to_vma(ref));
-}
-
-#ifdef __NetBSD__
-struct i915_vma_key {
-	struct i915_address_space *vm;
-	const struct i915_ggtt_view *view;
-};
-
-static int
-compare_vma(void *cookie, const void *va, const void *vb)
-{
-	const struct i915_vma *a = va;
-	const struct i915_vma *b = vb;
-	long cmp = i915_vma_compare(__UNCONST(a), b->vm,
-	    b->ggtt_view.type == I915_GGTT_VIEW_NORMAL ? NULL : &b->ggtt_view);
-
-	return (cmp < 0 ? -1 : cmp > 0 ? +1 : 0);
-}
-
-static int
-compare_vma_key(void *cookie, const void *vn, const void *vk)
-{
-	const struct i915_vma *vma = vn;
-	const struct i915_vma_key *key = vk;
-	long cmp = i915_vma_compare(__UNCONST(vma), key->vm, key->view);
-
-	return (cmp < 0 ? -1 : cmp > 0 ? +1 : 0);
-}
-
-static const rb_tree_ops_t vma_tree_rb_ops = {
-	.rbto_compare_nodes = compare_vma,
-	.rbto_compare_key = compare_vma_key,
-	.rbto_node_offset = offsetof(struct i915_vma, obj_node),
-};
-#endif
-
-void
-i915_vma_tree_init(struct drm_i915_gem_object *obj)
-{
-#ifdef __NetBSD__
-	rb_tree_init(&obj->vma.tree.rbr_tree, &vma_tree_rb_ops);
-#else
-	obj->vma.tree = RB_ROOT;
-#endif
 }
 
 static struct i915_vma *
@@ -233,13 +186,6 @@ vma_create(struct drm_i915_gem_object *obj,
 
 	spin_lock(&obj->vma.lock);
 
-#ifdef __NetBSD__
-	__USE(rb);
-	__USE(p);
-	struct i915_vma *collision __diagused;
-	collision = rb_tree_insert_node(&obj->vma.tree.rbr_tree, vma);
-	KASSERT(collision == vma);
-#else
 	rb = NULL;
 	p = &obj->vma.tree.rb_node;
 	while (*p) {
@@ -268,7 +214,6 @@ vma_create(struct drm_i915_gem_object *obj,
 	}
 	rb_link_node(&vma->obj_node, rb, p);
 	rb_insert_color(&vma->obj_node, &obj->vma.tree);
-#endif
 
 	if (i915_vma_is_ggtt(vma))
 		/*
@@ -295,11 +240,6 @@ vma_lookup(struct drm_i915_gem_object *obj,
 	   struct i915_address_space *vm,
 	   const struct i915_ggtt_view *view)
 {
-#ifdef __NetBSD__
-	const struct i915_vma_key key = { .vm = vm, .view = view };
-
-	return rb_tree_find_node(&obj->vma.tree.rbr_tree, &key);
-#else
 	struct rb_node *rb;
 
 	rb = obj->vma.tree.rb_node;
@@ -318,7 +258,6 @@ vma_lookup(struct drm_i915_gem_object *obj,
 	}
 
 	return NULL;
-#endif
 }
 
 /**
@@ -484,10 +423,6 @@ int i915_vma_bind(struct i915_vma *vma,
 	return 0;
 }
 
-#ifdef __NetBSD__
-#  define	__iomem		__i915_vma_iomem
-#endif
-
 void __iomem *i915_vma_pin_iomap(struct i915_vma *vma)
 {
 	void __iomem *ptr;
@@ -512,12 +447,7 @@ void __iomem *i915_vma_pin_iomap(struct i915_vma *vma)
 		}
 
 		if (unlikely(cmpxchg(&vma->iomap, NULL, ptr))) {
-#ifdef __NetBSD__
-			io_mapping_unmap(&i915_vm_to_ggtt(vma->vm)->iomap, ptr,
-			    vma->node.size);
-#else
 			io_mapping_unmap(ptr);
-#endif
 			ptr = vma->iomap;
 		}
 	}
@@ -538,10 +468,6 @@ err_unpin:
 err:
 	return IO_ERR_PTR(err);
 }
-
-#ifdef __NetBSD__
-#  undef	__iomem
-#endif
 
 void i915_vma_flush_writes(struct i915_vma *vma)
 {
@@ -586,7 +512,7 @@ bool i915_vma_misplaced(const struct i915_vma *vma,
 	if (!drm_mm_node_allocated(&vma->node))
 		return false;
 
-	if (test_bit(I915_VMA_ERROR_BIT, __i915_vma_flags_const(vma)))
+	if (test_bit(I915_VMA_ERROR_BIT, __i915_vma_flags(vma)))
 		return true;
 
 	if (vma->node.size < size)
@@ -724,7 +650,7 @@ i915_vma_insert(struct i915_vma *vma, u64 size, u64 alignment, u64 flags)
 	 * attempt to find space.
 	 */
 	if (size > end) {
-		DRM_DEBUG("Attempting to bind an object larger than the aperture: request=%"PRIu64" > %s aperture=%"PRIu64"\n",
+		DRM_DEBUG("Attempting to bind an object larger than the aperture: request=%llu > %s aperture=%llu\n",
 			  size, flags & PIN_MAPPABLE ? "mappable" : "total",
 			  end);
 		return -ENOSPC;
@@ -1181,12 +1107,7 @@ static void __i915_vma_iounmap(struct i915_vma *vma)
 	if (vma->iomap == NULL)
 		return;
 
-#ifdef __NetBSD__
-	io_mapping_unmap(&i915_vm_to_ggtt(vma->vm)->iomap, vma->iomap,
-	    vma->node.size);
-#else
 	io_mapping_unmap(vma->iomap);
-#endif
 	vma->iomap = NULL;
 }
 
@@ -1201,22 +1122,12 @@ void i915_vma_revoke_mmap(struct i915_vma *vma)
 	GEM_BUG_ON(!i915_vma_is_map_and_fenceable(vma));
 	GEM_BUG_ON(!vma->obj->userfault_count);
 
-#ifdef __NetBSD__
-	__USE(vma_offset);
-	__USE(node);
-	struct drm_i915_private *i915 = to_i915(vma->obj->base.dev);
-	paddr_t pa = i915->ggtt.gmadr.start + vma->node.start;
-	vsize_t npgs = vma->size >> PAGE_SHIFT;
-	while (npgs --> 0)
-		pmap_pv_protect(pa + (npgs << PAGE_SHIFT), VM_PROT_NONE);
-#else
 	node = &vma->mmo->vma_node;
 	vma_offset = vma->ggtt_view.partial.offset << PAGE_SHIFT;
 	unmap_mapping_range(vma->vm->i915->drm.anon_inode->i_mapping,
 			    drm_vma_node_offset_addr(node) + vma_offset,
 			    vma->size,
 			    1);
-#endif
 
 	i915_vma_unset_userfault(vma);
 	if (!--vma->obj->userfault_count)

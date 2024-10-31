@@ -1,5 +1,3 @@
-/*	$NetBSD: sis_drv.c,v 1.4 2021/12/18 23:45:44 riastradh Exp $	*/
-
 /* sis.c -- sis driver -*- linux-c -*-
  *
  * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
@@ -27,18 +25,13 @@
  *
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sis_drv.c,v 1.4 2021/12/18 23:45:44 riastradh Exp $");
-
 #include <linux/module.h>
-#include <linux/pci.h>
 
-#include <drm/drm_drv.h>
-#include <drm/drm_file.h>
-#include <drm/drm_pciids.h>
+#include <drm/drmP.h>
 #include <drm/sis_drm.h>
-
 #include "sis_drv.h"
+
+#include <drm/drm_pciids.h>
 
 static struct pci_device_id pciidlist[] = {
 	sisdrv_PCI_IDS
@@ -61,13 +54,16 @@ static int sis_driver_load(struct drm_device *dev, unsigned long chipset)
 	return 0;
 }
 
-static void sis_driver_unload(struct drm_device *dev)
+static int sis_driver_unload(struct drm_device *dev)
 {
 	drm_sis_private_t *dev_priv = dev->dev_private;
 
+	idr_remove_all(&dev_priv->object_idr);
 	idr_destroy(&dev_priv->object_idr);
 
 	kfree(dev_priv);
+
+	return 0;
 }
 
 static const struct file_operations sis_driver_fops = {
@@ -75,9 +71,12 @@ static const struct file_operations sis_driver_fops = {
 	.open = drm_open,
 	.release = drm_release,
 	.unlocked_ioctl = drm_ioctl,
-	.mmap = drm_legacy_mmap,
+	.mmap = drm_mmap,
 	.poll = drm_poll,
+	.fasync = drm_fasync,
+#ifdef CONFIG_COMPAT
 	.compat_ioctl = drm_compat_ioctl,
+#endif
 	.llseek = noop_llseek,
 };
 
@@ -97,7 +96,7 @@ static int sis_driver_open(struct drm_device *dev, struct drm_file *file)
 	return 0;
 }
 
-static void sis_driver_postclose(struct drm_device *dev, struct drm_file *file)
+void sis_driver_postclose(struct drm_device *dev, struct drm_file *file)
 {
 	struct sis_file_private *file_priv = file->driver_priv;
 
@@ -105,7 +104,7 @@ static void sis_driver_postclose(struct drm_device *dev, struct drm_file *file)
 }
 
 static struct drm_driver driver = {
-	.driver_features = DRIVER_USE_AGP | DRIVER_LEGACY,
+	.driver_features = DRIVER_USE_AGP | DRIVER_USE_MTRR,
 	.load = sis_driver_load,
 	.unload = sis_driver_unload,
 	.open = sis_driver_open,
@@ -131,12 +130,12 @@ static struct pci_driver sis_pci_driver = {
 static int __init sis_init(void)
 {
 	driver.num_ioctls = sis_max_ioctl;
-	return drm_legacy_pci_init(&driver, &sis_pci_driver);
+	return drm_pci_init(&driver, &sis_pci_driver);
 }
 
 static void __exit sis_exit(void)
 {
-	drm_legacy_pci_exit(&driver, &sis_pci_driver);
+	drm_pci_exit(&driver, &sis_pci_driver);
 }
 
 module_init(sis_init);

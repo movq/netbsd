@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_display.c,v 1.12 2021/12/19 12:37:17 riastradh Exp $	*/
+/*	$NetBSD: intel_display.c,v 1.1 2021/12/18 20:15:28 riastradh Exp $	*/
 
 /*
  * Copyright © 2006-2007 Intel Corporation
@@ -27,9 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_display.c,v 1.12 2021/12/19 12:37:17 riastradh Exp $");
-
-#include "intel_display.h"	/* for pipe_drmhack */
+__KERNEL_RCSID(0, "$NetBSD: intel_display.c,v 1.1 2021/12/18 20:15:28 riastradh Exp $");
 
 #include <linux/i2c.h>
 #include <linux/input.h>
@@ -90,8 +88,6 @@ __KERNEL_RCSID(0, "$NetBSD: intel_display.c,v 1.12 2021/12/19 12:37:17 riastradh
 #include "intel_sprite.h"
 #include "intel_tc.h"
 #include "intel_vga.h"
-
-#include <linux/nbsd-namespace.h>
 
 /* Primary plane formats for gen <= 3 */
 static const u32 i8xx_primary_formats[] = {
@@ -943,7 +939,7 @@ vlv_find_best_dpll(const struct intel_limit *limit,
 				clock.p = clock.p1 * clock.p2;
 				/* based on hardware requirement, prefer bigger m1,m2 values */
 				for (clock.m1 = limit->m1.min; clock.m1 <= limit->m1.max; clock.m1++) {
-					unsigned int ppm = 0; /*XXXGCC*/
+					unsigned int ppm;
 
 					clock.m2 = DIV_ROUND_CLOSEST(target * clock.p * clock.n,
 								     refclk * clock.m1);
@@ -1005,7 +1001,7 @@ chv_find_best_dpll(const struct intel_limit *limit,
 		for (clock.p2 = limit->p2.p2_fast;
 				clock.p2 >= limit->p2.p2_slow;
 				clock.p2 -= clock.p2 > 10 ? 2 : 1) {
-			unsigned int error_ppm = 0; /*XXXGCC*/
+			unsigned int error_ppm;
 
 			clock.p = clock.p1 * clock.p2;
 
@@ -2129,7 +2125,7 @@ intel_fill_fb_ggtt_view(struct i915_ggtt_view *view,
 	view->type = I915_GGTT_VIEW_NORMAL;
 	if (drm_rotation_90_or_270(rotation)) {
 		view->type = I915_GGTT_VIEW_ROTATED;
-		view->rotated = to_intel_framebuffer((struct drm_framebuffer *)__UNCONST(fb))->rot_info;
+		view->rotated = to_intel_framebuffer(fb)->rot_info;
 	}
 }
 
@@ -2316,7 +2312,7 @@ static int intel_fb_pitch(const struct drm_framebuffer *fb, int color_plane,
 			  unsigned int rotation)
 {
 	if (drm_rotation_90_or_270(rotation))
-		return to_intel_framebuffer((struct drm_framebuffer *)__UNCONST(fb))->rotated[color_plane].pitch;
+		return to_intel_framebuffer(fb)->rotated[color_plane].pitch;
 	else
 		return fb->pitches[color_plane];
 }
@@ -3120,7 +3116,7 @@ intel_fill_fb_info(struct drm_i915_private *dev_priv,
 	}
 
 	if (mul_u32_u32(max_size, tile_size) > obj->base.size) {
-		DRM_DEBUG_KMS("fb too big for bo (need %"PRIu64" bytes, have %zu bytes)\n",
+		DRM_DEBUG_KMS("fb too big for bo (need %llu bytes, have %zu bytes)\n",
 			      mul_u32_u32(max_size, tile_size), obj->base.size);
 		return -EINVAL;
 	}
@@ -3417,7 +3413,7 @@ intel_alloc_initial_plane_obj(struct intel_crtc *crtc,
 	case I915_FORMAT_MOD_Y_TILED:
 		break;
 	default:
-		DRM_DEBUG_DRIVER("Unsupported modifier for initial FB: 0x%"PRIx64"\n",
+		DRM_DEBUG_DRIVER("Unsupported modifier for initial FB: 0x%llx\n",
 				 fb->modifier);
 		return false;
 	}
@@ -4823,11 +4819,9 @@ void intel_prepare_reset(struct drm_i915_private *dev_priv)
 		return;
 
 	/* We have a modeset vs reset deadlock, defensively unbreak it. */
-	spin_lock(&dev_priv->atomic_commit_lock);
 	set_bit(I915_RESET_MODESET, &dev_priv->gt.reset.flags);
-	DRM_SPIN_WAKEUP_ALL(&dev_priv->atomic_commit_wq,
-	    &dev_priv->atomic_commit_lock);
-	spin_unlock(&dev_priv->atomic_commit_lock);
+	smp_mb__after_atomic();
+	wake_up_bit(&dev_priv->gt.reset.flags, I915_RESET_MODESET);
 
 	if (atomic_read(&dev_priv->gpu_error.pending_fb_pin)) {
 		DRM_DEBUG_KMS("Modeset potentially stuck, unbreaking through wedging\n");
@@ -8320,7 +8314,7 @@ static void chv_prepare_pll(struct intel_crtc *crtc,
 	enum pipe pipe = crtc->pipe;
 	enum dpio_channel port = vlv_pipe_to_channel(pipe);
 	u32 loopfilter, tribuf_calcntr;
-	u32 bestn __unused, bestm1 __unused, bestm2, bestp1, bestp2, bestm2_frac;
+	u32 bestn, bestm1, bestm2, bestp1, bestp2, bestm2_frac;
 	u32 dpio_val;
 	int vco;
 
@@ -9089,7 +9083,7 @@ i9xx_get_initial_plane_config(struct intel_crtc *crtc,
 	struct intel_plane *plane = to_intel_plane(crtc->base.primary);
 	enum i9xx_plane_id i9xx_plane = plane->i9xx_plane;
 	enum pipe pipe;
-	u32 val, base, offset __unused;
+	u32 val, base, offset;
 	int fourcc, pixel_format;
 	unsigned int aligned_height;
 	struct drm_framebuffer *fb;
@@ -10286,7 +10280,7 @@ skl_get_initial_plane_config(struct intel_crtc *crtc,
 	struct intel_plane *plane = to_intel_plane(crtc->base.primary);
 	enum plane_id plane_id = plane->id;
 	enum pipe pipe;
-	u32 val, base, offset __unused, stride_mult, tiling, alpha;
+	u32 val, base, offset, stride_mult, tiling, alpha;
 	int fourcc, pixel_format;
 	unsigned int aligned_height;
 	struct drm_framebuffer *fb;
@@ -14414,7 +14408,7 @@ static int intel_atomic_check_planes(struct intel_atomic_state *state,
 {
 	struct drm_i915_private *dev_priv = to_i915(state->base.dev);
 	struct intel_crtc_state *old_crtc_state, *new_crtc_state;
-	struct intel_plane_state *plane_state __unused;
+	struct intel_plane_state *plane_state;
 	struct intel_plane *plane;
 	struct intel_crtc *crtc;
 	int i, ret;
@@ -14472,7 +14466,7 @@ static int intel_atomic_check_planes(struct intel_atomic_state *state,
 
 static int intel_atomic_check_crtcs(struct intel_atomic_state *state)
 {
-	struct intel_crtc_state *crtc_state __unused;
+	struct intel_crtc_state *crtc_state;
 	struct intel_crtc *crtc;
 	int i;
 
@@ -14553,7 +14547,7 @@ intel_atomic_check_tiled_conns(struct intel_atomic_state *state)
 {
 	struct drm_i915_private *dev_priv = to_i915(state->base.dev);
 	struct drm_connector *connector;
-	struct drm_connector_state *old_conn_state __unused, *new_conn_state __unused;
+	struct drm_connector_state *old_conn_state, *new_conn_state;
 	int i, ret;
 
 	if (INTEL_GEN(dev_priv) < 11)
@@ -15273,45 +15267,31 @@ static void intel_atomic_helper_free_state_worker(struct work_struct *work)
 	intel_atomic_helper_free_state(dev_priv);
 }
 
-static int
-intel_atomic_commit_fence_wake(struct i915_sw_fence_waiter *waiter,
-    unsigned mode, int flags, void *not_a_cookie)
-{
-	struct intel_atomic_state *intel_state = waiter->private;
-	struct drm_i915_private *dev_priv = to_i915(intel_state->base.dev);
-
-	spin_lock(&dev_priv->atomic_commit_lock);
-	DRM_SPIN_WAKEUP_ALL(&dev_priv->atomic_commit_wq,
-	    &dev_priv->atomic_commit_lock);
-	spin_unlock(&dev_priv->atomic_commit_lock);
-
-	return 0;
-}
-
 static void intel_atomic_commit_fence_wait(struct intel_atomic_state *intel_state)
 {
+	struct wait_queue_entry wait_fence, wait_reset;
 	struct drm_i915_private *dev_priv = to_i915(intel_state->base.dev);
-	struct i915_sw_fence_waiter waiter;
-	int ret;
 
-	waiter.flags = 0;
-	waiter.func = intel_atomic_commit_fence_wake;
-	waiter.private = intel_state;
+	init_wait_entry(&wait_fence, 0);
+	init_wait_entry(&wait_reset, 0);
+	for (;;) {
+		prepare_to_wait(&intel_state->commit_ready.wait,
+				&wait_fence, TASK_UNINTERRUPTIBLE);
+		prepare_to_wait(bit_waitqueue(&dev_priv->gt.reset.flags,
+					      I915_RESET_MODESET),
+				&wait_reset, TASK_UNINTERRUPTIBLE);
 
-	spin_lock(&intel_state->commit_ready.wait.lock);
-	list_add_tail(&waiter.entry, &intel_state->commit_ready.wait.head);
-	spin_unlock(&intel_state->commit_ready.wait.lock);
 
-	spin_lock(&dev_priv->atomic_commit_lock);
-	DRM_SPIN_WAIT_NOINTR_UNTIL(ret, &dev_priv->atomic_commit_wq,
-	    &dev_priv->atomic_commit_lock,
-	    (i915_sw_fence_done(&intel_state->commit_ready) ||
-		test_bit(I915_RESET_MODESET, &dev_priv->gt.reset.flags)));
-	spin_unlock(&dev_priv->atomic_commit_lock);
+		if (i915_sw_fence_done(&intel_state->commit_ready) ||
+		    test_bit(I915_RESET_MODESET, &dev_priv->gt.reset.flags))
+			break;
 
-	spin_lock(&intel_state->commit_ready.wait.lock);
-	list_del(&waiter.entry);
-	spin_unlock(&intel_state->commit_ready.wait.lock);
+		schedule();
+	}
+	finish_wait(&intel_state->commit_ready.wait, &wait_fence);
+	finish_wait(bit_waitqueue(&dev_priv->gt.reset.flags,
+				  I915_RESET_MODESET),
+		    &wait_reset);
 }
 
 static void intel_atomic_cleanup_work(struct work_struct *work)
@@ -15505,7 +15485,7 @@ static void intel_atomic_commit_work(struct work_struct *work)
 	intel_atomic_commit_tail(state);
 }
 
-int __i915_sw_fence_call
+static int __i915_sw_fence_call
 intel_atomic_commit_ready(struct i915_sw_fence *fence,
 			  enum i915_sw_fence_notify notify)
 {
@@ -15562,7 +15542,8 @@ static int intel_atomic_commit(struct drm_device *dev,
 	state->wakeref = intel_runtime_pm_get(&dev_priv->runtime_pm);
 
 	drm_atomic_state_get(&state->base);
-	i915_sw_fence_reinit(&state->commit_ready);
+	i915_sw_fence_init(&state->commit_ready,
+			   intel_atomic_commit_ready);
 
 	/*
 	 * The intel_legacy_cursor_update() fast path takes care
@@ -15645,12 +15626,6 @@ static int intel_atomic_commit(struct drm_device *dev,
 	return 0;
 }
 
-#ifdef __NetBSD__
-
-/* XXX */
-
-#else
-
 struct wait_rps_boost {
 	struct wait_queue_entry wait;
 
@@ -15680,12 +15655,9 @@ static int do_rps_boost(struct wait_queue_entry *_wait,
 	return 1;
 }
 
-#endif
-
 static void add_rps_boost_after_vblank(struct drm_crtc *crtc,
 				       struct dma_fence *fence)
 {
-#ifndef __NetBSD__		/* XXX i915 rps boost */
 	struct wait_rps_boost *wait;
 
 	if (!dma_fence_is_i915(fence))
@@ -15710,7 +15682,6 @@ static void add_rps_boost_after_vblank(struct drm_crtc *crtc,
 	wait->wait.flags = 0;
 
 	add_wait_queue(drm_crtc_vblank_waitqueue(crtc), &wait->wait);
-#endif
 }
 
 static int intel_plane_pin_fb(struct intel_plane_state *plane_state)
@@ -16971,7 +16942,7 @@ static int intel_framebuffer_init(struct intel_framebuffer *intel_fb,
 				      mode_cmd->modifier[0])) {
 		struct drm_format_name_buf format_name;
 
-		DRM_DEBUG_KMS("unsupported pixel format %s / modifier 0x%"PRIx64"\n",
+		DRM_DEBUG_KMS("unsupported pixel format %s / modifier 0x%llx\n",
 			      drm_get_format_name(mode_cmd->pixel_format,
 						  &format_name),
 			      mode_cmd->modifier[0]);
@@ -17329,30 +17300,6 @@ void intel_modeset_init_hw(struct drm_i915_private *i915)
 	i915->cdclk.logical = i915->cdclk.actual = i915->cdclk.hw;
 }
 
-static int sanitize_watermarks_add_affected(struct drm_atomic_state *state)
-{
-	struct drm_plane *plane;
-	struct drm_crtc *crtc;
-
-	drm_for_each_crtc(crtc, state->dev) {
-		struct drm_crtc_state *crtc_state;
-
-		crtc_state = drm_atomic_get_crtc_state(state, crtc);
-		if (IS_ERR(crtc_state))
-			return PTR_ERR(crtc_state);
-	}
-
-	drm_for_each_plane(plane, state->dev) {
-		struct drm_plane_state *plane_state;
-
-		plane_state = drm_atomic_get_plane_state(state, plane);
-		if (IS_ERR(plane_state))
-			return PTR_ERR(plane_state);
-	}
-
-	return 0;
-}
-
 /*
  * Calculate what we think the watermarks should be for the state we've read
  * out of the hardware and then immediately program those watermarks so that
@@ -17363,8 +17310,9 @@ static int sanitize_watermarks_add_affected(struct drm_atomic_state *state)
  * through the atomic check code to calculate new watermark values in the
  * state object.
  */
-static void sanitize_watermarks(struct drm_i915_private *dev_priv)
+static void sanitize_watermarks(struct drm_device *dev)
 {
+	struct drm_i915_private *dev_priv = to_i915(dev);
 	struct drm_atomic_state *state;
 	struct intel_atomic_state *intel_state;
 	struct intel_crtc *crtc;
@@ -17377,16 +17325,25 @@ static void sanitize_watermarks(struct drm_i915_private *dev_priv)
 	if (!dev_priv->display.optimize_watermarks)
 		return;
 
-	state = drm_atomic_state_alloc(&dev_priv->drm);
-	if (WARN_ON(!state))
-		return;
+	/*
+	 * We need to hold connection_mutex before calling duplicate_state so
+	 * that the connector loop is protected.
+	 */
+	drm_modeset_acquire_init(&ctx, 0);
+retry:
+	ret = drm_modeset_lock_all_ctx(dev, &ctx);
+	if (ret == -EDEADLK) {
+		drm_modeset_backoff(&ctx);
+		goto retry;
+	} else if (WARN_ON(ret)) {
+		goto fail;
+	}
+
+	state = drm_atomic_helper_duplicate_state(dev, &ctx);
+	if (WARN_ON(IS_ERR(state)))
+		goto fail;
 
 	intel_state = to_intel_atomic_state(state);
-
-	drm_modeset_acquire_init(&ctx, 0);
-
-retry:
-	state->acquire_ctx = &ctx;
 
 	/*
 	 * Hardware readout is the only time we don't want to calculate
@@ -17396,13 +17353,22 @@ retry:
 	if (!HAS_GMCH(dev_priv))
 		intel_state->skip_intermediate_wm = true;
 
-	ret = sanitize_watermarks_add_affected(state);
-	if (ret)
-		goto fail;
-
-	ret = intel_atomic_check(&dev_priv->drm, state);
-	if (ret)
-		goto fail;
+	ret = intel_atomic_check(dev, state);
+	if (ret) {
+		/*
+		 * If we fail here, it means that the hardware appears to be
+		 * programmed in a way that shouldn't be possible, given our
+		 * understanding of watermark requirements.  This might mean a
+		 * mistake in the hardware readout code or a mistake in the
+		 * watermark calculations for a given platform.  Raise a WARN
+		 * so that this is noticeable.
+		 *
+		 * If this actually happens, we'll have to just leave the
+		 * BIOS-programmed watermarks untouched and hope for the best.
+		 */
+		WARN(true, "Could not determine valid watermarks for inherited state\n");
+		goto put_state;
+	}
 
 	/* Write calculated watermark values back */
 	for_each_new_intel_crtc_in_state(intel_state, crtc, crtc_state, i) {
@@ -17412,28 +17378,9 @@ retry:
 		to_intel_crtc_state(crtc->base.state)->wm = crtc_state->wm;
 	}
 
-fail:
-	if (ret == -EDEADLK) {
-		drm_atomic_state_clear(state);
-		drm_modeset_backoff(&ctx);
-		goto retry;
-	}
-
-	/*
-	 * If we fail here, it means that the hardware appears to be
-	 * programmed in a way that shouldn't be possible, given our
-	 * understanding of watermark requirements.  This might mean a
-	 * mistake in the hardware readout code or a mistake in the
-	 * watermark calculations for a given platform.  Raise a WARN
-	 * so that this is noticeable.
-	 *
-	 * If this actually happens, we'll have to just leave the
-	 * BIOS-programmed watermarks untouched and hope for the best.
-	 */
-	WARN(ret, "Could not determine valid watermarks for inherited state\n");
-
+put_state:
 	drm_atomic_state_put(state);
-
+fail:
 	drm_modeset_drop_locks(&ctx);
 	drm_modeset_acquire_fini(&ctx);
 }
@@ -17582,14 +17529,9 @@ int intel_modeset_init(struct drm_i915_private *i915)
 	struct intel_crtc *crtc;
 	int ret;
 
-	mutex_init(&i915->drrs.mutex);
-
 	i915->modeset_wq = alloc_ordered_workqueue("i915_modeset", 0);
 	i915->flip_wq = alloc_workqueue("i915_flip", WQ_HIGHPRI |
 					WQ_UNBOUND, WQ_UNBOUND_MAX_ACTIVE);
-
-	spin_lock_init(&i915->atomic_commit_lock);
-	DRM_INIT_WAITQUEUE(&i915->atomic_commit_wq, "i915cmit");
 
 	intel_mode_config_init(i915);
 
@@ -17637,9 +17579,7 @@ int intel_modeset_init(struct drm_i915_private *i915)
 		intel_update_max_cdclk(i915);
 
 	/* Just disable it once at startup */
-#ifndef __NetBSD__		/* XXX We wait until intelfb is ready.  */
 	intel_vga_disable(i915);
-#endif
 	intel_setup_outputs(i915);
 
 	drm_modeset_lock_all(dev);
@@ -17674,7 +17614,7 @@ int intel_modeset_init(struct drm_i915_private *i915)
 	 * since the watermark calculation done here will use pstate->fb.
 	 */
 	if (!HAS_GMCH(i915))
-		sanitize_watermarks(i915);
+		sanitize_watermarks(dev);
 
 	/*
 	 * Force all active planes to recompute their states. So that on
@@ -18576,21 +18516,12 @@ void intel_modeset_driver_remove(struct drm_i915_private *i915)
 
 	intel_overlay_cleanup(i915);
 
-	intel_shared_dpll_cleanup(&i915->drm);
-
 	intel_gmbus_teardown(i915);
-
-	intel_fbc_cleanup(i915);
 
 	intel_bw_cleanup(i915);
 
-	DRM_DESTROY_WAITQUEUE(&i915->atomic_commit_wq);
-	spin_lock_destroy(&i915->atomic_commit_lock);
-
 	destroy_workqueue(i915->flip_wq);
 	destroy_workqueue(i915->modeset_wq);
-
-	mutex_destroy(&i915->drrs.mutex);
 
 	intel_fbc_cleanup_cfb(i915);
 }

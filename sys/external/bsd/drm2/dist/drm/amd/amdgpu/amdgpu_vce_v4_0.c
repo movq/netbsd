@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_vce_v4_0.c,v 1.3 2021/12/19 12:21:29 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_vce_v4_0.c,v 1.1 2021/12/18 20:11:12 riastradh Exp $	*/
 
 /*
  * Copyright 2016 Advanced Micro Devices, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_vce_v4_0.c,v 1.3 2021/12/19 12:21:29 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_vce_v4_0.c,v 1.1 2021/12/18 20:11:12 riastradh Exp $");
 
 #include <linux/firmware.h>
 
@@ -45,8 +45,6 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_vce_v4_0.c,v 1.3 2021/12/19 12:21:29 riastrad
 #include "mmhub/mmhub_1_0_sh_mask.h"
 
 #include "ivsrcid/vce/irqsrcs_vce_4_0.h"
-
-#include <linux/nbsd-namespace.h>
 
 #define VCE_STATUS_VCPU_REPORT_FW_LOADED_MASK	0x02
 
@@ -470,7 +468,7 @@ static int vce_v4_0_sw_init(void *handle)
 
 	for (i = 0; i < adev->vce.num_rings; i++) {
 		ring = &adev->vce.ring[i];
-		snprintf(ring->name, sizeof(ring->name), "vce%d", i);
+		sprintf(ring->name, "vce%d", i);
 		if (amdgpu_sriov_vf(adev)) {
 			/* DOORBELL only works under SRIOV */
 			ring->use_doorbell = true;

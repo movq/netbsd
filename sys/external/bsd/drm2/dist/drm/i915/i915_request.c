@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_request.c,v 1.17 2022/07/11 18:56:00 riastradh Exp $	*/
+/*	$NetBSD: i915_request.c,v 1.1 2021/12/18 20:15:26 riastradh Exp $	*/
 
 /*
  * Copyright © 2008-2015 Intel Corporation
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i915_request.c,v 1.17 2022/07/11 18:56:00 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i915_request.c,v 1.1 2021/12/18 20:15:26 riastradh Exp $");
 
 #include <linux/dma-fence-array.h>
 #include <linux/irq_work.h>
@@ -118,10 +118,8 @@ static void i915_fence_release(struct dma_fence *fence)
 	 * freed when the slab cache itself is freed, and so we would get
 	 * caught trying to reuse dead objects.
 	 */
-#ifndef __NetBSD__
 	i915_sw_fence_fini(&rq->submit);
 	i915_sw_fence_fini(&rq->semaphore);
-#endif
 
 	kmem_cache_free(global.slab_requests, rq);
 }
@@ -449,7 +447,7 @@ void i915_request_submit(struct i915_request *request)
 
 void __i915_request_unsubmit(struct i915_request *request)
 {
-	struct intel_engine_cs *engine __lockdep_used = request->engine;
+	struct intel_engine_cs *engine = request->engine;
 
 	RQ_TRACE(request, "\n");
 
@@ -610,18 +608,6 @@ static void __i915_request_ctor(void *arg)
 	INIT_LIST_HEAD(&rq->execute_cb);
 }
 
-static void __i915_request_dtor(void *arg)
-{
-	struct i915_request *rq = arg;
-
-	dma_fence_destroy(&rq->fence);
-#ifdef __NetBSD__
-	i915_sw_fence_fini(&rq->submit);
-	i915_sw_fence_fini(&rq->semaphore);
-#endif
-	spin_lock_destroy(&rq->lock);
-}
-
 struct i915_request *
 __i915_request_create(struct intel_context *ce, gfp_t gfp)
 {
@@ -680,14 +666,10 @@ __i915_request_create(struct intel_context *ce, gfp_t gfp)
 	rq->ring = ce->ring;
 	rq->execution_mask = ce->engine->mask;
 
-#ifdef __NetBSD__
-	dma_fence_reset(&rq->fence, &i915_fence_ops, &rq->lock, 0, 0);
-#else
 	kref_init(&rq->fence.refcount);
 	rq->fence.flags = 0;
 	rq->fence.error = 0;
 	INIT_LIST_HEAD(&rq->fence.cb_list);
-#endif
 
 	ret = intel_timeline_get_seqno(tl, rq, &seqno);
 	if (ret)
@@ -1372,17 +1354,9 @@ void i915_request_add(struct i915_request *rq)
 	if (list_empty(&rq->sched.signalers_list))
 		attr.priority |= I915_PRIORITY_WAIT;
 
-#ifdef __NetBSD__
-	int s = splsoftserial();
-#else
 	local_bh_disable();
-#endif
 	__i915_request_queue(rq, &attr);
-#ifdef __NetBSD__
-	splx(s);
-#else
 	local_bh_enable(); /* Kick the execlists tasklet if just scheduled */
-#endif
 
 	/*
 	 * In typical scenarios, we do not expect the previous request on
@@ -1491,22 +1465,14 @@ static bool __i915_spin_request(const struct i915_request * const rq,
 
 struct request_wait {
 	struct dma_fence_cb cb;
-#ifdef __NetBSD__
-	drm_waitqueue_t wq;
-#else
 	struct task_struct *tsk;
-#endif
 };
 
 static void request_wait_wake(struct dma_fence *fence, struct dma_fence_cb *cb)
 {
 	struct request_wait *wait = container_of(cb, typeof(*wait), cb);
 
-#ifdef __NetBSD__
-	DRM_SPIN_WAKEUP_ALL(&wait->wq, fence->lock);
-#else
 	wake_up_process(wait->tsk);
-#endif
 }
 
 /**
@@ -1598,39 +1564,10 @@ long i915_request_wait(struct i915_request *rq,
 		i915_schedule_bump_priority(rq, I915_PRIORITY_WAIT);
 	}
 
-#ifdef __NetBSD__
-	DRM_INIT_WAITQUEUE(&wait.wq, "i915req");
-#else
 	wait.tsk = current;
-#endif
 	if (dma_fence_add_callback(&rq->fence, &wait.cb, request_wait_wake))
 		goto out;
 
-#ifdef __NetBSD__
-	spin_lock(rq->fence.lock);
-#define	C	(i915_request_completed(rq) ? 1 :			      \
-		    (spin_unlock(rq->fence.lock),			      \
-			intel_engine_flush_submission(rq->engine),	      \
-			spin_lock(rq->fence.lock),			      \
-			i915_request_completed(rq)))
-	if (flags & I915_WAIT_INTERRUPTIBLE) {
-		DRM_SPIN_TIMED_WAIT_UNTIL(timeout, &wait.wq,
-		    rq->fence.lock, timeout,
-		    C);
-	} else {
-		DRM_SPIN_TIMED_WAIT_NOINTR_UNTIL(timeout, &wait.wq,
-		    rq->fence.lock, timeout,
-		    C);
-	}
-#undef	C
-	if (timeout > 0) {	/* succeeded before timeout */
-		KASSERT(i915_request_completed(rq));
-		dma_fence_signal_locked(&rq->fence);
-	} else if (timeout == 0) {	/* timed out */
-		timeout = -ETIME;
-	}
-	spin_unlock(rq->fence.lock);
-#else
 	for (;;) {
 		set_current_state(state);
 
@@ -1653,12 +1590,8 @@ long i915_request_wait(struct i915_request *rq,
 		timeout = io_schedule_timeout(timeout);
 	}
 	__set_current_state(TASK_RUNNING);
-#endif
 
 	dma_fence_remove_callback(&rq->fence, &wait.cb);
-#ifdef __NetBSD__
-	DRM_DESTROY_WAITQUEUE(&wait.wq);
-#endif
 
 out:
 	mutex_release(&rq->engine->gt->reset.mutex.dep_map, _THIS_IP_);
@@ -1693,14 +1626,13 @@ static struct i915_global_request global = { {
 int __init i915_global_request_init(void)
 {
 	global.slab_requests =
-		kmem_cache_create_dtor("i915_request",
+		kmem_cache_create("i915_request",
 				  sizeof(struct i915_request),
 				  __alignof__(struct i915_request),
 				  SLAB_HWCACHE_ALIGN |
 				  SLAB_RECLAIM_ACCOUNT |
 				  SLAB_TYPESAFE_BY_RCU,
-				  __i915_request_ctor,
-				  __i915_request_dtor);
+				  __i915_request_ctor);
 	if (!global.slab_requests)
 		return -ENOMEM;
 

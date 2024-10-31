@@ -1,4 +1,4 @@
-/*	$NetBSD: gen6_ppgtt.h,v 1.4 2021/12/19 01:50:47 riastradh Exp $	*/
+/*	$NetBSD: gen6_ppgtt.h,v 1.1 2021/12/18 20:15:32 riastradh Exp $	*/
 
 /* SPDX-License-Identifier: MIT */
 /*
@@ -15,12 +15,7 @@ struct gen6_ppgtt {
 
 	struct mutex flush;
 	struct i915_vma *vma;
-#ifdef __NetBSD__
-	bus_space_tag_t pd_bst;
-	bus_space_handle_t pd_bsh;
-#else
 	gen6_pte_t __iomem *pd_addr;
-#endif
 
 	atomic_t pin_count;
 	struct mutex pin_mutex;
@@ -63,7 +58,7 @@ static inline struct gen6_ppgtt *to_gen6_ppgtt(struct i915_ppgtt *base)
 	for (iter = gen6_pde_index(start);				\
 	     length > 0 && iter < I915_PDES &&				\
 		     (pt = i915_pt_entry(pd, iter), true);		\
-	     ({ u32 temp = round_up(start+1, 1 << GEN6_PDE_SHIFT);	\
+	     ({ u32 temp = ALIGN(start+1, 1 << GEN6_PDE_SHIFT);		\
 		    temp = min(temp - start, length);			\
 		    start += temp, length -= temp; }), ++iter)
 

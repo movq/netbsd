@@ -1,9 +1,17 @@
-/*	$NetBSD: mt8173-clk.h,v 1.1.1.5 2021/11/07 16:49:59 jmcneill Exp $	*/
+/*	$NetBSD: mt8173-clk.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
-/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2014 MediaTek Inc.
  * Author: James Liao <jamesjj.liao@mediatek.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  */
 
 #ifndef _DT_BINDINGS_CLK_MT8173_H
@@ -187,9 +195,7 @@
 #define CLK_INFRA_PMICSPI		10
 #define CLK_INFRA_PMICWRAP		11
 #define CLK_INFRA_CLK_13M		12
-#define CLK_INFRA_CA53SEL               13
-#define CLK_INFRA_CA72SEL               14
-#define CLK_INFRA_NR_CLK                15
+#define CLK_INFRA_NR_CLK		13
 
 /* PERI_SYS */
 

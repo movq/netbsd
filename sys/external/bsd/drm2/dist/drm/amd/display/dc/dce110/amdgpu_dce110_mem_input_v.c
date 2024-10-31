@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_dce110_mem_input_v.c,v 1.4 2021/12/19 10:59:37 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_dce110_mem_input_v.c,v 1.1 2021/12/18 20:11:19 riastradh Exp $	*/
 
 /*
  * Copyright 2012-16 Advanced Micro Devices, Inc.
@@ -25,7 +25,7 @@
  *
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_dce110_mem_input_v.c,v 1.4 2021/12/19 10:59:37 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_dce110_mem_input_v.c,v 1.1 2021/12/18 20:11:19 riastradh Exp $");
 
 #include "dm_services.h"
 
@@ -39,7 +39,6 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_dce110_mem_input_v.c,v 1.4 2021/12/19 10:59:3
 #include "inc/dce_calcs.h"
 
 #include "dce/dce_mem_input.h"
-#include "dce110/dce110_mem_input_v.h"
 
 static void set_flip_control(
 	struct dce_mem_input *mem_input110,

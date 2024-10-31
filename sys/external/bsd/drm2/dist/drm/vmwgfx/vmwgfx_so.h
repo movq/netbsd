@@ -1,8 +1,8 @@
-/*	$NetBSD: vmwgfx_so.h,v 1.3 2021/12/18 23:45:45 riastradh Exp $	*/
+/*	$NetBSD: vmwgfx_so.h,v 1.1 2018/08/27 01:35:00 riastradh Exp $	*/
 
-/* SPDX-License-Identifier: GPL-2.0 OR MIT */
 /**************************************************************************
- * Copyright 2014-2015 VMware, Inc., Palo Alto, CA., USA
+ * Copyright © 2014-2015 VMware, Inc., Palo Alto, CA., USA
+ * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -159,5 +159,4 @@ extern struct vmw_resource *vmw_view_srf(struct vmw_resource *res);
 extern struct vmw_resource *vmw_view_lookup(struct vmw_cmdbuf_res_manager *man,
 					    enum vmw_view_type view_type,
 					    u32 user_key);
-extern u32 vmw_view_dirtying(struct vmw_resource *res);
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_engine_disp_dp.c,v 1.4 2021/12/19 11:34:45 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_engine_disp_dp.c,v 1.1 2021/12/18 20:15:37 riastradh Exp $	*/
 
 /*
  * Copyright 2014 Red Hat Inc.
@@ -24,7 +24,7 @@
  * Authors: Ben Skeggs
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_engine_disp_dp.c,v 1.4 2021/12/19 11:34:45 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_engine_disp_dp.c,v 1.1 2021/12/18 20:15:37 riastradh Exp $");
 
 #include "dp.h"
 #include "conn.h"
@@ -37,8 +37,6 @@ __KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_engine_disp_dp.c,v 1.4 2021/12/19 11:34
 #include <subdev/i2c.h>
 
 #include <nvif/event.h>
-
-#include <linux/nbsd-namespace.h>
 
 struct lt_state {
 	struct nvkm_dp *dp;
@@ -617,7 +615,6 @@ nvkm_dp_dtor(struct nvkm_outp *outp)
 {
 	struct nvkm_dp *dp = nvkm_dp(outp);
 	nvkm_notify_fini(&dp->hpd);
-	mutex_destroy(&dp->mutex);
 	return dp;
 }
 

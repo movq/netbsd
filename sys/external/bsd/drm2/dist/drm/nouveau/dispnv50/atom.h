@@ -1,4 +1,4 @@
-/*	$NetBSD: atom.h,v 1.3 2021/12/19 10:49:47 riastradh Exp $	*/
+/*	$NetBSD: atom.h,v 1.1 2021/12/18 20:15:36 riastradh Exp $	*/
 
 #ifndef __NV50_KMS_ATOM_H__
 #define __NV50_KMS_ATOM_H__
@@ -14,11 +14,6 @@ struct nv50_atom {
 };
 
 #define nv50_head_atom(p) container_of((p), struct nv50_head_atom, state)
-
-#ifdef __NetBSD__
-#  define	__lut_iomem	volatile
-#  define	__iomem		__lut_iomem
-#endif
 
 struct nv50_head_atom {
 	struct drm_crtc_state state;
@@ -250,9 +245,4 @@ struct nv50_wndw_atom {
 		u8 mask;
 	} set, clr;
 };
-
-#ifdef __NetBSD__
-#  undef	__iomem
-#endif
-
 #endif

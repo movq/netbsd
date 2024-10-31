@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_si.c,v 1.5 2023/09/30 10:46:45 mrg Exp $	*/
+/*	$NetBSD: amdgpu_si.c,v 1.1 2021/12/18 20:11:11 riastradh Exp $	*/
 
 /*
  * Copyright 2015 Advanced Micro Devices, Inc.
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_si.c,v 1.5 2023/09/30 10:46:45 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_si.c,v 1.1 2021/12/18 20:11:11 riastradh Exp $");
 
 #include <linux/firmware.h>
 #include <linux/slab.h>
@@ -54,8 +54,6 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_si.c,v 1.5 2023/09/30 10:46:45 mrg Exp $");
 #include "uvd/uvd_4_0_d.h"
 #include "bif/bif_3_0_d.h"
 #include "bif/bif_3_0_sh_mask.h"
-
-#include <linux/nbsd-namespace.h>
 
 static const u32 tahiti_golden_registers[] =
 {

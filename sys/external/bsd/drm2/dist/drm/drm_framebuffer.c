@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_framebuffer.c,v 1.6 2021/12/19 09:47:44 riastradh Exp $	*/
+/*	$NetBSD: drm_framebuffer.c,v 1.1 2021/12/18 20:11:02 riastradh Exp $	*/
 
 /*
  * Copyright (c) 2016 Intel Corporation
@@ -23,10 +23,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_framebuffer.c,v 1.6 2021/12/19 09:47:44 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_framebuffer.c,v 1.1 2021/12/18 20:11:02 riastradh Exp $");
 
 #include <linux/export.h>
-#include <linux/capability.h>
 #include <linux/uaccess.h>
 
 #include <drm/drm_atomic.h>
@@ -232,14 +231,14 @@ static int framebuffer_check(struct drm_device *dev,
 		}
 
 		if (r->modifier[i] && !(r->flags & DRM_MODE_FB_MODIFIERS)) {
-			DRM_DEBUG_KMS("bad fb modifier %"PRIu64" for plane %d\n",
+			DRM_DEBUG_KMS("bad fb modifier %llu for plane %d\n",
 				      r->modifier[i], i);
 			return -EINVAL;
 		}
 
 		if (r->flags & DRM_MODE_FB_MODIFIERS &&
 		    r->modifier[i] != r->modifier[0]) {
-			DRM_DEBUG_KMS("bad fb modifier %"PRIu64" for plane %d\n",
+			DRM_DEBUG_KMS("bad fb modifier %llu for plane %d\n",
 				      r->modifier[i], i);
 			return -EINVAL;
 		}
@@ -737,11 +736,7 @@ int drm_framebuffer_init(struct drm_device *dev, struct drm_framebuffer *fb,
 	INIT_LIST_HEAD(&fb->filp_head);
 
 	fb->funcs = funcs;
-#ifdef __NetBSD__
-	strlcpy(fb->comm, curproc->p_comm, sizeof fb->comm);
-#else
 	strcpy(fb->comm, current->comm);
-#endif
 
 	ret = __drm_mode_object_add(dev, &fb->base, DRM_MODE_OBJECT_FB,
 				    false, drm_framebuffer_free);
@@ -1056,7 +1051,7 @@ void drm_framebuffer_print_info(struct drm_printer *p, unsigned int indent,
 			  drm_framebuffer_read_refcount(fb));
 	drm_printf_indent(p, indent, "format=%s\n",
 			  drm_get_format_name(fb->format->format, &format_name));
-	drm_printf_indent(p, indent, "modifier=0x%"PRIx64"\n", fb->modifier);
+	drm_printf_indent(p, indent, "modifier=0x%llx\n", fb->modifier);
 	drm_printf_indent(p, indent, "size=%ux%u\n", fb->width, fb->height);
 	drm_printf_indent(p, indent, "layers:\n");
 

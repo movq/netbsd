@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_subdev_mmu_vmmnv44.c,v 1.4 2021/12/19 11:26:26 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_subdev_mmu_vmmnv44.c,v 1.1 2021/12/18 20:15:42 riastradh Exp $	*/
 
 /*
  * Copyright 2017 Red Hat Inc.
@@ -22,7 +22,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_mmu_vmmnv44.c,v 1.4 2021/12/19 11:26:26 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_mmu_vmmnv44.c,v 1.1 2021/12/18 20:15:42 riastradh Exp $");
 
 #include "vmm.h"
 
@@ -74,7 +74,7 @@ nv44_vmm_pgt_fill(struct nvkm_vmm *vmm, struct nvkm_mmu_pt *pt,
 	VMM_WO032(pt, vmm, pteo + 0xc, tmp[3] | 0x40000000);
 }
 
-static void __unused
+static void
 nv44_vmm_pgt_pte(struct nvkm_vmm *vmm, struct nvkm_mmu_pt *pt,
 		 u32 ptei, u32 ptes, struct nvkm_vmm_map *map, u64 addr)
 {
@@ -106,14 +106,12 @@ nv44_vmm_pgt_pte(struct nvkm_vmm *vmm, struct nvkm_mmu_pt *pt,
 	}
 }
 
-#ifndef __NetBSD__
 static void
 nv44_vmm_pgt_sgl(struct nvkm_vmm *vmm, struct nvkm_mmu_pt *pt,
 		 u32 ptei, u32 ptes, struct nvkm_vmm_map *map)
 {
 	VMM_MAP_ITER_SGL(vmm, pt, ptei, ptes, map, nv44_vmm_pgt_pte);
 }
-#endif
 
 static void
 nv44_vmm_pgt_dma(struct nvkm_vmm *vmm, struct nvkm_mmu_pt *pt,
@@ -179,9 +177,7 @@ static const struct nvkm_vmm_desc_func
 nv44_vmm_desc_pgt = {
 	.unmap = nv44_vmm_pgt_unmap,
 	.dma = nv44_vmm_pgt_dma,
-#ifndef __NetBSD__
 	.sgl = nv44_vmm_pgt_sgl,
-#endif
 };
 
 static const struct nvkm_vmm_desc
@@ -228,51 +224,8 @@ nv44_vmm_new(struct nvkm_mmu *mmu, bool managed, u64 addr, u64 size,
 	if (ret)
 		return ret;
 
-#ifdef __NetBSD__
-    do {
-	const bus_dma_tag_t dmat =
-	    subdev->device->func->dma_tag(subdev->device);
-	const unsigned nullsz = 16 * 1024;
-	int nsegs;
-
-	/* XXX errno NetBSD->Linux */
-	ret = -bus_dmamem_alloc(dmat, nullsz, PAGE_SIZE, 0,
-	    &vmm->nullseg, 1, &nsegs, BUS_DMA_WAITOK);
-	if (ret) {
-fail0:		vmm->nullp = NULL;
-		break;
-	}
-	KASSERT(nsegs == 1);
-
-	/* XXX errno NetBSD->Linux */
-	ret = -bus_dmamap_create(dmat, nullsz /* size */, 1 /* maxnseg */,
-	    nullsz /* maxsegsz */, 0, BUS_DMA_WAITOK, &vmm->nullmap);
-	if (ret) {
-fail1:		bus_dmamem_free(dmat, &vmm->nullseg, 1);
-		goto fail0;
-	}
-
-	/* XXX errno NetBSD->Linux */
-	ret = -bus_dmamem_map(dmat, &vmm->nullseg, 1, nullsz,
-	    &vmm->nullp, BUS_DMA_WAITOK|BUS_DMA_COHERENT);
-	if (ret) {
-fail2:		bus_dmamap_destroy(dmat, vmm->nullmap);
-		goto fail1;
-	}
-
-	/* XXX errno NetBSD->Linux */
-	ret = -bus_dmamap_load(dmat, vmm->nullmap, vmm->nullp, nullsz,
-	    NULL, BUS_DMA_WAITOK);
-	if (ret) {
-fail3: __unused	bus_dmamem_unmap(dmat, vmm->nullp, nullsz);
-		goto fail2;
-	}
-	vmm->null = vmm->nullmap->dm_segs[0].ds_addr;
-    } while (0);
-#else
 	vmm->nullp = dma_alloc_coherent(subdev->device->dev, 16 * 1024,
 					&vmm->null, GFP_KERNEL);
-#endif
 	if (!vmm->nullp) {
 		nvkm_warn(subdev, "unable to allocate dummy pages\n");
 		vmm->null = 0;

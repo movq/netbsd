@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_engine_types.h,v 1.7 2021/12/19 11:51:59 riastradh Exp $	*/
+/*	$NetBSD: intel_engine_types.h,v 1.1 2021/12/18 20:15:32 riastradh Exp $	*/
 
 /*
  * SPDX-License-Identifier: MIT
@@ -10,13 +10,11 @@
 #define __INTEL_ENGINE_TYPES__
 
 #include <linux/average.h>
-#include <linux/completion.h>
 #include <linux/hashtable.h>
 #include <linux/irq_work.h>
 #include <linux/kref.h>
 #include <linux/list.h>
 #include <linux/llist.h>
-#include <linux/notifier.h>
 #include <linux/rbtree.h>
 #include <linux/timer.h>
 #include <linux/types.h>
@@ -165,12 +163,6 @@ struct intel_engine_execlists {
 	 */
 	bool no_priolist;
 
-#ifdef __NetBSD__
-	bus_space_tag_t bst;
-	bus_space_handle_t bsh;
-	bus_size_t submit_reg;
-	bus_size_t ctrl_reg;
-#else
 	/**
 	 * @submit_reg: gen-specific execlist submission register
 	 * set to the ExecList Submission Port (elsp) register pre-Gen11 and to
@@ -183,7 +175,6 @@ struct intel_engine_execlists {
 	 * submit queue on the HW and to request preemptions to idle
 	 */
 	u32 __iomem *ctrl_reg;
-#endif
 
 #define EXECLIST_MAX_PORTS 2
 	/**
@@ -299,11 +290,7 @@ struct intel_engine_cs {
 	unsigned int context_tag;
 #define NUM_CONTEXT_TAG roundup_pow_of_two(2 * EXECLIST_MAX_PORTS)
 
-	union {
-		struct rb_node rbtree;
-		struct llist_node llist;
-		struct list_head list;
-	} uabi_node;
+	struct rb_node uabi_node;
 
 	struct intel_sseu sseu;
 

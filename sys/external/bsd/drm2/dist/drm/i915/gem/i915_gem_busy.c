@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_gem_busy.c,v 1.4 2023/05/12 10:13:37 riastradh Exp $	*/
+/*	$NetBSD: i915_gem_busy.c,v 1.1 2021/12/18 20:15:31 riastradh Exp $	*/
 
 /*
  * SPDX-License-Identifier: MIT
@@ -7,7 +7,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i915_gem_busy.c,v 1.4 2023/05/12 10:13:37 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i915_gem_busy.c,v 1.1 2021/12/18 20:15:31 riastradh Exp $");
 
 #include "gt/intel_engine.h"
 
@@ -57,7 +57,7 @@ __busy_set_if_active(const struct dma_fence *fence, u32 (*flag)(u16 id))
 		return 0;
 
 	/* opencode to_request() in order to avoid const warnings */
-	rq = const_container_of(fence, struct i915_request, fence);
+	rq = container_of(fence, const struct i915_request, fence);
 	if (i915_request_completed(rq))
 		return 0;
 
@@ -130,8 +130,6 @@ retry:
 			struct dma_fence *fence =
 				rcu_dereference(list->shared[i]);
 
-			if (read_seqcount_retry(&obj->base.resv->seq, seq))
-				goto retry;
 			args->busy |= busy_check_reader(fence);
 		}
 	}

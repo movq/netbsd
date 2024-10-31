@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_sw_fence.h,v 1.6 2021/12/19 11:36:08 riastradh Exp $	*/
+/*	$NetBSD: i915_sw_fence.h,v 1.1 2021/12/18 20:15:26 riastradh Exp $	*/
 
 /*
  * SPDX-License-Identifier: MIT
@@ -20,18 +20,8 @@
 struct completion;
 struct dma_resv;
 
-struct i915_sw_fence_waiter {
-	struct list_head entry;
-	int flags;
-	int (*func)(struct i915_sw_fence_waiter *, unsigned, int, void *);
-	void *private;
-};
-
 struct i915_sw_fence {
-	struct i915_sw_fence_queue {
-		spinlock_t lock;
-		struct list_head head;
-	} wait;
+	wait_queue_head_t wait;
 	unsigned long flags;
 	atomic_t pending;
 	int error;
@@ -54,7 +44,7 @@ void __i915_sw_fence_init(struct i915_sw_fence *fence,
 			  i915_sw_fence_notify_t fn,
 			  const char *name,
 			  struct lock_class_key *key);
-#if IS_ENABLED(CONFIG_LOCKDEP)
+#ifdef CONFIG_LOCKDEP
 #define i915_sw_fence_init(fence, fn)				\
 do {								\
 	static struct lock_class_key __key;			\
@@ -68,19 +58,17 @@ do {								\
 
 void i915_sw_fence_reinit(struct i915_sw_fence *fence);
 
+#ifdef CONFIG_DRM_I915_SW_FENCE_DEBUG_OBJECTS
 void i915_sw_fence_fini(struct i915_sw_fence *fence);
+#else
+static inline void i915_sw_fence_fini(struct i915_sw_fence *fence) {}
+#endif
 
 void i915_sw_fence_commit(struct i915_sw_fence *fence);
 
-#ifdef __NetBSD__
-int i915_sw_fence_await_sw_fence(struct i915_sw_fence *,
-				 struct i915_sw_fence *,
-				 struct i915_sw_fence_waiter *);
-#else
 int i915_sw_fence_await_sw_fence(struct i915_sw_fence *fence,
 				 struct i915_sw_fence *after,
 				 wait_queue_entry_t *wq);
-#endif
 int i915_sw_fence_await_sw_fence_gfp(struct i915_sw_fence *fence,
 				     struct i915_sw_fence *after,
 				     gfp_t gfp);
@@ -118,14 +106,10 @@ static inline bool i915_sw_fence_done(const struct i915_sw_fence *fence)
 	return atomic_read(&fence->pending) < 0;
 }
 
-#ifdef __NetBSD__
-void i915_sw_fence_wait(struct i915_sw_fence *);
-#else
 static inline void i915_sw_fence_wait(struct i915_sw_fence *fence)
 {
 	wait_event(fence->wait, i915_sw_fence_done(fence));
 }
-#endif
 
 static inline void
 i915_sw_fence_set_error_once(struct i915_sw_fence *fence, int error)

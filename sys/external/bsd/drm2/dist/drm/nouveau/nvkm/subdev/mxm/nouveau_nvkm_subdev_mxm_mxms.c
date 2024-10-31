@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_subdev_mxm_mxms.c,v 1.4 2021/12/18 23:45:41 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_subdev_mxm_mxms.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -24,12 +24,12 @@
  * Authors: Ben Skeggs
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_mxm_mxms.c,v 1.4 2021/12/18 23:45:41 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_mxm_mxms.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $");
 
 #include "mxms.h"
 
-#define ROM16(x) get_unaligned_le16(&(x))
-#define ROM32(x) get_unaligned_le32(&(x))
+#define ROM16(x) le16_to_cpu(*(u16 *)&(x))
+#define ROM32(x) le32_to_cpu(*(u32 *)&(x))
 
 static u8 *
 mxms_data(struct nvkm_mxm *mxm)
@@ -160,20 +160,18 @@ mxms_foreach(struct nvkm_mxm *mxm, u8 types,
 			int i, j;
 
 			for (j = headerlen - 1, ptr = data; j >= 0; j--)
-				ptr += snprintf(ptr, sizeof data - (ptr - data),
-				    "%02x", dump[j]);
+				ptr += sprintf(ptr, "%02x", dump[j]);
 			dump += headerlen;
 
 			nvkm_debug(subdev, "%4s: %s\n", mxms_desc[type], data);
 			for (i = 0; i < entries; i++, dump += recordlen) {
 				for (j = recordlen - 1, ptr = data; j >= 0; j--)
-					ptr += snprintf(ptr, sizeof data -
-					    (ptr - data), "%02x", dump[j]);
+					ptr += sprintf(ptr, "%02x", dump[j]);
 				nvkm_debug(subdev, "      %s\n", data);
 			}
 		}
 
-		if ((types & (1 << type)) && (exec != NULL)) {
+		if (types & (1 << type)) {
 			if (!exec(mxm, desc, info))
 				return false;
 		}

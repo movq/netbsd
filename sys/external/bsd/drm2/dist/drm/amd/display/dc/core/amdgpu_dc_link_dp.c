@@ -1,8 +1,8 @@
-/*	$NetBSD: amdgpu_dc_link_dp.c,v 1.5 2021/12/19 11:22:40 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_dc_link_dp.c,v 1.1 2021/12/18 20:18:29 riastradh Exp $	*/
 
 /* Copyright 2015 Advanced Micro Devices, Inc. */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_dc_link_dp.c,v 1.5 2021/12/19 11:22:40 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_dc_link_dp.c,v 1.1 2021/12/18 20:18:29 riastradh Exp $");
 
 #include "dm_services.h"
 #include "dc.h"
@@ -1291,9 +1291,9 @@ static void print_status_message(
 	const struct link_training_settings *lt_settings,
 	enum link_training_result status)
 {
-	const char *link_rate = "Unknown";
-	const char *lt_result = "Unknown";
-	const char *lt_spread = "Disabled";
+	char *link_rate = "Unknown";
+	char *lt_result = "Unknown";
+	char *lt_spread = "Disabled";
 
 	switch (lt_settings->link_settings.link_rate) {
 	case LINK_RATE_LOW:
@@ -3818,7 +3818,7 @@ bool dc_link_dp_set_test_pattern(
 		/* Set CRTC Test Pattern */
 		set_crtc_test_pattern(link, pipe_ctx, test_pattern, test_pattern_color_space);
 		dp_set_hw_test_pattern(link, test_pattern,
-				(const uint8_t *)p_custom_pattern,
+				(uint8_t *)p_custom_pattern,
 				(uint32_t)cust_pattern_size);
 
 		/* Unblank Stream */
@@ -3854,7 +3854,7 @@ bool dc_link_dp_set_test_pattern(
 		}
 
 		dp_set_hw_test_pattern(link, test_pattern,
-				(const uint8_t *)p_custom_pattern,
+				(uint8_t *)p_custom_pattern,
 				(uint32_t)cust_pattern_size);
 
 		if (test_pattern != DP_TEST_PATTERN_VIDEO_MODE) {
@@ -4010,7 +4010,7 @@ void dp_set_panel_mode(struct dc_link *link, enum dp_panel_mode panel_mode)
 
 		if (edp_config_set.bits.PANEL_MODE_EDP
 			!= panel_mode_edp) {
-			enum dc_status result = DC_ERROR_UNEXPECTED;
+			enum ddc_result result = DDC_RESULT_UNKNOWN;
 
 			edp_config_set.bits.PANEL_MODE_EDP =
 			panel_mode_edp;
@@ -4020,7 +4020,7 @@ void dp_set_panel_mode(struct dc_link *link, enum dp_panel_mode panel_mode)
 				&edp_config_set.raw,
 				sizeof(edp_config_set.raw));
 
-			ASSERT(result == DC_OK);
+			ASSERT(result == DDC_RESULT_SUCESSFULL);
 		}
 	}
 	DC_LOG_DETECTION_DP_CAPS("Link: %d eDP panel mode supported: %d "

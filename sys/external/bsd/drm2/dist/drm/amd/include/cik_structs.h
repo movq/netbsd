@@ -1,4 +1,4 @@
-/*	$NetBSD: cik_structs.h,v 1.3 2021/12/18 23:45:08 riastradh Exp $	*/
+/*	$NetBSD: cik_structs.h,v 1.1 2018/08/27 01:34:47 riastradh Exp $	*/
 
 /*
  * Copyright 2012 Advanced Micro Devices, Inc.
@@ -284,7 +284,8 @@ struct cik_sdma_rlc_registers {
 	uint32_t reserved_123;
 	uint32_t reserved_124;
 	uint32_t reserved_125;
-	/* reserved_126,127: repurposed for driver-internal use */
+	uint32_t reserved_126;
+	uint32_t reserved_127;
 	uint32_t sdma_engine_id;
 	uint32_t sdma_queue_id;
 };

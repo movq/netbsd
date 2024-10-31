@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_timeline.c,v 1.5 2021/12/19 12:32:15 riastradh Exp $	*/
+/*	$NetBSD: intel_timeline.c,v 1.1 2021/12/18 20:15:33 riastradh Exp $	*/
 
 /*
  * SPDX-License-Identifier: MIT
@@ -7,7 +7,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_timeline.c,v 1.5 2021/12/19 12:32:15 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_timeline.c,v 1.1 2021/12/18 20:15:33 riastradh Exp $");
 
 #include "i915_drv.h"
 
@@ -16,8 +16,6 @@ __KERNEL_RCSID(0, "$NetBSD: intel_timeline.c,v 1.5 2021/12/19 12:32:15 riastradh
 #include "intel_gt.h"
 #include "intel_ring.h"
 #include "intel_timeline.h"
-
-#include <linux/nbsd-namespace.h>
 
 #define ptr_set_bit(ptr, bit) ((typeof(ptr))((unsigned long)(ptr) | BIT(bit)))
 #define ptr_test_bit(ptr, bit) ((unsigned long)(ptr) & BIT(bit))
@@ -287,8 +285,6 @@ void intel_timeline_fini(struct intel_timeline *timeline)
 		i915_gem_object_unpin_map(timeline->hwsp_ggtt->obj);
 
 	i915_vma_put(timeline->hwsp_ggtt);
-
-	mutex_destroy(&timeline->mutex);
 }
 
 struct intel_timeline *
@@ -574,9 +570,6 @@ void intel_gt_fini_timelines(struct intel_gt *gt)
 
 	GEM_BUG_ON(!list_empty(&timelines->active_list));
 	GEM_BUG_ON(!list_empty(&timelines->hwsp_free_list));
-
-	spin_lock_destroy(&timelines->hwsp_lock);
-	spin_lock_destroy(&timelines->lock);
 }
 
 #if IS_ENABLED(CONFIG_DRM_I915_SELFTEST)

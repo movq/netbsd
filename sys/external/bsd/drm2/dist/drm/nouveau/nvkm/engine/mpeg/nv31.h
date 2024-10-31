@@ -1,6 +1,5 @@
-/*	$NetBSD: nv31.h,v 1.3 2021/12/18 23:45:36 riastradh Exp $	*/
+/*	$NetBSD: nv31.h,v 1.1 2018/08/27 01:34:56 riastradh Exp $	*/
 
-/* SPDX-License-Identifier: MIT */
 #ifndef __NV31_MPEG_H__
 #define __NV31_MPEG_H__
 #define nv31_mpeg(p) container_of((p), struct nv31_mpeg, engine)
@@ -21,7 +20,6 @@ struct nv31_mpeg_func {
 };
 
 #define nv31_mpeg_chan(p) container_of((p), struct nv31_mpeg_chan, object)
-#include <core/object.h>
 
 struct nv31_mpeg_chan {
 	struct nvkm_object object;

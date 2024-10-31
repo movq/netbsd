@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_wakeref.c,v 1.5 2021/12/19 12:33:57 riastradh Exp $	*/
+/*	$NetBSD: intel_wakeref.c,v 1.1 2021/12/18 20:15:27 riastradh Exp $	*/
 
 /*
  * SPDX-License-Identifier: MIT
@@ -7,14 +7,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_wakeref.c,v 1.5 2021/12/19 12:33:57 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_wakeref.c,v 1.1 2021/12/18 20:15:27 riastradh Exp $");
 
 #include <linux/wait_bit.h>
 
 #include "intel_runtime_pm.h"
 #include "intel_wakeref.h"
-
-#include <linux/nbsd-namespace.h>
 
 static void rpm_get(struct intel_wakeref *wf)
 {
@@ -27,8 +25,6 @@ static void rpm_put(struct intel_wakeref *wf)
 
 	intel_runtime_pm_put(wf->rpm, wakeref);
 	INTEL_WAKEREF_BUG_ON(!wakeref);
-
-	DRM_WAKEUP_ALL(&wf->wq, &wf->mutex);
 }
 
 int __intel_wakeref_get_first(struct intel_wakeref *wf)
@@ -64,16 +60,16 @@ int __intel_wakeref_get_first(struct intel_wakeref *wf)
 static void ____intel_wakeref_put_last(struct intel_wakeref *wf)
 {
 	INTEL_WAKEREF_BUG_ON(atomic_read(&wf->count) <= 0);
-	if (unlikely(!atomic_dec_and_test(&wf->count))) {
-		mutex_unlock(&wf->mutex);
-		return;
-	}
+	if (unlikely(!atomic_dec_and_test(&wf->count)))
+		goto unlock;
 
 	/* ops->put() must reschedule its own release on error/deferral */
 	if (likely(!wf->ops->put(wf))) {
 		rpm_put(wf);
+		wake_up_var(&wf->wakeref);
 	}
 
+unlock:
 	mutex_unlock(&wf->mutex);
 }
 
@@ -112,18 +108,9 @@ void __intel_wakeref_init(struct intel_wakeref *wf,
 	__mutex_init(&wf->mutex, "wakeref.mutex", &key->mutex);
 	atomic_set(&wf->count, 0);
 	wf->wakeref = 0;
-	DRM_INIT_WAITQUEUE(&wf->wq, "i915wake");
 
 	INIT_WORK(&wf->work, __intel_wakeref_put_work);
 	lockdep_init_map(&wf->work.lockdep_map, "wakeref.work", &key->work, 0);
-}
-
-void
-intel_wakeref_fini(struct intel_wakeref *wf)
-{
-
-	DRM_DESTROY_WAITQUEUE(&wf->wq);
-	mutex_destroy(&wf->mutex);
 }
 
 int intel_wakeref_wait_for_idle(struct intel_wakeref *wf)
@@ -132,9 +119,8 @@ int intel_wakeref_wait_for_idle(struct intel_wakeref *wf)
 
 	might_sleep();
 
-	mutex_lock(&wf->mutex);
-	DRM_WAIT_UNTIL(err, &wf->wq, &wf->mutex, !intel_wakeref_is_active(wf));
-	mutex_unlock(&wf->mutex);
+	err = wait_var_event_killable(&wf->wakeref,
+				      !intel_wakeref_is_active(wf));
 	if (err)
 		return err;
 
@@ -203,5 +189,4 @@ void intel_wakeref_auto_fini(struct intel_wakeref_auto *wf)
 {
 	intel_wakeref_auto(wf, 0);
 	INTEL_WAKEREF_BUG_ON(wf->wakeref);
-	spin_lock_destroy(&wf->lock);
 }

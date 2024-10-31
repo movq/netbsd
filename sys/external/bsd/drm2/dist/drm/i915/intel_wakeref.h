@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_wakeref.h,v 1.4 2021/12/19 12:33:57 riastradh Exp $	*/
+/*	$NetBSD: intel_wakeref.h,v 1.1 2021/12/18 20:15:27 riastradh Exp $	*/
 
 /*
  * SPDX-License-Identifier: MIT
@@ -17,8 +17,6 @@
 #include <linux/stackdepot.h>
 #include <linux/timer.h>
 #include <linux/workqueue.h>
-
-#include <drm/drm_wait_netbsd.h> /* XXX */
 
 #if IS_ENABLED(CONFIG_DRM_I915_DEBUG)
 #define INTEL_WAKEREF_BUG_ON(expr) BUG_ON(expr)
@@ -41,7 +39,6 @@ struct intel_wakeref {
 	struct mutex mutex;
 
 	intel_wakeref_t wakeref;
-	drm_waitqueue_t wq;
 
 	struct intel_runtime_pm *rpm;
 	const struct intel_wakeref_ops *ops;
@@ -63,8 +60,6 @@ void __intel_wakeref_init(struct intel_wakeref *wf,
 									\
 	__intel_wakeref_init((wf), (rpm), (ops), &__key);		\
 } while (0)
-
-void intel_wakeref_fini(struct intel_wakeref *);
 
 int __intel_wakeref_get_first(struct intel_wakeref *wf);
 void __intel_wakeref_put_last(struct intel_wakeref *wf, unsigned long flags);

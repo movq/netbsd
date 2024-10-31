@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_overlay.c,v 1.3 2021/12/19 11:48:02 riastradh Exp $	*/
+/*	$NetBSD: intel_overlay.c,v 1.1 2021/12/18 20:15:30 riastradh Exp $	*/
 
 /*
  * Copyright © 2009
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_overlay.c,v 1.3 2021/12/19 11:48:02 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_overlay.c,v 1.1 2021/12/18 20:15:30 riastradh Exp $");
 
 #include <drm/drm_fourcc.h>
 #include <drm/i915_drm.h>
@@ -42,8 +42,6 @@ __KERNEL_RCSID(0, "$NetBSD: intel_overlay.c,v 1.3 2021/12/19 11:48:02 riastradh 
 #include "intel_display_types.h"
 #include "intel_frontbuffer.h"
 #include "intel_overlay.h"
-
-#include <linux/nbsd-namespace.h>
 
 /* Limits for overlay size. According to intel doc, the real limits are:
  * Y width: 4095, UV width (planar): 2047, Y height: 2047,
@@ -180,19 +178,6 @@ struct overlay_registers {
 	u16 UV_HCOEFS[N_HORIZ_UV_TAPS * N_PHASES]; /* 0x600 */
 	u16 RESERVEDG[0x100 / 2 - N_HORIZ_UV_TAPS * N_PHASES];
 };
-
-#ifdef __NetBSD__		/* XXX intel overlay iomem */
-#  define	__intel_overlay_iomem
-#  define	__iomem			__intel_overlay_iomem
-
-static inline void
-iowrite32(uint32_t value, uint32_t __intel_overlay_iomem *ptr)
-{
-
-	__insn_barrier();
-	*ptr = value;
-}
-#endif
 
 struct intel_overlay {
 	struct drm_i915_private *i915;

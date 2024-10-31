@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_smu.c,v 1.5 2021/12/19 12:37:54 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_smu.c,v 1.1 2021/12/18 20:15:18 riastradh Exp $	*/
 
 /*
  * Copyright 2019 Advanced Micro Devices, Inc.
@@ -23,7 +23,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_smu.c,v 1.5 2021/12/19 12:37:54 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_smu.c,v 1.1 2021/12/18 20:15:18 riastradh Exp $");
 
 #include <linux/firmware.h>
 #include <linux/pci.h>
@@ -41,8 +41,6 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_smu.c,v 1.5 2021/12/19 12:37:54 riastradh Exp
 #include "arcturus_ppt.h"
 #include "navi10_ppt.h"
 #include "renoir_ppt.h"
-
-#include <linux/nbsd-namespace.h>
 
 #undef __SMU_DUMMY_MAP
 #define __SMU_DUMMY_MAP(type)	#type
@@ -585,7 +583,7 @@ bool is_support_sw_smu_xgmi(struct amdgpu_device *adev)
 	return false;
 }
 
-int smu_sys_get_pp_table(struct smu_context *smu, const void **table)
+int smu_sys_get_pp_table(struct smu_context *smu, void **table)
 {
 	struct smu_table_context *smu_table = &smu->smu_table;
 	uint32_t powerplay_table_size;
@@ -973,12 +971,6 @@ static int smu_sw_fini(void *handle)
 		pr_err("Failed to init smu_fini_power!\n");
 		return ret;
 	}
-
-	mutex_destroy(&smu->metrics_lock);
-	mutex_destroy(&smu->sensor_lock);
-	mutex_destroy(&smu->smu_baco.mutex);
-	mutex_destroy(&smu->smu_feature.mutex);
-	mutex_destroy(&smu->mutex);
 
 	return 0;
 }

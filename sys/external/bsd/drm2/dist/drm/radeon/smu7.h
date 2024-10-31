@@ -1,5 +1,3 @@
-/*	$NetBSD: smu7.h,v 1.3 2021/12/18 23:45:43 riastradh Exp $	*/
-
 /*
  * Copyright 2013 Advanced Micro Devices, Inc.
  *

@@ -1,5 +1,3 @@
-/*	$NetBSD: trinity_dpm.h,v 1.3 2021/12/18 23:45:43 riastradh Exp $	*/
-
 /*
  * Copyright 2012 Advanced Micro Devices, Inc.
  *

@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_dp.c,v 1.7 2021/12/19 12:41:54 riastradh Exp $	*/
+/*	$NetBSD: intel_dp.c,v 1.1 2021/12/18 20:15:29 riastradh Exp $	*/
 
 /*
  * Copyright © 2008 Intel Corporation
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_dp.c,v 1.7 2021/12/19 12:41:54 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_dp.c,v 1.1 2021/12/18 20:15:29 riastradh Exp $");
 
 #include <linux/export.h>
 #include <linux/i2c.h>
@@ -1189,29 +1189,8 @@ intel_dp_aux_wait_done(struct intel_dp *intel_dp)
 	bool done;
 
 #define C (((status = intel_uncore_read_notrace(&i915->uncore, ch_ctl)) & DP_AUX_CH_CTL_SEND_BUSY) == 0)
-#ifdef __NetBSD__
-	if (!cold) {
-		int ret;
-		spin_lock(&i915->gmbus_wait_lock);
-		DRM_SPIN_TIMED_WAIT_NOINTR_UNTIL(ret,
-		    &i915->gmbus_wait_queue, &i915->gmbus_wait_lock,
-		    msecs_to_jiffies_timeout(timeout_ms),
-		    C);
-		/*
-		 * ret<0 on error (-ERESTARTSYS, interrupt); ret=0 on
-		 * timeout; ret>0 on success.  We care about success
-		 * only.
-		 */
-		done = (ret > 0);
-		spin_unlock(&i915->gmbus_wait_lock);
-	} else {
-		done = wait_for_atomic(C, timeout_ms) == 0;
-	}
-#else
 	done = wait_event_timeout(i915->gmbus_wait_queue, C,
 				  msecs_to_jiffies_timeout(timeout_ms));
-
-#endif
 
 	/* just trace the final value */
 	trace_i915_reg_rw(false, ch_ctl, status, sizeof(status), true);
@@ -1730,8 +1709,7 @@ static i915_reg_t skl_aux_data_reg(struct intel_dp *intel_dp, int index)
 static void
 intel_dp_aux_fini(struct intel_dp *intel_dp)
 {
-	drm_dp_aux_fini(&intel_dp->aux);
-	kfree(__UNCONST(intel_dp->aux.name));
+	kfree(intel_dp->aux.name);
 }
 
 static void
@@ -2346,7 +2324,7 @@ bool intel_dp_limited_color_range(const struct intel_crtc_state *crtc_state,
 				  const struct drm_connector_state *conn_state)
 {
 	const struct intel_digital_connector_state *intel_conn_state =
-		const_container_of(conn_state, struct intel_digital_connector_state, base);
+		to_intel_digital_connector_state(conn_state);
 	const struct drm_display_mode *adjusted_mode =
 		&crtc_state->hw.adjusted_mode;
 
@@ -2848,7 +2826,7 @@ static void edp_panel_vdd_schedule_off(struct intel_dp *intel_dp)
  */
 static void edp_panel_vdd_off(struct intel_dp *intel_dp, bool sync)
 {
-	struct drm_i915_private *dev_priv __lockdep_used = dp_to_i915(intel_dp);
+	struct drm_i915_private *dev_priv = dp_to_i915(intel_dp);
 
 	lockdep_assert_held(&dev_priv->pps_mutex);
 
@@ -4777,7 +4755,7 @@ intel_dp_setup_hdr_metadata_infoframe_sdp(struct intel_dp *intel_dp,
 	 * Packet Type 80h + Non-audio INFOFRAME Type value
 	 * HDMI_INFOFRAME_TYPE_DRM: 0x87,
 	 */
-	infoframe_sdp.sdp_header.HB1 = drm_infoframe.header.type;
+	infoframe_sdp.sdp_header.HB1 = drm_infoframe.type;
 	/*
 	 * Least Significant Eight Bits of (Data Byte Count – 1)
 	 * infoframe_size - 1,
@@ -4786,9 +4764,9 @@ intel_dp_setup_hdr_metadata_infoframe_sdp(struct intel_dp *intel_dp,
 	/* INFOFRAME SDP Version Number */
 	infoframe_sdp.sdp_header.HB3 = (0x13 << 2);
 	/* CTA Header Byte 2 (INFOFRAME Version Number) */
-	infoframe_sdp.db[0] = drm_infoframe.header.version;
+	infoframe_sdp.db[0] = drm_infoframe.version;
 	/* CTA Header Byte 3 (Length of INFOFRAME): HDMI_DRM_INFOFRAME_SIZE */
-	infoframe_sdp.db[1] = drm_infoframe.header.length;
+	infoframe_sdp.db[1] = drm_infoframe.length;
 	/*
 	 * Copy HDMI_DRM_INFOFRAME_SIZE size from a buffer after
 	 * HDMI_INFOFRAME_HEADER_SIZE
@@ -5844,13 +5822,8 @@ intel_dp_connector_register(struct drm_connector *connector)
 
 	i915_debugfs_connector_add(connector);
 
-#ifdef __NetBSD__
-	DRM_DEBUG_KMS("registering %s bus for %s\n",
-		      intel_dp->aux.name, connector->name);
-#else
 	DRM_DEBUG_KMS("registering %s bus for %s\n",
 		      intel_dp->aux.name, connector->kdev->kobj.name);
-#endif
 
 	intel_dp->aux.dev = connector->kdev;
 	ret = drm_dp_aux_register(&intel_dp->aux);
@@ -5925,15 +5898,11 @@ static void intel_dp_hdcp_wait_for_cp_irq(struct intel_hdcp *hdcp, int timeout)
 	long ret;
 
 #define C (hdcp->cp_irq_count_cached != atomic_read(&hdcp->cp_irq_count))
-	unsigned long irqflags;
-	spin_lock_irqsave(&hdcp->cp_irq_lock, irqflags);
-	DRM_SPIN_TIMED_WAIT_UNTIL(ret, &hdcp->cp_irq_queue,
-	    &hdcp->cp_irq_lock,
-	    msecs_to_jiffies(timeout),
-	    C);
+	ret = wait_event_interruptible_timeout(hdcp->cp_irq_queue, C,
+					       msecs_to_jiffies(timeout));
+
 	if (!ret)
 		DRM_DEBUG_KMS("Timedout at waiting for CP_IRQ\n");
-	spin_unlock_irqrestore(&hdcp->cp_irq_lock, irqflags);
 }
 
 static
@@ -7317,6 +7286,7 @@ intel_dp_drrs_init(struct intel_connector *connector,
 	struct drm_display_mode *downclock_mode = NULL;
 
 	INIT_DELAYED_WORK(&dev_priv->drrs.work, intel_edp_drrs_downclock_work);
+	mutex_init(&dev_priv->drrs.mutex);
 
 	if (INTEL_GEN(dev_priv) <= 6) {
 		DRM_DEBUG_KMS("DRRS supported for Gen7 and above\n");

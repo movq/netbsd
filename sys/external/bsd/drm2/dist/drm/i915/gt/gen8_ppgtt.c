@@ -1,4 +1,4 @@
-/*	$NetBSD: gen8_ppgtt.c,v 1.10 2021/12/19 12:13:01 riastradh Exp $	*/
+/*	$NetBSD: gen8_ppgtt.c,v 1.1 2021/12/18 20:15:32 riastradh Exp $	*/
 
 // SPDX-License-Identifier: MIT
 /*
@@ -6,7 +6,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gen8_ppgtt.c,v 1.10 2021/12/19 12:13:01 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gen8_ppgtt.c,v 1.1 2021/12/18 20:15:32 riastradh Exp $");
 
 #include <linux/log2.h>
 
@@ -159,7 +159,6 @@ static void __gen8_ppgtt_cleanup(struct i915_address_space *vm,
 
 			__gen8_ppgtt_cleanup(vm, *pde, GEN8_PDES, lvl - 1);
 		} while (pde++, --count);
-		spin_lock_destroy(&pd->lock);
 	}
 
 	free_px(vm, pd);
@@ -228,11 +227,8 @@ static u64 __gen8_ppgtt_clear(struct i915_address_space * const vm,
 			start += count;
 		}
 
-		if (release_pd_entry(pd, idx, pt, scratch)) {
-			if (lvl)
-				spin_lock_destroy(&as_pd(pt)->lock);
+		if (release_pd_entry(pd, idx, pt, scratch))
 			free_px(vm, pt);
-		}
 	} while (idx++, --len);
 
 	return start;
@@ -344,15 +340,8 @@ static int __gen8_ppgtt_alloc(struct i915_address_space * const vm,
 	} while (idx++, --len);
 	spin_unlock(&pd->lock);
 out:
-	if (alloc) {
-		if (lvl) {
-			struct i915_page_directory *allocpd =
-			    container_of(alloc, struct i915_page_directory,
-				pt);
-			spin_lock_destroy(&allocpd->lock);
-		}
+	if (alloc)
 		free_px(vm, alloc);
-	}
 	return ret;
 }
 
@@ -395,26 +384,6 @@ gen8_ppgtt_insert_pte(struct i915_ppgtt *ppgtt,
 	pd = i915_pd_entry(pdp, gen8_pd_index(idx, 2));
 	vaddr = kmap_atomic_px(i915_pt_entry(pd, gen8_pd_index(idx, 1)));
 	do {
-#ifdef __NetBSD__
-		KASSERT(iter->seg < iter->map->dm_nsegs);
-		KASSERT((iter->off & (I915_GTT_PAGE_SIZE - 1)) == 0);
-		const bus_dma_segment_t *seg = &iter->map->dm_segs[iter->seg];
-		KASSERT((seg->ds_addr & (I915_GTT_PAGE_SIZE - 1)) == 0);
-		KASSERT((seg->ds_len & (I915_GTT_PAGE_SIZE - 1)) == 0);
-		KASSERT(iter->off <= seg->ds_len - I915_GTT_PAGE_SIZE);
-		vaddr[gen8_pd_index(idx, 0)] =
-		    pte_encode | (seg->ds_addr + iter->off);
-		iter->off += I915_GTT_PAGE_SIZE;
-		if (iter->off >= seg->ds_len) {
-			GEM_BUG_ON(iter->off > seg->ds_len);
-			iter->off = 0;
-			if (++iter->seg >= iter->map->dm_nsegs) {
-				GEM_BUG_ON(iter->seg > iter->map->dm_nsegs);
-				idx = 0;
-				break;
-			}
-		}
-#else
 		GEM_BUG_ON(iter->sg->length < I915_GTT_PAGE_SIZE);
 		vaddr[gen8_pd_index(idx, 0)] = pte_encode | iter->dma;
 
@@ -429,7 +398,6 @@ gen8_ppgtt_insert_pte(struct i915_ppgtt *ppgtt,
 			iter->dma = sg_dma_address(iter->sg);
 			iter->max = iter->dma + iter->sg->length;
 		}
-#endif
 
 		if (gen8_pd_index(++idx, 0) == 0) {
 			if (gen8_pd_index(idx, 1) == 0) {
@@ -456,11 +424,7 @@ static void gen8_ppgtt_insert_huge(struct i915_vma *vma,
 {
 	const gen8_pte_t pte_encode = gen8_pte_encode(0, cache_level, flags);
 	u64 start = vma->node.start;
-#ifdef __NetBSD__
-	bus_size_t rem = iter->map->dm_segs[iter->seg].ds_len - iter->off;
-#else
 	dma_addr_t rem = iter->sg->length;
-#endif
 
 	GEM_BUG_ON(!i915_vm_is_4lvl(vma->vm));
 
@@ -476,13 +440,7 @@ static void gen8_ppgtt_insert_huge(struct i915_vma *vma,
 		u16 index;
 
 		if (vma->page_sizes.sg & I915_GTT_PAGE_SIZE_2M &&
-#ifdef __NetBSD__
-		    IS_ALIGNED((iter->map->dm_segs[iter->seg].ds_addr +
-			    iter->off),
-			I915_GTT_PAGE_SIZE_2M) &&
-#else
 		    IS_ALIGNED(iter->dma, I915_GTT_PAGE_SIZE_2M) &&
-#endif
 		    rem >= I915_GTT_PAGE_SIZE_2M &&
 		    !__gen8_pte_index(start, 0)) {
 			index = __gen8_pte_index(start, 1);
@@ -499,13 +457,7 @@ static void gen8_ppgtt_insert_huge(struct i915_vma *vma,
 
 			if (!index &&
 			    vma->page_sizes.sg & I915_GTT_PAGE_SIZE_64K &&
-#ifdef __NetBSD__
-			    IS_ALIGNED((iter->map->dm_segs[iter->seg].ds_addr
-				    + iter->off),
-				I915_GTT_PAGE_SIZE_64K) &&
-#else
 			    IS_ALIGNED(iter->dma, I915_GTT_PAGE_SIZE_64K) &&
-#endif
 			    (IS_ALIGNED(rem, I915_GTT_PAGE_SIZE_64K) ||
 			     rem >= (I915_PDES - index) * I915_GTT_PAGE_SIZE))
 				maybe_64K = __gen8_pte_index(start, 1);
@@ -514,44 +466,10 @@ static void gen8_ppgtt_insert_huge(struct i915_vma *vma,
 		}
 
 		do {
-#ifdef __NetBSD__
-			GEM_BUG_ON((iter->map->dm_segs[iter->seg].ds_len -
-				iter->off) < page_size);
-			vaddr[index++] = encode |
-			    (iter->map->dm_segs[iter->seg].ds_addr
-				+ iter->off);
-#else
 			GEM_BUG_ON(iter->sg->length < page_size);
 			vaddr[index++] = encode | iter->dma;
-#endif
 
 			start += page_size;
-#ifdef __NetBSD__
-			iter->off += page_size;
-			rem -= page_size;
-			if (iter->off >= iter->map->dm_segs[iter->seg].ds_len) {
-				GEM_BUG_ON(iter->off >
-				    iter->map->dm_segs[iter->seg].ds_len);
-				iter->off = 0;
-				if (++iter->seg >= iter->map->dm_nsegs) {
-					GEM_BUG_ON(iter->seg >
-					    iter->map->dm_nsegs);
-					break;
-				}
-				const bus_dma_segment_t *seg =
-				    &iter->map->dm_segs[iter->seg];
-				if (maybe_64K && index < I915_PDES &&
-				    !(IS_ALIGNED((seg->ds_addr + iter->off),
-					    I915_GTT_PAGE_SIZE_64K) &&
-					(IS_ALIGNED(rem,
-					    I915_GTT_PAGE_SIZE_64K) ||
-					    rem >= ((I915_PDES - index) * I915_GTT_PAGE_SIZE))))
-					maybe_64K = false;
-				if (unlikely(!IS_ALIGNED((seg->ds_addr +
-						iter->off), page_size)))
-					break;
-			}
-#else
 			iter->dma += page_size;
 			rem -= page_size;
 			if (iter->dma >= iter->max) {
@@ -572,7 +490,6 @@ static void gen8_ppgtt_insert_huge(struct i915_vma *vma,
 				if (unlikely(!IS_ALIGNED(iter->dma, page_size)))
 					break;
 			}
-#endif
 		} while (rem >= page_size && index < I915_PDES);
 
 		kunmap_atomic(vaddr);
@@ -586,12 +503,7 @@ static void gen8_ppgtt_insert_huge(struct i915_vma *vma,
 		if (maybe_64K != -1 &&
 		    (index == I915_PDES ||
 		     (i915_vm_has_scratch_64K(vma->vm) &&
-#ifdef __NetBSD__
-		      iter->seg == iter->map->dm_nsegs &&
-#else
-		      !iter->sg &&
-#endif
-		      IS_ALIGNED(vma->node.start +
+		      !iter->sg && IS_ALIGNED(vma->node.start +
 					      vma->node.size,
 					      I915_GTT_PAGE_SIZE_2M)))) {
 			vaddr = kmap_atomic_px(pd);
@@ -622,12 +534,7 @@ static void gen8_ppgtt_insert_huge(struct i915_vma *vma,
 		}
 
 		vma->page_sizes.gtt |= page_size;
-	}
-#ifdef __NetBSD__
-	while (iter->seg < iter->map->dm_nsegs);
-#else
-	while (iter->sg);
-#endif
+	} while (iter->sg);
 }
 
 static void gen8_ppgtt_insert(struct i915_address_space *vm,
@@ -738,7 +645,6 @@ gen8_alloc_top_pd(struct i915_address_space *vm)
 		return ERR_PTR(-ENOMEM);
 
 	if (unlikely(setup_page_dma(vm, px_base(pd)))) {
-		spin_lock_destroy(&pd->lock);
 		kfree(pd);
 		return ERR_PTR(-ENOMEM);
 	}

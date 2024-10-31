@@ -1,5 +1,3 @@
-/*	$NetBSD: ch7006.h,v 1.3 2021/12/18 23:45:46 riastradh Exp $	*/
-
 /*
  * Copyright (C) 2009 Francisco Jerez.
  * All Rights Reserved.

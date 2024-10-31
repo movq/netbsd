@@ -1,5 +1,3 @@
-/*	$NetBSD: btcd.h,v 1.3 2021/12/18 23:45:42 riastradh Exp $	*/
-
 /*
  * Copyright 2010 Advanced Micro Devices, Inc.
  *

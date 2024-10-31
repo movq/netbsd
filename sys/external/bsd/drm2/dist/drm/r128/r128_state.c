@@ -1,5 +1,3 @@
-/*	$NetBSD: r128_state.c,v 1.3 2021/12/18 23:45:42 riastradh Exp $	*/
-
 /* r128_state.c -- State support for r128 -*- linux-c -*-
  * Created: Thu Jan 27 02:53:43 2000 by gareth@valinux.com
  */
@@ -30,18 +28,8 @@
  *    Gareth Hughes <gareth@valinux.com>
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: r128_state.c,v 1.3 2021/12/18 23:45:42 riastradh Exp $");
-
-#include <linux/pci.h>
-#include <linux/slab.h>
-#include <linux/uaccess.h>
-
-#include <drm/drm_device.h>
-#include <drm/drm_file.h>
-#include <drm/drm_print.h>
+#include <drm/drmP.h>
 #include <drm/r128_drm.h>
-
 #include "r128_drv.h"
 
 /* ================================================================
@@ -836,7 +824,7 @@ static int r128_cce_dispatch_blit(struct drm_device *dev,
 
 	if (buf->file_priv != file_priv) {
 		DRM_ERROR("process %d using buffer owned by %p\n",
-			  task_pid_nr(current), buf->file_priv);
+			  DRM_CURRENTPID, buf->file_priv);
 		return -EINVAL;
 	}
 	if (buf->pending) {
@@ -907,22 +895,31 @@ static int r128_cce_dispatch_write_span(struct drm_device *dev,
 	if (count > 4096 || count <= 0)
 		return -EMSGSIZE;
 
-	if (copy_from_user(&x, depth->x, sizeof(x)))
+	if (DRM_COPY_FROM_USER(&x, depth->x, sizeof(x)))
 		return -EFAULT;
-	if (copy_from_user(&y, depth->y, sizeof(y)))
+	if (DRM_COPY_FROM_USER(&y, depth->y, sizeof(y)))
 		return -EFAULT;
 
 	buffer_size = depth->n * sizeof(u32);
-	buffer = memdup_user(depth->buffer, buffer_size);
-	if (IS_ERR(buffer))
-		return PTR_ERR(buffer);
+	buffer = kmalloc(buffer_size, GFP_KERNEL);
+	if (buffer == NULL)
+		return -ENOMEM;
+	if (DRM_COPY_FROM_USER(buffer, depth->buffer, buffer_size)) {
+		kfree(buffer);
+		return -EFAULT;
+	}
 
-	mask_size = depth->n;
+	mask_size = depth->n * sizeof(u8);
 	if (depth->mask) {
-		mask = memdup_user(depth->mask, mask_size);
-		if (IS_ERR(mask)) {
+		mask = kmalloc(mask_size, GFP_KERNEL);
+		if (mask == NULL) {
 			kfree(buffer);
-			return PTR_ERR(mask);
+			return -ENOMEM;
+		}
+		if (DRM_COPY_FROM_USER(mask, depth->mask, mask_size)) {
+			kfree(buffer);
+			kfree(mask);
+			return -EFAULT;
 		}
 
 		for (i = 0; i < count; i++, x++) {
@@ -994,30 +991,54 @@ static int r128_cce_dispatch_write_pixels(struct drm_device *dev,
 
 	xbuf_size = count * sizeof(*x);
 	ybuf_size = count * sizeof(*y);
-	x = memdup_user(depth->x, xbuf_size);
-	if (IS_ERR(x))
-		return PTR_ERR(x);
-	y = memdup_user(depth->y, ybuf_size);
-	if (IS_ERR(y)) {
+	x = kmalloc(xbuf_size, GFP_KERNEL);
+	if (x == NULL)
+		return -ENOMEM;
+	y = kmalloc(ybuf_size, GFP_KERNEL);
+	if (y == NULL) {
 		kfree(x);
-		return PTR_ERR(y);
+		return -ENOMEM;
 	}
-	buffer_size = depth->n * sizeof(u32);
-	buffer = memdup_user(depth->buffer, buffer_size);
-	if (IS_ERR(buffer)) {
+	if (DRM_COPY_FROM_USER(x, depth->x, xbuf_size)) {
 		kfree(x);
 		kfree(y);
-		return PTR_ERR(buffer);
+		return -EFAULT;
+	}
+	if (DRM_COPY_FROM_USER(y, depth->y, xbuf_size)) {
+		kfree(x);
+		kfree(y);
+		return -EFAULT;
+	}
+
+	buffer_size = depth->n * sizeof(u32);
+	buffer = kmalloc(buffer_size, GFP_KERNEL);
+	if (buffer == NULL) {
+		kfree(x);
+		kfree(y);
+		return -ENOMEM;
+	}
+	if (DRM_COPY_FROM_USER(buffer, depth->buffer, buffer_size)) {
+		kfree(x);
+		kfree(y);
+		kfree(buffer);
+		return -EFAULT;
 	}
 
 	if (depth->mask) {
-		mask_size = depth->n;
-		mask = memdup_user(depth->mask, mask_size);
-		if (IS_ERR(mask)) {
+		mask_size = depth->n * sizeof(u8);
+		mask = kmalloc(mask_size, GFP_KERNEL);
+		if (mask == NULL) {
 			kfree(x);
 			kfree(y);
 			kfree(buffer);
-			return PTR_ERR(mask);
+			return -ENOMEM;
+		}
+		if (DRM_COPY_FROM_USER(mask, depth->mask, mask_size)) {
+			kfree(x);
+			kfree(y);
+			kfree(buffer);
+			kfree(mask);
+			return -EFAULT;
 		}
 
 		for (i = 0; i < count; i++) {
@@ -1086,9 +1107,9 @@ static int r128_cce_dispatch_read_span(struct drm_device *dev,
 	if (count > 4096 || count <= 0)
 		return -EMSGSIZE;
 
-	if (copy_from_user(&x, depth->x, sizeof(x)))
+	if (DRM_COPY_FROM_USER(&x, depth->x, sizeof(x)))
 		return -EFAULT;
-	if (copy_from_user(&y, depth->y, sizeof(y)))
+	if (DRM_COPY_FROM_USER(&y, depth->y, sizeof(y)))
 		return -EFAULT;
 
 	BEGIN_RING(7);
@@ -1141,12 +1162,12 @@ static int r128_cce_dispatch_read_pixels(struct drm_device *dev,
 		kfree(x);
 		return -ENOMEM;
 	}
-	if (copy_from_user(x, depth->x, xbuf_size)) {
+	if (DRM_COPY_FROM_USER(x, depth->x, xbuf_size)) {
 		kfree(x);
 		kfree(y);
 		return -EFAULT;
 	}
-	if (copy_from_user(y, depth->y, ybuf_size)) {
+	if (DRM_COPY_FROM_USER(y, depth->y, ybuf_size)) {
 		kfree(x);
 		kfree(y);
 		return -EFAULT;
@@ -1329,7 +1350,7 @@ static int r128_cce_vertex(struct drm_device *dev, void *data, struct drm_file *
 	DEV_INIT_TEST_WITH_RETURN(dev_priv);
 
 	DRM_DEBUG("pid=%d index=%d count=%d discard=%d\n",
-		  task_pid_nr(current), vertex->idx, vertex->count, vertex->discard);
+		  DRM_CURRENTPID, vertex->idx, vertex->count, vertex->discard);
 
 	if (vertex->idx < 0 || vertex->idx >= dma->buf_count) {
 		DRM_ERROR("buffer index %d (of %d max)\n",
@@ -1350,7 +1371,7 @@ static int r128_cce_vertex(struct drm_device *dev, void *data, struct drm_file *
 
 	if (buf->file_priv != file_priv) {
 		DRM_ERROR("process %d using buffer owned by %p\n",
-			  task_pid_nr(current), buf->file_priv);
+			  DRM_CURRENTPID, buf->file_priv);
 		return -EINVAL;
 	}
 	if (buf->pending) {
@@ -1381,7 +1402,7 @@ static int r128_cce_indices(struct drm_device *dev, void *data, struct drm_file 
 
 	DEV_INIT_TEST_WITH_RETURN(dev_priv);
 
-	DRM_DEBUG("pid=%d buf=%d s=%d e=%d d=%d\n", task_pid_nr(current),
+	DRM_DEBUG("pid=%d buf=%d s=%d e=%d d=%d\n", DRM_CURRENTPID,
 		  elts->idx, elts->start, elts->end, elts->discard);
 
 	if (elts->idx < 0 || elts->idx >= dma->buf_count) {
@@ -1403,7 +1424,7 @@ static int r128_cce_indices(struct drm_device *dev, void *data, struct drm_file 
 
 	if (buf->file_priv != file_priv) {
 		DRM_ERROR("process %d using buffer owned by %p\n",
-			  task_pid_nr(current), buf->file_priv);
+			  DRM_CURRENTPID, buf->file_priv);
 		return -EINVAL;
 	}
 	if (buf->pending) {
@@ -1444,7 +1465,7 @@ static int r128_cce_blit(struct drm_device *dev, void *data, struct drm_file *fi
 
 	DEV_INIT_TEST_WITH_RETURN(dev_priv);
 
-	DRM_DEBUG("pid=%d index=%d\n", task_pid_nr(current), blit->idx);
+	DRM_DEBUG("pid=%d index=%d\n", DRM_CURRENTPID, blit->idx);
 
 	if (blit->idx < 0 || blit->idx >= dma->buf_count) {
 		DRM_ERROR("buffer index %d (of %d max)\n",
@@ -1461,7 +1482,7 @@ static int r128_cce_blit(struct drm_device *dev, void *data, struct drm_file *fi
 	return ret;
 }
 
-int r128_cce_depth(struct drm_device *dev, void *data, struct drm_file *file_priv)
+static int r128_cce_depth(struct drm_device *dev, void *data, struct drm_file *file_priv)
 {
 	drm_r128_private_t *dev_priv = dev->dev_private;
 	drm_r128_depth_t *depth = data;
@@ -1493,7 +1514,7 @@ int r128_cce_depth(struct drm_device *dev, void *data, struct drm_file *file_pri
 	return ret;
 }
 
-int r128_cce_stipple(struct drm_device *dev, void *data, struct drm_file *file_priv)
+static int r128_cce_stipple(struct drm_device *dev, void *data, struct drm_file *file_priv)
 {
 	drm_r128_private_t *dev_priv = dev->dev_private;
 	drm_r128_stipple_t *stipple = data;
@@ -1503,7 +1524,7 @@ int r128_cce_stipple(struct drm_device *dev, void *data, struct drm_file *file_p
 
 	DEV_INIT_TEST_WITH_RETURN(dev_priv);
 
-	if (copy_from_user(&mask, stipple->mask, 32 * sizeof(u32)))
+	if (DRM_COPY_FROM_USER(&mask, stipple->mask, 32 * sizeof(u32)))
 		return -EFAULT;
 
 	RING_SPACE_TEST_WITH_RETURN(dev_priv);
@@ -1544,7 +1565,7 @@ static int r128_cce_indirect(struct drm_device *dev, void *data, struct drm_file
 
 	if (buf->file_priv != file_priv) {
 		DRM_ERROR("process %d using buffer owned by %p\n",
-			  task_pid_nr(current), buf->file_priv);
+			  DRM_CURRENTPID, buf->file_priv);
 		return -EINVAL;
 	}
 	if (buf->pending) {
@@ -1583,7 +1604,7 @@ static int r128_cce_indirect(struct drm_device *dev, void *data, struct drm_file
 	return 0;
 }
 
-int r128_getparam(struct drm_device *dev, void *data, struct drm_file *file_priv)
+static int r128_getparam(struct drm_device *dev, void *data, struct drm_file *file_priv)
 {
 	drm_r128_private_t *dev_priv = dev->dev_private;
 	drm_r128_getparam_t *param = data;
@@ -1591,17 +1612,17 @@ int r128_getparam(struct drm_device *dev, void *data, struct drm_file *file_priv
 
 	DEV_INIT_TEST_WITH_RETURN(dev_priv);
 
-	DRM_DEBUG("pid=%d\n", task_pid_nr(current));
+	DRM_DEBUG("pid=%d\n", DRM_CURRENTPID);
 
 	switch (param->param) {
 	case R128_PARAM_IRQ_NR:
-		value = dev->pdev->irq;
+		value = drm_dev_to_irq(dev);
 		break;
 	default:
 		return -EINVAL;
 	}
 
-	if (copy_to_user(param->value, &value, sizeof(int))) {
+	if (DRM_COPY_TO_USER(param->value, &value, sizeof(int))) {
 		DRM_ERROR("copy_to_user\n");
 		return -EFAULT;
 	}
@@ -1622,7 +1643,7 @@ void r128_driver_lastclose(struct drm_device *dev)
 	r128_do_cleanup_cce(dev);
 }
 
-const struct drm_ioctl_desc r128_ioctls[] = {
+struct drm_ioctl_desc r128_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(R128_INIT, r128_cce_init, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
 	DRM_IOCTL_DEF_DRV(R128_CCE_START, r128_cce_start, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
 	DRM_IOCTL_DEF_DRV(R128_CCE_STOP, r128_cce_stop, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
@@ -1642,4 +1663,4 @@ const struct drm_ioctl_desc r128_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(R128_GETPARAM, r128_getparam, DRM_AUTH),
 };
 
-int r128_max_ioctl = ARRAY_SIZE(r128_ioctls);
+int r128_max_ioctl = DRM_ARRAY_SIZE(r128_ioctls);

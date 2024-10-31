@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_vega10_hwmgr.c,v 1.4 2021/12/19 12:37:54 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_vega10_hwmgr.c,v 1.1 2021/12/18 20:15:20 riastradh Exp $	*/
 
 /*
  * Copyright 2016 Advanced Micro Devices, Inc.
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_vega10_hwmgr.c,v 1.4 2021/12/19 12:37:54 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_vega10_hwmgr.c,v 1.1 2021/12/18 20:15:20 riastradh Exp $");
 
 #include <linux/delay.h>
 #include <linux/fb.h>
@@ -58,8 +58,6 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_vega10_hwmgr.c,v 1.4 2021/12/19 12:37:54 rias
 
 #include "smuio/smuio_9_0_offset.h"
 #include "smuio/smuio_9_0_sh_mask.h"
-
-#include <linux/nbsd-namespace.h>
 
 #define HBM_MEMORY_CHANNEL_WIDTH    128
 
@@ -3136,7 +3134,7 @@ static int vega10_get_pp_table_entry_callback_func(struct pp_hwmgr *hwmgr,
 static int vega10_get_pp_table_entry(struct pp_hwmgr *hwmgr,
 		unsigned long entry_index, struct pp_power_state *state)
 {
-	int result __unused;
+	int result;
 	struct vega10_power_state *ps;
 
 	state->hardware.magic = PhwVega10_Magic;
@@ -4478,7 +4476,7 @@ static int vega10_get_ppfeature_status(struct pp_hwmgr *hwmgr, char *buf)
 			"[EnableAllSmuFeatures] Failed to get enabled smc features!",
 			return ret);
 
-	size += sprintf(buf + size, "Current ppfeatures: 0x%016"PRIx64"\n", features_enabled);
+	size += sprintf(buf + size, "Current ppfeatures: 0x%016llx\n", features_enabled);
 	size += sprintf(buf + size, "%-19s %-22s %s\n",
 				output_title[0],
 				output_title[1],
@@ -4512,8 +4510,8 @@ static int vega10_set_ppfeature_status(struct pp_hwmgr *hwmgr, uint64_t new_ppfe
 	features_to_enable =
 		~features_enabled & new_ppfeature_masks;
 
-	pr_debug("features_to_disable 0x%"PRIx64"\n", features_to_disable);
-	pr_debug("features_to_enable 0x%"PRIx64"\n", features_to_enable);
+	pr_debug("features_to_disable 0x%llx\n", features_to_disable);
+	pr_debug("features_to_enable 0x%llx\n", features_to_enable);
 
 	if (features_to_disable) {
 		ret = vega10_enable_smc_features(hwmgr, false, features_to_disable);

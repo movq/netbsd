@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_lpe_audio.h,v 1.3 2021/12/19 11:38:03 riastradh Exp $	*/
+/*	$NetBSD: intel_lpe_audio.h,v 1.1 2021/12/18 20:15:30 riastradh Exp $	*/
 
 /* SPDX-License-Identifier: MIT */
 /*
@@ -9,9 +9,6 @@
 #define __INTEL_LPE_AUDIO_H__
 
 #include <linux/types.h>
-
-#include <sys/file.h>
-#define	pipe	pipe_drmhack	/* see intel_display.h */
 
 enum pipe;
 enum port;

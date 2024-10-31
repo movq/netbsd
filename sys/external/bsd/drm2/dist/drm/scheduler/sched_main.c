@@ -1,4 +1,4 @@
-/*	$NetBSD: sched_main.c,v 1.11 2021/12/19 12:42:58 riastradh Exp $	*/
+/*	$NetBSD: sched_main.c,v 1.1 2021/12/18 20:15:53 riastradh Exp $	*/
 
 /*
  * Copyright 2015 Advanced Micro Devices, Inc.
@@ -47,7 +47,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sched_main.c,v 1.11 2021/12/19 12:42:58 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sched_main.c,v 1.1 2021/12/18 20:15:53 riastradh Exp $");
 
 #include <linux/kthread.h>
 #include <linux/wait.h>
@@ -235,11 +235,6 @@ EXPORT_SYMBOL(drm_sched_fault);
  */
 unsigned long drm_sched_suspend_timeout(struct drm_gpu_scheduler *sched)
 {
-#ifdef __NetBSD__
-	/* XXX Currently nothing uses the return value.  */
-	cancel_delayed_work(&sched->work_tdr);
-	return -123456789;
-#else
 	unsigned long sched_timeout, now = jiffies;
 
 	sched_timeout = sched->work_tdr.timer.expires;
@@ -253,7 +248,6 @@ unsigned long drm_sched_suspend_timeout(struct drm_gpu_scheduler *sched)
 		return sched_timeout - now;
 	else
 		return sched->timeout;
-#endif
 }
 EXPORT_SYMBOL(drm_sched_suspend_timeout);
 
@@ -623,10 +617,8 @@ static bool drm_sched_ready(struct drm_gpu_scheduler *sched)
  */
 void drm_sched_wakeup(struct drm_gpu_scheduler *sched)
 {
-	assert_spin_locked(&sched->job_list_lock);
 	if (drm_sched_ready(sched))
-		DRM_SPIN_WAKEUP_ONE(&sched->wake_up_worker,
-		    &sched->job_list_lock);
+		wake_up_interruptible(&sched->wake_up_worker);
 }
 
 /**
@@ -675,9 +667,7 @@ static void drm_sched_process_job(struct dma_fence *f, struct dma_fence_cb *cb)
 	trace_drm_sched_process_job(s_fence);
 
 	drm_sched_fence_finished(s_fence);
-	spin_lock(&sched->job_list_lock);
-	DRM_SPIN_WAKEUP_ONE(&sched->wake_up_worker, &sched->job_list_lock);
-	spin_unlock(&sched->job_list_lock);
+	wake_up_interruptible(&sched->wake_up_worker);
 }
 
 /**
@@ -692,8 +682,7 @@ static struct drm_sched_job *
 drm_sched_get_cleanup_job(struct drm_gpu_scheduler *sched)
 {
 	struct drm_sched_job *job;
-
-	assert_spin_locked(&sched->job_list_lock);
+	unsigned long flags;
 
 	/*
 	 * Don't destroy jobs while the timeout worker is running  OR thread
@@ -703,6 +692,8 @@ drm_sched_get_cleanup_job(struct drm_gpu_scheduler *sched)
 	    !cancel_delayed_work(&sched->work_tdr)) ||
 	    __kthread_should_park(sched->thread))
 		return NULL;
+
+	spin_lock_irqsave(&sched->job_list_lock, flags);
 
 	job = list_first_entry_or_null(&sched->ring_mirror_list,
 				       struct drm_sched_job, node);
@@ -715,6 +706,8 @@ drm_sched_get_cleanup_job(struct drm_gpu_scheduler *sched)
 		/* queue timeout for next job */
 		drm_sched_start_timeout(sched);
 	}
+
+	spin_unlock_irqrestore(&sched->job_list_lock, flags);
 
 	return job;
 }
@@ -751,12 +744,6 @@ static int drm_sched_main(void *param)
 
 	sched_setscheduler(current, SCHED_FIFO, &sparam);
 
-	/* Wait for sched->thread to be initialized by drm_sched_init.  */
-	spin_lock(&sched->job_list_lock);
-	DRM_SPIN_WAIT_UNTIL(r, &sched->wake_up_worker, &sched->job_list_lock,
-	    sched->thread != NULL);
-	spin_unlock(&sched->job_list_lock);
-
 	while (!kthread_should_stop()) {
 		struct drm_sched_entity *entity = NULL;
 		struct drm_sched_fence *s_fence;
@@ -764,14 +751,11 @@ static int drm_sched_main(void *param)
 		struct dma_fence *fence;
 		struct drm_sched_job *cleanup_job = NULL;
 
-		spin_lock(&sched->job_list_lock);
-		DRM_SPIN_WAIT_UNTIL(r, &sched->wake_up_worker,
-		    &sched->job_list_lock,
-		    ((cleanup_job = drm_sched_get_cleanup_job(sched)) ||
-			(!drm_sched_blocked(sched) &&
-			    (entity = drm_sched_select_entity(sched))) ||
-			kthread_should_stop()));
-		spin_unlock(&sched->job_list_lock);
+		wait_event_interruptible(sched->wake_up_worker,
+					 (cleanup_job = drm_sched_get_cleanup_job(sched)) ||
+					 (!drm_sched_blocked(sched) &&
+					  (entity = drm_sched_select_entity(sched))) ||
+					 kthread_should_stop());
 
 		if (cleanup_job) {
 			sched->ops->free_job(cleanup_job);
@@ -814,10 +798,7 @@ static int drm_sched_main(void *param)
 			drm_sched_process_job(NULL, &sched_job->cb);
 		}
 
-		spin_lock(&sched->job_list_lock);
-		DRM_SPIN_WAKEUP_ONE(&sched->job_scheduled,
-		    &sched->job_list_lock);
-		spin_unlock(&sched->job_list_lock);
+		wake_up(&sched->job_scheduled);
 	}
 	return 0;
 }
@@ -850,8 +831,8 @@ int drm_sched_init(struct drm_gpu_scheduler *sched,
 	for (i = DRM_SCHED_PRIORITY_MIN; i < DRM_SCHED_PRIORITY_MAX; i++)
 		drm_sched_rq_init(sched, &sched->sched_rq[i]);
 
-	DRM_INIT_WAITQUEUE(&sched->wake_up_worker, "drmschedw");
-	DRM_INIT_WAITQUEUE(&sched->job_scheduled, "drmschedj");
+	init_waitqueue_head(&sched->wake_up_worker);
+	init_waitqueue_head(&sched->job_scheduled);
 	INIT_LIST_HEAD(&sched->ring_mirror_list);
 	spin_lock_init(&sched->job_list_lock);
 	atomic_set(&sched->hw_rq_count, 0);
@@ -860,19 +841,13 @@ int drm_sched_init(struct drm_gpu_scheduler *sched,
 	atomic64_set(&sched->job_id_count, 0);
 
 	/* Each scheduler will run on a seperate kernel thread */
-	struct task_struct *thread =
-	    kthread_run(drm_sched_main, sched, sched->name,
-		&sched->job_list_lock, &sched->wake_up_worker);
-	if (IS_ERR(thread)) {
-		ret = PTR_ERR(thread);
+	sched->thread = kthread_run(drm_sched_main, sched, sched->name);
+	if (IS_ERR(sched->thread)) {
+		ret = PTR_ERR(sched->thread);
 		sched->thread = NULL;
 		DRM_ERROR("Failed to create scheduler for %s.\n", name);
 		return ret;
 	}
-	spin_lock(&sched->job_list_lock);
-	sched->thread = thread;
-	DRM_SPIN_WAKEUP_ALL(&sched->wake_up_worker, &sched->job_list_lock);
-	spin_unlock(&sched->job_list_lock);
 
 	sched->ready = true;
 	return 0;
@@ -892,14 +867,5 @@ void drm_sched_fini(struct drm_gpu_scheduler *sched)
 		kthread_stop(sched->thread);
 
 	sched->ready = false;
-
-	spin_lock_destroy(&sched->job_list_lock);
-	DRM_DESTROY_WAITQUEUE(&sched->job_scheduled);
-	DRM_DESTROY_WAITQUEUE(&sched->wake_up_worker);
-
-	for (int i = DRM_SCHED_PRIORITY_MIN; i < DRM_SCHED_PRIORITY_MAX; i++) {
-		struct drm_sched_rq *rq = &sched->sched_rq[i];
-		spin_lock_destroy(&rq->lock);
-	}
 }
 EXPORT_SYMBOL(drm_sched_fini);

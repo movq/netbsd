@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_syncobj.c,v 1.7 2021/12/19 12:35:45 riastradh Exp $	*/
+/*	$NetBSD: drm_syncobj.c,v 1.1 2021/12/18 20:11:03 riastradh Exp $	*/
 
 /*
  * Copyright 2017 Red Hat
@@ -125,7 +125,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_syncobj.c,v 1.7 2021/12/19 12:35:45 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_syncobj.c,v 1.1 2021/12/18 20:11:03 riastradh Exp $");
 
 #include <linux/anon_inodes.h>
 #include <linux/file.h>
@@ -146,24 +146,7 @@ __KERNEL_RCSID(0, "$NetBSD: drm_syncobj.c,v 1.7 2021/12/19 12:35:45 riastradh Ex
 
 struct syncobj_wait_entry {
 	struct list_head node;
-#ifdef __NetBSD__
-	/*
-	 * Lock order:
-	 *	syncobj->lock	????	fence lock
-	 *	syncobj->lock	then	wait->lock
-	 *	fence lock	then	wait->lock
-	 *
-	 * syncobj->lock serializes wait->node and wait->fence.
-	 * wait->lock serializes wait->signalledp, and, by
-	 * interlocking with syncobj->lock, coordinates wakeups on
-	 * wait->cv for wait->fence.
-	 */
-	kmutex_t	*lock;
-	kcondvar_t	*cv;
-	bool		*signalledp;
-#else
 	struct task_struct *task;
-#endif
 	struct dma_fence *fence;
 	struct dma_fence_cb fence_cb;
 	u64    point;
@@ -364,57 +347,10 @@ int drm_syncobj_find_fence(struct drm_file *file_private,
 		return ret;
 
 	memset(&wait, 0, sizeof(wait));
-#ifdef __NetBSD__
-	kmutex_t lock;
-	kcondvar_t cv;
-	mutex_init(&lock, MUTEX_DEFAULT, IPL_VM);
-	cv_init(&cv, "drmfnfnc");
-	wait.cv = &cv;
-#else
 	wait.task = current;
-#endif
 	wait.point = point;
 	drm_syncobj_fence_add_wait(syncobj, &wait);
 
-#ifdef __NetBSD__
-	spin_lock(&syncobj->lock);
-	ret = 0;
-	while (wait.fence == NULL) {
-		unsigned start, end;
-
-		if (timeout == 0) {
-			ret = -ETIME;
-			break;
-		}
-		mutex_spin_enter(&lock);
-		spin_unlock(&syncobj->lock);
-		start = getticks();
-		/* XXX errno NetBSD->Linux */
-		ret = -cv_timedwait_sig(&cv, &lock, MIN(timeout, INT_MAX/2));
-		end = getticks();
-		timeout -= MIN(timeout, end - start);
-		mutex_spin_exit(&lock);
-		spin_lock(&syncobj->lock);
-		KASSERTMSG((ret == 0 || ret == -EINTR || ret == -ERESTART ||
-			ret == -EWOULDBLOCK), "ret=%d", ret);
-		if (ret == -EINTR || ret == -ERESTART) {
-			ret = -ERESTARTSYS;
-			break;
-		} else if (ret == -EWOULDBLOCK) {
-			/* Check once more, then give up.  */
-			ret = 0;
-			timeout = 0;
-		} else {
-			KASSERT(ret == 0);
-		}
-	}
-	*fence = wait.fence;
-	if (wait.node.next)
-		list_del_init(&wait.node);
-	spin_unlock(&syncobj->lock);
-	cv_destroy(&cv);
-	mutex_destroy(&lock);
-#else
 	do {
 		set_current_state(TASK_INTERRUPTIBLE);
 		if (wait.fence) {
@@ -439,7 +375,6 @@ int drm_syncobj_find_fence(struct drm_file *file_private,
 
 	if (wait.node.next)
 		drm_syncobj_remove_wait(syncobj, &wait);
-#endif
 
 	return ret;
 }
@@ -457,7 +392,6 @@ void drm_syncobj_free(struct kref *kref)
 						   struct drm_syncobj,
 						   refcount);
 	drm_syncobj_replace_fence(syncobj, NULL);
-	spin_lock_destroy(&syncobj->lock);
 	kfree(syncobj);
 }
 EXPORT_SYMBOL(drm_syncobj_free);
@@ -565,40 +499,17 @@ static int drm_syncobj_destroy(struct drm_file *file_private,
 	return 0;
 }
 
-#ifdef __NetBSD__
-static int drm_syncobj_fop_close(struct file *file)
-#else
 static int drm_syncobj_file_release(struct inode *inode, struct file *file)
-#endif
 {
-#ifdef __NetBSD__
-	struct drm_syncobj *syncobj = file->f_data;
-#else
 	struct drm_syncobj *syncobj = file->private_data;
-#endif
 
 	drm_syncobj_put(syncobj);
 	return 0;
 }
 
-#ifdef __NetBSD__
-static const struct fileops drm_syncobj_file_ops = {
-	.fo_name = "drm_syncobj",
-	.fo_read = fbadop_read,
-	.fo_write = fbadop_write,
-	.fo_ioctl = fbadop_ioctl,
-	.fo_fcntl = fnullop_fcntl,
-	.fo_poll = fnullop_poll,
-	.fo_stat = fbadop_stat,
-	.fo_close = drm_syncobj_fop_close,
-	.fo_kqfilter = fnullop_kqfilter,
-	.fo_restart = fnullop_restart,
-};
-#else
 static const struct file_operations drm_syncobj_file_fops = {
 	.release = drm_syncobj_file_release,
 };
-#endif
 
 /**
  * drm_syncobj_get_fd - get a file descriptor from a syncobj
@@ -613,19 +524,7 @@ int drm_syncobj_get_fd(struct drm_syncobj *syncobj, int *p_fd)
 {
 	struct file *file;
 	int fd;
-#ifdef __NetBSD__
-	int ret;
-#endif
 
-#ifdef __NetBSD__
-	fd = -1;
-	/* XXX errno NetBSD->Linux */
-	ret = -fd_allocfile(&file, &fd);
-	if (ret)
-		return ret;
-	file->f_data = syncobj;
-	file->f_ops = &drm_syncobj_file_ops;
-#else
 	fd = get_unused_fd_flags(O_CLOEXEC);
 	if (fd < 0)
 		return fd;
@@ -637,7 +536,6 @@ int drm_syncobj_get_fd(struct drm_syncobj *syncobj, int *p_fd)
 		put_unused_fd(fd);
 		return PTR_ERR(file);
 	}
-#endif
 
 	drm_syncobj_get(syncobj);
 	fd_install(fd, file);
@@ -671,22 +569,13 @@ static int drm_syncobj_fd_to_handle(struct drm_file *file_private,
 	if (!f.file)
 		return -EINVAL;
 
-#ifdef __NetBSD__
-	if (f.file->f_ops != &drm_syncobj_file_ops)
-#else
-	if (f.file->f_op != &drm_syncobj_file_fops)
-#endif
-	{
+	if (f.file->f_op != &drm_syncobj_file_fops) {
 		fdput(f);
 		return -EINVAL;
 	}
 
 	/* take a reference to put in the idr */
-#ifdef __NetBSD__
-	syncobj = f.file->f_data;
-#else
 	syncobj = f.file->private_data;
-#endif
 	drm_syncobj_get(syncobj);
 
 	idr_preload(GFP_KERNEL);
@@ -729,50 +618,6 @@ static int drm_syncobj_import_sync_file_fence(struct drm_file *file_private,
 static int drm_syncobj_export_sync_file(struct drm_file *file_private,
 					int handle, int *p_fd)
 {
-#ifdef __NetBSD__
-	struct dma_fence *fence;
-	struct sync_file *sync_file;
-	struct file *fp = NULL;
-	int fd = -1;
-	int ret;
-
-	/* Allocate a file and descriptor.  */
-	/* XXX errno NetBSD->Linux */
-	ret = -fd_allocfile(&fp, &fd);
-	if (ret)
-		goto out;
-
-	/* Find the fence.  */
-	ret = drm_syncobj_find_fence(file_private, handle, 0, 0, &fence);
-	if (ret)
-		goto out;
-
-	/* Create the sync file.  */
-	sync_file = sync_file_create(fence, fp);
-
-	/* Release the fence.  */
-	dma_fence_put(fence);
-
-	/* If the sync file creation failed, bail.  */
-	if (sync_file == NULL)
-		goto out;
-
-	/* Success!  */
-	fd_affix(curproc, fp, fd);
-	fp = NULL;		/* sync_file consumes */
-	ret = 0;
-
-out:
-	/* If anything went wrong and we still have an unused file, abort.  */
-	if (fp != NULL) {
-		fd_abort(curproc, fp, fd);
-		fd = -1;
-	}
-
-	/* Return the descriptor or -1.  */
-	*p_fd = fd;
-	return ret;
-#else
 	int ret;
 	struct dma_fence *fence;
 	struct sync_file *sync_file;
@@ -801,7 +646,6 @@ out:
 err_put_fd:
 	put_unused_fd(fd);
 	return ret;
-#endif
 }
 /**
  * drm_syncobj_open - initalizes syncobj file-private structures at devnode open time
@@ -839,7 +683,6 @@ drm_syncobj_release(struct drm_file *file_private)
 {
 	idr_for_each(&file_private->syncobj_idr,
 		     &drm_syncobj_release_handle, file_private);
-	spin_lock_destroy(&file_private->syncobj_table_lock);
 	idr_destroy(&file_private->syncobj_idr);
 }
 
@@ -1004,14 +847,7 @@ static void syncobj_wait_fence_func(struct dma_fence *fence,
 	struct syncobj_wait_entry *wait =
 		container_of(cb, struct syncobj_wait_entry, fence_cb);
 
-#ifdef __NetBSD__
-	mutex_enter(wait->lock);
-	*wait->signalledp = true;
-	cv_broadcast(wait->cv);
-	mutex_exit(wait->lock);
-#else
 	wake_up_process(wait->task);
-#endif
 }
 
 static void syncobj_wait_syncobj_func(struct drm_syncobj *syncobj,
@@ -1026,22 +862,13 @@ static void syncobj_wait_syncobj_func(struct drm_syncobj *syncobj,
 	if (!fence || dma_fence_chain_find_seqno(&fence, wait->point)) {
 		dma_fence_put(fence);
 		return;
-	}
-
-	if (!fence) {
+	} else if (!fence) {
 		wait->fence = dma_fence_get_stub();
 	} else {
 		wait->fence = fence;
 	}
 
-#ifdef __NetBSD__
-	KASSERT(spin_is_locked(&syncobj->lock));
-	mutex_enter(wait->lock);
-	cv_broadcast(wait->cv);
-	mutex_exit(wait->lock);
-#else
 	wake_up_process(wait->task);
-#endif
 	list_del_init(&wait->node);
 }
 
@@ -1056,14 +883,6 @@ static signed long drm_syncobj_array_wait_timeout(struct drm_syncobj **syncobjs,
 	struct dma_fence *fence;
 	uint64_t *points;
 	uint32_t signaled_count, i;
-#ifdef __NetBSD__
-	kmutex_t lock;
-	kcondvar_t cv;
-	bool signalled = false;
-	int ret;
-	mutex_init(&lock, MUTEX_DEFAULT, IPL_VM);
-	cv_init(&cv, "drmsynco");
-#endif
 
 	points = kmalloc_array(count, sizeof(*points), GFP_KERNEL);
 	if (points == NULL)
@@ -1090,13 +909,9 @@ static signed long drm_syncobj_array_wait_timeout(struct drm_syncobj **syncobjs,
 	 */
 	signaled_count = 0;
 	for (i = 0; i < count; ++i) {
-#ifdef __NetBSD__
-		entries[i].lock = &lock;
-		entries[i].cv = &cv;
-		entries[i].signalledp = &signalled;
-#else
+		struct dma_fence *fence;
+
 		entries[i].task = current;
-#endif
 		entries[i].point = points[i];
 		fence = drm_syncobj_fence_get(syncobjs[i]);
 		if (!fence || dma_fence_chain_find_seqno(&fence, points[i])) {
@@ -1140,9 +955,7 @@ static signed long drm_syncobj_array_wait_timeout(struct drm_syncobj **syncobjs,
 	}
 
 	do {
-#ifndef __NetBSD__
 		set_current_state(TASK_INTERRUPTIBLE);
-#endif
 
 		signaled_count = 0;
 		for (i = 0; i < count; ++i) {
@@ -1175,46 +988,16 @@ static signed long drm_syncobj_array_wait_timeout(struct drm_syncobj **syncobjs,
 			goto done_waiting;
 		}
 
-#ifdef __NetBSD__
-		mutex_spin_enter(&lock);
-		if (signalled) {
-			ret = 0;
-		} else {
-			unsigned start, end;
-
-			start = getticks();
-			/* XXX errno NetBSD->Linux */
-			ret = -cv_timedwait_sig(&cv, &lock,
-			    MIN(timeout, INT_MAX/2));
-			end = getticks();
-			timeout -= MIN(timeout, end - start);
-		}
-		mutex_spin_exit(&lock);
-		KASSERTMSG((ret == 0 || ret == -EINTR || ret == -ERESTART ||
-			ret == -EWOULDBLOCK), "ret=%d", ret);
-		if (ret == -EINTR || ret == -ERESTART) {
-			timeout = -ERESTARTSYS;
-			goto done_waiting;
-		} else if (ret == -EWOULDBLOCK) {
-			/* Poll fences once more, then exit.  */
-			timeout = 0;
-		} else {
-			KASSERT(ret == 0);
-		}
-#else
 		if (signal_pending(current)) {
 			timeout = -ERESTARTSYS;
 			goto done_waiting;
 		}
 
 		timeout = schedule_timeout(timeout);
-#endif
 	} while (1);
 
 done_waiting:
-#ifndef __NetBSD__
 	__set_current_state(TASK_RUNNING);
-#endif
 
 cleanup_entries:
 	for (i = 0; i < count; ++i) {
@@ -1228,10 +1011,6 @@ cleanup_entries:
 
 err_free_points:
 	kfree(points);
-#ifdef __NetBSD__
-	cv_destroy(&cv);
-	mutex_destroy(&lock);
-#endif
 
 	return timeout;
 }

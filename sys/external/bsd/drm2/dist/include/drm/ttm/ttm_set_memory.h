@@ -1,4 +1,4 @@
-/*	$NetBSD: ttm_set_memory.h,v 1.4 2021/12/19 12:40:44 riastradh Exp $	*/
+/*	$NetBSD: ttm_set_memory.h,v 1.1 2021/12/18 20:15:57 riastradh Exp $	*/
 
 /**************************************************************************
  *
@@ -35,7 +35,7 @@
 
 #include <linux/mm.h>
 
-#if defined(CONFIG_X86) && !defined(__NetBSD__)
+#ifdef CONFIG_X86
 
 #include <asm/set_memory.h>
 

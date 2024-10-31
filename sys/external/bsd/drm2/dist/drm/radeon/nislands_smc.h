@@ -1,5 +1,3 @@
-/*	$NetBSD: nislands_smc.h,v 1.3 2021/12/18 23:45:42 riastradh Exp $	*/
-
 /*
  * Copyright 2012 Advanced Micro Devices, Inc.
  *

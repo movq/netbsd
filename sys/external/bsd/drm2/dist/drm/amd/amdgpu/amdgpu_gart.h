@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_gart.h,v 1.4 2021/12/19 12:21:29 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_gart.h,v 1.1 2021/12/18 20:11:06 riastradh Exp $	*/
 
 /*
  * Copyright 2017 Advanced Micro Devices, Inc.
@@ -42,10 +42,6 @@ struct amdgpu_bo;
 #define AMDGPU_GPU_PAGES_IN_CPU_PAGE (PAGE_SIZE / AMDGPU_GPU_PAGE_SIZE)
 
 struct amdgpu_gart {
-#ifdef __NetBSD__
-	bus_dma_segment_t		ag_table_seg;
-	bus_dmamap_t			ag_table_map;
-#endif
 	struct amdgpu_bo		*bo;
 	/* CPU kmapped address of gart table */
 	void				*ptr;
@@ -67,16 +63,6 @@ int amdgpu_gart_table_vram_pin(struct amdgpu_device *adev);
 void amdgpu_gart_table_vram_unpin(struct amdgpu_device *adev);
 int amdgpu_gart_init(struct amdgpu_device *adev);
 void amdgpu_gart_fini(struct amdgpu_device *adev);
-#ifdef __NetBSD__
-int amdgpu_gart_unbind(struct amdgpu_device *adev, uint64_t gpu_start,
-    unsigned npages);
-int amdgpu_gart_map(struct amdgpu_device *adev, uint64_t gpu_start,
-    unsigned npages, bus_size_t map_start, bus_dmamap_t map, uint32_t flags,
-    void *dst);
-int amdgpu_gart_bind(struct amdgpu_device *adev, uint64_t gpu_start,
-    unsigned npages, struct page **pagelist, bus_dmamap_t dmamap,
-    uint32_t flags);
-#else
 int amdgpu_gart_unbind(struct amdgpu_device *adev, uint64_t offset,
 		       int pages);
 int amdgpu_gart_map(struct amdgpu_device *adev, uint64_t offset,
@@ -85,6 +71,5 @@ int amdgpu_gart_map(struct amdgpu_device *adev, uint64_t offset,
 int amdgpu_gart_bind(struct amdgpu_device *adev, uint64_t offset,
 		     int pages, struct page **pagelist,
 		     dma_addr_t *dma_addr, uint64_t flags);
-#endif
 
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_gtt.h,v 1.13 2022/08/20 23:19:09 riastradh Exp $	*/
+/*	$NetBSD: intel_gtt.h,v 1.1 2021/12/18 20:15:32 riastradh Exp $	*/
 
 /* SPDX-License-Identifier: MIT */
 /*
@@ -19,8 +19,6 @@
 #define __INTEL_GTT_H__
 
 #include <linux/io-mapping.h>
-#include <linux/ioport.h>
-#include <linux/highmem.h>
 #include <linux/kref.h>
 #include <linux/mm.h>
 #include <linux/pagevec.h>
@@ -33,17 +31,6 @@
 #include "i915_gem_fence_reg.h"
 #include "i915_selftest.h"
 #include "i915_vma_types.h"
-
-#ifdef __NetBSD__
-#include <drm/bus_dma_hacks.h>
-#include <x86/machdep.h>
-#include <machine/pte.h>
-#define	_PAGE_PRESENT	PTE_P	/* 0x01 PTE is present / valid */
-#define	_PAGE_RW	PTE_W	/* 0x02 read/write */
-#define	_PAGE_PWT	PTE_PWT	/* 0x08 write-through */
-#define	_PAGE_PCD	PTE_PCD	/* 0x10 page cache disabled / non-cacheable */
-#define	_PAGE_PAT	PTE_PAT	/* 0x80 page attribute table on PTE */
-#endif
 
 #define I915_GFP_ALLOW_FAIL (GFP_KERNEL | __GFP_RETRY_MAYFAIL | __GFP_NOWARN)
 
@@ -155,13 +142,6 @@ typedef u64 gen8_pte_t;
 
 struct i915_page_dma {
 	struct page *page;
-#ifdef __NetBSD__
-	union {
-		bus_dma_segment_t seg;
-		uint32_t ggtt_offset;
-	};
-	bus_dmamap_t map;
-#else
 	union {
 		dma_addr_t daddr;
 
@@ -171,7 +151,6 @@ struct i915_page_dma {
 		 */
 		u32 ggtt_offset;
 	};
-#endif
 };
 
 struct i915_page_scratch {
@@ -194,7 +173,7 @@ struct i915_page_directory {
 	__builtin_choose_expr( \
 	__builtin_types_compatible_p(typeof(x), type) || \
 	__builtin_types_compatible_p(typeof(x), const type), \
-	({ type __x = (type)__UNCONST(x); expr; }), \
+	({ type __x = (type)(x); expr; }), \
 	other)
 
 #define px_base(px) \
@@ -203,11 +182,7 @@ struct i915_page_directory {
 	__px_choose_expr(px, struct i915_page_table *, &__x->base, \
 	__px_choose_expr(px, struct i915_page_directory *, &__x->pt.base, \
 	(void)0))))
-#ifdef __NetBSD__
-#define px_dma(px) (px_base(px)->map->dm_segs[0].ds_addr)
-#else
 #define px_dma(px) (px_base(px)->daddr)
-#endif
 
 #define px_pt(px) \
 	__px_choose_expr(px, struct i915_page_table *, __x, \
@@ -238,10 +213,8 @@ struct i915_vma_ops {
 };
 
 struct pagestash {
-#ifndef __NetBSD__
 	spinlock_t lock;
 	struct pagevec pvec;
-#endif
 };
 
 void stash_init(struct pagestash *stash);
@@ -253,12 +226,7 @@ struct i915_address_space {
 	struct drm_mm mm;
 	struct intel_gt *gt;
 	struct drm_i915_private *i915;
-#ifdef __NetBSD__
-	bus_dma_tag_t dmat;
-#else
 	struct device *dma;
-#endif
-
 	/*
 	 * Every address space belongs to a struct file - except for the global
 	 * GTT that is owned by the driver (and so @file is set to NULL). In
@@ -296,9 +264,7 @@ struct i915_address_space {
 	 */
 	struct list_head bound_list;
 
-#ifndef __NetBSD__
 	struct pagestash free_pages;
-#endif
 
 	/* Global GTT */
 	bool is_ggtt:1;
@@ -351,26 +317,7 @@ struct i915_ggtt {
 	resource_size_t mappable_end;	/* End offset that we can CPU map */
 
 	/** "Graphics Stolen Memory" holds the global PTEs */
-#ifdef __NetBSD__
-	/*
-	 * This is not actually the `Graphics Stolen Memory'; it is the
-	 * graphics translation table, which we write to through the
-	 * GTTADR/GTTMMADR PCI BAR, and which is backed by `Graphics
-	 * GTT Stolen Memory'.  That isn't the `Graphics Stolen Memory'
-	 * either, although it is stolen from main memory.
-	 */
-	bus_space_tag_t		gsmt;
-	bus_space_handle_t	gsmh;
-	bus_size_t		gsmsz;
-
-	/* Maximum physical address that can be wired into a GTT entry.  */
-	uint64_t		max_paddr;
-
-	/* Page freelist for pages limited to the above maximum address.  */
-	int			pgfl;
-#else
 	void __iomem *gsm;
-#endif
 	void (*invalidate)(struct i915_ggtt *ggtt);
 
 	/** PPGTT used for aliasing the PPGTT with the GTT */
@@ -629,18 +576,6 @@ void gtt_write_workarounds(struct intel_gt *gt);
 
 void setup_private_pat(struct intel_uncore *uncore);
 
-#ifdef __NetBSD__
-struct sgt_dma {
-	bus_dmamap_t map;
-	unsigned seg;
-	bus_size_t off;
-};
-static inline struct sgt_dma
-sgt_dma(struct i915_vma *vma)
-{
-	return (struct sgt_dma) { vma->pages->sgl->sg_dmamap, 0, 0 };
-}
-#else
 static inline struct sgt_dma {
 	struct scatterlist *sg;
 	dma_addr_t dma, max;
@@ -650,6 +585,5 @@ static inline struct sgt_dma {
 
 	return (struct sgt_dma){ sg, addr, addr + sg->length };
 }
-#endif
 
 #endif

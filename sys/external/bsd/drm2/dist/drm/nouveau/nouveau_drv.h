@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_drv.h,v 1.5 2024/04/16 14:34:02 riastradh Exp $	*/
+/*	$NetBSD: nouveau_drv.h,v 1.1 2021/12/18 20:15:35 riastradh Exp $	*/
 
 /* SPDX-License-Identifier: MIT */
 #ifndef __NOUVEAU_DRV_H__
@@ -40,7 +40,6 @@
  *      - implemented limited ABI16/NVIF interop
  */
 
-#include <linux/acpi.h>
 #include <linux/notifier.h>
 
 #include <nvif/client.h>
@@ -236,15 +235,8 @@ nouveau_drm_use_coherent_gpu_mapping(struct nouveau_drm *drm)
 	return !(mmu->type[drm->ttm.type_host[0]].type & NVIF_MEM_UNCACHED);
 }
 
-#ifdef __NetBSD__
-int nouveau_drm_device_init(struct drm_device *);
-void nouveau_drm_device_fini(struct drm_device *);
-int nouveau_pmops_suspend(struct drm_device *);
-int nouveau_pmops_resume(struct drm_device *);
-#else
 int nouveau_pmops_suspend(struct device *);
 int nouveau_pmops_resume(struct device *);
-#endif
 bool nouveau_pmops_runtime(void);
 
 #include <nvkm/core/tegra.h>

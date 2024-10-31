@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_dispnv50_disp.c,v 1.7 2021/12/26 21:00:14 riastradh Exp $	*/
+/*	$NetBSD: nouveau_dispnv50_disp.c,v 1.1 2021/12/18 20:15:36 riastradh Exp $	*/
 
 /*
  * Copyright 2011 Red Hat Inc.
@@ -24,7 +24,7 @@
  * Authors: Ben Skeggs
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_dispnv50_disp.c,v 1.7 2021/12/26 21:00:14 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_dispnv50_disp.c,v 1.1 2021/12/18 20:15:36 riastradh Exp $");
 
 #include "disp.h"
 #include "atom.h"
@@ -58,11 +58,8 @@ __KERNEL_RCSID(0, "$NetBSD: nouveau_dispnv50_disp.c,v 1.7 2021/12/26 21:00:14 ri
 #include "nouveau_encoder.h"
 #include "nouveau_fence.h"
 #include "nouveau_fbcon.h"
-#include "nv50_display.h"
 
 #include <subdev/bios/dp.h>
-
-#include <linux/nbsd-namespace.h>
 
 /******************************************************************************
  * Atomic state
@@ -105,15 +102,8 @@ nv50_chan_create(struct nvif_device *device, struct nvif_object *disp,
 			if (sclass[i].oclass == oclass[0]) {
 				ret = nvif_object_init(disp, 0, oclass[0],
 						       data, size, &chan->user);
-				if (ret == 0) {
-					ret = nvif_object_map(&chan->user, NULL, 0);
-					if (ret) {
-						printk(KERN_ERR "%s:%d"
-						    ": nvif_object_map, %d\n",
-						    __func__, __LINE__, ret);
-						nvif_object_fini(&chan->user);
-					}
-				}
+				if (ret == 0)
+					nvif_object_map(&chan->user, NULL, 0);
 				nvif_object_sclass_put(&sclass);
 				return ret;
 			}
@@ -138,7 +128,6 @@ nv50_chan_destroy(struct nv50_chan *chan)
 void
 nv50_dmac_destroy(struct nv50_dmac *dmac)
 {
-	spin_lock_destroy(&dmac->lock);
 	nvif_object_fini(&dmac->vram);
 	nvif_object_fini(&dmac->sync);
 
@@ -157,7 +146,7 @@ nv50_dmac_create(struct nvif_device *device, struct nvif_object *disp,
 	u8 type = NVIF_MEM_COHERENT;
 	int ret;
 
-	spin_lock_init(&dmac->lock);
+	mutex_init(&dmac->lock);
 
 	/* Pascal added support for 47-bit physical addresses, but some
 	 * parts of EVO still only accept 40-bit PAs.
@@ -175,7 +164,7 @@ nv50_dmac_create(struct nvif_device *device, struct nvif_object *disp,
 	if (ret)
 		return ret;
 
-	dmac->ptr = __UNVOLATILE(dmac->push.object.map.ptr);
+	dmac->ptr = dmac->push.object.map.ptr;
 
 	args->pushbuf = nvif_handle(&dmac->push.object);
 
@@ -238,7 +227,7 @@ evo_wait(struct nv50_dmac *evoc, int nr)
 	struct nvif_device *device = dmac->base.device;
 	u32 put = nvif_rd32(&dmac->base.user, 0x0000) / 4;
 
-	spin_lock(&dmac->lock);
+	mutex_lock(&dmac->lock);
 	if (put + nr >= (PAGE_SIZE / 4) - 8) {
 		dmac->ptr[put] = 0x20000000;
 		evo_flush(dmac);
@@ -248,7 +237,7 @@ evo_wait(struct nv50_dmac *evoc, int nr)
 			if (!nvif_rd32(&dmac->base.user, 0x0004))
 				break;
 		) < 0) {
-			spin_unlock(&dmac->lock);
+			mutex_unlock(&dmac->lock);
 			pr_err("nouveau: evo channel stalled\n");
 			return NULL;
 		}
@@ -267,7 +256,7 @@ evo_kick(u32 *push, struct nv50_dmac *evoc)
 	evo_flush(dmac);
 
 	nvif_wr32(&dmac->base.user, 0x0000, (push - dmac->ptr) << 2);
-	spin_unlock(&dmac->lock);
+	mutex_unlock(&dmac->lock);
 }
 
 /******************************************************************************
@@ -499,14 +488,10 @@ nv50_dac_create(struct drm_connector *connector, struct dcb_output *dcbe)
 static void
 nv50_audio_component_eld_notify(struct drm_audio_component *acomp, int port)
 {
-#ifndef __NetBSD__		/* XXX nouveau audio component */
 	if (acomp && acomp->audio_ops && acomp->audio_ops->pin_eld_notify)
 		acomp->audio_ops->pin_eld_notify(acomp->audio_ops->audio_ptr,
 						 port, -1);
-#endif
 }
-
-#ifndef __NetBSD__		/* XXX nouveau audio component */
 
 static int
 nv50_audio_component_get_eld(struct device *kdev, int port, int pipe,
@@ -581,26 +566,20 @@ static const struct component_ops nv50_audio_component_bind_ops = {
 	.unbind = nv50_audio_component_unbind,
 };
 
-#endif
-
 static void
 nv50_audio_component_init(struct nouveau_drm *drm)
 {
-#ifndef __NetBSD__		/* XXX nouveau audio component */
 	if (!component_add(drm->dev->dev, &nv50_audio_component_bind_ops))
 		drm->audio.component_registered = true;
-#endif
 }
 
 static void
 nv50_audio_component_fini(struct nouveau_drm *drm)
 {
-#ifndef __NetBSD__		/* XXX nouveau audio component */
 	if (drm->audio.component_registered) {
 		component_del(drm->dev->dev, &nv50_audio_component_bind_ops);
 		drm->audio.component_registered = false;
 	}
-#endif
 }
 
 /******************************************************************************
@@ -1237,7 +1216,7 @@ nv50_mstm_cleanup(struct nv50_mstm *mstm)
 {
 	struct nouveau_drm *drm = nouveau_drm(mstm->outp->base.base.dev);
 	struct drm_encoder *encoder;
-	int ret __unused;
+	int ret;
 
 	NV_ATOMIC(drm, "%s: mstm cleanup\n", mstm->outp->base.base.name);
 	ret = drm_dp_check_act_status(&mstm->mgr);
@@ -1261,7 +1240,7 @@ nv50_mstm_prepare(struct nv50_mstm *mstm)
 {
 	struct nouveau_drm *drm = nouveau_drm(mstm->outp->base.base.dev);
 	struct drm_encoder *encoder;
-	int ret __unused;
+	int ret;
 
 	NV_ATOMIC(drm, "%s: mstm prepare\n", mstm->outp->base.base.name);
 	ret = drm_dp_update_payload_part1(&mstm->mgr);
@@ -2136,9 +2115,9 @@ nv50_disp_atomic_commit_tail(struct drm_atomic_state *state)
 		if (new_crtc_state->event) {
 			unsigned long flags;
 			/* Get correct count/ts if racing with vblank irq */
-			spin_lock_irqsave(&crtc->dev->event_lock, flags);
 			if (new_crtc_state->active)
 				drm_crtc_accurate_vblank_count(crtc);
+			spin_lock_irqsave(&crtc->dev->event_lock, flags);
 			drm_crtc_send_vblank_event(crtc, new_crtc_state->event);
 			spin_unlock_irqrestore(&crtc->dev->event_lock, flags);
 
@@ -2455,7 +2434,6 @@ nv50_display_destroy(struct drm_device *dev)
 	nouveau_bo_ref(NULL, &disp->sync);
 
 	nouveau_display(dev)->priv = NULL;
-	mutex_destroy(&disp->mutex);
 	kfree(disp);
 }
 

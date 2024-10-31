@@ -1,5 +1,3 @@
-/*	$NetBSD: rv770_dpm.h,v 1.3 2021/12/18 23:45:43 riastradh Exp $	*/
-
 /*
  * Copyright 2011 Advanced Micro Devices, Inc.
  *
@@ -25,7 +23,6 @@
 #ifndef __RV770_DPM_H__
 #define __RV770_DPM_H__
 
-#include "radeon.h"
 #include "rv770_smc.h"
 
 struct rv770_clock_registers {
@@ -281,6 +278,8 @@ void rv770_set_uvd_clock_after_set_eng_clock(struct radeon_device *rdev,
 void rv770_get_engine_memory_ss(struct radeon_device *rdev);
 
 /* smc */
+int rv770_read_smc_soft_register(struct radeon_device *rdev,
+				 u16 reg_offset, u32 *value);
 int rv770_write_smc_soft_register(struct radeon_device *rdev,
 				  u16 reg_offset, u32 value);
 

@@ -1,5 +1,3 @@
-/*	$NetBSD: sumo_dpm.h,v 1.3 2021/12/18 23:45:43 riastradh Exp $	*/
-
 /*
  * Copyright 2012 Advanced Micro Devices, Inc.
  *
@@ -26,7 +24,6 @@
 #define __SUMO_DPM_H__
 
 #include "atom.h"
-#include "radeon.h"
 
 #define SUMO_MAX_HARDWARE_POWERLEVELS 5
 #define SUMO_PM_NUMBER_OF_TC 15
@@ -205,6 +202,9 @@ void sumo_construct_vid_mapping_table(struct radeon_device *rdev,
 u32 sumo_convert_vid2_to_vid7(struct radeon_device *rdev,
 			      struct sumo_vid_mapping_table *vid_mapping_table,
 			      u32 vid_2bit);
+u32 sumo_convert_vid7_to_vid2(struct radeon_device *rdev,
+			      struct sumo_vid_mapping_table *vid_mapping_table,
+			      u32 vid_7bit);
 u32 sumo_get_sleep_divider_from_id(u32 id);
 u32 sumo_get_sleep_divider_id_from_clock(struct radeon_device *rdev,
 					 u32 sclk,

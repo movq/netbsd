@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_print.c,v 1.16 2021/12/29 23:59:37 riastradh Exp $	*/
+/*	$NetBSD: drm_print.c,v 1.1 2021/12/18 20:11:03 riastradh Exp $	*/
 
 /*
  * Copyright (C) 2016 Red Hat
@@ -26,22 +26,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_print.c,v 1.16 2021/12/29 23:59:37 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_print.c,v 1.1 2021/12/18 20:11:03 riastradh Exp $");
 
-#ifndef __NetBSD__		/* XXX ??? */
 #define DEBUG /* for pr_debug() */
-#endif
 
-#ifdef __NetBSD__
-#include <sys/param.h>
-#include <sys/stdarg.h>
-#include <sys/cpu.h>
-#include <sys/device.h>
-#include <sys/ksyms.h>
-#include <sys/pserialize.h>
-#else
 #include <stdarg.h>
-#endif
 
 #include <linux/io.h>
 #include <linux/moduleparam.h>
@@ -69,34 +58,6 @@ MODULE_PARM_DESC(debug, "Enable debug output, where each bit enables a debug cat
 "\t\tBit 7 (0x80)  will enable LEASE messages (leasing code)\n"
 "\t\tBit 8 (0x100) will enable DP messages (displayport code)");
 module_param_named(debug, __drm_debug, int, 0600);
-
-#ifdef __NetBSD__
-static void
-drm_symstr(vaddr_t val, char *out, size_t outsize)
-{
-	unsigned long naddr;
-	const char *mod;
-	const char *sym;
-	int s;
-
-	s = pserialize_read_enter();
-	if (ksyms_getname(&mod, &sym, val, KSYMS_PROC|KSYMS_CLOSEST) == 0) {
-		char offset[32];
-
-		if (ksyms_getval(mod, sym, &naddr, KSYMS_ANY) == 0 &&
-		    (val - naddr) != 0)
-			snprintf(offset, sizeof offset, "+%p",
-			    (void *)(val - naddr));
-		else
-			offset[0] = '\0';
-		pserialize_read_exit(s);
-		snprintf(out, outsize, "%s:%s%s", mod, sym, offset);
-		return;
-	}
-	pserialize_read_exit(s);
-	snprintf(out, outsize, "%p", (void *)val);
-}
-#endif
 
 void __drm_puts_coredump(struct drm_printer *p, const char *str)
 {
@@ -132,7 +93,7 @@ void __drm_puts_coredump(struct drm_printer *p, const char *str)
 
 		len = min_t(ssize_t, strlen(str), iterator->remain);
 
-		memcpy((char *)iterator->data + pos, str, len);
+		memcpy(iterator->data + pos, str, len);
 
 		iterator->offset += len;
 		iterator->remain -= len;
@@ -186,52 +147,33 @@ void __drm_printfn_coredump(struct drm_printer *p, struct va_format *vaf)
 }
 EXPORT_SYMBOL(__drm_printfn_coredump);
 
-#ifndef __NetBSD__		/* XXX seq file */
 void __drm_puts_seq_file(struct drm_printer *p, const char *str)
 {
 	seq_puts(p->arg, str);
 }
 EXPORT_SYMBOL(__drm_puts_seq_file);
-#endif
 
-#ifndef __NetBSD__		/* XXX seq file */
 void __drm_printfn_seq_file(struct drm_printer *p, struct va_format *vaf)
 {
 	seq_printf(p->arg, "%pV", vaf);
 }
 EXPORT_SYMBOL(__drm_printfn_seq_file);
-#endif
 
 void __drm_printfn_info(struct drm_printer *p, struct va_format *vaf)
 {
-#ifdef __NetBSD__
-	dev_info(p->arg, "{" DRM_NAME "} ");
-	vprintf(vaf->fmt, *vaf->va);	/* XXX */
-#else
 	dev_info(p->arg, "[" DRM_NAME "] %pV", vaf);
-#endif
 }
 EXPORT_SYMBOL(__drm_printfn_info);
 
 void __drm_printfn_debug(struct drm_printer *p, struct va_format *vaf)
 {
-#ifdef __NetBSD__
-	pr_debug("%s ", p->prefix);
-	vprintf(vaf->fmt, *vaf->va);	/* XXX */
-#else
 	pr_debug("%s %pV", p->prefix, vaf);
-#endif
 }
 EXPORT_SYMBOL(__drm_printfn_debug);
 
 void __drm_printfn_err(struct drm_printer *p, struct va_format *vaf)
 {
-#ifdef __NetBSD__
-	pr_err("*ERROR* %s ", p->prefix);
-	vprintf(vaf->fmt, *vaf->va);	/* XXX */
-#else
 	pr_err("*ERROR* %s %pV", p->prefix, vaf);
-#endif
 }
 EXPORT_SYMBOL(__drm_printfn_err);
 
@@ -301,22 +243,6 @@ EXPORT_SYMBOL(drm_print_bits);
 void drm_dev_printk(const struct device *dev, const char *level,
 		    const char *format, ...)
 {
-#ifdef __NetBSD__
-	va_list va;
-	char symbuf[128];
-
-	drm_symstr((vaddr_t)__builtin_return_address(0), symbuf, sizeof symbuf);
-	if (dev) {
-		printf("%s {" DRM_NAME ":%s} ", device_xname(__UNCONST(dev)),
-		    symbuf);
-	} else {
-		printf("{" DRM_NAME ":%s} ", symbuf);
-	}
-
-	va_start(va, format);
-	vprintf(format, va);
-	va_end(va);
-#else
 	struct va_format vaf;
 	va_list args;
 
@@ -332,32 +258,12 @@ void drm_dev_printk(const struct device *dev, const char *level,
 		       level, __builtin_return_address(0), &vaf);
 
 	va_end(args);
-#endif
 }
 EXPORT_SYMBOL(drm_dev_printk);
 
 void drm_dev_dbg(const struct device *dev, enum drm_debug_category category,
 		 const char *format, ...)
 {
-#ifdef __NetBSD__
-	va_list va;
-	char symbuf[128];
-
-	if (!(__drm_debug & category))
-		return;
-
-	drm_symstr((vaddr_t)__builtin_return_address(0), symbuf, sizeof symbuf);
-	if (dev) {
-		printf("%s {" DRM_NAME ":%s} ", device_xname(__UNCONST(dev)),
-		    symbuf);
-	} else {
-		printf("{" DRM_NAME ":%s} ", symbuf);
-	}
-
-	va_start(va, format);
-	vprintf(format, va);
-	va_end(va);
-#else
 	struct va_format vaf;
 	va_list args;
 
@@ -376,27 +282,11 @@ void drm_dev_dbg(const struct device *dev, enum drm_debug_category category,
 		       __builtin_return_address(0), &vaf);
 
 	va_end(args);
-#endif
 }
 EXPORT_SYMBOL(drm_dev_dbg);
 
 void __drm_dbg(enum drm_debug_category category, const char *format, ...)
 {
-#ifdef __NetBSD__
-	char symbuf[128];
-	va_list va;
-
-	if (!(__drm_debug & category))
-		return;
-
-	memset(symbuf, 0, sizeof symbuf);
-	drm_symstr((vaddr_t)__builtin_return_address(0), symbuf, sizeof symbuf);
-	printf("{" DRM_NAME ":%s} ", symbuf);
-
-	va_start(va, format);
-	vprintf(format, va);
-	va_end(va);
-#else
 	struct va_format vaf;
 	va_list args;
 
@@ -411,23 +301,11 @@ void __drm_dbg(enum drm_debug_category category, const char *format, ...)
 	       __builtin_return_address(0), &vaf);
 
 	va_end(args);
-#endif
 }
 EXPORT_SYMBOL(__drm_dbg);
 
 void __drm_err(const char *format, ...)
 {
-#ifdef __NetBSD__
-	char symbuf[128];
-	va_list va;
-
-	drm_symstr((vaddr_t)__builtin_return_address(0), symbuf, sizeof symbuf);
-	printf("{" DRM_NAME ":%s} *ERROR* ", symbuf);
-
-	va_start(va, format);
-	vprintf(format, va);
-	va_end(va);
-#else
 	struct va_format vaf;
 	va_list args;
 
@@ -439,11 +317,9 @@ void __drm_err(const char *format, ...)
 	       __builtin_return_address(0), &vaf);
 
 	va_end(args);
-#endif
 }
 EXPORT_SYMBOL(__drm_err);
 
-#ifndef __NetBSD__
 /**
  * drm_print_regset32 - print the contents of registers to a
  * &drm_printer stream.
@@ -471,4 +347,3 @@ void drm_print_regset32(struct drm_printer *p, struct debugfs_regset32 *regset)
 	}
 }
 EXPORT_SYMBOL(drm_print_regset32);
-#endif

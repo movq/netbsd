@@ -1,9 +1,9 @@
-/*	$NetBSD: vmwgfx_cmdbuf_res.c,v 1.3 2021/12/18 23:45:45 riastradh Exp $	*/
+/*	$NetBSD: vmwgfx_cmdbuf_res.c,v 1.1 2018/08/27 01:34:59 riastradh Exp $	*/
 
-// SPDX-License-Identifier: GPL-2.0 OR MIT
 /**************************************************************************
  *
- * Copyright 2014-2015 VMware, Inc., Palo Alto, CA., USA
+ * Copyright © 2014-2015 VMware, Inc., Palo Alto, CA., USA
+ * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the
@@ -28,7 +28,7 @@
  **************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vmwgfx_cmdbuf_res.c,v 1.3 2021/12/18 23:45:45 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vmwgfx_cmdbuf_res.c,v 1.1 2018/08/27 01:34:59 riastradh Exp $");
 
 #include "vmwgfx_drv.h"
 #include "vmwgfx_resource_priv.h"
@@ -94,7 +94,8 @@ vmw_cmdbuf_res_lookup(struct vmw_cmdbuf_res_manager *man,
 	if (unlikely(ret != 0))
 		return ERR_PTR(ret);
 
-	return drm_hash_entry(hash, struct vmw_cmdbuf_res, hash)->res;
+	return vmw_resource_reference
+		(drm_hash_entry(hash, struct vmw_cmdbuf_res, hash)->res);
 }
 
 /**
@@ -209,15 +210,13 @@ int vmw_cmdbuf_res_add(struct vmw_cmdbuf_res_manager *man,
 	int ret;
 
 	cres = kzalloc(sizeof(*cres), GFP_KERNEL);
-	if (unlikely(!cres))
+	if (unlikely(cres == NULL))
 		return -ENOMEM;
 
 	cres->hash.key = user_key | (res_type << 24);
 	ret = drm_ht_insert_item(&man->resources, &cres->hash);
-	if (unlikely(ret != 0)) {
-		kfree(cres);
+	if (unlikely(ret != 0))
 		goto out_invalid_key;
-	}
 
 	cres->state = VMW_CMDBUF_RES_ADD;
 	cres->res = vmw_resource_reference(res);
@@ -297,7 +296,7 @@ vmw_cmdbuf_res_man_create(struct vmw_private *dev_priv)
 	int ret;
 
 	man = kzalloc(sizeof(*man), GFP_KERNEL);
-	if (!man)
+	if (man == NULL)
 		return ERR_PTR(-ENOMEM);
 
 	man->dev_priv = dev_priv;

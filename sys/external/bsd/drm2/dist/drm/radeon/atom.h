@@ -1,5 +1,3 @@
-/*	$NetBSD: atom.h,v 1.4 2021/12/18 23:45:42 riastradh Exp $	*/
-
 /*
  * Copyright 2008 Advanced Micro Devices, Inc.
  *
@@ -27,8 +25,8 @@
 #ifndef ATOM_H
 #define ATOM_H
 
-#include <linux/mutex.h>
 #include <linux/types.h>
+#include <drm/drmP.h>
 
 #define ATOM_BIOS_MAGIC		0xAA55
 #define ATOM_ATI_MAGIC_PTR	0x30
@@ -127,8 +125,7 @@ struct card_info {
 struct atom_context {
 	struct card_info *card;
 	struct mutex mutex;
-	struct mutex scratch_mutex;
-	uint8_t *bios;
+	void *bios;
 	uint32_t cmd_table, data_table;
 	uint16_t *iio;
 
@@ -148,7 +145,6 @@ extern int atom_debug;
 
 struct atom_context *atom_parse(struct card_info *, void *);
 int atom_execute_table(struct atom_context *, int, uint32_t *);
-int atom_execute_table_scratch_unlocked(struct atom_context *, int, uint32_t *);
 int atom_asic_init(struct atom_context *);
 void atom_destroy(struct atom_context *);
 bool atom_parse_data_header(struct atom_context *ctx, int index, uint16_t *size,

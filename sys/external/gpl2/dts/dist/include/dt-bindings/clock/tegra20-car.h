@@ -1,6 +1,5 @@
-/*	$NetBSD: tegra20-car.h,v 1.1.1.3 2021/11/07 16:49:58 jmcneill Exp $	*/
+/*	$NetBSD: tegra20-car.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
-/* SPDX-License-Identifier: GPL-2.0 */
 /*
  * This header provides constants for binding nvidia,tegra20-car.
  *
@@ -133,7 +132,7 @@
 #define TEGRA20_CLK_CCLK 108
 #define TEGRA20_CLK_HCLK 109
 #define TEGRA20_CLK_PCLK 110
-/* 111 */
+#define TEGRA20_CLK_BLINK 111
 #define TEGRA20_CLK_PLL_A 112
 #define TEGRA20_CLK_PLL_A_OUT0 113
 #define TEGRA20_CLK_PLL_C 114

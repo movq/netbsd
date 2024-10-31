@@ -1,5 +1,3 @@
-/*	$NetBSD: qxl_dev.h,v 1.3 2021/12/18 23:45:42 riastradh Exp $	*/
-
 /*
    Copyright (C) 2009 Red Hat, Inc.
 
@@ -29,6 +27,7 @@
    (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
    OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
+
 
 #ifndef H_QXL_DEV
 #define H_QXL_DEV

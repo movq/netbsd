@@ -1,5 +1,3 @@
-/*	$NetBSD: savage_state.c,v 1.3 2021/12/18 23:45:43 riastradh Exp $	*/
-
 /* savage_state.c -- State and drawing support for Savage
  *
  * Copyright 2004  Felix Kuehling
@@ -24,18 +22,8 @@
  * CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: savage_state.c,v 1.3 2021/12/18 23:45:43 riastradh Exp $");
-
-#include <linux/slab.h>
-#include <linux/uaccess.h>
-
-#include <drm/drm_device.h>
-#include <drm/drm_file.h>
-#include <drm/drm_print.h>
+#include <drm/drmP.h>
 #include <drm/savage_drm.h>
-
 #include "savage_drv.h"
 
 void savage_emit_clip_rect_s3d(drm_savage_private_t * dev_priv,
@@ -311,7 +299,6 @@ static int savage_dispatch_dma_prim(drm_savage_private_t * dev_priv,
 	case SAVAGE_PRIM_TRILIST_201:
 		reorder = 1;
 		prim = SAVAGE_PRIM_TRILIST;
-		/* fall through */
 	case SAVAGE_PRIM_TRILIST:
 		if (n % 3 != 0) {
 			DRM_ERROR("wrong number of vertices %u in TRILIST\n",
@@ -449,7 +436,6 @@ static int savage_dispatch_vb_prim(drm_savage_private_t * dev_priv,
 	case SAVAGE_PRIM_TRILIST_201:
 		reorder = 1;
 		prim = SAVAGE_PRIM_TRILIST;
-		/* fall through */
 	case SAVAGE_PRIM_TRILIST:
 		if (n % 3 != 0) {
 			DRM_ERROR("wrong number of vertices %u in TRILIST\n",
@@ -571,7 +557,6 @@ static int savage_dispatch_dma_idx(drm_savage_private_t * dev_priv,
 	case SAVAGE_PRIM_TRILIST_201:
 		reorder = 1;
 		prim = SAVAGE_PRIM_TRILIST;
-		/* fall through */
 	case SAVAGE_PRIM_TRILIST:
 		if (n % 3 != 0) {
 			DRM_ERROR("wrong number of indices %u in TRILIST\n", n);
@@ -710,7 +695,6 @@ static int savage_dispatch_vb_idx(drm_savage_private_t * dev_priv,
 	case SAVAGE_PRIM_TRILIST_201:
 		reorder = 1;
 		prim = SAVAGE_PRIM_TRILIST;
-		/* fall through */
 	case SAVAGE_PRIM_TRILIST:
 		if (n % 3 != 0) {
 			DRM_ERROR("wrong number of indices %u in TRILIST\n", n);
@@ -987,7 +971,7 @@ int savage_bci_cmdbuf(struct drm_device *dev, void *data, struct drm_file *file_
 	LOCK_TEST_WITH_RETURN(dev, file_priv);
 
 	if (dma && dma->buflist) {
-		if (cmdbuf->dma_idx >= dma->buf_count) {
+		if (cmdbuf->dma_idx > dma->buf_count) {
 			DRM_ERROR
 			    ("vertex buffer index %u out of range (0-%u)\n",
 			     cmdbuf->dma_idx, dma->buf_count - 1);
@@ -1008,7 +992,7 @@ int savage_bci_cmdbuf(struct drm_device *dev, void *data, struct drm_file *file_
 		if (kcmd_addr == NULL)
 			return -ENOMEM;
 
-		if (copy_from_user(kcmd_addr, cmdbuf->cmd_addr,
+		if (DRM_COPY_FROM_USER(kcmd_addr, cmdbuf->cmd_addr,
 				       cmdbuf->size * 8))
 		{
 			kfree(kcmd_addr);
@@ -1017,10 +1001,15 @@ int savage_bci_cmdbuf(struct drm_device *dev, void *data, struct drm_file *file_
 		cmdbuf->cmd_addr = kcmd_addr;
 	}
 	if (cmdbuf->vb_size) {
-		kvb_addr = memdup_user(cmdbuf->vb_addr, cmdbuf->vb_size);
-		if (IS_ERR(kvb_addr)) {
-			ret = PTR_ERR(kvb_addr);
-			kvb_addr = NULL;
+		kvb_addr = kmalloc(cmdbuf->vb_size, GFP_KERNEL);
+		if (kvb_addr == NULL) {
+			ret = -ENOMEM;
+			goto done;
+		}
+
+		if (DRM_COPY_FROM_USER(kvb_addr, cmdbuf->vb_addr,
+				       cmdbuf->vb_size)) {
+			ret = -EFAULT;
 			goto done;
 		}
 		cmdbuf->vb_addr = kvb_addr;
@@ -1033,7 +1022,7 @@ int savage_bci_cmdbuf(struct drm_device *dev, void *data, struct drm_file *file_
 			goto done;
 		}
 
-		if (copy_from_user(kbox_addr, cmdbuf->box_addr,
+		if (DRM_COPY_FROM_USER(kbox_addr, cmdbuf->box_addr,
 				       cmdbuf->nbox * sizeof(struct drm_clip_rect))) {
 			ret = -EFAULT;
 			goto done;
@@ -1043,7 +1032,7 @@ int savage_bci_cmdbuf(struct drm_device *dev, void *data, struct drm_file *file_
 
 	/* Make sure writes to DMA buffers are finished before sending
 	 * DMA commands to the graphics hardware. */
-	mb();
+	DRM_MEMORYBARRIER();
 
 	/* Coming from user space. Don't know if the Xserver has
 	 * emitted wait commands. Assuming the worst. */

@@ -1,4 +1,4 @@
-/*	$NetBSD: sched_entity.c,v 1.7 2021/12/24 15:26:35 riastradh Exp $	*/
+/*	$NetBSD: sched_entity.c,v 1.1 2021/12/18 20:15:53 riastradh Exp $	*/
 
 /*
  * Copyright 2015 Advanced Micro Devices, Inc.
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sched_entity.c,v 1.7 2021/12/24 15:26:35 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sched_entity.c,v 1.1 2021/12/18 20:15:53 riastradh Exp $");
 
 #include <linux/kthread.h>
 #include <linux/slab.h>
@@ -97,7 +97,7 @@ EXPORT_SYMBOL(drm_sched_entity_init);
  */
 static bool drm_sched_entity_is_idle(struct drm_sched_entity *entity)
 {
-	assert_spin_locked(&entity->rq->sched->job_list_lock);
+	rmb(); /* for list_empty to work without lock */
 
 	if (list_empty(&entity->list) ||
 	    spsc_queue_count(&entity->job_queue) == 0)
@@ -142,7 +142,7 @@ drm_sched_entity_get_free_sched(struct drm_sched_entity *entity)
 		struct drm_gpu_scheduler *sched = entity->sched_list[i];
 
 		if (!entity->sched_list[i]->ready) {
-			DRM_WARN("sched%s is not ready, skipping\n", sched->name);
+			DRM_WARN("sched%s is not ready, skipping", sched->name);
 			continue;
 		}
 
@@ -171,24 +171,13 @@ drm_sched_entity_get_free_sched(struct drm_sched_entity *entity)
 long drm_sched_entity_flush(struct drm_sched_entity *entity, long timeout)
 {
 	struct drm_gpu_scheduler *sched;
-#ifdef __NetBSD__
-	struct proc *last_user;
-#else
 	struct task_struct *last_user;
-#endif
 	long ret = timeout;
 
 	if (!entity->rq)
 		return 0;
 
 	sched = entity->rq->sched;
-#ifdef __NetBSD__
-	spin_lock(&sched->job_list_lock);
-	DRM_SPIN_WAIT_NOINTR_UNTIL(ret, &sched->job_scheduled,
-	    &sched->job_list_lock,
-	    drm_sched_entity_is_idle(entity));
-	spin_unlock(&sched->job_list_lock);
-#else
 	/**
 	 * The client will not queue more IBs during this fini, consume existing
 	 * queued IBs or discard them on SIGKILL
@@ -203,19 +192,11 @@ long drm_sched_entity_flush(struct drm_sched_entity *entity, long timeout)
 		wait_event_killable(sched->job_scheduled,
 				    drm_sched_entity_is_idle(entity));
 	}
-#endif
 
 	/* For killed process disable any more IBs enqueue right now */
-#ifdef __NetBSD__
-	last_user = cmpxchg(&entity->last_user, curproc, NULL);
-	if ((!last_user || last_user == curproc) &&
-	    (curproc->p_sflag & PS_WEXIT))
-#else
 	last_user = cmpxchg(&entity->last_user, current->group_leader, NULL);
 	if ((!last_user || last_user == current->group_leader) &&
-	    (current->flags & PF_EXITING) && (current->exit_code == SIGKILL))
-#endif
-	{
+	    (current->flags & PF_EXITING) && (current->exit_code == SIGKILL)) {
 		spin_lock(&entity->rq_lock);
 		entity->stopped = true;
 		drm_sched_rq_remove_entity(entity->rq, entity);
@@ -302,8 +283,6 @@ void drm_sched_entity_fini(struct drm_sched_entity *entity)
 		drm_sched_rq_remove_entity(entity->rq, entity);
 	}
 
-	spin_lock_destroy(&entity->rq_lock);
-
 	/* Consumption of existing IBs wasn't completed. Forcefully
 	 * remove them here.
 	 */
@@ -325,8 +304,6 @@ void drm_sched_entity_fini(struct drm_sched_entity *entity)
 
 		drm_sched_entity_kill_jobs(entity);
 	}
-
-	destroy_completion(&entity->entity_idle);
 
 	dma_fence_put(entity->last_scheduled);
 	entity->last_scheduled = NULL;
@@ -371,9 +348,7 @@ static void drm_sched_entity_wakeup(struct dma_fence *f,
 		container_of(cb, struct drm_sched_entity, cb);
 
 	drm_sched_entity_clear_dep(f, cb);
-	spin_lock(&entity->rq->sched->job_list_lock);
 	drm_sched_wakeup(entity->rq->sched);
-	spin_unlock(&entity->rq->sched->job_list_lock);
 }
 
 /**
@@ -529,11 +504,7 @@ void drm_sched_entity_push_job(struct drm_sched_job *sched_job,
 
 	trace_drm_sched_job(sched_job, entity);
 	atomic_inc(&entity->rq->sched->score);
-#ifdef __NetBSD__
-	WRITE_ONCE(entity->last_user, curproc);
-#else
 	WRITE_ONCE(entity->last_user, current->group_leader);
-#endif
 	first = spsc_queue_push(&entity->job_queue, &sched_job->queue_node);
 
 	/* first job wakes up scheduler */
@@ -548,9 +519,7 @@ void drm_sched_entity_push_job(struct drm_sched_job *sched_job,
 		}
 		drm_sched_rq_add_entity(entity->rq, entity);
 		spin_unlock(&entity->rq_lock);
-		spin_lock(&entity->rq->sched->job_list_lock);
 		drm_sched_wakeup(entity->rq->sched);
-		spin_unlock(&entity->rq->sched->job_list_lock);
 	}
 }
 EXPORT_SYMBOL(drm_sched_entity_push_job);

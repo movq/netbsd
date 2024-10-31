@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_ras_eeprom.c,v 1.4 2021/12/19 12:31:45 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_ras_eeprom.c,v 1.1 2021/12/18 20:11:10 riastradh Exp $	*/
 
 /*
  * Copyright 2019 Advanced Micro Devices, Inc.
@@ -24,15 +24,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_ras_eeprom.c,v 1.4 2021/12/19 12:31:45 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_ras_eeprom.c,v 1.1 2021/12/18 20:11:10 riastradh Exp $");
 
 #include "amdgpu_ras_eeprom.h"
 #include "amdgpu.h"
 #include "amdgpu_ras.h"
 #include <linux/bits.h>
 #include "smu_v11_0_i2c.h"
-
-#include <linux/nbsd-namespace.h>
 
 #define EEPROM_I2C_TARGET_ADDR_ARCTURUS  0xA8
 #define EEPROM_I2C_TARGET_ADDR_VEGA20    0xA0
@@ -285,8 +283,6 @@ void amdgpu_ras_eeprom_fini(struct amdgpu_ras_eeprom_control *control)
 	default:
 		return;
 	}
-
-	mutex_destroy(&control->tbl_mutex);
 }
 
 static void __encode_table_record_to_buff(struct amdgpu_ras_eeprom_control *control,

@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_smu7_hwmgr.c,v 1.5 2024/04/16 14:34:01 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_smu7_hwmgr.c,v 1.1 2021/12/18 20:15:19 riastradh Exp $	*/
 
 /*
  * Copyright 2015 Advanced Micro Devices, Inc.
@@ -23,7 +23,7 @@
  *
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_smu7_hwmgr.c,v 1.5 2024/04/16 14:34:01 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_smu7_hwmgr.c,v 1.1 2021/12/18 20:15:19 riastradh Exp $");
 
 #include "pp_debug.h"
 #include <linux/delay.h>
@@ -31,7 +31,6 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_smu7_hwmgr.c,v 1.5 2024/04/16 14:34:01 riastr
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
-#include <linux/acpi.h>
 #include <asm/div64.h>
 #include <drm/amdgpu_drm.h>
 #include "ppatomctrl.h"
@@ -57,8 +56,6 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_smu7_hwmgr.c,v 1.5 2024/04/16 14:34:01 riastr
 #include "smu7_baco.h"
 
 #include "ivsrcid/ivsrcid_vislands30.h"
-
-#include <linux/nbsd-namespace.h>
 
 #define MC_CG_ARB_FREQ_F0           0x0a
 #define MC_CG_ARB_FREQ_F1           0x0b

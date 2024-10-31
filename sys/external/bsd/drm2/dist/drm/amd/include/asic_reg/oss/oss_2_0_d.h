@@ -1,4 +1,4 @@
-/*	$NetBSD: oss_2_0_d.h,v 1.3 2021/12/18 23:45:21 riastradh Exp $	*/
+/*	$NetBSD: oss_2_0_d.h,v 1.1 2018/08/27 01:34:52 riastradh Exp $	*/
 
 /*
  * OSS_2_0 Register documentation

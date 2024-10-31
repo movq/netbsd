@@ -1,4 +1,4 @@
-/*	$NetBSD: gpu_scheduler.h,v 1.4 2021/12/19 12:23:16 riastradh Exp $	*/
+/*	$NetBSD: gpu_scheduler.h,v 1.1 2021/12/18 20:15:57 riastradh Exp $	*/
 
 /*
  * Copyright 2015 Advanced Micro Devices, Inc.
@@ -27,10 +27,8 @@
 #define _DRM_GPU_SCHEDULER_H_
 
 #include <drm/spsc_queue.h>
-#include <drm/drm_wait_netbsd.h>
 #include <linux/dma-fence.h>
 #include <linux/completion.h>
-#include <linux/workqueue.h>
 
 #define MAX_WAIT_SCHED_ENTITY_Q_EMPTY msecs_to_jiffies(1000)
 
@@ -100,11 +98,7 @@ struct drm_sched_entity {
 	struct dma_fence_cb		cb;
 	atomic_t			*guilty;
 	struct dma_fence                *last_scheduled;
-#ifdef __NetBSD__
-	struct proc			*last_user;
-#else
 	struct task_struct		*last_user;
-#endif
 	bool 				stopped;
 	struct completion		entity_idle;
 };
@@ -282,8 +276,8 @@ struct drm_gpu_scheduler {
 	long				timeout;
 	const char			*name;
 	struct drm_sched_rq		sched_rq[DRM_SCHED_PRIORITY_MAX];
-	drm_waitqueue_t			wake_up_worker;
-	drm_waitqueue_t			job_scheduled;
+	wait_queue_head_t		wake_up_worker;
+	wait_queue_head_t		job_scheduled;
 	atomic_t			hw_rq_count;
 	atomic64_t			job_id_count;
 	struct delayed_work		work_tdr;

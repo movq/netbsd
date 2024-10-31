@@ -1,6 +1,5 @@
-/*	$NetBSD: nv40.h,v 1.3 2021/12/18 23:45:37 riastradh Exp $	*/
+/*	$NetBSD: nv40.h,v 1.1 2018/08/27 01:34:56 riastradh Exp $	*/
 
-/* SPDX-License-Identifier: MIT */
 #ifndef __NVKM_PM_NV40_H__
 #define __NVKM_PM_NV40_H__
 #define nv40_pm(p) container_of((p), struct nv40_pm, base)

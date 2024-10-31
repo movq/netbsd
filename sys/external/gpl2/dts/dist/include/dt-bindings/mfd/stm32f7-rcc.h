@@ -1,6 +1,5 @@
-/*	$NetBSD: stm32f7-rcc.h,v 1.1.1.3 2018/04/28 18:25:53 jmcneill Exp $	*/
+/*	$NetBSD: stm32f7-rcc.h,v 1.1 2017/07/27 18:10:51 jmcneill Exp $	*/
 
-/* SPDX-License-Identifier: GPL-2.0 */
 /*
  * This header provides constants for the STM32F7 RCC IP
  */
@@ -93,7 +92,6 @@
 #define STM32F7_RCC_APB2_TIM8		1
 #define STM32F7_RCC_APB2_USART1		4
 #define STM32F7_RCC_APB2_USART6		5
-#define STM32F7_RCC_APB2_SDMMC2		7
 #define STM32F7_RCC_APB2_ADC1		8
 #define STM32F7_RCC_APB2_ADC2		9
 #define STM32F7_RCC_APB2_ADC3		10

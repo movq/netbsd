@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_engine_sec_g98.c,v 1.3 2021/12/18 23:45:37 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_engine_sec_g98.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -24,7 +24,7 @@
  * Authors: Ben Skeggs
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_engine_sec_g98.c,v 1.3 2021/12/18 23:45:37 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_engine_sec_g98.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $");
 
 #include <engine/sec.h>
 #include <engine/fifo.h>
@@ -57,7 +57,7 @@ g98_sec_intr(struct nvkm_falcon *sec, struct nvkm_fifo_chan *chan)
 	const struct nvkm_enum *en =
 		nvkm_enum_find(g98_sec_isr_error_name, ssta);
 
-	nvkm_error(subdev, "DISPATCH_ERROR %04x [%s] ch %d [%010"PRIx64" %s] "
+	nvkm_error(subdev, "DISPATCH_ERROR %04x [%s] ch %d [%010llx %s] "
 			   "subc %d mthd %04x data %08x\n", ssta,
 		   en ? en->name : "UNKNOWN", chan ? chan->chid : -1,
 		   chan ? chan->inst->addr : 0,
@@ -71,6 +71,7 @@ g98_sec = {
 	.code.size = sizeof(g98_sec_code),
 	.data.data = g98_sec_data,
 	.data.size = sizeof(g98_sec_data),
+	.pmc_enable = 0x00004000,
 	.intr = g98_sec_intr,
 	.sclass = {
 		{ -1, -1, G98_SEC },

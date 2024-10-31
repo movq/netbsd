@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_gem_object.c,v 1.9 2021/12/19 12:12:31 riastradh Exp $	*/
+/*	$NetBSD: i915_gem_object.c,v 1.1 2021/12/18 20:15:31 riastradh Exp $	*/
 
 /*
  * Copyright © 2017 Intel Corporation
@@ -25,9 +25,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i915_gem_object.c,v 1.9 2021/12/19 12:12:31 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i915_gem_object.c,v 1.1 2021/12/18 20:15:31 riastradh Exp $");
 
-#include <linux/bitmap.h>
 #include <linux/sched/mm.h>
 
 #include "display/intel_frontbuffer.h"
@@ -39,8 +38,6 @@ __KERNEL_RCSID(0, "$NetBSD: i915_gem_object.c,v 1.9 2021/12/19 12:12:31 riastrad
 #include "i915_gem_object.h"
 #include "i915_globals.h"
 #include "i915_trace.h"
-
-#include <linux/nbsd-namespace.h>
 
 static struct i915_global_object {
 	struct i915_global base;
@@ -65,28 +62,21 @@ void i915_gem_object_init(struct drm_i915_gem_object *obj,
 
 	spin_lock_init(&obj->vma.lock);
 	INIT_LIST_HEAD(&obj->vma.list);
-	i915_vma_tree_init(obj);
 
 	INIT_LIST_HEAD(&obj->mm.link);
 
 	INIT_LIST_HEAD(&obj->lut_list);
 
 	spin_lock_init(&obj->mmo.lock);
-#ifdef __NetBSD__
-	memset(obj->mmo.offsets, 0, sizeof(obj->mmo.offsets));
-#else
 	obj->mmo.offsets = RB_ROOT;
-#endif
 
 	init_rcu_head(&obj->rcu);
 
 	obj->ops = ops;
 
 	obj->mm.madv = I915_MADV_WILLNEED;
-#ifndef __NetBSD__
 	INIT_RADIX_TREE(&obj->mm.get_page.radix, GFP_KERNEL | __GFP_NOWARN);
 	mutex_init(&obj->mm.get_page.lock);
-#endif
 }
 
 /**
@@ -131,19 +121,10 @@ void i915_gem_close_object(struct drm_gem_object *gem, struct drm_file *file)
 	}
 	i915_gem_object_unlock(obj);
 
-#ifdef __NetBSD__
-	__USE(mn);
-	for (enum i915_mmap_type t = 0; t < I915_MMAP_NTYPES; t++) {
-		if ((mmo = obj->mmo.offsets[t]) == NULL)
-			continue;
-		drm_vma_node_revoke(&mmo->vma_node, file);
-	}
-#else
 	spin_lock(&obj->mmo.lock);
 	rbtree_postorder_for_each_entry_safe(mmo, mn, &obj->mmo.offsets, offset)
 		drm_vma_node_revoke(&mmo->vma_node, file);
 	spin_unlock(&obj->mmo.lock);
-#endif
 
 	list_for_each_entry_safe(lut, ln, &close, obj_link) {
 		struct i915_gem_context *ctx = lut->ctx;
@@ -177,13 +158,7 @@ static void __i915_gem_free_object_rcu(struct rcu_head *head)
 		container_of(head, typeof(*obj), rcu);
 	struct drm_i915_private *i915 = to_i915(obj->base.dev);
 
-	/* i915_gem_object_init */
-	spin_lock_destroy(&obj->mmo.lock);
-	spin_lock_destroy(&obj->vma.lock);
-	mutex_destroy(&obj->mm.lock);
-
 	dma_resv_fini(&obj->base._resv);
-	drm_vma_node_destroy(&obj->base.vma_node);
 	i915_gem_object_free(obj);
 
 	GEM_BUG_ON(!atomic_read(&i915->mm.free_count));
@@ -227,18 +202,6 @@ static void __i915_gem_free_objects(struct drm_i915_private *i915,
 
 		i915_gem_object_release_mmap(obj);
 
-#ifdef __NetBSD__
-		__USE(mn);
-		for (enum i915_mmap_type t = 0; t < I915_MMAP_NTYPES; t++) {
-			if ((mmo = obj->mmo.offsets[t]) == NULL)
-				continue;
-			drm_vma_offset_remove(obj->base.dev->vma_offset_manager,
-					      &mmo->vma_node);
-			drm_vma_node_destroy(&mmo->vma_node);
-			kfree(mmo);
-		}
-		memset(obj->mmo.offsets, 0, sizeof(obj->mmo.offsets));
-#else
 		rbtree_postorder_for_each_entry_safe(mmo, mn,
 						     &obj->mmo.offsets,
 						     offset) {
@@ -247,7 +210,6 @@ static void __i915_gem_free_objects(struct drm_i915_private *i915,
 			kfree(mmo);
 		}
 		obj->mmo.offsets = RB_ROOT;
-#endif
 
 		GEM_BUG_ON(atomic_read(&obj->bind_count));
 		GEM_BUG_ON(obj->userfault_count);

@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_falcon_msgq.c,v 1.4 2021/12/19 11:34:45 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_falcon_msgq.c,v 1.1 2021/12/18 20:15:40 riastradh Exp $	*/
 
 /*
  * Copyright (c) 2017, NVIDIA CORPORATION. All rights reserved.
@@ -23,11 +23,9 @@
  *
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_falcon_msgq.c,v 1.4 2021/12/19 11:34:45 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_falcon_msgq.c,v 1.1 2021/12/18 20:15:40 riastradh Exp $");
 
 #include "qmgr.h"
-
-#include <linux/nbsd-namespace.h>
 
 static void
 nvkm_falcon_msgq_open(struct nvkm_falcon_msgq *msgq)
@@ -199,7 +197,6 @@ nvkm_falcon_msgq_del(struct nvkm_falcon_msgq **pmsgq)
 {
 	struct nvkm_falcon_msgq *msgq = *pmsgq;
 	if (msgq) {
-		mutex_destroy(&msgq->mutex);
 		kfree(*pmsgq);
 		*pmsgq = NULL;
 	}

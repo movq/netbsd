@@ -1,5 +1,3 @@
-/*	$NetBSD: via_irq.c,v 1.9 2021/12/19 12:30:23 riastradh Exp $	*/
-
 /* via_irq.c
  *
  * Copyright 2004 BEAM Ltd.
@@ -37,13 +35,8 @@
  * The refresh rate is also calculated for video playback sync purposes.
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: via_irq.c,v 1.9 2021/12/19 12:30:23 riastradh Exp $");
-
-#include <drm/drm_device.h>
-#include <drm/drm_vblank.h>
+#include <drm/drmP.h>
 #include <drm/via_drm.h>
-
 #include "via_drv.h"
 
 #define VIA_REG_INTERRUPT       0x200
@@ -95,11 +88,17 @@ static int via_num_unichrome = ARRAY_SIZE(via_unichrome_irqs);
 static int via_irqmap_unichrome[] = {-1, -1, -1, 0, -1, 1};
 
 
-u32 via_get_vblank_counter(struct drm_device *dev, unsigned int pipe)
+static unsigned time_diff(struct timeval *now, struct timeval *then)
+{
+	return (now->tv_usec >= then->tv_usec) ?
+		now->tv_usec - then->tv_usec :
+		1000000 - (then->tv_usec - now->tv_usec);
+}
+
+u32 via_get_vblank_counter(struct drm_device *dev, int crtc)
 {
 	drm_via_private_t *dev_priv = dev->dev_private;
-
-	if (pipe != 0)
+	if (crtc != 0)
 		return 0;
 
 	return atomic_read(&dev_priv->vbl_received);
@@ -111,26 +110,26 @@ irqreturn_t via_driver_irq_handler(DRM_IRQ_ARGS)
 	drm_via_private_t *dev_priv = (drm_via_private_t *) dev->dev_private;
 	u32 status;
 	int handled = 0;
-	ktime_t cur_vblank;
+	struct timeval cur_vblank;
 	drm_via_irq_t *cur_irq = dev_priv->via_irqs;
 	int i;
 
-	status = via_read(dev_priv, VIA_REG_INTERRUPT);
+	status = VIA_READ(VIA_REG_INTERRUPT);
 	if (status & VIA_IRQ_VBLANK_PENDING) {
 		atomic_inc(&dev_priv->vbl_received);
 		if (!(atomic_read(&dev_priv->vbl_received) & 0x0F)) {
-			cur_vblank = ktime_get();
+			do_gettimeofday(&cur_vblank);
 			if (dev_priv->last_vblank_valid) {
-				dev_priv->nsec_per_vblank =
-					ktime_sub(cur_vblank,
-						dev_priv->last_vblank) >> 4;
+				dev_priv->usec_per_vblank =
+					time_diff(&cur_vblank,
+						  &dev_priv->last_vblank) >> 4;
 			}
 			dev_priv->last_vblank = cur_vblank;
 			dev_priv->last_vblank_valid = 1;
 		}
 		if (!(atomic_read(&dev_priv->vbl_received) & 0xFF)) {
-			DRM_DEBUG("nsec per vblank is: %"PRIu64"\n",
-				  ktime_to_ns(dev_priv->nsec_per_vblank));
+			DRM_DEBUG("US per vblank is: %u\n",
+				  dev_priv->usec_per_vblank);
 		}
 		drm_handle_vblank(dev, 0);
 		handled = 1;
@@ -138,16 +137,8 @@ irqreturn_t via_driver_irq_handler(DRM_IRQ_ARGS)
 
 	for (i = 0; i < dev_priv->num_irqs; ++i) {
 		if (status & cur_irq->pending_mask) {
-#ifdef __NetBSD__
-			spin_lock(&cur_irq->irq_lock);
-			cur_irq->irq_received++;
-			DRM_SPIN_WAKEUP_ONE(&cur_irq->irq_queue,
-			    &cur_irq->irq_lock);
-			spin_unlock(&cur_irq->irq_lock);
-#else
 			atomic_inc(&cur_irq->irq_received);
-			wake_up(&cur_irq->irq_queue);
-#endif
+			DRM_WAKEUP(&cur_irq->irq_queue);
 			handled = 1;
 			if (dev_priv->irq_map[drm_via_irq_dma0_td] == i)
 				via_dmablit_handler(dev, 0, 1);
@@ -158,7 +149,7 @@ irqreturn_t via_driver_irq_handler(DRM_IRQ_ARGS)
 	}
 
 	/* Acknowledge interrupts */
-	via_write(dev_priv, VIA_REG_INTERRUPT, status);
+	VIA_WRITE(VIA_REG_INTERRUPT, status);
 
 
 	if (handled)
@@ -173,44 +164,44 @@ static __inline__ void viadrv_acknowledge_irqs(drm_via_private_t *dev_priv)
 
 	if (dev_priv) {
 		/* Acknowledge interrupts */
-		status = via_read(dev_priv, VIA_REG_INTERRUPT);
-		via_write(dev_priv, VIA_REG_INTERRUPT, status |
+		status = VIA_READ(VIA_REG_INTERRUPT);
+		VIA_WRITE(VIA_REG_INTERRUPT, status |
 			  dev_priv->irq_pending_mask);
 	}
 }
 
-int via_enable_vblank(struct drm_device *dev, unsigned int pipe)
+int via_enable_vblank(struct drm_device *dev, int crtc)
 {
 	drm_via_private_t *dev_priv = dev->dev_private;
 	u32 status;
 
-	if (pipe != 0) {
-		DRM_ERROR("%s:  bad crtc %u\n", __func__, pipe);
+	if (crtc != 0) {
+		DRM_ERROR("%s:  bad crtc %d\n", __func__, crtc);
 		return -EINVAL;
 	}
 
-	status = via_read(dev_priv, VIA_REG_INTERRUPT);
-	via_write(dev_priv, VIA_REG_INTERRUPT, status | VIA_IRQ_VBLANK_ENABLE);
+	status = VIA_READ(VIA_REG_INTERRUPT);
+	VIA_WRITE(VIA_REG_INTERRUPT, status | VIA_IRQ_VBLANK_ENABLE);
 
-	via_write8(dev_priv, 0x83d4, 0x11);
-	via_write8_mask(dev_priv, 0x83d5, 0x30, 0x30);
+	VIA_WRITE8(0x83d4, 0x11);
+	VIA_WRITE8(0x83d5, VIA_READ8(0x83d5) | 0x30);
 
 	return 0;
 }
 
-void via_disable_vblank(struct drm_device *dev, unsigned int pipe)
+void via_disable_vblank(struct drm_device *dev, int crtc)
 {
 	drm_via_private_t *dev_priv = dev->dev_private;
 	u32 status;
 
-	status = via_read(dev_priv, VIA_REG_INTERRUPT);
-	via_write(dev_priv, VIA_REG_INTERRUPT, status & ~VIA_IRQ_VBLANK_ENABLE);
+	status = VIA_READ(VIA_REG_INTERRUPT);
+	VIA_WRITE(VIA_REG_INTERRUPT, status & ~VIA_IRQ_VBLANK_ENABLE);
 
-	via_write8(dev_priv, 0x83d4, 0x11);
-	via_write8_mask(dev_priv, 0x83d5, 0x30, 0);
+	VIA_WRITE8(0x83d4, 0x11);
+	VIA_WRITE8(0x83d5, VIA_READ8(0x83d5) & ~0x30);
 
-	if (pipe != 0)
-		DRM_ERROR("%s:  bad crtc %u\n", __func__, pipe);
+	if (crtc != 0)
+		DRM_ERROR("%s:  bad crtc %d\n", __func__, crtc);
 }
 
 static int
@@ -247,34 +238,17 @@ via_driver_irq_wait(struct drm_device *dev, unsigned int irq, int force_sequence
 	masks = dev_priv->irq_masks;
 	cur_irq = dev_priv->via_irqs + real_irq;
 
-#ifdef __NetBSD__
-	spin_lock(&cur_irq->irq_lock);
 	if (masks[real_irq][2] && !force_sequence) {
-		DRM_SPIN_WAIT_ON(ret, &cur_irq->irq_queue, &cur_irq->irq_lock,
-		    3 * HZ,
-		    ((via_read(dev_priv, masks[irq][2]) & masks[irq][3]) ==
-			masks[irq][4]));
-		cur_irq_sequence = cur_irq->irq_received;
-	} else {
-		DRM_SPIN_WAIT_ON(ret, &cur_irq->irq_queue, &cur_irq->irq_lock,
-		    3 * HZ,
-		    (((cur_irq_sequence = cur_irq->irq_received) -
-			*sequence) <= (1 << 23)));
-	}
-	spin_unlock(&cur_irq->irq_lock);
-#else
-	if (masks[real_irq][2] && !force_sequence) {
-		VIA_WAIT_ON(ret, cur_irq->irq_queue, 3 * HZ,
-			    ((via_read(dev_priv, masks[irq][2]) & masks[irq][3]) ==
+		DRM_WAIT_ON(ret, cur_irq->irq_queue, 3 * DRM_HZ,
+			    ((VIA_READ(masks[irq][2]) & masks[irq][3]) ==
 			     masks[irq][4]));
 		cur_irq_sequence = atomic_read(&cur_irq->irq_received);
 	} else {
-		VIA_WAIT_ON(ret, cur_irq->irq_queue, 3 * HZ,
+		DRM_WAIT_ON(ret, cur_irq->irq_queue, 3 * DRM_HZ,
 			    (((cur_irq_sequence =
 			       atomic_read(&cur_irq->irq_received)) -
 			      *sequence) <= (1 << 23)));
 	}
-#endif
 	*sequence = cur_irq_sequence;
 	return ret;
 }
@@ -310,19 +284,10 @@ void via_driver_irq_preinstall(struct drm_device *dev)
 		}
 
 		for (i = 0; i < dev_priv->num_irqs; ++i) {
-#ifdef __NetBSD__
-			spin_lock_init(&cur_irq->irq_lock);
-			cur_irq->irq_received = 0;
-#else
 			atomic_set(&cur_irq->irq_received, 0);
-#endif
 			cur_irq->enable_mask = dev_priv->irq_masks[i][0];
 			cur_irq->pending_mask = dev_priv->irq_masks[i][1];
-#ifdef __NetBSD__
-			DRM_INIT_WAITQUEUE(&cur_irq->irq_queue, "viairq");
-#else
-			init_waitqueue_head(&cur_irq->irq_queue);
-#endif
+			DRM_INIT_WAITQUEUE(&cur_irq->irq_queue);
 			dev_priv->irq_enable_mask |= cur_irq->enable_mask;
 			dev_priv->irq_pending_mask |= cur_irq->pending_mask;
 			cur_irq++;
@@ -333,8 +298,8 @@ void via_driver_irq_preinstall(struct drm_device *dev)
 		dev_priv->last_vblank_valid = 0;
 
 		/* Clear VSync interrupt regs */
-		status = via_read(dev_priv, VIA_REG_INTERRUPT);
-		via_write(dev_priv, VIA_REG_INTERRUPT, status &
+		status = VIA_READ(VIA_REG_INTERRUPT);
+		VIA_WRITE(VIA_REG_INTERRUPT, status &
 			  ~(dev_priv->irq_enable_mask));
 
 		/* Clear bits if they're already high */
@@ -351,13 +316,13 @@ int via_driver_irq_postinstall(struct drm_device *dev)
 	if (!dev_priv)
 		return -EINVAL;
 
-	status = via_read(dev_priv, VIA_REG_INTERRUPT);
-	via_write(dev_priv, VIA_REG_INTERRUPT, status | VIA_IRQ_GLOBAL
+	status = VIA_READ(VIA_REG_INTERRUPT);
+	VIA_WRITE(VIA_REG_INTERRUPT, status | VIA_IRQ_GLOBAL
 		  | dev_priv->irq_enable_mask);
 
 	/* Some magic, oh for some data sheets ! */
-	via_write8(dev_priv, 0x83d4, 0x11);
-	via_write8_mask(dev_priv, 0x83d5, 0x30, 0x30);
+	VIA_WRITE8(0x83d4, 0x11);
+	VIA_WRITE8(0x83d5, VIA_READ8(0x83d5) | 0x30);
 
 	return 0;
 }
@@ -372,30 +337,19 @@ void via_driver_irq_uninstall(struct drm_device *dev)
 
 		/* Some more magic, oh for some data sheets ! */
 
-		via_write8(dev_priv, 0x83d4, 0x11);
-		via_write8_mask(dev_priv, 0x83d5, 0x30, 0);
+		VIA_WRITE8(0x83d4, 0x11);
+		VIA_WRITE8(0x83d5, VIA_READ8(0x83d5) & ~0x30);
 
-		status = via_read(dev_priv, VIA_REG_INTERRUPT);
-		via_write(dev_priv, VIA_REG_INTERRUPT, status &
+		status = VIA_READ(VIA_REG_INTERRUPT);
+		VIA_WRITE(VIA_REG_INTERRUPT, status &
 			  ~(VIA_IRQ_VBLANK_ENABLE | dev_priv->irq_enable_mask));
-
-#ifdef __NetBSD__
-	    {
-		int i;
-
-		for (i = 0; i < dev_priv->num_irqs; i++) {
-			DRM_DESTROY_WAITQUEUE(&dev_priv->via_irqs[i].irq_queue);
-			spin_lock_destroy(&dev_priv->via_irqs[i].irq_lock);
-		}
-	    }
-#endif
 	}
 }
 
 int via_wait_irq(struct drm_device *dev, void *data, struct drm_file *file_priv)
 {
 	drm_via_irqwait_t *irqwait = data;
-	struct timespec64 now;
+	struct timeval now;
 	int ret = 0;
 	drm_via_private_t *dev_priv = (drm_via_private_t *) dev->dev_private;
 	drm_via_irq_t *cur_irq = dev_priv->via_irqs;
@@ -411,12 +365,8 @@ int via_wait_irq(struct drm_device *dev, void *data, struct drm_file *file_priv)
 
 	switch (irqwait->request.type & ~VIA_IRQ_FLAGS_MASK) {
 	case VIA_IRQ_RELATIVE:
-#ifdef __NetBSD__
-		irqwait->request.sequence += cur_irq->irq_received;
-#else
 		irqwait->request.sequence +=
 			atomic_read(&cur_irq->irq_received);
-#endif
 		irqwait->request.type &= ~_DRM_VBLANK_RELATIVE;
 	case VIA_IRQ_ABSOLUTE:
 		break;
@@ -433,9 +383,9 @@ int via_wait_irq(struct drm_device *dev, void *data, struct drm_file *file_priv)
 
 	ret = via_driver_irq_wait(dev, irqwait->request.irq, force_sequence,
 				  &irqwait->request.sequence);
-	ktime_get_ts64(&now);
+	do_gettimeofday(&now);
 	irqwait->reply.tval_sec = now.tv_sec;
-	irqwait->reply.tval_usec = now.tv_nsec / NSEC_PER_USEC;
+	irqwait->reply.tval_usec = now.tv_usec;
 
 	return ret;
 }

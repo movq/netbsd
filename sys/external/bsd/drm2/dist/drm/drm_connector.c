@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_connector.c,v 1.7 2021/12/19 12:32:01 riastradh Exp $	*/
+/*	$NetBSD: drm_connector.c,v 1.1 2021/12/18 20:11:00 riastradh Exp $	*/
 
 /*
  * Copyright (c) 2016 Intel Corporation
@@ -23,7 +23,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_connector.c,v 1.7 2021/12/19 12:32:01 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_connector.c,v 1.1 2021/12/18 20:11:00 riastradh Exp $");
 
 #include <drm/drm_connector.h>
 #include <drm/drm_edid.h>
@@ -37,8 +37,6 @@ __KERNEL_RCSID(0, "$NetBSD: drm_connector.c,v 1.7 2021/12/19 12:32:01 riastradh 
 
 #include "drm_crtc_internal.h"
 #include "drm_internal.h"
-
-#include <linux/nbsd-namespace.h>
 
 /**
  * DOC: overview
@@ -131,17 +129,10 @@ void drm_connector_ida_destroy(void)
 static void drm_connector_get_cmdline_mode(struct drm_connector *connector)
 {
 	struct drm_cmdline_mode *mode = &connector->cmdline_mode;
-#ifdef __NetBSD__
-	const char *option;
-	prop_dictionary_t prop = device_properties(connector->dev->dev);
-	if (!prop_dictionary_get_string(prop, connector->name, &option))
-		return;
-#else
 	char *option = NULL;
 
 	if (fb_get_options(connector->name, &option))
 		return;
-#endif
 
 	if (!drm_mode_parse_command_line_for_connector(option,
 						       connector,
@@ -624,7 +615,7 @@ const char *drm_get_connector_force_name(enum drm_connector_force force)
 	}
 }
 
-#if IS_ENABLED(CONFIG_LOCKDEP)
+#ifdef CONFIG_LOCKDEP
 static struct lockdep_map connector_list_iter_dep_map = {
 	.name = "drm_connector_list_iter"
 };
@@ -661,8 +652,7 @@ __drm_connector_put_safe(struct drm_connector *conn)
 
 	lockdep_assert_held(&config->connector_list_lock);
 
-	/* XXX sketchy function pointer cast */
-	if (!kref_put(&conn->base.refcount, (void (*)(struct kref *))voidop))
+	if (!refcount_dec_and_test(&conn->base.refcount.refcount))
 		return;
 
 	llist_add(&conn->free_node, &config->connector_free_list);
@@ -2199,7 +2189,7 @@ int drm_mode_getconnector(struct drm_device *dev, void *data,
 	struct drm_mode_modeinfo u_mode;
 	struct drm_mode_modeinfo __user *mode_ptr;
 	uint32_t __user *encoder_ptr;
-	struct list_head export_list = LIST_HEAD_INIT(export_list);
+	LIST_HEAD(export_list);
 
 	if (!drm_core_check_feature(dev, DRIVER_MODESET))
 		return -EOPNOTSUPP;
@@ -2351,7 +2341,7 @@ EXPORT_SYMBOL(drm_mode_put_tile_group);
  * tile group or NULL if not found.
  */
 struct drm_tile_group *drm_mode_get_tile_group(struct drm_device *dev,
-					       const char topology[8])
+					       char topology[8])
 {
 	struct drm_tile_group *tg;
 	int id;
@@ -2381,7 +2371,7 @@ EXPORT_SYMBOL(drm_mode_get_tile_group);
  * new tile group or NULL.
  */
 struct drm_tile_group *drm_mode_create_tile_group(struct drm_device *dev,
-						  const char topology[8])
+						  char topology[8])
 {
 	struct drm_tile_group *tg;
 	int ret;
@@ -2394,7 +2384,6 @@ struct drm_tile_group *drm_mode_create_tile_group(struct drm_device *dev,
 	memcpy(tg->group_data, topology, 8);
 	tg->dev = dev;
 
-	idr_preload(GFP_KERNEL);
 	mutex_lock(&dev->mode_config.idr_mutex);
 	ret = idr_alloc(&dev->mode_config.tile_idr, tg, 1, 0, GFP_KERNEL);
 	if (ret >= 0) {
@@ -2405,7 +2394,6 @@ struct drm_tile_group *drm_mode_create_tile_group(struct drm_device *dev,
 	}
 
 	mutex_unlock(&dev->mode_config.idr_mutex);
-	idr_preload_end();
 	return tg;
 }
 EXPORT_SYMBOL(drm_mode_create_tile_group);

@@ -1,5 +1,3 @@
-/*	$NetBSD: qxl_object.h,v 1.3 2021/12/18 23:45:42 riastradh Exp $	*/
-
 /*
  * Copyright 2013 Red Hat Inc.
  *
@@ -33,12 +31,11 @@ static inline int qxl_bo_reserve(struct qxl_bo *bo, bool no_wait)
 {
 	int r;
 
-	r = ttm_bo_reserve(&bo->tbo, true, no_wait, NULL);
+	r = ttm_bo_reserve(&bo->tbo, true, no_wait, false, 0);
 	if (unlikely(r != 0)) {
 		if (r != -ERESTARTSYS) {
-			struct drm_device *ddev = bo->tbo.base.dev;
-
-			dev_err(ddev->dev, "%p reserve failed\n", bo);
+			struct qxl_device *qdev = (struct qxl_device *)bo->gem_base.dev->dev_private;
+			dev_err(qdev->dev, "%p reserve failed\n", bo);
 		}
 		return r;
 	}
@@ -62,7 +59,7 @@ static inline unsigned long qxl_bo_size(struct qxl_bo *bo)
 
 static inline u64 qxl_bo_mmap_offset(struct qxl_bo *bo)
 {
-	return drm_vma_node_offset_addr(&bo->tbo.base.vma_node);
+	return drm_vma_node_offset_addr(&bo->tbo.vma_node);
 }
 
 static inline int qxl_bo_wait(struct qxl_bo *bo, u32 *mem_type,
@@ -70,20 +67,21 @@ static inline int qxl_bo_wait(struct qxl_bo *bo, u32 *mem_type,
 {
 	int r;
 
-	r = ttm_bo_reserve(&bo->tbo, true, no_wait, NULL);
+	r = ttm_bo_reserve(&bo->tbo, true, no_wait, false, 0);
 	if (unlikely(r != 0)) {
 		if (r != -ERESTARTSYS) {
-			struct drm_device *ddev = bo->tbo.base.dev;
-
-			dev_err(ddev->dev, "%p reserve failed for wait\n",
+			struct qxl_device *qdev = (struct qxl_device *)bo->gem_base.dev->dev_private;
+			dev_err(qdev->dev, "%p reserve failed for wait\n",
 				bo);
 		}
 		return r;
 	}
+	spin_lock(&bo->tbo.bdev->fence_lock);
 	if (mem_type)
 		*mem_type = bo->tbo.mem.mem_type;
-
-	r = ttm_bo_wait(&bo->tbo, true, no_wait);
+	if (bo->tbo.sync_obj)
+		r = ttm_bo_wait(&bo->tbo, true, true, no_wait);
+	spin_unlock(&bo->tbo.bdev->fence_lock);
 	ttm_bo_unreserve(&bo->tbo);
 	return r;
 }
@@ -99,7 +97,7 @@ void *qxl_bo_kmap_atomic_page(struct qxl_device *qdev, struct qxl_bo *bo, int pa
 void qxl_bo_kunmap_atomic_page(struct qxl_device *qdev, struct qxl_bo *bo, void *map);
 extern struct qxl_bo *qxl_bo_ref(struct qxl_bo *bo);
 extern void qxl_bo_unref(struct qxl_bo **bo);
-extern int qxl_bo_pin(struct qxl_bo *bo);
+extern int qxl_bo_pin(struct qxl_bo *bo, u32 domain, u64 *gpu_addr);
 extern int qxl_bo_unpin(struct qxl_bo *bo);
 extern void qxl_ttm_placement_from_domain(struct qxl_bo *qbo, u32 domain, bool pinned);
 extern bool qxl_ttm_bo_is_qxl_bo(struct ttm_buffer_object *bo);

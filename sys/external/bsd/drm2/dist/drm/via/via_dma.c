@@ -1,5 +1,3 @@
-/*	$NetBSD: via_dma.c,v 1.6 2021/12/18 23:45:44 riastradh Exp $	*/
-
 /* via_dma.c -- DMA support for the VIA Unichrome/Pro
  *
  * Copyright 2003 Tungsten Graphics, Inc., Cedar Park, Texas.
@@ -36,18 +34,8 @@
  *    Thomas Hellstrom.
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: via_dma.c,v 1.6 2021/12/18 23:45:44 riastradh Exp $");
-
-#include <linux/delay.h>
-#include <linux/uaccess.h>
-
-#include <drm/drm.h>
-#include <drm/drm_agpsupport.h>
-#include <drm/drm_device.h>
-#include <drm/drm_file.h>
+#include <drm/drmP.h>
 #include <drm/via_drm.h>
-
 #include "via_drv.h"
 #include "via_3d_reg.h"
 
@@ -72,7 +60,7 @@ __KERNEL_RCSID(0, "$NetBSD: via_dma.c,v 1.6 2021/12/18 23:45:44 riastradh Exp $"
 	dev_priv->dma_low += 8;					\
 }
 
-#define via_flush_write_combine() mb()
+#define via_flush_write_combine() DRM_MEMORYBARRIER()
 
 #define VIA_OUT_RING_QW(w1, w2)	do {		\
 	*vb++ = (w1);				\
@@ -173,7 +161,7 @@ int via_dma_cleanup(struct drm_device *dev)
 		if (dev_priv->ring.virtual_start) {
 			via_cmdbuf_reset(dev_priv);
 
-			drm_legacy_ioremapfree(&dev_priv->ring.map, dev);
+			drm_core_ioremapfree(&dev_priv->ring.map, dev);
 			dev_priv->ring.virtual_start = NULL;
 		}
 
@@ -212,7 +200,7 @@ static int via_initialize(struct drm_device *dev,
 	dev_priv->ring.map.flags = 0;
 	dev_priv->ring.map.mtrr = 0;
 
-	drm_legacy_ioremap(&dev_priv->ring.map, dev);
+	drm_core_ioremap(&dev_priv->ring.map, dev);
 
 	if (dev_priv->ring.map.handle == NULL) {
 		via_dma_cleanup(dev);
@@ -246,13 +234,13 @@ static int via_dma_init(struct drm_device *dev, void *data, struct drm_file *fil
 
 	switch (init->func) {
 	case VIA_INIT_DMA:
-		if (!capable(CAP_SYS_ADMIN))
+		if (!DRM_SUSER(DRM_CURPROC))
 			retcode = -EPERM;
 		else
 			retcode = via_initialize(dev, dev_priv, init);
 		break;
 	case VIA_CLEANUP_DMA:
-		if (!capable(CAP_SYS_ADMIN))
+		if (!DRM_SUSER(DRM_CURPROC))
 			retcode = -EPERM;
 		else
 			retcode = via_dma_cleanup(dev);
@@ -285,7 +273,7 @@ static int via_dispatch_cmdbuffer(struct drm_device *dev, drm_via_cmdbuffer_t *c
 	if (cmd->size > VIA_PCI_BUF_SIZE)
 		return -ENOMEM;
 
-	if (copy_from_user(dev_priv->pci_buf, cmd->buf, cmd->size))
+	if (DRM_COPY_FROM_USER(dev_priv->pci_buf, cmd->buf, cmd->size))
 		return -EFAULT;
 
 	/*
@@ -358,7 +346,7 @@ static int via_dispatch_pci_cmdbuffer(struct drm_device *dev,
 
 	if (cmd->size > VIA_PCI_BUF_SIZE)
 		return -ENOMEM;
-	if (copy_from_user(dev_priv->pci_buf, cmd->buf, cmd->size))
+	if (DRM_COPY_FROM_USER(dev_priv->pci_buf, cmd->buf, cmd->size))
 		return -EFAULT;
 
 	if ((ret =
@@ -442,14 +430,14 @@ static int via_hook_segment(drm_via_private_t *dev_priv,
 	diff = (uint32_t) (ptr - reader) - dev_priv->dma_diff;
 	count = 10000000;
 	while (diff == 0 && count--) {
-		paused = (via_read(dev_priv, 0x41c) & 0x80000000);
+		paused = (VIA_READ(0x41c) & 0x80000000);
 		if (paused)
 			break;
 		reader = *(dev_priv->hw_addr_ptr);
 		diff = (uint32_t) (ptr - reader) - dev_priv->dma_diff;
 	}
 
-	paused = via_read(dev_priv, 0x41c) & 0x80000000;
+	paused = VIA_READ(0x41c) & 0x80000000;
 
 	if (paused && !no_pci_fire) {
 		reader = *(dev_priv->hw_addr_ptr);
@@ -466,10 +454,10 @@ static int via_hook_segment(drm_via_private_t *dev_priv,
 			 * doesn't make a difference.
 			 */
 
-			via_write(dev_priv, VIA_REG_TRANSET, (HC_ParaType_PreCR << 16));
-			via_write(dev_priv, VIA_REG_TRANSPACE, pause_addr_hi);
-			via_write(dev_priv, VIA_REG_TRANSPACE, pause_addr_lo);
-			via_read(dev_priv, VIA_REG_TRANSPACE);
+			VIA_WRITE(VIA_REG_TRANSET, (HC_ParaType_PreCR << 16));
+			VIA_WRITE(VIA_REG_TRANSPACE, pause_addr_hi);
+			VIA_WRITE(VIA_REG_TRANSPACE, pause_addr_lo);
+			VIA_READ(VIA_REG_TRANSPACE);
 		}
 	}
 	return paused;
@@ -479,10 +467,10 @@ static int via_wait_idle(drm_via_private_t *dev_priv)
 {
 	int count = 10000000;
 
-	while (!(via_read(dev_priv, VIA_REG_STATUS) & VIA_VR_QUEUE_BUSY) && --count)
+	while (!(VIA_READ(VIA_REG_STATUS) & VIA_VR_QUEUE_BUSY) && --count)
 		;
 
-	while (count && (via_read(dev_priv, VIA_REG_STATUS) &
+	while (count && (VIA_READ(VIA_REG_STATUS) &
 			   (VIA_CMD_RGTR_BUSY | VIA_2D_ENG_BUSY |
 			    VIA_3D_ENG_BUSY)))
 		--count;
@@ -548,21 +536,21 @@ static void via_cmdbuf_start(drm_via_private_t *dev_priv)
 	via_flush_write_combine();
 	(void) *(volatile uint32_t *)dev_priv->last_pause_ptr;
 
-	via_write(dev_priv, VIA_REG_TRANSET, (HC_ParaType_PreCR << 16));
-	via_write(dev_priv, VIA_REG_TRANSPACE, command);
-	via_write(dev_priv, VIA_REG_TRANSPACE, start_addr_lo);
-	via_write(dev_priv, VIA_REG_TRANSPACE, end_addr_lo);
+	VIA_WRITE(VIA_REG_TRANSET, (HC_ParaType_PreCR << 16));
+	VIA_WRITE(VIA_REG_TRANSPACE, command);
+	VIA_WRITE(VIA_REG_TRANSPACE, start_addr_lo);
+	VIA_WRITE(VIA_REG_TRANSPACE, end_addr_lo);
 
-	via_write(dev_priv, VIA_REG_TRANSPACE, pause_addr_hi);
-	via_write(dev_priv, VIA_REG_TRANSPACE, pause_addr_lo);
-	wmb();
-	via_write(dev_priv, VIA_REG_TRANSPACE, command | HC_HAGPCMNT_MASK);
-	via_read(dev_priv, VIA_REG_TRANSPACE);
+	VIA_WRITE(VIA_REG_TRANSPACE, pause_addr_hi);
+	VIA_WRITE(VIA_REG_TRANSPACE, pause_addr_lo);
+	DRM_WRITEMEMORYBARRIER();
+	VIA_WRITE(VIA_REG_TRANSPACE, command | HC_HAGPCMNT_MASK);
+	VIA_READ(VIA_REG_TRANSPACE);
 
 	dev_priv->dma_diff = 0;
 
 	count = 10000000;
-	while (!(via_read(dev_priv, 0x41c) & 0x80000000) && count--);
+	while (!(VIA_READ(0x41c) & 0x80000000) && count--);
 
 	reader = *(dev_priv->hw_addr_ptr);
 	ptr = ((volatile char *)dev_priv->last_pause_ptr - dev_priv->dma_ptr) +
@@ -598,11 +586,13 @@ static inline void via_dummy_bitblt(drm_via_private_t *dev_priv)
 
 static void via_cmdbuf_jump(drm_via_private_t *dev_priv)
 {
+	uint32_t agp_base;
 	uint32_t pause_addr_lo, pause_addr_hi;
 	uint32_t jump_addr_lo, jump_addr_hi;
 	volatile uint32_t *last_pause_ptr;
 	uint32_t dma_low_save1, dma_low_save2;
 
+	agp_base = dev_priv->dma_offset + (uint32_t) dev_priv->agpAddr;
 	via_align_cmd(dev_priv, HC_HAGPBpID_JUMP, 0, &jump_addr_hi,
 		      &jump_addr_lo, 0);
 
@@ -730,7 +720,7 @@ static int via_cmdbuf_size(struct drm_device *dev, void *data, struct drm_file *
 	return ret;
 }
 
-const struct drm_ioctl_desc via_ioctls[] = {
+struct drm_ioctl_desc via_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(VIA_ALLOCMEM, via_mem_alloc, DRM_AUTH),
 	DRM_IOCTL_DEF_DRV(VIA_FREEMEM, via_mem_free, DRM_AUTH),
 	DRM_IOCTL_DEF_DRV(VIA_AGP_INIT, via_agp_init, DRM_AUTH|DRM_MASTER),
@@ -747,4 +737,4 @@ const struct drm_ioctl_desc via_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(VIA_BLIT_SYNC, via_dma_blit_sync, DRM_AUTH)
 };
 
-int via_max_ioctl = ARRAY_SIZE(via_ioctls);
+int via_max_ioctl = DRM_ARRAY_SIZE(via_ioctls);

@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_auth.h,v 1.4 2021/12/19 01:54:28 riastradh Exp $	*/
+/*	$NetBSD: drm_auth.h,v 1.1 2021/12/18 20:15:56 riastradh Exp $	*/
 
 #ifndef _DRM_AUTH_H_
 #define _DRM_AUTH_H_
@@ -37,21 +37,6 @@
 struct drm_file;
 struct drm_hw_lock;
 
-#include <linux/idr.h>
-#include <linux/kref.h>
-#include <linux/list.h>
-#include <linux/spinlock.h>
-#include <linux/types.h>
-
-#ifdef __NetBSD__
-#include <drm/drm_wait_netbsd.h>
-#endif
-
-struct drm_device;
-struct drm_file;
-struct drm_hw_lock;
-struct drm_master;
-
 /*
  * Legacy DRI1 locking data structure. Only here instead of in drm_legacy.h for
  * include ordering reasons.
@@ -61,11 +46,7 @@ struct drm_master;
 struct drm_lock_data {
 	struct drm_hw_lock *hw_lock;
 	struct drm_file *file_priv;
-#ifdef __NetBSD__
-	drm_waitqueue_t lock_queue;     /**< Queue of blocked processes */
-#else
 	wait_queue_head_t lock_queue;
-#endif
 	unsigned long lock_time;
 	spinlock_t spinlock;
 	uint32_t kernel_waiters;

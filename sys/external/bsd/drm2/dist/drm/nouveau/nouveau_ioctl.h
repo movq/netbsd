@@ -1,6 +1,3 @@
-/*	$NetBSD: nouveau_ioctl.h,v 1.3 2021/12/18 23:45:32 riastradh Exp $	*/
-
-/* SPDX-License-Identifier: MIT */
 #ifndef __NOUVEAU_IOCTL_H__
 #define __NOUVEAU_IOCTL_H__
 

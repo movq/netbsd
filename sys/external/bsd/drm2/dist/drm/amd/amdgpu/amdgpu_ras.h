@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_ras.h,v 1.3 2021/12/19 10:59:01 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_ras.h,v 1.1 2021/12/18 20:11:10 riastradh Exp $	*/
 
 /*
  * Copyright 2018 Advanced Micro Devices, Inc.
@@ -320,10 +320,8 @@ struct amdgpu_ras {
 	/* debugfs */
 	struct dentry *dir;
 	/* sysfs */
-#ifdef CONFIG_SYSFS
 	struct device_attribute features_attr;
 	struct bin_attribute badpages_attr;
-#endif
 	/* block array */
 	struct ras_manager *objs;
 
@@ -395,10 +393,8 @@ struct ras_manager {
 	/* debugfs */
 	struct dentry *ent;
 	/* sysfs */
-#ifdef CONFIG_SYSFS
 	struct device_attribute sysfs_attr;
 	int attr_inuse;
-#endif
 
 	/* fs node name */
 	struct ras_fs_data fs_data;

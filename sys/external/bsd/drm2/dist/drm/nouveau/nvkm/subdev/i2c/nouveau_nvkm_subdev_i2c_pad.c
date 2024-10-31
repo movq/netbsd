@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_subdev_i2c_pad.c,v 1.5 2021/12/18 23:45:40 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_subdev_i2c_pad.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $	*/
 
 /*
  * Copyright 2015 Red Hat Inc.
@@ -24,11 +24,9 @@
  * Authors: Ben Skeggs <bskeggs@redhat.com>
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_i2c_pad.c,v 1.5 2021/12/18 23:45:40 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_i2c_pad.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $");
 
 #include "pad.h"
-
-#include <linux/nbsd-namespace.h>
 
 static void
 nvkm_i2c_pad_mode_locked(struct nvkm_i2c_pad *pad, enum nvkm_i2c_pad_mode mode)
@@ -94,7 +92,6 @@ nvkm_i2c_pad_del(struct nvkm_i2c_pad **ppad)
 	if (pad) {
 		PAD_TRACE(pad, "dtor");
 		list_del(&pad->head);
-		mutex_destroy(&pad->mutex);
 		kfree(pad);
 		pad = NULL;
 	}

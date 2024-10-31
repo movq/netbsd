@@ -1,5 +1,3 @@
-/*	$NetBSD: qxl_irq.c,v 1.4 2021/12/18 23:45:42 riastradh Exp $	*/
-
 /*
  * Copyright 2013 Red Hat Inc.
  *
@@ -25,13 +23,6 @@
  *          Alon Levy
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: qxl_irq.c,v 1.4 2021/12/18 23:45:42 riastradh Exp $");
-
-#include <linux/pci.h>
-
-#include <drm/drm_irq.h>
-
 #include "qxl_drv.h"
 
 irqreturn_t qxl_irq_handler(int irq, void *arg)
@@ -41,9 +32,6 @@ irqreturn_t qxl_irq_handler(int irq, void *arg)
 	uint32_t pending;
 
 	pending = xchg(&qdev->ram_header->int_pending, 0);
-
-	if (!pending)
-		return IRQ_NONE;
 
 	atomic_inc(&qdev->irq_received);
 
@@ -66,9 +54,10 @@ irqreturn_t qxl_irq_handler(int irq, void *arg)
 		 * to avoid endless loops).
 		 */
 		qdev->irq_received_error++;
-		DRM_WARN("driver is in bug mode\n");
+		qxl_io_log(qdev, "%s: driver is in bug mode.\n", __func__);
 	}
 	if (pending & QXL_INTERRUPT_CLIENT_MONITORS_CONFIG) {
+		qxl_io_log(qdev, "QXL_INTERRUPT_CLIENT_MONITORS_CONFIG\n");
 		schedule_work(&qdev->client_monitors_config_work);
 	}
 	qdev->ram_header->int_mask = QXL_INTERRUPT_MASK;
@@ -98,11 +87,7 @@ int qxl_irq_init(struct qxl_device *qdev)
 	atomic_set(&qdev->irq_received_cursor, 0);
 	atomic_set(&qdev->irq_received_io_cmd, 0);
 	qdev->irq_received_error = 0;
-#ifdef __NetBSD__
 	ret = drm_irq_install(qdev->ddev);
-#else
-	ret = drm_irq_install(&qdev->ddev, qdev->ddev.pdev->irq);
-#endif
 	qdev->ram_header->int_mask = QXL_INTERRUPT_MASK;
 	if (unlikely(ret != 0)) {
 		DRM_ERROR("Failed installing irq: %d\n", ret);

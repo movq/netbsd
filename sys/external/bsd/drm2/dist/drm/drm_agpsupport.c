@@ -1,6 +1,4 @@
-/*	$NetBSD: drm_agpsupport.c,v 1.13 2022/07/19 22:24:33 riastradh Exp $	*/
-
-/*
+/**
  * \file drm_agpsupport.c
  * DRM support for AGP/GART backend
  *
@@ -33,22 +31,13 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_agpsupport.c,v 1.13 2022/07/19 22:24:33 riastradh Exp $");
-
+#include <drm/drmP.h>
 #include <linux/module.h>
-#include <linux/pci.h>
 #include <linux/slab.h>
 
+#if __OS_HAS_AGP
+
 #include <asm/agp.h>
-
-#include <drm/drm_agpsupport.h>
-#include <drm/drm_device.h>
-#include <drm/drm_drv.h>
-#include <drm/drm_file.h>
-#include <drm/drm_print.h>
-
-#include "drm_legacy.h"
 
 /**
  * Get AGP information.
@@ -62,25 +51,14 @@ __KERNEL_RCSID(0, "$NetBSD: drm_agpsupport.c,v 1.13 2022/07/19 22:24:33 riastrad
  * Verifies the AGP device has been initialized and acquired and fills in the
  * drm_agp_info structure with the information in drm_agp_head::agp_info.
  */
-static int drm_agp_info_hook(struct drm_device *dev, struct drm_agp_info *info)
+int drm_agp_info(struct drm_device *dev, struct drm_agp_info *info)
 {
-	struct agp_kern_info *kern;
+	DRM_AGP_KERN *kern;
 
 	if (!dev->agp || !dev->agp->acquired)
 		return -EINVAL;
 
 	kern = &dev->agp->agp_info;
-#if __NetBSD__
-	info->agp_version_major = 1;
-	info->agp_version_minor = 0;
-	info->mode = kern->aki_info.ai_mode;
-	info->aperture_base = kern->aki_info.ai_aperture_base;
-	info->aperture_size = kern->aki_info.ai_aperture_size;
-	info->memory_allowed = kern->aki_info.ai_memory_allowed;
-	info->memory_used = kern->aki_info.ai_memory_used;
-	info->id_vendor = PCI_VENDOR(kern->aki_info.ai_devid);
-	info->id_device = PCI_PRODUCT(kern->aki_info.ai_devid);
-#else
 	info->agp_version_major = kern->version.major;
 	info->agp_version_minor = kern->version.minor;
 	info->mode = kern->mode;
@@ -90,13 +68,13 @@ static int drm_agp_info_hook(struct drm_device *dev, struct drm_agp_info *info)
 	info->memory_used = kern->current_memory << PAGE_SHIFT;
 	info->id_vendor = kern->device->vendor;
 	info->id_device = kern->device->device;
-#endif
 
 	return 0;
 }
+
 EXPORT_SYMBOL(drm_agp_info);
 
-static int drm_agp_info_ioctl_hook(struct drm_device *dev, void *data,
+int drm_agp_info_ioctl(struct drm_device *dev, void *data,
 		       struct drm_file *file_priv)
 {
 	struct drm_agp_info *info = data;
@@ -118,18 +96,18 @@ static int drm_agp_info_ioctl_hook(struct drm_device *dev, void *data,
  * Verifies the AGP device hasn't been acquired before and calls
  * \c agp_backend_acquire.
  */
-static int drm_agp_acquire_hook(struct drm_device * dev)
+int drm_agp_acquire(struct drm_device * dev)
 {
 	if (!dev->agp)
 		return -ENODEV;
 	if (dev->agp->acquired)
 		return -EBUSY;
-	dev->agp->bridge = agp_backend_acquire(dev->pdev);
-	if (!dev->agp->bridge)
+	if (!(dev->agp->bridge = agp_backend_acquire(dev->pdev)))
 		return -ENODEV;
 	dev->agp->acquired = 1;
 	return 0;
 }
+
 EXPORT_SYMBOL(drm_agp_acquire);
 
 /**
@@ -144,7 +122,7 @@ EXPORT_SYMBOL(drm_agp_acquire);
  * Verifies the AGP device hasn't been acquired before and calls
  * \c agp_backend_acquire.
  */
-static int drm_agp_acquire_ioctl_hook(struct drm_device *dev, void *data,
+int drm_agp_acquire_ioctl(struct drm_device *dev, void *data,
 			  struct drm_file *file_priv)
 {
 	return drm_agp_acquire((struct drm_device *) file_priv->minor->dev);
@@ -158,7 +136,7 @@ static int drm_agp_acquire_ioctl_hook(struct drm_device *dev, void *data,
  *
  * Verifies the AGP device has been acquired and calls \c agp_backend_release.
  */
-static int drm_agp_release_hook(struct drm_device * dev)
+int drm_agp_release(struct drm_device * dev)
 {
 	if (!dev->agp || !dev->agp->acquired)
 		return -EINVAL;
@@ -168,7 +146,7 @@ static int drm_agp_release_hook(struct drm_device * dev)
 }
 EXPORT_SYMBOL(drm_agp_release);
 
-static int drm_agp_release_ioctl_hook(struct drm_device *dev, void *data,
+int drm_agp_release_ioctl(struct drm_device *dev, void *data,
 			  struct drm_file *file_priv)
 {
 	return drm_agp_release(dev);
@@ -184,7 +162,7 @@ static int drm_agp_release_ioctl_hook(struct drm_device *dev, void *data,
  * Verifies the AGP device has been acquired but not enabled, and calls
  * \c agp_enable.
  */
-static int drm_agp_enable_hook(struct drm_device * dev, struct drm_agp_mode mode)
+int drm_agp_enable(struct drm_device * dev, struct drm_agp_mode mode)
 {
 	if (!dev->agp || !dev->agp->acquired)
 		return -EINVAL;
@@ -194,9 +172,10 @@ static int drm_agp_enable_hook(struct drm_device * dev, struct drm_agp_mode mode
 	dev->agp->enabled = 1;
 	return 0;
 }
+
 EXPORT_SYMBOL(drm_agp_enable);
 
-static int drm_agp_enable_ioctl_hook(struct drm_device *dev, void *data,
+int drm_agp_enable_ioctl(struct drm_device *dev, void *data,
 			 struct drm_file *file_priv)
 {
 	struct drm_agp_mode *mode = data;
@@ -216,55 +195,42 @@ static int drm_agp_enable_ioctl_hook(struct drm_device *dev, void *data,
  * Verifies the AGP device is present and has been acquired, allocates the
  * memory via agp_allocate_memory() and creates a drm_agp_mem entry for it.
  */
-static int drm_agp_alloc_hook(struct drm_device *dev, struct drm_agp_buffer *request)
+int drm_agp_alloc(struct drm_device *dev, struct drm_agp_buffer *request)
 {
 	struct drm_agp_mem *entry;
-	struct agp_memory *memory;
+	DRM_AGP_MEM *memory;
 	unsigned long pages;
 	u32 type;
 
 	if (!dev->agp || !dev->agp->acquired)
 		return -EINVAL;
-	entry = kzalloc(sizeof(*entry), GFP_KERNEL);
-	if (!entry)
+	if (!(entry = kmalloc(sizeof(*entry), GFP_KERNEL)))
 		return -ENOMEM;
 
-	pages = DIV_ROUND_UP(request->size, AGP_PAGE_SIZE);
+	memset(entry, 0, sizeof(*entry));
+
+	pages = (request->size + PAGE_SIZE - 1) / PAGE_SIZE;
 	type = (u32) request->type;
-	memory = agp_allocate_memory(dev->agp->bridge, pages, type);
-	if (!memory) {
+	if (!(memory = agp_allocate_memory(dev->agp->bridge, pages, type))) {
 		kfree(entry);
 		return -ENOMEM;
 	}
 
-#ifdef __NetBSD__
-	/* I presume the `+ 1' is there to avoid an id of 0 or something.  */
-	entry->handle = (unsigned long)memory->am_id + 1;
-#else
 	entry->handle = (unsigned long)memory->key + 1;
-#endif
 	entry->memory = memory;
 	entry->bound = 0;
 	entry->pages = pages;
 	list_add(&entry->head, &dev->agp->memory);
 
 	request->handle = entry->handle;
-#ifdef __NetBSD__
-	{
-		struct agp_memory_info info;
-		agp_memory_info(dev->agp->bridge, memory, &info);
-		request->physical = info.ami_physical;
-	}
-#else
 	request->physical = memory->physical;
-#endif
 
 	return 0;
 }
 EXPORT_SYMBOL(drm_agp_alloc);
 
 
-static int drm_agp_alloc_ioctl_hook(struct drm_device *dev, void *data,
+int drm_agp_alloc_ioctl(struct drm_device *dev, void *data,
 			struct drm_file *file_priv)
 {
 	struct drm_agp_buffer *request = data;
@@ -281,8 +247,8 @@ static int drm_agp_alloc_ioctl_hook(struct drm_device *dev, void *data,
  *
  * Walks through drm_agp_head::memory until finding a matching handle.
  */
-static struct drm_agp_mem *drm_agp_lookup_entry(struct drm_device *dev,
-						unsigned long handle)
+static struct drm_agp_mem *drm_agp_lookup_entry(struct drm_device * dev,
+					   unsigned long handle)
 {
 	struct drm_agp_mem *entry;
 
@@ -305,21 +271,18 @@ static struct drm_agp_mem *drm_agp_lookup_entry(struct drm_device *dev,
  * Verifies the AGP device is present and acquired, looks-up the AGP memory
  * entry and passes it to the unbind_agp() function.
  */
-static int drm_agp_unbind_hook(struct drm_device *dev, struct drm_agp_binding *request)
+int drm_agp_unbind(struct drm_device *dev, struct drm_agp_binding *request)
 {
 	struct drm_agp_mem *entry;
 	int ret;
 
 	if (!dev->agp || !dev->agp->acquired)
 		return -EINVAL;
-	entry = drm_agp_lookup_entry(dev, request->handle);
-	if (!entry || !entry->bound)
+	if (!(entry = drm_agp_lookup_entry(dev, request->handle)))
 		return -EINVAL;
-#ifdef __NetBSD__
-	ret = drm_unbind_agp(dev->agp->bridge, entry->memory);
-#else
+	if (!entry->bound)
+		return -EINVAL;
 	ret = drm_unbind_agp(entry->memory);
-#endif
 	if (ret == 0)
 		entry->bound = 0;
 	return ret;
@@ -327,7 +290,7 @@ static int drm_agp_unbind_hook(struct drm_device *dev, struct drm_agp_binding *r
 EXPORT_SYMBOL(drm_agp_unbind);
 
 
-static int drm_agp_unbind_ioctl_hook(struct drm_device *dev, void *data,
+int drm_agp_unbind_ioctl(struct drm_device *dev, void *data,
 			 struct drm_file *file_priv)
 {
 	struct drm_agp_binding *request = data;
@@ -348,7 +311,7 @@ static int drm_agp_unbind_ioctl_hook(struct drm_device *dev, void *data,
  * is currently bound into the GATT. Looks-up the AGP memory entry and passes
  * it to bind_agp() function.
  */
-static int drm_agp_bind_hook(struct drm_device *dev, struct drm_agp_binding *request)
+int drm_agp_bind(struct drm_device *dev, struct drm_agp_binding *request)
 {
 	struct drm_agp_mem *entry;
 	int retcode;
@@ -356,18 +319,13 @@ static int drm_agp_bind_hook(struct drm_device *dev, struct drm_agp_binding *req
 
 	if (!dev->agp || !dev->agp->acquired)
 		return -EINVAL;
-	entry = drm_agp_lookup_entry(dev, request->handle);
-	if (!entry || entry->bound)
+	if (!(entry = drm_agp_lookup_entry(dev, request->handle)))
 		return -EINVAL;
-	page = DIV_ROUND_UP(request->offset, AGP_PAGE_SIZE);
-#ifdef __NetBSD__
-	if ((retcode = drm_bind_agp(dev->agp->bridge, entry->memory, page)))
+	if (entry->bound)
+		return -EINVAL;
+	page = (request->offset + PAGE_SIZE - 1) / PAGE_SIZE;
+	if ((retcode = drm_bind_agp(entry->memory, page)))
 		return retcode;
-#else
-	retcode = drm_bind_agp(entry->memory, page);
-	if (retcode)
-		return retcode;
-#endif
 	entry->bound = dev->agp->base + (page << PAGE_SHIFT);
 	DRM_DEBUG("base = 0x%lx entry->bound = 0x%lx\n",
 		  dev->agp->base, entry->bound);
@@ -376,7 +334,7 @@ static int drm_agp_bind_hook(struct drm_device *dev, struct drm_agp_binding *req
 EXPORT_SYMBOL(drm_agp_bind);
 
 
-static int drm_agp_bind_ioctl_hook(struct drm_device *dev, void *data,
+int drm_agp_bind_ioctl(struct drm_device *dev, void *data,
 		       struct drm_file *file_priv)
 {
 	struct drm_agp_binding *request = data;
@@ -394,40 +352,32 @@ static int drm_agp_bind_ioctl_hook(struct drm_device *dev, void *data,
  * \return zero on success or a negative number on failure.
  *
  * Verifies the AGP device is present and has been acquired and looks up the
- * AGP memory entry. If the memory is currently bound, unbind it via
+ * AGP memory entry. If the memory it's currently bound, unbind it via
  * unbind_agp(). Frees it via free_agp() as well as the entry itself
  * and unlinks from the doubly linked list it's inserted in.
  */
-static int drm_agp_free_hook(struct drm_device *dev, struct drm_agp_buffer *request)
+int drm_agp_free(struct drm_device *dev, struct drm_agp_buffer *request)
 {
 	struct drm_agp_mem *entry;
 
 	if (!dev->agp || !dev->agp->acquired)
 		return -EINVAL;
-	entry = drm_agp_lookup_entry(dev, request->handle);
-	if (!entry)
+	if (!(entry = drm_agp_lookup_entry(dev, request->handle)))
 		return -EINVAL;
 	if (entry->bound)
-#ifdef __NetBSD__
-		drm_unbind_agp(dev->agp->bridge, entry->memory);
-#else
 		drm_unbind_agp(entry->memory);
-#endif
 
 	list_del(&entry->head);
 
-#ifdef __NetBSD__
-	drm_free_agp(dev->agp->bridge, entry->memory, entry->pages);
-#else
 	drm_free_agp(entry->memory, entry->pages);
-#endif
 	kfree(entry);
 	return 0;
 }
 EXPORT_SYMBOL(drm_agp_free);
 
 
-static int drm_agp_free_ioctl_hook(struct drm_device *dev, void *data,
+
+int drm_agp_free_ioctl(struct drm_device *dev, void *data,
 		       struct drm_file *file_priv)
 {
 	struct drm_agp_buffer *request = data;
@@ -443,21 +393,17 @@ static int drm_agp_free_ioctl_hook(struct drm_device *dev, void *data,
  * Gets the drm_agp_t structure which is made available by the agpgart module
  * via the inter_module_* functions. Creates and initializes a drm_agp_head
  * structure.
- *
- * Note that final cleanup of the kmalloced structure is directly done in
- * drm_pci_agp_destroy.
  */
-static struct drm_agp_head *drm_agp_init_hook(struct drm_device *dev)
+struct drm_agp_head *drm_agp_init(struct drm_device *dev)
 {
 	struct drm_agp_head *head = NULL;
 
-	head = kzalloc(sizeof(*head), GFP_KERNEL);
-	if (!head)
+	if (!(head = kmalloc(sizeof(*head), GFP_KERNEL)))
 		return NULL;
+	memset((void *)head, 0, sizeof(*head));
 	head->bridge = agp_find_bridge(dev->pdev);
 	if (!head->bridge) {
-		head->bridge = agp_backend_acquire(dev->pdev);
-		if (!head->bridge) {
+		if (!(head->bridge = agp_backend_acquire(dev->pdev))) {
 			kfree(head);
 			return NULL;
 		}
@@ -466,155 +412,58 @@ static struct drm_agp_head *drm_agp_init_hook(struct drm_device *dev)
 	} else {
 		agp_copy_info(head->bridge, &head->agp_info);
 	}
-#ifndef __NetBSD__
-	/* Why would anything even attach in this case?  */
 	if (head->agp_info.chipset == NOT_SUPPORTED) {
 		kfree(head);
 		return NULL;
 	}
-#endif
 	INIT_LIST_HEAD(&head->memory);
-#ifdef __NetBSD__
-	head->cant_use_aperture = false; /* XXX */
-	head->page_mask = ~0UL;
-	head->base = head->agp_info.aki_info.ai_aperture_base;
-#else
 	head->cant_use_aperture = head->agp_info.cant_use_aperture;
 	head->page_mask = head->agp_info.page_mask;
 	head->base = head->agp_info.aper_base;
-#endif
 	return head;
 }
-/* Only exported for i810.ko */
-EXPORT_SYMBOL(drm_agp_init);
 
 /**
- * drm_legacy_agp_clear - Clear AGP resource list
- * @dev: DRM device
+ * Binds a collection of pages into AGP memory at the given offset, returning
+ * the AGP memory structure containing them.
  *
- * Iterate over all AGP resources and remove them. But keep the AGP head
- * intact so it can still be used. It is safe to call this if AGP is disabled or
- * was already removed.
- *
- * Cleanup is only done for drivers who have DRIVER_LEGACY set.
+ * No reference is held on the pages during this time -- it is up to the
+ * caller to handle that.
  */
-static void drm_agp_clear_hook(struct drm_device *dev)
+DRM_AGP_MEM *
+drm_agp_bind_pages(struct drm_device *dev,
+		   struct page **pages,
+		   unsigned long num_pages,
+		   uint32_t gtt_offset,
+		   u32 type)
 {
-	struct drm_agp_mem *entry, *tempe;
+	DRM_AGP_MEM *mem;
+	int ret, i;
 
-	if (!dev->agp)
-		return;
-	if (!drm_core_check_feature(dev, DRIVER_LEGACY))
-		return;
+	DRM_DEBUG("\n");
 
-	list_for_each_entry_safe(entry, tempe, &dev->agp->memory, head) {
-#ifdef __NetBSD__
-		if (entry->bound)
-			drm_unbind_agp(dev->agp->bridge, entry->memory);
-		drm_free_agp(dev->agp->bridge, entry->memory, entry->pages);
-#else
-		if (entry->bound)
-			drm_unbind_agp(entry->memory);
-		drm_free_agp(entry->memory, entry->pages);
-#endif
-		kfree(entry);
+	mem = agp_allocate_memory(dev->agp->bridge, num_pages,
+				      type);
+	if (mem == NULL) {
+		DRM_ERROR("Failed to allocate memory for %ld pages\n",
+			  num_pages);
+		return NULL;
 	}
-	INIT_LIST_HEAD(&dev->agp->memory);
 
-	if (dev->agp->acquired)
-		drm_agp_release(dev);
+	for (i = 0; i < num_pages; i++)
+		mem->pages[i] = pages[i];
+	mem->page_count = num_pages;
 
-	dev->agp->acquired = 0;
-	dev->agp->enabled = 0;
-}
-
-#ifdef __NetBSD__
-
-static void
-drm_agp_flush_hook(void)
-{
-
-	agp_flush_cache();
-}
-
-static const struct drm_agp_hooks agp_hooks = {
-	.agph_info = drm_agp_info_hook,
-	.agph_info_ioctl = drm_agp_info_ioctl_hook,
-	.agph_acquire = drm_agp_acquire_hook,
-	.agph_acquire_ioctl = drm_agp_acquire_ioctl_hook,
-	.agph_release = drm_agp_release_hook,
-	.agph_release_ioctl = drm_agp_release_ioctl_hook,
-	.agph_enable = drm_agp_enable_hook,
-	.agph_enable_ioctl = drm_agp_enable_ioctl_hook,
-	.agph_alloc = drm_agp_alloc_hook,
-	.agph_alloc_ioctl = drm_agp_alloc_ioctl_hook,
-	.agph_unbind = drm_agp_unbind_hook,
-	.agph_unbind_ioctl = drm_agp_unbind_ioctl_hook,
-	.agph_bind = drm_agp_bind_hook,
-	.agph_bind_ioctl = drm_agp_bind_ioctl_hook,
-	.agph_free = drm_agp_free_hook,
-	.agph_free_ioctl = drm_agp_free_ioctl_hook,
-	.agph_init = drm_agp_init_hook,
-	.agph_clear = drm_agp_clear_hook,
-	.agph_flush = drm_agp_flush_hook,
-};
-
-#include <sys/module.h>
-#include <sys/once.h>
-
-MODULE(MODULE_CLASS_MISC, drmkms_agp, "drmkms"); /* XXX agp */
-
-static int
-drmkms_agp_init(void)
-{
-
-	return drm_agp_register(&agp_hooks);
-}
-
-int
-drmkms_agp_guarantee_initialized(void)
-{
-#ifdef _MODULE
-	return 0;
-#else
-	static ONCE_DECL(drmkms_agp_init_once);
-
-	return RUN_ONCE(&drmkms_agp_init_once, &drmkms_agp_init);
-#endif
-}
-
-static int
-drmkms_agp_fini(void)
-{
-
-	return drm_agp_deregister(&agp_hooks);
-}
-
-static int
-drmkms_agp_modcmd(modcmd_t cmd, void *arg __unused)
-{
-	int error;
-
-	switch (cmd) {
-	case MODULE_CMD_INIT:
-#ifdef _MODULE
-		error = drmkms_agp_init();
-#else
-		error = drmkms_agp_guarantee_initialized();
-#endif
-		if (error)
-			return error;
-		return 0;
-	case MODULE_CMD_AUTOUNLOAD:
-		return EBUSY;
-	case MODULE_CMD_FINI:
-		error = drmkms_agp_fini();
-		if (error)
-			return error;
-		return 0;
-	default:
-		return ENOTTY;
+	mem->is_flushed = true;
+	ret = agp_bind_memory(mem, gtt_offset / PAGE_SIZE);
+	if (ret != 0) {
+		DRM_ERROR("Failed to bind AGP memory: %d\n", ret);
+		agp_free_memory(mem);
+		return NULL;
 	}
-}
 
-#endif	/* __NetBSD__ */
+	return mem;
+}
+EXPORT_SYMBOL(drm_agp_bind_pages);
+
+#endif /* __OS_HAS_AGP */

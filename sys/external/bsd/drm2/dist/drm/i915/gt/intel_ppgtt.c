@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_ppgtt.c,v 1.4 2021/12/19 12:07:47 riastradh Exp $	*/
+/*	$NetBSD: intel_ppgtt.c,v 1.1 2021/12/18 20:15:32 riastradh Exp $	*/
 
 // SPDX-License-Identifier: MIT
 /*
@@ -6,7 +6,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_ppgtt.c,v 1.4 2021/12/19 12:07:47 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_ppgtt.c,v 1.1 2021/12/18 20:15:32 riastradh Exp $");
 
 #include <linux/slab.h>
 
@@ -53,7 +53,6 @@ struct i915_page_directory *alloc_pd(struct i915_address_space *vm)
 		return ERR_PTR(-ENOMEM);
 
 	if (unlikely(setup_page_dma(vm, px_base(pd)))) {
-		spin_lock_destroy(&pd->lock);
 		kfree(pd);
 		return ERR_PTR(-ENOMEM);
 	}
@@ -89,11 +88,7 @@ __set_pd_entry(struct i915_page_directory * const pd,
 
 	atomic_inc(px_used(pd));
 	pd->entry[idx] = to;
-#ifdef __NetBSD__
-	write_dma_entry(px_base(pd), idx, encode(to->map->dm_segs[0].ds_addr, I915_CACHE_LLC));
-#else
 	write_dma_entry(px_base(pd), idx, encode(to->daddr, I915_CACHE_LLC));
-#endif
 }
 
 void
@@ -216,11 +211,7 @@ void ppgtt_init(struct i915_ppgtt *ppgtt, struct intel_gt *gt)
 
 	ppgtt->vm.gt = gt;
 	ppgtt->vm.i915 = i915;
-#ifdef __NetBSD__
-	ppgtt->vm.dmat = i915->drm.dmat;
-#else
 	ppgtt->vm.dma = &i915->drm.pdev->dev;
-#endif
 	ppgtt->vm.total = BIT_ULL(INTEL_INFO(i915)->ppgtt_size);
 
 	i915_address_space_init(&ppgtt->vm, VM_CLASS_PPGTT);

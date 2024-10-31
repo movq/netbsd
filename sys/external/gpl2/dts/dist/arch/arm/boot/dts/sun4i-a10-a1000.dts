@@ -47,6 +47,7 @@
 #include "sunxi-common-regulators.dtsi"
 
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/pinctrl/sun4i-a10.h>
 
 / {
 	model = "Mele A1000";
@@ -60,26 +61,17 @@
 		stdout-path = "serial0:115200n8";
 	};
 
-	hdmi-connector {
-		compatible = "hdmi-connector";
-		type = "a";
-
-		port {
-			hdmi_con_in: endpoint {
-				remote-endpoint = <&hdmi_out_con>;
-			};
-		};
-	};
-
 	leds {
 		compatible = "gpio-leds";
+		pinctrl-names = "default";
+		pinctrl-0 = <&led_pins_a1000>;
 
-		led-0 {
+		red {
 			label = "a1000:red:usr";
 			gpios = <&pio 7 10 GPIO_ACTIVE_HIGH>;
 		};
 
-		led-1 {
+		blue {
 			label = "a1000:blue:pwr";
 			gpios = <&pio 7 20 GPIO_ACTIVE_HIGH>;
 			default-state = "on";
@@ -88,6 +80,8 @@
 
 	reg_emac_3v3: emac-3v3 {
 		compatible = "regulator-fixed";
+		pinctrl-names = "default";
+		pinctrl-0 = <&emac_power_pin_a1000>;
 		regulator-name = "emac-3v3";
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
@@ -136,7 +130,9 @@
 };
 
 &emac {
-	phy-handle = <&phy1>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&emac_pins_a>;
+	phy = <&phy1>;
 	status = "okay";
 };
 
@@ -144,21 +140,9 @@
 	status = "okay";
 };
 
-&de {
-	status = "okay";
-};
-
-&hdmi {
-	status = "okay";
-};
-
-&hdmi_out {
-	hdmi_out_con: endpoint {
-		remote-endpoint = <&hdmi_con_in>;
-	};
-};
-
 &i2c0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c0_pins_a>;
 	status = "okay";
 
 	axp209: pmic@34 {
@@ -173,7 +157,7 @@
 
 &ir0 {
 	pinctrl-names = "default";
-	pinctrl-0 = <&ir0_rx_pins>;
+	pinctrl-0 = <&ir0_rx_pins_a>;
 	status = "okay";
 };
 
@@ -187,9 +171,12 @@
 };
 
 &mmc0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&mmc0_pins_a>, <&mmc0_cd_pin_reference_design>;
 	vmmc-supply = <&reg_vcc3v3>;
 	bus-width = <4>;
-	cd-gpios = <&pio 7 1 GPIO_ACTIVE_LOW>; /* PH1 */
+	cd-gpios = <&pio 7 1 GPIO_ACTIVE_HIGH>; /* PH1 */
+	cd-inverted;
 	status = "okay";
 };
 
@@ -199,6 +186,18 @@
 
 &ohci1 {
 	status = "okay";
+};
+
+&pio {
+	emac_power_pin_a1000: emac_power_pin@0 {
+		pins = "PH15";
+		function = "gpio_out";
+	};
+
+	led_pins_a1000: led_pins@0 {
+		pins = "PH10", "PH20";
+		function = "gpio_out";
+	};
 };
 
 #include "axp209.dtsi"
@@ -238,13 +237,13 @@
 
 &spdif {
 	pinctrl-names = "default";
-	pinctrl-0 = <&spdif_tx_pin>;
+	pinctrl-0 = <&spdif_tx_pins_a>;
 	status = "okay";
 };
 
 &uart0 {
 	pinctrl-names = "default";
-	pinctrl-0 = <&uart0_pb_pins>;
+	pinctrl-0 = <&uart0_pins_a>;
 	status = "okay";
 };
 

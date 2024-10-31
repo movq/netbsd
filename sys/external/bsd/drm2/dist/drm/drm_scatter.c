@@ -1,6 +1,4 @@
-/*	$NetBSD: drm_scatter.c,v 1.3 2021/12/18 23:44:57 riastradh Exp $	*/
-
-/*
+/**
  * \file drm_scatter.c
  * IOCTLs to manage scatter/gather memory
  *
@@ -33,31 +31,22 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_scatter.c,v 1.3 2021/12/18 23:44:57 riastradh Exp $");
-
-#include <linux/mm.h>
-#include <linux/slab.h>
 #include <linux/vmalloc.h>
-
-#include <drm/drm.h>
-#include <drm/drm_drv.h>
-#include <drm/drm_print.h>
-
-#include "drm_legacy.h"
+#include <linux/slab.h>
+#include <drm/drmP.h>
 
 #define DEBUG_SCATTER 0
 
 static inline void *drm_vmalloc_dma(unsigned long size)
 {
 #if defined(__powerpc__) && defined(CONFIG_NOT_COHERENT_CACHE)
-	return __vmalloc(size, GFP_KERNEL, pgprot_noncached_wc(PAGE_KERNEL));
+	return __vmalloc(size, GFP_KERNEL, PAGE_KERNEL | _PAGE_NO_CACHE);
 #else
 	return vmalloc_32(size);
 #endif
 }
 
-static void drm_sg_cleanup(struct drm_sg_mem * entry)
+void drm_sg_cleanup(struct drm_sg_mem * entry)
 {
 	struct page *page;
 	int i;
@@ -75,34 +64,21 @@ static void drm_sg_cleanup(struct drm_sg_mem * entry)
 	kfree(entry);
 }
 
-void drm_legacy_sg_cleanup(struct drm_device *dev)
-{
-	if (drm_core_check_feature(dev, DRIVER_SG) && dev->sg &&
-	    drm_core_check_feature(dev, DRIVER_LEGACY)) {
-		drm_sg_cleanup(dev->sg);
-		dev->sg = NULL;
-	}
-}
 #ifdef _LP64
 # define ScatterHandle(x) (unsigned int)((x >> 32) + (x & ((1L << 32) - 1)))
 #else
 # define ScatterHandle(x) (unsigned int)(x)
 #endif
 
-int drm_legacy_sg_alloc(struct drm_device *dev, void *data,
-			struct drm_file *file_priv)
+int drm_sg_alloc(struct drm_device *dev, struct drm_scatter_gather * request)
 {
-	struct drm_scatter_gather *request = data;
 	struct drm_sg_mem *entry;
 	unsigned long pages, i, j;
 
 	DRM_DEBUG("\n");
 
-	if (!drm_core_check_feature(dev, DRIVER_LEGACY))
-		return -EOPNOTSUPP;
-
 	if (!drm_core_check_feature(dev, DRIVER_SG))
-		return -EOPNOTSUPP;
+		return -EINVAL;
 
 	if (dev->sg)
 		return -EINVAL;
@@ -205,17 +181,23 @@ int drm_legacy_sg_alloc(struct drm_device *dev, void *data,
 	return -ENOMEM;
 }
 
-int drm_legacy_sg_free(struct drm_device *dev, void *data,
+int drm_sg_alloc_ioctl(struct drm_device *dev, void *data,
 		       struct drm_file *file_priv)
+{
+	struct drm_scatter_gather *request = data;
+
+	return drm_sg_alloc(dev, request);
+
+}
+
+int drm_sg_free(struct drm_device *dev, void *data,
+		struct drm_file *file_priv)
 {
 	struct drm_scatter_gather *request = data;
 	struct drm_sg_mem *entry;
 
-	if (!drm_core_check_feature(dev, DRIVER_LEGACY))
-		return -EOPNOTSUPP;
-
 	if (!drm_core_check_feature(dev, DRIVER_SG))
-		return -EOPNOTSUPP;
+		return -EINVAL;
 
 	entry = dev->sg;
 	dev->sg = NULL;

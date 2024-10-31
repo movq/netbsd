@@ -1,5 +1,3 @@
-/*	$NetBSD: rv770d.h,v 1.4 2021/12/18 23:45:43 riastradh Exp $	*/
-
 /*
  * Copyright 2009 Advanced Micro Devices, Inc.
  * Copyright 2009 Red Hat Inc.
@@ -389,7 +387,6 @@
 #define UVD_UDEC_TILING_CONFIG                          0xef40
 #define UVD_UDEC_DB_TILING_CONFIG                       0xef44
 #define UVD_UDEC_DBW_TILING_CONFIG                      0xef48
-#define UVD_NO_OP					0xeffc
 
 #define	GC_USER_SHADER_PIPE_CONFIG			0x8954
 #define		INACTIVE_QD_PIPES(x)				((x) << 8)
@@ -564,7 +561,7 @@
 #define	SQ_DYN_GPR_SIZE_SIMD_AB_5			0x8DC4
 #define	SQ_DYN_GPR_SIZE_SIMD_AB_6			0x8DC8
 #define	SQ_DYN_GPR_SIZE_SIMD_AB_7			0x8DCC
-#define		ES_PRIO(x)					((u32)(x) << 30)
+#define		ES_PRIO(x)					((x) << 30)
 #define	SQ_GPR_RESOURCE_MGMT_1				0x8C04
 #define		NUM_PS_GPRS(x)					((x) << 0)
 #define		NUM_VS_GPRS(x)					((x) << 16)
@@ -662,7 +659,7 @@
 #define DMA_RB_WPTR                                       0xd00c
 
 /* async DMA packets */
-#define DMA_PACKET(cmd, t, s, n)	((((u32)(cmd) & 0xF) << 28) |	\
+#define DMA_PACKET(cmd, t, s, n)	((((cmd) & 0xF) << 28) |	\
 					 (((t) & 0x1) << 23) |		\
 					 (((s) & 0x1) << 22) |		\
 					 (((n) & 0xFFFF) << 0))
@@ -992,9 +989,6 @@
 			 ((n) & 0x3FFF) << 16)
 
 /* UVD */
-#define UVD_SEMA_ADDR_LOW				0xef00
-#define UVD_SEMA_ADDR_HIGH				0xef04
-#define UVD_SEMA_CMD					0xef08
 #define UVD_GPCOM_VCPU_CMD				0xef0c
 #define UVD_GPCOM_VCPU_DATA0				0xef10
 #define UVD_GPCOM_VCPU_DATA1				0xef14

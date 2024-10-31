@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_ring.h,v 1.3 2021/12/19 10:59:01 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_ring.h,v 1.1 2021/12/18 20:11:10 riastradh Exp $	*/
 
 /*
  * Copyright 2016 Advanced Micro Devices, Inc.
@@ -25,8 +25,6 @@
  */
 #ifndef __AMDGPU_RING_H__
 #define __AMDGPU_RING_H__
-
-#include <linux/idr.h>
 
 #include <drm/amdgpu_drm.h>
 #include <drm/gpu_scheduler.h>
@@ -309,7 +307,7 @@ static inline void amdgpu_ring_write_multiple(struct amdgpu_ring *ring,
 		DRM_ERROR("amdgpu: writing more dwords to the ring than expected!\n");
 
 	occupied = ring->wptr & ring->buf_mask;
-	dst = __UNVOLATILE(&ring->ring[occupied]);
+	dst = (void *)&ring->ring[occupied];
 	chunk1 = ring->buf_mask + 1 - occupied;
 	chunk1 = (chunk1 >= count_dw) ? count_dw: chunk1;
 	chunk2 = count_dw - chunk1;
@@ -321,7 +319,7 @@ static inline void amdgpu_ring_write_multiple(struct amdgpu_ring *ring,
 
 	if (chunk2) {
 		src += chunk1;
-		dst = __UNVOLATILE(ring->ring);
+		dst = (void *)ring->ring;
 		memcpy(dst, src, chunk2);
 	}
 

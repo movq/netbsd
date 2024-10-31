@@ -7,7 +7,6 @@
 
 / {
 	memory@80000000 {
-		device_type = "memory";
 		reg = <0x80000000 0x20000000>;
 	};
 
@@ -21,12 +20,26 @@
 
 &cpu0 {
 	clock-frequency = <792000000>;
+	operating-points = <
+		/* kHz	uV */
+		792000  1225000
+		528000	1175000
+		396000	1025000
+		198000	950000
+	>;
+	fsl,soc-operating-points = <
+		/* KHz	uV */
+		792000  1175000
+		528000	1175000
+		396000	1175000
+		198000	1175000
+	>;
 };
 
 &iomuxc {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_gpio1 &pinctrl_gpio2 &pinctrl_gpio3
-		&pinctrl_gpio4 &pinctrl_gpio5 &pinctrl_gpio7>;
+		&pinctrl_gpio4 &pinctrl_gpio5>;
 
 };
 
@@ -43,7 +56,6 @@
 	assigned-clock-rates = <0>, <198000000>;
 	cap-power-off-card;
 	keep-power-in-suspend;
-	max-frequency = <25000000>;
 	mmc-pwrseq = <&wifi_pwrseq>;
 	no-1-8-v;
 	non-removable;

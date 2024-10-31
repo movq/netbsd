@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_ttm.h,v 1.5 2021/12/19 12:21:29 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_ttm.h,v 1.1 2021/12/18 20:11:12 riastradh Exp $	*/
 
 /*
  * Copyright 2016 Advanced Micro Devices, Inc.
@@ -42,21 +42,11 @@
 
 #define AMDGPU_POISON	0xd0bed0be
 
-#ifdef __NetBSD__
-#  define	__amdgpu_aperture_iomem
-#  define	__iomem	__amdgpu_aperture_iomem
-#endif
-
 struct amdgpu_mman {
 	struct ttm_bo_device		bdev;
 	bool				mem_global_referenced;
 	bool				initialized;
-#ifdef __NetBSD__
-	bus_space_handle_t		aper_base_handle;
-	void				*aper_base_kaddr;
-#else
 	void __iomem			*aper_base_kaddr;
-#endif
 
 #if defined(CONFIG_DEBUG_FS)
 	struct dentry			*debugfs_entries[8];
@@ -71,10 +61,6 @@ struct amdgpu_mman {
 	/* Scheduler entity for buffer moves */
 	struct drm_sched_entity			entity;
 };
-
-#ifdef __NetBSD__
-#  undef	__iomem
-#endif
 
 struct amdgpu_copy_mem {
 	struct ttm_buffer_object	*bo;
@@ -115,12 +101,7 @@ int amdgpu_fill_buffer(struct amdgpu_bo *bo,
 			struct dma_resv *resv,
 			struct dma_fence **fence);
 
-#ifdef __NetBSD__
-int amdgpu_mmap_object(struct drm_device *, off_t, size_t, vm_prot_t,
-    struct uvm_object **, voff_t *, struct file *);
-#else
 int amdgpu_mmap(struct file *filp, struct vm_area_struct *vma);
-#endif
 int amdgpu_ttm_alloc_gart(struct ttm_buffer_object *bo);
 int amdgpu_ttm_recover_gart(struct ttm_buffer_object *tbo);
 
@@ -143,11 +124,7 @@ void amdgpu_ttm_tt_set_user_pages(struct ttm_tt *ttm, struct page **pages);
 int amdgpu_ttm_tt_set_userptr(struct ttm_tt *ttm, uint64_t addr,
 				     uint32_t flags);
 bool amdgpu_ttm_tt_has_userptr(struct ttm_tt *ttm);
-#ifdef __NetBSD__
-struct vmspace *amdgpu_ttm_tt_get_usermm(struct ttm_tt *ttm);
-#else
 struct mm_struct *amdgpu_ttm_tt_get_usermm(struct ttm_tt *ttm);
-#endif
 bool amdgpu_ttm_tt_affect_userptr(struct ttm_tt *ttm, unsigned long start,
 				  unsigned long end);
 bool amdgpu_ttm_tt_userptr_invalidated(struct ttm_tt *ttm,

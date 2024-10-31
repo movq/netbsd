@@ -1,8 +1,12 @@
-/*	$NetBSD: r8a7790-clock.h,v 1.1.1.3 2020/01/03 14:33:04 skrll Exp $	*/
+/*	$NetBSD: r8a7790-clock.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
-/* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
  * Copyright 2013 Ideas On Board SPRL
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  */
 
 #ifndef __DT_BINDINGS_CLOCK_R8A7790_H__
@@ -80,7 +84,6 @@
 
 /* MSTP4 */
 #define R8A7790_CLK_IRQC		7
-#define R8A7790_CLK_INTC_SYS		8
 
 /* MSTP5 */
 #define R8A7790_CLK_AUDIO_DMAC1		1

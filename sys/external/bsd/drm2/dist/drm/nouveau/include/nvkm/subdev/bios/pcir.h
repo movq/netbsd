@@ -1,6 +1,5 @@
-/*	$NetBSD: pcir.h,v 1.3 2021/12/18 23:45:33 riastradh Exp $	*/
+/*	$NetBSD: pcir.h,v 1.1 2018/08/27 01:34:55 riastradh Exp $	*/
 
-/* SPDX-License-Identifier: MIT */
 #ifndef __NVBIOS_PCIR_H__
 #define __NVBIOS_PCIR_H__
 struct nvbios_pcirT {

@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_opregion.h,v 1.6 2024/04/16 14:34:01 riastradh Exp $	*/
+/*	$NetBSD: intel_opregion.h,v 1.1 2021/12/18 20:15:30 riastradh Exp $	*/
 
 /*
  * Copyright © 2008-2017 Intel Corporation
@@ -29,7 +29,6 @@
 
 #include <linux/workqueue.h>
 #include <linux/pci.h>
-#include <linux/acpi.h>
 
 struct drm_i915_private;
 struct intel_encoder;
@@ -52,11 +51,7 @@ struct intel_opregion {
 	u32 vbt_size;
 	u32 *lid_state;
 	struct work_struct asle_work;
-#ifdef __NetBSD__
-	struct acpidisp_notifier *acpi_notifier;
-#else
 	struct notifier_block acpi_notifier;
-#endif
 };
 
 #define OPREGION_SIZE            (8 * 1024)

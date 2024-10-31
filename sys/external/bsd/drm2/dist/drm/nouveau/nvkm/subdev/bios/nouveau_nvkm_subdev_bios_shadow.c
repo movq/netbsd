@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_subdev_bios_shadow.c,v 1.4 2021/12/18 23:45:38 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_subdev_bios_shadow.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $	*/
 
 /*
  * Copyright 2014 Red Hat Inc.
@@ -24,7 +24,7 @@
  * Authors: Ben Skeggs <bskeggs@redhat.com>
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_bios_shadow.c,v 1.4 2021/12/18 23:45:38 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_bios_shadow.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $");
 
 #include "priv.h"
 
@@ -156,7 +156,7 @@ shadow_fw_init(struct nvkm_bios *bios, const char *name)
 	int ret = request_firmware(&fw, name, dev);
 	if (ret)
 		return ERR_PTR(-ENOENT);
-	return __UNCONST(fw);
+	return (void *)fw;
 }
 
 static const struct nvbios_source

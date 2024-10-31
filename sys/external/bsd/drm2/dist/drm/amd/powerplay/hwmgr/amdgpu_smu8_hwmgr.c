@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_smu8_hwmgr.c,v 1.4 2021/12/19 12:37:54 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_smu8_hwmgr.c,v 1.1 2021/12/18 20:15:20 riastradh Exp $	*/
 
 /*
  * Copyright 2015 Advanced Micro Devices, Inc.
@@ -23,7 +23,7 @@
  *
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_smu8_hwmgr.c,v 1.4 2021/12/19 12:37:54 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_smu8_hwmgr.c,v 1.1 2021/12/18 20:15:20 riastradh Exp $");
 
 #include "pp_debug.h"
 #include <linux/types.h>
@@ -43,8 +43,6 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_smu8_hwmgr.c,v 1.4 2021/12/19 12:37:54 riastr
 #include "smu8_hwmgr.h"
 #include "power_state.h"
 #include "pp_thermal.h"
-
-#include <linux/nbsd-namespace.h>
 
 #define ixSMUSVI_NB_CURRENTVID 0xD8230044
 #define CURRENT_NB_VID_MASK 0xff000000
@@ -69,7 +67,7 @@ static const struct smu8_power_state *cast_const_smu8_power_state(
 	if (smu8_magic != hw_ps->magic)
 		return NULL;
 
-	return (const struct smu8_power_state *)hw_ps;
+	return (struct smu8_power_state *)hw_ps;
 }
 
 static uint32_t smu8_get_eclk_level(struct pp_hwmgr *hwmgr,
@@ -855,7 +853,7 @@ static int smu8_update_low_mem_pstate(struct pp_hwmgr *hwmgr, const void *input)
 	bool disable_switch;
 	bool enable_low_mem_state;
 	struct smu8_hwmgr *hw_data = hwmgr->backend;
-	const struct phm_set_power_state_input *states = (const struct phm_set_power_state_input *)input;
+	const struct phm_set_power_state_input *states = (struct phm_set_power_state_input *)input;
 	const struct smu8_power_state *pnew_state = cast_const_smu8_power_state(states->pnew_state);
 
 	if (hw_data->sys_info.nb_dpm_enable) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvif_notify.c,v 1.5 2021/12/19 10:51:57 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvif_notify.c,v 1.1 2018/08/27 01:34:55 riastradh Exp $	*/
 
 /*
  * Copyright 2014 Red Hat Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvif_notify.c,v 1.5 2021/12/19 10:51:57 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvif_notify.c,v 1.1 2018/08/27 01:34:55 riastradh Exp $");
 
 #include <nvif/client.h>
 #include <nvif/driver.h>
@@ -133,7 +133,7 @@ nvif_notify(const void *header, u32 length, const void *data, u32 size)
 		if (!WARN_ON(notify->size != size)) {
 			atomic_inc(&notify->putcnt);
 			if (test_bit(NVIF_NOTIFY_WORK, &notify->flags)) {
-				memcpy(__UNCONST(notify->data), data, size);
+				memcpy((void *)notify->data, data, size);
 				schedule_work(&notify->work);
 				return NVIF_NOTIFY_DROP;
 			}
@@ -160,8 +160,10 @@ nvif_notify_fini(struct nvif_notify *notify)
 	int ret = nvif_notify_put(notify);
 	if (ret >= 0 && object) {
 		ret = nvif_object_ioctl(object, &args, sizeof(args), NULL);
-		notify->object = NULL;
-		kfree(__UNCONST(notify->data));
+		if (ret == 0) {
+			notify->object = NULL;
+			kfree((void *)notify->data);
+		}
 	}
 	return ret;
 }

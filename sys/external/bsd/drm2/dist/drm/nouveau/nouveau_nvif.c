@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvif.c,v 1.6 2021/12/18 23:45:32 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvif.c,v 1.1 2018/08/27 01:34:55 riastradh Exp $	*/
 
 /*
  * Copyright 2014 Red Hat Inc.
@@ -29,7 +29,7 @@
  ******************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvif.c,v 1.6 2021/12/18 23:45:32 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvif.c,v 1.1 2018/08/27 01:34:55 riastradh Exp $");
 
 #include <core/client.h>
 #include <core/notify.h>
@@ -41,64 +41,9 @@ __KERNEL_RCSID(0, "$NetBSD: nouveau_nvif.c,v 1.6 2021/12/18 23:45:32 riastradh E
 #include <nvif/event.h>
 #include <nvif/ioctl.h>
 
-#include "nouveau_drv.h"
+#include "nouveau_drm.h"
 #include "nouveau_usif.h"
 
-#ifdef __NetBSD__
-#define	__iomem	__nvif_iomem
-static int
-nvkm_client_map(void *priv, bus_space_tag_t tag, u64 busaddr, u32 size,
-    bus_space_handle_t *handlep, void __iomem **ptrp)
-{
-	struct nvkm_client *client = nvxx_client(priv);
-	int ret;
-
-	if (tag == client->mmiot &&
-	    client->mmioaddr <= busaddr &&
-	    busaddr - client->mmioaddr <= client->mmiosz) {
-		const bus_size_t offset = busaddr - client->mmioaddr;
-		if (size > client->mmiosz - offset) {
-			DRM_ERROR("Invalid register access\n");
-			return -EFAULT;
-		}
-		ret = -bus_space_subregion(client->mmiot, client->mmioh,
-		    offset, size, handlep);
-		if (ret)
-			return ret;
-		*ptrp = bus_space_vaddr(tag, *handlep);
-		return 0;
-	}
-
-	ret = -bus_space_map(tag, busaddr, size, BUS_SPACE_MAP_LINEAR,
-	    handlep);
-	if (ret)
-		return ret;
-	*ptrp = bus_space_vaddr(tag, *handlep);
-	return 0;
-}
-
-static void
-nvkm_client_unmap(void *priv, bus_space_tag_t tag, bus_space_handle_t handle,
-    bus_addr_t busaddr, void __iomem *ptr, u32 size)
-{
-	struct nvkm_client *client = nvxx_client(priv);
-
-	KASSERTMSG(ptr == bus_space_vaddr(tag, handle),
-	    "nvkm_client ptr %p != %p [bus_space_vaddr(%p, %"PRIxVADDR")]",
-	    ptr, bus_space_vaddr(tag, handle), tag, handle);
-
-	if (tag == client->mmiot &&
-	    client->mmioaddr <= busaddr &&
-	    busaddr - client->mmioaddr <= client->mmiosz) {
-		__diagused const bus_size_t offset = busaddr - client->mmioaddr;
-		KASSERT(size <= client->mmiosz - offset);
-		/* Nothing to do to release a subregion.  */
-		return;
-	}
-
-	bus_space_unmap(tag, handle, size);
-}
-#else
 static void
 nvkm_client_unmap(void *priv, void __iomem *ptr, u32 size)
 {
@@ -110,7 +55,6 @@ nvkm_client_map(void *priv, u64 handle, u32 size)
 {
 	return ioremap(handle, size);
 }
-#endif
 
 static int
 nvkm_client_ioctl(void *priv, bool super, void *data, u32 size, void **hack)
@@ -121,15 +65,20 @@ nvkm_client_ioctl(void *priv, bool super, void *data, u32 size, void **hack)
 static int
 nvkm_client_resume(void *priv)
 {
-	struct nvkm_client *client = priv;
-	return nvkm_object_init(&client->object);
+	return nvkm_client_init(priv);
 }
 
 static int
 nvkm_client_suspend(void *priv)
 {
+	return nvkm_client_fini(priv, true);
+}
+
+static void
+nvkm_client_driver_fini(void *priv)
+{
 	struct nvkm_client *client = priv;
-	return nvkm_object_fini(&client->object, true);
+	nvkm_client_del(&client);
 }
 
 static int
@@ -164,14 +113,23 @@ static int
 nvkm_client_driver_init(const char *name, u64 device, const char *cfg,
 			const char *dbg, void **ppriv)
 {
-	return nvkm_client_new(name, device, cfg, dbg, nvkm_client_ntfy,
-			       (struct nvkm_client **)ppriv);
+	struct nvkm_client *client;
+	int ret;
+
+	ret = nvkm_client_new(name, device, cfg, dbg, &client);
+	*ppriv = client;
+	if (ret)
+		return ret;
+
+	client->ntfy = nvkm_client_ntfy;
+	return 0;
 }
 
 const struct nvif_driver
 nvif_driver_nvkm = {
 	.name = "nvkm",
 	.init = nvkm_client_driver_init,
+	.fini = nvkm_client_driver_fini,
 	.suspend = nvkm_client_suspend,
 	.resume = nvkm_client_resume,
 	.ioctl = nvkm_client_ioctl,

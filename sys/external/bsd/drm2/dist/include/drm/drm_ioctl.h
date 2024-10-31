@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_ioctl.h,v 1.5 2022/10/15 15:19:28 riastradh Exp $	*/
+/*	$NetBSD: drm_ioctl.h,v 1.1 2021/12/18 20:15:57 riastradh Exp $	*/
 
 /*
  * Internal Header for the Direct Rendering Manager
@@ -69,15 +69,8 @@ typedef int drm_ioctl_t(struct drm_device *dev, void *data,
 typedef int drm_ioctl_compat_t(struct file *filp, unsigned int cmd,
 			       unsigned long arg);
 
-#ifdef __NetBSD__
-/* XXX Kludge...is there a better way to do this?  */
-#define	DRM_IOCTL_NR(n)							\
-	(IOCBASECMD(n) &~ (IOC_DIRMASK | (IOCGROUP(n) << IOCGROUP_SHIFT)))
-#define	DRM_MAJOR	cdevsw_lookup_major(&drm_cdevsw)
-#else
 #define DRM_IOCTL_NR(n)                _IOC_NR(n)
 #define DRM_MAJOR       226
-#endif
 
 /**
  * enum drm_ioctl_flags - DRM ioctl flags
@@ -176,13 +169,7 @@ struct drm_ioctl_desc {
 	}
 
 int drm_ioctl_permit(u32 flags, struct drm_file *file_priv);
-#ifdef __NetBSD__
-int drm_ioctl(struct file *, unsigned long, void *);
-void drm_suspend_ioctl(struct drm_device *);
-void drm_resume_ioctl(struct drm_device *);
-#else
 long drm_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
-#endif
 long drm_ioctl_kernel(struct file *, drm_ioctl_t, void *, u32);
 #ifdef CONFIG_COMPAT
 long drm_compat_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
