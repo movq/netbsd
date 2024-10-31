@@ -1,4 +1,4 @@
-/*	$NetBSD: uvd_v6_0.h,v 1.3 2021/12/18 23:44:59 riastradh Exp $	*/
+/*	$NetBSD: uvd_v6_0.h,v 1.1 2018/08/27 01:34:46 riastradh Exp $	*/
 
 /*
  * Copyright 2014 Advanced Micro Devices, Inc.
@@ -26,8 +26,6 @@
 #ifndef __UVD_V6_0_H__
 #define __UVD_V6_0_H__
 
-extern const struct amdgpu_ip_block_version uvd_v6_0_ip_block;
-extern const struct amdgpu_ip_block_version uvd_v6_2_ip_block;
-extern const struct amdgpu_ip_block_version uvd_v6_3_ip_block;
+extern const struct amd_ip_funcs uvd_v6_0_ip_funcs;
 
 #endif

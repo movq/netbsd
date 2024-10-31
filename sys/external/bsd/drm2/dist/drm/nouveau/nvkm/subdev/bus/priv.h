@@ -1,6 +1,5 @@
-/*	$NetBSD: priv.h,v 1.3 2021/12/18 23:45:38 riastradh Exp $	*/
+/*	$NetBSD: priv.h,v 1.1 2018/08/27 01:34:56 riastradh Exp $	*/
 
-/* SPDX-License-Identifier: MIT */
 #ifndef __NVKM_BUS_PRIV_H__
 #define __NVKM_BUS_PRIV_H__
 #define nvkm_bus(p) container_of((p), struct nvkm_bus, subdev)

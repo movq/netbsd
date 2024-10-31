@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_util.h,v 1.4 2021/12/19 10:32:47 riastradh Exp $	*/
+/*	$NetBSD: drm_util.h,v 1.1 2021/12/18 20:15:57 riastradh Exp $	*/
 
 /*
  * Internal Header for the Direct Rendering Manager
@@ -39,10 +39,6 @@
 #include <linux/preempt.h>
 #include <linux/smp.h>
 
-#ifdef __NetBSD__
-#include <drm/drm_wait_netbsd.h>
-#endif
-
 /*
  * Use EXPORT_SYMBOL_FOR_TESTS_ONLY() for functions that shall
  * only be visible for drmselftests.
@@ -81,13 +77,9 @@
  */
 static inline bool drm_can_sleep(void)
 {
-#ifdef __NetBSD__
-	return false;		/* XXX */
-#else
 	if (in_atomic() || in_dbg_master() || irqs_disabled())
 		return false;
 	return true;
-#endif
 }
 
 #endif

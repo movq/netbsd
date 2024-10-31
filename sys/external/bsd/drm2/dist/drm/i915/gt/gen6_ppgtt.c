@@ -1,4 +1,4 @@
-/*	$NetBSD: gen6_ppgtt.c,v 1.8 2021/12/19 12:27:32 riastradh Exp $	*/
+/*	$NetBSD: gen6_ppgtt.c,v 1.1 2021/12/18 20:15:32 riastradh Exp $	*/
 
 // SPDX-License-Identifier: MIT
 /*
@@ -6,7 +6,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gen6_ppgtt.c,v 1.8 2021/12/19 12:27:32 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gen6_ppgtt.c,v 1.1 2021/12/18 20:15:32 riastradh Exp $");
 
 #include <linux/log2.h>
 
@@ -15,7 +15,6 @@ __KERNEL_RCSID(0, "$NetBSD: gen6_ppgtt.c,v 1.8 2021/12/19 12:27:32 riastradh Exp
 #include "i915_trace.h"
 #include "i915_vgpu.h"
 #include "intel_gt.h"
-#include <linux/nbsd-namespace.h>
 
 /* Write pde (index) from the page directory @pd to the page table @pt */
 static inline void gen6_write_pde(const struct gen6_ppgtt *ppgtt,
@@ -23,14 +22,8 @@ static inline void gen6_write_pde(const struct gen6_ppgtt *ppgtt,
 				  const struct i915_page_table *pt)
 {
 	/* Caller needs to make sure the write completes if necessary */
-#ifdef __NetBSD__
-	CTASSERT(sizeof(gen6_pte_t) == 4);
-	bus_space_write_4(ppgtt->pd_bst, ppgtt->pd_bsh, pde*sizeof(gen6_pte_t),
-	    GEN6_PDE_ADDR_ENCODE(px_dma(pt)) | GEN6_PDE_VALID);
-#else
 	iowrite32(GEN6_PDE_ADDR_ENCODE(px_dma(pt)) | GEN6_PDE_VALID,
 		  ppgtt->pd_addr + pde);
-#endif
 }
 
 void gen7_ppgtt_enable(struct intel_gt *gt)
@@ -143,25 +136,6 @@ static void gen6_ppgtt_insert_entries(struct i915_address_space *vm,
 
 	vaddr = kmap_atomic_px(i915_pt_entry(pd, act_pt));
 	do {
-#ifdef __NetBSD__
-		KASSERT(iter.seg < iter.map->dm_nsegs);
-		KASSERT((iter.off & (PAGE_SIZE - 1)) == 0);
-		const bus_dma_segment_t *seg = &iter.map->dm_segs[iter.seg];
-		KASSERT((seg->ds_addr & (PAGE_SIZE - 1)) == 0);
-		KASSERT((seg->ds_len & (PAGE_SIZE - 1)) == 0);
-		KASSERT(iter.off <= seg->ds_len - PAGE_SIZE);
-		vaddr[act_pte] = pte_encode |
-		    GEN6_PTE_ADDR_ENCODE(seg->ds_addr + iter.off);
-		iter.off += PAGE_SIZE;
-		if (iter.off >= seg->ds_len) {
-			GEM_BUG_ON(iter.off > seg->ds_len);
-			iter.off = 0;
-			if (++iter.seg >= iter.map->dm_nsegs) {
-				GEM_BUG_ON(iter.seg > iter.map->dm_nsegs);
-				break;
-			}
-		}
-#else
 		GEM_BUG_ON(iter.sg->length < I915_GTT_PAGE_SIZE);
 		vaddr[act_pte] = pte_encode | GEN6_PTE_ADDR_ENCODE(iter.dma);
 
@@ -174,7 +148,6 @@ static void gen6_ppgtt_insert_entries(struct i915_address_space *vm,
 			iter.dma = sg_dma_address(iter.sg);
 			iter.max = iter.dma + iter.sg->length;
 		}
-#endif
 
 		if (++act_pte == GEN6_PTES) {
 			kunmap_atomic(vaddr);
@@ -202,11 +175,7 @@ static void gen6_flush_pd(struct gen6_ppgtt *ppgtt, u64 start, u64 end)
 		gen6_write_pde(ppgtt, pde, pt);
 
 	mb();
-#ifdef __NetBSD__
-	(void)bus_space_read_4(ppgtt->pd_bst, ppgtt->pd_bsh, 4*(pde - 1));
-#else
 	ioread32(ppgtt->pd_addr + pde - 1);
-#endif
 	gen6_ggtt_invalidate(ppgtt->base.vm.gt->ggtt);
 	mb();
 
@@ -319,7 +288,6 @@ static void gen6_ppgtt_cleanup(struct i915_address_space *vm)
 
 	mutex_destroy(&ppgtt->flush);
 	mutex_destroy(&ppgtt->pin_mutex);
-	spin_lock_destroy(&ppgtt->base.pd->lock);
 	kfree(ppgtt->base.pd);
 }
 
@@ -345,34 +313,7 @@ static int pd_vma_bind(struct i915_vma *vma,
 	u32 ggtt_offset = i915_ggtt_offset(vma) / I915_GTT_PAGE_SIZE;
 
 	px_base(ppgtt->base.pd)->ggtt_offset = ggtt_offset * sizeof(gen6_pte_t);
-#ifdef __NetBSD__
-    {
-	bus_size_t npgs = vma->size >> PAGE_SHIFT;
-	bus_size_t gtt_nbytes = npgs * sizeof(gen6_pte_t);
-	bus_size_t ggtt_offset_bytes =
-	    (bus_size_t)ggtt_offset * sizeof(gen6_pte_t);
-	int ret;
-
-	KASSERTMSG(gtt_nbytes <= ggtt->gsmsz - ggtt_offset_bytes,
-	    "oversize ppgtt size 0x%"PRIx64" bytes 0x%"PRIx64" pgs,"
-	    " requiring 0x%"PRIx64" bytes of ptes at 0x%"PRIx64";"
-	    " gsm has 0x%"PRIx64" bytes total"
-	    " with only 0x%"PRIx64" for ptes",
-	    (uint64_t)vma->size, (uint64_t)npgs,
-	    (uint64_t)gtt_nbytes, (uint64_t)ggtt_offset_bytes,
-	    (uint64_t)ggtt->gsmsz,
-	    (uint64_t)(ggtt->gsmsz - ggtt_offset_bytes));
-	ret = -bus_space_subregion(ggtt->gsmt, ggtt->gsmh, ggtt_offset_bytes,
-	    gtt_nbytes, &ppgtt->pd_bsh);
-	if (ret) {
-		DRM_ERROR("Unable to subregion the GGTT: %d\n", ret);
-		return ret;
-	}
-	ppgtt->pd_bst = ggtt->gsmt;
-    }
-#else
 	ppgtt->pd_addr = (gen6_pte_t __iomem *)ggtt->gsm + ggtt_offset;
-#endif
 
 	gen6_flush_pd(ppgtt, 0, ppgtt->base.vm.total);
 	return 0;
@@ -539,7 +480,6 @@ struct i915_ppgtt *gen6_ppgtt_create(struct intel_gt *gt)
 err_scratch:
 	free_scratch(&ppgtt->base.vm);
 err_pd:
-	spin_lock_destroy(&ppgtt->base.pd->lock);
 	kfree(ppgtt->base.pd);
 err_free:
 	mutex_destroy(&ppgtt->pin_mutex);

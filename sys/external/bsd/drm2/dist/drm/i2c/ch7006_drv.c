@@ -1,5 +1,3 @@
-/*	$NetBSD: ch7006_drv.c,v 1.3 2021/12/18 23:45:27 riastradh Exp $	*/
-
 /*
  * Copyright (C) 2009 Francisco Jerez.
  * All Rights Reserved.
@@ -25,9 +23,6 @@
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ch7006_drv.c,v 1.3 2021/12/18 23:45:27 riastradh Exp $");
 
 #include <linux/module.h>
 
@@ -124,8 +119,8 @@ static void ch7006_encoder_mode_set(struct drm_encoder *encoder,
 	struct ch7006_encoder_params *params = &priv->params;
 	struct ch7006_state *state = &priv->state;
 	uint8_t *regs = state->regs;
-	const struct ch7006_mode *mode = priv->mode;
-	const struct ch7006_tv_norm_info *norm = &ch7006_tv_norms[priv->norm];
+	struct ch7006_mode *mode = priv->mode;
+	struct ch7006_tv_norm_info *norm = &ch7006_tv_norms[priv->norm];
 	int start_active;
 
 	ch7006_dbg(client, "\n");
@@ -231,7 +226,7 @@ static int ch7006_encoder_get_modes(struct drm_encoder *encoder,
 				    struct drm_connector *connector)
 {
 	struct ch7006_priv *priv = to_ch7006_priv(encoder);
-	const struct ch7006_mode *mode;
+	struct ch7006_mode *mode;
 	int n = 0;
 
 	for (mode = ch7006_modes; mode->mode.clock; mode++) {
@@ -258,8 +253,6 @@ static int ch7006_encoder_create_resources(struct drm_encoder *encoder,
 	drm_mode_create_tv_properties(dev, NUM_TV_NORMS, ch7006_tv_norm_names);
 
 	priv->scale_property = drm_property_create_range(dev, 0, "scale", 0, 2);
-	if (!priv->scale_property)
-		return -ENOMEM;
 
 	drm_object_attach_property(&connector->base, conf->tv_select_subconnector_property,
 				      priv->select_subconnector);
@@ -364,16 +357,21 @@ static int ch7006_encoder_set_property(struct drm_encoder *encoder,
 	if (modes_changed) {
 		drm_helper_probe_single_connector_modes(connector, 0, 0);
 
-		if (crtc)
-			drm_crtc_helper_set_mode(crtc, &crtc->mode,
-						 crtc->x, crtc->y,
-						 crtc->primary->fb);
+		/* Disable the crtc to ensure a full modeset is
+		 * performed whenever it's turned on again. */
+		if (crtc) {
+			struct drm_mode_set modeset = {
+				.crtc = crtc,
+			};
+
+			crtc->funcs->set_config(&modeset);
+		}
 	}
 
 	return 0;
 }
 
-static const struct drm_encoder_slave_funcs ch7006_encoder_funcs = {
+static struct drm_encoder_slave_funcs ch7006_encoder_funcs = {
 	.set_config = ch7006_encoder_set_config,
 	.destroy = ch7006_encoder_destroy,
 	.dpms = ch7006_encoder_dpms,
@@ -490,7 +488,7 @@ static int ch7006_encoder_init(struct i2c_client *client,
 	return 0;
 }
 
-static const struct i2c_device_id ch7006_ids[] = {
+static struct i2c_device_id ch7006_ids[] = {
 	{ "ch7006", 0 },
 	{ }
 };

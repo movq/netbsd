@@ -1,4 +1,4 @@
-/*	$NetBSD: stm32mp1-clks.h,v 1.1.1.4 2021/11/07 16:49:57 jmcneill Exp $	*/
+/*	$NetBSD: stm32mp1-clks.h,v 1.1 2018/04/28 18:25:53 jmcneill Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 or BSD-3-Clause */
 /*
@@ -78,7 +78,7 @@
 #define I2C6		63
 #define USART1		64
 #define RTCAPB		65
-#define TZC1		66
+#define TZC		66
 #define TZPC		67
 #define IWDG1		68
 #define BSEC		69
@@ -125,7 +125,6 @@
 #define CRC1		110
 #define USBH		111
 #define ETHSTP		112
-#define TZC2		113
 
 /* Kernel clocks */
 #define SDMMC1_K	118
@@ -231,6 +230,7 @@
 #define CK_MCO2		212
 
 /* TRACE & DEBUG clocks */
+#define DBG		213
 #define CK_DBG		214
 #define CK_TRACE	215
 
@@ -250,31 +250,7 @@
 
 #define STM32MP1_LAST_CLK 232
 
-/* SCMI clock identifiers */
-#define CK_SCMI0_HSE		0
-#define CK_SCMI0_HSI		1
-#define CK_SCMI0_CSI		2
-#define CK_SCMI0_LSE		3
-#define CK_SCMI0_LSI		4
-#define CK_SCMI0_PLL2_Q		5
-#define CK_SCMI0_PLL2_R		6
-#define CK_SCMI0_MPU		7
-#define CK_SCMI0_AXI		8
-#define CK_SCMI0_BSEC		9
-#define CK_SCMI0_CRYP1		10
-#define CK_SCMI0_GPIOZ		11
-#define CK_SCMI0_HASH1		12
-#define CK_SCMI0_I2C4		13
-#define CK_SCMI0_I2C6		14
-#define CK_SCMI0_IWDG1		15
-#define CK_SCMI0_RNG1		16
-#define CK_SCMI0_RTC		17
-#define CK_SCMI0_RTCAPB		18
-#define CK_SCMI0_SPI6		19
-#define CK_SCMI0_USART1		20
-
-#define CK_SCMI1_PLL3_Q		0
-#define CK_SCMI1_PLL3_R		1
-#define CK_SCMI1_MCU		2
+#define LTDC_K		LTDC_PX
+#define ETHMAC_K	ETHCK_K
 
 #endif /* _DT_BINDINGS_STM32MP1_CLKS_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_perf.c,v 1.7 2021/12/19 12:32:15 riastradh Exp $	*/
+/*	$NetBSD: i915_perf.c,v 1.1 2021/12/18 20:15:25 riastradh Exp $	*/
 
 /*
  * Copyright © 2015-2016 Intel Corporation
@@ -194,7 +194,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i915_perf.c,v 1.7 2021/12/19 12:32:15 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i915_perf.c,v 1.1 2021/12/18 20:15:25 riastradh Exp $");
 
 #include <linux/anon_inodes.h>
 #include <linux/sizes.h>
@@ -224,13 +224,6 @@ __KERNEL_RCSID(0, "$NetBSD: i915_perf.c,v 1.7 2021/12/19 12:32:15 riastradh Exp 
 #include "oa/i915_oa_cnl.h"
 #include "oa/i915_oa_icl.h"
 #include "oa/i915_oa_tgl.h"
-
-#ifdef __NetBSD__
-#include <sys/filedesc.h>
-#include <sys/poll.h>
-#include <sys/select.h>
-#include <linux/nbsd-namespace.h>
-#endif
 
 /* HW requires this to be a power of two, between 128k and 16M, though driver
  * is currently generally designed assuming the largest 16M size is used such
@@ -399,9 +392,7 @@ struct i915_oa_config_bo {
 	struct i915_vma *vma;
 };
 
-#ifndef __NetBSD__		/* XXX i915 perf sysctl */
 static struct ctl_table_header *sysctl_header;
-#endif
 
 static enum hrtimer_restart oa_poll_check_timer_cb(struct hrtimer *hrtimer);
 
@@ -410,9 +401,9 @@ void i915_oa_config_release(struct kref *ref)
 	struct i915_oa_config *oa_config =
 		container_of(ref, typeof(*oa_config), ref);
 
-	kfree(__UNCONST(oa_config->flex_regs));
-	kfree(__UNCONST(oa_config->b_counter_regs));
-	kfree(__UNCONST(oa_config->mux_regs));
+	kfree(oa_config->flex_regs);
+	kfree(oa_config->b_counter_regs);
+	kfree(oa_config->mux_regs);
 
 	kfree_rcu(oa_config, rcu);
 }
@@ -465,7 +456,7 @@ static u32 gen7_oa_hw_tail_read(struct i915_perf_stream *stream)
 }
 
 /**
- * oa_buffer_check - check for data and update tail ptr state
+ * oa_buffer_check_unlocked - check for data and update tail ptr state
  * @stream: i915 stream instance
  *
  * This is either called via fops (for blocking reads in user ctx) or the poll
@@ -488,9 +479,10 @@ static u32 gen7_oa_hw_tail_read(struct i915_perf_stream *stream)
  *
  * Returns: %true if the OA buffer contains data, else %false
  */
-static bool oa_buffer_check(struct i915_perf_stream *stream)
+static bool oa_buffer_check_unlocked(struct i915_perf_stream *stream)
 {
 	int report_size = stream->oa_buffer.format_size;
+	unsigned long flags;
 	unsigned int aged_idx;
 	u32 head, hw_tail, aged_tail, aging_tail;
 	u64 now;
@@ -499,6 +491,7 @@ static bool oa_buffer_check(struct i915_perf_stream *stream)
 	 * could result in an OA buffer reset which might reset the head,
 	 * tails[] and aged_tail state.
 	 */
+	spin_lock_irqsave(&stream->oa_buffer.ptr_lock, flags);
 
 	/* NB: The head we observe here might effectively be a little out of
 	 * date (between head and tails[aged_idx].offset if there is currently
@@ -572,6 +565,8 @@ static bool oa_buffer_check(struct i915_perf_stream *stream)
 		}
 	}
 
+	spin_unlock_irqrestore(&stream->oa_buffer.ptr_lock, flags);
+
 	return aged_tail == INVALID_TAIL_PTR ?
 		false : OA_TAKEN(aged_tail, head) >= report_size;
 }
@@ -592,23 +587,13 @@ static bool oa_buffer_check(struct i915_perf_stream *stream)
  * Returns: 0 on success, negative error code on failure.
  */
 static int append_oa_status(struct i915_perf_stream *stream,
-#ifdef __NetBSD__
-			    struct uio *buf,
-			    kauth_cred_t count, /* XXX dummy */
-			    int offset,		/* XXX dummy */
-#else
 			    char __user *buf,
 			    size_t count,
 			    size_t *offset,
-#endif
 			    enum drm_i915_perf_record_type type)
 {
 	struct drm_i915_perf_record_header header = { type, 0, sizeof(header) };
 
-#ifdef __NetBSD__
-	/* XXX errno NetBSD->Linux */
-	return -uiomove(&header, sizeof(header), buf);
-#else
 	if ((count - *offset) < header.size)
 		return -ENOSPC;
 
@@ -618,7 +603,6 @@ static int append_oa_status(struct i915_perf_stream *stream,
 	(*offset) += header.size;
 
 	return 0;
-#endif
 }
 
 /**
@@ -639,15 +623,9 @@ static int append_oa_status(struct i915_perf_stream *stream,
  * Returns: 0 on success, negative error code on failure.
  */
 static int append_oa_sample(struct i915_perf_stream *stream,
-#ifdef __NetBSD__
-			    struct uio *buf,
-			    kauth_cred_t count, /* XXX dummy */
-			    int offset,		/* XXX dummy */
-#else
 			    char __user *buf,
 			    size_t count,
 			    size_t *offset,
-#endif
 			    const u8 *report)
 {
 	int report_size = stream->oa_buffer.format_size;
@@ -658,12 +636,6 @@ static int append_oa_sample(struct i915_perf_stream *stream,
 	header.pad = 0;
 	header.size = stream->sample_size;
 
-#ifdef __NetBSD__
-	/* XXX errno NetBSD->Linux */
-	int ret = -uiomove(&header, sizeof(header), buf);
-	if (ret)
-		return ret;
-#else
 	if ((count - *offset) < header.size)
 		return -ENOSPC;
 
@@ -671,22 +643,13 @@ static int append_oa_sample(struct i915_perf_stream *stream,
 	if (copy_to_user(buf, &header, sizeof(header)))
 		return -EFAULT;
 	buf += sizeof(header);
-#endif
 
 	if (sample_flags & SAMPLE_OA_REPORT) {
-#ifdef __NetBSD__
-		ret = -uiomove(__UNCONST(report), report_size, buf);
-		if (ret)
-			return ret;
-#else
 		if (copy_to_user(buf, report, report_size))
 			return -EFAULT;
-#endif
 	}
 
-#ifndef __NetBSD__		/* done by uiomove */
 	(*offset) += header.size;
-#endif
 
 	return 0;
 }
@@ -711,28 +674,17 @@ static int append_oa_sample(struct i915_perf_stream *stream,
  *
  * Returns: 0 on success, negative error code on failure.
  */
-#ifdef __NetBSD__
-static int gen8_append_oa_reports(struct i915_perf_stream *stream,
-				  struct uio *buf,
-				  kauth_cred_t count, /* XXX dummy */
-				  int offset)	      /* XXX dummy */
-#else
 static int gen8_append_oa_reports(struct i915_perf_stream *stream,
 				  char __user *buf,
 				  size_t count,
 				  size_t *offset)
-#endif
 {
 	struct intel_uncore *uncore = stream->uncore;
 	int report_size = stream->oa_buffer.format_size;
 	u8 *oa_buf_base = stream->oa_buffer.vaddr;
 	u32 gtt_offset = i915_ggtt_offset(stream->oa_buffer.vma);
 	u32 mask = (OA_BUFFER_SIZE - 1);
-#ifdef __NetBSD__
-	size_t start_offset = buf->uio_offset;
-#else
 	size_t start_offset = *offset;
-#endif
 	unsigned long flags;
 	unsigned int aged_tail_idx;
 	u32 head, tail;
@@ -896,12 +848,7 @@ static int gen8_append_oa_reports(struct i915_perf_stream *stream,
 		report32[0] = 0;
 	}
 
-#ifdef __NetBSD__
-	if (start_offset != buf->uio_offset)
-#else
-	if (start_offset != *offset)
-#endif
-	{
+	if (start_offset != *offset) {
 		i915_reg_t oaheadptr;
 
 		oaheadptr = IS_GEN(stream->perf->i915, 12) ?
@@ -944,17 +891,10 @@ static int gen8_append_oa_reports(struct i915_perf_stream *stream,
  *
  * Returns: zero on success or a negative error code
  */
-#ifdef __NetBSD__
-static int gen8_oa_read(struct i915_perf_stream *stream,
-			struct uio *buf,
-			kauth_cred_t count,   /* XXX dummy */
-			int offset)	      /* XXX dummy */
-#else
 static int gen8_oa_read(struct i915_perf_stream *stream,
 			char __user *buf,
 			size_t count,
 			size_t *offset)
-#endif
 {
 	struct intel_uncore *uncore = stream->uncore;
 	u32 oastatus;
@@ -1034,28 +974,17 @@ static int gen8_oa_read(struct i915_perf_stream *stream,
  *
  * Returns: 0 on success, negative error code on failure.
  */
-#ifdef __NetBSD__
-static int gen7_append_oa_reports(struct i915_perf_stream *stream,
-				  struct uio *buf,
-				  kauth_cred_t count, /* XXX dummy */
-				  int offset)	      /* XXX dummy */
-#else
 static int gen7_append_oa_reports(struct i915_perf_stream *stream,
 				  char __user *buf,
 				  size_t count,
 				  size_t *offset)
-#endif
 {
 	struct intel_uncore *uncore = stream->uncore;
 	int report_size = stream->oa_buffer.format_size;
 	u8 *oa_buf_base = stream->oa_buffer.vaddr;
 	u32 gtt_offset = i915_ggtt_offset(stream->oa_buffer.vma);
 	u32 mask = (OA_BUFFER_SIZE - 1);
-#ifdef __NetBSD__
-	size_t start_offset = buf->uio_offset;
-#else
 	size_t start_offset = *offset;
-#endif
 	unsigned long flags;
 	unsigned int aged_tail_idx;
 	u32 head, tail;
@@ -1142,12 +1071,7 @@ static int gen7_append_oa_reports(struct i915_perf_stream *stream,
 		report32[0] = 0;
 	}
 
-#ifdef __NetBSD__
-	if (start_offset != buf->uio_offset)
-#else
-	if (start_offset != *offset)
-#endif
-	{
+	if (start_offset != *offset) {
 		spin_lock_irqsave(&stream->oa_buffer.ptr_lock, flags);
 
 		/* We removed the gtt_offset for the copy loop above, indexing
@@ -1182,17 +1106,10 @@ static int gen7_append_oa_reports(struct i915_perf_stream *stream,
  *
  * Returns: zero on success or a negative error code
  */
-#ifdef __NetBSD__
-static int gen7_oa_read(struct i915_perf_stream *stream,
-			struct uio *buf,
-			kauth_cred_t count,   /* XXX dummy */
-			int offset)	      /* XXX dummy */
-#else
 static int gen7_oa_read(struct i915_perf_stream *stream,
 			char __user *buf,
 			size_t count,
 			size_t *offset)
-#endif
 {
 	struct intel_uncore *uncore = stream->uncore;
 	u32 oastatus1;
@@ -1273,19 +1190,12 @@ static int gen7_oa_read(struct i915_perf_stream *stream,
  */
 static int i915_oa_wait_unlocked(struct i915_perf_stream *stream)
 {
-	unsigned long flags;
-	int ret;
-
 	/* We would wait indefinitely if periodic sampling is not enabled */
 	if (!stream->periodic)
 		return -EIO;
 
-	spin_lock_irqsave(&stream->oa_buffer.ptr_lock, flags);
-	DRM_SPIN_WAIT_UNTIL(ret, &stream->poll_wq, &stream->oa_buffer.ptr_lock,
-	    oa_buffer_check(stream));
-	spin_unlock_irqrestore(&stream->oa_buffer.ptr_lock, flags);
-
-	return ret;
+	return wait_event_interruptible(stream->poll_wq,
+					oa_buffer_check_unlocked(stream));
 }
 
 /**
@@ -1298,14 +1208,12 @@ static int i915_oa_wait_unlocked(struct i915_perf_stream *stream)
  * this starts a poll_wait with the wait queue that our hrtimer callback wakes
  * when it sees data ready to read in the circular OA buffer.
  */
-#ifndef __NetBSD__
 static void i915_oa_poll_wait(struct i915_perf_stream *stream,
 			      struct file *file,
 			      poll_table *wait)
 {
 	poll_wait(file, &stream->poll_wq, wait);
 }
-#endif
 
 /**
  * i915_oa_read - just calls through to &i915_oa_ops->read
@@ -1319,17 +1227,10 @@ static void i915_oa_poll_wait(struct i915_perf_stream *stream,
  *
  * Returns: zero on success or a negative error code
  */
-#ifdef __NetBSD__
-static int i915_oa_read(struct i915_perf_stream *stream,
-			struct uio *buf,
-			kauth_cred_t count,   /* XXX dummy */
-			int offset)	      /* XXX dummy */
-#else
 static int i915_oa_read(struct i915_perf_stream *stream,
 			char __user *buf,
 			size_t count,
 			size_t *offset)
-#endif
 {
 	return stream->perf->ops.read(stream, buf, count, offset);
 }
@@ -1491,11 +1392,6 @@ static void i915_oa_stream_destroy(struct i915_perf_stream *stream)
 	struct i915_perf *perf = stream->perf;
 
 	BUG_ON(stream != perf->exclusive_stream);
-
-	spin_lock_destroy(&stream->oa_buffer.ptr_lock);
-	seldestroy(&stream->poll_selq);
-	DRM_DESTROY_WAITQUEUE(&stream->poll_wq);
-	hrtimer_cancel(&stream->poll_check_timer);
 
 	/*
 	 * Unset exclusive_stream first, it will be checked while disabling
@@ -2801,9 +2697,7 @@ static const struct i915_perf_stream_ops i915_oa_stream_ops = {
 	.enable = i915_oa_stream_enable,
 	.disable = i915_oa_stream_disable,
 	.wait_unlocked = i915_oa_wait_unlocked,
-#ifndef __NetBSD__
 	.poll_wait = i915_oa_poll_wait,
-#endif
 	.read = i915_oa_read,
 };
 
@@ -2952,8 +2846,7 @@ static int i915_oa_stream_init(struct i915_perf_stream *stream,
 	hrtimer_init(&stream->poll_check_timer,
 		     CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	stream->poll_check_timer.function = oa_poll_check_timer_cb;
-	DRM_INIT_WAITQUEUE(&stream->poll_wq, "i915perf");
-	selinit(&stream->poll_selq);
+	init_waitqueue_head(&stream->poll_wq);
 	spin_lock_init(&stream->oa_buffer.ptr_lock);
 
 	return 0;
@@ -3024,16 +2917,6 @@ void i915_oa_init_reg_state(const struct intel_context *ce,
  *
  * Returns: The number of bytes copied or a negative error code on failure.
  */
-#ifdef __NetBSD__
-static int i915_perf_read_locked(struct i915_perf_stream *stream,
-				     struct file *file,
-				     struct uio *buf,
-				     kauth_cred_t count, /* XXX dummy */
-				     int ppos)		 /* XXX dummy */
-{
-	return stream->ops->read(stream, buf, count, ppos);
-}
-#else
 static ssize_t i915_perf_read_locked(struct i915_perf_stream *stream,
 				     struct file *file,
 				     char __user *buf,
@@ -3051,7 +2934,6 @@ static ssize_t i915_perf_read_locked(struct i915_perf_stream *stream,
 
 	return offset ?: (ret ?: -EAGAIN);
 }
-#endif
 
 /**
  * i915_perf_read - handles read() FOP for i915 perf stream FDs
@@ -3071,24 +2953,12 @@ static ssize_t i915_perf_read_locked(struct i915_perf_stream *stream,
  *
  * Returns: The number of bytes copied or a negative error code on failure.
  */
-#ifdef __NetBSD__
-static int i915_perf_read(struct file *file,
-			  off_t *offset,
-			  struct uio *buf,
-			  kauth_cred_t count, /* XXX dummy */
-			  int ppos)	      /* XXX dummy */
-#else
 static ssize_t i915_perf_read(struct file *file,
 			      char __user *buf,
 			      size_t count,
 			      loff_t *ppos)
-#endif
 {
-#ifdef __NetBSD__
-	struct i915_perf_stream *stream = file->f_data;
-#else
 	struct i915_perf_stream *stream = file->private_data;
-#endif
 	struct i915_perf *perf = stream->perf;
 	ssize_t ret;
 
@@ -3099,13 +2969,7 @@ static ssize_t i915_perf_read(struct file *file,
 	if (!stream->enabled)
 		return -EIO;
 
-#ifdef __NetBSD__
-	buf->uio_offset = *offset;
-	if (!(file->f_flag & FNONBLOCK))
-#else
-	if (!(file->f_flags & O_NONBLOCK))
-#endif
-	{
+	if (!(file->f_flags & O_NONBLOCK)) {
 		/* There's the small chance of false positives from
 		 * stream->ops->wait_unlocked.
 		 *
@@ -3151,42 +3015,16 @@ static enum hrtimer_restart oa_poll_check_timer_cb(struct hrtimer *hrtimer)
 {
 	struct i915_perf_stream *stream =
 		container_of(hrtimer, typeof(*stream), poll_check_timer);
-	unsigned long flags;
 
-	spin_lock_irqsave(&stream->oa_buffer.ptr_lock, flags);
-	if (oa_buffer_check(stream)) {
+	if (oa_buffer_check_unlocked(stream)) {
 		stream->pollin = true;
-		DRM_SPIN_WAKEUP_ONE(&stream->poll_wq,
-		    &stream->oa_buffer.ptr_lock);
-		selnotify(&stream->poll_selq, POLLIN|POLLRDNORM, NOTE_SUBMIT);
+		wake_up(&stream->poll_wq);
 	}
-	spin_unlock_irqrestore(&stream->oa_buffer.ptr_lock, flags);
 
 	hrtimer_forward_now(hrtimer, ns_to_ktime(POLL_PERIOD));
 
 	return HRTIMER_RESTART;
 }
-
-#ifdef __NetBSD__
-
-static int
-i915_perf_poll(struct file *fp, int events)
-{
-	struct i915_perf_stream *stream = fp->f_data;
-	unsigned long flags;
-	int revents = 0;
-
-	spin_lock_irqsave(&stream->oa_buffer.ptr_lock, flags);
-	if (stream->pollin)
-		revents |= events & (POLLIN|POLLRDNORM);
-	else
-		selrecord(curlwp, &stream->poll_selq);
-	spin_unlock_irqrestore(&stream->oa_buffer.ptr_lock, flags);
-
-	return revents;
-}
-
-#else
 
 /**
  * i915_perf_poll_locked - poll_wait() with a suitable wait queue for stream
@@ -3248,8 +3086,6 @@ static __poll_t i915_perf_poll(struct file *file, poll_table *wait)
 
 	return ret;
 }
-
-#endif	/* __NetBSD__ */
 
 /**
  * i915_perf_enable_locked - handle `I915_PERF_IOCTL_ENABLE` ioctl
@@ -3380,22 +3216,11 @@ static long i915_perf_ioctl_locked(struct i915_perf_stream *stream,
  * Returns: zero on success or a negative error code. Returns -EINVAL for
  * an unknown ioctl request.
  */
-#ifdef __NetBSD__
-static int i915_perf_ioctl(struct file *file,
-			    unsigned long cmd,
-			    void *cookie)
-#else
 static long i915_perf_ioctl(struct file *file,
 			    unsigned int cmd,
 			    unsigned long arg)
-#endif
 {
-#ifdef __NetBSD__
-	unsigned long arg = (unsigned long)(uintptr_t)cookie;
-	struct i915_perf_stream *stream = file->f_data;
-#else
 	struct i915_perf_stream *stream = file->private_data;
-#endif
 	struct i915_perf *perf = stream->perf;
 	long ret;
 
@@ -3441,22 +3266,6 @@ static void i915_perf_destroy_locked(struct i915_perf_stream *stream)
  *
  * Returns: zero on success or a negative error code.
  */
-#ifdef __NetBSD__
-static int i915_perf_close(struct file *fp)
-{
-	struct i915_perf_stream *stream = fp->f_data;
-	struct i915_perf *perf = stream->perf;
-
-	mutex_lock(&perf->lock);
-	i915_perf_destroy_locked(stream);
-	mutex_unlock(&perf->lock);
-
-	/* Release the reference the perf stream kept on the driver. */
-	drm_dev_put(&perf->i915->drm);
-
-	return 0;
-}
-#else
 static int i915_perf_release(struct inode *inode, struct file *file)
 {
 	struct i915_perf_stream *stream = file->private_data;
@@ -3471,41 +3280,8 @@ static int i915_perf_release(struct inode *inode, struct file *file)
 
 	return 0;
 }
-#endif
 
 
-#ifdef __NetBSD__
-static int
-i915_perf_stat(struct file *fp, struct stat *st)
-{
-	const dev_t devno = 0;	/* XXX */
-
-	memset(st, 0, sizeof(*st));
-
-	st->st_dev = devno;	/* XXX */
-	st->st_ino = 0;		/* XXX */
-	st->st_uid = kauth_cred_geteuid(fp->f_cred);
-	st->st_gid = kauth_cred_getegid(fp->f_cred);
-	st->st_mode = S_IFCHR;
-	st->st_rdev = devno;
-
-	return 0;
-}
-
-static const struct fileops fops = {
-	.fo_name = "i915perf",
-	.fo_read = i915_perf_read,
-	.fo_write = fbadop_write,
-	.fo_ioctl = i915_perf_ioctl,
-	.fo_fcntl = fnullop_fcntl,
-	.fo_poll = i915_perf_poll,
-	.fo_stat = i915_perf_stat,
-	.fo_close = i915_perf_close,
-	.fo_kqfilter = fnullop_kqfilter,	/* XXX */
-	.fo_restart = fnullop_restart,
-	.fo_mmap = NULL,
-};
-#else
 static const struct file_operations fops = {
 	.owner		= THIS_MODULE,
 	.llseek		= no_llseek,
@@ -3518,7 +3294,6 @@ static const struct file_operations fops = {
 	 */
 	.compat_ioctl   = i915_perf_ioctl,
 };
-#endif
 
 
 /**
@@ -3644,30 +3419,11 @@ i915_perf_open_ioctl_locked(struct i915_perf *perf,
 	if (param->flags & I915_PERF_FLAG_FD_NONBLOCK)
 		f_flags |= O_NONBLOCK;
 
-#ifdef __NetBSD__
-	struct file *fp;
-
-	/* XXX errno NetBSD->Linux */
-	ret = -fd_allocfile(&fp, &stream_fd);
-	if (ret)
-		goto err_flags;
-
-	fp->f_type = DTYPE_MISC;
-	fp->f_flag = FREAD;
-	if (f_flags & O_NONBLOCK)
-		fp->f_flag |= FNONBLOCK;
-	if (f_flags & O_CLOEXEC)
-		fd_set_exclose(curlwp, stream_fd, true);
-	fp->f_ops = &fops;
-
-	fd_affix(curproc, fp, stream_fd);
-#else
 	stream_fd = anon_inode_getfd("[i915_perf]", &fops, stream, f_flags);
 	if (stream_fd < 0) {
 		ret = stream_fd;
 		goto err_flags;
 	}
-#endif
 
 	if (!(param->flags & I915_PERF_FLAG_DISABLED))
 		i915_perf_enable_locked(stream);
@@ -3783,12 +3539,12 @@ static int read_properties_unlocked(struct i915_perf *perf,
 			break;
 		case DRM_I915_PERF_PROP_OA_FORMAT:
 			if (value == 0 || value >= I915_OA_FORMAT_MAX) {
-				DRM_DEBUG("Out-of-range OA report format %"PRIu64"\n",
+				DRM_DEBUG("Out-of-range OA report format %llu\n",
 					  value);
 				return -EINVAL;
 			}
 			if (!perf->oa_formats[value].size) {
-				DRM_DEBUG("Unsupported OA report format %"PRIu64"\n",
+				DRM_DEBUG("Unsupported OA report format %llu\n",
 					  value);
 				return -EINVAL;
 			}
@@ -3825,7 +3581,7 @@ static int read_properties_unlocked(struct i915_perf *perf,
 
 			if (oa_freq_hz > i915_oa_max_sample_rate &&
 			    !capable(CAP_SYS_ADMIN)) {
-				DRM_DEBUG("OA exponent would exceed the max sampling frequency (sysctl hw.drm2.i915.oa_max_sample_rate) %uHz without root privileges\n",
+				DRM_DEBUG("OA exponent would exceed the max sampling frequency (sysctl dev.i915.oa_max_sample_rate) %uHz without root privileges\n",
 					  i915_oa_max_sample_rate);
 				return -EACCES;
 			}
@@ -3917,7 +3673,6 @@ int i915_perf_open_ioctl(struct drm_device *dev, void *data,
  */
 void i915_perf_register(struct drm_i915_private *i915)
 {
-#ifndef __NetBSD__
 	struct i915_perf *perf = &i915->perf;
 	int ret;
 
@@ -3930,7 +3685,6 @@ void i915_perf_register(struct drm_i915_private *i915)
 	 */
 	mutex_lock(&perf->lock);
 
-#ifndef __NetBSD__
 	perf->metrics_kobj =
 		kobject_create_and_add("metrics",
 				       &i915->drm.primary->kdev->kobj);
@@ -3938,7 +3692,6 @@ void i915_perf_register(struct drm_i915_private *i915)
 		goto exit;
 
 	sysfs_attr_init(&perf->test_config.sysfs_metric_id.attr);
-#endif
 
 	if (IS_TIGERLAKE(i915)) {
 		i915_perf_load_test_config_tgl(i915);
@@ -3978,14 +3731,10 @@ void i915_perf_register(struct drm_i915_private *i915)
 	if (perf->test_config.id == 0)
 		goto sysfs_error;
 
-#ifdef __NetBSD__		/* XXX i915 sysfs */
-	__USE(ret);
-#else
 	ret = sysfs_create_group(perf->metrics_kobj,
 				 &perf->test_config.sysfs_metric);
 	if (ret)
 		goto sysfs_error;
-#endif
 
 	perf->test_config.perf = perf;
 	kref_init(&perf->test_config.ref);
@@ -3993,14 +3742,11 @@ void i915_perf_register(struct drm_i915_private *i915)
 	goto exit;
 
 sysfs_error:
-#ifndef __NetBSD__
 	kobject_put(perf->metrics_kobj);
 	perf->metrics_kobj = NULL;
-#endif
 
 exit:
 	mutex_unlock(&perf->lock);
-#endif
 }
 
 /**
@@ -4014,7 +3760,6 @@ exit:
  */
 void i915_perf_unregister(struct drm_i915_private *i915)
 {
-#ifndef __NetBSD__
 	struct i915_perf *perf = &i915->perf;
 
 	if (!perf->metrics_kobj)
@@ -4025,7 +3770,6 @@ void i915_perf_unregister(struct drm_i915_private *i915)
 
 	kobject_put(perf->metrics_kobj);
 	perf->metrics_kobj = NULL;
-#endif
 }
 
 static bool gen8_is_valid_flex_addr(struct i915_perf *perf, u32 addr)
@@ -4197,7 +3941,6 @@ addr_err:
 	return ERR_PTR(err);
 }
 
-#ifndef __NetBSD__		/* XXX i915 sysfs */
 static ssize_t show_dynamic_id(struct device *dev,
 			       struct device_attribute *attr,
 			       char *buf)
@@ -4207,14 +3950,10 @@ static ssize_t show_dynamic_id(struct device *dev,
 
 	return sprintf(buf, "%d\n", oa_config->id);
 }
-#endif
 
 static int create_dynamic_oa_sysfs_entry(struct i915_perf *perf,
 					 struct i915_oa_config *oa_config)
 {
-#ifdef __NetBSD__		/* XXX i915 sysfs */
-	return 0;
-#else
 	sysfs_attr_init(&oa_config->sysfs_metric_id.attr);
 	oa_config->sysfs_metric_id.attr.name = "id";
 	oa_config->sysfs_metric_id.attr.mode = S_IRUGO;
@@ -4229,7 +3968,6 @@ static int create_dynamic_oa_sysfs_entry(struct i915_perf *perf,
 
 	return sysfs_create_group(perf->metrics_kobj,
 				  &oa_config->sysfs_metric);
-#endif
 }
 
 /**
@@ -4342,7 +4080,6 @@ int i915_perf_add_config_ioctl(struct drm_device *dev, void *data,
 		oa_config->flex_regs = regs;
 	}
 
-	idr_preload(GFP_KERNEL);
 	err = mutex_lock_interruptible(&perf->metrics_lock);
 	if (err)
 		goto reg_err;
@@ -4375,7 +4112,6 @@ int i915_perf_add_config_ioctl(struct drm_device *dev, void *data,
 	}
 
 	mutex_unlock(&perf->metrics_lock);
-	idr_preload_end();
 
 	DRM_DEBUG("Added config %s id=%i\n", oa_config->uuid, oa_config->id);
 
@@ -4383,7 +4119,6 @@ int i915_perf_add_config_ioctl(struct drm_device *dev, void *data,
 
 sysfs_err:
 	mutex_unlock(&perf->metrics_lock);
-	idr_preload_end();
 reg_err:
 	i915_oa_config_put(oa_config);
 	DRM_DEBUG("Failed to add new OA config\n");
@@ -4432,9 +4167,7 @@ int i915_perf_remove_config_ioctl(struct drm_device *dev, void *data,
 
 	GEM_BUG_ON(*arg != oa_config->id);
 
-#ifndef __NetBSD__
 	sysfs_remove_group(perf->metrics_kobj, &oa_config->sysfs_metric);
-#endif
 
 	idr_remove(&perf->metrics_idr, *arg);
 
@@ -4450,8 +4183,6 @@ err_unlock:
 	mutex_unlock(&perf->metrics_lock);
 	return ret;
 }
-
-#ifndef __NetBSD__		/* XXX i915 perf sysctl */
 
 static struct ctl_table oa_table[] = {
 	{
@@ -4494,8 +4225,6 @@ static struct ctl_table dev_root[] = {
 	 },
 	{}
 };
-
-#endif	/* __NetBSD__ */
 
 /**
  * i915_perf_init - initialize i915-perf state on module bind
@@ -4652,16 +4381,12 @@ static int destroy_config(int id, void *p, void *data)
 
 void i915_perf_sysctl_register(void)
 {
-#ifndef __NetBSD__		/* XXX i915 perf sysctl */
 	sysctl_header = register_sysctl_table(dev_root);
-#endif
 }
 
 void i915_perf_sysctl_unregister(void)
 {
-#ifndef __NetBSD__		/* XXX i915 perf sysctl */
 	unregister_sysctl_table(sysctl_header);
-#endif
 }
 
 /**
@@ -4674,11 +4399,6 @@ void i915_perf_fini(struct drm_i915_private *i915)
 
 	if (!perf->i915)
 		return;
-
-	if (perf->ops.enable_metric_set) {
-		mutex_destroy(&perf->metrics_lock);
-		mutex_destroy(&perf->lock);
-	}
 
 	idr_for_each(&perf->metrics_idr, destroy_config, perf);
 	idr_destroy(&perf->metrics_idr);

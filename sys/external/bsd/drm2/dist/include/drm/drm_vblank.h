@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_vblank.h,v 1.12 2021/12/20 12:56:07 riastradh Exp $	*/
+/*	$NetBSD: drm_vblank.h,v 1.1 2021/12/18 20:15:57 riastradh Exp $	*/
 
 /*
  * Copyright 2016 Intel Corp.
@@ -26,24 +26,12 @@
 #ifndef _DRM_VBLANK_H_
 #define _DRM_VBLANK_H_
 
-#ifdef __NetBSD__
-#include <sys/types.h>
-#include <sys/file.h>
-#define	pipe	pipe_drmhack	/* see intel_display.h */
-#endif
-
 #include <linux/seqlock.h>
 #include <linux/idr.h>
 #include <linux/poll.h>
-#include <linux/timer.h>
-#include <linux/ktime.h>
 
 #include <drm/drm_file.h>
 #include <drm/drm_modes.h>
-
-#ifdef __NetBSD__		/* XXX */
-#include <drm/drm_wait_netbsd.h>
-#endif
 
 struct drm_device;
 struct drm_crtc;
@@ -108,7 +96,7 @@ struct drm_vblank_crtc {
 	/**
 	 * @queue: Wait queue for vblank waiters.
 	 */
-	drm_waitqueue_t queue;
+	wait_queue_head_t queue;
 	/**
 	 * @disable_timer: Disable timer for the delayed vblank disabling
 	 * hysteresis logic. Vblank disabling is controlled through the
@@ -233,9 +221,7 @@ void drm_vblank_set_event(struct drm_pending_vblank_event *e,
 bool drm_handle_vblank(struct drm_device *dev, unsigned int pipe);
 bool drm_crtc_handle_vblank(struct drm_crtc *crtc);
 int drm_crtc_vblank_get(struct drm_crtc *crtc);
-int drm_crtc_vblank_get_locked(struct drm_crtc *crtc);
 void drm_crtc_vblank_put(struct drm_crtc *crtc);
-void drm_crtc_vblank_put_locked(struct drm_crtc *crtc);
 void drm_wait_one_vblank(struct drm_device *dev, unsigned int pipe);
 void drm_crtc_wait_one_vblank(struct drm_crtc *crtc);
 void drm_crtc_vblank_off(struct drm_crtc *crtc);
@@ -251,7 +237,7 @@ bool drm_calc_vbltimestamp_from_scanoutpos(struct drm_device *dev,
 					   bool in_vblank_irq);
 void drm_calc_timestamping_constants(struct drm_crtc *crtc,
 				     const struct drm_display_mode *mode);
-drm_waitqueue_t *drm_crtc_vblank_waitqueue(struct drm_crtc *crtc);
+wait_queue_head_t *drm_crtc_vblank_waitqueue(struct drm_crtc *crtc);
 void drm_crtc_set_max_vblank_count(struct drm_crtc *crtc,
 				   u32 max_vblank_count);
 #endif

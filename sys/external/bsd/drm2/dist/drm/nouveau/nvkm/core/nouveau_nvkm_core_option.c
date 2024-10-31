@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_core_option.c,v 1.5 2021/12/18 23:45:34 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_core_option.c,v 1.1 2018/08/27 01:36:13 riastradh Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -24,7 +24,7 @@
  * Authors: Ben Skeggs
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_core_option.c,v 1.5 2021/12/18 23:45:34 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_core_option.c,v 1.1 2018/08/27 01:36:13 riastradh Exp $");
 
 #include <core/option.h>
 #include <core/debug.h>

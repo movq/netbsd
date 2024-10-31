@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_scheduler.c,v 1.8 2021/12/21 12:06:29 tnn Exp $	*/
+/*	$NetBSD: i915_scheduler.c,v 1.1 2021/12/18 20:15:26 riastradh Exp $	*/
 
 /*
  * SPDX-License-Identifier: MIT
@@ -7,7 +7,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i915_scheduler.c,v 1.8 2021/12/21 12:06:29 tnn Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i915_scheduler.c,v 1.1 2021/12/18 20:15:26 riastradh Exp $");
 
 #include <linux/mutex.h>
 
@@ -16,25 +16,18 @@ __KERNEL_RCSID(0, "$NetBSD: i915_scheduler.c,v 1.8 2021/12/21 12:06:29 tnn Exp $
 #include "i915_request.h"
 #include "i915_scheduler.h"
 
-#include <linux/nbsd-namespace.h>
-
 static struct i915_global_scheduler {
 	struct i915_global base;
 	struct kmem_cache *slab_dependencies;
 	struct kmem_cache *slab_priorities;
 } global;
 
-#ifdef __NetBSD__
-static spinlock_t schedule_lock;
-spinlock_t *const i915_schedule_lock = &schedule_lock;
-#else
 static DEFINE_SPINLOCK(schedule_lock);
-#endif
 
 static const struct i915_request *
 node_to_request(const struct i915_sched_node *node)
 {
-	return const_container_of(node, struct i915_request, sched);
+	return container_of(node, const struct i915_request, sched);
 }
 
 static inline bool node_started(const struct i915_sched_node *node)
@@ -64,9 +57,7 @@ static void assert_priolists(struct intel_engine_execlists * const execlists)
 		   rb_first(&execlists->queue.rb_root));
 
 	last_prio = (INT_MAX >> I915_USER_PRIORITY_SHIFT) + 1;
-	for (rb = rb_first_cached(&execlists->queue);
-	     rb;
-	     rb = rb_next2(&execlists->queue.rb_root, rb)) {
+	for (rb = rb_first_cached(&execlists->queue); rb; rb = rb_next(rb)) {
 		const struct i915_priolist *p = to_priolist(rb);
 
 		GEM_BUG_ON(p->priority >= last_prio);
@@ -80,54 +71,6 @@ static void assert_priolists(struct intel_engine_execlists * const execlists)
 			GEM_BUG_ON(!(p->used & BIT(i)));
 		}
 	}
-}
-
-#ifdef __NetBSD__
-
-static int
-compare_priolists(void *cookie, const void *va, const void *vb)
-{
-	const struct i915_priolist *a = va;
-	const struct i915_priolist *b = vb;
-
-	if (a->priority > b->priority)
-		return -1;
-	if (a->priority < b->priority)
-		return +1;
-	return 0;
-}
-
-static int
-compare_priolist_key(void *cookie, const void *vp, const void *vk)
-{
-	const struct i915_priolist *p = vp;
-	const int *priorityp = vk, priority = *priorityp;
-
-	if (p->priority > priority)
-		return -1;
-	if (p->priority < priority)
-		return +1;
-	return 0;
-}
-
-static const rb_tree_ops_t i915_priolist_rb_ops = {
-	.rbto_compare_nodes = compare_priolists,
-	.rbto_compare_key = compare_priolist_key,
-	.rbto_node_offset = offsetof(struct i915_priolist, node),
-};
-
-#endif
-
-void
-i915_sched_init(struct intel_engine_execlists *execlists)
-{
-
-#ifdef __NetBSD__
-	rb_tree_init(&execlists->queue.rb_root.rbr_tree,
-	    &i915_priolist_rb_ops);
-#else
-	execlists->queue = RB_ROOT_CACHED;
-#endif
 }
 
 struct list_head *
@@ -149,15 +92,6 @@ i915_sched_lookup_priolist(struct intel_engine_cs *engine, int prio)
 		prio = I915_PRIORITY_NORMAL;
 
 find_priolist:
-#ifdef __NetBSD__
-	/* XXX  */
-	__USE(first);
-	__USE(parent);
-	__USE(rb);
-	p = rb_tree_find_node(&execlists->queue.rb_root.rbr_tree, &prio);
-	if (p)
-		goto out;
-#else
 	/* most positive priority is scheduled first, equal priorities fifo */
 	rb = NULL;
 	parent = &execlists->queue.rb_root.rb_node;
@@ -173,7 +107,6 @@ find_priolist:
 			goto out;
 		}
 	}
-#endif
 
 	if (prio == I915_PRIORITY_NORMAL) {
 		p = &execlists->default_priolist;
@@ -199,15 +132,8 @@ find_priolist:
 	p->priority = prio;
 	for (i = 0; i < ARRAY_SIZE(p->requests); i++)
 		INIT_LIST_HEAD(&p->requests[i]);
-#ifdef __NetBSD__
-	struct i915_priolist *collision __diagused;
-	collision = rb_tree_insert_node(&execlists->queue.rb_root.rbr_tree,
-	    p);
-	KASSERT(collision == p);
-#else
 	rb_link_node(&p->node, rb, parent);
 	rb_insert_color_cached(&p->node, &execlists->queue, first);
-#endif
 	p->used = 0;
 
 out:

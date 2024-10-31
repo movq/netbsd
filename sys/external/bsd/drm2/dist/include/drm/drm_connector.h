@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_connector.h,v 1.5 2021/12/19 12:44:04 riastradh Exp $	*/
+/*	$NetBSD: drm_connector.h,v 1.1 2021/12/18 20:15:56 riastradh Exp $	*/
 
 /*
  * Copyright (c) 2016 Intel Corporation
@@ -412,7 +412,7 @@ struct drm_display_info {
 	 * @color_formats. Array of size @num_bus_formats encoded using
 	 * MEDIA_BUS_FMT\_ defines shared with v4l and media drivers.
 	 */
-	u32 *bus_formats;
+	const u32 *bus_formats;
 	/**
 	 * @num_bus_formats: Size of @bus_formats array.
 	 */
@@ -1317,9 +1317,6 @@ struct drm_connector {
 	 */
 	struct drm_encoder *encoder;
 
-	/** @physical_address: HDMI physical address */
-	uint16_t physical_address;
-
 #define MAX_ELD_BYTES	128
 	/** @eld: EDID-like data, if present */
 	uint8_t eld[MAX_ELD_BYTES];
@@ -1580,9 +1577,9 @@ struct drm_tile_group {
 };
 
 struct drm_tile_group *drm_mode_create_tile_group(struct drm_device *dev,
-						  const char topology[8]);
+						  char topology[8]);
 struct drm_tile_group *drm_mode_get_tile_group(struct drm_device *dev,
-					       const char topology[8]);
+					       char topology[8]);
 void drm_mode_put_tile_group(struct drm_device *dev,
 			     struct drm_tile_group *tg);
 

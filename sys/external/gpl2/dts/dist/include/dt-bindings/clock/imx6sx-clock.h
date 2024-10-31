@@ -1,8 +1,12 @@
-/*	$NetBSD: imx6sx-clock.h,v 1.1.1.4 2020/01/03 14:33:04 skrll Exp $	*/
+/*	$NetBSD: imx6sx-clock.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
-/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (C) 2014 Freescale Semiconductor, Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
  */
 
 #ifndef __DT_BINDINGS_CLOCK_IMX6SX_H
@@ -273,11 +277,6 @@
 #define IMX6SX_PLL6_BYPASS		262
 #define IMX6SX_PLL7_BYPASS		263
 #define IMX6SX_CLK_SPDIF_GCLK		264
-#define IMX6SX_CLK_LVDS2_SEL		265
-#define IMX6SX_CLK_LVDS2_OUT		266
-#define IMX6SX_CLK_LVDS2_IN		267
-#define IMX6SX_CLK_ANACLK2		268
-#define IMX6SX_CLK_MMDC_P1_IPG		269
-#define IMX6SX_CLK_CLK_END		270
+#define IMX6SX_CLK_CLK_END		265
 
 #endif /* __DT_BINDINGS_CLOCK_IMX6SX_H */

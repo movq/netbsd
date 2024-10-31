@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_gem_context.c,v 1.7 2022/09/01 11:49:23 riastradh Exp $	*/
+/*	$NetBSD: i915_gem_context.c,v 1.1 2021/12/18 20:15:31 riastradh Exp $	*/
 
 /*
  * SPDX-License-Identifier: MIT
@@ -67,12 +67,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i915_gem_context.c,v 1.7 2022/09/01 11:49:23 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i915_gem_context.c,v 1.1 2021/12/18 20:15:31 riastradh Exp $");
 
 #include <linux/log2.h>
 #include <linux/nospec.h>
-
-#include <asm/uaccess.h>
 
 #include <drm/i915_drm.h>
 
@@ -88,8 +86,6 @@ __KERNEL_RCSID(0, "$NetBSD: i915_gem_context.c,v 1.7 2022/09/01 11:49:23 riastra
 #include "i915_globals.h"
 #include "i915_trace.h"
 #include "i915_user_extensions.h"
-
-#include <linux/nbsd-namespace.h>
 
 #define ALL_L3_SLICES(dev) (1 << NUM_L3_SLICES(dev)) - 1
 
@@ -321,9 +317,7 @@ static void i915_gem_context_free(struct i915_gem_context *ctx)
 	if (ctx->timeline)
 		intel_timeline_put(ctx->timeline);
 
-#ifndef __NetBSD__
 	put_pid(ctx->pid);
-#endif
 	mutex_destroy(&ctx->mutex);
 
 	kfree_rcu(ctx, rcu);
@@ -786,7 +780,6 @@ void i915_gem_init__contexts(struct drm_i915_private *i915)
 void i915_gem_driver_release__contexts(struct drm_i915_private *i915)
 {
 	flush_work(&i915->gem.contexts.free_work);
-	spin_lock_destroy(&i915->gem.contexts.lock);
 }
 
 static int vm_idr_cleanup(int id, void *p, void *data)
@@ -810,25 +803,14 @@ static int gem_context_register(struct i915_gem_context *ctx,
 		WRITE_ONCE(vm->file, fpriv); /* XXX */
 	mutex_unlock(&ctx->mutex);
 
-#ifdef __NetBSD__
-	ctx->pid = NULL;
-#else
 	ctx->pid = get_task_pid(current, PIDTYPE_PID);
-#endif
-#ifdef __NetBSD__
-	snprintf(ctx->name, sizeof(ctx->name), "%s[%d]",
-		 curproc->p_comm, (int)curproc->p_pid);
-#else
 	snprintf(ctx->name, sizeof(ctx->name), "%s[%d]",
 		 current->comm, pid_nr(ctx->pid));
-#endif
 
 	/* And finally expose ourselves to userspace via the idr */
 	ret = xa_alloc(&fpriv->context_xa, id, ctx, xa_limit_32b, GFP_KERNEL);
-#ifndef __NetBSD__
 	if (ret)
 		put_pid(fetch_and_zero(&ctx->pid));
-#endif
 
 	return ret;
 }
@@ -915,7 +897,6 @@ int i915_gem_vm_create_ioctl(struct drm_device *dev, void *data,
 			goto err_put;
 	}
 
-	idr_preload(GFP_KERNEL);
 	err = mutex_lock_interruptible(&file_priv->vm_idr_lock);
 	if (err)
 		goto err_put;
@@ -927,14 +908,12 @@ int i915_gem_vm_create_ioctl(struct drm_device *dev, void *data,
 	GEM_BUG_ON(err == 0); /* reserved for invalid/unassigned ppgtt */
 
 	mutex_unlock(&file_priv->vm_idr_lock);
-	idr_preload_end();
 
 	args->vm_id = err;
 	return 0;
 
 err_unlock:
 	mutex_unlock(&file_priv->vm_idr_lock);
-	idr_preload_end();
 err_put:
 	i915_vm_put(&ppgtt->vm);
 	return err;
@@ -1072,7 +1051,6 @@ static int get_ppgtt(struct drm_i915_file_private *file_priv,
 	vm = context_get_vm_rcu(ctx);
 	rcu_read_unlock();
 
-	idr_preload(GFP_KERNEL);
 	ret = mutex_lock_interruptible(&file_priv->vm_idr_lock);
 	if (ret)
 		goto err_put;
@@ -1090,7 +1068,6 @@ static int get_ppgtt(struct drm_i915_file_private *file_priv,
 	ret = 0;
 err_unlock:
 	mutex_unlock(&file_priv->vm_idr_lock);
-	idr_preload_end();
 err_put:
 	i915_vm_put(vm);
 	return ret;
@@ -2241,13 +2218,8 @@ int i915_gem_context_create_ioctl(struct drm_device *dev, void *data,
 
 	ext_data.fpriv = file->driver_priv;
 	if (client_is_banned(ext_data.fpriv)) {
-#ifdef __NetBSD__
-		DRM_DEBUG("client %s[%d] banned from creating ctx\n",
-			  curproc->p_comm, (int)curproc->p_pid);
-#else
 		DRM_DEBUG("client %s[%d] banned from creating ctx\n",
 			  current->comm, task_pid_nr(current));
-#endif
 		return -EIO;
 	}
 

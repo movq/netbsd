@@ -1,5 +1,3 @@
-/*	$NetBSD: rv730d.h,v 1.4 2021/12/18 23:45:43 riastradh Exp $	*/
-
 /*
  * Copyright 2011 Advanced Micro Devices, Inc.
  *
@@ -150,7 +148,7 @@
 #define		POWERMODE2(x)				((x) << 16)
 #define		POWERMODE2_MASK				(0xff << 16)
 #define		POWERMODE3(x)				((x) << 24)
-#define		POWERMODE3_MASK				(0xffU << 24)
+#define		POWERMODE3_MASK				(0xff << 24)
 
 #define	MC_ARB_DRAM_TIMING_1				0x27f0
 #define	MC_ARB_DRAM_TIMING_2				0x27f4

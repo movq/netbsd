@@ -1,5 +1,3 @@
-/*	$NetBSD: via_drv.c,v 1.9 2021/12/19 12:30:23 riastradh Exp $	*/
-
 /*
  * Copyright 1998-2003 VIA Technologies, Inc. All Rights Reserved.
  * Copyright 2001-2003 S3 Graphics, Inc. All Rights Reserved.
@@ -24,20 +22,13 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: via_drv.c,v 1.9 2021/12/19 12:30:23 riastradh Exp $");
-
 #include <linux/module.h>
-#include <linux/pci.h>
 
-#include <drm/drm_drv.h>
-#include <drm/drm_file.h>
-#include <drm/drm_pci.h>
-#include <drm/drm_pciids.h>
+#include <drm/drmP.h>
 #include <drm/via_drm.h>
-
 #include "via_drv.h"
 
+#include <drm/drm_pciids.h>
 
 static int via_driver_open(struct drm_device *dev, struct drm_file *file)
 {
@@ -55,14 +46,13 @@ static int via_driver_open(struct drm_device *dev, struct drm_file *file)
 	return 0;
 }
 
-static void via_driver_postclose(struct drm_device *dev, struct drm_file *file)
+void via_driver_postclose(struct drm_device *dev, struct drm_file *file)
 {
 	struct via_file_private *file_priv = file->driver_priv;
 
 	kfree(file_priv);
 }
 
-#ifndef __NetBSD__
 static struct pci_device_id pciidlist[] = {
 	viadrv_PCI_IDS
 };
@@ -72,16 +62,19 @@ static const struct file_operations via_driver_fops = {
 	.open = drm_open,
 	.release = drm_release,
 	.unlocked_ioctl = drm_ioctl,
-	.mmap = drm_legacy_mmap,
+	.mmap = drm_mmap,
 	.poll = drm_poll,
+	.fasync = drm_fasync,
+#ifdef CONFIG_COMPAT
 	.compat_ioctl = drm_compat_ioctl,
+#endif
 	.llseek = noop_llseek,
 };
-#endif
 
 static struct drm_driver driver = {
 	.driver_features =
-	    DRIVER_USE_AGP | DRIVER_HAVE_IRQ | DRIVER_LEGACY,
+	    DRIVER_USE_AGP | DRIVER_USE_MTRR | DRIVER_HAVE_IRQ |
+	    DRIVER_IRQ_SHARED,
 	.load = via_driver_load,
 	.unload = via_driver_unload,
 	.open = via_driver_open,
@@ -95,18 +88,10 @@ static struct drm_driver driver = {
 	.irq_postinstall = via_driver_irq_postinstall,
 	.irq_uninstall = via_driver_irq_uninstall,
 	.irq_handler = via_driver_irq_handler,
-#ifdef __NetBSD__
-	.request_irq = drm_pci_request_irq,
-	.free_irq = drm_pci_free_irq,
-#endif
 	.dma_quiescent = via_driver_dma_quiescent,
 	.lastclose = via_lastclose,
 	.ioctls = via_ioctls,
-#ifndef __NetBSD__
 	.fops = &via_driver_fops,
-#else
-	.mmap_object = drm_legacy_mmap_object,
-#endif
 	.name = DRIVER_NAME,
 	.desc = DRIVER_DESC,
 	.date = DRIVER_DATE,
@@ -115,28 +100,22 @@ static struct drm_driver driver = {
 	.patchlevel = DRIVER_PATCHLEVEL,
 };
 
-#ifdef __NetBSD__
-struct drm_driver *const via_drm_driver = &driver;
-#endif
-
-#ifndef __NetBSD__
 static struct pci_driver via_pci_driver = {
 	.name = DRIVER_NAME,
-	.id_table = viadrm_pciidlist,
+	.id_table = pciidlist,
 };
 
 static int __init via_init(void)
 {
 	driver.num_ioctls = via_max_ioctl;
 	via_init_command_verifier();
-	return drm_legacy_pci_init(&driver, &via_pci_driver);
+	return drm_pci_init(&driver, &via_pci_driver);
 }
 
 static void __exit via_exit(void)
 {
-	drm_legacy_pci_exit(&driver, &via_pci_driver);
+	drm_pci_exit(&driver, &via_pci_driver);
 }
-#endif	/* __NetBSD__ */
 
 module_init(via_init);
 module_exit(via_exit);

@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_prime.h,v 1.7 2021/12/19 11:33:30 riastradh Exp $	*/
+/*	$NetBSD: drm_prime.h,v 1.1 2021/12/18 20:15:57 riastradh Exp $	*/
 
 /*
  * Copyright © 2012 Red Hat
@@ -87,46 +87,24 @@ void drm_gem_unmap_dma_buf(struct dma_buf_attachment *attach,
 void *drm_gem_dmabuf_vmap(struct dma_buf *dma_buf);
 void drm_gem_dmabuf_vunmap(struct dma_buf *dma_buf, void *vaddr);
 
-#ifdef __NetBSD__
-int drm_gem_prime_mmap(struct drm_gem_object *, off_t *, size_t, int, int *,
-    int *, struct uvm_object **, int *);
-int drm_gem_dmabuf_mmap(struct dma_buf *, off_t *, size_t, int, int *,
-    int *, struct uvm_object **, int *);
-#else
 int drm_gem_prime_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma);
 int drm_gem_dmabuf_mmap(struct dma_buf *dma_buf, struct vm_area_struct *vma);
-#endif
 
 struct sg_table *drm_prime_pages_to_sg(struct page **pages, unsigned int nr_pages);
 struct dma_buf *drm_gem_prime_export(struct drm_gem_object *obj,
 				     int flags);
 
 /* helper functions for importing */
-#ifdef __NetBSD__
-struct drm_gem_object *drm_gem_prime_import_dev(struct drm_device *dev,
-						struct dma_buf *dma_buf,
-						bus_dma_tag_t attach_dev);
-#else
 struct drm_gem_object *drm_gem_prime_import_dev(struct drm_device *dev,
 						struct dma_buf *dma_buf,
 						struct device *attach_dev);
-#endif
 struct drm_gem_object *drm_gem_prime_import(struct drm_device *dev,
 					    struct dma_buf *dma_buf);
 
 void drm_prime_gem_destroy(struct drm_gem_object *obj, struct sg_table *sg);
 
-#ifdef __NetBSD__
-extern struct sg_table *drm_prime_bus_dmamem_to_sg(bus_dma_tag_t, const bus_dma_segment_t *, int);
-extern int drm_prime_sg_to_bus_dmamem(bus_dma_tag_t, bus_dma_segment_t *, int, int *, const struct sg_table *);
-extern int drm_prime_bus_dmamap_load_sgt(bus_dma_tag_t, bus_dmamap_t, struct sg_table *);
-extern bus_size_t drm_prime_sg_size(struct sg_table *);
-extern void drm_prime_sg_free(struct sg_table *);
-extern bool drm_prime_sg_importable(bus_dma_tag_t, struct sg_table *);
-#else
 int drm_prime_sg_to_page_addr_arrays(struct sg_table *sgt, struct page **pages,
 				     dma_addr_t *addrs, int max_pages);
-#endif
 
 
 #endif /* __DRM_PRIME_H__ */

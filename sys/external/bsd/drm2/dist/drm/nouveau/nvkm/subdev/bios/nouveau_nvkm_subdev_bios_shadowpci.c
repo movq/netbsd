@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_subdev_bios_shadowpci.c,v 1.5 2021/12/18 23:45:38 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_subdev_bios_shadowpci.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -23,15 +23,11 @@
  *
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_bios_shadowpci.c,v 1.5 2021/12/18 23:45:38 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_bios_shadowpci.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $");
 
 #include "priv.h"
 
 #include <core/pci.h>
-
-#ifdef __NetBSD__
-#  define	__iomem	__pci_rom_iomem
-#endif
 
 struct priv {
 	struct pci_dev *pdev;

@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_subdev_fb_nv04.c,v 1.3 2021/12/18 23:45:39 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_subdev_fb_nv04.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -24,11 +24,19 @@
  * Authors: Ben Skeggs
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_fb_nv04.c,v 1.3 2021/12/18 23:45:39 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_fb_nv04.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $");
 
 #include "priv.h"
 #include "ram.h"
 #include "regsnv04.h"
+
+bool
+nv04_fb_memtype_valid(struct nvkm_fb *fb, u32 tile_flags)
+{
+	if (!(tile_flags & 0xff00))
+		return true;
+	return false;
+}
 
 static void
 nv04_fb_init(struct nvkm_fb *fb)
@@ -46,6 +54,7 @@ static const struct nvkm_fb_func
 nv04_fb = {
 	.init = nv04_fb_init,
 	.ram_new = nv04_ram_new,
+	.memtype_valid = nv04_fb_memtype_valid,
 };
 
 int

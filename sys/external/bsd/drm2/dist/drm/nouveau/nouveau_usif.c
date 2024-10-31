@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_usif.c,v 1.8 2021/12/18 23:45:32 riastradh Exp $	*/
+/*	$NetBSD: nouveau_usif.c,v 1.1 2018/08/27 01:34:55 riastradh Exp $	*/
 
 /*
  * Copyright 2014 Red Hat Inc.
@@ -25,9 +25,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_usif.c,v 1.8 2021/12/18 23:45:32 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_usif.c,v 1.1 2018/08/27 01:34:55 riastradh Exp $");
 
-#include "nouveau_drv.h"
+#include "nouveau_drm.h"
 #include "nouveau_usif.h"
 #include "nouveau_abi16.h"
 
@@ -108,7 +108,7 @@ usif_notify(const void *header, u32 length, const void *data, u32 size)
 	}
 		break;
 	default:
-		BUG();
+		BUG_ON(1);
 		break;
 	}
 
@@ -117,11 +117,7 @@ usif_notify(const void *header, u32 length, const void *data, u32 size)
 		list_add_tail(&ntfy->p->base.link, &filp->event_list);
 		filp->event_space -= ntfy->p->e.base.length;
 	}
-#ifdef __NetBSD__
-	DRM_SPIN_WAKEUP_ONE(&filp->event_wait, &dev->event_lock);
-#else
 	wake_up_interruptible(&filp->event_wait);
-#endif
 	spin_unlock_irqrestore(&dev->event_lock, flags);
 	atomic_set(&ntfy->enabled, 0);
 	return NVIF_NOTIFY_DROP;
@@ -139,21 +135,20 @@ usif_notify_new(struct drm_file *f, void *data, u32 size, void *argv, u32 argc)
 		struct nvif_notify_req_v0 v0;
 	} *req;
 	struct usif_notify *ntfy;
-	int ret = -ENOSYS;
+	int ret;
 
-	if (!(ret = nvif_unpack(ret, &data, &size, args->v0, 0, 0, true))) {
+	if (nvif_unpack(args->v0, 0, 0, true)) {
 		if (usif_notify_find(f, args->v0.index))
 			return -EEXIST;
 	} else
 		return ret;
 	req = data;
-	ret = -ENOSYS;
 
 	if (!(ntfy = kmalloc(sizeof(*ntfy), GFP_KERNEL)))
 		return -ENOMEM;
 	atomic_set(&ntfy->enabled, 0);
 
-	if (!(ret = nvif_unpack(ret, &data, &size, req->v0, 0, 0, true))) {
+	if (nvif_unpack(req->v0, 0, 0, true)) {
 		ntfy->reply = sizeof(struct nvif_notify_rep_v0) + req->v0.reply;
 		ntfy->route = req->v0.route;
 		ntfy->token = req->v0.token;
@@ -181,9 +176,9 @@ usif_notify_del(struct drm_file *f, void *data, u32 size, void *argv, u32 argc)
 		struct nvif_ioctl_ntfy_del_v0 v0;
 	} *args = data;
 	struct usif_notify *ntfy;
-	int ret = -ENOSYS;
+	int ret;
 
-	if (!(ret = nvif_unpack(ret, &data, &size, args->v0, 0, 0, true))) {
+	if (nvif_unpack(args->v0, 0, 0, true)) {
 		if (!(ntfy = usif_notify_find(f, args->v0.index)))
 			return -ENOENT;
 	} else
@@ -204,9 +199,9 @@ usif_notify_get(struct drm_file *f, void *data, u32 size, void *argv, u32 argc)
 		struct nvif_ioctl_ntfy_del_v0 v0;
 	} *args = data;
 	struct usif_notify *ntfy;
-	int ret = -ENOSYS;
+	int ret;
 
-	if (!(ret = nvif_unpack(ret, &data, &size, args->v0, 0, 0, true))) {
+	if (nvif_unpack(args->v0, 0, 0, true)) {
 		if (!(ntfy = usif_notify_find(f, args->v0.index)))
 			return -ENOENT;
 	} else
@@ -220,6 +215,8 @@ usif_notify_get(struct drm_file *f, void *data, u32 size, void *argv, u32 argc)
 		goto done;
 	ntfy->p->base.event = &ntfy->p->e.base;
 	ntfy->p->base.file_priv = f;
+	ntfy->p->base.pid = current->pid;
+	ntfy->p->base.destroy =(void(*)(struct drm_pending_event *))kfree;
 	ntfy->p->e.base.type = DRM_NOUVEAU_EVENT_NVIF;
 	ntfy->p->e.base.length = sizeof(ntfy->p->e.base) + ntfy->reply;
 
@@ -241,9 +238,9 @@ usif_notify_put(struct drm_file *f, void *data, u32 size, void *argv, u32 argc)
 		struct nvif_ioctl_ntfy_put_v0 v0;
 	} *args = data;
 	struct usif_notify *ntfy;
-	int ret = -ENOSYS;
+	int ret;
 
-	if (!(ret = nvif_unpack(ret, &data, &size, args->v0, 0, 0, true))) {
+	if (nvif_unpack(args->v0, 0, 0, true)) {
 		if (!(ntfy = usif_notify_find(f, args->v0.index)))
 			return -ENOENT;
 	} else
@@ -278,13 +275,13 @@ usif_object_new(struct drm_file *f, void *data, u32 size, void *argv, u32 argc)
 		struct nvif_ioctl_new_v0 v0;
 	} *args = data;
 	struct usif_object *object;
-	int ret = -ENOSYS;
+	int ret;
 
 	if (!(object = kmalloc(sizeof(*object), GFP_KERNEL)))
 		return -ENOMEM;
 	list_add(&object->head, &cli->objects);
 
-	if (!(ret = nvif_unpack(ret, &data, &size, args->v0, 0, 0, true))) {
+	if (nvif_unpack(args->v0, 0, 0, true)) {
 		object->route = args->v0.route;
 		object->token = args->v0.token;
 		args->v0.route = NVDRM_OBJECT_USIF;
@@ -300,17 +297,11 @@ usif_object_new(struct drm_file *f, void *data, u32 size, void *argv, u32 argc)
 }
 
 int
-#ifdef __NetBSD__
-usif_ioctl(struct drm_file *filp, void *data, u32 argc)
-#else
 usif_ioctl(struct drm_file *filp, void __user *user, u32 argc)
-#endif
 {
 	struct nouveau_cli *cli = nouveau_cli(filp);
 	struct nvif_client *client = &cli->base;
-#ifndef __NetBSD__
 	void *data = kmalloc(argc, GFP_KERNEL);
-#endif
 	u32   size = argc;
 	union {
 		struct nvif_ioctl_v0 v0;
@@ -319,14 +310,12 @@ usif_ioctl(struct drm_file *filp, void __user *user, u32 argc)
 	u8 owner;
 	int ret;
 
-#ifndef __NetBSD__
 	if (ret = -ENOMEM, !argv)
 		goto done;
 	if (ret = -EFAULT, copy_from_user(argv, user, size))
 		goto done;
-#endif
 
-	if (!(ret = nvif_unpack(-ENOSYS, &data, &size, argv->v0, 0, 0, true))) {
+	if (nvif_unpack(argv->v0, 0, 0, true)) {
 		/* block access to objects not created via this interface */
 		owner = argv->v0.owner;
 		if (argv->v0.object == 0ULL &&
@@ -366,10 +355,6 @@ usif_ioctl(struct drm_file *filp, void __user *user, u32 argc)
 	case NVIF_IOCTL_V0_NTFY_PUT:
 		ret = usif_notify_put(filp, data, size, argv, argc);
 		break;
-	case NVIF_IOCTL_V0_MAP_NETBSD:
-		/* Kernel-only kludge.  */
-		ret = -EINVAL;
-		break;
 	default:
 		ret = nvif_client_ioctl(client, argv, argc);
 		break;
@@ -389,14 +374,10 @@ usif_ioctl(struct drm_file *filp, void __user *user, u32 argc)
 	argv->v0.owner = owner;
 	mutex_unlock(&cli->mutex);
 
-#ifndef __NetBSD__
 	if (copy_to_user(user, argv, argc))
 		ret = -EFAULT;
-#endif
 done:
-#ifndef __NetBSD__
 	kfree(argv);
-#endif
 	return ret;
 }
 

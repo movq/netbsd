@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_gem_object_types.h,v 1.7 2021/12/19 12:26:55 riastradh Exp $	*/
+/*	$NetBSD: i915_gem_object_types.h,v 1.1 2021/12/18 20:15:31 riastradh Exp $	*/
 
 /*
  * SPDX-License-Identifier: MIT
@@ -70,7 +70,6 @@ enum i915_mmap_type {
 	I915_MMAP_TYPE_WC,
 	I915_MMAP_TYPE_WB,
 	I915_MMAP_TYPE_UC,
-	I915_MMAP_NTYPES
 };
 
 struct i915_mmap_offset {
@@ -78,11 +77,7 @@ struct i915_mmap_offset {
 	struct drm_i915_gem_object *obj;
 	enum i915_mmap_type mmap_type;
 
-#ifdef __NetBSD__
-	struct uvm_object uobj;
-#else
 	struct rb_node offset;
-#endif
 };
 
 struct drm_i915_gem_object {
@@ -142,11 +137,7 @@ struct drm_i915_gem_object {
 
 	struct {
 		spinlock_t lock; /* Protects access to mmo offsets */
-#ifdef __NetBSD__
-		struct i915_mmap_offset *offsets[I915_MMAP_NTYPES];
-#else
 		struct rb_root offsets;
-#endif
 	} mmo;
 
 	I915_SELFTEST_DECLARE(struct list_head st_link);
@@ -216,21 +207,6 @@ struct drm_i915_gem_object {
 		 * region->obj_lock.
 		 */
 		struct list_head region_link;
-
-#ifdef __NetBSD__
-		/* internal objects */
-		union {
-			struct {
-				bus_dma_segment_t *segs;
-				int nsegs;
-				int rsegs;
-			} internal;
-			struct {
-				bus_dma_segment_t seg;
-				void *kva;
-			} phys;
-		} u;
-#endif
 
 		struct sg_table *pages;
 		void *mapping;

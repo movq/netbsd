@@ -1,6 +1,5 @@
-/*	$NetBSD: omap.h,v 1.1.1.4 2021/11/07 16:49:56 jmcneill Exp $	*/
+/*	$NetBSD: omap.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
-/* SPDX-License-Identifier: GPL-2.0 */
 /*
  * This header provides constants for OMAP pinctrl bindings.
  *
@@ -66,8 +65,7 @@
 #define OMAP3_WKUP_IOPAD(pa, val)	OMAP_IOPAD_OFFSET((pa), 0x2a00) (val)
 #define DM814X_IOPAD(pa, val)		OMAP_IOPAD_OFFSET((pa), 0x0800) (val)
 #define DM816X_IOPAD(pa, val)		OMAP_IOPAD_OFFSET((pa), 0x0800) (val)
-#define AM33XX_IOPAD(pa, val)		OMAP_IOPAD_OFFSET((pa), 0x0800) (val) (0)
-#define AM33XX_PADCONF(pa, conf, mux)	OMAP_IOPAD_OFFSET((pa), 0x0800) (conf) (mux)
+#define AM33XX_IOPAD(pa, val)		OMAP_IOPAD_OFFSET((pa), 0x0800) (val)
 
 /*
  * Macros to allow using the offset from the padconf physical address

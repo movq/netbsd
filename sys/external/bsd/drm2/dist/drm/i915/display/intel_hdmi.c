@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_hdmi.c,v 1.5 2021/12/19 11:46:19 riastradh Exp $	*/
+/*	$NetBSD: intel_hdmi.c,v 1.1 2021/12/18 20:15:30 riastradh Exp $	*/
 
 /*
  * Copyright 2006 Dave Airlie <airlied@linux.ie>
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_hdmi.c,v 1.5 2021/12/19 11:46:19 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_hdmi.c,v 1.1 2021/12/18 20:15:30 riastradh Exp $");
 
 #include <linux/delay.h>
 #include <linux/hdmi.h>
@@ -555,7 +555,7 @@ static void hsw_read_infoframe(struct intel_encoder *encoder,
 {
 	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
-	u32 val __unused, *data = frame;
+	u32 val, *data = frame;
 	int i;
 
 	val = I915_READ(HSW_TVIDEO_DIP_CTL(cpu_transcoder));
@@ -2382,8 +2382,7 @@ static bool intel_hdmi_limited_color_range(const struct intel_crtc_state *crtc_s
 					   const struct drm_connector_state *conn_state)
 {
 	const struct intel_digital_connector_state *intel_conn_state =
-		const_container_of(conn_state,
-		    struct intel_digital_connector_state, base);
+		to_intel_digital_connector_state(conn_state);
 	const struct drm_display_mode *adjusted_mode =
 		&crtc_state->hw.adjusted_mode;
 
@@ -2775,7 +2774,6 @@ static void chv_hdmi_pre_enable(struct intel_encoder *encoder,
 	chv_phy_release_cl2_override(encoder);
 }
 
-#ifndef __NetBSD__
 static struct i2c_adapter *
 intel_hdmi_get_i2c_adapter(struct drm_connector *connector)
 {
@@ -2784,11 +2782,9 @@ intel_hdmi_get_i2c_adapter(struct drm_connector *connector)
 
 	return intel_gmbus_get_adapter(dev_priv, intel_hdmi->ddc_bus);
 }
-#endif
 
 static void intel_hdmi_create_i2c_symlink(struct drm_connector *connector)
 {
-#ifndef __NetBSD__ /* XXX i915 hdmi sysfs */
 	struct i2c_adapter *adapter = intel_hdmi_get_i2c_adapter(connector);
 	struct kobject *i2c_kobj = &adapter->dev.kobj;
 	struct kobject *connector_kobj = &connector->kdev->kobj;
@@ -2797,18 +2793,15 @@ static void intel_hdmi_create_i2c_symlink(struct drm_connector *connector)
 	ret = sysfs_create_link(connector_kobj, i2c_kobj, i2c_kobj->name);
 	if (ret)
 		DRM_ERROR("Failed to create i2c symlink (%d)\n", ret);
-#endif
 }
 
 static void intel_hdmi_remove_i2c_symlink(struct drm_connector *connector)
 {
-#ifndef __NetBSD__ /* XXX i915 hdmi sysfs */
 	struct i2c_adapter *adapter = intel_hdmi_get_i2c_adapter(connector);
 	struct kobject *i2c_kobj = &adapter->dev.kobj;
 	struct kobject *connector_kobj = &connector->kdev->kobj;
 
 	sysfs_remove_link(connector_kobj, i2c_kobj->name);
-#endif
 }
 
 static int

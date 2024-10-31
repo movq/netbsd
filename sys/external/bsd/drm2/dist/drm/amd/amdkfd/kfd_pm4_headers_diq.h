@@ -1,4 +1,4 @@
-/*	$NetBSD: kfd_pm4_headers_diq.h,v 1.3 2021/12/18 23:44:59 riastradh Exp $	*/
+/*	$NetBSD: kfd_pm4_headers_diq.h,v 1.1 2018/08/27 01:34:46 riastradh Exp $	*/
 
 /*
  * Copyright 2014 Advanced Micro Devices, Inc.

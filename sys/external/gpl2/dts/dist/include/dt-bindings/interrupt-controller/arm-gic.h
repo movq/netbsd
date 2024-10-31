@@ -1,6 +1,5 @@
-/*	$NetBSD: arm-gic.h,v 1.1.1.3 2019/01/22 14:57:01 jmcneill Exp $	*/
+/*	$NetBSD: arm-gic.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
-/* SPDX-License-Identifier: GPL-2.0 OR MIT */
 /*
  * This header provides constants for the ARM GIC.
  */

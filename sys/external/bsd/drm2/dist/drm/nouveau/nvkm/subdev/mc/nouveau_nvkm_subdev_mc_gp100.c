@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_subdev_mc_gp100.c,v 1.3 2021/12/19 11:34:45 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_subdev_mc_gp100.c,v 1.1 2021/12/18 20:15:42 riastradh Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -24,7 +24,7 @@
  * Authors: Ben Skeggs
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_mc_gp100.c,v 1.3 2021/12/19 11:34:45 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_mc_gp100.c,v 1.1 2021/12/18 20:15:42 riastradh Exp $");
 
 #define gp100_mc(p) container_of((p), struct gp100_mc, base)
 #include "priv.h"
@@ -98,17 +98,9 @@ gp100_mc_intr[] = {
 	{},
 };
 
-static void *
-nv50_mc_dtor(struct nvkm_mc *mc)
-{
-	spin_lock_destroy(&gp100_mc(mc)->lock);
-	return mc;
-}
-
 static const struct nvkm_mc_func
 gp100_mc = {
 	.init = nv50_mc_init,
-	.dtor = nv50_mc_dtor,
 	.intr = gp100_mc_intr,
 	.intr_unarm = gp100_mc_intr_unarm,
 	.intr_rearm = gp100_mc_intr_rearm,

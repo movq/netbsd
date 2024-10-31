@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_subdev_mmu_memgf100.c,v 1.3 2021/12/19 10:51:58 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_subdev_mmu_memgf100.c,v 1.1 2021/12/18 20:15:42 riastradh Exp $	*/
 
 /*
  * Copyright 2017 Red Hat Inc.
@@ -22,7 +22,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_mmu_memgf100.c,v 1.3 2021/12/19 10:51:58 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_mmu_memgf100.c,v 1.1 2021/12/18 20:15:42 riastradh Exp $");
 
 #include "mem.h"
 
@@ -36,14 +36,8 @@ __KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_mmu_memgf100.c,v 1.3 2021/12/19 
 #include <nvif/unpack.h>
 
 int
-#ifdef __NetBSD__
-gf100_mem_map(struct nvkm_mmu *mmu, struct nvkm_memory *memory, void *argv,
-	      u32 argc, bus_space_tag_t *ptag, u64 *paddr, u64 *psize,
-	      struct nvkm_vma **pvma)
-#else
 gf100_mem_map(struct nvkm_mmu *mmu, struct nvkm_memory *memory, void *argv,
 	      u32 argc, u64 *paddr, u64 *psize, struct nvkm_vma **pvma)
-#endif
 {
 	struct gf100_vmm_map_v0 uvmm = {};
 	union {
@@ -71,9 +65,6 @@ gf100_mem_map(struct nvkm_mmu *mmu, struct nvkm_memory *memory, void *argv,
 	if (ret)
 		return ret;
 
-#ifdef __NetBSD__
-	*ptag = device->func->resource_tag(device, 1);
-#endif
 	*paddr = device->func->resource_addr(device, 1) + (*pvma)->addr;
 	*psize = (*pvma)->size;
 	return 0;

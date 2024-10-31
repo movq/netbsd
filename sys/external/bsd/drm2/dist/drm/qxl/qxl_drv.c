@@ -1,5 +1,3 @@
-/*	$NetBSD: qxl_drv.c,v 1.5 2021/12/18 23:45:42 riastradh Exp $	*/
-
 /* vim: set ts=8 sw=8 tw=78 ai noexpandtab */
 /* qxl_drv.c -- QXL driver -*- linux-c -*-
  *
@@ -30,24 +28,17 @@
  *    Alon Levy <alevy@redhat.com>
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: qxl_drv.c,v 1.5 2021/12/18 23:45:42 riastradh Exp $");
-
-#include "qxl_drv.h"
-#include <linux/console.h>
 #include <linux/module.h>
-#include <linux/pci.h>
+#include <linux/console.h>
 
-#include <drm/drm.h>
-#include <drm/drm_drv.h>
-#include <drm/drm_file.h>
-#include <drm/drm_modeset_helper.h>
-#include <drm/drm_prime.h>
-#include <drm/drm_probe_helper.h>
-
+#include "drmP.h"
+#include "drm/drm.h"
+#include "drm_crtc_helper.h"
+#include "qxl_drv.h"
 #include "qxl_object.h"
 
-static const struct pci_device_id pciidlist[] = {
+extern int qxl_max_ioctls;
+static DEFINE_PCI_DEVICE_TABLE(pciidlist) = {
 	{ 0x1b36, 0x100, PCI_ANY_ID, PCI_ANY_ID, PCI_CLASS_DISPLAY_VGA << 8,
 	  0xffff00, 0 },
 	{ 0x1b36, 0x100, PCI_ANY_ID, PCI_ANY_ID, PCI_CLASS_DISPLAY_OTHER << 8,
@@ -68,104 +59,52 @@ module_param_named(num_heads, qxl_num_crtc, int, 0400);
 static struct drm_driver qxl_driver;
 static struct pci_driver qxl_pci_driver;
 
-static bool is_vga(struct pci_dev *pdev)
-{
-	return pdev->class == PCI_CLASS_DISPLAY_VGA << 8;
-}
-
 static int
 qxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
-	struct qxl_device *qdev;
-	int ret;
-
 	if (pdev->revision < 4) {
 		DRM_ERROR("qxl too old, doesn't support client_monitors_config,"
 			  " use xf86-video-qxl in user mode");
 		return -EINVAL; /* TODO: ENODEV ? */
 	}
-
-	qdev = kzalloc(sizeof(struct qxl_device), GFP_KERNEL);
-	if (!qdev)
-		return -ENOMEM;
-
-	ret = pci_enable_device(pdev);
-	if (ret)
-		goto free_dev;
-
-	ret = drm_fb_helper_remove_conflicting_pci_framebuffers(pdev, "qxl");
-	if (ret)
-		goto disable_pci;
-
-	if (is_vga(pdev)) {
-		ret = vga_get_interruptible(pdev, VGA_RSRC_LEGACY_IO);
-		if (ret) {
-			DRM_ERROR("can't get legacy vga ioports\n");
-			goto disable_pci;
-		}
-	}
-
-	ret = qxl_device_init(qdev, &qxl_driver, pdev);
-	if (ret)
-		goto put_vga;
-
-	ret = qxl_modeset_init(qdev);
-	if (ret)
-		goto unload;
-
-	drm_kms_helper_poll_init(&qdev->ddev);
-
-	/* Complete initialization. */
-	ret = drm_dev_register(&qdev->ddev, ent->driver_data);
-	if (ret)
-		goto modeset_cleanup;
-
-	drm_fbdev_generic_setup(&qdev->ddev, 32);
-	return 0;
-
-modeset_cleanup:
-	qxl_modeset_fini(qdev);
-unload:
-	qxl_device_fini(qdev);
-put_vga:
-	if (is_vga(pdev))
-		vga_put(pdev, VGA_RSRC_LEGACY_IO);
-disable_pci:
-	pci_disable_device(pdev);
-free_dev:
-	kfree(qdev);
-	return ret;
+	return drm_get_pci_dev(pdev, ent, &qxl_driver);
 }
 
 static void
 qxl_pci_remove(struct pci_dev *pdev)
 {
 	struct drm_device *dev = pci_get_drvdata(pdev);
-	struct qxl_device *qdev = dev->dev_private;
 
-	drm_dev_unregister(dev);
-
-	qxl_modeset_fini(qdev);
-	qxl_device_fini(qdev);
-	if (is_vga(pdev))
-		vga_put(pdev, VGA_RSRC_LEGACY_IO);
-
-	dev->dev_private = NULL;
-	kfree(qdev);
-	drm_dev_put(dev);
+	drm_put_dev(dev);
 }
 
-DEFINE_DRM_GEM_FOPS(qxl_fops);
+static const struct file_operations qxl_fops = {
+	.owner = THIS_MODULE,
+	.open = drm_open,
+	.release = drm_release,
+	.unlocked_ioctl = drm_ioctl,
+	.poll = drm_poll,
+	.mmap = qxl_mmap,
+};
 
 static int qxl_drm_freeze(struct drm_device *dev)
 {
 	struct pci_dev *pdev = dev->pdev;
 	struct qxl_device *qdev = dev->dev_private;
-	int ret;
+	struct drm_crtc *crtc;
 
-	ret = drm_mode_config_helper_suspend(dev);
-	if (ret)
-		return ret;
+	drm_kms_helper_poll_disable(dev);
+
+	console_lock();
+	qxl_fbdev_set_suspend(qdev, 1);
+	console_unlock();
+
+	/* unpin the front buffers */
+	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
+		struct drm_crtc_helper_funcs *crtc_funcs = crtc->helper_private;
+		if (crtc->enabled)
+			(*crtc_funcs->disable)(crtc);
+	}
 
 	qxl_destroy_monitors_object(qdev);
 	qxl_surf_evict(qdev);
@@ -191,7 +130,14 @@ static int qxl_drm_resume(struct drm_device *dev, bool thaw)
 	}
 
 	qxl_create_monitors_object(qdev);
-	return drm_mode_config_helper_resume(dev);
+	drm_helper_resume_force_mode(dev);
+
+	console_lock();
+	qxl_fbdev_set_suspend(qdev, 0);
+	console_unlock();
+
+	drm_kms_helper_poll_enable(dev);
+	return 0;
 }
 
 static int qxl_pm_suspend(struct device *dev)
@@ -225,14 +171,16 @@ static int qxl_pm_resume(struct device *dev)
 
 static int qxl_pm_thaw(struct device *dev)
 {
-	struct drm_device *drm_dev = dev_get_drvdata(dev);
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct drm_device *drm_dev = pci_get_drvdata(pdev);
 
 	return qxl_drm_resume(drm_dev, true);
 }
 
 static int qxl_pm_freeze(struct device *dev)
 {
-	struct drm_device *drm_dev = dev_get_drvdata(dev);
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct drm_device *drm_dev = pci_get_drvdata(pdev);
 
 	return qxl_drm_freeze(drm_dev);
 }
@@ -264,24 +212,25 @@ static struct pci_driver qxl_pci_driver = {
 };
 
 static struct drm_driver qxl_driver = {
-	.driver_features = DRIVER_GEM | DRIVER_MODESET | DRIVER_ATOMIC,
+	.driver_features = DRIVER_GEM | DRIVER_MODESET |
+			   DRIVER_HAVE_IRQ | DRIVER_IRQ_SHARED,
+	.dev_priv_size = 0,
+	.load = qxl_driver_load,
+	.unload = qxl_driver_unload,
 
 	.dumb_create = qxl_mode_dumb_create,
 	.dumb_map_offset = qxl_mode_dumb_mmap,
+	.dumb_destroy = drm_gem_dumb_destroy,
 #if defined(CONFIG_DEBUG_FS)
 	.debugfs_init = qxl_debugfs_init,
+	.debugfs_cleanup = qxl_debugfs_takedown,
 #endif
-	.prime_handle_to_fd = drm_gem_prime_handle_to_fd,
-	.prime_fd_to_handle = drm_gem_prime_fd_to_handle,
-	.gem_prime_import_sg_table = qxl_gem_prime_import_sg_table,
-	.gem_prime_mmap = qxl_gem_prime_mmap,
+	.gem_free_object = qxl_gem_object_free,
+	.gem_open_object = qxl_gem_object_open,
+	.gem_close_object = qxl_gem_object_close,
 	.fops = &qxl_fops,
 	.ioctls = qxl_ioctls,
 	.irq_handler = qxl_irq_handler,
-#ifdef __NetBSD__
-	.request_irq = drm_pci_request_irq,
-	.free_irq = drm_pci_free_irq,
-#endif
 	.name = DRIVER_NAME,
 	.desc = DRIVER_DESC,
 	.date = DRIVER_DATE,
@@ -292,18 +241,20 @@ static struct drm_driver qxl_driver = {
 
 static int __init qxl_init(void)
 {
+#ifdef CONFIG_VGA_CONSOLE
 	if (vgacon_text_force() && qxl_modeset == -1)
 		return -EINVAL;
+#endif
 
 	if (qxl_modeset == 0)
 		return -EINVAL;
 	qxl_driver.num_ioctls = qxl_max_ioctls;
-	return pci_register_driver(&qxl_pci_driver);
+	return drm_pci_init(&qxl_driver, &qxl_pci_driver);
 }
 
 static void __exit qxl_exit(void)
 {
-	pci_unregister_driver(&qxl_pci_driver);
+	drm_pci_exit(&qxl_driver, &qxl_pci_driver);
 }
 
 module_init(qxl_init);

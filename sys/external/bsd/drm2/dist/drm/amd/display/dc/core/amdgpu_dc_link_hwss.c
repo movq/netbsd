@@ -1,10 +1,10 @@
-/*	$NetBSD: amdgpu_dc_link_hwss.c,v 1.4 2021/12/19 11:59:30 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_dc_link_hwss.c,v 1.1 2021/12/18 20:18:29 riastradh Exp $	*/
 
 /* Copyright 2015 Advanced Micro Devices, Inc. */
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_dc_link_hwss.c,v 1.4 2021/12/19 11:59:30 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_dc_link_hwss.c,v 1.1 2021/12/18 20:18:29 riastradh Exp $");
 
 #include "dm_services.h"
 #include "dc.h"
@@ -294,7 +294,7 @@ void dp_set_hw_lane_settings(
 void dp_set_hw_test_pattern(
 	struct dc_link *link,
 	enum dp_test_pattern test_pattern,
-	const uint8_t *custom_pattern,
+	uint8_t *custom_pattern,
 	uint32_t custom_pattern_size)
 {
 	struct encoder_set_dp_phy_pattern_param pattern_param = {0};

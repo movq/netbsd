@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_engine_user.c,v 1.5 2021/12/19 11:59:11 riastradh Exp $	*/
+/*	$NetBSD: intel_engine_user.c,v 1.1 2021/12/18 20:15:32 riastradh Exp $	*/
 
 /*
  * SPDX-License-Identifier: MIT
@@ -7,7 +7,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_engine_user.c,v 1.5 2021/12/19 11:59:11 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_engine_user.c,v 1.1 2021/12/18 20:15:32 riastradh Exp $");
 
 #include <linux/list.h>
 #include <linux/list_sort.h>
@@ -18,59 +18,9 @@ __KERNEL_RCSID(0, "$NetBSD: intel_engine_user.c,v 1.5 2021/12/19 11:59:11 riastr
 #include "intel_engine_user.h"
 #include "intel_gt.h"
 
-#include <linux/nbsd-namespace.h>
-
-#ifdef __NetBSD__
-
-static int
-compare_engines(void *cookie, const void *va, const void *vb)
-{
-	const struct intel_engine_cs *csa = va;
-	const struct intel_engine_cs *csb = vb;
-
-	if (csa->uabi_class < csb->uabi_class)
-		return -1;
-	if (csa->uabi_class > csb->uabi_class)
-		return +1;
-	if (csa->uabi_instance < csb->uabi_instance)
-		return -1;
-	if (csa->uabi_instance > csb->uabi_instance)
-		return +1;
-	return 0;
-}
-
-static int
-compare_engine_key(void *cookie, const void *vn, const void *vk)
-{
-	const struct intel_engine_cs *cs = vn;
-	const u8 *k = vk;
-
-	if (cs->uabi_class < k[0])
-		return -1;
-	if (cs->uabi_class > k[0])
-		return +1;
-	if (cs->uabi_instance < k[1])
-		return -1;
-	if (cs->uabi_instance > k[1])
-		return +1;
-	return 0;
-}
-
-static const rb_tree_ops_t engine_ops = {
-	.rbto_compare_nodes = compare_engines,
-	.rbto_compare_key = compare_engine_key,
-	.rbto_node_offset = offsetof(struct intel_engine_cs, uabi_node.rbtree),
-};
-
-#endif
-
 struct intel_engine_cs *
 intel_engine_lookup_user(struct drm_i915_private *i915, u8 class, u8 instance)
 {
-#ifdef __NetBSD__
-	const u8 key[2] = {class, instance};
-	return rb_tree_find_node(&i915->uabi_engines.rbr_tree, key);
-#else
 	struct rb_node *p = i915->uabi_engines.rb_node;
 
 	while (p) {
@@ -89,12 +39,12 @@ intel_engine_lookup_user(struct drm_i915_private *i915, u8 class, u8 instance)
 	}
 
 	return NULL;
-#endif
 }
 
 void intel_engine_add_user(struct intel_engine_cs *engine)
 {
-	llist_add(&engine->uabi_node.llist, &engine->i915->uabi_engines_llist);
+	llist_add((struct llist_node *)&engine->uabi_node,
+		  (struct llist_head *)&engine->i915->uabi_engines);
 }
 
 static const u8 uabi_classes[] = {
@@ -107,9 +57,9 @@ static const u8 uabi_classes[] = {
 static int engine_cmp(void *priv, struct list_head *A, struct list_head *B)
 {
 	const struct intel_engine_cs *a =
-		container_of(A, typeof(*a), uabi_node.list);
+		container_of((struct rb_node *)A, typeof(*a), uabi_node);
 	const struct intel_engine_cs *b =
-		container_of(B, typeof(*b), uabi_node.list);
+		container_of((struct rb_node *)B, typeof(*b), uabi_node);
 
 	if (uabi_classes[a->class] < uabi_classes[b->class])
 		return -1;
@@ -126,7 +76,7 @@ static int engine_cmp(void *priv, struct list_head *A, struct list_head *B)
 
 static struct llist_node *get_engines(struct drm_i915_private *i915)
 {
-	return llist_del_all(&i915->uabi_engines_llist);
+	return llist_del_all((struct llist_head *)&i915->uabi_engines);
 }
 
 static void sort_engines(struct drm_i915_private *i915,
@@ -136,8 +86,9 @@ static void sort_engines(struct drm_i915_private *i915,
 
 	llist_for_each_safe(pos, next, get_engines(i915)) {
 		struct intel_engine_cs *engine =
-			llist_entry(pos, typeof(*engine), uabi_node.llist);
-		list_add(&engine->uabi_node.list, engines);
+			container_of((struct rb_node *)pos, typeof(*engine),
+				     uabi_node);
+		list_add((struct list_head *)&engine->uabi_node, engines);
 	}
 	list_sort(NULL, engines, engine_cmp);
 }
@@ -247,17 +198,12 @@ void intel_engines_driver_register(struct drm_i915_private *i915)
 
 	sort_engines(i915, &engines);
 
-#ifdef __NetBSD__
-	__USE(prev);
-	__USE(p);
-	rb_tree_init(&i915->uabi_engines.rbr_tree, &engine_ops);
-#else
 	prev = NULL;
 	p = &i915->uabi_engines.rb_node;
-#endif
 	list_for_each_safe(it, next, &engines) {
 		struct intel_engine_cs *engine =
-			container_of(it, typeof(*engine), uabi_node.list);
+			container_of((struct rb_node *)it, typeof(*engine),
+				     uabi_node);
 		char old[sizeof(engine->name)];
 
 		if (intel_gt_has_init_error(engine->gt))
@@ -276,15 +222,8 @@ void intel_engines_driver_register(struct drm_i915_private *i915)
 			  engine->uabi_instance);
 		DRM_DEBUG_DRIVER("renamed %s to %s\n", old, engine->name);
 
-#ifdef __NetBSD__
-		struct intel_engine_cs *collision __diagused;
-		collision = rb_tree_insert_node(&i915->uabi_engines.rbr_tree,
-		    engine);
-		KASSERT(collision == engine);
-#else
 		rb_link_node(&engine->uabi_node, prev, p);
 		rb_insert_color(&engine->uabi_node, &i915->uabi_engines);
-#endif
 
 		GEM_BUG_ON(intel_engine_lookup_user(i915,
 						    engine->uabi_class,
@@ -293,13 +232,11 @@ void intel_engines_driver_register(struct drm_i915_private *i915)
 		/* Fix up the mapping to match default execbuf::user_map[] */
 		add_legacy_ring(&ring, engine);
 
-#ifndef __NetBSD__
 		prev = &engine->uabi_node;
 		p = &prev->rb_right;
-#endif
 	}
 
-	if (IS_ENABLED(CONFIG_DRM_I915_SELFTEST) &&
+	if (IS_ENABLED(CONFIG_DRM_I915_SELFTESTS) &&
 	    IS_ENABLED(CONFIG_DRM_I915_DEBUG_GEM)) {
 		struct intel_engine_cs *engine;
 		unsigned int isolation;
@@ -347,12 +284,7 @@ void intel_engines_driver_register(struct drm_i915_private *i915)
 		}
 
 		if (WARN(errors, "Invalid UABI engine mapping found"))
-#ifdef __NetBSD__
-			rb_tree_init(&i915->uabi_engines.rbr_tree,
-			    &engine_ops);
-#else
 			i915->uabi_engines = RB_ROOT;
-#endif
 	}
 
 	set_scheduler_caps(i915);

@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_bios.c,v 1.4 2021/12/19 12:24:49 riastradh Exp $	*/
+/*	$NetBSD: intel_bios.c,v 1.1 2021/12/18 20:15:27 riastradh Exp $	*/
 
 /*
  * Copyright © 2006 Intel Corporation
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_bios.c,v 1.4 2021/12/19 12:24:49 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_bios.c,v 1.1 2021/12/18 20:15:27 riastradh Exp $");
 
 #include <drm/drm_dp_helper.h>
 #include <drm/i915_drm.h>
@@ -188,10 +188,9 @@ get_lvds_dvo_timing(const struct bdb_lvds_lfp_data *lvds_lfp_data,
 	int dvo_timing_offset =
 		lvds_lfp_data_ptrs->ptr[0].dvo_timing_offset -
 		lvds_lfp_data_ptrs->ptr[0].fp_timing_offset;
-	const char *entry = (const char *)lvds_lfp_data->data +
-	    lfp_data_size * index;
+	char *entry = (char *)lvds_lfp_data->data + lfp_data_size * index;
 
-	return (const struct lvds_dvo_timing *)(entry + dvo_timing_offset);
+	return (struct lvds_dvo_timing *)(entry + dvo_timing_offset);
 }
 
 /* get lvds_fp_timing entry
@@ -1282,7 +1281,7 @@ static void fixup_mipi_sequences(struct drm_i915_private *dev_priv)
 	DRM_DEBUG_KMS("Using init OTP fragment to deassert reset\n");
 
 	/* Copy the fragment, update seq byte and terminate it */
-	init_otp = (u8 *)__UNCONST(dev_priv->vbt.dsi.sequence[MIPI_SEQ_INIT_OTP]);
+	init_otp = (u8 *)dev_priv->vbt.dsi.sequence[MIPI_SEQ_INIT_OTP];
 	dev_priv->vbt.dsi.deassert_seq = kmemdup(init_otp, len + 1, GFP_KERNEL);
 	if (!dev_priv->vbt.dsi.deassert_seq)
 		return;
@@ -1972,32 +1971,6 @@ bool intel_bios_is_valid_vbt(const void *buf, size_t size)
 	return vbt;
 }
 
-#ifdef __NetBSD__
-#  define	__iomem	__pci_rom_iomem
-#  define	ioread16	fake_ioread16
-#  define	ioread32	fake_ioread32
-static inline uint16_t
-fake_ioread16(const void __iomem *p)
-{
-	uint16_t v;
-
-	v = *(const uint16_t __iomem *)p;
-	__insn_barrier();
-
-	return v;
-}
-static inline uint32_t
-fake_ioread32(const void __iomem *p)
-{
-	uint32_t v;
-
-	v = *(const uint32_t __iomem *)p;
-	__insn_barrier();
-
-	return v;
-}
-#endif
-
 static struct vbt_header *oprom_get_vbt(struct drm_i915_private *dev_priv)
 {
 	struct pci_dev *pdev = dev_priv->drm.pdev;
@@ -2055,11 +2028,6 @@ err_unmap_oprom:
 
 	return NULL;
 }
-
-#ifdef __NetBSD__
-#  undef	__iomem
-#  undef	ioread32
-#endif
 
 /**
  * intel_bios_init - find VBT and initialize settings from the BIOS

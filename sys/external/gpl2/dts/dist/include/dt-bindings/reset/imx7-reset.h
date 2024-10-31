@@ -1,10 +1,21 @@
-/*	$NetBSD: imx7-reset.h,v 1.1.1.3 2020/01/03 14:33:06 skrll Exp $	*/
+/*	$NetBSD: imx7-reset.h,v 1.1 2017/07/27 18:10:50 jmcneill Exp $	*/
 
-/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (C) 2017 Impinj, Inc.
  *
  * Author: Andrey Smirnov <andrew.smirnov@gmail.com>
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms and conditions of the GNU General Public License,
+ * version 2, as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #ifndef DT_BINDING_RESET_IMX7_H
@@ -47,9 +58,7 @@
 #define IMX7_RESET_DDRC_PRST		23
 #define IMX7_RESET_DDRC_CORE_RST	24
 
-#define IMX7_RESET_PCIE_CTRL_APPS_TURNOFF 25
-
-#define IMX7_RESET_NUM			26
+#define IMX7_RESET_NUM			25
 
 #endif
 

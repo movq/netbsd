@@ -1,4 +1,4 @@
-/*	$NetBSD: gtt.h,v 1.4 2021/12/19 11:15:49 riastradh Exp $	*/
+/*	$NetBSD: gtt.h,v 1.1 2021/12/18 20:15:34 riastradh Exp $	*/
 
 /*
  * Copyright(c) 2011-2016 Intel Corporation. All rights reserved.

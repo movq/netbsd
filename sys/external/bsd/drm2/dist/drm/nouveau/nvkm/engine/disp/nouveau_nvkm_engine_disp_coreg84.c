@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_engine_disp_coreg84.c,v 1.3 2021/12/18 23:45:35 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_engine_disp_coreg84.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -24,9 +24,12 @@
  * Authors: Ben Skeggs
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_engine_disp_coreg84.c,v 1.3 2021/12/18 23:45:35 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_engine_disp_coreg84.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $");
 
-#include "channv50.h"
+#include "dmacnv50.h"
+#include "rootnv50.h"
+
+#include <nvif/class.h>
 
 const struct nv50_disp_mthd_list
 g84_disp_core_mthd_dac = {
@@ -93,7 +96,7 @@ g84_disp_core_mthd_head = {
 };
 
 const struct nv50_disp_chan_mthd
-g84_disp_core_mthd = {
+g84_disp_core_chan_mthd = {
 	.name = "Core",
 	.addr = 0x000000,
 	.prev = 0x000004,
@@ -107,10 +110,13 @@ g84_disp_core_mthd = {
 	}
 };
 
-int
-g84_disp_core_new(const struct nvkm_oclass *oclass, void *argv, u32 argc,
-		  struct nv50_disp *disp, struct nvkm_object **pobject)
-{
-	return nv50_disp_core_new_(&nv50_disp_core_func, &g84_disp_core_mthd,
-				   disp, 0, oclass, argv, argc, pobject);
-}
+const struct nv50_disp_dmac_oclass
+g84_disp_core_oclass = {
+	.base.oclass = G82_DISP_CORE_CHANNEL_DMA,
+	.base.minver = 0,
+	.base.maxver = 0,
+	.ctor = nv50_disp_core_new,
+	.func = &nv50_disp_core_func,
+	.mthd = &g84_disp_core_chan_mthd,
+	.chid = 0,
+};

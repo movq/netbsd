@@ -1,6 +1,5 @@
-/*	$NetBSD: tegra124-soctherm.h,v 1.1.1.3 2020/01/03 14:33:03 skrll Exp $	*/
+/*	$NetBSD: tegra124-soctherm.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
-/* SPDX-License-Identifier: GPL-2.0 */
 /*
  * This header provides constants for binding nvidia,tegra124-soctherm.
  */
@@ -14,9 +13,9 @@
 #define TEGRA124_SOCTHERM_SENSOR_PLLX 3
 #define TEGRA124_SOCTHERM_SENSOR_NUM 4
 
-#define TEGRA_SOCTHERM_THROT_LEVEL_NONE 0
-#define TEGRA_SOCTHERM_THROT_LEVEL_LOW  1
-#define TEGRA_SOCTHERM_THROT_LEVEL_MED  2
-#define TEGRA_SOCTHERM_THROT_LEVEL_HIGH 3
+#define TEGRA_SOCTHERM_THROT_LEVEL_LOW  0
+#define TEGRA_SOCTHERM_THROT_LEVEL_MED  1
+#define TEGRA_SOCTHERM_THROT_LEVEL_HIGH 2
+#define TEGRA_SOCTHERM_THROT_LEVEL_NONE -1
 
 #endif

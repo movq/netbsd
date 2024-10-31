@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_dce112_resource.c,v 1.4 2021/12/19 11:59:30 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_dce112_resource.c,v 1.1 2021/12/18 20:11:20 riastradh Exp $	*/
 
 /*
 * Copyright 2012-15 Advanced Micro Devices, Inc.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_dce112_resource.c,v 1.4 2021/12/19 11:59:30 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_dce112_resource.c,v 1.1 2021/12/18 20:11:20 riastradh Exp $");
 
 #include <linux/slab.h>
 
@@ -478,6 +478,7 @@ static struct audio *create_audio(
 	return dce_audio_create(ctx, inst,
 			&audio_regs[inst], &audio_shift, &audio_mask);
 }
+
 
 static struct timing_generator *dce112_timing_generator_create(
 		struct dc_context *ctx,

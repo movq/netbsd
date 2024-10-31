@@ -1,4 +1,4 @@
-/*	$NetBSD: r8a7744-cpg-mssr.h,v 1.1.1.1 2019/01/22 14:57:01 jmcneill Exp $	*/
+/*	$NetBSD: r8a7744-cpg-mssr.h,v 1.1 2019/01/22 14:57:01 jmcneill Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0
  *

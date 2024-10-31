@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_reset.c,v 1.6 2021/12/19 12:32:15 riastradh Exp $	*/
+/*	$NetBSD: intel_reset.c,v 1.1 2021/12/18 20:15:32 riastradh Exp $	*/
 
 /*
  * SPDX-License-Identifier: MIT
@@ -7,7 +7,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_reset.c,v 1.6 2021/12/19 12:32:15 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_reset.c,v 1.1 2021/12/18 20:15:32 riastradh Exp $");
 
 #include <linux/sched/mm.h>
 #include <linux/stop_machine.h>
@@ -27,8 +27,6 @@ __KERNEL_RCSID(0, "$NetBSD: intel_reset.c,v 1.6 2021/12/19 12:32:15 riastradh Ex
 
 #include "uc/intel_guc.h"
 #include "uc/intel_guc_submission.h"
-
-#include <linux/nbsd-namespace.h>
 
 #define RESET_MAX_RETRIES 3
 
@@ -710,20 +708,10 @@ static void revoke_mmaps(struct intel_gt *gt)
 		node = &vma->mmo->vma_node;
 		vma_offset = vma->ggtt_view.partial.offset << PAGE_SHIFT;
 
-#ifdef __NetBSD__
-		__USE(vma_offset);
-		__USE(node);
-		paddr_t pa = gt->i915->ggtt.gmadr.start + vma->node.start;
-		vsize_t npgs = vma->size >> PAGE_SHIFT;
-		while (npgs --> 0)
-			pmap_pv_protect(pa + (npgs << PAGE_SHIFT),
-			    VM_PROT_NONE);
-#else
 		unmap_mapping_range(gt->i915->drm.anon_inode->i_mapping,
 				    drm_vma_node_offset_addr(node) + vma_offset,
 				    vma->size,
 				    1);
-#endif
 	}
 }
 
@@ -1174,22 +1162,16 @@ static void intel_gt_reset_global(struct intel_gt *gt,
 				  u32 engine_mask,
 				  const char *reason)
 {
-#ifndef __NetBSD__		/* XXX kobject uevent...?  */
 	struct kobject *kobj = &gt->i915->drm.primary->kdev->kobj;
 	char *error_event[] = { I915_ERROR_UEVENT "=1", NULL };
 	char *reset_event[] = { I915_RESET_UEVENT "=1", NULL };
 	char *reset_done_event[] = { I915_ERROR_UEVENT "=0", NULL };
-#endif
 	struct intel_wedge_me w;
 
-#ifndef __NetBSD__
 	kobject_uevent_env(kobj, KOBJ_CHANGE, error_event);
-#endif
 
 	DRM_DEBUG_DRIVER("resetting chip\n");
-#ifndef __NetBSD__
 	kobject_uevent_env(kobj, KOBJ_CHANGE, reset_event);
-#endif
 
 	/* Use a watchdog to ensure that our reset completes */
 	intel_wedge_on_timeout(&w, gt, 5 * HZ) {
@@ -1203,10 +1185,8 @@ static void intel_gt_reset_global(struct intel_gt *gt,
 		intel_finish_reset(gt->i915);
 	}
 
-#ifndef __NetBSD__		/* XXX kobj uevent...?  */
 	if (!test_bit(I915_WEDGED, &gt->reset.flags))
 		kobject_uevent_env(kobj, KOBJ_CHANGE, reset_done_event);
-#endif
 }
 
 /**
@@ -1283,13 +1263,8 @@ void intel_gt_handle_error(struct intel_gt *gt,
 
 	/* Full reset needs the mutex, stop any other user trying to do so. */
 	if (test_and_set_bit(I915_RESET_BACKOFF, &gt->reset.flags)) {
-		int ret;
-		spin_lock(&gt->reset.lock);
-		DRM_SPIN_WAIT_NOINTR_UNTIL(ret,
-		    &gt->reset.queue,
-		    &gt->reset.lock,
-		    !test_bit(I915_RESET_BACKOFF, &gt->reset.flags));
-		spin_unlock(&gt->reset.lock);
+		wait_event(gt->reset.queue,
+			   !test_bit(I915_RESET_BACKOFF, &gt->reset.flags));
 		goto out; /* piggy-back on the other reset */
 	}
 
@@ -1312,9 +1287,7 @@ void intel_gt_handle_error(struct intel_gt *gt,
 				 &gt->reset.flags);
 	clear_bit_unlock(I915_RESET_BACKOFF, &gt->reset.flags);
 	smp_mb__after_atomic();
-	spin_lock(&gt->reset.lock);
-	DRM_SPIN_WAKEUP_ALL(&gt->reset.queue, &gt->reset.lock);
-	spin_unlock(&gt->reset.lock);
+	wake_up_all(&gt->reset.queue);
 
 out:
 	intel_runtime_pm_put(gt->uncore->rpm, wakeref);
@@ -1329,12 +1302,9 @@ int intel_gt_reset_trylock(struct intel_gt *gt, int *srcu)
 	while (test_bit(I915_RESET_BACKOFF, &gt->reset.flags)) {
 		rcu_read_unlock();
 
-		int ret;
-		spin_lock(&gt->reset.lock);
-		DRM_SPIN_WAIT_UNTIL(ret, &gt->reset.queue, &gt->reset.lock,
-		    !test_bit(I915_RESET_BACKOFF, &gt->reset.flags));
-		spin_unlock(&gt->reset.lock);
-		if (ret)
+		if (wait_event_interruptible(gt->reset.queue,
+					     !test_bit(I915_RESET_BACKOFF,
+						       &gt->reset.flags)))
 			return -EINTR;
 
 		rcu_read_lock();
@@ -1362,12 +1332,9 @@ int intel_gt_terminally_wedged(struct intel_gt *gt)
 		return -EIO;
 
 	/* Reset still in progress? Maybe we will recover? */
-	int ret;
-	spin_lock(&gt->reset.lock);
-	DRM_SPIN_WAIT_UNTIL(ret, &gt->reset.queue, &gt->reset.lock,
-	    !test_bit(I915_RESET_BACKOFF, &gt->reset.flags));
-	spin_unlock(&gt->reset.lock);
-	if (ret)
+	if (wait_event_interruptible(gt->reset.queue,
+				     !test_bit(I915_RESET_BACKOFF,
+					       &gt->reset.flags)))
 		return -EINTR;
 
 	return intel_gt_is_wedged(gt) ? -EIO : 0;
@@ -1383,8 +1350,7 @@ void intel_gt_set_wedged_on_init(struct intel_gt *gt)
 
 void intel_gt_init_reset(struct intel_gt *gt)
 {
-	spin_lock_init(&gt->reset.lock);
-	DRM_INIT_WAITQUEUE(&gt->reset.queue, "i915rst");
+	init_waitqueue_head(&gt->reset.queue);
 	mutex_init(&gt->reset.mutex);
 	init_srcu_struct(&gt->reset.backoff_srcu);
 
@@ -1395,9 +1361,6 @@ void intel_gt_init_reset(struct intel_gt *gt)
 void intel_gt_fini_reset(struct intel_gt *gt)
 {
 	cleanup_srcu_struct(&gt->reset.backoff_srcu);
-	DRM_DESTROY_WAITQUEUE(&gt->reset.queue);
-	mutex_destroy(&gt->reset.mutex);
-	spin_lock_destroy(&gt->reset.lock);
 }
 
 static void intel_wedge_me(struct work_struct *work)

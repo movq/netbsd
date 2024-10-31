@@ -1,7 +1,8 @@
-/*	$NetBSD: drm_legacy.h,v 1.8 2021/12/18 23:45:46 riastradh Exp $	*/
+/*	$NetBSD: drm_legacy.h,v 1.1 2018/08/27 01:35:00 riastradh Exp $	*/
 
 #ifndef __DRM_DRM_LEGACY_H__
 #define __DRM_DRM_LEGACY_H__
+
 /*
  * Legacy driver interfaces for the Direct Rendering Manager
  *
@@ -35,14 +36,6 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include <drm/drm.h>
-#include <drm/drm_auth.h>
-#include <drm/drm_hashtab.h>
-
-struct drm_device;
-struct drm_driver;
-struct file;
-struct pci_driver;
 
 /*
  * Legacy Support for palateontologic DRM drivers
@@ -85,11 +78,6 @@ typedef struct drm_dma_handle {
 	dma_addr_t busaddr;
 	void *vaddr;
 	size_t size;
-#ifdef __NetBSD__
-	bus_dma_tag_t dmah_tag;
-	bus_dmamap_t dmah_map;
-	bus_dma_segment_t dmah_seg;
-#endif
 } drm_dma_handle_t;
 
 /**
@@ -134,32 +122,10 @@ struct drm_device_dma {
 struct drm_sg_mem {
 	unsigned long handle;
 	void *virtual;
-#ifdef __NetBSD__
-	size_t sg_size;
-	bus_dma_tag_t sg_tag;
-	bus_dmamap_t sg_map;
-	unsigned int sg_nsegs;
-	unsigned int sg_nsegs_max;
-	bus_dma_segment_t sg_segs[];
-#else
 	int pages;
 	struct page **pagelist;
 	dma_addr_t *busaddr;
-#endif
 };
-
-#ifdef __NetBSD__
-/*
- * XXX Remember: memory mappings only.  bm_flags must include
- * BUS_SPACE_MAP_LINEAR.
- */
-struct drm_bus_map {
-	bus_addr_t		bm_base;
-	bus_size_t		bm_size;
-	bus_space_handle_t	bm_bsh;
-	int			bm_flags;
-};
-#endif
 
 /**
  * Kernel side of a mapping
@@ -172,33 +138,6 @@ struct drm_local_map {
 	void *handle;		 /**< User-space: "Handle" to pass to mmap() */
 				 /**< Kernel-space: kernel-virtual address */
 	int mtrr;		 /**< MTRR slot used */
-
-#ifdef __NetBSD__
-	union {
-		/* _DRM_FRAME_BUFFER, _DRM_AGP, _DRM_REGISTERS */
-		/* XXX mtrr should be moved into this case too.  */
-		struct {
-			/*
-			 * XXX bst seems like a waste of space, but not
-			 * all accessors have the drm_device handy.
-			 */
-			bus_space_tag_t bst;
-			bus_space_handle_t bsh;
-			struct drm_bus_map *bus_map;
-		} bus_space;
-
-		/* _DRM_CONSISTENT */
-		struct drm_dma_handle *dmah;
-
-		/* _DRM_SCATTER_GATHER */
-#if 0				/* XXX stored in dev->sg instead */
-		struct drm_sg_mem *sg;
-#endif
-
-		/* _DRM_SHM */
-		/* XXX Anything?  uvm object?  */
-	} lm_data;
-#endif
 };
 
 typedef struct drm_local_map drm_local_map_t;
@@ -217,17 +156,10 @@ struct drm_map_list {
 int drm_legacy_addmap(struct drm_device *d, resource_size_t offset,
 		      unsigned int size, enum drm_map_type type,
 		      enum drm_map_flags flags, struct drm_local_map **map_p);
-struct drm_local_map *drm_legacy_findmap(struct drm_device *dev, unsigned int token);
-void drm_legacy_rmmap(struct drm_device *d, struct drm_local_map *map);
+int drm_legacy_rmmap(struct drm_device *d, struct drm_local_map *map);
 int drm_legacy_rmmap_locked(struct drm_device *d, struct drm_local_map *map);
 struct drm_local_map *drm_legacy_getsarea(struct drm_device *dev);
-#ifdef __NetBSD__
-int drm_legacy_mmap_object(struct drm_device *, off_t, size_t, int,
-    struct uvm_object **, voff_t *, struct file *);
-paddr_t drm_legacy_mmap_paddr(struct drm_device *, off_t, int);
-#else
 int drm_legacy_mmap(struct file *filp, struct vm_area_struct *vma);
-#endif
 
 int drm_legacy_addbufs_agp(struct drm_device *d, struct drm_buf_desc *req);
 int drm_legacy_addbufs_pci(struct drm_device *d, struct drm_buf_desc *req);
@@ -252,41 +184,22 @@ do {										\
 void drm_legacy_idlelock_take(struct drm_lock_data *lock);
 void drm_legacy_idlelock_release(struct drm_lock_data *lock);
 
-/* drm_pci.c */
-
-#ifdef CONFIG_PCI
-
+/* drm_pci.c dma alloc wrappers */
 void __drm_legacy_pci_free(struct drm_device *dev, drm_dma_handle_t * dmah);
-int drm_legacy_pci_init(struct drm_driver *driver, struct pci_driver *pdriver);
-void drm_legacy_pci_exit(struct drm_driver *driver, struct pci_driver *pdriver);
-
-#else
-
-static inline void __drm_legacy_pci_free(struct drm_device *dev,
-					 drm_dma_handle_t *dmah)
-{
-}
-
-static inline int drm_legacy_pci_init(struct drm_driver *driver,
-				      struct pci_driver *pdriver)
-{
-	return -EINVAL;
-}
-
-static inline void drm_legacy_pci_exit(struct drm_driver *driver,
-				       struct pci_driver *pdriver)
-{
-}
-
-#endif
 
 /* drm_memory.c */
 void drm_legacy_ioremap(struct drm_local_map *map, struct drm_device *dev);
 void drm_legacy_ioremap_wc(struct drm_local_map *map, struct drm_device *dev);
 void drm_legacy_ioremapfree(struct drm_local_map *map, struct drm_device *dev);
 
-#ifdef __NetBSD__
-#include <drm/drm_iomap_netbsd.h>
-#endif
+static __inline__ struct drm_local_map *drm_legacy_findmap(struct drm_device *dev,
+							   unsigned int token)
+{
+	struct drm_map_list *_entry;
+	list_for_each_entry(_entry, &dev->maplist, head)
+	    if (_entry->user_token == token)
+		return _entry->map;
+	return NULL;
+}
 
 #endif /* __DRM_DRM_LEGACY_H__ */

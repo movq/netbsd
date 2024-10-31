@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_self_refresh_helper.c,v 1.4 2021/12/19 10:39:20 riastradh Exp $	*/
+/*	$NetBSD: drm_self_refresh_helper.c,v 1.1 2021/12/18 20:11:03 riastradh Exp $	*/
 
 // SPDX-License-Identifier: MIT
 /*
@@ -8,7 +8,7 @@
  * Sean Paul <seanpaul@chromium.org>
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_self_refresh_helper.c,v 1.4 2021/12/19 10:39:20 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_self_refresh_helper.c,v 1.1 2021/12/18 20:11:03 riastradh Exp $");
 
 #include <linux/average.h>
 #include <linux/bitops.h>
@@ -24,8 +24,6 @@ __KERNEL_RCSID(0, "$NetBSD: drm_self_refresh_helper.c,v 1.4 2021/12/19 10:39:20 
 #include <drm/drm_modeset_lock.h>
 #include <drm/drm_print.h>
 #include <drm/drm_self_refresh_helper.h>
-
-#include <linux/nbsd-namespace.h>
 
 /**
  * DOC: overview
@@ -283,7 +281,6 @@ void drm_self_refresh_helper_cleanup(struct drm_crtc *crtc)
 	crtc->self_refresh_data = NULL;
 
 	cancel_delayed_work_sync(&sr_data->entry_work);
-	mutex_destroy(&sr_data->avg_mutex);
 	kfree(sr_data);
 }
 EXPORT_SYMBOL(drm_self_refresh_helper_cleanup);

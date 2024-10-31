@@ -1,4 +1,9 @@
-# SPDX-License-Identifier: GPL-2.0
-dtb-$(CONFIG_FIT_IMAGE_FDT_BOSTON)	+= boston.dtb
+dtb-$(CONFIG_MACH_PISTACHIO)	+= pistachio_marduk.dtb
 
-dtb-$(CONFIG_FIT_IMAGE_FDT_MARDUK)	+= pistachio_marduk.dtb
+obj-y				+= $(patsubst %.dtb, %.dtb.o, $(dtb-y))
+
+# Force kbuild to make empty built-in.o if necessary
+obj-				+= dummy.o
+
+always				:= $(dtb-y)
+clean-files			:= *.dtb *.dtb.S

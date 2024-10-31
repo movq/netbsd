@@ -1,4 +1,4 @@
-/*	$NetBSD: os_types.h,v 1.4 2022/07/24 20:05:08 riastradh Exp $	*/
+/*	$NetBSD: os_types.h,v 1.1 2021/12/18 20:11:17 riastradh Exp $	*/
 
 /*
  * Copyright 2012-16 Advanced Micro Devices, Inc.
@@ -53,17 +53,6 @@
 #define dm_error(fmt, ...) DRM_ERROR(fmt, ##__VA_ARGS__)
 
 #if defined(CONFIG_DRM_AMD_DC_DCN)
-#ifdef __NetBSD__
-#if defined(__i386__) || defined(__x86_64__)
-#include <x86/fpu.h>
-#define	DC_FP_START()	fpu_kern_enter()
-#define	DC_FP_END()	fpu_kern_leave()
-#elif defined(__arm__) || defined(__aarch64__)
-#include <arm/fpu.h>
-#define	DC_FP_START()	fpu_kern_enter()
-#define	DC_FP_END()	fpu_kern_leave()
-#endif
-#else	/* !__NetBSD__ */
 #if defined(CONFIG_X86)
 #include <asm/fpu/api.h>
 #define DC_FP_START() kernel_fpu_begin()
@@ -95,7 +84,6 @@
 		preempt_enable(); \
 	} \
 }
-#endif
 #endif
 #endif
 

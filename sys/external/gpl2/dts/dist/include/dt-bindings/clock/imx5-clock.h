@@ -1,8 +1,12 @@
-/*	$NetBSD: imx5-clock.h,v 1.1.1.3 2020/01/03 14:33:05 skrll Exp $	*/
+/*	$NetBSD: imx5-clock.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
-/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright 2013 Lucas Stach, Pengutronix <l.stach@pengutronix.de>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
  */
 
 #ifndef __DT_BINDINGS_CLOCK_IMX5_H
@@ -212,7 +216,6 @@
 #define IMX5_CLK_IEEE1588_SEL		202
 #define IMX5_CLK_IEEE1588_PODF		203
 #define IMX5_CLK_IEEE1588_GATE		204
-#define IMX5_CLK_SCC2_IPG_GATE		205
-#define IMX5_CLK_END			206
+#define IMX5_CLK_END			205
 
 #endif /* __DT_BINDINGS_CLOCK_IMX5_H */

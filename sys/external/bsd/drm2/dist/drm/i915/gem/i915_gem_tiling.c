@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_gem_tiling.c,v 1.3 2021/12/19 11:33:49 riastradh Exp $	*/
+/*	$NetBSD: i915_gem_tiling.c,v 1.1 2021/12/18 20:15:31 riastradh Exp $	*/
 
 /*
  * SPDX-License-Identifier: MIT
@@ -7,9 +7,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i915_gem_tiling.c,v 1.3 2021/12/19 11:33:49 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i915_gem_tiling.c,v 1.1 2021/12/18 20:15:31 riastradh Exp $");
 
-#include <linux/bitmap.h>
 #include <linux/string.h>
 #include <linux/bitops.h>
 #include <drm/i915_drm.h>

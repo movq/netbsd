@@ -39,13 +39,22 @@
 	model = "NorthStar Enterprise Router (BCM953012ER)";
 	compatible = "brcm,bcm953012er", "brcm,brcm53012", "brcm,bcm4708";
 
-	memory@0 {
-		device_type = "memory";
+	aliases {
+		serial0 = &uart0;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	memory {
 		reg = <0x00000000 0x8000000>;
 	};
 
 	gpio-keys {
 		compatible = "gpio-keys";
+		#address-cells = <1>;
+		#size-cells = <0>;
 
 		wps {
 			label = "WPS";
@@ -69,6 +78,9 @@
 	status = "okay";
 
 	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
 		port@0 {
 			reg = <0>;
 			label = "port0";
@@ -85,8 +97,4 @@
 			ethernet = <&gmac0>;
 		};
 	};
-};
-
-&usb3_phy {
-	status = "okay";
 };

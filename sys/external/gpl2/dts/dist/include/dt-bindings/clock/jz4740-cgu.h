@@ -1,6 +1,5 @@
-/*	$NetBSD: jz4740-cgu.h,v 1.1.1.3 2020/01/03 14:33:06 skrll Exp $	*/
+/*	$NetBSD: jz4740-cgu.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
-/* SPDX-License-Identifier: GPL-2.0 */
 /*
  * This header provides clock numbers for the ingenic,jz4740-cgu DT binding.
  *
@@ -36,6 +35,5 @@
 #define JZ4740_CLK_ADC		19
 #define JZ4740_CLK_I2C		20
 #define JZ4740_CLK_AIC		21
-#define JZ4740_CLK_TCU		22
 
 #endif /* __DT_BINDINGS_CLOCK_JZ4740_CGU_H__ */

@@ -1,6 +1,5 @@
-/*	$NetBSD: ti-sysc.h,v 1.1.1.4 2021/11/07 16:49:57 jmcneill Exp $	*/
+/*	$NetBSD: ti-sysc.h,v 1.1 2018/04/28 18:25:53 jmcneill Exp $	*/
 
-/* SPDX-License-Identifier: GPL-2.0 */
 /* TI sysc interconnect target module defines */
 
 /* Generic sysc found on omap2 and later, also known as type1 */
@@ -17,12 +16,6 @@
 
 /* SmartReflex sysc found on 36xx and later */
 #define SYSC_OMAP3_SR_ENAWAKEUP		(1 << 26)
-
-#define SYSC_DRA7_MCAN_ENAWAKEUP	(1 << 4)
-
-/* PRUSS sysc found on AM33xx/AM43xx/AM57xx */
-#define SYSC_PRUSS_SUB_MWAIT		(1 << 5)
-#define SYSC_PRUSS_STANDBY_INIT		(1 << 4)
 
 /* SYSCONFIG STANDBYMODE/MIDLEMODE/SIDLEMODE supported by hardware */
 #define SYSC_IDLE_FORCE			0

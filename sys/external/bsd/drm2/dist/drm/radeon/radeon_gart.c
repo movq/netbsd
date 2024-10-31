@@ -1,5 +1,3 @@
-/*	$NetBSD: radeon_gart.c,v 1.14 2021/12/19 11:26:26 riastradh Exp $	*/
-
 /*
  * Copyright 2008 Advanced Micro Devices, Inc.
  * Copyright 2008 Red Hat Inc.
@@ -27,17 +25,8 @@
  *          Alex Deucher
  *          Jerome Glisse
  */
-
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: radeon_gart.c,v 1.14 2021/12/19 11:26:26 riastradh Exp $");
-
-#include <linux/pci.h>
-#include <linux/vmalloc.h>
-
+#include <drm/drmP.h>
 #include <drm/radeon_drm.h>
-#ifdef CONFIG_X86
-#include <asm/set_memory.h>
-#endif
 #include "radeon.h"
 
 /*
@@ -75,48 +64,6 @@ __KERNEL_RCSID(0, "$NetBSD: radeon_gart.c,v 1.14 2021/12/19 11:26:26 riastradh E
  */
 int radeon_gart_table_ram_alloc(struct radeon_device *rdev)
 {
-#ifdef __NetBSD__
-	int rsegs;
-	int error;
-
-	error = bus_dmamem_alloc(rdev->ddev->dmat, rdev->gart.table_size,
-	    PAGE_SIZE, 0, &rdev->gart.rg_table_seg, 1, &rsegs, BUS_DMA_WAITOK);
-	if (error)
-		goto fail0;
-	KASSERT(rsegs == 1);
-	error = bus_dmamap_create(rdev->ddev->dmat, rdev->gart.table_size, 1,
-	    rdev->gart.table_size, 0, BUS_DMA_WAITOK,
-	    &rdev->gart.rg_table_map);
-	if (error)
-		goto fail1;
-	error = bus_dmamem_map(rdev->ddev->dmat, &rdev->gart.rg_table_seg, 1,
-	    rdev->gart.table_size, &rdev->gart.ptr,
-	    BUS_DMA_WAITOK|BUS_DMA_NOCACHE);
-	if (error)
-		goto fail2;
-	error = bus_dmamap_load(rdev->ddev->dmat, rdev->gart.rg_table_map,
-	    rdev->gart.ptr, rdev->gart.table_size, NULL, BUS_DMA_WAITOK);
-	if (error)
-		goto fail3;
-
-	memset(rdev->gart.ptr, 0, rdev->gart.table_size);
-	bus_dmamap_sync(rdev->ddev->dmat, rdev->gart.rg_table_map, 0,
-	    rdev->gart.table_size, BUS_DMASYNC_PREWRITE);
-
-	/* Success!  */
-	rdev->gart.table_addr = rdev->gart.rg_table_map->dm_segs[0].ds_addr;
-	return 0;
-
-fail4: __unused
-	bus_dmamap_unload(rdev->ddev->dmat, rdev->gart.rg_table_map);
-fail3:	bus_dmamem_unmap(rdev->ddev->dmat, rdev->gart.ptr,
-	    rdev->gart.table_size);
-fail2:	bus_dmamap_destroy(rdev->ddev->dmat, rdev->gart.rg_table_map);
-fail1:	bus_dmamem_free(rdev->ddev->dmat, &rdev->gart.rg_table_seg, 1);
-fail0:	KASSERT(error);
-	/* XXX errno NetBSD->Linux */
-	return -error;
-#else
 	void *ptr;
 
 	ptr = pci_alloc_consistent(rdev->pdev, rdev->gart.table_size,
@@ -134,7 +81,6 @@ fail0:	KASSERT(error);
 	rdev->gart.ptr = ptr;
 	memset((void *)rdev->gart.ptr, 0, rdev->gart.table_size);
 	return 0;
-#endif
 }
 
 /**
@@ -151,13 +97,6 @@ void radeon_gart_table_ram_free(struct radeon_device *rdev)
 	if (rdev->gart.ptr == NULL) {
 		return;
 	}
-#ifdef __NetBSD__
-	bus_dmamap_unload(rdev->ddev->dmat, rdev->gart.rg_table_map);
-	bus_dmamem_unmap(rdev->ddev->dmat, rdev->gart.ptr,
-	    rdev->gart.table_size);
-	bus_dmamap_destroy(rdev->ddev->dmat, rdev->gart.rg_table_map);
-	bus_dmamem_free(rdev->ddev->dmat, &rdev->gart.rg_table_seg, 1);
-#else
 #ifdef CONFIG_X86
 	if (rdev->family == CHIP_RS400 || rdev->family == CHIP_RS480 ||
 	    rdev->family == CHIP_RS690 || rdev->family == CHIP_RS740) {
@@ -170,7 +109,6 @@ void radeon_gart_table_ram_free(struct radeon_device *rdev)
 			    rdev->gart.table_addr);
 	rdev->gart.ptr = NULL;
 	rdev->gart.table_addr = 0;
-#endif
 }
 
 /**
@@ -190,7 +128,7 @@ int radeon_gart_table_vram_alloc(struct radeon_device *rdev)
 	if (rdev->gart.robj == NULL) {
 		r = radeon_bo_create(rdev, rdev->gart.table_size,
 				     PAGE_SIZE, true, RADEON_GEM_DOMAIN_VRAM,
-				     0, NULL, NULL, &rdev->gart.robj);
+				     NULL, &rdev->gart.robj);
 		if (r) {
 			return r;
 		}
@@ -227,19 +165,6 @@ int radeon_gart_table_vram_pin(struct radeon_device *rdev)
 		radeon_bo_unpin(rdev->gart.robj);
 	radeon_bo_unreserve(rdev->gart.robj);
 	rdev->gart.table_addr = gpu_addr;
-
-	if (!r) {
-		int i;
-
-		/* We might have dropped some GART table updates while it wasn't
-		 * mapped, restore all entries
-		 */
-		for (i = 0; i < rdev->gart.num_gpu_pages; i++)
-			radeon_gart_set_page(rdev, i, rdev->gart.pages_entry[i]);
-		mb();
-		radeon_gart_tlb_flush(rdev);
-	}
-
 	return r;
 }
 
@@ -284,82 +209,9 @@ void radeon_gart_table_vram_free(struct radeon_device *rdev)
 	radeon_bo_unref(&rdev->gart.robj);
 }
 
-#ifdef __NetBSD__
-static void
-radeon_gart_pre_update(struct radeon_device *rdev, unsigned gpu_pgstart,
-    unsigned gpu_npages)
-{
-
-	if (rdev->gart.rg_table_map != NULL) {
-		const unsigned entsize =
-		    rdev->gart.table_size / rdev->gart.num_gpu_pages;
-
-		bus_dmamap_sync(rdev->ddev->dmat, rdev->gart.rg_table_map,
-		    gpu_pgstart*entsize, gpu_npages*entsize,
-		    BUS_DMASYNC_POSTWRITE);
-	}
-}
-
-static void
-radeon_gart_post_update(struct radeon_device *rdev, unsigned gpu_pgstart,
-    unsigned gpu_npages)
-{
-
-	if (rdev->gart.rg_table_map != NULL) {
-		const unsigned entsize =
-		    rdev->gart.table_size / rdev->gart.num_gpu_pages;
-
-		bus_dmamap_sync(rdev->ddev->dmat, rdev->gart.rg_table_map,
-		    gpu_pgstart*entsize, gpu_npages*entsize,
-		    BUS_DMASYNC_PREWRITE);
-	}
-	if (rdev->gart.ptr != NULL) {
-		mb();
-		radeon_gart_tlb_flush(rdev);
-	}
-}
-#endif
-
 /*
  * Common gart functions.
  */
-#ifdef __NetBSD__
-void
-radeon_gart_unbind(struct radeon_device *rdev, unsigned gpu_start,
-    unsigned npages)
-{
-	const unsigned gpu_per_cpu = (PAGE_SIZE / RADEON_GPU_PAGE_SIZE);
-	const unsigned gpu_npages = (npages * gpu_per_cpu);
-	const unsigned gpu_pgstart = (gpu_start / RADEON_GPU_PAGE_SIZE);
-	const unsigned pgstart = (gpu_pgstart / gpu_per_cpu);
-	unsigned pgno, gpu_pgno;
-
-	KASSERT(pgstart == (gpu_start / PAGE_SIZE));
-	KASSERT(npages <= rdev->gart.num_cpu_pages);
-	KASSERT(gpu_npages <= rdev->gart.num_cpu_pages);
-
-	if (!rdev->gart.ready) {
-		WARN(1, "trying to bind memory to uninitialized GART !\n");
-		return;
-	}
-
-	radeon_gart_pre_update(rdev, gpu_pgstart, gpu_npages);
-	for (pgno = 0; pgno < npages; pgno++) {
-		if (rdev->gart.pages[pgstart + pgno] == NULL)
-			continue;
-		rdev->gart.pages[pgstart + pgno] = NULL;
-		for (gpu_pgno = 0; gpu_pgno < gpu_per_cpu; gpu_pgno++) {
-			const unsigned t = gpu_pgstart + gpu_per_cpu*pgno +
-			    gpu_pgno;
-			rdev->gart.pages_entry[t] = rdev->dummy_page.entry;
-			if (rdev->gart.ptr == NULL)
-				continue;
-			radeon_gart_set_page(rdev, t, rdev->dummy_page.entry);
-		}
-	}
-	radeon_gart_post_update(rdev, gpu_pgstart, gpu_npages);
-}
-#else
 /**
  * radeon_gart_unbind - unbind pages from the gart page table
  *
@@ -376,6 +228,7 @@ void radeon_gart_unbind(struct radeon_device *rdev, unsigned offset,
 	unsigned t;
 	unsigned p;
 	int i, j;
+	u64 page_base;
 
 	if (!rdev->gart.ready) {
 		WARN(1, "trying to unbind memory from uninitialized GART !\n");
@@ -386,66 +239,20 @@ void radeon_gart_unbind(struct radeon_device *rdev, unsigned offset,
 	for (i = 0; i < pages; i++, p++) {
 		if (rdev->gart.pages[p]) {
 			rdev->gart.pages[p] = NULL;
+			rdev->gart.pages_addr[p] = rdev->dummy_page.addr;
+			page_base = rdev->gart.pages_addr[p];
 			for (j = 0; j < (PAGE_SIZE / RADEON_GPU_PAGE_SIZE); j++, t++) {
-				rdev->gart.pages_entry[t] = rdev->dummy_page.entry;
 				if (rdev->gart.ptr) {
-					radeon_gart_set_page(rdev, t,
-							     rdev->dummy_page.entry);
+					radeon_gart_set_page(rdev, t, page_base);
 				}
+				page_base += RADEON_GPU_PAGE_SIZE;
 			}
 		}
 	}
-	if (rdev->gart.ptr) {
-		mb();
-		radeon_gart_tlb_flush(rdev);
-	}
+	mb();
+	radeon_gart_tlb_flush(rdev);
 }
-#endif
 
-#ifdef __NetBSD__
-int
-radeon_gart_bind(struct radeon_device *rdev, unsigned gpu_start,
-    unsigned npages, struct page **pages, bus_dmamap_t dmamap, uint32_t flags)
-{
-	const unsigned gpu_per_cpu = (PAGE_SIZE / RADEON_GPU_PAGE_SIZE);
-	const unsigned gpu_npages = (npages * gpu_per_cpu);
-	const unsigned gpu_pgstart = (gpu_start / RADEON_GPU_PAGE_SIZE);
-	const unsigned pgstart = (gpu_pgstart / gpu_per_cpu);
-	unsigned pgno, gpu_pgno;
-	uint64_t page_entry;
-
-	KASSERT(pgstart == (gpu_start / PAGE_SIZE));
-	KASSERT(npages == dmamap->dm_nsegs);
-	KASSERT(npages <= rdev->gart.num_cpu_pages);
-	KASSERT(gpu_npages <= rdev->gart.num_cpu_pages);
-
-	if (!rdev->gart.ready) {
-		WARN(1, "trying to bind memory to uninitialized GART !\n");
-		return -EINVAL;
-	}
-
-	radeon_gart_pre_update(rdev, gpu_pgstart, gpu_npages);
-	for (pgno = 0; pgno < npages; pgno++) {
-		const bus_addr_t addr = dmamap->dm_segs[pgno].ds_addr;
-
-		KASSERT(dmamap->dm_segs[pgno].ds_len == PAGE_SIZE);
-		rdev->gart.pages[pgstart + pgno] = pages[pgno];
-		for (gpu_pgno = 0; gpu_pgno < gpu_per_cpu; gpu_pgno++) {
-			const unsigned i = gpu_pgstart + gpu_per_cpu*pgno +
-			    gpu_pgno;
-			page_entry = radeon_gart_get_page_entry(
-				addr + gpu_pgno*RADEON_GPU_PAGE_SIZE, flags);
-			rdev->gart.pages_entry[i] = page_entry;
-			if (rdev->gart.ptr == NULL)
-				continue;
-			radeon_gart_set_page(rdev, i, page_entry);
-		}
-	}
-	radeon_gart_post_update(rdev, gpu_pgstart, gpu_npages);
-
-	return 0;
-}
-#else
 /**
  * radeon_gart_bind - bind pages into the gart page table
  *
@@ -454,19 +261,17 @@ radeon_gart_bind(struct radeon_device *rdev, unsigned gpu_start,
  * @pages: number of pages to bind
  * @pagelist: pages to bind
  * @dma_addr: DMA addresses of pages
- * @flags: RADEON_GART_PAGE_* flags
  *
  * Binds the requested pages to the gart page table
  * (all asics).
  * Returns 0 for success, -EINVAL for failure.
  */
 int radeon_gart_bind(struct radeon_device *rdev, unsigned offset,
-		     int pages, struct page **pagelist, dma_addr_t *dma_addr,
-		     uint32_t flags)
+		     int pages, struct page **pagelist, dma_addr_t *dma_addr)
 {
 	unsigned t;
 	unsigned p;
-	uint64_t page_base, page_entry;
+	uint64_t page_base;
 	int i, j;
 
 	if (!rdev->gart.ready) {
@@ -477,24 +282,47 @@ int radeon_gart_bind(struct radeon_device *rdev, unsigned offset,
 	p = t / (PAGE_SIZE / RADEON_GPU_PAGE_SIZE);
 
 	for (i = 0; i < pages; i++, p++) {
+		rdev->gart.pages_addr[p] = dma_addr[i];
 		rdev->gart.pages[p] = pagelist[i];
-		page_base = dma_addr[i];
-		for (j = 0; j < (PAGE_SIZE / RADEON_GPU_PAGE_SIZE); j++, t++) {
-			page_entry = radeon_gart_get_page_entry(page_base, flags);
-			rdev->gart.pages_entry[t] = page_entry;
-			if (rdev->gart.ptr) {
-				radeon_gart_set_page(rdev, t, page_entry);
+		if (rdev->gart.ptr) {
+			page_base = rdev->gart.pages_addr[p];
+			for (j = 0; j < (PAGE_SIZE / RADEON_GPU_PAGE_SIZE); j++, t++) {
+				radeon_gart_set_page(rdev, t, page_base);
+				page_base += RADEON_GPU_PAGE_SIZE;
 			}
+		}
+	}
+	mb();
+	radeon_gart_tlb_flush(rdev);
+	return 0;
+}
+
+/**
+ * radeon_gart_restore - bind all pages in the gart page table
+ *
+ * @rdev: radeon_device pointer
+ *
+ * Binds all pages in the gart page table (all asics).
+ * Used to rebuild the gart table on device startup or resume.
+ */
+void radeon_gart_restore(struct radeon_device *rdev)
+{
+	int i, j, t;
+	u64 page_base;
+
+	if (!rdev->gart.ptr) {
+		return;
+	}
+	for (i = 0, t = 0; i < rdev->gart.num_cpu_pages; i++) {
+		page_base = rdev->gart.pages_addr[i];
+		for (j = 0; j < (PAGE_SIZE / RADEON_GPU_PAGE_SIZE); j++, t++) {
+			radeon_gart_set_page(rdev, t, page_base);
 			page_base += RADEON_GPU_PAGE_SIZE;
 		}
 	}
-	if (rdev->gart.ptr) {
-		mb();
-		radeon_gart_tlb_flush(rdev);
-	}
-	return 0;
+	mb();
+	radeon_gart_tlb_flush(rdev);
 }
-#endif
 
 /**
  * radeon_gart_init - init the driver info for managing the gart
@@ -525,21 +353,21 @@ int radeon_gart_init(struct radeon_device *rdev)
 	DRM_INFO("GART: num cpu pages %u, num gpu pages %u\n",
 		 rdev->gart.num_cpu_pages, rdev->gart.num_gpu_pages);
 	/* Allocate pages table */
-	rdev->gart.pages = vzalloc(array_size(sizeof(void *),
-				   rdev->gart.num_cpu_pages));
+	rdev->gart.pages = vzalloc(sizeof(void *) * rdev->gart.num_cpu_pages);
 	if (rdev->gart.pages == NULL) {
 		radeon_gart_fini(rdev);
 		return -ENOMEM;
 	}
-	rdev->gart.pages_entry = vmalloc(array_size(sizeof(uint64_t),
-						    rdev->gart.num_gpu_pages));
-	if (rdev->gart.pages_entry == NULL) {
+	rdev->gart.pages_addr = vzalloc(sizeof(dma_addr_t) *
+					rdev->gart.num_cpu_pages);
+	if (rdev->gart.pages_addr == NULL) {
 		radeon_gart_fini(rdev);
 		return -ENOMEM;
 	}
 	/* set GART entry to point to the dummy page by default */
-	for (i = 0; i < rdev->gart.num_gpu_pages; i++)
-		rdev->gart.pages_entry[i] = rdev->dummy_page.entry;
+	for (i = 0; i < rdev->gart.num_cpu_pages; i++) {
+		rdev->gart.pages_addr[i] = rdev->dummy_page.addr;
+	}
 	return 0;
 }
 
@@ -552,15 +380,15 @@ int radeon_gart_init(struct radeon_device *rdev)
  */
 void radeon_gart_fini(struct radeon_device *rdev)
 {
-	if (rdev->gart.ready) {
+	if (rdev->gart.pages && rdev->gart.pages_addr && rdev->gart.ready) {
 		/* unbind pages */
 		radeon_gart_unbind(rdev, 0, rdev->gart.num_cpu_pages);
 	}
 	rdev->gart.ready = false;
 	vfree(rdev->gart.pages);
-	vfree(rdev->gart.pages_entry);
+	vfree(rdev->gart.pages_addr);
 	rdev->gart.pages = NULL;
-	rdev->gart.pages_entry = NULL;
+	rdev->gart.pages_addr = NULL;
 
 	radeon_dummy_page_fini(rdev);
 }

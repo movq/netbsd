@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0
 /dts-v1/;
 
 #include "kirkwood.dtsi"
@@ -112,7 +111,7 @@
 		};
 
 		serial@12000 {
-			status = "okay";
+			status = "ok";
 		};
 
 		sata@80000 {

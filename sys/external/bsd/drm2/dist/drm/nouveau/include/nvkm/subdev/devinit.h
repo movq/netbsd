@@ -1,6 +1,5 @@
-/*	$NetBSD: devinit.h,v 1.3 2021/12/18 23:45:33 riastradh Exp $	*/
+/*	$NetBSD: devinit.h,v 1.1 2018/08/27 01:34:55 riastradh Exp $	*/
 
-/* SPDX-License-Identifier: MIT */
 #ifndef __NVKM_DEVINIT_H__
 #define __NVKM_DEVINIT_H__
 #include <core/subdev.h>
@@ -10,7 +9,6 @@ struct nvkm_devinit {
 	const struct nvkm_devinit_func *func;
 	struct nvkm_subdev subdev;
 	bool post;
-	bool force_post;
 };
 
 u32 nvkm_devinit_mmio(struct nvkm_devinit *, u32 addr);
@@ -31,7 +29,5 @@ int gt215_devinit_new(struct nvkm_device *, int, struct nvkm_devinit **);
 int mcp89_devinit_new(struct nvkm_device *, int, struct nvkm_devinit **);
 int gf100_devinit_new(struct nvkm_device *, int, struct nvkm_devinit **);
 int gm107_devinit_new(struct nvkm_device *, int, struct nvkm_devinit **);
-int gm200_devinit_new(struct nvkm_device *, int, struct nvkm_devinit **);
-int gv100_devinit_new(struct nvkm_device *, int, struct nvkm_devinit **);
-int tu102_devinit_new(struct nvkm_device *, int, struct nvkm_devinit **);
+int gm204_devinit_new(struct nvkm_device *, int, struct nvkm_devinit **);
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_gem.h,v 1.8 2023/08/08 06:59:40 mrg Exp $	*/
+/*	$NetBSD: i915_gem.h,v 1.1 2021/12/18 20:15:25 riastradh Exp $	*/
 
 /*
  * Copyright © 2016 Intel Corporation
@@ -29,7 +29,6 @@
 
 #include <linux/bug.h>
 #include <linux/interrupt.h>
-#include <linux/stringify.h>
 
 #include <drm/drm_drv.h>
 
@@ -93,8 +92,6 @@ static inline void tasklet_lock(struct tasklet_struct *t)
 		cpu_relax();
 }
 
-#ifndef __NetBSD__
-
 static inline bool tasklet_is_locked(const struct tasklet_struct *t)
 {
 	return test_bit(TASKLET_STATE_RUN, &t->state);
@@ -120,7 +117,5 @@ static inline bool __tasklet_is_scheduled(struct tasklet_struct *t)
 {
 	return test_bit(TASKLET_STATE_SCHED, &t->state);
 }
-
-#endif
 
 #endif /* __I915_GEM_H__ */

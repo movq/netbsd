@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0
 #include <dt-bindings/input/input.h>
 
 #include "qcom-msm8660.dtsi"
@@ -17,10 +16,10 @@
 
 	soc {
 		gsbi@19c00000 {
-			status = "okay";
+			status = "ok";
 			qcom,mode = <GSBI_PROT_I2C_UART>;
 			serial@19c40000 {
-				status = "okay";
+				status = "ok";
 			};
 		};
 

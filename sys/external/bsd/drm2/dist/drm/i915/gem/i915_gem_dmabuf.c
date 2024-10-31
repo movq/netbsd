@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_gem_dmabuf.c,v 1.7 2024/05/20 11:34:45 riastradh Exp $	*/
+/*	$NetBSD: i915_gem_dmabuf.c,v 1.1 2021/12/18 20:15:31 riastradh Exp $	*/
 
 /*
  * SPDX-License-Identifier: MIT
@@ -7,7 +7,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i915_gem_dmabuf.c,v 1.7 2024/05/20 11:34:45 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i915_gem_dmabuf.c,v 1.1 2021/12/18 20:15:31 riastradh Exp $");
 
 #include <linux/dma-buf.h>
 #include <linux/highmem.h>
@@ -19,9 +19,7 @@ __KERNEL_RCSID(0, "$NetBSD: i915_gem_dmabuf.c,v 1.7 2024/05/20 11:34:45 riastrad
 
 static struct drm_i915_gem_object *dma_buf_to_obj(struct dma_buf *buf)
 {
-	struct drm_gem_object *obj = buf->priv;
-
-	return to_intel_bo(obj);
+	return to_intel_bo(buf->priv);
 }
 
 static struct sg_table *i915_gem_map_dma_buf(struct dma_buf_attachment *attachment,
@@ -47,14 +45,6 @@ static struct sg_table *i915_gem_map_dma_buf(struct dma_buf_attachment *attachme
 	if (ret)
 		goto err_free;
 
-#ifdef __NetBSD__
-	__USE(i);
-	__USE(src);
-	__USE(dst);
-	memcpy(st->sgl->sg_pgs, obj->mm.pages->sgl->sg_pgs,
-	    obj->mm.pages->nents * sizeof(st->sgl->sg_pgs[0]));
-#else
-
 	src = obj->mm.pages->sgl;
 	dst = st->sgl;
 	for (i = 0; i < obj->mm.pages->nents; i++) {
@@ -62,7 +52,6 @@ static struct sg_table *i915_gem_map_dma_buf(struct dma_buf_attachment *attachme
 		dst = sg_next(dst);
 		src = sg_next(src);
 	}
-#endif
 
 	if (!dma_map_sg(attachment->dev, st->sgl, st->nents, dir)) {
 		ret = -ENOMEM;
@@ -109,28 +98,11 @@ static void i915_gem_dmabuf_vunmap(struct dma_buf *dma_buf, void *vaddr)
 	i915_gem_object_unpin_map(obj);
 }
 
-#ifdef __NetBSD__
-static int i915_gem_dmabuf_mmap(struct dma_buf *dma_buf, off_t *offp,
-    size_t size, int prot, int *flagsp, int *advicep,
-    struct uvm_object **uobjp, int *maxprotp)
-#else
 static int i915_gem_dmabuf_mmap(struct dma_buf *dma_buf, struct vm_area_struct *vma)
-#endif
 {
 	struct drm_i915_gem_object *obj = dma_buf_to_obj(dma_buf);
 	int ret;
 
-#ifdef __NetBSD__
-	__USE(ret);
-	if (obj->base.size < size)
-		return -EINVAL;
-	if (!obj->base.filp)
-		return -ENODEV;
-	uao_reference(obj->base.filp);
-	*advicep = UVM_ADV_RANDOM;
-	*uobjp = obj->base.filp;
-	*maxprotp = prot;
-#else
 	if (obj->base.size < vma->vm_end - vma->vm_start)
 		return -EINVAL;
 
@@ -143,7 +115,6 @@ static int i915_gem_dmabuf_mmap(struct dma_buf *dma_buf, struct vm_area_struct *
 
 	fput(vma->vm_file);
 	vma->vm_file = get_file(obj->base.filp);
-#endif
 
 	return 0;
 }
@@ -273,7 +244,7 @@ struct drm_gem_object *i915_gem_prime_import(struct drm_device *dev,
 	}
 
 	/* need to attach */
-	attach = dma_buf_attach(dma_buf, dev->dmat);
+	attach = dma_buf_attach(dma_buf, dev->dev);
 	if (IS_ERR(attach))
 		return ERR_CAST(attach);
 

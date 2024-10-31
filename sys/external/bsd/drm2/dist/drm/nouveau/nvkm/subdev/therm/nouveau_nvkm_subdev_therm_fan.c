@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_subdev_therm_fan.c,v 1.4 2021/12/19 11:34:46 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_subdev_therm_fan.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -25,7 +25,7 @@
  * 	    Martin Peres
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_therm_fan.c,v 1.4 2021/12/19 11:34:46 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_therm_fan.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $");
 
 #include "priv.h"
 
@@ -50,9 +50,7 @@ nvkm_fan_update(struct nvkm_fan *fan, bool immediate, int target)
 	target = max_t(u8, target, fan->bios.min_duty);
 	target = min_t(u8, target, fan->bios.max_duty);
 	if (fan->percent != target) {
-#if 0 /* XXXMRG one log per second is a little excessive */
 		nvkm_debug(subdev, "FAN target: %d\n", target);
-#endif
 		fan->percent = target;
 	}
 
@@ -77,9 +75,7 @@ nvkm_fan_update(struct nvkm_fan *fan, bool immediate, int target)
 		duty = target;
 	}
 
-#if 0 /* XXXMRG one log per second is a little excessive */
 	nvkm_debug(subdev, "FAN update: %d\n", duty);
-#endif
 	ret = fan->set(therm, duty);
 	if (ret) {
 		spin_unlock_irqrestore(&fan->lock, flags);
@@ -224,16 +220,8 @@ nvkm_therm_fan_fini(struct nvkm_therm *therm, bool suspend)
 {
 	struct nvkm_timer *tmr = therm->subdev.device->timer;
 	if (suspend)
-		nvkm_timer_alarm(tmr, 0, &therm->fan->alarm);
+		nvkm_timer_alarm_cancel(tmr, &therm->fan->alarm);
 	return 0;
-}
-
-void
-nvkm_therm_fan_dtor(struct nvkm_therm *therm)
-{
-	if (therm->fan->dtor)
-		therm->fan->dtor(therm->fan);
-	spin_lock_destroy(&therm->fan->lock);
 }
 
 int

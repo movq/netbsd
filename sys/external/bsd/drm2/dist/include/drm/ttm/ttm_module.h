@@ -1,5 +1,3 @@
-/*	$NetBSD: ttm_module.h,v 1.3 2021/12/18 23:45:46 riastradh Exp $	*/
-
 /**************************************************************************
  *
  * Copyright 2008-2009 VMware, Inc., Palo Alto, CA., USA

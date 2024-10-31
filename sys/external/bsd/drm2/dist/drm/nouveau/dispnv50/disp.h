@@ -1,4 +1,4 @@
-/*	$NetBSD: disp.h,v 1.3 2021/12/19 10:49:47 riastradh Exp $	*/
+/*	$NetBSD: disp.h,v 1.1 2021/12/18 20:15:36 riastradh Exp $	*/
 
 #ifndef __NV50_KMS_H__
 #define __NV50_KMS_H__
@@ -50,16 +50,7 @@ struct nv50_disp_interlock {
 
 void corec37d_ntfy_init(struct nouveau_bo *, u32);
 
-#ifdef __NetBSD__
-#  define	__lut_iomem	volatile
-#  define	__iomem		__lut_iomem
-#endif
-
 void head907d_olut_load(struct drm_color_lut *, int size, void __iomem *);
-
-#ifdef __NetBSD__
-#  undef	__iomem
-#endif
 
 struct nv50_chan {
 	struct nvif_object user;
@@ -78,7 +69,7 @@ struct nv50_dmac {
 	/* Protects against concurrent pushbuf access to this channel, lock is
 	 * grabbed by evo_wait (if the pushbuf reservation is successful) and
 	 * dropped again by evo_kick. */
-	struct spinlock lock;
+	struct mutex lock;
 };
 
 int nv50_dmac_create(struct nvif_device *device, struct nvif_object *disp,

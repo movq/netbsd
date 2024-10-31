@@ -1,5 +1,3 @@
-/*	$NetBSD: radeon_asic.c,v 1.5 2021/12/18 23:45:43 riastradh Exp $	*/
-
 /*
  * Copyright 2008 Advanced Micro Devices, Inc.
  * Copyright 2008 Red Hat Inc.
@@ -28,20 +26,16 @@
  *          Jerome Glisse
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: radeon_asic.c,v 1.5 2021/12/18 23:45:43 riastradh Exp $");
-
 #include <linux/console.h>
-#include <linux/pci.h>
-#include <linux/vgaarb.h>
-
+#include <drm/drmP.h>
 #include <drm/drm_crtc_helper.h>
 #include <drm/radeon_drm.h>
-
-#include "atom.h"
+#include <linux/vgaarb.h>
+#include <linux/vga_switcheroo.h>
+#include "radeon_reg.h"
 #include "radeon.h"
 #include "radeon_asic.h"
-#include "radeon_reg.h"
+#include "atom.h"
 
 /*
  * Registers accessors functions.
@@ -142,11 +136,6 @@ static void radeon_register_accessor_init(struct radeon_device *rdev)
 	}
 }
 
-static int radeon_invalid_get_allowed_info_register(struct radeon_device *rdev,
-						    u32 reg, u32 *val)
-{
-	return -EINVAL;
-}
 
 /* helper to disable agp */
 /**
@@ -170,13 +159,11 @@ void radeon_agp_disable(struct radeon_device *rdev)
 		DRM_INFO("Forcing AGP to PCIE mode\n");
 		rdev->flags |= RADEON_IS_PCIE;
 		rdev->asic->gart.tlb_flush = &rv370_pcie_gart_tlb_flush;
-		rdev->asic->gart.get_page_entry = &rv370_pcie_gart_get_page_entry;
 		rdev->asic->gart.set_page = &rv370_pcie_gart_set_page;
 	} else {
 		DRM_INFO("Forcing AGP to PCI mode\n");
 		rdev->flags |= RADEON_IS_PCI;
 		rdev->asic->gart.tlb_flush = &r100_pci_gart_tlb_flush;
-		rdev->asic->gart.get_page_entry = &r100_pci_gart_get_page_entry;
 		rdev->asic->gart.set_page = &r100_pci_gart_set_page;
 	}
 	rdev->mc.gtt_size = radeon_gart_size * 1024 * 1024;
@@ -186,7 +173,7 @@ void radeon_agp_disable(struct radeon_device *rdev)
  * ASIC
  */
 
-static const struct radeon_asic_ring r100_gfx_ring = {
+static struct radeon_asic_ring r100_gfx_ring = {
 	.ib_execute = &r100_ring_ib_execute,
 	.emit_fence = &r100_fence_ring_emit,
 	.emit_semaphore = &r100_semaphore_ring_emit,
@@ -207,13 +194,11 @@ static struct radeon_asic r100_asic = {
 	.resume = &r100_resume,
 	.vga_set_state = &r100_vga_set_state,
 	.asic_reset = &r100_asic_reset,
-	.mmio_hdp_flush = NULL,
+	.ioctl_wait_idle = NULL,
 	.gui_idle = &r100_gui_idle,
 	.mc_wait_for_idle = &r100_mc_wait_for_idle,
-	.get_allowed_info_register = radeon_invalid_get_allowed_info_register,
 	.gart = {
 		.tlb_flush = &r100_pci_gart_tlb_flush,
-		.get_page_entry = &r100_pci_gart_get_page_entry,
 		.set_page = &r100_pci_gart_set_page,
 	},
 	.ring = {
@@ -263,8 +248,9 @@ static struct radeon_asic r100_asic = {
 		.set_clock_gating = &radeon_legacy_set_clock_gating,
 	},
 	.pflip = {
+		.pre_page_flip = &r100_pre_page_flip,
 		.page_flip = &r100_page_flip,
-		.page_flip_pending = &r100_page_flip_pending,
+		.post_page_flip = &r100_post_page_flip,
 	},
 };
 
@@ -275,13 +261,11 @@ static struct radeon_asic r200_asic = {
 	.resume = &r100_resume,
 	.vga_set_state = &r100_vga_set_state,
 	.asic_reset = &r100_asic_reset,
-	.mmio_hdp_flush = NULL,
+	.ioctl_wait_idle = NULL,
 	.gui_idle = &r100_gui_idle,
 	.mc_wait_for_idle = &r100_mc_wait_for_idle,
-	.get_allowed_info_register = radeon_invalid_get_allowed_info_register,
 	.gart = {
 		.tlb_flush = &r100_pci_gart_tlb_flush,
-		.get_page_entry = &r100_pci_gart_get_page_entry,
 		.set_page = &r100_pci_gart_set_page,
 	},
 	.ring = {
@@ -331,31 +315,18 @@ static struct radeon_asic r200_asic = {
 		.set_clock_gating = &radeon_legacy_set_clock_gating,
 	},
 	.pflip = {
+		.pre_page_flip = &r100_pre_page_flip,
 		.page_flip = &r100_page_flip,
-		.page_flip_pending = &r100_page_flip_pending,
+		.post_page_flip = &r100_post_page_flip,
 	},
 };
 
-static const struct radeon_asic_ring r300_gfx_ring = {
+static struct radeon_asic_ring r300_gfx_ring = {
 	.ib_execute = &r100_ring_ib_execute,
 	.emit_fence = &r300_fence_ring_emit,
 	.emit_semaphore = &r100_semaphore_ring_emit,
 	.cs_parse = &r300_cs_parse,
 	.ring_start = &r300_ring_start,
-	.ring_test = &r100_ring_test,
-	.ib_test = &r100_ib_test,
-	.is_lockup = &r100_gpu_is_lockup,
-	.get_rptr = &r100_gfx_get_rptr,
-	.get_wptr = &r100_gfx_get_wptr,
-	.set_wptr = &r100_gfx_set_wptr,
-};
-
-static const struct radeon_asic_ring rv515_gfx_ring = {
-	.ib_execute = &r100_ring_ib_execute,
-	.emit_fence = &r300_fence_ring_emit,
-	.emit_semaphore = &r100_semaphore_ring_emit,
-	.cs_parse = &r300_cs_parse,
-	.ring_start = &rv515_ring_start,
 	.ring_test = &r100_ring_test,
 	.ib_test = &r100_ib_test,
 	.is_lockup = &r100_gpu_is_lockup,
@@ -371,13 +342,11 @@ static struct radeon_asic r300_asic = {
 	.resume = &r300_resume,
 	.vga_set_state = &r100_vga_set_state,
 	.asic_reset = &r300_asic_reset,
-	.mmio_hdp_flush = NULL,
+	.ioctl_wait_idle = NULL,
 	.gui_idle = &r100_gui_idle,
 	.mc_wait_for_idle = &r300_mc_wait_for_idle,
-	.get_allowed_info_register = radeon_invalid_get_allowed_info_register,
 	.gart = {
 		.tlb_flush = &r100_pci_gart_tlb_flush,
-		.get_page_entry = &r100_pci_gart_get_page_entry,
 		.set_page = &r100_pci_gart_set_page,
 	},
 	.ring = {
@@ -427,8 +396,9 @@ static struct radeon_asic r300_asic = {
 		.set_clock_gating = &radeon_legacy_set_clock_gating,
 	},
 	.pflip = {
+		.pre_page_flip = &r100_pre_page_flip,
 		.page_flip = &r100_page_flip,
-		.page_flip_pending = &r100_page_flip_pending,
+		.post_page_flip = &r100_post_page_flip,
 	},
 };
 
@@ -439,13 +409,11 @@ static struct radeon_asic r300_asic_pcie = {
 	.resume = &r300_resume,
 	.vga_set_state = &r100_vga_set_state,
 	.asic_reset = &r300_asic_reset,
-	.mmio_hdp_flush = NULL,
+	.ioctl_wait_idle = NULL,
 	.gui_idle = &r100_gui_idle,
 	.mc_wait_for_idle = &r300_mc_wait_for_idle,
-	.get_allowed_info_register = radeon_invalid_get_allowed_info_register,
 	.gart = {
 		.tlb_flush = &rv370_pcie_gart_tlb_flush,
-		.get_page_entry = &rv370_pcie_gart_get_page_entry,
 		.set_page = &rv370_pcie_gart_set_page,
 	},
 	.ring = {
@@ -495,8 +463,9 @@ static struct radeon_asic r300_asic_pcie = {
 		.set_clock_gating = &radeon_legacy_set_clock_gating,
 	},
 	.pflip = {
+		.pre_page_flip = &r100_pre_page_flip,
 		.page_flip = &r100_page_flip,
-		.page_flip_pending = &r100_page_flip_pending,
+		.post_page_flip = &r100_post_page_flip,
 	},
 };
 
@@ -507,13 +476,11 @@ static struct radeon_asic r420_asic = {
 	.resume = &r420_resume,
 	.vga_set_state = &r100_vga_set_state,
 	.asic_reset = &r300_asic_reset,
-	.mmio_hdp_flush = NULL,
+	.ioctl_wait_idle = NULL,
 	.gui_idle = &r100_gui_idle,
 	.mc_wait_for_idle = &r300_mc_wait_for_idle,
-	.get_allowed_info_register = radeon_invalid_get_allowed_info_register,
 	.gart = {
 		.tlb_flush = &rv370_pcie_gart_tlb_flush,
-		.get_page_entry = &rv370_pcie_gart_get_page_entry,
 		.set_page = &rv370_pcie_gart_set_page,
 	},
 	.ring = {
@@ -563,8 +530,9 @@ static struct radeon_asic r420_asic = {
 		.set_clock_gating = &radeon_atom_set_clock_gating,
 	},
 	.pflip = {
+		.pre_page_flip = &r100_pre_page_flip,
 		.page_flip = &r100_page_flip,
-		.page_flip_pending = &r100_page_flip_pending,
+		.post_page_flip = &r100_post_page_flip,
 	},
 };
 
@@ -575,13 +543,11 @@ static struct radeon_asic rs400_asic = {
 	.resume = &rs400_resume,
 	.vga_set_state = &r100_vga_set_state,
 	.asic_reset = &r300_asic_reset,
-	.mmio_hdp_flush = NULL,
+	.ioctl_wait_idle = NULL,
 	.gui_idle = &r100_gui_idle,
 	.mc_wait_for_idle = &rs400_mc_wait_for_idle,
-	.get_allowed_info_register = radeon_invalid_get_allowed_info_register,
 	.gart = {
 		.tlb_flush = &rs400_gart_tlb_flush,
-		.get_page_entry = &rs400_gart_get_page_entry,
 		.set_page = &rs400_gart_set_page,
 	},
 	.ring = {
@@ -631,8 +597,9 @@ static struct radeon_asic rs400_asic = {
 		.set_clock_gating = &radeon_legacy_set_clock_gating,
 	},
 	.pflip = {
+		.pre_page_flip = &r100_pre_page_flip,
 		.page_flip = &r100_page_flip,
-		.page_flip_pending = &r100_page_flip_pending,
+		.post_page_flip = &r100_post_page_flip,
 	},
 };
 
@@ -643,13 +610,11 @@ static struct radeon_asic rs600_asic = {
 	.resume = &rs600_resume,
 	.vga_set_state = &r100_vga_set_state,
 	.asic_reset = &rs600_asic_reset,
-	.mmio_hdp_flush = NULL,
+	.ioctl_wait_idle = NULL,
 	.gui_idle = &r100_gui_idle,
 	.mc_wait_for_idle = &rs600_mc_wait_for_idle,
-	.get_allowed_info_register = radeon_invalid_get_allowed_info_register,
 	.gart = {
 		.tlb_flush = &rs600_gart_tlb_flush,
-		.get_page_entry = &rs600_gart_get_page_entry,
 		.set_page = &rs600_gart_set_page,
 	},
 	.ring = {
@@ -665,6 +630,8 @@ static struct radeon_asic rs600_asic = {
 		.wait_for_vblank = &avivo_wait_for_vblank,
 		.set_backlight_level = &atombios_set_backlight_level,
 		.get_backlight_level = &atombios_get_backlight_level,
+		.hdmi_enable = &r600_hdmi_enable,
+		.hdmi_setmode = &r600_hdmi_setmode,
 	},
 	.copy = {
 		.blit = &r100_copy_blit,
@@ -699,8 +666,9 @@ static struct radeon_asic rs600_asic = {
 		.set_clock_gating = &radeon_atom_set_clock_gating,
 	},
 	.pflip = {
+		.pre_page_flip = &rs600_pre_page_flip,
 		.page_flip = &rs600_page_flip,
-		.page_flip_pending = &rs600_page_flip_pending,
+		.post_page_flip = &rs600_post_page_flip,
 	},
 };
 
@@ -711,13 +679,11 @@ static struct radeon_asic rs690_asic = {
 	.resume = &rs690_resume,
 	.vga_set_state = &r100_vga_set_state,
 	.asic_reset = &rs600_asic_reset,
-	.mmio_hdp_flush = NULL,
+	.ioctl_wait_idle = NULL,
 	.gui_idle = &r100_gui_idle,
 	.mc_wait_for_idle = &rs690_mc_wait_for_idle,
-	.get_allowed_info_register = radeon_invalid_get_allowed_info_register,
 	.gart = {
 		.tlb_flush = &rs400_gart_tlb_flush,
-		.get_page_entry = &rs400_gart_get_page_entry,
 		.set_page = &rs400_gart_set_page,
 	},
 	.ring = {
@@ -733,6 +699,8 @@ static struct radeon_asic rs690_asic = {
 		.wait_for_vblank = &avivo_wait_for_vblank,
 		.set_backlight_level = &atombios_set_backlight_level,
 		.get_backlight_level = &atombios_get_backlight_level,
+		.hdmi_enable = &r600_hdmi_enable,
+		.hdmi_setmode = &r600_hdmi_setmode,
 	},
 	.copy = {
 		.blit = &r100_copy_blit,
@@ -767,8 +735,9 @@ static struct radeon_asic rs690_asic = {
 		.set_clock_gating = &radeon_atom_set_clock_gating,
 	},
 	.pflip = {
+		.pre_page_flip = &rs600_pre_page_flip,
 		.page_flip = &rs600_page_flip,
-		.page_flip_pending = &rs600_page_flip_pending,
+		.post_page_flip = &rs600_post_page_flip,
 	},
 };
 
@@ -779,17 +748,15 @@ static struct radeon_asic rv515_asic = {
 	.resume = &rv515_resume,
 	.vga_set_state = &r100_vga_set_state,
 	.asic_reset = &rs600_asic_reset,
-	.mmio_hdp_flush = NULL,
+	.ioctl_wait_idle = NULL,
 	.gui_idle = &r100_gui_idle,
 	.mc_wait_for_idle = &rv515_mc_wait_for_idle,
-	.get_allowed_info_register = radeon_invalid_get_allowed_info_register,
 	.gart = {
 		.tlb_flush = &rv370_pcie_gart_tlb_flush,
-		.get_page_entry = &rv370_pcie_gart_get_page_entry,
 		.set_page = &rv370_pcie_gart_set_page,
 	},
 	.ring = {
-		[RADEON_RING_TYPE_GFX_INDEX] = &rv515_gfx_ring
+		[RADEON_RING_TYPE_GFX_INDEX] = &r300_gfx_ring
 	},
 	.irq = {
 		.set = &rs600_irq_set,
@@ -835,8 +802,9 @@ static struct radeon_asic rv515_asic = {
 		.set_clock_gating = &radeon_atom_set_clock_gating,
 	},
 	.pflip = {
+		.pre_page_flip = &rs600_pre_page_flip,
 		.page_flip = &rs600_page_flip,
-		.page_flip_pending = &rs600_page_flip_pending,
+		.post_page_flip = &rs600_post_page_flip,
 	},
 };
 
@@ -847,17 +815,15 @@ static struct radeon_asic r520_asic = {
 	.resume = &r520_resume,
 	.vga_set_state = &r100_vga_set_state,
 	.asic_reset = &rs600_asic_reset,
-	.mmio_hdp_flush = NULL,
+	.ioctl_wait_idle = NULL,
 	.gui_idle = &r100_gui_idle,
 	.mc_wait_for_idle = &r520_mc_wait_for_idle,
-	.get_allowed_info_register = radeon_invalid_get_allowed_info_register,
 	.gart = {
 		.tlb_flush = &rv370_pcie_gart_tlb_flush,
-		.get_page_entry = &rv370_pcie_gart_get_page_entry,
 		.set_page = &rv370_pcie_gart_set_page,
 	},
 	.ring = {
-		[RADEON_RING_TYPE_GFX_INDEX] = &rv515_gfx_ring
+		[RADEON_RING_TYPE_GFX_INDEX] = &r300_gfx_ring
 	},
 	.irq = {
 		.set = &rs600_irq_set,
@@ -903,12 +869,13 @@ static struct radeon_asic r520_asic = {
 		.set_clock_gating = &radeon_atom_set_clock_gating,
 	},
 	.pflip = {
+		.pre_page_flip = &rs600_pre_page_flip,
 		.page_flip = &rs600_page_flip,
-		.page_flip_pending = &rs600_page_flip_pending,
+		.post_page_flip = &rs600_post_page_flip,
 	},
 };
 
-static const struct radeon_asic_ring r600_gfx_ring = {
+static struct radeon_asic_ring r600_gfx_ring = {
 	.ib_execute = &r600_ring_ib_execute,
 	.emit_fence = &r600_fence_ring_emit,
 	.emit_semaphore = &r600_semaphore_ring_emit,
@@ -921,7 +888,7 @@ static const struct radeon_asic_ring r600_gfx_ring = {
 	.set_wptr = &r600_gfx_set_wptr,
 };
 
-static const struct radeon_asic_ring r600_dma_ring = {
+static struct radeon_asic_ring r600_dma_ring = {
 	.ib_execute = &r600_dma_ring_ib_execute,
 	.emit_fence = &r600_dma_fence_ring_emit,
 	.emit_semaphore = &r600_dma_semaphore_ring_emit,
@@ -941,15 +908,13 @@ static struct radeon_asic r600_asic = {
 	.resume = &r600_resume,
 	.vga_set_state = &r600_vga_set_state,
 	.asic_reset = &r600_asic_reset,
-	.mmio_hdp_flush = r600_mmio_hdp_flush,
+	.ioctl_wait_idle = r600_ioctl_wait_idle,
 	.gui_idle = &r600_gui_idle,
 	.mc_wait_for_idle = &r600_mc_wait_for_idle,
 	.get_xclk = &r600_get_xclk,
 	.get_gpu_clock_counter = &r600_get_gpu_clock_counter,
-	.get_allowed_info_register = r600_get_allowed_info_register,
 	.gart = {
 		.tlb_flush = &r600_pcie_gart_tlb_flush,
-		.get_page_entry = &rs600_gart_get_page_entry,
 		.set_page = &rs600_gart_set_page,
 	},
 	.ring = {
@@ -966,6 +931,8 @@ static struct radeon_asic r600_asic = {
 		.wait_for_vblank = &avivo_wait_for_vblank,
 		.set_backlight_level = &atombios_set_backlight_level,
 		.get_backlight_level = &atombios_get_backlight_level,
+		.hdmi_enable = &r600_hdmi_enable,
+		.hdmi_setmode = &r600_hdmi_setmode,
 	},
 	.copy = {
 		.blit = &r600_copy_cpdma,
@@ -1001,22 +968,10 @@ static struct radeon_asic r600_asic = {
 		.get_temperature = &rv6xx_get_temp,
 	},
 	.pflip = {
+		.pre_page_flip = &rs600_pre_page_flip,
 		.page_flip = &rs600_page_flip,
-		.page_flip_pending = &rs600_page_flip_pending,
+		.post_page_flip = &rs600_post_page_flip,
 	},
-};
-
-static const struct radeon_asic_ring rv6xx_uvd_ring = {
-	.ib_execute = &uvd_v1_0_ib_execute,
-	.emit_fence = &uvd_v1_0_fence_emit,
-	.emit_semaphore = &uvd_v1_0_semaphore_emit,
-	.cs_parse = &radeon_uvd_cs_parse,
-	.ring_test = &uvd_v1_0_ring_test,
-	.ib_test = &uvd_v1_0_ib_test,
-	.is_lockup = &radeon_ring_test_lockup,
-	.get_rptr = &uvd_v1_0_get_rptr,
-	.get_wptr = &uvd_v1_0_get_wptr,
-	.set_wptr = &uvd_v1_0_set_wptr,
 };
 
 static struct radeon_asic rv6xx_asic = {
@@ -1026,21 +981,18 @@ static struct radeon_asic rv6xx_asic = {
 	.resume = &r600_resume,
 	.vga_set_state = &r600_vga_set_state,
 	.asic_reset = &r600_asic_reset,
-	.mmio_hdp_flush = r600_mmio_hdp_flush,
+	.ioctl_wait_idle = r600_ioctl_wait_idle,
 	.gui_idle = &r600_gui_idle,
 	.mc_wait_for_idle = &r600_mc_wait_for_idle,
 	.get_xclk = &r600_get_xclk,
 	.get_gpu_clock_counter = &r600_get_gpu_clock_counter,
-	.get_allowed_info_register = r600_get_allowed_info_register,
 	.gart = {
 		.tlb_flush = &r600_pcie_gart_tlb_flush,
-		.get_page_entry = &rs600_gart_get_page_entry,
 		.set_page = &rs600_gart_set_page,
 	},
 	.ring = {
 		[RADEON_RING_TYPE_GFX_INDEX] = &r600_gfx_ring,
 		[R600_RING_TYPE_DMA_INDEX] = &r600_dma_ring,
-		[R600_RING_TYPE_UVD_INDEX] = &rv6xx_uvd_ring,
 	},
 	.irq = {
 		.set = &r600_irq_set,
@@ -1052,6 +1004,8 @@ static struct radeon_asic rv6xx_asic = {
 		.wait_for_vblank = &avivo_wait_for_vblank,
 		.set_backlight_level = &atombios_set_backlight_level,
 		.get_backlight_level = &atombios_get_backlight_level,
+		.hdmi_enable = &r600_hdmi_enable,
+		.hdmi_setmode = &r600_hdmi_setmode,
 	},
 	.copy = {
 		.blit = &r600_copy_cpdma,
@@ -1101,16 +1055,13 @@ static struct radeon_asic rv6xx_asic = {
 		.get_sclk = &rv6xx_dpm_get_sclk,
 		.get_mclk = &rv6xx_dpm_get_mclk,
 		.print_power_state = &rv6xx_dpm_print_power_state,
-#ifdef CONFIG_DEBUG_FS
 		.debugfs_print_current_performance_level = &rv6xx_dpm_debugfs_print_current_performance_level,
-#endif
 		.force_performance_level = &rv6xx_dpm_force_performance_level,
-		.get_current_sclk = &rv6xx_dpm_get_current_sclk,
-		.get_current_mclk = &rv6xx_dpm_get_current_mclk,
 	},
 	.pflip = {
+		.pre_page_flip = &rs600_pre_page_flip,
 		.page_flip = &rs600_page_flip,
-		.page_flip_pending = &rs600_page_flip_pending,
+		.post_page_flip = &rs600_post_page_flip,
 	},
 };
 
@@ -1121,21 +1072,18 @@ static struct radeon_asic rs780_asic = {
 	.resume = &r600_resume,
 	.vga_set_state = &r600_vga_set_state,
 	.asic_reset = &r600_asic_reset,
-	.mmio_hdp_flush = r600_mmio_hdp_flush,
+	.ioctl_wait_idle = r600_ioctl_wait_idle,
 	.gui_idle = &r600_gui_idle,
 	.mc_wait_for_idle = &r600_mc_wait_for_idle,
 	.get_xclk = &r600_get_xclk,
 	.get_gpu_clock_counter = &r600_get_gpu_clock_counter,
-	.get_allowed_info_register = r600_get_allowed_info_register,
 	.gart = {
 		.tlb_flush = &r600_pcie_gart_tlb_flush,
-		.get_page_entry = &rs600_gart_get_page_entry,
 		.set_page = &rs600_gart_set_page,
 	},
 	.ring = {
 		[RADEON_RING_TYPE_GFX_INDEX] = &r600_gfx_ring,
 		[R600_RING_TYPE_DMA_INDEX] = &r600_dma_ring,
-		[R600_RING_TYPE_UVD_INDEX] = &rv6xx_uvd_ring,
 	},
 	.irq = {
 		.set = &r600_irq_set,
@@ -1147,6 +1095,8 @@ static struct radeon_asic rs780_asic = {
 		.wait_for_vblank = &avivo_wait_for_vblank,
 		.set_backlight_level = &atombios_set_backlight_level,
 		.get_backlight_level = &atombios_get_backlight_level,
+		.hdmi_enable = &r600_hdmi_enable,
+		.hdmi_setmode = &r600_hdmi_setmode,
 	},
 	.copy = {
 		.blit = &r600_copy_cpdma,
@@ -1196,23 +1146,20 @@ static struct radeon_asic rs780_asic = {
 		.get_sclk = &rs780_dpm_get_sclk,
 		.get_mclk = &rs780_dpm_get_mclk,
 		.print_power_state = &rs780_dpm_print_power_state,
-#ifdef CONFIG_DEBUG_FS
 		.debugfs_print_current_performance_level = &rs780_dpm_debugfs_print_current_performance_level,
-#endif
 		.force_performance_level = &rs780_dpm_force_performance_level,
-		.get_current_sclk = &rs780_dpm_get_current_sclk,
-		.get_current_mclk = &rs780_dpm_get_current_mclk,
 	},
 	.pflip = {
+		.pre_page_flip = &rs600_pre_page_flip,
 		.page_flip = &rs600_page_flip,
-		.page_flip_pending = &rs600_page_flip_pending,
+		.post_page_flip = &rs600_post_page_flip,
 	},
 };
 
-static const struct radeon_asic_ring rv770_uvd_ring = {
+static struct radeon_asic_ring rv770_uvd_ring = {
 	.ib_execute = &uvd_v1_0_ib_execute,
 	.emit_fence = &uvd_v2_2_fence_emit,
-	.emit_semaphore = &uvd_v2_2_semaphore_emit,
+	.emit_semaphore = &uvd_v1_0_semaphore_emit,
 	.cs_parse = &radeon_uvd_cs_parse,
 	.ring_test = &uvd_v1_0_ring_test,
 	.ib_test = &uvd_v1_0_ib_test,
@@ -1229,15 +1176,13 @@ static struct radeon_asic rv770_asic = {
 	.resume = &rv770_resume,
 	.asic_reset = &r600_asic_reset,
 	.vga_set_state = &r600_vga_set_state,
-	.mmio_hdp_flush = r600_mmio_hdp_flush,
+	.ioctl_wait_idle = r600_ioctl_wait_idle,
 	.gui_idle = &r600_gui_idle,
 	.mc_wait_for_idle = &r600_mc_wait_for_idle,
 	.get_xclk = &rv770_get_xclk,
 	.get_gpu_clock_counter = &r600_get_gpu_clock_counter,
-	.get_allowed_info_register = r600_get_allowed_info_register,
 	.gart = {
 		.tlb_flush = &r600_pcie_gart_tlb_flush,
-		.get_page_entry = &rs600_gart_get_page_entry,
 		.set_page = &rs600_gart_set_page,
 	},
 	.ring = {
@@ -1255,6 +1200,8 @@ static struct radeon_asic rv770_asic = {
 		.wait_for_vblank = &avivo_wait_for_vblank,
 		.set_backlight_level = &atombios_set_backlight_level,
 		.get_backlight_level = &atombios_get_backlight_level,
+		.hdmi_enable = &r600_hdmi_enable,
+		.hdmi_setmode = &r600_hdmi_setmode,
 	},
 	.copy = {
 		.blit = &r600_copy_cpdma,
@@ -1304,21 +1251,18 @@ static struct radeon_asic rv770_asic = {
 		.get_sclk = &rv770_dpm_get_sclk,
 		.get_mclk = &rv770_dpm_get_mclk,
 		.print_power_state = &rv770_dpm_print_power_state,
-#ifdef CONFIG_DEBUG_FS
 		.debugfs_print_current_performance_level = &rv770_dpm_debugfs_print_current_performance_level,
-#endif
 		.force_performance_level = &rv770_dpm_force_performance_level,
 		.vblank_too_short = &rv770_dpm_vblank_too_short,
-		.get_current_sclk = &rv770_dpm_get_current_sclk,
-		.get_current_mclk = &rv770_dpm_get_current_mclk,
 	},
 	.pflip = {
+		.pre_page_flip = &rs600_pre_page_flip,
 		.page_flip = &rv770_page_flip,
-		.page_flip_pending = &rv770_page_flip_pending,
+		.post_page_flip = &rs600_post_page_flip,
 	},
 };
 
-static const struct radeon_asic_ring evergreen_gfx_ring = {
+static struct radeon_asic_ring evergreen_gfx_ring = {
 	.ib_execute = &evergreen_ring_ib_execute,
 	.emit_fence = &r600_fence_ring_emit,
 	.emit_semaphore = &r600_semaphore_ring_emit,
@@ -1331,7 +1275,7 @@ static const struct radeon_asic_ring evergreen_gfx_ring = {
 	.set_wptr = &r600_gfx_set_wptr,
 };
 
-static const struct radeon_asic_ring evergreen_dma_ring = {
+static struct radeon_asic_ring evergreen_dma_ring = {
 	.ib_execute = &evergreen_dma_ring_ib_execute,
 	.emit_fence = &evergreen_dma_fence_ring_emit,
 	.emit_semaphore = &r600_dma_semaphore_ring_emit,
@@ -1351,15 +1295,13 @@ static struct radeon_asic evergreen_asic = {
 	.resume = &evergreen_resume,
 	.asic_reset = &evergreen_asic_reset,
 	.vga_set_state = &r600_vga_set_state,
-	.mmio_hdp_flush = r600_mmio_hdp_flush,
+	.ioctl_wait_idle = r600_ioctl_wait_idle,
 	.gui_idle = &r600_gui_idle,
 	.mc_wait_for_idle = &evergreen_mc_wait_for_idle,
 	.get_xclk = &rv770_get_xclk,
 	.get_gpu_clock_counter = &r600_get_gpu_clock_counter,
-	.get_allowed_info_register = evergreen_get_allowed_info_register,
 	.gart = {
 		.tlb_flush = &evergreen_pcie_gart_tlb_flush,
-		.get_page_entry = &rs600_gart_get_page_entry,
 		.set_page = &rs600_gart_set_page,
 	},
 	.ring = {
@@ -1377,6 +1319,8 @@ static struct radeon_asic evergreen_asic = {
 		.wait_for_vblank = &dce4_wait_for_vblank,
 		.set_backlight_level = &atombios_set_backlight_level,
 		.get_backlight_level = &atombios_get_backlight_level,
+		.hdmi_enable = &evergreen_hdmi_enable,
+		.hdmi_setmode = &evergreen_hdmi_setmode,
 	},
 	.copy = {
 		.blit = &r600_copy_cpdma,
@@ -1426,17 +1370,14 @@ static struct radeon_asic evergreen_asic = {
 		.get_sclk = &rv770_dpm_get_sclk,
 		.get_mclk = &rv770_dpm_get_mclk,
 		.print_power_state = &rv770_dpm_print_power_state,
-#ifdef CONFIG_DEBUG_FS
 		.debugfs_print_current_performance_level = &rv770_dpm_debugfs_print_current_performance_level,
-#endif
 		.force_performance_level = &rv770_dpm_force_performance_level,
 		.vblank_too_short = &cypress_dpm_vblank_too_short,
-		.get_current_sclk = &rv770_dpm_get_current_sclk,
-		.get_current_mclk = &rv770_dpm_get_current_mclk,
 	},
 	.pflip = {
+		.pre_page_flip = &evergreen_pre_page_flip,
 		.page_flip = &evergreen_page_flip,
-		.page_flip_pending = &evergreen_page_flip_pending,
+		.post_page_flip = &evergreen_post_page_flip,
 	},
 };
 
@@ -1447,15 +1388,13 @@ static struct radeon_asic sumo_asic = {
 	.resume = &evergreen_resume,
 	.asic_reset = &evergreen_asic_reset,
 	.vga_set_state = &r600_vga_set_state,
-	.mmio_hdp_flush = r600_mmio_hdp_flush,
+	.ioctl_wait_idle = r600_ioctl_wait_idle,
 	.gui_idle = &r600_gui_idle,
 	.mc_wait_for_idle = &evergreen_mc_wait_for_idle,
 	.get_xclk = &r600_get_xclk,
 	.get_gpu_clock_counter = &r600_get_gpu_clock_counter,
-	.get_allowed_info_register = evergreen_get_allowed_info_register,
 	.gart = {
 		.tlb_flush = &evergreen_pcie_gart_tlb_flush,
-		.get_page_entry = &rs600_gart_get_page_entry,
 		.set_page = &rs600_gart_set_page,
 	},
 	.ring = {
@@ -1473,6 +1412,8 @@ static struct radeon_asic sumo_asic = {
 		.wait_for_vblank = &dce4_wait_for_vblank,
 		.set_backlight_level = &atombios_set_backlight_level,
 		.get_backlight_level = &atombios_get_backlight_level,
+		.hdmi_enable = &evergreen_hdmi_enable,
+		.hdmi_setmode = &evergreen_hdmi_setmode,
 	},
 	.copy = {
 		.blit = &r600_copy_cpdma,
@@ -1522,16 +1463,13 @@ static struct radeon_asic sumo_asic = {
 		.get_sclk = &sumo_dpm_get_sclk,
 		.get_mclk = &sumo_dpm_get_mclk,
 		.print_power_state = &sumo_dpm_print_power_state,
-#ifdef CONFIG_DEBUG_FS
 		.debugfs_print_current_performance_level = &sumo_dpm_debugfs_print_current_performance_level,
-#endif
 		.force_performance_level = &sumo_dpm_force_performance_level,
-		.get_current_sclk = &sumo_dpm_get_current_sclk,
-		.get_current_mclk = &sumo_dpm_get_current_mclk,
 	},
 	.pflip = {
+		.pre_page_flip = &evergreen_pre_page_flip,
 		.page_flip = &evergreen_page_flip,
-		.page_flip_pending = &evergreen_page_flip_pending,
+		.post_page_flip = &evergreen_post_page_flip,
 	},
 };
 
@@ -1542,15 +1480,13 @@ static struct radeon_asic btc_asic = {
 	.resume = &evergreen_resume,
 	.asic_reset = &evergreen_asic_reset,
 	.vga_set_state = &r600_vga_set_state,
-	.mmio_hdp_flush = r600_mmio_hdp_flush,
+	.ioctl_wait_idle = r600_ioctl_wait_idle,
 	.gui_idle = &r600_gui_idle,
 	.mc_wait_for_idle = &evergreen_mc_wait_for_idle,
 	.get_xclk = &rv770_get_xclk,
 	.get_gpu_clock_counter = &r600_get_gpu_clock_counter,
-	.get_allowed_info_register = evergreen_get_allowed_info_register,
 	.gart = {
 		.tlb_flush = &evergreen_pcie_gart_tlb_flush,
-		.get_page_entry = &rs600_gart_get_page_entry,
 		.set_page = &rs600_gart_set_page,
 	},
 	.ring = {
@@ -1568,6 +1504,8 @@ static struct radeon_asic btc_asic = {
 		.wait_for_vblank = &dce4_wait_for_vblank,
 		.set_backlight_level = &atombios_set_backlight_level,
 		.get_backlight_level = &atombios_get_backlight_level,
+		.hdmi_enable = &evergreen_hdmi_enable,
+		.hdmi_setmode = &evergreen_hdmi_setmode,
 	},
 	.copy = {
 		.blit = &r600_copy_cpdma,
@@ -1617,21 +1555,18 @@ static struct radeon_asic btc_asic = {
 		.get_sclk = &btc_dpm_get_sclk,
 		.get_mclk = &btc_dpm_get_mclk,
 		.print_power_state = &rv770_dpm_print_power_state,
-#ifdef CONFIG_DEBUG_FS
 		.debugfs_print_current_performance_level = &btc_dpm_debugfs_print_current_performance_level,
-#endif
 		.force_performance_level = &rv770_dpm_force_performance_level,
 		.vblank_too_short = &btc_dpm_vblank_too_short,
-		.get_current_sclk = &btc_dpm_get_current_sclk,
-		.get_current_mclk = &btc_dpm_get_current_mclk,
 	},
 	.pflip = {
+		.pre_page_flip = &evergreen_pre_page_flip,
 		.page_flip = &evergreen_page_flip,
-		.page_flip_pending = &evergreen_page_flip_pending,
+		.post_page_flip = &evergreen_post_page_flip,
 	},
 };
 
-static const struct radeon_asic_ring cayman_gfx_ring = {
+static struct radeon_asic_ring cayman_gfx_ring = {
 	.ib_execute = &cayman_ring_ib_execute,
 	.ib_parse = &evergreen_ib_parse,
 	.emit_fence = &cayman_fence_ring_emit,
@@ -1646,7 +1581,7 @@ static const struct radeon_asic_ring cayman_gfx_ring = {
 	.set_wptr = &cayman_gfx_set_wptr,
 };
 
-static const struct radeon_asic_ring cayman_dma_ring = {
+static struct radeon_asic_ring cayman_dma_ring = {
 	.ib_execute = &cayman_dma_ring_ib_execute,
 	.ib_parse = &evergreen_dma_ib_parse,
 	.emit_fence = &evergreen_dma_fence_ring_emit,
@@ -1661,7 +1596,7 @@ static const struct radeon_asic_ring cayman_dma_ring = {
 	.set_wptr = &cayman_dma_set_wptr
 };
 
-static const struct radeon_asic_ring cayman_uvd_ring = {
+static struct radeon_asic_ring cayman_uvd_ring = {
 	.ib_execute = &uvd_v1_0_ib_execute,
 	.emit_fence = &uvd_v2_2_fence_emit,
 	.emit_semaphore = &uvd_v3_1_semaphore_emit,
@@ -1681,24 +1616,19 @@ static struct radeon_asic cayman_asic = {
 	.resume = &cayman_resume,
 	.asic_reset = &cayman_asic_reset,
 	.vga_set_state = &r600_vga_set_state,
-	.mmio_hdp_flush = r600_mmio_hdp_flush,
+	.ioctl_wait_idle = r600_ioctl_wait_idle,
 	.gui_idle = &r600_gui_idle,
 	.mc_wait_for_idle = &evergreen_mc_wait_for_idle,
 	.get_xclk = &rv770_get_xclk,
 	.get_gpu_clock_counter = &r600_get_gpu_clock_counter,
-	.get_allowed_info_register = cayman_get_allowed_info_register,
 	.gart = {
 		.tlb_flush = &cayman_pcie_gart_tlb_flush,
-		.get_page_entry = &rs600_gart_get_page_entry,
 		.set_page = &rs600_gart_set_page,
 	},
 	.vm = {
 		.init = &cayman_vm_init,
 		.fini = &cayman_vm_fini,
-		.copy_pages = &cayman_dma_vm_copy_pages,
-		.write_pages = &cayman_dma_vm_write_pages,
-		.set_pages = &cayman_dma_vm_set_pages,
-		.pad_ib = &cayman_dma_vm_pad_ib,
+		.set_page = &cayman_dma_vm_set_page,
 	},
 	.ring = {
 		[RADEON_RING_TYPE_GFX_INDEX] = &cayman_gfx_ring,
@@ -1718,6 +1648,8 @@ static struct radeon_asic cayman_asic = {
 		.wait_for_vblank = &dce4_wait_for_vblank,
 		.set_backlight_level = &atombios_set_backlight_level,
 		.get_backlight_level = &atombios_get_backlight_level,
+		.hdmi_enable = &evergreen_hdmi_enable,
+		.hdmi_setmode = &evergreen_hdmi_setmode,
 	},
 	.copy = {
 		.blit = &r600_copy_cpdma,
@@ -1767,31 +1699,15 @@ static struct radeon_asic cayman_asic = {
 		.get_sclk = &ni_dpm_get_sclk,
 		.get_mclk = &ni_dpm_get_mclk,
 		.print_power_state = &ni_dpm_print_power_state,
-#ifdef CONFIG_DEBUG_FS
 		.debugfs_print_current_performance_level = &ni_dpm_debugfs_print_current_performance_level,
-#endif
 		.force_performance_level = &ni_dpm_force_performance_level,
 		.vblank_too_short = &ni_dpm_vblank_too_short,
-		.get_current_sclk = &ni_dpm_get_current_sclk,
-		.get_current_mclk = &ni_dpm_get_current_mclk,
 	},
 	.pflip = {
+		.pre_page_flip = &evergreen_pre_page_flip,
 		.page_flip = &evergreen_page_flip,
-		.page_flip_pending = &evergreen_page_flip_pending,
+		.post_page_flip = &evergreen_post_page_flip,
 	},
-};
-
-static const struct radeon_asic_ring trinity_vce_ring = {
-	.ib_execute = &radeon_vce_ib_execute,
-	.emit_fence = &radeon_vce_fence_emit,
-	.emit_semaphore = &radeon_vce_semaphore_emit,
-	.cs_parse = &radeon_vce_cs_parse,
-	.ring_test = &radeon_vce_ring_test,
-	.ib_test = &radeon_vce_ib_test,
-	.is_lockup = &radeon_ring_test_lockup,
-	.get_rptr = &vce_v1_0_get_rptr,
-	.get_wptr = &vce_v1_0_get_wptr,
-	.set_wptr = &vce_v1_0_set_wptr,
 };
 
 static struct radeon_asic trinity_asic = {
@@ -1801,24 +1717,19 @@ static struct radeon_asic trinity_asic = {
 	.resume = &cayman_resume,
 	.asic_reset = &cayman_asic_reset,
 	.vga_set_state = &r600_vga_set_state,
-	.mmio_hdp_flush = r600_mmio_hdp_flush,
+	.ioctl_wait_idle = r600_ioctl_wait_idle,
 	.gui_idle = &r600_gui_idle,
 	.mc_wait_for_idle = &evergreen_mc_wait_for_idle,
 	.get_xclk = &r600_get_xclk,
 	.get_gpu_clock_counter = &r600_get_gpu_clock_counter,
-	.get_allowed_info_register = cayman_get_allowed_info_register,
 	.gart = {
 		.tlb_flush = &cayman_pcie_gart_tlb_flush,
-		.get_page_entry = &rs600_gart_get_page_entry,
 		.set_page = &rs600_gart_set_page,
 	},
 	.vm = {
 		.init = &cayman_vm_init,
 		.fini = &cayman_vm_fini,
-		.copy_pages = &cayman_dma_vm_copy_pages,
-		.write_pages = &cayman_dma_vm_write_pages,
-		.set_pages = &cayman_dma_vm_set_pages,
-		.pad_ib = &cayman_dma_vm_pad_ib,
+		.set_page = &cayman_dma_vm_set_page,
 	},
 	.ring = {
 		[RADEON_RING_TYPE_GFX_INDEX] = &cayman_gfx_ring,
@@ -1827,8 +1738,6 @@ static struct radeon_asic trinity_asic = {
 		[R600_RING_TYPE_DMA_INDEX] = &cayman_dma_ring,
 		[CAYMAN_RING_TYPE_DMA1_INDEX] = &cayman_dma_ring,
 		[R600_RING_TYPE_UVD_INDEX] = &cayman_uvd_ring,
-		[TN_RING_TYPE_VCE1_INDEX] = &trinity_vce_ring,
-		[TN_RING_TYPE_VCE2_INDEX] = &trinity_vce_ring,
 	},
 	.irq = {
 		.set = &evergreen_irq_set,
@@ -1840,6 +1749,8 @@ static struct radeon_asic trinity_asic = {
 		.wait_for_vblank = &dce4_wait_for_vblank,
 		.set_backlight_level = &atombios_set_backlight_level,
 		.get_backlight_level = &atombios_get_backlight_level,
+		.hdmi_enable = &evergreen_hdmi_enable,
+		.hdmi_setmode = &evergreen_hdmi_setmode,
 	},
 	.copy = {
 		.blit = &r600_copy_cpdma,
@@ -1873,7 +1784,6 @@ static struct radeon_asic trinity_asic = {
 		.set_pcie_lanes = NULL,
 		.set_clock_gating = NULL,
 		.set_uvd_clocks = &sumo_set_uvd_clocks,
-		.set_vce_clocks = &tn_set_vce_clocks,
 		.get_temperature = &tn_get_temp,
 	},
 	.dpm = {
@@ -1890,21 +1800,18 @@ static struct radeon_asic trinity_asic = {
 		.get_sclk = &trinity_dpm_get_sclk,
 		.get_mclk = &trinity_dpm_get_mclk,
 		.print_power_state = &trinity_dpm_print_power_state,
-#ifdef CONFIG_DEBUG_FS
 		.debugfs_print_current_performance_level = &trinity_dpm_debugfs_print_current_performance_level,
-#endif
 		.force_performance_level = &trinity_dpm_force_performance_level,
 		.enable_bapm = &trinity_dpm_enable_bapm,
-		.get_current_sclk = &trinity_dpm_get_current_sclk,
-		.get_current_mclk = &trinity_dpm_get_current_mclk,
 	},
 	.pflip = {
+		.pre_page_flip = &evergreen_pre_page_flip,
 		.page_flip = &evergreen_page_flip,
-		.page_flip_pending = &evergreen_page_flip_pending,
+		.post_page_flip = &evergreen_post_page_flip,
 	},
 };
 
-static const struct radeon_asic_ring si_gfx_ring = {
+static struct radeon_asic_ring si_gfx_ring = {
 	.ib_execute = &si_ring_ib_execute,
 	.ib_parse = &si_ib_parse,
 	.emit_fence = &si_fence_ring_emit,
@@ -1919,7 +1826,7 @@ static const struct radeon_asic_ring si_gfx_ring = {
 	.set_wptr = &cayman_gfx_set_wptr,
 };
 
-static const struct radeon_asic_ring si_dma_ring = {
+static struct radeon_asic_ring si_dma_ring = {
 	.ib_execute = &cayman_dma_ring_ib_execute,
 	.ib_parse = &evergreen_dma_ib_parse,
 	.emit_fence = &evergreen_dma_fence_ring_emit,
@@ -1941,24 +1848,19 @@ static struct radeon_asic si_asic = {
 	.resume = &si_resume,
 	.asic_reset = &si_asic_reset,
 	.vga_set_state = &r600_vga_set_state,
-	.mmio_hdp_flush = r600_mmio_hdp_flush,
+	.ioctl_wait_idle = r600_ioctl_wait_idle,
 	.gui_idle = &r600_gui_idle,
 	.mc_wait_for_idle = &evergreen_mc_wait_for_idle,
 	.get_xclk = &si_get_xclk,
 	.get_gpu_clock_counter = &si_get_gpu_clock_counter,
-	.get_allowed_info_register = si_get_allowed_info_register,
 	.gart = {
 		.tlb_flush = &si_pcie_gart_tlb_flush,
-		.get_page_entry = &rs600_gart_get_page_entry,
 		.set_page = &rs600_gart_set_page,
 	},
 	.vm = {
 		.init = &si_vm_init,
 		.fini = &si_vm_fini,
-		.copy_pages = &si_dma_vm_copy_pages,
-		.write_pages = &si_dma_vm_write_pages,
-		.set_pages = &si_dma_vm_set_pages,
-		.pad_ib = &cayman_dma_vm_pad_ib,
+		.set_page = &si_dma_vm_set_page,
 	},
 	.ring = {
 		[RADEON_RING_TYPE_GFX_INDEX] = &si_gfx_ring,
@@ -1967,8 +1869,6 @@ static struct radeon_asic si_asic = {
 		[R600_RING_TYPE_DMA_INDEX] = &si_dma_ring,
 		[CAYMAN_RING_TYPE_DMA1_INDEX] = &si_dma_ring,
 		[R600_RING_TYPE_UVD_INDEX] = &cayman_uvd_ring,
-		[TN_RING_TYPE_VCE1_INDEX] = &trinity_vce_ring,
-		[TN_RING_TYPE_VCE2_INDEX] = &trinity_vce_ring,
 	},
 	.irq = {
 		.set = &si_irq_set,
@@ -1980,6 +1880,8 @@ static struct radeon_asic si_asic = {
 		.wait_for_vblank = &dce4_wait_for_vblank,
 		.set_backlight_level = &atombios_set_backlight_level,
 		.get_backlight_level = &atombios_get_backlight_level,
+		.hdmi_enable = &evergreen_hdmi_enable,
+		.hdmi_setmode = &evergreen_hdmi_setmode,
 	},
 	.copy = {
 		.blit = &r600_copy_cpdma,
@@ -2013,7 +1915,6 @@ static struct radeon_asic si_asic = {
 		.set_pcie_lanes = &r600_set_pcie_lanes,
 		.set_clock_gating = NULL,
 		.set_uvd_clocks = &si_set_uvd_clocks,
-		.set_vce_clocks = &si_set_vce_clocks,
 		.get_temperature = &si_get_temp,
 	},
 	.dpm = {
@@ -2030,25 +1931,18 @@ static struct radeon_asic si_asic = {
 		.get_sclk = &ni_dpm_get_sclk,
 		.get_mclk = &ni_dpm_get_mclk,
 		.print_power_state = &ni_dpm_print_power_state,
-#ifdef CONFIG_DEBUG_FS
 		.debugfs_print_current_performance_level = &si_dpm_debugfs_print_current_performance_level,
-#endif
 		.force_performance_level = &si_dpm_force_performance_level,
 		.vblank_too_short = &ni_dpm_vblank_too_short,
-		.fan_ctrl_set_mode = &si_fan_ctrl_set_mode,
-		.fan_ctrl_get_mode = &si_fan_ctrl_get_mode,
-		.get_fan_speed_percent = &si_fan_ctrl_get_fan_speed_percent,
-		.set_fan_speed_percent = &si_fan_ctrl_set_fan_speed_percent,
-		.get_current_sclk = &si_dpm_get_current_sclk,
-		.get_current_mclk = &si_dpm_get_current_mclk,
 	},
 	.pflip = {
+		.pre_page_flip = &evergreen_pre_page_flip,
 		.page_flip = &evergreen_page_flip,
-		.page_flip_pending = &evergreen_page_flip_pending,
+		.post_page_flip = &evergreen_post_page_flip,
 	},
 };
 
-static const struct radeon_asic_ring ci_gfx_ring = {
+static struct radeon_asic_ring ci_gfx_ring = {
 	.ib_execute = &cik_ring_ib_execute,
 	.ib_parse = &cik_ib_parse,
 	.emit_fence = &cik_fence_gfx_ring_emit,
@@ -2063,7 +1957,7 @@ static const struct radeon_asic_ring ci_gfx_ring = {
 	.set_wptr = &cik_gfx_set_wptr,
 };
 
-static const struct radeon_asic_ring ci_cp_ring = {
+static struct radeon_asic_ring ci_cp_ring = {
 	.ib_execute = &cik_ring_ib_execute,
 	.ib_parse = &cik_ib_parse,
 	.emit_fence = &cik_fence_compute_ring_emit,
@@ -2078,7 +1972,7 @@ static const struct radeon_asic_ring ci_cp_ring = {
 	.set_wptr = &cik_compute_set_wptr,
 };
 
-static const struct radeon_asic_ring ci_dma_ring = {
+static struct radeon_asic_ring ci_dma_ring = {
 	.ib_execute = &cik_sdma_ring_ib_execute,
 	.ib_parse = &cik_ib_parse,
 	.emit_fence = &cik_sdma_fence_ring_emit,
@@ -2093,7 +1987,7 @@ static const struct radeon_asic_ring ci_dma_ring = {
 	.set_wptr = &cik_sdma_set_wptr,
 };
 
-static const struct radeon_asic_ring ci_vce_ring = {
+static struct radeon_asic_ring ci_vce_ring = {
 	.ib_execute = &radeon_vce_ib_execute,
 	.emit_fence = &radeon_vce_fence_emit,
 	.emit_semaphore = &radeon_vce_semaphore_emit,
@@ -2113,24 +2007,19 @@ static struct radeon_asic ci_asic = {
 	.resume = &cik_resume,
 	.asic_reset = &cik_asic_reset,
 	.vga_set_state = &r600_vga_set_state,
-	.mmio_hdp_flush = &r600_mmio_hdp_flush,
+	.ioctl_wait_idle = NULL,
 	.gui_idle = &r600_gui_idle,
 	.mc_wait_for_idle = &evergreen_mc_wait_for_idle,
 	.get_xclk = &cik_get_xclk,
 	.get_gpu_clock_counter = &cik_get_gpu_clock_counter,
-	.get_allowed_info_register = cik_get_allowed_info_register,
 	.gart = {
 		.tlb_flush = &cik_pcie_gart_tlb_flush,
-		.get_page_entry = &rs600_gart_get_page_entry,
 		.set_page = &rs600_gart_set_page,
 	},
 	.vm = {
 		.init = &cik_vm_init,
 		.fini = &cik_vm_fini,
-		.copy_pages = &cik_sdma_vm_copy_pages,
-		.write_pages = &cik_sdma_vm_write_pages,
-		.set_pages = &cik_sdma_vm_set_pages,
-		.pad_ib = &cik_sdma_vm_pad_ib,
+		.set_page = &cik_sdma_vm_set_page,
 	},
 	.ring = {
 		[RADEON_RING_TYPE_GFX_INDEX] = &ci_gfx_ring,
@@ -2152,14 +2041,16 @@ static struct radeon_asic ci_asic = {
 		.wait_for_vblank = &dce4_wait_for_vblank,
 		.set_backlight_level = &atombios_set_backlight_level,
 		.get_backlight_level = &atombios_get_backlight_level,
+		.hdmi_enable = &evergreen_hdmi_enable,
+		.hdmi_setmode = &evergreen_hdmi_setmode,
 	},
 	.copy = {
 		.blit = &cik_copy_cpdma,
 		.blit_ring_index = RADEON_RING_TYPE_GFX_INDEX,
 		.dma = &cik_copy_dma,
 		.dma_ring_index = R600_RING_TYPE_DMA_INDEX,
-		.copy = &cik_copy_dma,
-		.copy_ring_index = R600_RING_TYPE_DMA_INDEX,
+		.copy = &cik_copy_cpdma,
+		.copy_ring_index = RADEON_RING_TYPE_GFX_INDEX,
 	},
 	.surface = {
 		.set_reg = r600_set_surface_reg,
@@ -2202,22 +2093,15 @@ static struct radeon_asic ci_asic = {
 		.get_sclk = &ci_dpm_get_sclk,
 		.get_mclk = &ci_dpm_get_mclk,
 		.print_power_state = &ci_dpm_print_power_state,
-#ifdef CONFIG_DEBUG_FS
 		.debugfs_print_current_performance_level = &ci_dpm_debugfs_print_current_performance_level,
-#endif
 		.force_performance_level = &ci_dpm_force_performance_level,
 		.vblank_too_short = &ci_dpm_vblank_too_short,
 		.powergate_uvd = &ci_dpm_powergate_uvd,
-		.fan_ctrl_set_mode = &ci_fan_ctrl_set_mode,
-		.fan_ctrl_get_mode = &ci_fan_ctrl_get_mode,
-		.get_fan_speed_percent = &ci_fan_ctrl_get_fan_speed_percent,
-		.set_fan_speed_percent = &ci_fan_ctrl_set_fan_speed_percent,
-		.get_current_sclk = &ci_dpm_get_current_sclk,
-		.get_current_mclk = &ci_dpm_get_current_mclk,
 	},
 	.pflip = {
+		.pre_page_flip = &evergreen_pre_page_flip,
 		.page_flip = &evergreen_page_flip,
-		.page_flip_pending = &evergreen_page_flip_pending,
+		.post_page_flip = &evergreen_post_page_flip,
 	},
 };
 
@@ -2228,24 +2112,19 @@ static struct radeon_asic kv_asic = {
 	.resume = &cik_resume,
 	.asic_reset = &cik_asic_reset,
 	.vga_set_state = &r600_vga_set_state,
-	.mmio_hdp_flush = &r600_mmio_hdp_flush,
+	.ioctl_wait_idle = NULL,
 	.gui_idle = &r600_gui_idle,
 	.mc_wait_for_idle = &evergreen_mc_wait_for_idle,
 	.get_xclk = &cik_get_xclk,
 	.get_gpu_clock_counter = &cik_get_gpu_clock_counter,
-	.get_allowed_info_register = cik_get_allowed_info_register,
 	.gart = {
 		.tlb_flush = &cik_pcie_gart_tlb_flush,
-		.get_page_entry = &rs600_gart_get_page_entry,
 		.set_page = &rs600_gart_set_page,
 	},
 	.vm = {
 		.init = &cik_vm_init,
 		.fini = &cik_vm_fini,
-		.copy_pages = &cik_sdma_vm_copy_pages,
-		.write_pages = &cik_sdma_vm_write_pages,
-		.set_pages = &cik_sdma_vm_set_pages,
-		.pad_ib = &cik_sdma_vm_pad_ib,
+		.set_page = &cik_sdma_vm_set_page,
 	},
 	.ring = {
 		[RADEON_RING_TYPE_GFX_INDEX] = &ci_gfx_ring,
@@ -2267,6 +2146,8 @@ static struct radeon_asic kv_asic = {
 		.wait_for_vblank = &dce4_wait_for_vblank,
 		.set_backlight_level = &atombios_set_backlight_level,
 		.get_backlight_level = &atombios_get_backlight_level,
+		.hdmi_enable = &evergreen_hdmi_enable,
+		.hdmi_setmode = &evergreen_hdmi_setmode,
 	},
 	.copy = {
 		.blit = &cik_copy_cpdma,
@@ -2317,18 +2198,15 @@ static struct radeon_asic kv_asic = {
 		.get_sclk = &kv_dpm_get_sclk,
 		.get_mclk = &kv_dpm_get_mclk,
 		.print_power_state = &kv_dpm_print_power_state,
-#ifdef CONFIG_DEBUG_FS
 		.debugfs_print_current_performance_level = &kv_dpm_debugfs_print_current_performance_level,
-#endif
 		.force_performance_level = &kv_dpm_force_performance_level,
 		.powergate_uvd = &kv_dpm_powergate_uvd,
 		.enable_bapm = &kv_dpm_enable_bapm,
-		.get_current_sclk = &kv_dpm_get_current_sclk,
-		.get_current_mclk = &kv_dpm_get_current_mclk,
 	},
 	.pflip = {
+		.pre_page_flip = &evergreen_pre_page_flip,
 		.page_flip = &evergreen_page_flip,
-		.page_flip_pending = &evergreen_page_flip_pending,
+		.post_page_flip = &evergreen_post_page_flip,
 	},
 };
 
@@ -2353,7 +2231,6 @@ int radeon_asic_init(struct radeon_device *rdev)
 		rdev->num_crtc = 2;
 
 	rdev->has_uvd = false;
-	rdev->has_vce = false;
 
 	switch (rdev->family) {
 	case CHIP_R100:
@@ -2426,15 +2303,7 @@ int radeon_asic_init(struct radeon_device *rdev)
 	case CHIP_RS780:
 	case CHIP_RS880:
 		rdev->asic = &rs780_asic;
-		/* 760G/780V/880V don't have UVD */
-		if ((rdev->pdev->device == 0x9616)||
-		    (rdev->pdev->device == 0x9611)||
-		    (rdev->pdev->device == 0x9613)||
-		    (rdev->pdev->device == 0x9711)||
-		    (rdev->pdev->device == 0x9713))
-			rdev->has_uvd = false;
-		else
-			rdev->has_uvd = true;
+		rdev->has_uvd = true;
 		break;
 	case CHIP_RV770:
 	case CHIP_RV730:
@@ -2484,9 +2353,6 @@ int radeon_asic_init(struct radeon_device *rdev)
 		/* set num crtcs */
 		rdev->num_crtc = 4;
 		rdev->has_uvd = true;
-		rdev->has_vce = true;
-		rdev->cg_flags =
-			RADEON_CG_SUPPORT_VCE_MGCG;
 		break;
 	case CHIP_TAHITI:
 	case CHIP_PITCAIRN:
@@ -2501,13 +2367,10 @@ int radeon_asic_init(struct radeon_device *rdev)
 			rdev->num_crtc = 2;
 		else
 			rdev->num_crtc = 6;
-		if (rdev->family == CHIP_HAINAN) {
+		if (rdev->family == CHIP_HAINAN)
 			rdev->has_uvd = false;
-			rdev->has_vce = false;
-		} else {
+		else
 			rdev->has_uvd = true;
-			rdev->has_vce = true;
-		}
 		switch (rdev->family) {
 		case CHIP_TAHITI:
 			rdev->cg_flags =
@@ -2612,12 +2475,11 @@ int radeon_asic_init(struct radeon_device *rdev)
 		rdev->asic = &ci_asic;
 		rdev->num_crtc = 6;
 		rdev->has_uvd = true;
-		rdev->has_vce = true;
 		if (rdev->family == CHIP_BONAIRE) {
 			rdev->cg_flags =
 				RADEON_CG_SUPPORT_GFX_MGCG |
 				RADEON_CG_SUPPORT_GFX_MGLS |
-				/*RADEON_CG_SUPPORT_GFX_CGCG |*/
+				RADEON_CG_SUPPORT_GFX_CGCG |
 				RADEON_CG_SUPPORT_GFX_CGLS |
 				RADEON_CG_SUPPORT_GFX_CGTS |
 				RADEON_CG_SUPPORT_GFX_CGTS_LS |
@@ -2636,7 +2498,7 @@ int radeon_asic_init(struct radeon_device *rdev)
 			rdev->cg_flags =
 				RADEON_CG_SUPPORT_GFX_MGCG |
 				RADEON_CG_SUPPORT_GFX_MGLS |
-				/*RADEON_CG_SUPPORT_GFX_CGCG |*/
+				RADEON_CG_SUPPORT_GFX_CGCG |
 				RADEON_CG_SUPPORT_GFX_CGLS |
 				RADEON_CG_SUPPORT_GFX_CGTS |
 				RADEON_CG_SUPPORT_GFX_CP_LS |
@@ -2662,7 +2524,7 @@ int radeon_asic_init(struct radeon_device *rdev)
 			rdev->cg_flags =
 				RADEON_CG_SUPPORT_GFX_MGCG |
 				RADEON_CG_SUPPORT_GFX_MGLS |
-				/*RADEON_CG_SUPPORT_GFX_CGCG |*/
+				RADEON_CG_SUPPORT_GFX_CGCG |
 				RADEON_CG_SUPPORT_GFX_CGLS |
 				RADEON_CG_SUPPORT_GFX_CGTS |
 				RADEON_CG_SUPPORT_GFX_CGTS_LS |
@@ -2690,7 +2552,7 @@ int radeon_asic_init(struct radeon_device *rdev)
 			rdev->cg_flags =
 				RADEON_CG_SUPPORT_GFX_MGCG |
 				RADEON_CG_SUPPORT_GFX_MGLS |
-				/*RADEON_CG_SUPPORT_GFX_CGCG |*/
+				RADEON_CG_SUPPORT_GFX_CGCG |
 				RADEON_CG_SUPPORT_GFX_CGLS |
 				RADEON_CG_SUPPORT_GFX_CGTS |
 				RADEON_CG_SUPPORT_GFX_CGTS_LS |
@@ -2713,7 +2575,6 @@ int radeon_asic_init(struct radeon_device *rdev)
 				RADEON_PG_SUPPORT_SAMU;*/
 		}
 		rdev->has_uvd = true;
-		rdev->has_vce = true;
 		break;
 	default:
 		/* FIXME: not supported yet */
@@ -2724,11 +2585,6 @@ int radeon_asic_init(struct radeon_device *rdev)
 		rdev->asic->pm.get_memory_clock = NULL;
 		rdev->asic->pm.set_memory_clock = NULL;
 	}
-
-	if (!radeon_uvd)
-		rdev->has_uvd = false;
-	if (!radeon_vce)
-		rdev->has_vce = false;
 
 	return 0;
 }

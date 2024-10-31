@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_subdev_pci_agp.c,v 1.4 2021/12/18 23:45:41 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_subdev_pci_agp.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $	*/
 
 /*
  * Copyright 2015 Nouveau Project
@@ -22,7 +22,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_pci_agp.c,v 1.4 2021/12/18 23:45:41 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_pci_agp.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $");
 
 #include "agp.h"
 #ifdef __NVKM_PCI_AGP_H__
@@ -103,9 +103,6 @@ void
 nvkm_agp_dtor(struct nvkm_pci *pci)
 {
 	arch_phys_wc_del(pci->agp.mtrr);
-#ifdef __NetBSD__
-	pmap_pv_untrack(pci->agp.base, pci->agp.size);
-#endif
 }
 
 void
@@ -137,30 +134,16 @@ nvkm_agp_ctor(struct nvkm_pci *pci)
 	agp_copy_info(pci->agp.bridge, &info);
 	agp_backend_release(pci->agp.bridge);
 
-#ifdef __NetBSD__
-	pci->agp.mode = info.aki_info.ai_mode;
-	pci->agp.base = info.aki_info.ai_aperture_base;
-	pci->agp.size = info.aki_info.ai_aperture_size;
-	pci->agp.cma = !info.aki_info.ai_memory_allowed; /* XXX ? */
-#else
 	pci->agp.mode = info.mode;
 	pci->agp.base = info.aper_base;
 	pci->agp.size = info.aper_size * 1024 * 1024;
 	pci->agp.cma  = info.cant_use_aperture;
-#endif
 	pci->agp.mtrr = -1;
 
 	/* determine if bridge + chipset combination needs a workaround */
 	while (quirk->hostbridge_vendor) {
-#ifdef __NetBSD__
-		uint16_t vendor = PCI_VENDOR(info.aki_info.ai_devid);
-		uint16_t product = PCI_PRODUCT(info.aki_info.ai_devid);
-#else
-		uint16_t vendor = info.device->vendor;
-		uint16_t product = info.device->device;
-#endif
-		if (vendor == quirk->hostbridge_vendor &&
-		    product == quirk->hostbridge_device &&
+		if (info.device->vendor == quirk->hostbridge_vendor &&
+		    info.device->device == quirk->hostbridge_device &&
 		    (quirk->chip_vendor == (u16)PCI_ANY_ID ||
 		    pci->pdev->vendor == quirk->chip_vendor) &&
 		    (quirk->chip_device == (u16)PCI_ANY_ID ||
@@ -192,9 +175,6 @@ nvkm_agp_ctor(struct nvkm_pci *pci)
 	if (device->chipset == 0x18)
 		pci->agp.mode &= ~PCI_AGP_COMMAND_FW;
 
-#ifdef __NetBSD__
-	pmap_pv_track(pci->agp.base, pci->agp.size);
-#endif
 	pci->agp.mtrr = arch_phys_wc_add(pci->agp.base, pci->agp.size);
 }
 #endif

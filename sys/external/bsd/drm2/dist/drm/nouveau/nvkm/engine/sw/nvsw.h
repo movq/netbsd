@@ -1,10 +1,9 @@
-/*	$NetBSD: nvsw.h,v 1.3 2021/12/18 23:45:37 riastradh Exp $	*/
+/*	$NetBSD: nvsw.h,v 1.1 2018/08/27 01:34:56 riastradh Exp $	*/
 
-/* SPDX-License-Identifier: MIT */
 #ifndef __NVKM_NVSW_H__
 #define __NVKM_NVSW_H__
 #define nvkm_nvsw(p) container_of((p), struct nvkm_nvsw, object)
-#include <core/object.h>
+#include "priv.h"
 
 struct nvkm_nvsw {
 	struct nvkm_object object;

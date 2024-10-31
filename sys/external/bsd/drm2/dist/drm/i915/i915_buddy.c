@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_buddy.c,v 1.5 2021/12/19 11:13:36 riastradh Exp $	*/
+/*	$NetBSD: i915_buddy.c,v 1.1 2021/12/18 20:15:24 riastradh Exp $	*/
 
 // SPDX-License-Identifier: MIT
 /*
@@ -6,9 +6,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i915_buddy.c,v 1.5 2021/12/19 11:13:36 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i915_buddy.c,v 1.1 2021/12/18 20:15:24 riastradh Exp $");
 
-#include <linux/err.h>
 #include <linux/kmemleak.h>
 #include <linux/slab.h>
 
@@ -37,10 +36,6 @@ static struct i915_global_block global = { {
 	.shrink = i915_global_buddy_shrink,
 	.exit = i915_global_buddy_exit,
 } };
-
-#ifdef __NetBSD__
-#define	__init	/* called from i915_module.c */
-#endif
 
 int __init i915_global_buddy_init(void)
 {
@@ -352,8 +347,8 @@ int i915_buddy_alloc_range(struct i915_buddy_mm *mm,
 {
 	struct i915_buddy_block *block;
 	struct i915_buddy_block *buddy;
-	struct list_head allocated = LIST_HEAD_INIT(allocated);
-	struct list_head dfs = LIST_HEAD_INIT(dfs);
+	LIST_HEAD(allocated);
+	LIST_HEAD(dfs);
 	u64 end;
 	int err;
 	int i;

@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_smu10_hwmgr.c,v 1.4 2021/12/19 12:37:54 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_smu10_hwmgr.c,v 1.1 2021/12/18 20:15:19 riastradh Exp $	*/
 
 /*
  * Copyright 2015 Advanced Micro Devices, Inc.
@@ -23,7 +23,7 @@
  *
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_smu10_hwmgr.c,v 1.4 2021/12/19 12:37:54 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_smu10_hwmgr.c,v 1.1 2021/12/18 20:15:19 riastradh Exp $");
 
 #include "pp_debug.h"
 #include <linux/types.h>
@@ -41,8 +41,6 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_smu10_hwmgr.c,v 1.4 2021/12/19 12:37:54 riast
 #include "power_state.h"
 #include "soc15_common.h"
 #include "smu10.h"
-
-#include <linux/nbsd-namespace.h>
 
 #define SMU10_MAX_DEEPSLEEP_DIVIDER_ID     5
 #define SMU10_MINIMUM_ENGINE_CLOCK         800   /* 8Mhz, the low boundary of engine clock allowed on this chip */
@@ -107,7 +105,7 @@ static const struct smu10_power_state *cast_const_smu10_ps(
 	if (SMU10_Magic != hw_ps->magic)
 		return NULL;
 
-	return (const struct smu10_power_state *)hw_ps;
+	return (struct smu10_power_state *)hw_ps;
 }
 
 static int smu10_initialize_dpm_defaults(struct pp_hwmgr *hwmgr)

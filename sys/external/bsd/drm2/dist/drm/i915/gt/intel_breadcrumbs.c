@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_breadcrumbs.c,v 1.5 2021/12/19 12:32:15 riastradh Exp $	*/
+/*	$NetBSD: intel_breadcrumbs.c,v 1.1 2021/12/18 20:15:32 riastradh Exp $	*/
 
 /*
  * Copyright © 2015 Intel Corporation
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_breadcrumbs.c,v 1.5 2021/12/19 12:32:15 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_breadcrumbs.c,v 1.1 2021/12/18 20:15:32 riastradh Exp $");
 
 #include <linux/kthread.h>
 #include <trace/events/dma_fence.h>
@@ -35,8 +35,6 @@ __KERNEL_RCSID(0, "$NetBSD: intel_breadcrumbs.c,v 1.5 2021/12/19 12:32:15 riastr
 #include "i915_trace.h"
 #include "intel_gt_pm.h"
 #include "intel_gt_requests.h"
-
-#include <linux/nbsd-namespace.h>
 
 static void irq_enable(struct intel_engine_cs *engine)
 {
@@ -110,8 +108,6 @@ check_signal_order(struct intel_context *ce, struct i915_request *rq)
 	return true;
 }
 
-#ifndef __NetBSD__
-
 static bool
 __dma_fence_signal(struct dma_fence *fence)
 {
@@ -139,8 +135,6 @@ __dma_fence_signal__notify(struct dma_fence *fence,
 		cur->func(fence, cur);
 	}
 }
-
-#endif
 
 static void add_retire(struct intel_breadcrumbs *b, struct intel_timeline *tl)
 {
@@ -214,9 +208,6 @@ static void signal_irq_work(struct irq_work *work)
 	list_for_each_safe(pos, next, &signal) {
 		struct i915_request *rq =
 			list_entry(pos, typeof(*rq), signal_link);
-#ifdef __NetBSD__
-		__dma_fence_signal_wake(&rq->fence, timestamp);
-#else
 		struct list_head cb_list;
 
 		spin_lock(&rq->lock);
@@ -224,7 +215,6 @@ static void signal_irq_work(struct irq_work *work)
 		__dma_fence_signal__timestamp(&rq->fence, timestamp);
 		__dma_fence_signal__notify(&rq->fence, &cb_list);
 		spin_unlock(&rq->lock);
-#endif
 
 		i915_request_put(rq);
 	}
@@ -291,9 +281,6 @@ void intel_engine_reset_breadcrumbs(struct intel_engine_cs *engine)
 
 void intel_engine_fini_breadcrumbs(struct intel_engine_cs *engine)
 {
-	struct intel_breadcrumbs *b = &engine->breadcrumbs;
-
-	spin_lock_destroy(&b->irq_lock);
 }
 
 bool i915_request_enable_breadcrumb(struct i915_request *rq)
@@ -385,9 +372,8 @@ void intel_engine_print_breadcrumbs(struct intel_engine_cs *engine,
 	spin_lock_irq(&b->irq_lock);
 	list_for_each_entry(ce, &b->signalers, signal_link) {
 		list_for_each_entry(rq, &ce->signals, signal_link) {
-			drm_printf(p, "\t[%"PRIx64":%"PRIx64"%s] @ %dms\n",
-				   (uint64_t)rq->fence.context,
-				   (uint64_t)rq->fence.seqno,
+			drm_printf(p, "\t[%llx:%llx%s] @ %dms\n",
+				   rq->fence.context, rq->fence.seqno,
 				   i915_request_completed(rq) ? "!" :
 				   i915_request_started(rq) ? "*" :
 				   "",

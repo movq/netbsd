@@ -1,5 +1,3 @@
-/*	$NetBSD: clearstate_ci.h,v 1.3 2021/12/18 23:45:42 riastradh Exp $	*/
-
 /*
  * Copyright 2013 Advanced Micro Devices, Inc.
  *
@@ -22,8 +20,6 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-
-#include "clearstate_defs.h"
 
 static const unsigned int ci_SECT_CONTEXT_def_1[] =
 {
@@ -940,9 +936,9 @@ static const struct cs_extent_def ci_SECT_CONTEXT_defs[] =
     {ci_SECT_CONTEXT_def_5, 0x0000a2a0, 2 },
     {ci_SECT_CONTEXT_def_6, 0x0000a2a3, 1 },
     {ci_SECT_CONTEXT_def_7, 0x0000a2a5, 233 },
-    { NULL, 0, 0 }
+    { 0, 0, 0 }
 };
 static const struct cs_section_def ci_cs_data[] = {
     { ci_SECT_CONTEXT_defs, SECT_CONTEXT },
-    { NULL, SECT_NONE }
+    { 0, SECT_NONE }
 };

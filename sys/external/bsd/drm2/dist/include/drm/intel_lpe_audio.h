@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_lpe_audio.h,v 1.3 2021/12/20 12:56:07 riastradh Exp $	*/
+/*	$NetBSD: intel_lpe_audio.h,v 1.1 2021/12/18 20:15:57 riastradh Exp $	*/
 
 /*
  * Copyright © 2016 Intel Corporation
@@ -25,12 +25,6 @@
 
 #ifndef _INTEL_LPE_AUDIO_H_
 #define _INTEL_LPE_AUDIO_H_
-
-#ifdef __NetBSD__
-#include <sys/types.h>
-#include <sys/file.h>
-#define	pipe	pipe_drmhack	/* see intel_display.h */
-#endif
 
 #include <linux/types.h>
 #include <linux/spinlock_types.h>

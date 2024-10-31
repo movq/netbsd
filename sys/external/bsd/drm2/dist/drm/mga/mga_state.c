@@ -1,5 +1,3 @@
-/*	$NetBSD: mga_state.c,v 1.3 2021/12/18 23:45:32 riastradh Exp $	*/
-
 /* mga_state.c -- State support for MGA G200/G400 -*- linux-c -*-
  * Created: Thu Jan 27 02:53:43 2000 by jhartmann@precisioninsight.com
  *
@@ -34,9 +32,8 @@
  *    Gareth Hughes <gareth@valinux.com>
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mga_state.c,v 1.3 2021/12/18 23:45:32 riastradh Exp $");
-
+#include <drm/drmP.h>
+#include <drm/mga_drm.h>
 #include "mga_drv.h"
 
 /* ================================================================
@@ -1008,7 +1005,7 @@ static int mga_dma_blit(struct drm_device *dev, void *data, struct drm_file *fil
 	return 0;
 }
 
-int mga_getparam(struct drm_device *dev, void *data, struct drm_file *file_priv)
+static int mga_getparam(struct drm_device *dev, void *data, struct drm_file *file_priv)
 {
 	drm_mga_private_t *dev_priv = dev->dev_private;
 	drm_mga_getparam_t *param = data;
@@ -1019,11 +1016,11 @@ int mga_getparam(struct drm_device *dev, void *data, struct drm_file *file_priv)
 		return -EINVAL;
 	}
 
-	DRM_DEBUG("pid=%d\n", task_pid_nr(current));
+	DRM_DEBUG("pid=%d\n", DRM_CURRENTPID);
 
 	switch (param->param) {
 	case MGA_PARAM_IRQ_NR:
-		value = dev->pdev->irq;
+		value = drm_dev_to_irq(dev);
 		break;
 	case MGA_PARAM_CARD_TYPE:
 		value = dev_priv->chipset;
@@ -1032,7 +1029,7 @@ int mga_getparam(struct drm_device *dev, void *data, struct drm_file *file_priv)
 		return -EINVAL;
 	}
 
-	if (copy_to_user(param->value, &value, sizeof(int))) {
+	if (DRM_COPY_TO_USER(param->value, &value, sizeof(int))) {
 		DRM_ERROR("copy_to_user\n");
 		return -EFAULT;
 	}
@@ -1051,7 +1048,7 @@ static int mga_set_fence(struct drm_device *dev, void *data, struct drm_file *fi
 		return -EINVAL;
 	}
 
-	DRM_DEBUG("pid=%d\n", task_pid_nr(current));
+	DRM_DEBUG("pid=%d\n", DRM_CURRENTPID);
 
 	/* I would normal do this assignment in the declaration of fence,
 	 * but dev_priv may be NULL.
@@ -1080,13 +1077,13 @@ file_priv)
 		return -EINVAL;
 	}
 
-	DRM_DEBUG("pid=%d\n", task_pid_nr(current));
+	DRM_DEBUG("pid=%d\n", DRM_CURRENTPID);
 
 	mga_driver_fence_wait(dev, fence);
 	return 0;
 }
 
-const struct drm_ioctl_desc mga_ioctls[] = {
+struct drm_ioctl_desc mga_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(MGA_INIT, mga_dma_init, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
 	DRM_IOCTL_DEF_DRV(MGA_FLUSH, mga_dma_flush, DRM_AUTH),
 	DRM_IOCTL_DEF_DRV(MGA_RESET, mga_dma_reset, DRM_AUTH),
@@ -1102,4 +1099,4 @@ const struct drm_ioctl_desc mga_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(MGA_DMA_BOOTSTRAP, mga_dma_bootstrap, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
 };
 
-int mga_max_ioctl = ARRAY_SIZE(mga_ioctls);
+int mga_max_ioctl = DRM_ARRAY_SIZE(mga_ioctls);

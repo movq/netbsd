@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_engine_pm.c,v 1.5 2021/12/19 12:37:28 riastradh Exp $	*/
+/*	$NetBSD: intel_engine_pm.c,v 1.1 2021/12/18 20:15:32 riastradh Exp $	*/
 
 /*
  * SPDX-License-Identifier: MIT
@@ -7,7 +7,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_engine_pm.c,v 1.5 2021/12/19 12:37:28 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_engine_pm.c,v 1.1 2021/12/18 20:15:32 riastradh Exp $");
 
 #include "i915_drv.h"
 
@@ -210,6 +210,7 @@ static bool switch_to_kernel_context(struct intel_engine_cs *engine)
 		 * until the background request retirement running every
 		 * second or two).
 		 */
+		BUILD_BUG_ON(sizeof(rq->duration) > sizeof(rq->submitq));
 		dma_fence_add_callback(&rq->fence, &rq->duration.cb, duration);
 		rq->duration.emitted = ktime_get();
 	}
@@ -228,10 +229,11 @@ static void call_idle_barriers(struct intel_engine_cs *engine)
 	struct llist_node *node, *next;
 
 	llist_for_each_safe(node, next, llist_del_all(&engine->barrier_tasks)) {
-		struct i915_active_fence *fence =
-		    container_of(node, struct i915_active_fence, llist);
+		struct dma_fence_cb *cb =
+			container_of((struct list_head *)node,
+				     typeof(*cb), node);
 
-		fence->cb.func(ERR_PTR(-EAGAIN), &fence->cb);
+		cb->func(ERR_PTR(-EAGAIN), cb);
 	}
 }
 
@@ -289,13 +291,6 @@ void intel_engine_init__pm(struct intel_engine_cs *engine)
 
 	intel_wakeref_init(&engine->wakeref, rpm, &wf_ops);
 	intel_engine_init_heartbeat(engine);
-}
-
-void
-intel_engine_fini__pm(struct intel_engine_cs *engine)
-{
-
-	intel_wakeref_fini(&engine->wakeref);
 }
 
 #if IS_ENABLED(CONFIG_DRM_I915_SELFTEST)

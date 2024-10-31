@@ -1,6 +1,4 @@
-/*	$NetBSD: drm_memory.c,v 1.3 2021/12/18 23:44:57 riastradh Exp $	*/
-
-/*
+/**
  * \file drm_memory.c
  * Memory management wrappers for DRM
  *
@@ -35,35 +33,13 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_memory.c,v 1.3 2021/12/18 23:44:57 riastradh Exp $");
-
-#include <linux/export.h>
 #include <linux/highmem.h>
-#include <linux/pci.h>
-#include <linux/vmalloc.h>
-#include <xen/xen.h>
+#include <linux/export.h>
+#include <drm/drmP.h>
 
-#include <drm/drm_agpsupport.h>
-#include <drm/drm_cache.h>
-#include <drm/drm_device.h>
-
-#include "drm_legacy.h"
-
-#if IS_ENABLED(CONFIG_AGP)
-
-#ifdef HAVE_PAGE_AGP
-# include <asm/agp.h>
-#else
-# ifdef __powerpc__
-#  define PAGE_AGP	pgprot_noncached_wc(PAGE_KERNEL)
-# else
-#  define PAGE_AGP	PAGE_KERNEL
-# endif
-#endif
-
+#if __OS_HAS_AGP
 static void *agp_remap(unsigned long offset, unsigned long size,
-		       struct drm_device *dev)
+		       struct drm_device * dev)
 {
 	unsigned long i, num_pages =
 	    PAGE_ALIGN(size) / PAGE_SIZE;
@@ -92,7 +68,7 @@ static void *agp_remap(unsigned long offset, unsigned long size,
 	 * page-table instead (that's probably faster anyhow...).
 	 */
 	/* note: use vmalloc() because num_pages could be large... */
-	page_map = vmalloc(array_size(num_pages, sizeof(struct page *)));
+	page_map = vmalloc(num_pages * sizeof(struct page *));
 	if (!page_map)
 		return NULL;
 
@@ -106,90 +82,63 @@ static void *agp_remap(unsigned long offset, unsigned long size,
 }
 
 /** Wrapper around agp_free_memory() */
-void drm_free_agp(struct agp_memory *handle, int pages)
+void drm_free_agp(DRM_AGP_MEM * handle, int pages)
 {
 	agp_free_memory(handle);
 }
+EXPORT_SYMBOL(drm_free_agp);
 
 /** Wrapper around agp_bind_memory() */
-int drm_bind_agp(struct agp_memory *handle, unsigned int start)
+int drm_bind_agp(DRM_AGP_MEM * handle, unsigned int start)
 {
 	return agp_bind_memory(handle, start);
 }
 
 /** Wrapper around agp_unbind_memory() */
-int drm_unbind_agp(struct agp_memory *handle)
+int drm_unbind_agp(DRM_AGP_MEM * handle)
 {
 	return agp_unbind_memory(handle);
 }
+EXPORT_SYMBOL(drm_unbind_agp);
 
-#else /*  CONFIG_AGP  */
+#else  /*  __OS_HAS_AGP  */
 static inline void *agp_remap(unsigned long offset, unsigned long size,
-			      struct drm_device *dev)
+			      struct drm_device * dev)
 {
 	return NULL;
 }
 
-#endif /* CONFIG_AGP */
+#endif				/* agp */
 
-void drm_legacy_ioremap(struct drm_local_map *map, struct drm_device *dev)
+void drm_core_ioremap(struct drm_local_map *map, struct drm_device *dev)
 {
-	if (dev->agp && dev->agp->cant_use_aperture && map->type == _DRM_AGP)
+	if (drm_core_has_AGP(dev) &&
+	    dev->agp && dev->agp->cant_use_aperture && map->type == _DRM_AGP)
 		map->handle = agp_remap(map->offset, map->size, dev);
 	else
 		map->handle = ioremap(map->offset, map->size);
 }
-EXPORT_SYMBOL(drm_legacy_ioremap);
+EXPORT_SYMBOL(drm_core_ioremap);
 
-void drm_legacy_ioremap_wc(struct drm_local_map *map, struct drm_device *dev)
+void drm_core_ioremap_wc(struct drm_local_map *map, struct drm_device *dev)
 {
-	if (dev->agp && dev->agp->cant_use_aperture && map->type == _DRM_AGP)
+	if (drm_core_has_AGP(dev) &&
+	    dev->agp && dev->agp->cant_use_aperture && map->type == _DRM_AGP)
 		map->handle = agp_remap(map->offset, map->size, dev);
 	else
 		map->handle = ioremap_wc(map->offset, map->size);
 }
-EXPORT_SYMBOL(drm_legacy_ioremap_wc);
+EXPORT_SYMBOL(drm_core_ioremap_wc);
 
-void drm_legacy_ioremapfree(struct drm_local_map *map, struct drm_device *dev)
+void drm_core_ioremapfree(struct drm_local_map *map, struct drm_device *dev)
 {
 	if (!map->handle || !map->size)
 		return;
 
-	if (dev->agp && dev->agp->cant_use_aperture && map->type == _DRM_AGP)
+	if (drm_core_has_AGP(dev) &&
+	    dev->agp && dev->agp->cant_use_aperture && map->type == _DRM_AGP)
 		vunmap(map->handle);
 	else
 		iounmap(map->handle);
 }
-EXPORT_SYMBOL(drm_legacy_ioremapfree);
-
-bool drm_need_swiotlb(int dma_bits)
-{
-	struct resource *tmp;
-	resource_size_t max_iomem = 0;
-
-	/*
-	 * Xen paravirtual hosts require swiotlb regardless of requested dma
-	 * transfer size.
-	 *
-	 * NOTE: Really, what it requires is use of the dma_alloc_coherent
-	 *       allocator used in ttm_dma_populate() instead of
-	 *       ttm_populate_and_map_pages(), which bounce buffers so much in
-	 *       Xen it leads to swiotlb buffer exhaustion.
-	 */
-	if (xen_pv_domain())
-		return true;
-
-	/*
-	 * Enforce dma_alloc_coherent when memory encryption is active as well
-	 * for the same reasons as for Xen paravirtual hosts.
-	 */
-	if (mem_encrypt_active())
-		return true;
-
-	for (tmp = iomem_resource.child; tmp; tmp = tmp->sibling) {
-		max_iomem = max(max_iomem,  tmp->end);
-	}
-
-	return max_iomem > ((u64)1 << dma_bits);
-}
-EXPORT_SYMBOL(drm_need_swiotlb);
+EXPORT_SYMBOL(drm_core_ioremapfree);

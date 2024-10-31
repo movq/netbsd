@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_gtt.c,v 1.9 2021/12/19 12:10:42 riastradh Exp $	*/
+/*	$NetBSD: intel_gtt.c,v 1.1 2021/12/18 20:15:32 riastradh Exp $	*/
 
 // SPDX-License-Identifier: MIT
 /*
@@ -6,7 +6,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_gtt.c,v 1.9 2021/12/19 12:10:42 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_gtt.c,v 1.1 2021/12/18 20:15:32 riastradh Exp $");
 
 #include <linux/slab.h> /* fault-inject.h is not standalone! */
 
@@ -16,9 +16,6 @@ __KERNEL_RCSID(0, "$NetBSD: intel_gtt.c,v 1.9 2021/12/19 12:10:42 riastradh Exp 
 #include "intel_gt.h"
 #include "intel_gtt.h"
 
-#include <linux/nbsd-namespace.h>
-
-#ifndef __NetBSD__
 void stash_init(struct pagestash *stash)
 {
 	pagevec_init(&stash->pvec);
@@ -174,7 +171,6 @@ static void vm_free_page(struct i915_address_space *vm, struct page *page)
 	pagevec_add(&vm->free_pages.pvec, page);
 	spin_unlock(&vm->free_pages.lock);
 }
-#endif
 
 void __i915_vm_close(struct i915_address_space *vm)
 {
@@ -200,13 +196,11 @@ void __i915_vm_close(struct i915_address_space *vm)
 
 void i915_address_space_fini(struct i915_address_space *vm)
 {
-#ifndef __NetBSD__
 	spin_lock(&vm->free_pages.lock);
 	if (pagevec_count(&vm->free_pages.pvec))
 		vm_free_pages_release(vm, true);
 	GEM_BUG_ON(pagevec_count(&vm->free_pages.pvec));
 	spin_unlock(&vm->free_pages.lock);
-#endif
 
 	drm_mm_takedown(&vm->mm);
 
@@ -254,11 +248,7 @@ void i915_address_space_init(struct i915_address_space *vm, int subclass)
 	drm_mm_init(&vm->mm, 0, vm->total);
 	vm->mm.head_node.color = I915_COLOR_UNEVICTABLE;
 
-#ifdef __NetBSD__
-	vm->dmat = vm->i915->drm.dmat;
-#else
 	stash_init(&vm->free_pages);
-#endif
 
 	INIT_LIST_HEAD(&vm->bound_list);
 }
@@ -280,46 +270,6 @@ static int __setup_page_dma(struct i915_address_space *vm,
 			    struct i915_page_dma *p,
 			    gfp_t gfp)
 {
-#ifdef __NetBSD__
-	int busdmaflags = 0;
-	int error;
-	int nseg = 1;
-
-	if (gfp & __GFP_WAIT)
-		busdmaflags |= BUS_DMA_WAITOK;
-	else
-		busdmaflags |= BUS_DMA_NOWAIT;
-
-	error = bus_dmamem_alloc(vm->dmat, PAGE_SIZE, PAGE_SIZE, 0, &p->seg,
-	    nseg, &nseg, busdmaflags);
-	if (error) {
-fail0:		p->map = NULL;
-		return -error;	/* XXX errno NetBSD->Linux */
-	}
-	KASSERT(nseg == 1);
-	error = bus_dmamap_create(vm->dmat, PAGE_SIZE, 1, PAGE_SIZE, 0,
-	    busdmaflags, &p->map);
-	if (error) {
-fail1:		bus_dmamem_free(vm->dmat, &p->seg, 1);
-		goto fail0;
-	}
-	error = bus_dmamap_load_raw(vm->dmat, p->map, &p->seg, 1, PAGE_SIZE,
-	    busdmaflags);
-	if (error) {
-fail2: __unused
-		bus_dmamap_destroy(vm->dmat, p->map);
-		goto fail1;
-	}
-
-	p->page = container_of(PHYS_TO_VM_PAGE(p->seg.ds_addr), struct page,
-	    p_vmp);
-
-	if (gfp & __GFP_ZERO) {
-		void *va = kmap_atomic(p->page);
-		memset(va, 0, PAGE_SIZE);
-		kunmap_atomic(va);
-	}
-#else
 	p->page = vm_alloc_page(vm, gfp | I915_GFP_ALLOW_FAIL);
 	if (unlikely(!p->page))
 		return -ENOMEM;
@@ -333,7 +283,6 @@ fail2: __unused
 		vm_free_page(vm, p->page);
 		return -ENOMEM;
 	}
-#endif
 
 	return 0;
 }
@@ -345,14 +294,8 @@ int setup_page_dma(struct i915_address_space *vm, struct i915_page_dma *p)
 
 void cleanup_page_dma(struct i915_address_space *vm, struct i915_page_dma *p)
 {
-#ifdef __NetBSD__
-	bus_dmamap_unload(vm->dmat, p->map);
-	bus_dmamap_destroy(vm->dmat, p->map);
-	bus_dmamem_free(vm->dmat, &p->seg, 1);
-#else
 	dma_unmap_page(vm->dma, p->daddr, PAGE_SIZE, PCI_DMA_BIDIRECTIONAL);
 	vm_free_page(vm, p->page);
-#endif
 }
 
 void
@@ -386,50 +329,6 @@ int setup_scratch_page(struct i915_address_space *vm, gfp_t gfp)
 
 	do {
 		unsigned int order = get_order(size);
-#ifdef __NetBSD__
-		struct vm_page *vm_page;
-		void *kva;
-		int nseg;
-		int ret;
-
-		/* Allocate a scratch page.  */
-		/* XXX errno NetBSD->Linux */
-		ret = -bus_dmamem_alloc(vm->dmat, size, size, 0,
-		    &vm->scratch[0].base.seg, 1, &nseg, BUS_DMA_NOWAIT);
-		if (ret)
-			goto skip;
-		KASSERT(nseg == 1);
-		KASSERT(vm->scratch[0].base.seg.ds_len == size);
-
-		/* Create a DMA map.  */
-		ret = -bus_dmamap_create(vm->dmat, size, 1, size, 0,
-		    BUS_DMA_NOWAIT, &vm->scratch[0].base.map);
-		if (ret)
-			goto free_dmamem;
-
-		/* Load the segment into the DMA map.  */
-		ret = -bus_dmamap_load_raw(vm->dmat, vm->scratch[0].base.map,
-		    &vm->scratch[0].base.seg, 1, size, BUS_DMA_NOWAIT);
-		if (ret)
-			goto destroy_dmamap;
-		KASSERT(vm->scratch[0].base.map->dm_nsegs == 1);
-		KASSERT(vm->scratch[0].base.map->dm_segs[0].ds_len == size);
-
-		/* Zero the page.  */
-		ret = -bus_dmamem_map(vm->dmat, &vm->scratch[0].base.seg, 1,
-		    size, &kva, BUS_DMA_NOWAIT|BUS_DMA_NOCACHE);
-		if (ret)
-			goto unload_dmamap;
-		memset(kva, 0, size);
-		bus_dmamap_sync(vm->dmat, vm->scratch[0].base.map, 0, size,
-		    BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
-		bus_dmamem_unmap(vm->dmat, kva, size);
-
-		/* XXX Is this page guaranteed to work as a huge page?  */
-		vm_page = PHYS_TO_VM_PAGE(vm->scratch[0].base.seg.ds_addr);
-		vm->scratch[0].base.page = container_of(vm_page, struct page,
-		    p_vmp);
-#else
 		struct page *page;
 		dma_addr_t addr;
 
@@ -450,21 +349,13 @@ int setup_scratch_page(struct i915_address_space *vm, gfp_t gfp)
 
 		vm->scratch[0].base.page = page;
 		vm->scratch[0].base.daddr = addr;
-#endif
 		vm->scratch_order = order;
 		return 0;
 
-#ifdef __NetBSD__
-unload_dmamap:	bus_dmamap_unload(vm->dmat, vm->scratch[0].base.map);
-destroy_dmamap:	bus_dmamap_destroy(vm->dmat, vm->scratch[0].base.map);
-		vm->scratch[0].base.map = NULL; /* paranoia */
-free_dmamem:	bus_dmamem_free(vm->dmat, &vm->scratch[0].base.seg, 1);
-#else
 unmap_page:
 		dma_unmap_page(vm->dma, addr, size, PCI_DMA_BIDIRECTIONAL);
 free_page:
 		__free_pages(page, order);
-#endif
 skip:
 		if (size == I915_GTT_PAGE_SIZE_4K)
 			return -ENOMEM;
@@ -477,18 +368,11 @@ skip:
 void cleanup_scratch_page(struct i915_address_space *vm)
 {
 	struct i915_page_dma *p = px_base(&vm->scratch[0]);
-#ifdef __NetBSD__
-	bus_dmamap_unload(vm->dmat, p->map);
-	bus_dmamap_destroy(vm->dmat, p->map);
-	vm->scratch[0].base.map = NULL; /* paranoia */
-	bus_dmamem_free(vm->dmat, &p->seg, 1);
-#else
 	unsigned int order = vm->scratch_order;
 
 	dma_unmap_page(vm->dma, p->daddr, BIT(order) << PAGE_SHIFT,
 		       PCI_DMA_BIDIRECTIONAL);
 	__free_pages(p->page, order);
-#endif
 }
 
 void free_scratch(struct i915_address_space *vm)

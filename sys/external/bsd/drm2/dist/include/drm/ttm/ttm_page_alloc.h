@@ -1,5 +1,3 @@
-/*	$NetBSD: ttm_page_alloc.h,v 1.4 2021/12/18 23:45:46 riastradh Exp $	*/
-
 /*
  * Copyright (c) Red Hat Inc.
 
@@ -31,8 +29,6 @@
 #include <drm/ttm/ttm_bo_driver.h>
 #include <drm/ttm/ttm_memory.h>
 
-struct device;
-
 /**
  * Initialize pool allocator.
  */
@@ -49,7 +45,7 @@ void ttm_page_alloc_fini(void);
  *
  * Add backing pages to all of @ttm
  */
-int ttm_pool_populate(struct ttm_tt *ttm, struct ttm_operation_ctx *ctx);
+extern int ttm_pool_populate(struct ttm_tt *ttm);
 
 /**
  * ttm_pool_unpopulate:
@@ -58,27 +54,15 @@ int ttm_pool_populate(struct ttm_tt *ttm, struct ttm_operation_ctx *ctx);
  *
  * Free all pages of @ttm
  */
-void ttm_pool_unpopulate(struct ttm_tt *ttm);
+extern void ttm_pool_unpopulate(struct ttm_tt *ttm);
 
-/**
- * Populates and DMA maps pages to fullfil a ttm_dma_populate() request
- */
-int ttm_populate_and_map_pages(struct device *dev, struct ttm_dma_tt *tt,
-				struct ttm_operation_ctx *ctx);
-
-/**
- * Unpopulates and DMA unmaps pages as part of a
- * ttm_dma_unpopulate() request */
-void ttm_unmap_and_unpopulate_pages(struct device *dev, struct ttm_dma_tt *tt);
-
-#ifdef CONFIG_DEBUG_FS
 /**
  * Output the state of pools to debugfs file
  */
-int ttm_page_alloc_debugfs(struct seq_file *m, void *data);
-#endif
+extern int ttm_page_alloc_debugfs(struct seq_file *m, void *data);
 
-#if defined(CONFIG_DRM_TTM_DMA_PAGE_POOL)
+
+#ifdef CONFIG_SWIOTLB
 /**
  * Initialize pool allocator.
  */
@@ -89,16 +73,13 @@ int ttm_dma_page_alloc_init(struct ttm_mem_global *glob, unsigned max_pages);
  */
 void ttm_dma_page_alloc_fini(void);
 
-#ifdef CONFIG_DEBUG_FS
 /**
  * Output the state of pools to debugfs file
  */
-int ttm_dma_page_alloc_debugfs(struct seq_file *m, void *data);
-#endif CONFIG_DEBUG_FS
+extern int ttm_dma_page_alloc_debugfs(struct seq_file *m, void *data);
 
-int ttm_dma_populate(struct ttm_dma_tt *ttm_dma, struct device *dev,
-			struct ttm_operation_ctx *ctx);
-void ttm_dma_unpopulate(struct ttm_dma_tt *ttm_dma, struct device *dev);
+extern int ttm_dma_populate(struct ttm_dma_tt *ttm_dma, struct device *dev);
+extern void ttm_dma_unpopulate(struct ttm_dma_tt *ttm_dma, struct device *dev);
 
 #else
 static inline int ttm_dma_page_alloc_init(struct ttm_mem_global *glob,
@@ -109,21 +90,9 @@ static inline int ttm_dma_page_alloc_init(struct ttm_mem_global *glob,
 
 static inline void ttm_dma_page_alloc_fini(void) { return; }
 
-#ifdef CONFIG_DEBUG_FS
 static inline int ttm_dma_page_alloc_debugfs(struct seq_file *m, void *data)
 {
 	return 0;
-}
-#endif
-static inline int ttm_dma_populate(struct ttm_dma_tt *ttm_dma,
-				struct device *dev,
-				struct ttm_operation_ctx *ctx)
-{
-	return -ENOMEM;
-}
-static inline void ttm_dma_unpopulate(struct ttm_dma_tt *ttm_dma,
-				      struct device *dev)
-{
 }
 #endif
 

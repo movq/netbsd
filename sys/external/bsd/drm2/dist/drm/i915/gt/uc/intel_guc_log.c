@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_guc_log.c,v 1.3 2021/12/19 12:32:15 riastradh Exp $	*/
+/*	$NetBSD: intel_guc_log.c,v 1.1 2021/12/18 20:15:33 riastradh Exp $	*/
 
 // SPDX-License-Identifier: MIT
 /*
@@ -6,7 +6,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_guc_log.c,v 1.3 2021/12/19 12:32:15 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_guc_log.c,v 1.1 2021/12/18 20:15:33 riastradh Exp $");
 
 #include <linux/debugfs.h>
 
@@ -510,7 +510,6 @@ err:
 void intel_guc_log_destroy(struct intel_guc_log *log)
 {
 	i915_vma_unpin_and_release(&log->vma, 0);
-	mutex_destroy(&log->relay.lock);
 }
 
 int intel_guc_log_set_level(struct intel_guc_log *log, u32 level)

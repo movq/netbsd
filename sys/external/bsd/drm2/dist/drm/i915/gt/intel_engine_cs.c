@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_engine_cs.c,v 1.9 2021/12/19 12:40:43 riastradh Exp $	*/
+/*	$NetBSD: intel_engine_cs.c,v 1.1 2021/12/18 20:15:32 riastradh Exp $	*/
 
 /*
  * Copyright © 2016 Intel Corporation
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_engine_cs.c,v 1.9 2021/12/19 12:40:43 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_engine_cs.c,v 1.1 2021/12/18 20:15:32 riastradh Exp $");
 
 #include <drm/drm_print.h>
 
@@ -417,7 +417,6 @@ void intel_engines_free(struct intel_gt *gt)
 	enum intel_engine_id id;
 
 	for_each_engine(engine, gt, id) {
-		seqlock_destroy(&engine->stats.lock);
 		kfree(engine);
 		gt->engine[id] = NULL;
 	}
@@ -490,7 +489,7 @@ void intel_engine_init_execlists(struct intel_engine_cs *engine)
 		memset(execlists->inflight, 0, sizeof(execlists->inflight));
 
 	execlists->queue_priority_hint = INT_MIN;
-	i915_sched_init(execlists);
+	execlists->queue = RB_ROOT_CACHED;
 }
 
 static void cleanup_status_page(struct intel_engine_cs *engine)
@@ -812,7 +811,6 @@ void intel_engine_cleanup_common(struct intel_engine_cs *engine)
 	cleanup_status_page(engine);
 
 	intel_engine_fini_retire(engine);
-	intel_engine_fini__pm(engine);
 	intel_engine_pool_fini(&engine->pool);
 	intel_engine_fini_breadcrumbs(engine);
 	intel_engine_cleanup_cmd_parser(engine);
@@ -829,8 +827,6 @@ void intel_engine_cleanup_common(struct intel_engine_cs *engine)
 	intel_wa_list_free(&engine->ctx_wa_list);
 	intel_wa_list_free(&engine->wa_list);
 	intel_wa_list_free(&engine->whitelist);
-
-	spin_lock_destroy(&engine->active.lock);
 }
 
 u64 intel_engine_get_active_head(const struct intel_engine_cs *engine)
@@ -1062,22 +1058,14 @@ void intel_engine_flush_submission(struct intel_engine_cs *engine)
 	struct tasklet_struct *t = &engine->execlists.tasklet;
 
 	if (__tasklet_is_scheduled(t)) {
-#ifdef __NetBSD__
-		int s = splsoftserial();
-#else
 		local_bh_disable();
-#endif
 		if (tasklet_trylock(t)) {
 			/* Must wait for any GPU reset in progress. */
 			if (__tasklet_is_enabled(t))
 				t->func(t->data);
 			tasklet_unlock(t);
 		}
-#ifdef __NetBSD__
-		splx(s);
-#else
 		local_bh_enable();
-#endif
 	}
 
 	/* Otherwise flush the tasklet if it was running on another cpu */
@@ -1102,11 +1090,7 @@ bool intel_engine_is_idle(struct intel_engine_cs *engine)
 
 	/* Waiting to drain ELSP? */
 	if (execlists_active(&engine->execlists)) {
-#ifdef __NetBSD__
-		xc_barrier(XC_HIGHPRI);
-#else
 		synchronize_hardirq(engine->i915->drm.pdev->irq);
-#endif
 
 		intel_engine_flush_submission(engine);
 
@@ -1195,9 +1179,9 @@ static void print_request(struct drm_printer *m,
 
 	x = print_sched_attr(rq->i915, &rq->sched.attr, buf, x, sizeof(buf));
 
-	drm_printf(m, "%s %"PRIx64":%"PRIx64"%s%s %s @ %dms: %s\n",
+	drm_printf(m, "%s %llx:%llx%s%s %s @ %dms: %s\n",
 		   prefix,
-		   (uint64_t)rq->fence.context, (uint64_t)rq->fence.seqno,
+		   rq->fence.context, rq->fence.seqno,
 		   i915_request_completed(rq) ? "!" :
 		   i915_request_started(rq) ? "*" :
 		   "",
@@ -1210,8 +1194,6 @@ static void print_request(struct drm_printer *m,
 		   jiffies_to_msecs(jiffies - rq->emitted_jiffies),
 		   name);
 }
-
-#define	hexdump	intel_hexdump
 
 static void hexdump(struct drm_printer *m, const void *buf, size_t len)
 {
@@ -1265,19 +1247,11 @@ static struct intel_timeline *get_timeline(struct i915_request *rq)
 
 static const char *repr_timer(const struct timer_list *t)
 {
-#ifdef __NetBSD__
-	if (!callout_active(__UNCONST(&t->tl_callout)))
-		return "inactive";
-
-	if (callout_pending(__UNCONST(&t->tl_callout)))
-		return "pending";
-#else
 	if (!READ_ONCE(t->expires))
 		return "inactive";
 
 	if (timer_pending(t))
 		return "active";
-#endif
 
 	return "expired";
 }
@@ -1344,14 +1318,9 @@ static void intel_engine_print_registers(struct intel_engine_cs *engine,
 		u8 read, write;
 
 		drm_printf(m, "\tExeclist tasklet queued? %s (%s), preempt? %s, timeslice? %s\n",
-#ifdef __NetBSD__		/* XXX sigh */
-			   "<abstraction violation>",
-			   "<abstraction violation>",
-#else
 			   yesno(test_bit(TASKLET_STATE_SCHED,
 					  &engine->execlists.tasklet.state)),
 			   enableddisabled(!atomic_read(&engine->execlists.tasklet.count)),
-#endif
 			   repr_timer(&engine->execlists.preempt),
 			   repr_timer(&engine->execlists.timer));
 
@@ -1375,11 +1344,7 @@ static void intel_engine_print_registers(struct intel_engine_cs *engine,
 				   idx, hws[idx * 2], hws[idx * 2 + 1]);
 		}
 
-#ifdef __NetBSD__
-		int s = execlists_active_lock_bh(execlists);
-#else
 		execlists_active_lock_bh(execlists);
-#endif
 		rcu_read_lock();
 		for (port = execlists->active; (rq = *port); port++) {
 			char hdr[80];
@@ -1419,11 +1384,7 @@ static void intel_engine_print_registers(struct intel_engine_cs *engine,
 				intel_timeline_put(tl);
 		}
 		rcu_read_unlock();
-#ifdef __NetBSD__
-		execlists_active_unlock_bh(execlists, s);
-#else
 		execlists_active_unlock_bh(execlists);
-#endif
 	} else if (INTEL_GEN(dev_priv) > 6) {
 		drm_printf(m, "\tPP_DIR_BASE: 0x%08x\n",
 			   ENGINE_READ(engine, RING_PP_DIR_BASE));
@@ -1586,11 +1547,7 @@ int intel_enable_engine_stats(struct intel_engine_cs *engine)
 	if (!intel_engine_supports_stats(engine))
 		return -ENODEV;
 
-#ifdef __NetBSD__
-	int s = execlists_active_lock_bh(execlists);
-#else
 	execlists_active_lock_bh(execlists);
-#endif
 	write_seqlock_irqsave(&engine->stats.lock, flags);
 
 	if (unlikely(engine->stats.enabled == ~0)) {
@@ -1620,11 +1577,7 @@ int intel_enable_engine_stats(struct intel_engine_cs *engine)
 
 unlock:
 	write_sequnlock_irqrestore(&engine->stats.lock, flags);
-#ifdef __NetBSD__
-	execlists_active_unlock_bh(execlists, s);
-#else
 	execlists_active_unlock_bh(execlists);
-#endif
 
 	return err;
 }

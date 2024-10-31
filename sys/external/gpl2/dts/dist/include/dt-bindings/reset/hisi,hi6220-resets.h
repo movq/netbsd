@@ -1,6 +1,5 @@
-/*	$NetBSD: hisi,hi6220-resets.h,v 1.1.1.3 2020/01/03 14:33:06 skrll Exp $	*/
+/*	$NetBSD: hisi,hi6220-resets.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
-/* SPDX-License-Identifier: GPL-2.0 */
 /**
  * This header provides index for the reset controller
  * based on hi6220 SoC.
@@ -74,12 +73,5 @@
 #define MEDIA_ADE                       5
 #define MEDIA_MMU                       6
 #define MEDIA_XG2RAM1                   7
-
-#define AO_G3D                          1
-#define AO_CODECISP                     2
-#define AO_MCPU                         4
-#define AO_BBPHARQMEM                   5
-#define AO_HIFI                         8
-#define AO_ACPUSCUL2C                   12
 
 #endif /*_DT_BINDINGS_RESET_CONTROLLER_HI6220*/

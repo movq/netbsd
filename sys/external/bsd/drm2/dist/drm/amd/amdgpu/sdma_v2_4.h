@@ -1,4 +1,4 @@
-/*	$NetBSD: sdma_v2_4.h,v 1.3 2021/12/18 23:44:59 riastradh Exp $	*/
+/*	$NetBSD: sdma_v2_4.h,v 1.1 2018/08/27 01:34:46 riastradh Exp $	*/
 
 /*
  * Copyright 2014 Advanced Micro Devices, Inc.
@@ -26,6 +26,6 @@
 #ifndef __SDMA_V2_4_H__
 #define __SDMA_V2_4_H__
 
-extern const struct amdgpu_ip_block_version sdma_v2_4_ip_block;
+extern const struct amd_ip_funcs sdma_v2_4_ip_funcs;
 
 #endif

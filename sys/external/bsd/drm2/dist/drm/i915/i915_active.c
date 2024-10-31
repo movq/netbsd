@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_active.c,v 1.14 2022/03/16 23:32:52 riastradh Exp $	*/
+/*	$NetBSD: i915_active.c,v 1.1 2021/12/18 20:15:24 riastradh Exp $	*/
 
 /*
  * SPDX-License-Identifier: MIT
@@ -7,7 +7,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i915_active.c,v 1.14 2022/03/16 23:32:52 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i915_active.c,v 1.1 2021/12/18 20:15:24 riastradh Exp $");
 
 #include <linux/debugobjects.h>
 
@@ -18,8 +18,6 @@ __KERNEL_RCSID(0, "$NetBSD: i915_active.c,v 1.14 2022/03/16 23:32:52 riastradh E
 #include "i915_drv.h"
 #include "i915_active.h"
 #include "i915_globals.h"
-
-#include <linux/nbsd-namespace.h>
 
 /*
  * Active refs memory management
@@ -38,7 +36,6 @@ struct active_node {
 	struct i915_active *ref;
 	struct rb_node node;
 	u64 timeline;
-	struct intel_engine_cs *engine;
 };
 
 static inline struct active_node *
@@ -57,13 +54,13 @@ static inline bool is_barrier(const struct i915_active_fence *active)
 static inline struct llist_node *barrier_to_ll(struct active_node *node)
 {
 	GEM_BUG_ON(!is_barrier(&node->base));
-	return &node->base.llist;
+	return (struct llist_node *)&node->base.cb.node;
 }
 
 static inline struct intel_engine_cs *
 __barrier_to_engine(struct active_node *node)
 {
-	return READ_ONCE(node->engine);
+	return (struct intel_engine_cs *)READ_ONCE(node->base.cb.node.prev);
 }
 
 static inline struct intel_engine_cs *
@@ -75,7 +72,8 @@ barrier_to_engine(struct active_node *node)
 
 static inline struct active_node *barrier_from_ll(struct llist_node *x)
 {
-	return container_of(x, struct active_node, base.llist);
+	return container_of((struct list_head *)x,
+			    struct active_node, base.cb.node);
 }
 
 #if IS_ENABLED(CONFIG_DRM_I915_DEBUG_GEM) && IS_ENABLED(CONFIG_DEBUG_OBJECTS)
@@ -131,46 +129,6 @@ static inline void debug_active_assert(struct i915_active *ref) { }
 
 #endif
 
-#ifdef __NetBSD__
-
-static int
-compare_nodes(void *cookie, const void *va, const void *vb)
-{
-	const struct active_node *a = va;
-	const struct active_node *b = vb;
-
-	if (a->timeline < b->timeline)
-		return -1;
-	if (a->timeline > b->timeline)
-		return +1;
-	if ((uintptr_t)a < (uintptr_t)b)
-		return -1;
-	if ((uintptr_t)a > (uintptr_t)b)
-		return +1;
-	return 0;
-}
-
-static int
-compare_node_key(void *cookie, const void *vn, const void *vk)
-{
-	const struct active_node *a = vn;
-	const uint64_t *k = vk;
-
-	if (a->timeline < *k)
-		return -1;
-	if (a->timeline > *k)
-		return +1;
-	return 0;
-}
-
-static const rb_tree_ops_t active_rb_ops = {
-	.rbto_compare_nodes = compare_nodes,
-	.rbto_compare_key = compare_node_key,
-	.rbto_node_offset = offsetof(struct active_node, node),
-};
-
-#endif
-
 static void
 __active_retire(struct i915_active *ref)
 {
@@ -187,16 +145,9 @@ __active_retire(struct i915_active *ref)
 	GEM_BUG_ON(rcu_access_pointer(ref->excl.fence));
 	debug_active_deactivate(ref);
 
-#ifdef __NetBSD__
-	rb_move(&root, &ref->tree);
-	rb_tree_init(&ref->tree.rbr_tree, &active_rb_ops);
-#else
 	root = ref->tree;
 	ref->tree = RB_ROOT;
-#endif
 	ref->cache = NULL;
-
-	DRM_SPIN_WAKEUP_ALL(&ref->tree_wq, &ref->tree_lock);
 
 	spin_unlock_irqrestore(&ref->tree_lock, flags);
 
@@ -205,6 +156,7 @@ __active_retire(struct i915_active *ref)
 		ref->retire(ref);
 
 	/* ... except if you wait on it, you must manage your own references! */
+	wake_up_var(ref);
 
 	rbtree_postorder_for_each_entry_safe(it, n, &root, node) {
 		GEM_BUG_ON(i915_active_fence_isset(&it->base));
@@ -290,20 +242,10 @@ active_instance(struct i915_active *ref, struct intel_timeline *tl)
 	prealloc = kmem_cache_alloc(global.slab_cache, GFP_KERNEL);
 	if (!prealloc)
 		return NULL;
-	memset(prealloc, 0, sizeof(*prealloc));
 
 	spin_lock_irq(&ref->tree_lock);
 	GEM_BUG_ON(i915_active_is_idle(ref));
 
-#ifdef __NetBSD__
-	__USE(parent);
-	__USE(p);
-	node = rb_tree_find_node(&ref->tree.rbr_tree, &idx);
-	if (node) {
-		KASSERT(node->timeline == idx);
-		goto out;
-	}
-#else
 	parent = NULL;
 	p = &ref->tree.rb_node;
 	while (*p) {
@@ -320,31 +262,18 @@ active_instance(struct i915_active *ref, struct intel_timeline *tl)
 		else
 			p = &parent->rb_left;
 	}
-#endif
 
 	node = prealloc;
-	prealloc = NULL;
 	__i915_active_fence_init(&node->base, NULL, node_retire);
 	node->ref = ref;
 	node->timeline = idx;
 
-#ifdef __NetBSD__
-	struct active_node *collision __diagused;
-	collision = rb_tree_insert_node(&ref->tree.rbr_tree, node);
-	KASSERT(collision == node);
-#else
 	rb_link_node(&node->node, parent, p);
 	rb_insert_color(&node->node, &ref->tree);
-#endif
 
 out:
 	ref->cache = node;
 	spin_unlock_irq(&ref->tree_lock);
-
-#ifdef __NetBSD__
-	if (prealloc)
-		kmem_cache_free(global.slab_cache, prealloc);
-#endif
 
 	BUILD_BUG_ON(offsetof(typeof(*node), base));
 	return &node->base;
@@ -367,12 +296,7 @@ void __i915_active_init(struct i915_active *ref,
 		ref->flags |= I915_ACTIVE_RETIRE_SLEEPS;
 
 	spin_lock_init(&ref->tree_lock);
-	DRM_INIT_WAITQUEUE(&ref->tree_wq, "i915act");
-#ifdef __NetBSD__
-	rb_tree_init(&ref->tree.rbr_tree, &active_rb_ops);
-#else
 	ref->tree = RB_ROOT;
-#endif
 	ref->cache = NULL;
 
 	init_llist_head(&ref->preallocated_barriers);
@@ -555,12 +479,8 @@ int i915_active_wait(struct i915_active *ref)
 	if (err)
 		return err;
 
-	spin_lock(&ref->tree_lock);
-	DRM_SPIN_WAIT_UNTIL(err, &ref->tree_wq, &ref->tree_lock,
-	    i915_active_is_idle(ref));
-	spin_unlock(&ref->tree_lock);
-	if (err)
-		return err;
+	if (wait_var_event_interruptible(ref, i915_active_is_idle(ref)))
+		return -EINTR;
 
 	flush_work(&ref->work);
 	return 0;
@@ -587,6 +507,7 @@ int i915_request_await_active(struct i915_request *rq, struct i915_active *ref)
 	return err;
 }
 
+#if IS_ENABLED(CONFIG_DRM_I915_DEBUG_GEM)
 void i915_active_fini(struct i915_active *ref)
 {
 	debug_active_fini(ref);
@@ -594,8 +515,8 @@ void i915_active_fini(struct i915_active *ref)
 	GEM_BUG_ON(work_pending(&ref->work));
 	GEM_BUG_ON(!RB_EMPTY_ROOT(&ref->tree));
 	mutex_destroy(&ref->mutex);
-	spin_lock_destroy(&ref->tree_lock);
 }
+#endif
 
 static inline bool is_idle_barrier(struct active_node *node, u64 idx)
 {
@@ -624,21 +545,6 @@ static struct active_node *reuse_idle_barrier(struct i915_active *ref, u64 idx)
 		goto match;
 	}
 
-#ifdef __NetBSD__
-    {
-	struct active_node *node =
-	    rb_tree_find_node_leq(&ref->tree.rbr_tree, &idx);
-	if (node) {
-		if (node->timeline == idx && is_idle_barrier(node, idx)) {
-			p = &node->node;
-			goto match;
-		}
-		prev = &node->node;
-	} else {
-		prev = NULL;
-	}
-    }
-#else
 	prev = NULL;
 	p = ref->tree.rb_node;
 	while (p) {
@@ -654,7 +560,6 @@ static struct active_node *reuse_idle_barrier(struct i915_active *ref, u64 idx)
 		else
 			p = p->rb_left;
 	}
-#endif
 
 	/*
 	 * No quick match, but we did find the leftmost rb_node for the
@@ -662,7 +567,7 @@ static struct active_node *reuse_idle_barrier(struct i915_active *ref, u64 idx)
 	 * any idle-barriers on this timeline that we missed, or just use
 	 * the first pending barrier.
 	 */
-	for (p = prev; p; p = rb_next2(&ref->tree, p)) {
+	for (p = prev; p; p = rb_next(p)) {
 		struct active_node *node =
 			rb_entry(p, struct active_node, node);
 		struct intel_engine_cs *engine;
@@ -736,7 +641,6 @@ int i915_active_acquire_preallocate_barrier(struct i915_active *ref,
 				goto unwind;
 			}
 
-			memset(node, 0, sizeof(*node));
 			RCU_INIT_POINTER(node->base.fence, NULL);
 			node->base.cb.func = node_retire;
 			node->timeline = idx;
@@ -754,7 +658,7 @@ int i915_active_acquire_preallocate_barrier(struct i915_active *ref,
 			 * for our tracking of the pending barrier.
 			 */
 			RCU_INIT_POINTER(node->base.fence, ERR_PTR(-EAGAIN));
-			node->engine = engine;
+			node->base.cb.node.prev = (void *)engine;
 			atomic_inc(&ref->count);
 		}
 		GEM_BUG_ON(rcu_access_pointer(node->base.fence) != ERR_PTR(-EAGAIN));
@@ -806,13 +710,6 @@ void i915_active_acquire_barrier(struct i915_active *ref)
 
 		spin_lock_irqsave_nested(&ref->tree_lock, flags,
 					 SINGLE_DEPTH_NESTING);
-#ifdef __NetBSD__
-		__USE(p);
-		__USE(parent);
-		struct active_node *collision __diagused;
-		collision = rb_tree_insert_node(&ref->tree.rbr_tree, node);
-		KASSERT(collision == node);
-#else
 		parent = NULL;
 		p = &ref->tree.rb_node;
 		while (*p) {
@@ -828,7 +725,6 @@ void i915_active_acquire_barrier(struct i915_active *ref)
 		}
 		rb_link_node(&node->node, parent, p);
 		rb_insert_color(&node->node, &ref->tree);
-#endif
 		spin_unlock_irqrestore(&ref->tree_lock, flags);
 
 		GEM_BUG_ON(!intel_engine_pm_is_awake(engine));
@@ -864,24 +760,7 @@ void i915_request_add_active_barriers(struct i915_request *rq)
 	llist_for_each_safe(node, next, node) {
 		/* serialise with reuse_idle_barrier */
 		smp_store_mb(*ll_to_fence_slot(node), &rq->fence);
-#ifdef __NetBSD__
-		/* XXX ugh bletch */
-		struct i915_active_fence *active =
-		    container_of(node, struct i915_active_fence, llist);
-		/* XXX something bad went wrong in making this code */
-		KASSERT(active->cb.func == node_retire ||
-		    active->cb.func == excl_retire ||
-		    active->cb.func == i915_active_noop);
-		KASSERTMSG(active->fence == &rq->fence,
-		    "active=%p fence=%p; rq=%p fence=%p",
-		    active, active->fence, rq, &rq->fence);
-		KASSERTMSG(!active->cb.fcb_onqueue, "active=%p", active);
-		active->cb.fcb_onqueue = true;
-		TAILQ_INSERT_TAIL(&rq->fence.f_callbacks, &active->cb,
-		    fcb_entry);
-#else
 		list_add_tail((struct list_head *)node, &rq->fence.cb_list);
-#endif
 	}
 	spin_unlock_irqrestore(&rq->lock, flags);
 }
@@ -935,30 +814,11 @@ __i915_active_fence_set(struct i915_active_fence *active,
 	if (prev) {
 		GEM_BUG_ON(prev == fence);
 		spin_lock_nested(prev->lock, SINGLE_DEPTH_NESTING);
-#ifdef __NetBSD__
-		/* XXX ugh bletch */
-		KASSERT(active->cb.func == node_retire ||
-		    active->cb.func == excl_retire ||
-		    active->cb.func == i915_active_noop);
-		if (active->cb.fcb_onqueue) {
-			TAILQ_REMOVE(&prev->f_callbacks, &active->cb,
-			    fcb_entry);
-			active->cb.fcb_onqueue = false;
-		}
-#else
 		__list_del_entry(&active->cb.node);
-#endif
 		spin_unlock(prev->lock); /* serialise with prev->cb_list */
 	}
 	GEM_BUG_ON(rcu_access_pointer(active->fence) != fence);
-#ifdef __NetBSD__
-	/* XXX ugh bletch */
-	KASSERT(!active->cb.fcb_onqueue);
-	active->cb.fcb_onqueue = true;
-	TAILQ_INSERT_TAIL(&fence->f_callbacks, &active->cb, fcb_entry);
-#else
 	list_add_tail(&active->cb.node, &fence->cb_list);
-#endif
 	spin_unlock_irqrestore(fence->lock, flags);
 
 	return prev;

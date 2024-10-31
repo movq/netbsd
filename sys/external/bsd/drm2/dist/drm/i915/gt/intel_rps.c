@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_rps.c,v 1.5 2021/12/19 12:32:15 riastradh Exp $	*/
+/*	$NetBSD: intel_rps.c,v 1.1 2021/12/18 20:15:33 riastradh Exp $	*/
 
 /*
  * SPDX-License-Identifier: MIT
@@ -7,7 +7,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_rps.c,v 1.5 2021/12/19 12:32:15 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_rps.c,v 1.1 2021/12/18 20:15:33 riastradh Exp $");
 
 #include "i915_drv.h"
 #include "intel_gt.h"
@@ -15,18 +15,12 @@ __KERNEL_RCSID(0, "$NetBSD: intel_rps.c,v 1.5 2021/12/19 12:32:15 riastradh Exp 
 #include "intel_gt_pm_irq.h"
 #include "intel_rps.h"
 #include "intel_sideband.h"
-/* #include "../../../platform/x86/intel_ips.h" */
-
-#include <linux/nbsd-namespace.h>
+#include "../../../platform/x86/intel_ips.h"
 
 /*
  * Lock protecting IPS related data structures
  */
-#ifdef __NetBSD__
-spinlock_t mchdev_lock;
-#else
 static DEFINE_SPINLOCK(mchdev_lock);
-#endif
 
 static struct intel_gt *rps_to_gt(struct intel_rps *rps)
 {
@@ -1677,13 +1671,6 @@ void intel_rps_init(struct intel_rps *rps)
 		rps->pm_intrmsk_mbz |= GEN8_PMINTR_DISABLE_REDIRECT_TO_GUC;
 }
 
-void intel_rps_fini(struct intel_rps *rps)
-{
-
-	mutex_destroy(&rps->power.mutex);
-	mutex_destroy(&rps->lock);
-}
-
 u32 intel_rps_get_cagf(struct intel_rps *rps, u32 rpstat)
 {
 	struct drm_i915_private *i915 = rps_to_i915(rps);
@@ -1744,7 +1731,6 @@ static struct drm_i915_private __rcu *ips_mchdev;
 static void
 ips_ping_for_i915_load(void)
 {
-#ifndef __NetBSD__		/* XXX IPS GPU turbo limits what?  */
 	void (*link)(void);
 
 	link = symbol_get(ips_link_to_i915_driver);
@@ -1752,7 +1738,6 @@ ips_ping_for_i915_load(void)
 		link();
 		symbol_put(ips_link_to_i915_driver);
 	}
-#endif
 }
 
 void intel_rps_driver_register(struct intel_rps *rps)

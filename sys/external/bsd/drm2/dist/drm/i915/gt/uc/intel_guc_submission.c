@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_guc_submission.c,v 1.4 2021/12/19 12:32:15 riastradh Exp $	*/
+/*	$NetBSD: intel_guc_submission.c,v 1.1 2021/12/18 20:15:33 riastradh Exp $	*/
 
 // SPDX-License-Identifier: MIT
 /*
@@ -6,7 +6,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_guc_submission.c,v 1.4 2021/12/19 12:32:15 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_guc_submission.c,v 1.1 2021/12/18 20:15:33 riastradh Exp $");
 
 #include <linux/circ_buf.h>
 
@@ -486,7 +486,7 @@ static void guc_reset_cancel(struct intel_engine_cs *engine)
 	/* Remaining _unready_ requests will be nop'ed when submitted */
 
 	execlists->queue_priority_hint = INT_MIN;
-	i915_sched_init(execlists);
+	execlists->queue = RB_ROOT_CACHED;
 
 	spin_unlock_irqrestore(&engine->active.lock, flags);
 }
@@ -550,7 +550,6 @@ err_pool:
 
 void intel_guc_submission_fini(struct intel_guc *guc)
 {
-	spin_lock_destroy(&guc->wq_lock);
 	if (guc->stage_desc_pool) {
 		guc_proc_desc_destroy(guc);
 		guc_workqueue_destroy(guc);

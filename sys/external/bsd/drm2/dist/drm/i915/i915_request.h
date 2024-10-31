@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_request.h,v 1.4 2021/12/19 11:36:17 riastradh Exp $	*/
+/*	$NetBSD: i915_request.h,v 1.1 2021/12/18 20:15:26 riastradh Exp $	*/
 
 /*
  * Copyright © 2008-2018 Intel Corporation
@@ -201,11 +201,7 @@ struct i915_request {
 	 */
 	struct i915_sw_fence submit;
 	union {
-#ifdef __NetBSD__		/* XXX */
-		struct i915_sw_fence_waiter submitq;
-#else
 		wait_queue_entry_t submitq;
-#endif
 		struct i915_sw_dma_fence_cb dmaq;
 		struct i915_request_duration_cb {
 			struct dma_fence_cb cb;

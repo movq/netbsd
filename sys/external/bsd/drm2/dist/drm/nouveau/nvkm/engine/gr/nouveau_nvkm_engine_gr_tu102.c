@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_engine_gr_tu102.c,v 1.3 2021/12/19 10:51:57 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_engine_gr_tu102.c,v 1.1 2021/12/18 20:15:39 riastradh Exp $	*/
 
 /*
  * Copyright 2019 Red Hat Inc.
@@ -22,14 +22,12 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_engine_gr_tu102.c,v 1.3 2021/12/19 10:51:57 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_engine_gr_tu102.c,v 1.1 2021/12/18 20:15:39 riastradh Exp $");
 
 #include "gf100.h"
 #include "ctxgf100.h"
 
 #include <nvif/class.h>
-
-#include <linux/nbsd-namespace.h>
 
 static void
 tu102_gr_init_fecs_exceptions(struct gf100_gr *gr)

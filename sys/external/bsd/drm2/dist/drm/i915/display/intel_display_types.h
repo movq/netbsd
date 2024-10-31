@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_display_types.h,v 1.4 2021/12/19 11:38:26 riastradh Exp $	*/
+/*	$NetBSD: intel_display_types.h,v 1.1 2021/12/18 20:15:29 riastradh Exp $	*/
 
 /*
  * Copyright (c) 2006 Dave Airlie <airlied@linux.ie>
@@ -387,8 +387,7 @@ struct intel_hdcp {
 	 * Work queue to signal the CP_IRQ. Used for the waiters to read the
 	 * available information from HDCP DP sink.
 	 */
-	spinlock_t cp_irq_lock;
-	drm_waitqueue_t cp_irq_queue;
+	wait_queue_head_t cp_irq_queue;
 	atomic_t cp_irq_count;
 	int cp_irq_count_cached;
 

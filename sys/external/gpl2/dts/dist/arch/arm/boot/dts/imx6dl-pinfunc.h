@@ -1,8 +1,12 @@
-/*	$NetBSD: imx6dl-pinfunc.h,v 1.1.1.3 2020/01/03 14:33:19 skrll Exp $	*/
+/*	$NetBSD: imx6dl-pinfunc.h,v 1.1 2017/06/15 20:14:24 jmcneill Exp $	*/
 
-/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright 2013 Freescale Semiconductor, Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
  */
 
 #ifndef __DTS_IMX6DL_PINFUNC_H
@@ -666,7 +670,6 @@
 #define MX6QDL_PAD_ENET_RX_ER__SPDIF_IN             0x1f4 0x5c4 0x8f0 0x3 0x1
 #define MX6QDL_PAD_ENET_RX_ER__ENET_1588_EVENT2_OUT 0x1f4 0x5c4 0x000 0x4 0x0
 #define MX6QDL_PAD_ENET_RX_ER__GPIO1_IO24           0x1f4 0x5c4 0x000 0x5 0x0
-#define MX6QDL_PAD_ENET_RXD0__OSC32K_32K_OUT        0x1f8 0x5c8 0x000 0x0 0x0
 #define MX6QDL_PAD_ENET_RXD0__ENET_RX_DATA0         0x1f8 0x5c8 0x818 0x1 0x0
 #define MX6QDL_PAD_ENET_RXD0__ESAI_TX_HF_CLK        0x1f8 0x5c8 0x838 0x2 0x0
 #define MX6QDL_PAD_ENET_RXD0__SPDIF_OUT             0x1f8 0x5c8 0x000 0x3 0x0

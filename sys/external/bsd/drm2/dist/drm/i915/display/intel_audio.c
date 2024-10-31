@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_audio.c,v 1.3 2021/12/19 11:38:03 riastradh Exp $	*/
+/*	$NetBSD: intel_audio.c,v 1.1 2021/12/18 20:15:27 riastradh Exp $	*/
 
 /*
  * Copyright © 2014 Intel Corporation
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_audio.c,v 1.3 2021/12/19 11:38:03 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_audio.c,v 1.1 2021/12/18 20:15:27 riastradh Exp $");
 
 #include <linux/component.h>
 #include <linux/kernel.h>
@@ -805,8 +805,6 @@ void intel_init_audio_hooks(struct drm_i915_private *dev_priv)
 	}
 }
 
-#ifndef __NetBSD__		/* XXX intel audio */
-
 static void glk_force_audio_cdclk(struct drm_i915_private *dev_priv,
 				  bool enable)
 {
@@ -1102,8 +1100,6 @@ static const struct component_ops i915_audio_component_bind_ops = {
 	.unbind	= i915_audio_component_unbind,
 };
 
-#endif	/* __NetBSD__ */
-
 /**
  * i915_audio_component_init - initialize and register the audio component
  * @dev_priv: i915 device instance
@@ -1122,7 +1118,6 @@ static const struct component_ops i915_audio_component_bind_ops = {
  */
 static void i915_audio_component_init(struct drm_i915_private *dev_priv)
 {
-#ifndef __NetBSD__		/* XXX intel audio */
 	int ret;
 
 	ret = component_add_typed(dev_priv->drm.dev,
@@ -1133,7 +1128,6 @@ static void i915_audio_component_init(struct drm_i915_private *dev_priv)
 		/* continue with reduced functionality */
 		return;
 	}
-#endif
 
 	if (IS_TIGERLAKE(dev_priv) || IS_ICELAKE(dev_priv)) {
 		dev_priv->audio_freq_cntrl = I915_READ(AUD_FREQ_CNTRL);
@@ -1156,9 +1150,7 @@ static void i915_audio_component_cleanup(struct drm_i915_private *dev_priv)
 	if (!dev_priv->audio_component_registered)
 		return;
 
-#ifndef __NetBSD__		/* XXX intel audio */
 	component_del(dev_priv->drm.dev, &i915_audio_component_bind_ops);
-#endif
 	dev_priv->audio_component_registered = false;
 }
 

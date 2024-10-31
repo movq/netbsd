@@ -1,5 +1,3 @@
-/*	$NetBSD: drm_plane_helper.h,v 1.4 2021/12/18 23:45:46 riastradh Exp $	*/
-
 /*
  * Copyright (C) 2011-2013 Intel Corporation
  *
@@ -26,21 +24,26 @@
 #ifndef DRM_PLANE_HELPER_H
 #define DRM_PLANE_HELPER_H
 
-#include <drm/drm_rect.h>
-#include <drm/drm_crtc.h>
-#include <drm/drm_modeset_helper_vtables.h>
-#include <drm/drm_modeset_helper.h>
-
-/*
- * Drivers that don't allow primary plane scaling may pass this macro in place
- * of the min/max scale parameters of the update checker function.
+/**
+ * DOC: plane helpers
  *
- * Due to src being in 16.16 fixed point and dest being in integer pixels,
- * 1<<16 represents no scaling.
+ * Helper functions to assist with creation and handling of CRTC primary
+ * planes.
  */
-#define DRM_PLANE_HELPER_NO_SCALING (1<<16)
 
-void drm_primary_helper_destroy(struct drm_plane *plane);
+extern int drm_primary_helper_update(struct drm_plane *plane,
+				     struct drm_crtc *crtc,
+				     struct drm_framebuffer *fb,
+				     int crtc_x, int crtc_y,
+				     unsigned int crtc_w, unsigned int crtc_h,
+				     uint32_t src_x, uint32_t src_y,
+				     uint32_t src_w, uint32_t src_h);
+extern int drm_primary_helper_disable(struct drm_plane *plane);
+extern void drm_primary_helper_destroy(struct drm_plane *plane);
 extern const struct drm_plane_funcs drm_primary_helper_funcs;
+extern struct drm_plane *drm_primary_helper_create_plane(struct drm_device *dev,
+							 uint32_t *formats,
+							 int num_formats);
+
 
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_fbdev.c,v 1.10 2021/12/20 20:34:58 chs Exp $	*/
+/*	$NetBSD: intel_fbdev.c,v 1.1 2021/12/18 20:15:30 riastradh Exp $	*/
 
 /*
  * Copyright © 2007 David Airlie
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_fbdev.c,v 1.10 2021/12/20 20:34:58 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_fbdev.c,v 1.1 2021/12/18 20:15:30 riastradh Exp $");
 
 #include <linux/async.h>
 #include <linux/console.h>
@@ -62,12 +62,6 @@ static void intel_fbdev_invalidate(struct intel_fbdev *ifbdev)
 	intel_frontbuffer_invalidate(to_frontbuffer(ifbdev), ORIGIN_CPU);
 }
 
-#ifdef __NetBSD__
-#include "intelfb.h"
-#include <linux/nbsd-namespace.h>
-#endif
-
-#ifndef __NetBSD__
 static int intel_fbdev_set_par(struct fb_info *info)
 {
 	struct drm_fb_helper *fb_helper = info->par;
@@ -121,7 +115,6 @@ static const struct fb_ops intelfb_ops = {
 	.fb_pan_display = intel_fbdev_pan_display,
 	.fb_blank = intel_fbdev_blank,
 };
-#endif
 
 static int intelfb_alloc(struct drm_fb_helper *helper,
 			 struct drm_fb_helper_surface_size *sizes)
@@ -172,10 +165,6 @@ static int intelfb_alloc(struct drm_fb_helper *helper,
 	return 0;
 }
 
-#ifdef __NetBSD__
-#  define	__iomem		__i915_vma_iomem
-#endif
-
 static int intelfb_create(struct drm_fb_helper *helper,
 			  struct drm_fb_helper_surface_size *sizes)
 {
@@ -190,9 +179,7 @@ static int intelfb_create(struct drm_fb_helper *helper,
 		.type = I915_GGTT_VIEW_NORMAL,
 	};
 	intel_wakeref_t wakeref;
-#ifndef __NetBSD__
 	struct fb_info *info;
-#endif
 	struct i915_vma *vma;
 	unsigned long flags = 0;
 	bool prealloc = false;
@@ -237,45 +224,6 @@ static int intelfb_create(struct drm_fb_helper *helper,
 
 	intel_frontbuffer_flush(to_frontbuffer(ifbdev), ORIGIN_DIRTYFB);
 
-#ifdef __NetBSD__
-    {
-	static const struct intelfb_attach_args zero_ifa;
-	struct intelfb_attach_args ifa = zero_ifa;
-
-	__USE(ggtt);
-	__USE(pdev);
-
-	vaddr = i915_vma_pin_iomap(vma);
-	if (IS_ERR(vaddr)) {
-		DRM_ERROR("Failed to remap framebuffer into virtual memory\n");
-		ret = PTR_ERR(vaddr);
-		goto out_unpin;
-	}
-
-        if (vma->obj->stolen && !prealloc)
-		memset_io(vaddr, 0, vma->node.size);
-
-	ifa.ifa_drm_dev = dev;
-	ifa.ifa_fb_helper = helper;
-	ifa.ifa_fb_sizes = *sizes;
-	ifa.ifa_fb_vaddr = vaddr;
-
-	/*
-	 * XXX Should do this asynchronously, since we hold
-	 * dev->struct_mutex.
-	 */
-	KERNEL_LOCK(1, NULL);
-	helper->fbdev = config_found(dev->dev, &ifa, NULL,
-	    CFARGS(.iattr = "intelfbbus"));
-	KERNEL_UNLOCK_ONE(NULL);
-	if (helper->fbdev == NULL) {
-		DRM_ERROR("unable to attach intelfb\n");
-		ret = -ENXIO;
-		goto out_unpin;
-	}
-	ifbdev->helper.fb = &ifbdev->fb->base;
-    }
-#else
 	info = drm_fb_helper_alloc_fbi(helper);
 	if (IS_ERR(info)) {
 		DRM_ERROR("Failed to allocate fb_info\n");
@@ -313,20 +261,17 @@ static int intelfb_create(struct drm_fb_helper *helper,
 	 */
 	if (vma->obj->stolen && !prealloc)
 		memset_io(info->screen_base, 0, info->screen_size);
-#endif
 
 	/* Use default scratch pixmap (info->pixmap.flags = FB_PIXMAP_SYSTEM) */
 
-	DRM_DEBUG_KMS("allocated %dx%d fb: 0x%08"PRIx32"\n",
+	DRM_DEBUG_KMS("allocated %dx%d fb: 0x%08x\n",
 		      ifbdev->fb->base.width, ifbdev->fb->base.height,
 		      i915_ggtt_offset(vma));
 	ifbdev->vma = vma;
 	ifbdev->vma_flags = flags;
 
 	intel_runtime_pm_put(&dev_priv->runtime_pm, wakeref);
-#ifndef __NetBSD__
 	vga_switcheroo_client_fb_set(pdev, info);
-#endif
 	return 0;
 
 out_unpin:
@@ -335,10 +280,6 @@ out_unlock:
 	intel_runtime_pm_put(&dev_priv->runtime_pm, wakeref);
 	return ret;
 }
-
-#ifdef __NetBSD__
-#  undef	__iomem
-#endif
 
 static const struct drm_fb_helper_funcs intel_fb_helper_funcs = {
 	.fb_probe = intelfb_create,
@@ -358,8 +299,6 @@ static void intel_fbdev_destroy(struct intel_fbdev *ifbdev)
 
 	if (ifbdev->fb)
 		drm_framebuffer_remove(&ifbdev->fb->base);
-
-	mutex_destroy(&ifbdev->hpd_lock);
 
 	kfree(ifbdev);
 }
@@ -492,13 +431,11 @@ out:
 
 static void intel_fbdev_suspend_worker(struct work_struct *work)
 {
-#ifndef __NetBSD__		/* XXX fb suspend */
 	intel_fbdev_set_suspend(&container_of(work,
 					      struct drm_i915_private,
 					      fbdev_suspend_work)->drm,
 				FBINFO_STATE_RUNNING,
 				true);
-#endif
 }
 
 int intel_fbdev_init(struct drm_device *dev)
@@ -572,9 +509,7 @@ void intel_fbdev_unregister(struct drm_i915_private *dev_priv)
 		return;
 
 	cancel_work_sync(&dev_priv->fbdev_suspend_work);
-#ifndef __NetBSD__		/* XXX fb async */
 	if (!current_is_async())
-#endif
 		intel_fbdev_sync(ifbdev);
 
 	drm_fb_helper_unregister_fbi(&ifbdev->helper);
@@ -594,7 +529,6 @@ void intel_fbdev_fini(struct drm_i915_private *dev_priv)
  * processing, fbdev will perform a full connector reprobe if a hotplug event
  * was received while HPD was suspended.
  */
-#ifndef __NetBSD__		/* XXX fb suspend */
 static void intel_fbdev_hpd_set_suspend(struct intel_fbdev *ifbdev, int state)
 {
 	bool send_hpd = false;
@@ -610,11 +544,9 @@ static void intel_fbdev_hpd_set_suspend(struct intel_fbdev *ifbdev, int state)
 		drm_fb_helper_hotplug_event(&ifbdev->helper);
 	}
 }
-#endif	/* __NetBSD__ */
 
 void intel_fbdev_set_suspend(struct drm_device *dev, int state, bool synchronous)
 {
-#ifndef __NetBSD__		/* XXX fb suspend */
 	struct drm_i915_private *dev_priv = to_i915(dev);
 	struct intel_fbdev *ifbdev = dev_priv->fbdev;
 	struct fb_info *info;
@@ -664,7 +596,6 @@ void intel_fbdev_set_suspend(struct drm_device *dev, int state, bool synchronous
 	console_unlock();
 
 	intel_fbdev_hpd_set_suspend(ifbdev, state);
-#endif
 }
 
 void intel_fbdev_output_poll_changed(struct drm_device *dev)

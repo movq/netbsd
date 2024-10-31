@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_sw_fence_work.c,v 1.4 2021/12/19 12:13:37 riastradh Exp $	*/
+/*	$NetBSD: i915_sw_fence_work.c,v 1.1 2021/12/18 20:15:26 riastradh Exp $	*/
 
 // SPDX-License-Identifier: MIT
 
@@ -7,7 +7,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i915_sw_fence_work.c,v 1.4 2021/12/19 12:13:37 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i915_sw_fence_work.c,v 1.1 2021/12/18 20:15:26 riastradh Exp $");
 
 #include "i915_sw_fence_work.h"
 
@@ -76,7 +76,6 @@ static void fence_release(struct dma_fence *fence)
 	i915_sw_fence_fini(&f->chain);
 
 	BUILD_BUG_ON(offsetof(typeof(*f), dma));
-	spin_lock_destroy(&f->lock);
 	dma_fence_free(&f->dma);
 }
 

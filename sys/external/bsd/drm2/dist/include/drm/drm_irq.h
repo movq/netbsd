@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_irq.h,v 1.4 2021/12/19 10:32:47 riastradh Exp $	*/
+/*	$NetBSD: drm_irq.h,v 1.1 2021/12/18 20:15:57 riastradh Exp $	*/
 
 /*
  * Copyright 2016 Intel Corp.
@@ -26,18 +26,9 @@
 #ifndef _DRM_IRQ_H_
 #define _DRM_IRQ_H_
 
-#ifdef __NetBSD__
-#include <drm/drm_irq_netbsd.h>
-#endif
-
 struct drm_device;
 
-#ifdef __NetBSD__
-int drm_irq_install(struct drm_device *dev);
-#else
 int drm_irq_install(struct drm_device *dev, int irq);
-#endif
-
 int drm_irq_uninstall(struct drm_device *dev);
 
 #endif

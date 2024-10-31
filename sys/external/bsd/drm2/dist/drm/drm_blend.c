@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_blend.c,v 1.4 2021/12/19 00:50:01 riastradh Exp $	*/
+/*	$NetBSD: drm_blend.c,v 1.1 2021/12/18 20:10:59 riastradh Exp $	*/
 
 /*
  * Copyright (C) 2016 Samsung Electronics Co.Ltd
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_blend.c,v 1.4 2021/12/19 00:50:01 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_blend.c,v 1.1 2021/12/18 20:10:59 riastradh Exp $");
 
 #include <linux/export.h>
 #include <linux/slab.h>
@@ -420,8 +420,8 @@ EXPORT_SYMBOL(drm_plane_create_zpos_immutable_property);
 
 static int drm_atomic_state_zpos_cmp(const void *a, const void *b)
 {
-	const struct drm_plane_state *sa = *(struct drm_plane_state *const *)a;
-	const struct drm_plane_state *sb = *(struct drm_plane_state *const *)b;
+	const struct drm_plane_state *sa = *(struct drm_plane_state **)a;
+	const struct drm_plane_state *sb = *(struct drm_plane_state **)b;
 
 	if (sa->zpos != sb->zpos)
 		return sa->zpos - sb->zpos;
@@ -503,7 +503,7 @@ int drm_atomic_normalize_zpos(struct drm_device *dev,
 {
 	struct drm_crtc *crtc;
 	struct drm_crtc_state *old_crtc_state, *new_crtc_state;
-	struct drm_plane *plane __unused;
+	struct drm_plane *plane;
 	struct drm_plane_state *old_plane_state, *new_plane_state;
 	int i, ret = 0;
 

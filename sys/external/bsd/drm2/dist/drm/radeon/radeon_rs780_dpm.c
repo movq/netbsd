@@ -1,4 +1,4 @@
-/*	$NetBSD: radeon_rs780_dpm.c,v 1.2 2021/12/18 23:45:43 riastradh Exp $	*/
+/*	$NetBSD: radeon_rs780_dpm.c,v 1.1 2018/08/27 14:38:20 riastradh Exp $	*/
 
 /*
  * Copyright 2011 Advanced Micro Devices, Inc.
@@ -25,17 +25,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: radeon_rs780_dpm.c,v 1.2 2021/12/18 23:45:43 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: radeon_rs780_dpm.c,v 1.1 2018/08/27 14:38:20 riastradh Exp $");
 
-#include <linux/pci.h>
-#include <linux/seq_file.h>
-
-#include "atom.h"
-#include "r600_dpm.h"
+#include "drmP.h"
 #include "radeon.h"
 #include "radeon_asic.h"
-#include "rs780_dpm.h"
 #include "rs780d.h"
+#include "r600_dpm.h"
+#include "rs780_dpm.h"
+#include "atom.h"
+#include <linux/seq_file.h>
 
 static struct igp_ps *rs780_get_ps(struct radeon_ps *rps)
 {
@@ -801,7 +800,7 @@ static int rs780_parse_power_table(struct radeon_device *rdev)
 	union pplib_clock_info *clock_info;
 	union power_info *power_info;
 	int index = GetIndexIntoMasterTable(DATA, PowerPlayInfo);
-	u16 data_offset;
+        u16 data_offset;
 	u8 frev, crev;
 	struct igp_ps *ps;
 
@@ -810,9 +809,8 @@ static int rs780_parse_power_table(struct radeon_device *rdev)
 		return -EINVAL;
 	power_info = (union power_info *)(mode_info->atom_context->bios + data_offset);
 
-	rdev->pm.dpm.ps = kcalloc(power_info->pplib.ucNumStates,
-				  sizeof(struct radeon_ps),
-				  GFP_KERNEL);
+	rdev->pm.dpm.ps = kzalloc(sizeof(struct radeon_ps) *
+				  power_info->pplib.ucNumStates, GFP_KERNEL);
 	if (!rdev->pm.dpm.ps)
 		return -ENOMEM;
 

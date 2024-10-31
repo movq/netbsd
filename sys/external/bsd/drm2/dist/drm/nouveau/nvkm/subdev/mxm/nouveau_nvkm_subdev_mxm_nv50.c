@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_subdev_mxm_nv50.c,v 1.4 2021/12/18 23:45:41 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_subdev_mxm_nv50.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $	*/
 
 /*
  * Copyright 2011 Red Hat Inc.
@@ -24,7 +24,7 @@
  * Authors: Ben Skeggs
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_mxm_nv50.c,v 1.4 2021/12/18 23:45:41 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_mxm_nv50.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $");
 
 #include "mxms.h"
 
@@ -164,7 +164,6 @@ mxm_dcb_sanitise_entry(struct nvkm_bios *bios, void *data, int idx, u16 pdcb)
 		break;
 	case 0x0e: /* eDP, falls through to DPint */
 		ctx.outp[1] |= 0x00010000;
-		/* fall through */
 	case 0x07: /* DP internal, wtf is this?? HP8670w */
 		ctx.outp[1] |= 0x00000004; /* use_power_scripts? */
 		type = DCB_CONNECTOR_eDP;
@@ -185,7 +184,7 @@ mxm_show_unmatched(struct nvkm_mxm *mxm, u8 *data, void *info)
 	struct nvkm_subdev *subdev = &mxm->subdev;
 	u64 desc = *(u64 *)data;
 	if ((desc & 0xf0) != 0xf0)
-		nvkm_info(subdev, "unmatched output device %016"PRIx64"\n", desc);
+		nvkm_info(subdev, "unmatched output device %016llx\n", desc);
 	return true;
 }
 
@@ -196,8 +195,8 @@ mxm_dcb_sanitise(struct nvkm_mxm *mxm)
 	struct nvkm_bios *bios = subdev->device->bios;
 	u8  ver, hdr, cnt, len;
 	u16 dcb = dcb_table(bios, &ver, &hdr, &cnt, &len);
-	if (dcb == 0x0000 || (ver != 0x40 && ver != 0x41)) {
-		nvkm_warn(subdev, "unsupported DCB version\n");
+	if (dcb == 0x0000 || ver != 0x40) {
+		nvkm_debug(subdev, "unsupported DCB version\n");
 		return;
 	}
 

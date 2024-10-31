@@ -1,4 +1,4 @@
-/*	$NetBSD: sun50i-a64-ccu.h,v 1.1.1.4 2021/11/07 16:49:59 jmcneill Exp $	*/
+/*	$NetBSD: sun50i-a64-ccu.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 /*
  * Copyright (C) 2016 Maxime Ripard <maxime.ripard@free-electrons.com>
@@ -45,10 +45,6 @@
 #ifndef _DT_BINDINGS_CLK_SUN50I_A64_H_
 #define _DT_BINDINGS_CLK_SUN50I_A64_H_
 
-#define CLK_PLL_VIDEO0		7
-#define CLK_PLL_PERIPH0		11
-
-#define CLK_CPUX		21
 #define CLK_BUS_MIPI_DSI	28
 #define CLK_BUS_CE		29
 #define CLK_BUS_DMA		30
@@ -133,7 +129,7 @@
 #define CLK_AVS			109
 #define CLK_HDMI		110
 #define CLK_HDMI_DDC		111
-#define CLK_MBUS		112
+
 #define CLK_DSI_DPHY		113
 #define CLK_GPU			114
 

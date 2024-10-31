@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (C) 2019 Texas Instruments Incorporated - https://www.ti.com/
+ * Copyright (C) 2019 Texas Instruments Incorporated - http://www.ti.com/
  */
 
-#include "dra74x-p.dtsi"
-#include "am57-pruss.dtsi"
+#include "dra76x.dtsi"
 
 / {
 	compatible = "ti,am5748", "ti,dra762", "ti,dra7";
@@ -22,6 +21,10 @@
  */
 
 &usb3_tm {
+	status = "disabled";
+};
+
+&usb4_tm {
 	status = "disabled";
 };
 

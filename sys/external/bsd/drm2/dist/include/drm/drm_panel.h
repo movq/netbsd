@@ -1,5 +1,3 @@
-/*	$NetBSD: drm_panel.h,v 1.4 2021/12/18 23:45:46 riastradh Exp $	*/
-
 /*
  * Copyright (C) 2013, NVIDIA Corporation.  All rights reserved.
  *
@@ -26,191 +24,58 @@
 #ifndef __DRM_PANEL_H__
 #define __DRM_PANEL_H__
 
-#include <linux/err.h>
-#include <linux/errno.h>
 #include <linux/list.h>
 
-struct backlight_device;
-struct device_node;
 struct drm_connector;
 struct drm_device;
 struct drm_panel;
-struct display_timing;
 
-/**
- * struct drm_panel_funcs - perform operations on a given panel
- *
- * The .prepare() function is typically called before the display controller
- * starts to transmit video data. Panel drivers can use this to turn the panel
- * on and wait for it to become ready. If additional configuration is required
- * (via a control bus such as I2C, SPI or DSI for example) this is a good time
- * to do that.
- *
- * After the display controller has started transmitting video data, it's safe
- * to call the .enable() function. This will typically enable the backlight to
- * make the image on screen visible. Some panels require a certain amount of
- * time or frames before the image is displayed. This function is responsible
- * for taking this into account before enabling the backlight to avoid visual
- * glitches.
- *
- * Before stopping video transmission from the display controller it can be
- * necessary to turn off the panel to avoid visual glitches. This is done in
- * the .disable() function. Analogously to .enable() this typically involves
- * turning off the backlight and waiting for some time to make sure no image
- * is visible on the panel. It is then safe for the display controller to
- * cease transmission of video data.
- *
- * To save power when no video data is transmitted, a driver can power down
- * the panel. This is the job of the .unprepare() function.
- *
- * Backlight can be handled automatically if configured using
- * drm_panel_of_backlight(). Then the driver does not need to implement the
- * functionality to enable/disable backlight.
- */
 struct drm_panel_funcs {
-	/**
-	 * @prepare:
-	 *
-	 * Turn on panel and perform set up.
-	 *
-	 * This function is optional.
-	 */
-	int (*prepare)(struct drm_panel *panel);
-
-	/**
-	 * @enable:
-	 *
-	 * Enable panel (turn on back light, etc.).
-	 *
-	 * This function is optional.
-	 */
-	int (*enable)(struct drm_panel *panel);
-
-	/**
-	 * @disable:
-	 *
-	 * Disable panel (turn off back light, etc.).
-	 *
-	 * This function is optional.
-	 */
 	int (*disable)(struct drm_panel *panel);
-
-	/**
-	 * @unprepare:
-	 *
-	 * Turn off panel.
-	 *
-	 * This function is optional.
-	 */
-	int (*unprepare)(struct drm_panel *panel);
-
-	/**
-	 * @get_modes:
-	 *
-	 * Add modes to the connector that the panel is attached to
-	 * and returns the number of modes added.
-	 *
-	 * This function is mandatory.
-	 */
-	int (*get_modes)(struct drm_panel *panel,
-			 struct drm_connector *connector);
-
-	/**
-	 * @get_timings:
-	 *
-	 * Copy display timings into the provided array and return
-	 * the number of display timings available.
-	 *
-	 * This function is optional.
-	 */
-	int (*get_timings)(struct drm_panel *panel, unsigned int num_timings,
-			   struct display_timing *timings);
+	int (*enable)(struct drm_panel *panel);
+	int (*get_modes)(struct drm_panel *panel);
 };
 
-/**
- * struct drm_panel - DRM panel object
- */
 struct drm_panel {
-	/**
-	 * @dev:
-	 *
-	 * Parent device of the panel.
-	 */
+	struct drm_device *drm;
+	struct drm_connector *connector;
 	struct device *dev;
 
-	/**
-	 * @backlight:
-	 *
-	 * Backlight device, used to turn on backlight after the call
-	 * to enable(), and to turn off backlight before the call to
-	 * disable().
-	 * backlight is set by drm_panel_of_backlight() and drivers
-	 * shall not assign it.
-	 */
-	struct backlight_device *backlight;
-
-	/**
-	 * @funcs:
-	 *
-	 * Operations that can be performed on the panel.
-	 */
 	const struct drm_panel_funcs *funcs;
 
-	/**
-	 * @connector_type:
-	 *
-	 * Type of the panel as a DRM_MODE_CONNECTOR_* value. This is used to
-	 * initialise the drm_connector corresponding to the panel with the
-	 * correct connector type.
-	 */
-	int connector_type;
-
-	/**
-	 * @list:
-	 *
-	 * Panel entry in registry.
-	 */
 	struct list_head list;
 };
 
-#ifdef __NetBSD__
-void drm_panel_init_lock(void);
-void drm_panel_fini_lock(void);
-#endif
+static inline int drm_panel_disable(struct drm_panel *panel)
+{
+	if (panel && panel->funcs && panel->funcs->disable)
+		return panel->funcs->disable(panel);
 
-void drm_panel_init(struct drm_panel *panel, struct device *dev,
-		    const struct drm_panel_funcs *funcs,
-		    int connector_type);
+	return panel ? -ENOSYS : -EINVAL;
+}
+
+static inline int drm_panel_enable(struct drm_panel *panel)
+{
+	if (panel && panel->funcs && panel->funcs->enable)
+		return panel->funcs->enable(panel);
+
+	return panel ? -ENOSYS : -EINVAL;
+}
+
+void drm_panel_init(struct drm_panel *panel);
 
 int drm_panel_add(struct drm_panel *panel);
 void drm_panel_remove(struct drm_panel *panel);
 
 int drm_panel_attach(struct drm_panel *panel, struct drm_connector *connector);
-void drm_panel_detach(struct drm_panel *panel);
+int drm_panel_detach(struct drm_panel *panel);
 
-int drm_panel_prepare(struct drm_panel *panel);
-int drm_panel_unprepare(struct drm_panel *panel);
-
-int drm_panel_enable(struct drm_panel *panel);
-int drm_panel_disable(struct drm_panel *panel);
-
-int drm_panel_get_modes(struct drm_panel *panel, struct drm_connector *connector);
-
-#if defined(CONFIG_OF) && defined(CONFIG_DRM_PANEL)
-struct drm_panel *of_drm_find_panel(const struct device_node *np);
+#ifdef CONFIG_OF
+struct drm_panel *of_drm_find_panel(struct device_node *np);
 #else
-static inline struct drm_panel *of_drm_find_panel(const struct device_node *np)
+static inline struct drm_panel *of_drm_find_panel(struct device_node *np)
 {
-	return ERR_PTR(-ENODEV);
-}
-#endif
-
-#if IS_REACHABLE(CONFIG_BACKLIGHT_CLASS_DEVICE)
-int drm_panel_of_backlight(struct drm_panel *panel);
-#else
-static inline int drm_panel_of_backlight(struct drm_panel *panel)
-{
-	return 0;
+	return NULL;
 }
 #endif
 

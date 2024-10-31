@@ -1,4 +1,4 @@
-/*	$NetBSD: core_types.h,v 1.3 2021/12/19 11:59:19 riastradh Exp $	*/
+/*	$NetBSD: core_types.h,v 1.1 2021/12/18 20:11:25 riastradh Exp $	*/
 
 /*
  * Copyright 2015 Advanced Micro Devices, Inc.
@@ -50,7 +50,7 @@ void enable_surface_flip_reporting(struct dc_plane_state *plane_state,
 #include "link_encoder.h"
 #include "stream_encoder.h"
 #include "clock_source.h"
-#include "hw/audio.h"
+#include "audio.h"
 #include "dm_pp_smu.h"
 #ifdef CONFIG_DRM_AMD_DC_HDCP
 #include "dm_cp_psp.h"

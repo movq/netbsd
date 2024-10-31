@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_subdev_bios_shadowramin.c,v 1.3 2021/12/18 23:45:38 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_subdev_bios_shadowramin.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -23,7 +23,7 @@
  *
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_bios_shadowramin.c,v 1.3 2021/12/18 23:45:38 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_bios_shadowramin.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $");
 
 #include "priv.h"
 
@@ -83,10 +83,7 @@ pramin_init(struct nvkm_bios *bios, const char *name)
 	 * important as we don't want to be touching vram on an
 	 * uninitialised board
 	 */
-	if (device->card_type >= GV100)
-		addr = nvkm_rd32(device, 0x625f04);
-	else
-		addr = nvkm_rd32(device, 0x619f04);
+	addr = nvkm_rd32(device, 0x619f04);
 	if (!(addr & 0x00000008)) {
 		nvkm_debug(subdev, "... not enabled\n");
 		return ERR_PTR(-ENODEV);

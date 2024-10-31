@@ -1,8 +1,7 @@
-/*	$NetBSD: agp.h,v 1.4 2021/12/18 23:45:41 riastradh Exp $	*/
+/*	$NetBSD: agp.h,v 1.1 2018/08/27 01:34:56 riastradh Exp $	*/
 
-/* SPDX-License-Identifier: MIT */
 #include "priv.h"
-#if 0 && (defined(CONFIG_AGP) || (defined(CONFIG_AGP_MODULE) && defined(MODULE))) /* XXX nouveau agp */
+#if defined(CONFIG_AGP) || (defined(CONFIG_AGP_MODULE) && defined(MODULE))
 #ifndef __NVKM_PCI_AGP_H__
 #define __NVKM_PCI_AGP_H__
 

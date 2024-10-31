@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_gmc_v10_0.c,v 1.5 2021/12/19 12:31:45 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_gmc_v10_0.c,v 1.1 2021/12/18 20:11:09 riastradh Exp $	*/
 
 /*
  * Copyright 2019 Advanced Micro Devices, Inc.
@@ -23,7 +23,7 @@
  *
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_gmc_v10_0.c,v 1.5 2021/12/19 12:31:45 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_gmc_v10_0.c,v 1.1 2021/12/18 20:11:09 riastradh Exp $");
 
 #include <linux/firmware.h>
 #include <linux/pci.h>
@@ -169,7 +169,7 @@ static int gmc_v10_0_process_interrupt(struct amdgpu_device *adev,
 			entry->src_id, entry->ring_id, entry->vmid,
 			entry->pasid, task_info.process_name, task_info.tgid,
 			task_info.task_name, task_info.pid);
-		dev_err(adev->dev, "  in page starting at address 0x%016"PRIx64" from client %d\n",
+		dev_err(adev->dev, "  in page starting at address 0x%016llx from client %d\n",
 			addr, entry->client_id);
 		if (!amdgpu_sriov_vf(adev)) {
 			dev_err(adev->dev,
@@ -685,10 +685,6 @@ static int gmc_v10_0_mc_init(struct amdgpu_device *adev)
 	adev->gmc.aper_base = pci_resource_start(adev->pdev, 0);
 	adev->gmc.aper_size = pci_resource_len(adev->pdev, 0);
 
-#ifdef __NetBSD__
-	adev->gmc.aper_tag = adev->pdev->pd_pa.pa_memt;
-#endif
-
 	/* size in MB on si */
 	adev->gmc.mc_vram_size =
 		adev->nbio.funcs->get_memsize(adev) * 1024ULL * 1024ULL;
@@ -823,11 +819,7 @@ static int gmc_v10_0_sw_init(void *handle)
 	 */
 	adev->gmc.mc_mask = 0xffffffffffffULL; /* 48 bit MC */
 
-#ifdef __NetBSD__
-	r = drm_limit_dma_space(adev->ddev, 0, DMA_BIT_MASK(44));
-#else
 	r = dma_set_mask_and_coherent(adev->dev, DMA_BIT_MASK(44));
-#endif
 	if (r) {
 		printk(KERN_WARNING "amdgpu: No suitable DMA available.\n");
 		return r;
@@ -883,8 +875,6 @@ static int gmc_v10_0_sw_fini(void *handle)
 	gmc_v10_0_gart_fini(adev);
 	amdgpu_gem_force_release(adev);
 	amdgpu_bo_fini(adev);
-
-	spin_lock_destroy(&adev->gmc.invalidate_lock);
 
 	return 0;
 }

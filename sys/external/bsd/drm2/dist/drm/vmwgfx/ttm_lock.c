@@ -1,4 +1,4 @@
-/*	$NetBSD: ttm_lock.c,v 1.3 2022/02/17 01:21:02 riastradh Exp $	*/
+/*	$NetBSD: ttm_lock.c,v 1.1 2021/12/18 20:15:54 riastradh Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 OR MIT */
 /**************************************************************************
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ttm_lock.c,v 1.3 2022/02/17 01:21:02 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ttm_lock.c,v 1.1 2021/12/18 20:15:54 riastradh Exp $");
 
 #include <linux/atomic.h>
 #include <linux/errno.h>
@@ -50,7 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: ttm_lock.c,v 1.3 2022/02/17 01:21:02 riastradh Exp $
 void ttm_lock_init(struct ttm_lock *lock)
 {
 	spin_lock_init(&lock->lock);
-	DRM_INIT_WAITQUEUE(&lock->queue, "ttmlock");
+	init_waitqueue_head(&lock->queue);
 	lock->rw = 0;
 	lock->flags = 0;
 }
@@ -59,7 +59,7 @@ void ttm_read_unlock(struct ttm_lock *lock)
 {
 	spin_lock(&lock->lock);
 	if (--lock->rw == 0)
-		DRM_SPIN_WAKEUP_ALL(&lock->queue, &lock->lock);
+		wake_up_all(&lock->queue);
 	spin_unlock(&lock->lock);
 }
 
@@ -67,10 +67,12 @@ static bool __ttm_read_lock(struct ttm_lock *lock)
 {
 	bool locked = false;
 
+	spin_lock(&lock->lock);
 	if (lock->rw >= 0 && lock->flags == 0) {
 		++lock->rw;
 		locked = true;
 	}
+	spin_unlock(&lock->lock);
 	return locked;
 }
 
@@ -78,15 +80,11 @@ int ttm_read_lock(struct ttm_lock *lock, bool interruptible)
 {
 	int ret = 0;
 
-	spin_lock(&lock->lock);
 	if (interruptible)
-		DRM_SPIN_WAIT_UNTIL(ret, &lock->queue, &lock->lock,
-		    __ttm_read_lock(lock));
+		ret = wait_event_interruptible(lock->queue,
+					       __ttm_read_lock(lock));
 	else
-		DRM_SPIN_WAIT_NOINTR_UNTIL(ret, &lock->queue, &lock->lock,
-		    __ttm_read_lock(lock));
-	spin_unlock(&lock->lock);
-
+		wait_event(lock->queue, __ttm_read_lock(lock));
 	return ret;
 }
 
@@ -114,14 +112,11 @@ int ttm_read_trylock(struct ttm_lock *lock, bool interruptible)
 	int ret = 0;
 	bool locked;
 
-	spin_lock(&lock->lock);
 	if (interruptible)
-		DRM_SPIN_WAIT_UNTIL(ret, &lock->queue, &lock->lock,
-		    __ttm_read_trylock(lock, &locked));
+		ret = wait_event_interruptible
+			(lock->queue, __ttm_read_trylock(lock, &locked));
 	else
-		DRM_SPIN_WAIT_NOINTR_UNTIL(ret, &lock->queue, &lock->lock,
-		    __ttm_read_trylock(lock, &locked));
-	spin_unlock(&lock->lock);
+		wait_event(lock->queue, __ttm_read_trylock(lock, &locked));
 
 	if (unlikely(ret != 0)) {
 		BUG_ON(locked);
@@ -135,7 +130,7 @@ void ttm_write_unlock(struct ttm_lock *lock)
 {
 	spin_lock(&lock->lock);
 	lock->rw = 0;
-	DRM_SPIN_WAKEUP_ALL(&lock->queue, &lock->lock);
+	wake_up_all(&lock->queue);
 	spin_unlock(&lock->lock);
 }
 
@@ -159,18 +154,17 @@ int ttm_write_lock(struct ttm_lock *lock, bool interruptible)
 {
 	int ret = 0;
 
-	spin_lock(&lock->lock);
 	if (interruptible) {
-		DRM_SPIN_WAIT_UNTIL(ret, &lock->queue, &lock->lock,
-		    __ttm_write_lock(lock));
+		ret = wait_event_interruptible(lock->queue,
+					       __ttm_write_lock(lock));
 		if (unlikely(ret != 0)) {
+			spin_lock(&lock->lock);
 			lock->flags &= ~TTM_WRITE_LOCK_PENDING;
-			DRM_SPIN_WAKEUP_ONE(&lock->queue, &lock->lock);
+			wake_up_all(&lock->queue);
+			spin_unlock(&lock->lock);
 		}
 	} else
-		DRM_SPIN_WAIT_NOINTR_UNTIL(ret, &lock->queue, &lock->lock,
-		    __ttm_write_lock(lock));
-	spin_unlock(&lock->lock);
+		wait_event(lock->queue, __ttm_write_lock(lock));
 
 	return ret;
 }
@@ -179,7 +173,7 @@ void ttm_suspend_unlock(struct ttm_lock *lock)
 {
 	spin_lock(&lock->lock);
 	lock->flags &= ~TTM_SUSPEND_LOCK;
-	DRM_SPIN_WAKEUP_ALL(&lock->queue, &lock->lock);
+	wake_up_all(&lock->queue);
 	spin_unlock(&lock->lock);
 }
 
@@ -187,6 +181,7 @@ static bool __ttm_suspend_lock(struct ttm_lock *lock)
 {
 	bool locked = false;
 
+	spin_lock(&lock->lock);
 	if (lock->rw == 0) {
 		lock->flags &= ~TTM_SUSPEND_LOCK_PENDING;
 		lock->flags |= TTM_SUSPEND_LOCK;
@@ -194,15 +189,11 @@ static bool __ttm_suspend_lock(struct ttm_lock *lock)
 	} else {
 		lock->flags |= TTM_SUSPEND_LOCK_PENDING;
 	}
+	spin_unlock(&lock->lock);
 	return locked;
 }
 
 void ttm_suspend_lock(struct ttm_lock *lock)
 {
-	int ret;
-
-	spin_lock(&lock->lock);
-	DRM_SPIN_WAIT_UNTIL(ret, &lock->queue, &lock->lock,
-	    __ttm_suspend_lock(lock));
-	spin_unlock(&lock->lock);
+	wait_event(lock->queue, __ttm_suspend_lock(lock));
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_atomic_uapi.c,v 1.7 2021/12/19 10:45:49 riastradh Exp $	*/
+/*	$NetBSD: drm_atomic_uapi.c,v 1.1 2021/12/18 20:10:59 riastradh Exp $	*/
 
 /*
  * Copyright (C) 2014 Red Hat
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_atomic_uapi.c,v 1.7 2021/12/19 10:45:49 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_atomic_uapi.c,v 1.1 2021/12/18 20:10:59 riastradh Exp $");
 
 #include <drm/drm_atomic_uapi.h>
 #include <drm/drm_atomic.h>
@@ -569,7 +569,7 @@ static int drm_atomic_plane_set_property(struct drm_plane *plane,
 		state->pixel_blend_mode = val;
 	} else if (property == plane->rotation_property) {
 		if (!is_power_of_2(val & DRM_MODE_ROTATE_MASK)) {
-			DRM_DEBUG_ATOMIC("[PLANE:%d:%s] bad rotation bitmask: 0x%"PRIx64"\n",
+			DRM_DEBUG_ATOMIC("[PLANE:%d:%s] bad rotation bitmask: 0x%llx\n",
 					 plane->base.id, plane->name, val);
 			return -EINVAL;
 		}
@@ -682,6 +682,7 @@ static int drm_atomic_connector_set_property(struct drm_connector *connector,
 	struct drm_device *dev = connector->dev;
 	struct drm_mode_config *config = &dev->mode_config;
 	bool replaced = false;
+	int ret;
 
 	if (property == config->prop_crtc_id) {
 		struct drm_crtc *crtc = drm_crtc_find(dev, file_priv, val);
@@ -733,7 +734,6 @@ static int drm_atomic_connector_set_property(struct drm_connector *connector,
 		if (state->link_status != DRM_LINK_STATUS_GOOD)
 			state->link_status = val;
 	} else if (property == config->hdr_output_metadata_property) {
-		int ret;
 		ret = drm_atomic_replace_property_blob_from_id(dev,
 				&state->hdr_output_metadata,
 				val,
@@ -1091,39 +1091,6 @@ struct drm_out_fence_state {
 static int setup_out_fence(struct drm_out_fence_state *fence_state,
 			   struct dma_fence *fence)
 {
-#ifdef __NetBSD__
-	int fd = -1;
-	struct file *fp = NULL;
-	int ret;
-
-	/* Allocate a file descriptor.	*/
-	/* XXX errno NetBSD->Linux */
-	ret = -fd_allocfile(&fp, &fd);
-	if (ret)
-		goto out;
-
-	/* Prepare to transmit it to user.  */
-	/* XXX errno NetBSD->Linux */
-	ret = -copyout(&fd, fence_state->out_fence_ptr, sizeof fd);
-	if (ret)
-		goto out;
-
-	/* Create sync file.  */
-	fence_state->sync_file = sync_file_create(fence, fp);
-	if (fence_state->sync_file == NULL) {
-		ret = -ENOMEM;
-		goto out;
-	}
-	fd_affix(curproc, fp, fd);
-	fp = NULL;		/* sync_file consumes */
-
-out:	if (fp != NULL) {
-		fd_abort(curproc, fp, fd);
-		fd = -1;
-	}
-	fence_state->fd = fd;
-	return ret;
-#else
 	fence_state->fd = get_unused_fd_flags(O_CLOEXEC);
 	if (fence_state->fd < 0)
 		return fence_state->fd;
@@ -1136,7 +1103,6 @@ out:	if (fp != NULL) {
 		return -ENOMEM;
 
 	return 0;
-#endif
 }
 
 static int prepare_signaling(struct drm_device *dev,
@@ -1298,15 +1264,10 @@ static void complete_signaling(struct drm_device *dev,
 		return;
 
 	for (i = 0; i < num_fences; i++) {
-#ifdef __NetBSD__
-		if (fd_getfile(fence_state[i].fd))
-			(void)fd_close(fence_state[i].fd);
-#else
 		if (fence_state[i].sync_file)
 			fput(fence_state[i].sync_file->file);
 		if (fence_state[i].fd >= 0)
 			put_unused_fd(fence_state[i].fd);
-#endif
 
 		/* If this fails log error to the user */
 		if (fence_state[i].out_fence_ptr &&

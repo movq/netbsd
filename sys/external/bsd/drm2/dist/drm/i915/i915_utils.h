@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_utils.h,v 1.6 2022/05/27 21:02:27 riastradh Exp $	*/
+/*	$NetBSD: i915_utils.h,v 1.1 2021/12/18 20:15:26 riastradh Exp $	*/
 
 /*
  * Copyright © 2016 Intel Corporation
@@ -30,7 +30,6 @@
 #include <linux/list.h>
 #include <linux/overflow.h>
 #include <linux/sched.h>
-#include <linux/sched/clock.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>
 
@@ -44,13 +43,13 @@ struct timer_list;
 	bool __i915_warn_cond = (x); \
 	if (__builtin_constant_p(__i915_warn_cond)) \
 		BUILD_BUG_ON(__i915_warn_cond); \
-	WARN(__i915_warn_cond, "WARN_ON(" #x ")\n"); })
+	WARN(__i915_warn_cond, "WARN_ON(" #x ")"); })
 #else
-#define WARN_ON(x) WARN((x), "%s\n", "WARN_ON(" __stringify(x) ")")
+#define WARN_ON(x) WARN((x), "%s", "WARN_ON(" __stringify(x) ")")
 #endif
 
 #undef WARN_ON_ONCE
-#define WARN_ON_ONCE(x) WARN_ONCE((x), "%s", "WARN_ON_ONCE(" __stringify(x) ")\n")
+#define WARN_ON_ONCE(x) WARN_ONCE((x), "%s", "WARN_ON_ONCE(" __stringify(x) ")")
 
 #define MISSING_CASE(x) WARN(1, "Missing case (%s == %ld)\n", \
 			     __stringify(x), (long)(x))
@@ -299,52 +298,6 @@ wait_remaining_ms_from_jiffies(unsigned long timestamp_jiffies, int to_wait_ms)
  * timeout could be due to preemption or similar and we've never had a chance to
  * check the condition before the timeout.
  */
-#ifdef __NetBSD__
-#define __wait_for(OP, COND, US, Wmin, Wmax) ({ \
-	int ret__ = 0;							\
-	if (cold) {							\
-		int ms__ = ((US) + 999)/1000;				\
-		for (;;) {						\
-			const bool expired__ = ms__-- == 0;		\
-			OP;						\
-			barrier();					\
-			if (COND) {					\
-				ret__ = 0;				\
-				break;					\
-			}						\
-			if (expired__) {				\
-				ret__ = -ETIMEDOUT;			\
-				break;					\
-			}						\
-			DELAY(1000);					\
-		}							\
-	} else {							\
-		const ktime_t end__ =					\
-		    ktime_add_ns(ktime_get_raw(), 1000ll * (US));	\
-		long wait__ = (Wmin);					\
-		might_sleep();						\
-		for (;;) {						\
-			const bool expired__ =				\
-			    ktime_after(ktime_get_raw(), end__);	\
-			OP;						\
-			/* Guarantee COND check prior to timeout */	\
-			barrier();					\
-			if (COND) {					\
-				ret__ = 0;				\
-				break;					\
-			}						\
-			if (expired__) {				\
-				ret__ = -ETIMEDOUT;			\
-				break;					\
-			}						\
-			usleep_range(wait__, wait__ * 2);		\
-			if (wait__ < (Wmax))				\
-				wait__ <<= 1;				\
-		}							\
-	}								\
-	ret__;								\
-})
-#else	/* !NetBSD */
 #define __wait_for(OP, COND, US, Wmin, Wmax) ({ \
 	const ktime_t end__ = ktime_add_ns(ktime_get_raw(), 1000ll * (US)); \
 	long wait__ = (Wmin); /* recommended min for usleep is 10 us */	\
@@ -369,7 +322,6 @@ wait_remaining_ms_from_jiffies(unsigned long timestamp_jiffies, int to_wait_ms)
 	}								\
 	ret__;								\
 })
-#endif
 
 #define _wait_for(COND, US, Wmin, Wmax)	__wait_for(, (COND), (US), (Wmin), \
 						   (Wmax))
@@ -475,18 +427,10 @@ static inline void add_taint_for_CI(unsigned int taint)
 void cancel_timer(struct timer_list *t);
 void set_timer_ms(struct timer_list *t, unsigned long timeout);
 
-#ifdef __NetBSD__
-static inline bool
-timer_expired(const struct timer_list *t)
-{
-	return callout_expired(__UNCONST(&t->tl_callout));
-}
-#else
 static inline bool timer_expired(const struct timer_list *t)
 {
 	return READ_ONCE(t->expires) && !timer_pending(t);
 }
-#endif
 
 /*
  * This is a lookalike for IS_ENABLED() that takes a kconfig value,

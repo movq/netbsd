@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_subdev_therm_ic.c,v 1.3 2021/12/18 23:45:41 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_subdev_therm_ic.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $	*/
 
 /*
  * Copyright 2012 Nouveau community
@@ -24,7 +24,7 @@
  * Authors: Martin Peres
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_therm_ic.c,v 1.3 2021/12/18 23:45:41 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_therm_ic.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $");
 
 #include "priv.h"
 
@@ -35,9 +35,6 @@ static bool
 probe_monitoring_device(struct nvkm_i2c_bus *bus,
 			struct i2c_board_info *info, void *data)
 {
-#ifdef __NetBSD__
-	return false;
-#else
 	struct nvkm_therm *therm = data;
 	struct nvbios_therm_sensor *sensor = &therm->bios_sensor;
 	struct i2c_client *client;
@@ -60,7 +57,6 @@ probe_monitoring_device(struct nvkm_i2c_bus *bus,
 		   info->type, info->addr, sensor->offset_constant);
 	therm->ic = client;
 	return true;
-#endif
 }
 
 static struct nvkm_i2c_bus_probe
@@ -124,9 +120,6 @@ nvkm_therm_ic_ctor(struct nvkm_therm *therm)
 		if (therm->ic)
 			return;
 	}
-
-	if (nvbios_extdev_skip_probe(bios))
-		return;
 
 	/* The vbios doesn't provide the address of an exisiting monitoring
 	   device. Let's try our static list.

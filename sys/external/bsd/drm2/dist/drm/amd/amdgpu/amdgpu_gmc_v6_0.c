@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_gmc_v6_0.c,v 1.4 2021/12/19 12:21:29 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_gmc_v6_0.c,v 1.1 2021/12/18 20:11:09 riastradh Exp $	*/
 
 /*
  * Copyright 2014 Advanced Micro Devices, Inc.
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_gmc_v6_0.c,v 1.4 2021/12/19 12:21:29 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_gmc_v6_0.c,v 1.1 2021/12/18 20:11:09 riastradh Exp $");
 
 #include <linux/firmware.h>
 #include <linux/module.h>
@@ -67,7 +67,7 @@ MODULE_FIRMWARE("amdgpu/si58_mc.bin");
 #define MC_SEQ_MISC0__MT__DDR3   0xB0000000
 
 
-static const u32 crtc_offsets[6] __unused =
+static const u32 crtc_offsets[6] =
 {
 	SI_CRTC0_REGISTER_OFFSET,
 	SI_CRTC1_REGISTER_OFFSET,
@@ -343,10 +343,6 @@ static int gmc_v6_0_mc_init(struct amdgpu_device *adev)
 	adev->gmc.aper_base = pci_resource_start(adev->pdev, 0);
 	adev->gmc.aper_size = pci_resource_len(adev->pdev, 0);
 	adev->gmc.visible_vram_size = adev->gmc.aper_size;
-
-#ifdef __NetBSD__
-	adev->gmc.aper_tag = adev->pdev->pd_pa.pa_memt;
-#endif
 
 	/* set the gart size */
 	if (amdgpu_gart_size == -1) {
@@ -865,11 +861,7 @@ static int gmc_v6_0_sw_init(void *handle)
 
 	adev->gmc.mc_mask = 0xffffffffffULL;
 
-#ifdef __NetBSD__
-	r = drm_limit_dma_space(adev->ddev, 0, DMA_BIT_MASK(44));
-#else
 	r = dma_set_mask_and_coherent(adev->dev, DMA_BIT_MASK(44));
-#endif
 	if (r) {
 		dev_warn(adev->dev, "amdgpu: No suitable DMA available.\n");
 		return r;

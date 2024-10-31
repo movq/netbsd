@@ -1,8 +1,7 @@
-// SPDX-License-Identifier: GPL-2.0
 /dts-v1/;
 
-#include "bcm7425.dtsi"
-#include "bcm97xxx-nand-cs1-bch24.dtsi"
+/include/ "bcm7425.dtsi"
+/include/ "bcm97xxx-nand-cs1-bch24.dtsi"
 
 / {
 	compatible = "brcm,bcm97425svmb", "brcm,bcm7425";
@@ -58,10 +57,6 @@
 };
 
 &pwmb {
-	status = "okay";
-};
-
-&watchdog {
 	status = "okay";
 };
 
@@ -146,9 +141,5 @@
 };
 
 &mspi {
-	status = "okay";
-};
-
-&waketimer {
 	status = "okay";
 };

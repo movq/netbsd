@@ -1,5 +1,3 @@
-/*	$NetBSD: sis_drv.h,v 1.3 2021/12/18 23:45:44 riastradh Exp $	*/
-
 /* sis_drv.h -- Private header for sis driver -*- linux-c -*- */
 /*
  * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
@@ -30,10 +28,6 @@
 #ifndef _SIS_DRV_H_
 #define _SIS_DRV_H_
 
-#include <drm/drm_ioctl.h>
-#include <drm/drm_legacy.h>
-#include <drm/drm_mm.h>
-
 /* General customization:
  */
 
@@ -50,8 +44,12 @@ enum sis_family {
 	SIS_CHIP_315 = 1,
 };
 
-#define SIS_READ(reg)         readl(((void __iomem *)dev_priv->mmio->handle) + (reg))
-#define SIS_WRITE(reg, val)   writel(val, ((void __iomem *)dev_priv->mmio->handle) + (reg))
+#include <drm/drm_mm.h>
+
+
+#define SIS_BASE (dev_priv->mmio)
+#define SIS_READ(reg)         DRM_READ32(SIS_BASE, reg)
+#define SIS_WRITE(reg, val)   DRM_WRITE32(SIS_BASE, reg, val)
 
 typedef struct drm_sis_private {
 	drm_local_map_t *mmio;
@@ -67,16 +65,12 @@ typedef struct drm_sis_private {
 	struct idr object_idr;
 } drm_sis_private_t;
 
-struct sis_file_private {
-	struct list_head obj_list;
-};
-
 extern int sis_idle(struct drm_device *dev);
 extern void sis_reclaim_buffers_locked(struct drm_device *dev,
 				       struct drm_file *file_priv);
 extern void sis_lastclose(struct drm_device *dev);
 
-extern const struct drm_ioctl_desc sis_ioctls[];
+extern struct drm_ioctl_desc sis_ioctls[];
 extern int sis_max_ioctl;
 
 #endif

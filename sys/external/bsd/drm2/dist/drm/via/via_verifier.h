@@ -1,5 +1,3 @@
-/*	$NetBSD: via_verifier.h,v 1.3 2021/12/18 23:45:44 riastradh Exp $	*/
-
 /*
  * Copyright 2004 The Unichrome Project. All Rights Reserved.
  *

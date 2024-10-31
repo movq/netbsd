@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_subdev_pci_pcie.c,v 1.5 2023/09/30 10:46:45 mrg Exp $	*/
+/*	$NetBSD: nouveau_nvkm_subdev_pci_pcie.c,v 1.1 2021/12/18 20:15:42 riastradh Exp $	*/
 
 /*
  * Copyright 2015 Karol Herbst <nouveau@karolherbst.de>
@@ -24,11 +24,11 @@
  * Authors: Karol Herbst <git@karolherbst.de>
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_pci_pcie.c,v 1.5 2023/09/30 10:46:45 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_pci_pcie.c,v 1.1 2021/12/18 20:15:42 riastradh Exp $");
 
 #include "priv.h"
 
-static const char *nvkm_pcie_speeds[] = {
+static char *nvkm_pcie_speeds[] = {
 	"2.5GT/s",
 	"5.0GT/s",
 	"8.0GT/s",
@@ -48,7 +48,7 @@ nvkm_pcie_speed(enum pci_bus_speed speed)
 		/* XXX 0x16 is 8_0, assume 0x17 will be 16_0 for now */
 		if (speed == 0x17)
 			return NVKM_PCIE_SPEED_8_0;
-		return NVKM_PCIE_SPEED_2_5;
+		return -1;
 	}
 }
 

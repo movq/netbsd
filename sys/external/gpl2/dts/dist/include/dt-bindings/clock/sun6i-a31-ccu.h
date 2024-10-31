@@ -1,4 +1,4 @@
-/*	$NetBSD: sun6i-a31-ccu.h,v 1.1.1.3 2021/11/07 16:49:57 jmcneill Exp $	*/
+/*	$NetBSD: sun6i-a31-ccu.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
 /*
  * Copyright (C) 2016 Chen-Yu Tsai <wens@csie.org>
@@ -45,13 +45,7 @@
 #ifndef _DT_BINDINGS_CLK_SUN6I_A31_H_
 #define _DT_BINDINGS_CLK_SUN6I_A31_H_
 
-#define CLK_PLL_VIDEO0_2X	7
-
 #define CLK_PLL_PERIPH		10
-
-#define CLK_PLL_VIDEO1_2X	13
-
-#define CLK_PLL_MIPI		15
 
 #define CLK_CPU			18
 

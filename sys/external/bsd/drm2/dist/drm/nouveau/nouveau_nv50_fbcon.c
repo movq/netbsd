@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nv50_fbcon.c,v 1.3 2021/12/18 23:45:32 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nv50_fbcon.c,v 1.1 2014/08/06 12:36:23 riastradh Exp $	*/
 
 /*
  * Copyright 2010 Red Hat Inc.
@@ -25,18 +25,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nv50_fbcon.c,v 1.3 2021/12/18 23:45:32 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nv50_fbcon.c,v 1.1 2014/08/06 12:36:23 riastradh Exp $");
 
-#include "nouveau_drv.h"
+#include "nouveau_drm.h"
 #include "nouveau_dma.h"
 #include "nouveau_fbcon.h"
-#include "nouveau_vmm.h"
 
 int
 nv50_fbcon_fillrect(struct fb_info *info, const struct fb_fillrect *rect)
 {
 	struct nouveau_fbdev *nfbdev = info->par;
-	struct nouveau_drm *drm = nouveau_drm(nfbdev->helper.dev);
+	struct nouveau_drm *drm = nouveau_drm(nfbdev->dev);
 	struct nouveau_channel *chan = drm->channel;
 	int ret;
 
@@ -71,7 +70,7 @@ int
 nv50_fbcon_copyarea(struct fb_info *info, const struct fb_copyarea *region)
 {
 	struct nouveau_fbdev *nfbdev = info->par;
-	struct nouveau_drm *drm = nouveau_drm(nfbdev->helper.dev);
+	struct nouveau_drm *drm = nouveau_drm(nfbdev->dev);
 	struct nouveau_channel *chan = drm->channel;
 	int ret;
 
@@ -99,9 +98,9 @@ int
 nv50_fbcon_imageblit(struct fb_info *info, const struct fb_image *image)
 {
 	struct nouveau_fbdev *nfbdev = info->par;
-	struct nouveau_drm *drm = nouveau_drm(nfbdev->helper.dev);
+	struct nouveau_drm *drm = nouveau_drm(nfbdev->dev);
 	struct nouveau_channel *chan = drm->channel;
-	uint32_t dwords, *data = (uint32_t *)image->data;
+	uint32_t width, dwords, *data = (uint32_t *)image->data;
 	uint32_t mask = ~(~0 >> (32 - info->var.bits_per_pixel));
 	uint32_t *palette = info->pseudo_palette;
 	int ret;
@@ -112,6 +111,9 @@ nv50_fbcon_imageblit(struct fb_info *info, const struct fb_image *image)
 	ret = RING_SPACE(chan, 11);
 	if (ret)
 		return ret;
+
+	width = ALIGN(image->width, 32);
+	dwords = (width * image->height) >> 5;
 
 	BEGIN_NV04(chan, NvSub2D, 0x0814, 2);
 	if (info->fix.visual == FB_VISUAL_TRUECOLOR ||
@@ -131,7 +133,6 @@ nv50_fbcon_imageblit(struct fb_info *info, const struct fb_image *image)
 	OUT_RING(chan, 0);
 	OUT_RING(chan, image->dy);
 
-	dwords = ALIGN(ALIGN(image->width, 8) * image->height, 32) >> 5;
 	while (dwords) {
 		int push = dwords > 2047 ? 2047 : dwords;
 
@@ -154,10 +155,11 @@ int
 nv50_fbcon_accel_init(struct fb_info *info)
 {
 	struct nouveau_fbdev *nfbdev = info->par;
-	struct nouveau_framebuffer *fb = nouveau_framebuffer(nfbdev->helper.fb);
-	struct drm_device *dev = nfbdev->helper.dev;
+	struct nouveau_framebuffer *fb = &nfbdev->nouveau_fb;
+	struct drm_device *dev = nfbdev->dev;
 	struct nouveau_drm *drm = nouveau_drm(dev);
 	struct nouveau_channel *chan = drm->channel;
+	struct nouveau_object *object;
 	int ret, format;
 
 	switch (info->var.bits_per_pixel) {
@@ -187,23 +189,23 @@ nv50_fbcon_accel_init(struct fb_info *info)
 		return -EINVAL;
 	}
 
-	ret = nvif_object_init(&chan->user, 0x502d, 0x502d, NULL, 0,
-			       &nfbdev->twod);
+	ret = nouveau_object_new(nv_object(chan->cli), NVDRM_CHAN, Nv2D,
+				 0x502d, NULL, 0, &object);
 	if (ret)
 		return ret;
 
-	ret = RING_SPACE(chan, 58);
+	ret = RING_SPACE(chan, 59);
 	if (ret) {
 		nouveau_fbcon_gpu_lockup(info);
 		return ret;
 	}
 
 	BEGIN_NV04(chan, NvSub2D, 0x0000, 1);
-	OUT_RING(chan, nfbdev->twod.handle);
+	OUT_RING(chan, Nv2D);
 	BEGIN_NV04(chan, NvSub2D, 0x0184, 3);
-	OUT_RING(chan, chan->vram.handle);
-	OUT_RING(chan, chan->vram.handle);
-	OUT_RING(chan, chan->vram.handle);
+	OUT_RING(chan, NvDmaFB);
+	OUT_RING(chan, NvDmaFB);
+	OUT_RING(chan, NvDmaFB);
 	BEGIN_NV04(chan, NvSub2D, 0x0290, 1);
 	OUT_RING(chan, 0);
 	BEGIN_NV04(chan, NvSub2D, 0x0888, 1);
@@ -245,8 +247,8 @@ nv50_fbcon_accel_init(struct fb_info *info)
 	OUT_RING(chan, info->fix.line_length);
 	OUT_RING(chan, info->var.xres_virtual);
 	OUT_RING(chan, info->var.yres_virtual);
-	OUT_RING(chan, upper_32_bits(fb->vma->addr));
-	OUT_RING(chan, lower_32_bits(fb->vma->addr));
+	OUT_RING(chan, upper_32_bits(fb->vma.offset));
+	OUT_RING(chan, lower_32_bits(fb->vma.offset));
 	BEGIN_NV04(chan, NvSub2D, 0x0230, 2);
 	OUT_RING(chan, format);
 	OUT_RING(chan, 1);
@@ -254,9 +256,8 @@ nv50_fbcon_accel_init(struct fb_info *info)
 	OUT_RING(chan, info->fix.line_length);
 	OUT_RING(chan, info->var.xres_virtual);
 	OUT_RING(chan, info->var.yres_virtual);
-	OUT_RING(chan, upper_32_bits(fb->vma->addr));
-	OUT_RING(chan, lower_32_bits(fb->vma->addr));
-	FIRE_RING(chan);
+	OUT_RING(chan, upper_32_bits(fb->vma.offset));
+	OUT_RING(chan, lower_32_bits(fb->vma.offset));
 
 	return 0;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nv50_fence.c,v 1.3 2021/12/18 23:45:32 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nv50_fence.c,v 1.1 2014/08/06 12:36:23 riastradh Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -25,13 +25,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nv50_fence.c,v 1.3 2021/12/18 23:45:32 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nv50_fence.c,v 1.1 2014/08/06 12:36:23 riastradh Exp $");
 
-#include <nvif/os.h>
-#include <nvif/class.h>
-#include <nvif/cl0002.h>
+#include <core/object.h>
+#include <core/class.h>
 
-#include "nouveau_drv.h"
+#include "nouveau_drm.h"
 #include "nouveau_dma.h"
 #include "nv10_fence.h"
 
@@ -40,30 +39,51 @@ __KERNEL_RCSID(0, "$NetBSD: nouveau_nv50_fence.c,v 1.3 2021/12/18 23:45:32 riast
 static int
 nv50_fence_context_new(struct nouveau_channel *chan)
 {
+	struct drm_device *dev = chan->drm->dev;
 	struct nv10_fence_priv *priv = chan->drm->fence;
 	struct nv10_fence_chan *fctx;
-	struct ttm_mem_reg *reg = &priv->bo->bo.mem;
-	u32 start = reg->start * PAGE_SIZE;
-	u32 limit = start + reg->size - 1;
-	int ret;
+	struct ttm_mem_reg *mem = &priv->bo->bo.mem;
+	struct nouveau_object *object;
+	u32 start = mem->start * PAGE_SIZE;
+	u32 limit = start + mem->size - 1;
+	int ret, i;
 
 	fctx = chan->fence = kzalloc(sizeof(*fctx), GFP_KERNEL);
 	if (!fctx)
 		return -ENOMEM;
 
-	nouveau_fence_context_new(chan, &fctx->base);
+	nouveau_fence_context_new(&fctx->base);
 	fctx->base.emit = nv10_fence_emit;
 	fctx->base.read = nv10_fence_read;
 	fctx->base.sync = nv17_fence_sync;
 
-	ret = nvif_object_init(&chan->user, NvSema, NV_DMA_IN_MEMORY,
-			       &(struct nv_dma_v0) {
-					.target = NV_DMA_V0_TARGET_VRAM,
-					.access = NV_DMA_V0_ACCESS_RDWR,
+	ret = nouveau_object_new(nv_object(chan->cli), chan->handle,
+				 NvSema, 0x003d,
+				 &(struct nv_dma_class) {
+					.flags = NV_DMA_TARGET_VRAM |
+						 NV_DMA_ACCESS_RDWR,
 					.start = start,
 					.limit = limit,
-			       }, sizeof(struct nv_dma_v0),
-			       &fctx->sema);
+				 }, sizeof(struct nv_dma_class),
+				 &object);
+
+	/* dma objects for display sync channel semaphore blocks */
+	for (i = 0; !ret && i < dev->mode_config.num_crtc; i++) {
+		struct nouveau_bo *bo = nv50_display_crtc_sema(dev, i);
+		u32 start = bo->bo.mem.start * PAGE_SIZE;
+		u32 limit = start + bo->bo.mem.size - 1;
+
+		ret = nouveau_object_new(nv_object(chan->cli), chan->handle,
+					 NvEvoSema0 + i, 0x003d,
+					 &(struct nv_dma_class) {
+						.flags = NV_DMA_TARGET_VRAM |
+							 NV_DMA_ACCESS_RDWR,
+						.start = start,
+						.limit = limit,
+					 }, sizeof(struct nv_dma_class),
+					 &object);
+	}
+
 	if (ret)
 		nv10_fence_context_del(chan);
 	return ret;
@@ -85,10 +105,10 @@ nv50_fence_create(struct nouveau_drm *drm)
 	priv->base.context_del = nv10_fence_context_del;
 	spin_lock_init(&priv->lock);
 
-	ret = nouveau_bo_new(&drm->client, 4096, 0x1000, TTM_PL_FLAG_VRAM,
-			     0, 0x0000, NULL, NULL, &priv->bo);
+	ret = nouveau_bo_new(drm->dev, 4096, 0x1000, TTM_PL_FLAG_VRAM,
+			     0, 0x0000, NULL, &priv->bo);
 	if (!ret) {
-		ret = nouveau_bo_pin(priv->bo, TTM_PL_FLAG_VRAM, false);
+		ret = nouveau_bo_pin(priv->bo, TTM_PL_FLAG_VRAM);
 		if (!ret) {
 			ret = nouveau_bo_map(priv->bo);
 			if (ret)

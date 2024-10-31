@@ -46,8 +46,7 @@
 #include <dt-bindings/gpio/gpio.h>
 
 / {
-	memory@10000000 {
-		device_type = "memory";
+	memory {
 		reg = <0x10000000 0x40000000>;
 	};
 
@@ -124,9 +123,6 @@
 		regulator-name = "usb_otg_vbus";
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
-		pinctrl-0 = <&pinctrl_usbotg_vbus>;
-		gpio = <&gpio4 15 GPIO_ACTIVE_HIGH>;
-		enable-active-high;
 	};
 };
 
@@ -137,7 +133,7 @@
 };
 
 &ecspi1 {
-	cs-gpios = <&gpio2 30 GPIO_ACTIVE_LOW>;
+	cs-gpios = <&gpio2 30 GPIO_ACTIVE_HIGH>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_ecspi1>;
 	status = "okay";
@@ -161,12 +157,7 @@
 
 		partition@d0000 {
 			label = "spare";
-			reg = <0xd0000 0x320000>;
-		};
-
-		partition@3f0000 {
-			label = "mfg";
-			reg = <0x3f0000 0x10000>;
+			reg = <0xd0000 0x130000>;
 		};
 	};
 };
@@ -174,20 +165,8 @@
 &fec {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_enet>;
-	phy-mode = "rgmii-id";
-	phy-supply = <&reg_3p3v>;
-	phy-handle = <&phy0>;
+	phy-mode = "rgmii";
 	status = "okay";
-
-	mdio {
-		#address-cells = <1>;
-		#size-cells = <0>;
-
-		phy0: ethernet-phy@4 {
-			reg = <4>;
-			qca,clk-out-frequency = <125000000>;
-		};
-	};
 };
 
 &hdmi {
@@ -342,14 +321,13 @@
 &pcie {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_pcie>;
-	reset-gpio = <&gpio7 12 GPIO_ACTIVE_LOW>;
+	reset-gpio = <&gpio7 12 GPIO_ACTIVE_HIGH>;
 	fsl,tx-swing-full = <103>;
 	fsl,tx-swing-low = <103>;
 	status = "okay";
 };
 
 &pwm1 {
-	#pwm-cells = <2>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_pwm1>;
 	status = "okay";
@@ -587,12 +565,6 @@
 	pinctrl_usbotg: usbotggrp {
 		fsl,pins = <
 			MX6QDL_PAD_ENET_RX_ER__USB_OTG_ID 0x17059
-		>;
-	};
-
-	pinctrl_usbotg_vbus: usbotgvbusgrp {
-		fsl,pins = <
-			MX6QDL_PAD_KEY_ROW4__GPIO4_IO15 0x000b0
 		>;
 	};
 

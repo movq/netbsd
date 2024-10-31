@@ -1,5 +1,3 @@
-/*	$NetBSD: radeon_irq_kms.c,v 1.6 2021/12/18 23:45:43 riastradh Exp $	*/
-
 /*
  * Copyright 2008 Advanced Micro Devices, Inc.
  * Copyright 2008 Red Hat Inc.
@@ -27,24 +25,14 @@
  *          Alex Deucher
  *          Jerome Glisse
  */
-
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: radeon_irq_kms.c,v 1.6 2021/12/18 23:45:43 riastradh Exp $");
-
-#include <linux/pci.h>
-#include <linux/pm_runtime.h>
-
+#include <drm/drmP.h>
 #include <drm/drm_crtc_helper.h>
-#include <drm/drm_device.h>
-#include <drm/drm_irq.h>
-#include <drm/drm_probe_helper.h>
-#include <drm/drm_vblank.h>
 #include <drm/radeon_drm.h>
-
-#include "atom.h"
-#include "radeon.h"
 #include "radeon_reg.h"
+#include "radeon.h"
+#include "atom.h"
 
+#include <linux/pm_runtime.h>
 
 #define RADEON_WAIT_IDLE_TIMEOUT 200
 
@@ -57,7 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: radeon_irq_kms.c,v 1.6 2021/12/18 23:45:43 riastradh
  * radeon_irq_process is a macro that points to the per-asic
  * irq handler callback.
  */
-irqreturn_t radeon_driver_irq_handler_kms(DRM_IRQ_ARGS)
+irqreturn_t radeon_driver_irq_handler_kms(int irq, void *arg)
 {
 	struct drm_device *dev = (struct drm_device *) arg;
 	struct radeon_device *rdev = dev->dev_private;
@@ -86,36 +74,36 @@ irqreturn_t radeon_driver_irq_handler_kms(DRM_IRQ_ARGS)
 static void radeon_hotplug_work_func(struct work_struct *work)
 {
 	struct radeon_device *rdev = container_of(work, struct radeon_device,
-						  hotplug_work.work);
+						  hotplug_work);
 	struct drm_device *dev = rdev->ddev;
 	struct drm_mode_config *mode_config = &dev->mode_config;
 	struct drm_connector *connector;
 
-	/* we can race here at startup, some boards seem to trigger
-	 * hotplug irqs when they shouldn't. */
-	if (!rdev->mode_info.mode_config_initialized)
-		return;
-
-	mutex_lock(&mode_config->mutex);
-	list_for_each_entry(connector, &mode_config->connector_list, head)
-		radeon_connector_hotplug(connector);
-	mutex_unlock(&mode_config->mutex);
+	if (mode_config->num_connector) {
+		list_for_each_entry(connector, &mode_config->connector_list, head)
+			radeon_connector_hotplug(connector);
+	}
 	/* Just fire off a uevent and let userspace tell us what to do */
 	drm_helper_hpd_irq_event(dev);
 }
 
-static void radeon_dp_work_func(struct work_struct *work)
+/**
+ * radeon_irq_reset_work_func - execute gpu reset
+ *
+ * @work: work struct
+ *
+ * Execute scheduled gpu reset (cayman+).
+ * This function is called when the irq handler
+ * thinks we need a gpu reset.
+ */
+static void radeon_irq_reset_work_func(struct work_struct *work)
 {
 	struct radeon_device *rdev = container_of(work, struct radeon_device,
-						  dp_work);
-	struct drm_device *dev = rdev->ddev;
-	struct drm_mode_config *mode_config = &dev->mode_config;
-	struct drm_connector *connector;
+						  reset_work);
 
-	/* this should take a mutex */
-	list_for_each_entry(connector, &mode_config->connector_list, head)
-		radeon_connector_hotplug(connector);
+	radeon_gpu_reset(rdev);
 }
+
 /**
  * radeon_driver_irq_preinstall_kms - drm irq preinstall callback
  *
@@ -158,13 +146,7 @@ void radeon_driver_irq_preinstall_kms(struct drm_device *dev)
  */
 int radeon_driver_irq_postinstall_kms(struct drm_device *dev)
 {
-	struct radeon_device *rdev = dev->dev_private;
-
-	if (ASIC_IS_AVIVO(rdev))
-		dev->max_vblank_count = 0x00ffffff;
-	else
-		dev->max_vblank_count = 0x001fffff;
-
+	dev->max_vblank_count = 0x001fffff;
 	return 0;
 }
 
@@ -219,16 +201,6 @@ static bool radeon_msi_ok(struct radeon_device *rdev)
 	/* MSIs don't work on AGP */
 	if (rdev->flags & RADEON_IS_AGP)
 		return false;
-
-	/*
-	 * Older chips have a HW limitation, they can only generate 40 bits
-	 * of address for "64-bit" MSIs which breaks on some platforms, notably
-	 * IBM POWER servers, so we limit them
-	 */
-	if (rdev->family < CHIP_BONAIRE) {
-		dev_info(rdev->dev, "radeon: MSI limited to 32-bit\n");
-		rdev->pdev->no_64bit_msi = 1;
-	}
 
 	/* force MSI on */
 	if (radeon_msi == 1)
@@ -295,15 +267,10 @@ int radeon_irq_kms_init(struct radeon_device *rdev)
 	int r = 0;
 
 	spin_lock_init(&rdev->irq.lock);
-
-	/* Disable vblank irqs aggressively for power-saving */
-	rdev->ddev->vblank_disable_immediate = true;
-
 	r = drm_vblank_init(rdev->ddev, rdev->num_crtc);
 	if (r) {
 		return r;
 	}
-
 	/* enable msi */
 	rdev->msi_enabled = 0;
 
@@ -315,19 +282,15 @@ int radeon_irq_kms_init(struct radeon_device *rdev)
 		}
 	}
 
-	INIT_DELAYED_WORK(&rdev->hotplug_work, radeon_hotplug_work_func);
-	INIT_WORK(&rdev->dp_work, radeon_dp_work_func);
+	INIT_WORK(&rdev->hotplug_work, radeon_hotplug_work_func);
 	INIT_WORK(&rdev->audio_work, r600_audio_update_hdmi);
+	INIT_WORK(&rdev->reset_work, radeon_irq_reset_work_func);
 
 	rdev->irq.installed = true;
-#ifdef __NetBSD__
 	r = drm_irq_install(rdev->ddev);
-#else
-	r = drm_irq_install(rdev->ddev, rdev->ddev->pdev->irq);
-#endif
 	if (r) {
 		rdev->irq.installed = false;
-		flush_delayed_work(&rdev->hotplug_work);
+		flush_work(&rdev->hotplug_work);
 		return r;
 	}
 
@@ -344,12 +307,13 @@ int radeon_irq_kms_init(struct radeon_device *rdev)
  */
 void radeon_irq_kms_fini(struct radeon_device *rdev)
 {
+	drm_vblank_cleanup(rdev->ddev);
 	if (rdev->irq.installed) {
 		drm_irq_uninstall(rdev->ddev);
 		rdev->irq.installed = false;
 		if (rdev->msi_enabled)
 			pci_disable_msi(rdev->pdev);
-		flush_delayed_work(&rdev->hotplug_work);
+		flush_work(&rdev->hotplug_work);
 	}
 }
 
@@ -375,21 +339,6 @@ void radeon_irq_kms_sw_irq_get(struct radeon_device *rdev, int ring)
 		radeon_irq_set(rdev);
 		spin_unlock_irqrestore(&rdev->irq.lock, irqflags);
 	}
-}
-
-/**
- * radeon_irq_kms_sw_irq_get_delayed - enable software interrupt
- *
- * @rdev: radeon device pointer
- * @ring: ring whose interrupt you want to enable
- *
- * Enables the software interrupt for a specific ring (all asics).
- * The software interrupt is generally used to signal a fence on
- * a particular ring.
- */
-bool radeon_irq_kms_sw_irq_get_delayed(struct radeon_device *rdev, int ring)
-{
-	return atomic_inc_return(&rdev->irq.ring_int[ring]) == 1;
 }
 
 /**
@@ -557,38 +506,3 @@ void radeon_irq_kms_disable_hpd(struct radeon_device *rdev, unsigned hpd_mask)
 	spin_unlock_irqrestore(&rdev->irq.lock, irqflags);
 }
 
-/**
- * radeon_irq_kms_update_int_n - helper for updating interrupt enable registers
- *
- * @rdev: radeon device pointer
- * @reg: the register to write to enable/disable interrupts
- * @mask: the mask that enables the interrupts
- * @enable: whether to enable or disable the interrupt register
- * @name: the name of the interrupt register to print to the kernel log
- * @num: the number of the interrupt register to print to the kernel log
- *
- * Helper for updating the enable state of interrupt registers. Checks whether
- * or not the interrupt matches the enable state we want. If it doesn't, then
- * we update it and print a debugging message to the kernel log indicating the
- * new state of the interrupt register.
- *
- * Used for updating sequences of interrupts registers like HPD1, HPD2, etc.
- */
-void radeon_irq_kms_set_irq_n_enabled(struct radeon_device *rdev,
-				      u32 reg, u32 mask,
-				      bool enable, const char *name, unsigned n)
-{
-	u32 tmp = RREG32(reg);
-
-	/* Interrupt state didn't change */
-	if (!!(tmp & mask) == enable)
-		return;
-
-	if (enable) {
-		DRM_DEBUG("%s%d interrupts enabled\n", name, n);
-		WREG32(reg, tmp |= mask);
-	} else {
-		DRM_DEBUG("%s%d interrupts disabled\n", name, n);
-		WREG32(reg, tmp & ~mask);
-	}
-}

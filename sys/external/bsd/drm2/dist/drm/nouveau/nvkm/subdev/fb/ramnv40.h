@@ -1,6 +1,5 @@
-/*	$NetBSD: ramnv40.h,v 1.3 2021/12/18 23:45:39 riastradh Exp $	*/
+/*	$NetBSD: ramnv40.h,v 1.1 2018/08/27 01:34:56 riastradh Exp $	*/
 
-/* SPDX-License-Identifier: MIT */
 #ifndef __NV40_FB_RAM_H__
 #define __NV40_FB_RAM_H__
 #define nv40_ram(p) container_of((p), struct nv40_ram, base)
@@ -12,6 +11,6 @@ struct nv40_ram {
 	u32 coef;
 };
 
-int nv40_ram_new_(struct nvkm_fb *fb, enum nvkm_ram_type, u64,
+int nv40_ram_new_(struct nvkm_fb *fb, enum nvkm_ram_type, u64, u32,
 		  struct nvkm_ram **);
 #endif

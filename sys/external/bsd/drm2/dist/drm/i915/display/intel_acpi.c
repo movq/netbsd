@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_acpi.c,v 1.8 2022/02/27 14:22:42 riastradh Exp $	*/
+/*	$NetBSD: intel_acpi.c,v 1.1 2021/12/18 20:15:27 riastradh Exp $	*/
 
 // SPDX-License-Identifier: GPL-2.0
 /*
@@ -8,24 +8,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_acpi.c,v 1.8 2022/02/27 14:22:42 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_acpi.c,v 1.1 2021/12/18 20:15:27 riastradh Exp $");
 
 #include <linux/pci.h>
 #include <linux/acpi.h>
 
 #include "i915_drv.h"
 #include "intel_acpi.h"
-
-#ifdef __NetBSD__
-
-#include <dev/acpi/acpireg.h>
-#define _COMPONENT ACPI_BUTTON_COMPONENT
-ACPI_MODULE_NAME("acpi_intel_brightness")
-
-#include <dev/acpi/acpi_pci.h>
-
-#include <linux/nbsd-namespace-acpi.h>
-#endif
 
 #define INTEL_DSM_REVISION_ID 1 /* For Calpella anyway... */
 #define INTEL_DSM_FN_PLATFORM_MUX_INFO 1 /* No args */
@@ -34,7 +23,7 @@ static const guid_t intel_dsm_guid =
 	GUID_INIT(0x7ed873d3, 0xc2d0, 0x4e4f,
 		  0xa8, 0x54, 0x0f, 0x13, 0x17, 0xb0, 0x1c, 0x2c);
 
-static const char *intel_dsm_port_name(u8 id)
+static char *intel_dsm_port_name(u8 id)
 {
 	switch (id) {
 	case 0:
@@ -70,7 +59,7 @@ static const char *intel_dsm_port_name(u8 id)
 	}
 }
 
-static const char *intel_dsm_mux_type(u8 type)
+static char *intel_dsm_mux_type(u8 type)
 {
 	switch (type) {
 	case 0:
@@ -121,19 +110,13 @@ static void intel_dsm_platform_mux_info(acpi_handle dhandle)
 	ACPI_FREE(pkg);
 }
 
-#ifdef __NetBSD__
-static ACPI_HANDLE intel_dsm_pci_probe(ACPI_HANDLE dhandle)
-#else
 static acpi_handle intel_dsm_pci_probe(struct pci_dev *pdev)
-#endif
 {
-#ifndef __NetBSD__
 	acpi_handle dhandle;
 
 	dhandle = ACPI_HANDLE(&pdev->dev);
 	if (!dhandle)
 		return NULL;
-#endif
 
 	if (!acpi_check_dsm(dhandle, &intel_dsm_guid, INTEL_DSM_REVISION_ID,
 			    1 << INTEL_DSM_FN_PLATFORM_MUX_INFO)) {
@@ -146,52 +129,6 @@ static acpi_handle intel_dsm_pci_probe(struct pci_dev *pdev)
 	return dhandle;
 }
 
-#ifdef __NetBSD__
-
-static int vga_count;
-static ACPI_HANDLE intel_dsm_handle;
-
-/* XXX from sys/dev/pci/vga_pcivar.h */
-#define	DEVICE_IS_VGA_PCI(class, id)					\
-	    (((PCI_CLASS(class) == PCI_CLASS_DISPLAY &&			\
-	      PCI_SUBCLASS(class) == PCI_SUBCLASS_DISPLAY_VGA) ||	\
-	     (PCI_CLASS(class) == PCI_CLASS_PREHISTORIC &&		\
-	      PCI_SUBCLASS(class) == PCI_SUBCLASS_PREHISTORIC_VGA)) ? 1 : 0)
-
-static int
-intel_dsm_vga_match(const struct pci_attach_args *pa)
-{
-
-	if (!DEVICE_IS_VGA_PCI(pa->pa_class, pa->pa_id))
-		return 0;
-
-	vga_count++;
-	struct acpi_devnode *node =
-	    acpi_pcidev_find(pci_get_segment(pa->pa_pc),
-		pa->pa_bus, pa->pa_device, pa->pa_function);
-	if (node != NULL && intel_dsm_handle == NULL)
-		intel_dsm_handle = intel_dsm_pci_probe(node->ad_handle);
-	return 0;
-}
-
-static bool intel_dsm_detect(struct drm_device *dev)
-{
-	char acpi_method_name[255] = { 0 };
-
-	vga_count = 0;
-	pci_find_device(&dev->pdev->pd_pa, intel_dsm_vga_match);
-
-	if (vga_count == 2 && intel_dsm_handle) {
-		const char *name = acpi_name(intel_dsm_handle);
-		strlcpy(acpi_method_name, name, sizeof(acpi_method_name));
-		DRM_DEBUG_DRIVER("VGA switcheroo: detected DSM switching method %s handle\n",
-				 acpi_method_name);
-		return true;
-	}
-
-	return false;
-}
-#else
 static bool intel_dsm_detect(void)
 {
 	acpi_handle dhandle = NULL;
@@ -214,21 +151,12 @@ static bool intel_dsm_detect(void)
 
 	return false;
 }
-#endif
 
-#ifdef __NetBSD__
-void intel_register_dsm_handler(struct drm_i915_private *i915)
-{
-	if (!intel_dsm_detect(&i915->drm))
-		return;
-}
-#else
 void intel_register_dsm_handler(void)
 {
 	if (!intel_dsm_detect())
 		return;
 }
-#endif
 
 void intel_unregister_dsm_handler(void)
 {

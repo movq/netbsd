@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_atomic_uapi.h,v 1.3 2021/12/19 01:58:25 riastradh Exp $	*/
+/*	$NetBSD: drm_atomic_uapi.h,v 1.1 2021/12/18 20:15:56 riastradh Exp $	*/
 
 /*
  * Copyright (C) 2014 Red Hat
@@ -30,8 +30,6 @@
 
 #ifndef DRM_ATOMIC_UAPI_H_
 #define DRM_ATOMIC_UAPI_H_
-
-#include <linux/compiler.h>
 
 struct drm_crtc_state;
 struct drm_display_mode;

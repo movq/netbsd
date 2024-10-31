@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_vega12_hwmgr.c,v 1.4 2021/12/19 12:37:54 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_vega12_hwmgr.c,v 1.1 2021/12/18 20:15:20 riastradh Exp $	*/
 
 /*
  * Copyright 2017 Advanced Micro Devices, Inc.
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_vega12_hwmgr.c,v 1.4 2021/12/19 12:37:54 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_vega12_hwmgr.c,v 1.1 2021/12/18 20:15:20 riastradh Exp $");
 
 #include <linux/delay.h>
 #include <linux/fb.h>
@@ -51,8 +51,6 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_vega12_hwmgr.c,v 1.4 2021/12/19 12:37:54 rias
 #include "pp_overdriver.h"
 #include "pp_thermal.h"
 #include "vega12_baco.h"
-
-#include <linux/nbsd-namespace.h>
 
 
 static int vega12_force_clock_level(struct pp_hwmgr *hwmgr,
@@ -2037,7 +2035,7 @@ static int vega12_get_ppfeature_status(struct pp_hwmgr *hwmgr, char *buf)
 		"[EnableAllSmuFeatures] Failed to get enabled smc features!",
 		return ret);
 
-	size += sprintf(buf + size, "Current ppfeatures: 0x%016"PRIx64"\n", features_enabled);
+	size += sprintf(buf + size, "Current ppfeatures: 0x%016llx\n", features_enabled);
 	size += sprintf(buf + size, "%-19s %-22s %s\n",
 				output_title[0],
 				output_title[1],
@@ -2071,8 +2069,8 @@ static int vega12_set_ppfeature_status(struct pp_hwmgr *hwmgr, uint64_t new_ppfe
 	features_to_enable =
 		~features_enabled & new_ppfeature_masks;
 
-	pr_debug("features_to_disable 0x%"PRIx64"\n", features_to_disable);
-	pr_debug("features_to_enable 0x%"PRIx64"\n", features_to_enable);
+	pr_debug("features_to_disable 0x%llx\n", features_to_disable);
+	pr_debug("features_to_enable 0x%llx\n", features_to_enable);
 
 	if (features_to_disable) {
 		ret = vega12_enable_smc_features(hwmgr, false, features_to_disable);

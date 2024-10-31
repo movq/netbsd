@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_drv.h,v 1.8 2021/12/19 11:09:47 riastradh Exp $	*/
+/*	$NetBSD: drm_drv.h,v 1.1 2021/12/18 20:15:56 riastradh Exp $	*/
 
 /*
  * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
@@ -31,7 +31,6 @@
 
 #include <linux/list.h>
 #include <linux/irqreturn.h>
-#include <linux/ktime.h>
 
 #include <drm/drm_device.h>
 
@@ -430,7 +429,7 @@ struct drm_driver {
 	 * Interrupt handler called when using drm_irq_install(). Not used by
 	 * drivers which implement their own interrupt handling.
 	 */
-	irqreturn_t(*irq_handler) (DRM_IRQ_ARGS);
+	irqreturn_t(*irq_handler) (int irq, void *arg);
 
 	/**
 	 * @irq_preinstall:
@@ -459,11 +458,6 @@ struct drm_driver {
 	 * interrupt generation in the hardware.
 	 */
 	void (*irq_uninstall) (struct drm_device *dev);
-
-#ifdef __NetBSD__
-	int (*request_irq)(struct drm_device *, int);
-	void (*free_irq)(struct drm_device *);
-#endif
 
 	/**
 	 * @master_create:
@@ -658,14 +652,8 @@ struct drm_driver {
 	 * FIXME: There's way too much duplication going on here, and also moved
 	 * to &drm_gem_object_funcs.
 	 */
-#ifdef __NetBSD__
-	int (*gem_prime_mmap)(struct drm_gem_object *obj, off_t *offp,
-	    size_t len, int prot, int *flagsp, int *advicep,
-	    struct uvm_object **uobjp, int *maxprotp);
-#else
 	int (*gem_prime_mmap)(struct drm_gem_object *obj,
 				struct vm_area_struct *vma);
-#endif
 
 	/**
 	 * @dumb_create:
@@ -735,13 +723,7 @@ struct drm_driver {
 	 * For GEM drivers this is deprecated in favour of
 	 * &drm_gem_object_funcs.vm_ops.
 	 */
-#ifdef __NetBSD__
-	int (*mmap_object)(struct drm_device *, off_t, size_t, int,
-	    struct uvm_object **, voff_t *, struct file *);
-	const struct uvm_pagerops *gem_uvm_ops;
-#else
 	const struct vm_operations_struct *gem_vm_ops;
-#endif
 
 	/** @major: driver major number */
 	int major;
@@ -750,11 +732,11 @@ struct drm_driver {
 	/** @patchlevel: driver patch level */
 	int patchlevel;
 	/** @name: driver name */
-	const char *name;
+	char *name;
 	/** @desc: driver description */
-	const char *desc;
+	char *desc;
 	/** @date: driver date */
-	const char *date;
+	char *date;
 
 	/**
 	 * @driver_features:
@@ -784,10 +766,6 @@ struct drm_driver {
 	 * some examples.
 	 */
 	const struct file_operations *fops;
-
-#ifdef __NetBSD__
-	int (*ioctl_override)(struct file *, unsigned long, void *);
-#endif
 
 	/* Everything below here is for legacy driver, never use! */
 	/* private: */

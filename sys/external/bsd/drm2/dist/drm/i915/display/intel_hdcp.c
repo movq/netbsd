@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_hdcp.c,v 1.6 2021/12/19 12:32:15 riastradh Exp $	*/
+/*	$NetBSD: intel_hdcp.c,v 1.1 2021/12/18 20:15:30 riastradh Exp $	*/
 
 /* SPDX-License-Identifier: MIT */
 /*
@@ -11,7 +11,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_hdcp.c,v 1.6 2021/12/19 12:32:15 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_hdcp.c,v 1.1 2021/12/18 20:15:30 riastradh Exp $");
 
 #include <linux/component.h>
 #include <linux/i2c.h>
@@ -26,8 +26,6 @@ __KERNEL_RCSID(0, "$NetBSD: intel_hdcp.c,v 1.6 2021/12/19 12:32:15 riastradh Exp
 #include "intel_hdcp.h"
 #include "intel_sideband.h"
 #include "intel_connector.h"
-
-#include <linux/nbsd-namespace.h>
 
 #define KEY_LOAD_TRIES	5
 #define ENCRYPT_STATUS_CHANGE_TIMEOUT_MS	50
@@ -1774,8 +1772,6 @@ static void intel_hdcp_check_work(struct work_struct *work)
 				      DRM_HDCP_CHECK_PERIOD_MS);
 }
 
-#ifndef __NetBSD__		/* XXX i915 hdmi audio */
-
 static int i915_hdcp_component_bind(struct device *i915_kdev,
 				    struct device *mei_kdev, void *data)
 {
@@ -1805,8 +1801,6 @@ static const struct component_ops i915_hdcp_component_ops = {
 	.bind   = i915_hdcp_component_bind,
 	.unbind = i915_hdcp_component_unbind,
 };
-
-#endif
 
 static inline
 enum mei_fw_ddi intel_get_mei_fw_ddi_index(enum port port)
@@ -1896,12 +1890,8 @@ void intel_hdcp_component_init(struct drm_i915_private *dev_priv)
 
 	dev_priv->hdcp_comp_added = true;
 	mutex_unlock(&dev_priv->hdcp_comp_mutex);
-#ifdef __NetBSD__		/* XXX i915 hdmi audio */
-	ret = 0;
-#else
 	ret = component_add_typed(dev_priv->drm.dev, &i915_hdcp_component_ops,
 				  I915_COMPONENT_HDCP);
-#endif
 	if (ret < 0) {
 		DRM_DEBUG_KMS("Failed at component add(%d)\n", ret);
 		mutex_lock(&dev_priv->hdcp_comp_mutex);
@@ -1952,7 +1942,7 @@ int intel_hdcp_init(struct intel_connector *connector,
 	mutex_init(&hdcp->mutex);
 	INIT_DELAYED_WORK(&hdcp->check_work, intel_hdcp_check_work);
 	INIT_WORK(&hdcp->prop_work, intel_hdcp_prop_work);
-	DRM_INIT_WAITQUEUE(&hdcp->cp_irq_queue, "hdcpirq");
+	init_waitqueue_head(&hdcp->cp_irq_queue);
 
 	return 0;
 }
@@ -2040,9 +2030,7 @@ void intel_hdcp_component_fini(struct drm_i915_private *dev_priv)
 	dev_priv->hdcp_comp_added = false;
 	mutex_unlock(&dev_priv->hdcp_comp_mutex);
 
-#ifndef __NetBSD__		/* XXX i915 hdmi audio */
 	component_del(dev_priv->drm.dev, &i915_hdcp_component_ops);
-#endif
 }
 
 void intel_hdcp_cleanup(struct intel_connector *connector)
@@ -2053,8 +2041,6 @@ void intel_hdcp_cleanup(struct intel_connector *connector)
 	mutex_lock(&connector->hdcp.mutex);
 	kfree(connector->hdcp.port_data.streams);
 	mutex_unlock(&connector->hdcp.mutex);
-
-	mutex_destroy(&connector->hdcp.mutex);
 }
 
 void intel_hdcp_atomic_check(struct drm_connector *connector,
@@ -2101,12 +2087,8 @@ void intel_hdcp_handle_cp_irq(struct intel_connector *connector)
 	if (!hdcp->shim)
 		return;
 
-	unsigned long irqflags;
-	spin_lock_irqsave(&connector->hdcp.cp_irq_lock, irqflags);
 	atomic_inc(&connector->hdcp.cp_irq_count);
-	DRM_SPIN_WAKEUP_ALL(&connector->hdcp.cp_irq_queue,
-	    &connector->hdcp.cp_irq_lock);
-	spin_unlock_irqrestore(&connector->hdcp.cp_irq_lock, irqflags);
+	wake_up_all(&connector->hdcp.cp_irq_queue);
 
 	schedule_delayed_work(&hdcp->check_work, 0);
 }

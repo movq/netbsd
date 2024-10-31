@@ -1,23 +1,24 @@
-/*	$NetBSD: ast_dp501.c,v 1.3 2021/12/18 23:45:27 riastradh Exp $	*/
+/*	$NetBSD: ast_dp501.c,v 1.1 2018/08/27 01:34:53 riastradh Exp $	*/
 
-// SPDX-License-Identifier: GPL-2.0
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ast_dp501.c,v 1.3 2021/12/18 23:45:27 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ast_dp501.c,v 1.1 2018/08/27 01:34:53 riastradh Exp $");
 
-#include <linux/delay.h>
 #include <linux/firmware.h>
-#include <linux/module.h>
-
+#include <drm/drmP.h>
 #include "ast_drv.h"
-
 MODULE_FIRMWARE("ast_dp501_fw.bin");
 
-static int ast_load_dp501_microcode(struct drm_device *dev)
+int ast_load_dp501_microcode(struct drm_device *dev)
 {
 	struct ast_private *ast = dev->dev_private;
+	static char *fw_name = "ast_dp501_fw.bin";
+	int err;
+	err = request_firmware(&ast->dp501_fw, fw_name, dev->dev);
+	if (err)
+		return err;
 
-	return request_firmware(&ast->dp501_fw, "ast_dp501_fw.bin", dev->dev);
+	return 0;
 }
 
 static void send_ack(struct ast_private *ast)
@@ -191,7 +192,7 @@ bool ast_backup_fw(struct drm_device *dev, u8 *addr, u32 size)
 	return false;
 }
 
-static bool ast_launch_m68k(struct drm_device *dev)
+bool ast_launch_m68k(struct drm_device *dev)
 {
 	struct ast_private *ast = dev->dev_private;
 	u32 i, data, len = 0;
@@ -205,11 +206,7 @@ static bool ast_launch_m68k(struct drm_device *dev)
 		if (ast->dp501_fw_addr) {
 			fw_addr = ast->dp501_fw_addr;
 			len = 32*1024;
-		} else {
-			if (!ast->dp501_fw &&
-			    ast_load_dp501_microcode(dev) < 0)
-				return false;
-
+		} else if (ast->dp501_fw) {
 			fw_addr = (u8 *)ast->dp501_fw->data;
 			len = ast->dp501_fw->size;
 		}
@@ -439,12 +436,4 @@ void ast_init_3rdtx(struct drm_device *dev)
 				ast_init_analog(dev);
 		}
 	}
-}
-
-void ast_release_firmware(struct drm_device *dev)
-{
-	struct ast_private *ast = dev->dev_private;
-
-	release_firmware(ast->dp501_fw);
-	ast->dp501_fw = NULL;
 }

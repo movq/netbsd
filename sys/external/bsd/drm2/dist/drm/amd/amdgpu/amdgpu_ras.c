@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_ras.c,v 1.5 2021/12/19 12:31:45 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_ras.c,v 1.1 2021/12/18 20:11:10 riastradh Exp $	*/
 
 /*
  * Copyright 2018 Advanced Micro Devices, Inc.
@@ -24,7 +24,7 @@
  *
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_ras.c,v 1.5 2021/12/19 12:31:45 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_ras.c,v 1.1 2021/12/18 20:11:10 riastradh Exp $");
 
 #include <linux/debugfs.h>
 #include <linux/list.h>
@@ -37,8 +37,6 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_ras.c,v 1.5 2021/12/19 12:31:45 riastradh Exp
 #include "amdgpu_ras.h"
 #include "amdgpu_atomfirmware.h"
 #include "ivsrcid/nbio/irqsrcs_nbif_7_4.h"
-
-#include <linux/nbsd-namespace.h>
 
 const char *ras_error_string[] = {
 	"none",
@@ -84,9 +82,7 @@ enum amdgpu_ras_retire_page_reservation {
 atomic_t amdgpu_ras_in_intr = ATOMIC_INIT(0);
 
 static bool amdgpu_ras_check_bad_page(struct amdgpu_device *adev,
-				uint64_t addr) __unused;
-
-#ifndef __NetBSD__		/* XXX debugfs */
+				uint64_t addr);
 
 static ssize_t amdgpu_ras_debugfs_read(struct file *f, char __user *buf,
 					size_t size, loff_t *pos)
@@ -189,7 +185,7 @@ static int amdgpu_ras_debugfs_ctrl_parse_data(struct file *f,
 		if (op == 2) {
 			if (sscanf(str, "%*s %*s %*s %u %llu %llu",
 						&sub_block, &address, &value) != 3)
-				if (sscanf(str, "%*s %*s %*s 0x%x 0x%"PRIx64" 0x%"PRIx64"",
+				if (sscanf(str, "%*s %*s %*s 0x%x 0x%llx 0x%llx",
 							&sub_block, &address, &value) != 3)
 					return -EINVAL;
 			data->head.sub_block_index = sub_block;
@@ -313,7 +309,7 @@ static ssize_t amdgpu_ras_debugfs_ctrl_write(struct file *f, const char __user *
 		/* umc ce/ue error injection for a bad page is not allowed */
 		if ((data.head.block == AMDGPU_RAS_BLOCK__UMC) &&
 		    amdgpu_ras_check_bad_page(adev, data.inject.address)) {
-			DRM_WARN("RAS WARN: 0x%"PRIx64" has been marked as bad before error injection!\n",
+			DRM_WARN("RAS WARN: 0x%llx has been marked as bad before error injection!\n",
 					data.inject.address);
 			break;
 		}
@@ -409,8 +405,6 @@ static ssize_t amdgpu_ras_sysfs_read(struct device *dev,
 			"ue", info.ue_count,
 			"ce", info.ce_count);
 }
-
-#endif	/* __NetBSD__ */
 
 /* obj begin */
 
@@ -855,9 +849,7 @@ unsigned long amdgpu_ras_query_error_count(struct amdgpu_device *adev,
 /* sysfs begin */
 
 static int amdgpu_ras_badpages_read(struct amdgpu_device *adev,
-		struct ras_badpage **bps, unsigned int *count) __unused;
-
-#ifndef __NetBSD__		/* XXX amdgpu sysfs */
+		struct ras_badpage **bps, unsigned int *count);
 
 static char *amdgpu_ras_badpage_flags_str(unsigned int flags)
 {
@@ -1006,12 +998,9 @@ static int amdgpu_ras_sysfs_remove_feature_node(struct amdgpu_device *adev)
 	return 0;
 }
 
-#endif	/* __NetBSD__ */
-
 int amdgpu_ras_sysfs_create(struct amdgpu_device *adev,
 		struct ras_fs_if *head)
 {
-#ifndef __NetBSD__
 	struct ras_manager *obj = amdgpu_ras_find_obj(adev, &head->head);
 
 	if (!obj || obj->attr_inuse)
@@ -1040,7 +1029,6 @@ int amdgpu_ras_sysfs_create(struct amdgpu_device *adev,
 	}
 
 	obj->attr_inuse = 1;
-#endif
 
 	return 0;
 }
@@ -1048,7 +1036,6 @@ int amdgpu_ras_sysfs_create(struct amdgpu_device *adev,
 int amdgpu_ras_sysfs_remove(struct amdgpu_device *adev,
 		struct ras_common_if *head)
 {
-#ifndef __NetBSD__		/* XXX amdgpu sysfs */
 	struct ras_manager *obj = amdgpu_ras_find_obj(adev, head);
 
 	if (!obj || !obj->attr_inuse)
@@ -1059,14 +1046,12 @@ int amdgpu_ras_sysfs_remove(struct amdgpu_device *adev,
 				"ras");
 	obj->attr_inuse = 0;
 	put_obj(obj);
-#endif	/* __NetBSD__ */
 
 	return 0;
 }
 
 static int amdgpu_ras_sysfs_remove_all(struct amdgpu_device *adev)
 {
-#ifndef __NetBSD__
 	struct amdgpu_ras *con = amdgpu_ras_get_context(adev);
 	struct ras_manager *obj, *tmp;
 
@@ -1075,7 +1060,6 @@ static int amdgpu_ras_sysfs_remove_all(struct amdgpu_device *adev)
 	}
 
 	amdgpu_ras_sysfs_remove_feature_node(adev);
-#endif
 
 	return 0;
 }
@@ -1100,7 +1084,6 @@ static int amdgpu_ras_sysfs_remove_all(struct amdgpu_device *adev)
  *
  */
 /* debugfs begin */
-#ifndef __NetBSD__		/* XXX amdgpu debugfs */
 static void amdgpu_ras_debugfs_create_ctrl_node(struct amdgpu_device *adev)
 {
 	struct amdgpu_ras *con = amdgpu_ras_get_context(adev);
@@ -1124,12 +1107,9 @@ static void amdgpu_ras_debugfs_create_ctrl_node(struct amdgpu_device *adev)
 				&con->reboot);
 }
 
-#endif	/* __NetBSD__ */
-
 void amdgpu_ras_debugfs_create(struct amdgpu_device *adev,
 		struct ras_fs_if *head)
 {
-#ifndef __NetBSD__		/* XXX amdgpu debugfs */
 	struct amdgpu_ras *con = amdgpu_ras_get_context(adev);
 	struct ras_manager *obj = amdgpu_ras_find_obj(adev, &head->head);
 
@@ -1145,13 +1125,11 @@ void amdgpu_ras_debugfs_create(struct amdgpu_device *adev,
 	obj->ent = debugfs_create_file(obj->fs_data.debugfs_name,
 				       S_IWUGO | S_IRUGO, con->dir, obj,
 				       &amdgpu_ras_debugfs_ops);
-#endif
 }
 
 void amdgpu_ras_debugfs_remove(struct amdgpu_device *adev,
 		struct ras_common_if *head)
 {
-#ifndef __NetBSD__		/* XXX amdgpu debugfs */
 	struct ras_manager *obj = amdgpu_ras_find_obj(adev, head);
 
 	if (!obj || !obj->ent)
@@ -1160,12 +1138,10 @@ void amdgpu_ras_debugfs_remove(struct amdgpu_device *adev,
 	debugfs_remove(obj->ent);
 	obj->ent = NULL;
 	put_obj(obj);
-#endif	/* __NetBSD__ */
 }
 
 static void amdgpu_ras_debugfs_remove_all(struct amdgpu_device *adev)
 {
-#ifndef __NetBSD__
 	struct amdgpu_ras *con = amdgpu_ras_get_context(adev);
 	struct ras_manager *obj, *tmp;
 
@@ -1175,7 +1151,6 @@ static void amdgpu_ras_debugfs_remove_all(struct amdgpu_device *adev)
 
 	debugfs_remove_recursive(con->dir);
 	con->dir = NULL;
-#endif
 }
 /* debugfs end */
 
@@ -1183,10 +1158,8 @@ static void amdgpu_ras_debugfs_remove_all(struct amdgpu_device *adev)
 
 static int amdgpu_ras_fs_init(struct amdgpu_device *adev)
 {
-#ifndef __NetBSD__		/* XXX amdgpu debugfs sysfs */
 	amdgpu_ras_sysfs_create_feature_node(adev);
 	amdgpu_ras_debugfs_create_ctrl_node(adev);
-#endif
 
 	return 0;
 }
@@ -1601,7 +1574,7 @@ int amdgpu_ras_reserve_bad_pages(struct amdgpu_device *adev)
 					       AMDGPU_GPU_PAGE_SIZE,
 					       AMDGPU_GEM_DOMAIN_VRAM,
 					       &bo, NULL))
-			DRM_WARN("RAS WARN: reserve vram for retired page %"PRIx64" fail\n", bp);
+			DRM_WARN("RAS WARN: reserve vram for retired page %llx fail\n", bp);
 
 		data->bps_bo[i] = bo;
 		data->last_reserved = i + 1;
@@ -1688,7 +1661,6 @@ free:
 	kfree((*data)->bps_bo);
 	kfree(*data);
 	con->eh_data = NULL;
-	mutex_destroy(&con->recovery_lock);
 out:
 	DRM_WARN("Failed to initialize ras recovery!\n");
 
@@ -1707,11 +1679,12 @@ static int amdgpu_ras_recovery_fini(struct amdgpu_device *adev)
 	cancel_work_sync(&con->recovery_work);
 	amdgpu_ras_release_bad_pages(adev);
 
-	mutex_destroy(&con->recovery_lock);
+	mutex_lock(&con->recovery_lock);
 	con->eh_data = NULL;
 	kfree(data->bps);
 	kfree(data->bps_bo);
 	kfree(data);
+	mutex_unlock(&con->recovery_lock);
 
 	return 0;
 }

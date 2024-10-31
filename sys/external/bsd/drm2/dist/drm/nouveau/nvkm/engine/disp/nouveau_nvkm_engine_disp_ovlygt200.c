@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nvkm_engine_disp_ovlygt200.c,v 1.3 2021/12/18 23:45:35 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nvkm_engine_disp_ovlygt200.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -24,9 +24,12 @@
  * Authors: Ben Skeggs
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_engine_disp_ovlygt200.c,v 1.3 2021/12/18 23:45:35 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_engine_disp_ovlygt200.c,v 1.1 2018/08/27 01:34:56 riastradh Exp $");
 
-#include "channv50.h"
+#include "dmacnv50.h"
+#include "rootnv50.h"
+
+#include <nvif/class.h>
 
 static const struct nv50_disp_mthd_list
 gt200_disp_ovly_mthd_base = {
@@ -60,7 +63,7 @@ gt200_disp_ovly_mthd_base = {
 };
 
 static const struct nv50_disp_chan_mthd
-gt200_disp_ovly_mthd = {
+gt200_disp_ovly_chan_mthd = {
 	.name = "Overlay",
 	.addr = 0x000540,
 	.prev = 0x000004,
@@ -70,10 +73,13 @@ gt200_disp_ovly_mthd = {
 	}
 };
 
-int
-gt200_disp_ovly_new(const struct nvkm_oclass *oclass, void *argv, u32 argc,
-		    struct nv50_disp *disp, struct nvkm_object **pobject)
-{
-	return nv50_disp_ovly_new_(&nv50_disp_dmac_func, &gt200_disp_ovly_mthd,
-				   disp, 3, oclass, argv, argc, pobject);
-}
+const struct nv50_disp_dmac_oclass
+gt200_disp_ovly_oclass = {
+	.base.oclass = GT200_DISP_OVERLAY_CHANNEL_DMA,
+	.base.minver = 0,
+	.base.maxver = 0,
+	.ctor = nv50_disp_ovly_new,
+	.func = &nv50_disp_dmac_func,
+	.mthd = &gt200_disp_ovly_chan_mthd,
+	.chid = 3,
+};

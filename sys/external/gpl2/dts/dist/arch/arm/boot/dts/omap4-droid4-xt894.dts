@@ -1,157 +1,188 @@
-// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
 /dts-v1/;
 
-#include "motorola-mapphone-common.dtsi"
-
-/ {
-	gpio_keys {
-		compatible = "gpio-keys";
-
-		volume_down {
-			label = "Volume Down";
-			gpios = <&gpio5 26 GPIO_ACTIVE_LOW>; /* gpio154 */
-			linux,code = <KEY_VOLUMEDOWN>;
-			linux,can-disable;
-			/* Value above 7.95ms for no GPIO hardware debounce */
-			debounce-interval = <10>;
-		};
-
-		/*
-		 * We use pad 0x4a100116 abe_dmic_din3.gpio_122 as the irq instead
-		 * of the gpio interrupt to avoid lost events in deeper idle states.
-		*/
-		slider {
-			label = "Keypad Slide";
-			interrupts-extended = <&omap4_pmx_core 0xd6>;
-			gpios = <&gpio4 26 GPIO_ACTIVE_HIGH>; /* gpio122 */
-			linux,input-type = <EV_SW>;
-			linux,code = <SW_KEYPAD_SLIDE>;
-			linux,can-disable;
-			/* Value above 7.95ms for no GPIO hardware debounce */
-			debounce-interval = <10>;
-		};
-	};
-};
+#include "omap443x.dtsi"
 
 / {
 	model = "Motorola Droid 4 XT894";
 	compatible = "motorola,droid4", "ti,omap4430", "ti,omap4";
-};
 
-&keypad {
-	keypad,num-rows = <8>;
-	keypad,num-columns = <8>;
-	linux,keymap = <
+	chosen {
+		stdout-path = &uart3;
+	};
 
-	/* Row 1 */
-	MATRIX_KEY(0, 2, KEY_1)
-	MATRIX_KEY(0, 6, KEY_2)
-	MATRIX_KEY(2, 3, KEY_3)
-	MATRIX_KEY(0, 7, KEY_4)
-	MATRIX_KEY(0, 4, KEY_5)
-	MATRIX_KEY(5, 5, KEY_6)
-	MATRIX_KEY(0, 1, KEY_7)
-	MATRIX_KEY(0, 5, KEY_8)
-	MATRIX_KEY(0, 0, KEY_9)
-	MATRIX_KEY(1, 6, KEY_0)
+	/*
+	 * We seem to have only 1021 MB accessible, 1021 - 1022 is locked,
+	 * then 1023 - 1024 seems to contain mbm. For SRAM, see the notes
+	 * below about SRAM and L3_ICLK2 being unused by default,
+	 */
+	memory {
+		device_type = "memory";
+		reg = <0x80000000 0x3fd00000>;	/* 1021 MB */
+	};
 
-	/* Row 2 */
-	MATRIX_KEY(3, 4, KEY_APOSTROPHE)
-	MATRIX_KEY(7, 6, KEY_Q)
-	MATRIX_KEY(7, 7, KEY_W)
-	MATRIX_KEY(7, 2, KEY_E)
-	MATRIX_KEY(1, 0, KEY_R)
-	MATRIX_KEY(4, 4, KEY_T)
-	MATRIX_KEY(1, 2, KEY_Y)
-	MATRIX_KEY(6, 7, KEY_U)
-	MATRIX_KEY(2, 2, KEY_I)
-	MATRIX_KEY(5, 6, KEY_O)
-	MATRIX_KEY(3, 7, KEY_P)
-	MATRIX_KEY(6, 5, KEY_BACKSPACE)
+	/* CPCAP really supports 1650000 to 3400000 range */
+	vmmc: regulator-mmc {
+		compatible = "regulator-fixed";
+		regulator-name = "vmmc";
+		regulator-min-microvolt = <3000000>;
+		regulator-max-microvolt = <3000000>;
+		regulator-always-on;
+	};
 
-	/* Row 3 */
-	MATRIX_KEY(5, 4, KEY_TAB)
-	MATRIX_KEY(5, 7, KEY_A)
-	MATRIX_KEY(2, 7, KEY_S)
-	MATRIX_KEY(7, 0, KEY_D)
-	MATRIX_KEY(2, 6, KEY_F)
-	MATRIX_KEY(6, 2, KEY_G)
-	MATRIX_KEY(6, 6, KEY_H)
-	MATRIX_KEY(1, 4, KEY_J)
-	MATRIX_KEY(3, 1, KEY_K)
-	MATRIX_KEY(2, 1, KEY_L)
-	MATRIX_KEY(4, 6, KEY_ENTER)
+	/* CPCAP really supports 3000000 to 3100000 range */
+	vemmc: regulator-emmc {
+		compatible = "regulator-fixed";
+		regulator-name = "vemmc";
+		regulator-min-microvolt = <3000000>;
+		regulator-max-microvolt = <3000000>;
+		regulator-always-on;
+	};
 
-	/* Row 4 */
-	MATRIX_KEY(3, 6, KEY_LEFTSHIFT)		/* KEY_CAPSLOCK */
-	MATRIX_KEY(6, 1, KEY_Z)
-	MATRIX_KEY(7, 4, KEY_X)
-	MATRIX_KEY(5, 1, KEY_C)
-	MATRIX_KEY(1, 7, KEY_V)
-	MATRIX_KEY(2, 4, KEY_B)
-	MATRIX_KEY(4, 1, KEY_N)
-	MATRIX_KEY(1, 1, KEY_M)
-	MATRIX_KEY(3, 5, KEY_COMMA)
-	MATRIX_KEY(5, 2, KEY_DOT)
-	MATRIX_KEY(6, 3, KEY_UP)
-	MATRIX_KEY(7, 3, KEY_OK)
-
-	/* Row 5 */
-	MATRIX_KEY(2, 5, KEY_LEFTCTRL)		/* KEY_LEFTSHIFT */
-	MATRIX_KEY(4, 5, KEY_LEFTALT)		/* SYM */
-	MATRIX_KEY(6, 0, KEY_MINUS)
-	MATRIX_KEY(4, 7, KEY_EQUAL)
-	MATRIX_KEY(1, 5, KEY_SPACE)
-	MATRIX_KEY(3, 2, KEY_SLASH)
-	MATRIX_KEY(4, 3, KEY_LEFT)
-	MATRIX_KEY(5, 3, KEY_DOWN)
-	MATRIX_KEY(3, 3, KEY_RIGHT)
-
-	/* Side buttons, KEY_VOLUMEDOWN and KEY_PWER are on CPCAP? */
-	MATRIX_KEY(5, 0, KEY_VOLUMEUP)
-	>;
-};
-
-&i2c1 {
-	led-controller@38 {
-		compatible = "ti,lm3532";
-		#address-cells = <1>;
-		#size-cells = <0>;
-		reg = <0x38>;
-
-		enable-gpios = <&gpio6 12 GPIO_ACTIVE_HIGH>;
-
-		ramp-up-us = <1024>;
-		ramp-down-us = <8193>;
-
-		backlight_led: led@0 {
-			reg = <0>;
-			led-sources = <2>;
-			ti,led-mode = <0>;
-			label = ":backlight";
-		};
-
-		led@1 {
-			reg = <1>;
-			led-sources = <1>;
-			ti,led-mode = <0>;
-			label = ":kbd_backlight";
-		};
+	/* CPCAP really supports 1650000 to 1950000 range */
+	wl12xx_vmmc: regulator-wl12xx {
+		compatible = "regulator-fixed";
+		regulator-name = "vwl1271";
+		regulator-min-microvolt = <1650000>;
+		regulator-max-microvolt = <1650000>;
+		gpio = <&gpio3 30 GPIO_ACTIVE_HIGH>;	/* gpio94 */
+		startup-delay-us = <70000>;
+		enable-active-high;
 	};
 };
 
-&i2c4 {
-	lis3dh: accelerometer@18 {
-		compatible = "st,lis3dh-accel";
-		reg = <0x18>;
+/* L3_2 interconnect is unused, SRAM, GPMC and L3_ICLK2 disabled */
+&gpmc {
+	status = "disabled";
+};
 
-		vdd-supply = <&vhvio>;
+&mmc1 {
+	vmmc-supply = <&vmmc>;
+	bus-width = <4>;
+	cd-gpios = <&gpio4 10 GPIO_ACTIVE_LOW>;	/* gpio106 */
+};
 
-		interrupt-parent = <&gpio2>;
-		interrupts = <2 IRQ_TYPE_EDGE_BOTH>; /* gpio34 */
+&mmc2 {
+	vmmc-supply = <&vemmc>;
+	bus-width = <8>;
+	non-removable;
+};
 
-		rotation-matrix = "0", "-1", "0",
-				  "1", "0", "0",
-				  "0", "0", "1";
+&mmc3 {
+	vmmc-supply = <&wl12xx_vmmc>;
+	interrupts-extended = <&wakeupgen GIC_SPI 94 IRQ_TYPE_LEVEL_HIGH
+			       &omap4_pmx_core 0xde>;
+
+	non-removable;
+	bus-width = <4>;
+	cap-power-off-card;
+
+	#address-cells = <1>;
+	#size-cells = <0>;
+	wlcore: wlcore@2 {
+		compatible = "ti,wl1283";
+		reg = <2>;
+		interrupt-parent = <&gpio4>;
+		interrupts = <4 IRQ_TYPE_LEVEL_HIGH>; /* gpio100 */
+		ref-clock-frequency = <26000000>;
+		tcxo-clock-frequency = <26000000>;
 	};
+};
+
+/* L3_2 interconnect is unused, SRAM, GPMC and L3_ICLK2 disabled */
+&ocmcram {
+	status = "disabled";
+};
+
+&omap4_pmx_core {
+	usb_gpio_mux_sel1: pinmux_usb_gpio_mux_sel1_pins {
+		/* gpio_60 */
+		pinctrl-single,pins = <
+		OMAP4_IOPAD(0x088, PIN_OUTPUT | MUX_MODE3)
+		>;
+	};
+
+	usb_ulpi_pins: pinmux_usb_ulpi_pins {
+		pinctrl-single,pins = <
+		OMAP4_IOPAD(0x196, MUX_MODE7)
+		OMAP4_IOPAD(0x198, MUX_MODE7)
+		OMAP4_IOPAD(0x1b2, PIN_INPUT_PULLUP | MUX_MODE0)
+		OMAP4_IOPAD(0x1b4, PIN_INPUT_PULLUP | MUX_MODE0)
+		OMAP4_IOPAD(0x1b6, PIN_INPUT_PULLUP | MUX_MODE0)
+		OMAP4_IOPAD(0x1b8, PIN_INPUT_PULLUP | MUX_MODE0)
+		OMAP4_IOPAD(0x1ba, PIN_INPUT_PULLUP | MUX_MODE0)
+		OMAP4_IOPAD(0x1bc, PIN_INPUT_PULLUP | MUX_MODE0)
+		OMAP4_IOPAD(0x1be, PIN_INPUT_PULLUP | MUX_MODE0)
+		OMAP4_IOPAD(0x1c0, PIN_INPUT_PULLUP | MUX_MODE0)
+		OMAP4_IOPAD(0x1c2, PIN_INPUT_PULLUP | MUX_MODE0)
+		OMAP4_IOPAD(0x1c4, PIN_INPUT_PULLUP | MUX_MODE0)
+		OMAP4_IOPAD(0x1c6, PIN_INPUT_PULLUP | MUX_MODE0)
+		OMAP4_IOPAD(0x1c8, PIN_INPUT_PULLUP | MUX_MODE0)
+		>;
+	};
+
+	/* usb0_otg_dp and usb0_otg_dm */
+	usb_utmi_pins: pinmux_usb_utmi_pins {
+		pinctrl-single,pins = <
+		OMAP4_IOPAD(0x196, PIN_INPUT | MUX_MODE0)
+		OMAP4_IOPAD(0x198, PIN_INPUT | MUX_MODE0)
+		OMAP4_IOPAD(0x1b2, PIN_INPUT_PULLUP | MUX_MODE7)
+		OMAP4_IOPAD(0x1b4, PIN_INPUT_PULLUP | MUX_MODE7)
+		OMAP4_IOPAD(0x1b6, PIN_INPUT_PULLUP | MUX_MODE7)
+		OMAP4_IOPAD(0x1b8, PIN_INPUT_PULLUP | MUX_MODE7)
+		OMAP4_IOPAD(0x1ba, PIN_INPUT_PULLUP | MUX_MODE7)
+		OMAP4_IOPAD(0x1bc, PIN_INPUT_PULLUP | MUX_MODE7)
+		OMAP4_IOPAD(0x1be, PIN_INPUT_PULLUP | MUX_MODE7)
+		OMAP4_IOPAD(0x1c0, PIN_INPUT_PULLUP | MUX_MODE7)
+		OMAP4_IOPAD(0x1c2, PIN_INPUT_PULLUP | MUX_MODE7)
+		OMAP4_IOPAD(0x1c4, PIN_INPUT_PULLUP | MUX_MODE7)
+		OMAP4_IOPAD(0x1c6, PIN_INPUT_PULLUP | MUX_MODE7)
+		OMAP4_IOPAD(0x1c8, PIN_INPUT_PULLUP | MUX_MODE7)
+		>;
+	};
+
+	/* uart3_tx_irtx and uart3_rx_irrx */
+	uart3_pins: pinmux_uart3_pins {
+		pinctrl-single,pins = <
+		OMAP4_IOPAD(0x196, MUX_MODE7)
+		OMAP4_IOPAD(0x198, MUX_MODE7)
+		OMAP4_IOPAD(0x1b2, PIN_INPUT_PULLUP | MUX_MODE7)
+		OMAP4_IOPAD(0x1b4, PIN_INPUT_PULLUP | MUX_MODE7)
+		OMAP4_IOPAD(0x1b6, PIN_INPUT_PULLUP | MUX_MODE7)
+		OMAP4_IOPAD(0x1b8, PIN_INPUT_PULLUP | MUX_MODE7)
+		OMAP4_IOPAD(0x1ba, MUX_MODE2)
+		OMAP4_IOPAD(0x1bc, PIN_INPUT | MUX_MODE2)
+		OMAP4_IOPAD(0x1be, PIN_INPUT_PULLUP | MUX_MODE7)
+		OMAP4_IOPAD(0x1c0, PIN_INPUT_PULLUP | MUX_MODE7)
+		OMAP4_IOPAD(0x1c2, PIN_INPUT_PULLUP | MUX_MODE7)
+		OMAP4_IOPAD(0x1c4, PIN_INPUT_PULLUP | MUX_MODE7)
+		OMAP4_IOPAD(0x1c6, PIN_INPUT_PULLUP | MUX_MODE7)
+		OMAP4_IOPAD(0x1c8, PIN_INPUT_PULLUP | MUX_MODE7)
+		>;
+	};
+};
+
+&omap4_pmx_wkup {
+	usb_gpio_mux_sel2: pinmux_usb_gpio_mux_sel2_pins {
+		/* gpio_wk0 */
+		pinctrl-single,pins = <
+		OMAP4_IOPAD(0x040, PIN_OUTPUT_PULLDOWN | MUX_MODE3)
+		>;
+	};
+};
+
+&uart3 {
+	interrupts-extended = <&wakeupgen GIC_SPI 74 IRQ_TYPE_LEVEL_HIGH
+			       &omap4_pmx_core 0x17c>;
+};
+
+/* Internal UTMI+ PHY used for OTG, CPCAP ULPI PHY for detection and charger */
+&usb_otg_hs {
+	interface-type = <1>;
+	mode = <3>;
+	power = <50>;
 };

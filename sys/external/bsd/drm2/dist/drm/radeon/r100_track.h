@@ -1,8 +1,3 @@
-/*	$NetBSD: r100_track.h,v 1.3 2021/12/18 23:45:42 riastradh Exp $	*/
-
-/* SPDX-License-Identifier: MIT */
-
-#include "radeon.h"
 
 #define R100_TRACK_MAX_TEXTURE 3
 #define R200_TRACK_MAX_TEXTURE 6

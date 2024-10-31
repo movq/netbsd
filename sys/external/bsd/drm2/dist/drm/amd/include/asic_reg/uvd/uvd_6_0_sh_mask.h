@@ -1,4 +1,4 @@
-/*	$NetBSD: uvd_6_0_sh_mask.h,v 1.3 2021/12/18 23:45:24 riastradh Exp $	*/
+/*	$NetBSD: uvd_6_0_sh_mask.h,v 1.1 2018/08/27 01:34:53 riastradh Exp $	*/
 
 /*
  * UVD_6_0 Register documentation

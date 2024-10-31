@@ -1,4 +1,4 @@
-/*	$NetBSD: radeon_atombios_crtc.c,v 1.3 2021/12/19 11:08:32 riastradh Exp $	*/
+/*	$NetBSD: radeon_atombios_crtc.c,v 1.1 2018/08/27 14:38:20 riastradh Exp $	*/
 
 /*
  * Copyright 2007-8 Advanced Micro Devices, Inc.
@@ -25,17 +25,13 @@
  * Authors: Dave Airlie
  *          Alex Deucher
  */
-
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: radeon_atombios_crtc.c,v 1.3 2021/12/19 11:08:32 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: radeon_atombios_crtc.c,v 1.1 2018/08/27 14:38:20 riastradh Exp $");
 
+#include <drm/drmP.h>
 #include <drm/drm_crtc_helper.h>
-#include <drm/drm_fb_helper.h>
-#include <drm/drm_fixed.h>
-#include <drm/drm_fourcc.h>
-#include <drm/drm_vblank.h>
 #include <drm/radeon_drm.h>
-
+#include <drm/drm_fixed.h>
 #include "radeon.h"
 #include "radeon_asic.h"
 #include "atom.h"
@@ -250,8 +246,9 @@ static void atombios_blank_crtc(struct drm_crtc *crtc, int state)
 
 	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args);
 
-	if (ASIC_IS_DCE8(rdev))
+	if (ASIC_IS_DCE8(rdev)) {
 		WREG32(vga_control_regs[radeon_crtc->crtc_id], vga_control);
+	}
 }
 
 static void atombios_powergate_crtc(struct drm_crtc *crtc, int state)
@@ -283,15 +280,15 @@ void atombios_crtc_dpms(struct drm_crtc *crtc, int mode)
 		if (ASIC_IS_DCE3(rdev) && !ASIC_IS_DCE6(rdev))
 			atombios_enable_crtc_memreq(crtc, ATOM_ENABLE);
 		atombios_blank_crtc(crtc, ATOM_DISABLE);
-		if (dev->num_crtcs > radeon_crtc->crtc_id)
-			drm_crtc_vblank_on(crtc);
+		drm_vblank_post_modeset(dev, radeon_crtc->crtc_id);
+		/* Make sure vblank interrupt is still enabled if needed */
+		radeon_irq_set(rdev);
 		radeon_crtc_load_lut(crtc);
 		break;
 	case DRM_MODE_DPMS_STANDBY:
 	case DRM_MODE_DPMS_SUSPEND:
 	case DRM_MODE_DPMS_OFF:
-		if (dev->num_crtcs > radeon_crtc->crtc_id)
-			drm_crtc_vblank_off(crtc);
+		drm_vblank_pre_modeset(dev, radeon_crtc->crtc_id);
 		if (radeon_crtc->enabled)
 			atombios_blank_crtc(crtc, ATOM_ENABLE);
 		if (ASIC_IS_DCE3(rdev) && !ASIC_IS_DCE6(rdev))
@@ -597,8 +594,7 @@ static u32 atombios_adjust_pll(struct drm_crtc *crtc,
 		if (ASIC_IS_DCE41(rdev) || ASIC_IS_DCE61(rdev) || ASIC_IS_DCE8(rdev))
 			radeon_crtc->pll_flags |= RADEON_PLL_USE_FRAC_FB_DIV;
 		/* use frac fb div on RS780/RS880 */
-		if (((rdev->family == CHIP_RS780) || (rdev->family == CHIP_RS880))
-		    && !radeon_crtc->ss_enabled)
+		if ((rdev->family == CHIP_RS780) || (rdev->family == CHIP_RS880))
 			radeon_crtc->pll_flags |= RADEON_PLL_USE_FRAC_FB_DIV;
 		if (ASIC_IS_DCE32(rdev) && mode->clock > 165000)
 			radeon_crtc->pll_flags |= RADEON_PLL_USE_FRAC_FB_DIV;
@@ -635,9 +631,7 @@ static u32 atombios_adjust_pll(struct drm_crtc *crtc,
 			if (radeon_crtc->ss.refdiv) {
 				radeon_crtc->pll_flags |= RADEON_PLL_USE_REF_DIV;
 				radeon_crtc->pll_reference_div = radeon_crtc->ss.refdiv;
-				if (ASIC_IS_AVIVO(rdev) &&
-				    rdev->family != CHIP_RS780 &&
-				    rdev->family != CHIP_RS880)
+				if (ASIC_IS_AVIVO(rdev))
 					radeon_crtc->pll_flags |= RADEON_PLL_USE_FRAC_FB_DIV;
 			}
 		}
@@ -1153,6 +1147,7 @@ static int dce4_crtc_do_set_base(struct drm_crtc *crtc,
 	struct radeon_crtc *radeon_crtc = to_radeon_crtc(crtc);
 	struct drm_device *dev = crtc->dev;
 	struct radeon_device *rdev = dev->dev_private;
+	struct radeon_framebuffer *radeon_fb;
 	struct drm_framebuffer *target_fb;
 	struct drm_gem_object *obj;
 	struct radeon_bo *rbo;
@@ -1163,7 +1158,6 @@ static int dce4_crtc_do_set_base(struct drm_crtc *crtc,
 	u32 tmp, viewport_w, viewport_h;
 	int r;
 	bool bypass_lut = false;
-	struct drm_format_name_buf format_name;
 
 	/* no fb bound */
 	if (!atomic && !crtc->primary->fb) {
@@ -1171,15 +1165,19 @@ static int dce4_crtc_do_set_base(struct drm_crtc *crtc,
 		return 0;
 	}
 
-	if (atomic)
+	if (atomic) {
+		radeon_fb = to_radeon_framebuffer(fb);
 		target_fb = fb;
-	else
+	}
+	else {
+		radeon_fb = to_radeon_framebuffer(crtc->primary->fb);
 		target_fb = crtc->primary->fb;
+	}
 
 	/* If atomic, assume fb object is pinned & idle & fenced and
 	 * just update base pointers
 	 */
-	obj = target_fb->obj[0];
+	obj = radeon_fb->obj;
 	rbo = gem_to_radeon_bo(obj);
 
 	if (atomic) {
@@ -1199,7 +1197,7 @@ static int dce4_crtc_do_set_base(struct drm_crtc *crtc,
 		radeon_bo_unreserve(rbo);
 	}
 
-	switch (target_fb->format->format) {
+	switch (target_fb->pixel_format) {
 	case DRM_FORMAT_C8:
 		fb_format = (EVERGREEN_GRPH_DEPTH(EVERGREEN_GRPH_DEPTH_8BPP) |
 			     EVERGREEN_GRPH_FORMAT(EVERGREEN_GRPH_FORMAT_INDEXED));
@@ -1263,19 +1261,9 @@ static int dce4_crtc_do_set_base(struct drm_crtc *crtc,
 		/* Greater 8 bpc fb needs to bypass hw-lut to retain precision */
 		bypass_lut = true;
 		break;
-	case DRM_FORMAT_XBGR8888:
-	case DRM_FORMAT_ABGR8888:
-		fb_format = (EVERGREEN_GRPH_DEPTH(EVERGREEN_GRPH_DEPTH_32BPP) |
-			     EVERGREEN_GRPH_FORMAT(EVERGREEN_GRPH_FORMAT_ARGB8888));
-		fb_swap = (EVERGREEN_GRPH_RED_CROSSBAR(EVERGREEN_GRPH_RED_SEL_B) |
-			   EVERGREEN_GRPH_BLUE_CROSSBAR(EVERGREEN_GRPH_BLUE_SEL_R));
-#ifdef __BIG_ENDIAN
-		fb_swap |= EVERGREEN_GRPH_ENDIAN_SWAP(EVERGREEN_GRPH_ENDIAN_8IN32);
-#endif
-		break;
 	default:
 		DRM_ERROR("Unsupported screen format %s\n",
-		          drm_get_format_name(target_fb->format->format, &format_name));
+			  drm_get_format_name(target_fb->pixel_format));
 		return -EINVAL;
 	}
 
@@ -1291,7 +1279,7 @@ static int dce4_crtc_do_set_base(struct drm_crtc *crtc,
 
 				/* Calculate the macrotile mode index. */
 				tile_split_bytes = 64 << tile_split;
-				tileb = 8 * 8 * target_fb->format->cpp[0];
+				tileb = 8 * 8 * target_fb->bits_per_pixel / 8;
 				tileb = min(tile_split_bytes, tileb);
 
 				for (index = 0; tileb > 64; index++)
@@ -1299,14 +1287,13 @@ static int dce4_crtc_do_set_base(struct drm_crtc *crtc,
 
 				if (index >= 16) {
 					DRM_ERROR("Wrong screen bpp (%u) or tile split (%u)\n",
-						  target_fb->format->cpp[0] * 8,
-						  tile_split);
+						  target_fb->bits_per_pixel, tile_split);
 					return -EINVAL;
 				}
 
 				num_banks = (rdev->config.cik.macrotile_mode_array[index] >> 6) & 0x3;
 			} else {
-				switch (target_fb->format->cpp[0] * 8) {
+				switch (target_fb->bits_per_pixel) {
 				case 8:
 					index = 10;
 					break;
@@ -1394,11 +1381,6 @@ static int dce4_crtc_do_set_base(struct drm_crtc *crtc,
 		break;
 	}
 
-	/* Make sure surface address is updated at vertical blank rather than
-	 * horizontal blank
-	 */
-	WREG32(EVERGREEN_GRPH_FLIP_CONTROL + radeon_crtc->crtc_offset, 0);
-
 	WREG32(EVERGREEN_GRPH_PRIMARY_SURFACE_ADDRESS_HIGH + radeon_crtc->crtc_offset,
 	       upper_32_bits(fb_location));
 	WREG32(EVERGREEN_GRPH_SECONDARY_SURFACE_ADDRESS_HIGH + radeon_crtc->crtc_offset,
@@ -1429,7 +1411,7 @@ static int dce4_crtc_do_set_base(struct drm_crtc *crtc,
 	WREG32(EVERGREEN_GRPH_X_END + radeon_crtc->crtc_offset, target_fb->width);
 	WREG32(EVERGREEN_GRPH_Y_END + radeon_crtc->crtc_offset, target_fb->height);
 
-	fb_pitch_pixels = target_fb->pitches[0] / target_fb->format->cpp[0];
+	fb_pitch_pixels = target_fb->pitches[0] / (target_fb->bits_per_pixel / 8);
 	WREG32(EVERGREEN_GRPH_PITCH + radeon_crtc->crtc_offset, fb_pitch_pixels);
 	WREG32(EVERGREEN_GRPH_ENABLE + radeon_crtc->crtc_offset, 1);
 
@@ -1451,11 +1433,18 @@ static int dce4_crtc_do_set_base(struct drm_crtc *crtc,
 	WREG32(EVERGREEN_VIEWPORT_SIZE + radeon_crtc->crtc_offset,
 	       (viewport_w << 16) | viewport_h);
 
-	/* set pageflip to happen anywhere in vblank interval */
-	WREG32(EVERGREEN_MASTER_UPDATE_MODE + radeon_crtc->crtc_offset, 0);
+	/* pageflip setup */
+	/* make sure flip is at vb rather than hb */
+	tmp = RREG32(EVERGREEN_GRPH_FLIP_CONTROL + radeon_crtc->crtc_offset);
+	tmp &= ~EVERGREEN_GRPH_SURFACE_UPDATE_H_RETRACE_EN;
+	WREG32(EVERGREEN_GRPH_FLIP_CONTROL + radeon_crtc->crtc_offset, tmp);
+
+	/* set pageflip to happen only at start of vblank interval (front porch) */
+	WREG32(EVERGREEN_MASTER_UPDATE_MODE + radeon_crtc->crtc_offset, 3);
 
 	if (!atomic && fb && fb != crtc->primary->fb) {
-		rbo = gem_to_radeon_bo(fb->obj[0]);
+		radeon_fb = to_radeon_framebuffer(fb);
+		rbo = gem_to_radeon_bo(radeon_fb->obj);
 		r = radeon_bo_reserve(rbo, false);
 		if (unlikely(r != 0))
 			return r;
@@ -1476,16 +1465,16 @@ static int avivo_crtc_do_set_base(struct drm_crtc *crtc,
 	struct radeon_crtc *radeon_crtc = to_radeon_crtc(crtc);
 	struct drm_device *dev = crtc->dev;
 	struct radeon_device *rdev = dev->dev_private;
+	struct radeon_framebuffer *radeon_fb;
 	struct drm_gem_object *obj;
 	struct radeon_bo *rbo;
 	struct drm_framebuffer *target_fb;
 	uint64_t fb_location;
 	uint32_t fb_format, fb_pitch_pixels, tiling_flags;
 	u32 fb_swap = R600_D1GRPH_SWAP_ENDIAN_NONE;
-	u32 viewport_w, viewport_h;
+	u32 tmp, viewport_w, viewport_h;
 	int r;
 	bool bypass_lut = false;
-	struct drm_format_name_buf format_name;
 
 	/* no fb bound */
 	if (!atomic && !crtc->primary->fb) {
@@ -1493,12 +1482,16 @@ static int avivo_crtc_do_set_base(struct drm_crtc *crtc,
 		return 0;
 	}
 
-	if (atomic)
+	if (atomic) {
+		radeon_fb = to_radeon_framebuffer(fb);
 		target_fb = fb;
-	else
+	}
+	else {
+		radeon_fb = to_radeon_framebuffer(crtc->primary->fb);
 		target_fb = crtc->primary->fb;
+	}
 
-	obj = target_fb->obj[0];
+	obj = radeon_fb->obj;
 	rbo = gem_to_radeon_bo(obj);
 
 	/* If atomic, assume fb object is pinned & idle & fenced and
@@ -1521,7 +1514,7 @@ static int avivo_crtc_do_set_base(struct drm_crtc *crtc,
 		radeon_bo_unreserve(rbo);
 	}
 
-	switch (target_fb->format->format) {
+	switch (target_fb->pixel_format) {
 	case DRM_FORMAT_C8:
 		fb_format =
 		    AVIVO_D1GRPH_CONTROL_DEPTH_8BPP |
@@ -1572,24 +1565,9 @@ static int avivo_crtc_do_set_base(struct drm_crtc *crtc,
 		/* Greater 8 bpc fb needs to bypass hw-lut to retain precision */
 		bypass_lut = true;
 		break;
-	case DRM_FORMAT_XBGR8888:
-	case DRM_FORMAT_ABGR8888:
-		fb_format =
-		    AVIVO_D1GRPH_CONTROL_DEPTH_32BPP |
-		    AVIVO_D1GRPH_CONTROL_32BPP_ARGB8888;
-		if (rdev->family >= CHIP_R600)
-			fb_swap =
-			    (R600_D1GRPH_RED_CROSSBAR(R600_D1GRPH_RED_SEL_B) |
-			     R600_D1GRPH_BLUE_CROSSBAR(R600_D1GRPH_BLUE_SEL_R));
-		else /* DCE1 (R5xx) */
-			fb_format |= AVIVO_D1GRPH_SWAP_RB;
-#ifdef __BIG_ENDIAN
-		fb_swap |= R600_D1GRPH_SWAP_ENDIAN_32BIT;
-#endif
-		break;
 	default:
 		DRM_ERROR("Unsupported screen format %s\n",
-		          drm_get_format_name(target_fb->format->format, &format_name));
+			  drm_get_format_name(target_fb->pixel_format));
 		return -EINVAL;
 	}
 
@@ -1610,11 +1588,6 @@ static int avivo_crtc_do_set_base(struct drm_crtc *crtc,
 		WREG32(AVIVO_D1VGA_CONTROL, 0);
 	else
 		WREG32(AVIVO_D2VGA_CONTROL, 0);
-
-	/* Make sure surface address is update at vertical blank rather than
-	 * horizontal blank
-	 */
-	WREG32(AVIVO_D1GRPH_FLIP_CONTROL + radeon_crtc->crtc_offset, 0);
 
 	if (rdev->family >= CHIP_RV770) {
 		if (radeon_crtc->crtc_id) {
@@ -1647,7 +1620,7 @@ static int avivo_crtc_do_set_base(struct drm_crtc *crtc,
 	WREG32(AVIVO_D1GRPH_X_END + radeon_crtc->crtc_offset, target_fb->width);
 	WREG32(AVIVO_D1GRPH_Y_END + radeon_crtc->crtc_offset, target_fb->height);
 
-	fb_pitch_pixels = target_fb->pitches[0] / target_fb->format->cpp[0];
+	fb_pitch_pixels = target_fb->pitches[0] / (target_fb->bits_per_pixel / 8);
 	WREG32(AVIVO_D1GRPH_PITCH + radeon_crtc->crtc_offset, fb_pitch_pixels);
 	WREG32(AVIVO_D1GRPH_ENABLE + radeon_crtc->crtc_offset, 1);
 
@@ -1662,11 +1635,18 @@ static int avivo_crtc_do_set_base(struct drm_crtc *crtc,
 	WREG32(AVIVO_D1MODE_VIEWPORT_SIZE + radeon_crtc->crtc_offset,
 	       (viewport_w << 16) | viewport_h);
 
+	/* pageflip setup */
+	/* make sure flip is at vb rather than hb */
+	tmp = RREG32(AVIVO_D1GRPH_FLIP_CONTROL + radeon_crtc->crtc_offset);
+	tmp &= ~AVIVO_D1GRPH_SURFACE_UPDATE_H_RETRACE_EN;
+	WREG32(AVIVO_D1GRPH_FLIP_CONTROL + radeon_crtc->crtc_offset, tmp);
+
 	/* set pageflip to happen only at start of vblank interval (front porch) */
 	WREG32(AVIVO_D1MODE_MASTER_UPDATE_MODE + radeon_crtc->crtc_offset, 3);
 
 	if (!atomic && fb && fb != crtc->primary->fb) {
-		rbo = gem_to_radeon_bo(fb->obj[0]);
+		radeon_fb = to_radeon_framebuffer(fb);
+		rbo = gem_to_radeon_bo(radeon_fb->obj);
 		r = radeon_bo_reserve(rbo, false);
 		if (unlikely(r != 0))
 			return r;
@@ -1695,11 +1675,11 @@ int atombios_crtc_set_base(struct drm_crtc *crtc, int x, int y,
 }
 
 int atombios_crtc_set_base_atomic(struct drm_crtc *crtc,
-				  struct drm_framebuffer *fb,
+                                  struct drm_framebuffer *fb,
 				  int x, int y, enum mode_set_atomic state)
 {
-	struct drm_device *dev = crtc->dev;
-	struct radeon_device *rdev = dev->dev_private;
+       struct drm_device *dev = crtc->dev;
+       struct radeon_device *rdev = dev->dev_private;
 
 	if (ASIC_IS_DCE4(rdev))
 		return dce4_crtc_do_set_base(crtc, fb, x, y, 1);
@@ -2173,9 +2153,11 @@ static void atombios_crtc_disable(struct drm_crtc *crtc)
 	atombios_crtc_dpms(crtc, DRM_MODE_DPMS_OFF);
 	if (crtc->primary->fb) {
 		int r;
+		struct radeon_framebuffer *radeon_fb;
 		struct radeon_bo *rbo;
 
-		rbo = gem_to_radeon_bo(crtc->primary->fb->obj[0]);
+		radeon_fb = to_radeon_framebuffer(crtc->primary->fb);
+		rbo = gem_to_radeon_bo(radeon_fb->obj);
 		r = radeon_bo_reserve(rbo, false);
 		if (unlikely(r))
 			DRM_ERROR("failed to reserve rbo before unpin\n");
@@ -2239,6 +2221,7 @@ static const struct drm_crtc_helper_funcs atombios_helper_funcs = {
 	.mode_set_base_atomic = atombios_crtc_set_base_atomic,
 	.prepare = atombios_crtc_prepare,
 	.commit = atombios_crtc_commit,
+	.load_lut = radeon_crtc_load_lut,
 	.disable = atombios_crtc_disable,
 };
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_pci.c,v 1.5 2024/01/14 22:15:15 riastradh Exp $	*/
+/*	$NetBSD: i915_pci.c,v 1.1 2021/12/18 20:15:25 riastradh Exp $	*/
 
 /*
  * Copyright © 2016 Intel Corporation
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i915_pci.c,v 1.5 2024/01/14 22:15:15 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i915_pci.c,v 1.1 2021/12/18 20:15:25 riastradh Exp $");
 
 #include <linux/console.h>
 #include <linux/vga_switcheroo.h>
@@ -442,7 +442,7 @@ static const struct intel_device_info snb_m_gt2_info = {
 	.has_rc6 = 1, \
 	.has_rc6p = 1, \
 	.has_rps = true, \
-	.ppgtt_type = INTEL_PPGTT_ALIASING, \
+	.ppgtt_type = INTEL_PPGTT_FULL, \
 	.ppgtt_size = 31, \
 	IVB_PIPE_OFFSETS, \
 	IVB_CURSOR_OFFSETS, \
@@ -499,7 +499,7 @@ static const struct intel_device_info vlv_info = {
 	.has_rps = true,
 	.display.has_gmch = 1,
 	.display.has_hotplug = 1,
-	.ppgtt_type = INTEL_PPGTT_ALIASING,
+	.ppgtt_type = INTEL_PPGTT_FULL,
 	.ppgtt_size = 31,
 	.has_snoop = true,
 	.has_coherent_ggtt = false,
@@ -913,13 +913,6 @@ static const struct pci_device_id pciidlist[] = {
 };
 MODULE_DEVICE_TABLE(pci, pciidlist);
 
-#ifdef __NetBSD__
-
-/* XXX Kludge to expose this to NetBSD driver attachment goop.  */
-const struct pci_device_id *const i915_device_ids = pciidlist;
-const size_t i915_n_device_ids = __arraycount(pciidlist);
-
-#else
 static void i915_pci_remove(struct pci_dev *pdev)
 {
 	struct drm_i915_private *i915;
@@ -996,14 +989,12 @@ static int i915_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (PCI_FUNC(pdev->devfn))
 		return -ENODEV;
 
-#ifndef __NetBSD__		/* XXX vga switcheroo */
 	/*
 	 * apple-gmux is needed on dual GPU MacBook Pro
 	 * to probe the panel if we're the inactive GPU.
 	 */
 	if (vga_switcheroo_client_probe_defer(pdev))
 		return -EPROBE_DEFER;
-#endif
 
 	err = i915_driver_probe(pdev, ent);
 	if (err)
@@ -1029,7 +1020,6 @@ static int i915_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	return 0;
 }
 
-#ifndef __NetBSD__
 static struct pci_driver i915_pci_driver = {
 	.name = DRIVER_NAME,
 	.id_table = pciidlist,
@@ -1037,7 +1027,6 @@ static struct pci_driver i915_pci_driver = {
 	.remove = i915_pci_remove,
 	.driver.pm = &i915_pm_ops,
 };
-#endif
 
 static int __init i915_init(void)
 {
@@ -1090,8 +1079,6 @@ static void __exit i915_exit(void)
 
 module_init(i915_init);
 module_exit(i915_exit);
-
-#endif
 
 MODULE_AUTHOR("Tungsten Graphics, Inc.");
 MODULE_AUTHOR("Intel Corporation");

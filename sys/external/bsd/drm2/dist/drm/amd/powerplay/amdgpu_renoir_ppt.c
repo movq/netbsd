@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpu_renoir_ppt.c,v 1.4 2021/12/19 12:37:54 riastradh Exp $	*/
+/*	$NetBSD: amdgpu_renoir_ppt.c,v 1.1 2021/12/18 20:15:18 riastradh Exp $	*/
 
 /*
  * Copyright 2019 Advanced Micro Devices, Inc.
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpu_renoir_ppt.c,v 1.4 2021/12/19 12:37:54 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpu_renoir_ppt.c,v 1.1 2021/12/18 20:15:18 riastradh Exp $");
 
 #include "amdgpu.h"
 #include "amdgpu_smu.h"
@@ -34,8 +34,6 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_renoir_ppt.c,v 1.4 2021/12/19 12:37:54 riastr
 #include "smu12_driver_if.h"
 #include "smu_v12_0.h"
 #include "renoir_ppt.h"
-
-#include <linux/nbsd-namespace.h>
 
 
 #define CLK_MAP(clk, index) \

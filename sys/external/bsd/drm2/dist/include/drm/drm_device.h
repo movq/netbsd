@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_device.h,v 1.11 2022/10/15 15:19:28 riastradh Exp $	*/
+/*	$NetBSD: drm_device.h,v 1.1 2021/12/18 20:15:56 riastradh Exp $	*/
 
 #ifndef _DRM_DEVICE_H_
 #define _DRM_DEVICE_H_
@@ -11,11 +11,6 @@
 #include <drm/drm_hashtab.h>
 #include <drm/drm_mode_config.h>
 
-#ifdef __NetBSD__
-#include <drm/drm_wait_netbsd.h>
-#include <dev/sysmon/sysmonvar.h>
-#endif
-
 struct drm_driver;
 struct drm_minor;
 struct drm_master;
@@ -27,8 +22,11 @@ struct drm_vma_offset_manager;
 struct drm_vram_mm;
 struct drm_fb_helper;
 
+struct inode;
+
 struct pci_dev;
 struct pci_controller;
+
 
 /**
  * enum drm_switch_power - power state of drm device
@@ -123,7 +121,7 @@ struct drm_device {
 	bool unplugged;
 
 	/** @anon_inode: inode for private address-space */
-	void *anon_inode;
+	struct inode *anon_inode;
 
 	/** @unique: Unique name of the device */
 	char *unique;
@@ -194,9 +192,6 @@ struct drm_device {
 	 * @irq: Used by the drm_irq_install() and drm_irq_unistall() helpers.
 	 */
 	int irq;
-#ifdef __NetBSD__
-	struct drm_bus_irq_cookie *irq_cookie;
-#endif
 
 	/**
 	 * @vblank_disable_immediate:
@@ -229,13 +224,11 @@ struct drm_device {
 	 *  Protects vblank count and time updates during vblank enable/disable
 	 */
 	spinlock_t vblank_time_lock;
-#ifndef __NetBSD__		/* merged into event_lock */
 	/**
 	 * @vbl_lock: Top-level vblank references lock, wraps the low-level
 	 * @vblank_time_lock.
 	 */
 	spinlock_t vbl_lock;
-#endif
 
 	/**
 	 * @max_vblank_count:
@@ -281,20 +274,6 @@ struct drm_device {
 	/** @hose: PCI hose, only used on ALPHA platforms. */
 	struct pci_controller *hose;
 #endif
-
-#ifdef __NetBSD__
-	bus_space_tag_t bst;
-	struct drm_bus_map *bus_maps;
-	unsigned bus_nmaps;
-	bus_dma_tag_t bus_dmat;	/* bus's full DMA tag, for internal use */
-	bus_dma_tag_t bus_dmat32;	/* bus's 32-bit DMA tag */
-	bus_dma_tag_t dmat;	/* DMA tag for driver, may be subregion */
-	bool dmat_subregion_p;
-	bus_addr_t dmat_subregion_min;
-	bus_addr_t dmat_subregion_max;
-	struct vmem *cma_pool;
-#endif
-
 	/** @num_crtcs: Number of CRTCs on this device */
 	unsigned int num_crtcs;
 
@@ -331,18 +310,9 @@ struct drm_device {
 	 */
 	struct drm_fb_helper *fb_helper;
 
-#ifdef __NetBSD__
-	struct sysmon_pswitch sc_monitor_hotplug;
-	struct mutex suspend_lock;
-	drm_waitqueue_t suspend_cv;
-	uint64_t active_ioctls;
-	struct lwp *suspender;
-#endif
-
 	/* Everything below here is for legacy driver, never use! */
 	/* private: */
-#if IS_ENABLED(CONFIG_DRM_LEGACY) || \
-    defined(__NetBSD__) /* XXX drm_vm.c / drm_cdevsw.c use this */
+#if IS_ENABLED(CONFIG_DRM_LEGACY)
 	/* Context handle management - linked list of context handles */
 	struct list_head ctxlist;
 
@@ -391,11 +361,5 @@ struct drm_device {
 	struct drm_sg_mem *sg;
 #endif
 };
-
-#ifdef __NetBSD__
-extern const struct cdevsw drm_cdevsw;
-int drm_limit_dma_space(struct drm_device *, resource_size_t, resource_size_t);
-int drm_guarantee_initialized(void);
-#endif
 
 #endif

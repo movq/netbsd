@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_sprite.c,v 1.6 2021/12/19 12:05:09 riastradh Exp $	*/
+/*	$NetBSD: intel_sprite.c,v 1.1 2021/12/18 20:15:31 riastradh Exp $	*/
 
 /*
  * Copyright © 2011 Intel Corporation
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_sprite.c,v 1.6 2021/12/19 12:05:09 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_sprite.c,v 1.1 2021/12/18 20:15:31 riastradh Exp $");
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
@@ -91,10 +91,10 @@ void intel_pipe_update_start(const struct intel_crtc_state *new_crtc_state)
 	const struct drm_display_mode *adjusted_mode = &new_crtc_state->hw.adjusted_mode;
 	long timeout = msecs_to_jiffies_timeout(1);
 	int scanline, min, max, vblank_start;
-	drm_waitqueue_t *wq = drm_crtc_vblank_waitqueue(&crtc->base);
-	int ret;
+	wait_queue_head_t *wq = drm_crtc_vblank_waitqueue(&crtc->base);
 	bool need_vlv_dsi_wa = (IS_VALLEYVIEW(dev_priv) || IS_CHERRYVIEW(dev_priv)) &&
 		intel_crtc_has_type(new_crtc_state, INTEL_OUTPUT_DSI);
+	DEFINE_WAIT(wait);
 	u32 psr_status;
 
 	vblank_start = adjusted_mode->crtc_vblank_start;
@@ -121,20 +121,40 @@ void intel_pipe_update_start(const struct intel_crtc_state *new_crtc_state)
 		DRM_ERROR("PSR idle timed out 0x%x, atomic update may fail\n",
 			  psr_status);
 
-	spin_lock(&dev_priv->drm.event_lock);
+	local_irq_disable();
 
 	crtc->debug.min_vbl = min;
 	crtc->debug.max_vbl = max;
 	trace_intel_pipe_update_start(crtc);
 
-	DRM_SPIN_TIMED_WAIT_NOINTR_UNTIL(ret, wq, &dev_priv->drm.event_lock,
-	    timeout,
-	    (scanline = intel_get_crtc_scanline(crtc),
-		scanline < min || scanline > max));
-	if (ret <= 0)
-		DRM_ERROR("Potential atomic update failure on pipe %c: %d\n",
-		    pipe_name(crtc->pipe), ret ? ret : -EWOULDBLOCK);
-	drm_crtc_vblank_put_locked(&crtc->base);
+	for (;;) {
+		/*
+		 * prepare_to_wait() has a memory barrier, which guarantees
+		 * other CPUs can see the task state update by the time we
+		 * read the scanline.
+		 */
+		prepare_to_wait(wq, &wait, TASK_UNINTERRUPTIBLE);
+
+		scanline = intel_get_crtc_scanline(crtc);
+		if (scanline < min || scanline > max)
+			break;
+
+		if (!timeout) {
+			DRM_ERROR("Potential atomic update failure on pipe %c\n",
+				  pipe_name(crtc->pipe));
+			break;
+		}
+
+		local_irq_enable();
+
+		timeout = schedule_timeout(timeout);
+
+		local_irq_disable();
+	}
+
+	finish_wait(wq, &wait);
+
+	drm_crtc_vblank_put(&crtc->base);
 
 	/*
 	 * On VLV/CHV DSI the scanline counter would appear to
@@ -162,7 +182,7 @@ void intel_pipe_update_start(const struct intel_crtc_state *new_crtc_state)
 	return;
 
 irq_disable:
-	spin_lock(&dev_priv->drm.event_lock);
+	local_irq_disable();
 }
 
 /**
@@ -182,8 +202,6 @@ void intel_pipe_update_end(struct intel_crtc_state *new_crtc_state)
 	ktime_t end_vbl_time = ktime_get();
 	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
 
-	BUG_ON(!spin_is_locked(&dev_priv->drm.event_lock));
-
 	trace_intel_pipe_update_end(crtc, end_vbl_count, scanline_end);
 
 	/* We're still in the vblank-evade critical section, this can't race.
@@ -191,21 +209,24 @@ void intel_pipe_update_end(struct intel_crtc_state *new_crtc_state)
 	 * event outside of the critical section - the spinlock might spin for a
 	 * while ... */
 	if (new_crtc_state->uapi.event) {
-		WARN_ON(drm_crtc_vblank_get_locked(&crtc->base) != 0);
+		WARN_ON(drm_crtc_vblank_get(&crtc->base) != 0);
 
+		spin_lock(&crtc->base.dev->event_lock);
 		drm_crtc_arm_vblank_event(&crtc->base,
 				          new_crtc_state->uapi.event);
+		spin_unlock(&crtc->base.dev->event_lock);
 
 		new_crtc_state->uapi.event = NULL;
 	}
-	spin_unlock(&dev_priv->drm.event_lock);
+
+	local_irq_enable();
 
 	if (intel_vgpu_active(dev_priv))
 		return;
 
 	if (crtc->debug.start_vbl_count &&
 	    crtc->debug.start_vbl_count != end_vbl_count) {
-		DRM_ERROR("Atomic update failure on pipe %c (start=%u end=%u) time %"PRIdMAX" us, min %d, max %d, scanline start %d, end %d\n",
+		DRM_ERROR("Atomic update failure on pipe %c (start=%u end=%u) time %lld us, min %d, max %d, scanline start %d, end %d\n",
 			  pipe_name(pipe), crtc->debug.start_vbl_count,
 			  end_vbl_count,
 			  ktime_us_delta(end_vbl_time, crtc->debug.start_vbl_time),

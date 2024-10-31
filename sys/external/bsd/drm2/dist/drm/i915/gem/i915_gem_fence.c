@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_gem_fence.c,v 1.4 2021/12/19 12:36:15 riastradh Exp $	*/
+/*	$NetBSD: i915_gem_fence.c,v 1.1 2021/12/18 20:15:31 riastradh Exp $	*/
 
 /*
  * SPDX-License-Identifier: MIT
@@ -7,14 +7,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i915_gem_fence.c,v 1.4 2021/12/19 12:36:15 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i915_gem_fence.c,v 1.1 2021/12/18 20:15:31 riastradh Exp $");
 
 #include "i915_drv.h"
 #include "i915_gem_object.h"
 
 struct stub_fence {
 	struct dma_fence dma;
-	spinlock_t lock;
 	struct i915_sw_fence chain;
 };
 
@@ -53,7 +52,6 @@ static void stub_release(struct dma_fence *fence)
 	i915_sw_fence_fini(&stub->chain);
 
 	BUILD_BUG_ON(offsetof(typeof(*stub), dma));
-	spin_lock_destroy(&stub->lock);
 	dma_fence_free(&stub->dma);
 }
 
@@ -75,8 +73,7 @@ i915_gem_object_lock_fence(struct drm_i915_gem_object *obj)
 		return NULL;
 
 	i915_sw_fence_init(&stub->chain, stub_notify);
-	spin_lock_init(&stub->lock);
-	dma_fence_init(&stub->dma, &stub_fence_ops, &stub->lock,
+	dma_fence_init(&stub->dma, &stub_fence_ops, &stub->chain.wait.lock,
 		       0, 0);
 
 	if (i915_sw_fence_await_reservation(&stub->chain,

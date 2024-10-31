@@ -1,10 +1,13 @@
-/*	$NetBSD: hi6220-clock.h,v 1.1.1.4 2020/01/03 14:33:04 skrll Exp $	*/
+/*	$NetBSD: hi6220-clock.h,v 1.1 2017/06/15 20:14:23 jmcneill Exp $	*/
 
-/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2015 Hisilicon Limited.
  *
  * Author: Bintian Wang <bintian.wang@huawei.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 
 #ifndef __DT_BINDINGS_CLOCK_HI6220_H
@@ -123,10 +126,7 @@
 #define HI6220_CS_DAPB		57
 #define HI6220_CS_ATB_DIV	58
 
-/* gate clock */
-#define HI6220_DAPB_CLK		59
-
-#define HI6220_SYS_NR_CLKS	60
+#define HI6220_SYS_NR_CLKS	59
 
 /* clk in Hi6220 media controller */
 /* gate clocks */
@@ -173,8 +173,4 @@
 #define HI6220_DDRC_AXI1	7
 
 #define HI6220_POWER_NR_CLKS	8
-
-/* clk in Hi6220 acpu sctrl */
-#define HI6220_ACPU_SFT_AT_S		0
-
 #endif
