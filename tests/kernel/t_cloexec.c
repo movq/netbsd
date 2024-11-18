@@ -1,4 +1,4 @@
-/*	$NetBSD: t_cloexec.c,v 1.1 2024/11/10 15:57:32 riastradh Exp $	*/
+/*	$NetBSD: t_cloexec.c,v 1.1.4.2 2024/11/18 17:38:03 martin Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_cloexec.c,v 1.1 2024/11/10 15:57:32 riastradh Exp $");
+__RCSID("$NetBSD: t_cloexec.c,v 1.1.4.2 2024/11/18 17:38:03 martin Exp $");
 
 #include <sys/types.h>
 
