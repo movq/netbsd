@@ -1,3 +1,0 @@
-# $NetBSD: md.sparc,v 1.9 2024/07/11 20:41:08 riastradh Exp $
-#
-./etc/ld.so.conf				etc-sys-etc
