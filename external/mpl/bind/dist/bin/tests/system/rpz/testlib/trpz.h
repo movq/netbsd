@@ -1,4 +1,4 @@
-/*	$NetBSD: trpz.h,v 1.1 2025/01/26 16:12:24 christos Exp $	*/
+/*	$NetBSD: trpz.h,v 1.1.1.1 2025/01/26 16:12:24 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
