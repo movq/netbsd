@@ -1,4 +1,4 @@
-/* $NetBSD: di.c,v 1.1 2025/02/12 11:33:34 jmcneill Exp $ */
+/* $NetBSD: di.c,v 1.1.2.2 2025/02/22 11:47:16 martin Exp $ */
 
 /*-
  * Copyright (c) 2025 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: di.c,v 1.1 2025/02/12 11:33:34 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: di.c,v 1.1.2.2 2025/02/22 11:47:16 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
