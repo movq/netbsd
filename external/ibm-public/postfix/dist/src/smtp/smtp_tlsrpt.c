@@ -1,4 +1,4 @@
-/*	$NetBSD: smtp_tlsrpt.c,v 1.1 2025/02/25 19:11:45 christos Exp $	*/
+/*	$NetBSD: smtp_tlsrpt.c,v 1.1.1.1 2025/02/25 19:11:45 christos Exp $	*/
 
 /*++
 /* NAME
