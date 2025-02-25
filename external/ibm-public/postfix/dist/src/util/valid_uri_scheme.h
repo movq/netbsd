@@ -1,4 +1,4 @@
-/*	$NetBSD: valid_uri_scheme.h,v 1.1 2025/02/25 19:11:47 christos Exp $	*/
+/*	$NetBSD: valid_uri_scheme.h,v 1.1.1.1 2025/02/25 19:11:47 christos Exp $	*/
 
 #ifndef _VALID_SCHEME_H_INCLUDED_
 #define _VALID_SCHEME_H_INCLUDED_

@@ -1,4 +1,4 @@
-/*	$NetBSD: sendopts.h,v 1.1 2025/02/25 19:11:43 christos Exp $	*/
+/*	$NetBSD: sendopts.h,v 1.1.1.1 2025/02/25 19:11:43 christos Exp $	*/
 
 #ifndef _SENDOPTS_H_INCLUDED_
 #define _SENDOPTS_H_INCLUDED_

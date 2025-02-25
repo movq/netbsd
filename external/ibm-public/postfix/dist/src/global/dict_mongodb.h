@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_mongodb.h,v 1.1 2025/02/25 19:11:42 christos Exp $	*/
+/*	$NetBSD: dict_mongodb.h,v 1.1.1.1 2025/02/25 19:11:42 christos Exp $	*/
 
 #ifndef _DICT_MONGODB_INCLUDED_
 #define _DICT_MONGODB_INCLUDED_

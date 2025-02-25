@@ -1,4 +1,4 @@
-/*	$NetBSD: mystrerror.c,v 1.1 2025/02/25 19:11:47 christos Exp $	*/
+/*	$NetBSD: mystrerror.c,v 1.1.1.1 2025/02/25 19:11:47 christos Exp $	*/
 
 /*++
 /* NAME
