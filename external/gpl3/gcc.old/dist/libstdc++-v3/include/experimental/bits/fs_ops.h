@@ -1,6 +1,6 @@
 // Filesystem operational functions -*- C++ -*-
 
-// Copyright (C) 2014-2020 Free Software Foundation, Inc.
+// Copyright (C) 2014-2016 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,7 +22,7 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file experimental/bits/fs_ops.h
+/** @file experimental/bits/fs_fwd.h
  *  This is an internal header file, included by other library headers.
  *  Do not attempt to use it directly. @headername{experimental/filesystem}
  */
@@ -38,16 +38,16 @@
 
 namespace std _GLIBCXX_VISIBILITY(default)
 {
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
-
 namespace experimental
 {
 namespace filesystem
 {
 inline namespace v1
 {
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
+
   /**
-   * @addtogroup filesystem-ts
+   * @ingroup filesystem
    * @{
    */
 
@@ -74,19 +74,19 @@ inline namespace v1
   { return copy_file(__from, __to, copy_options::none); }
 
   inline bool
-  copy_file(const path& __from, const path& __to, error_code& __ec)
+  copy_file(const path& __from, const path& __to, error_code& __ec) noexcept
   { return copy_file(__from, __to, copy_options::none, __ec); }
 
   bool copy_file(const path& __from, const path& __to, copy_options __option);
   bool copy_file(const path& __from, const path& __to, copy_options __option,
-		 error_code& __ec);
+		 error_code& __ec) noexcept;
 
   void copy_symlink(const path& __existing_symlink, const path& __new_symlink);
   void copy_symlink(const path& __existing_symlink, const path& __new_symlink,
 		    error_code& __ec) noexcept;
 
   bool create_directories(const path& __p);
-  bool create_directories(const path& __p, error_code& __ec);
+  bool create_directories(const path& __p, error_code& __ec) noexcept;
 
   bool create_directory(const path& __p);
   bool create_directory(const path& __p, error_code& __ec) noexcept;
@@ -131,11 +131,8 @@ inline namespace v1
   {
     auto __s = status(__p, __ec);
     if (status_known(__s))
-      {
-	__ec.clear();
-	return __s.type() != file_type::not_found;
-      }
-    return false;
+      __ec.clear();
+    return exists(__s);
   }
 
   uintmax_t file_size(const path& __p);
@@ -262,7 +259,7 @@ inline namespace v1
   bool remove(const path& __p, error_code& __ec) noexcept;
 
   uintmax_t remove_all(const path& __p);
-  uintmax_t remove_all(const path& __p, error_code& __ec);
+  uintmax_t remove_all(const path& __p, error_code& __ec) noexcept;
 
   void rename(const path& __from, const path& __to);
   void rename(const path& __from, const path& __to, error_code& __ec) noexcept;
@@ -288,12 +285,11 @@ inline namespace v1
   path temp_directory_path();
   path temp_directory_path(error_code& __ec);
 
-  /// @} group filesystem-ts
+  // @} group filesystem
+_GLIBCXX_END_NAMESPACE_VERSION
 } // namespace v1
 } // namespace filesystem
 } // namespace experimental
-
-_GLIBCXX_END_NAMESPACE_VERSION
 } // namespace std
 
 #endif // C++11

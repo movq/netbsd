@@ -1,6 +1,6 @@
 #ifdef __powerpc64__
 # PowerPC64 support for -fsplit-stack.
-# Copyright (C) 2009-2020 Free Software Foundation, Inc.
+# Copyright (C) 2009-2016 Free Software Foundation, Inc.
 # Contributed by Alan Modra <amodra@gmail.com>.
 
 # This file is part of GCC.
@@ -31,7 +31,6 @@
 #define PARAMS 48
 #endif
 #define MORESTACK_FRAMESIZE	(PARAMS+96)
-#define R2_SAVE			-MORESTACK_FRAMESIZE+PARAMS-8
 #define PARAMREG_SAVE		-MORESTACK_FRAMESIZE+PARAMS+0
 #define STATIC_CHAIN_SAVE	-MORESTACK_FRAMESIZE+PARAMS+64
 #define R29_SAVE		-MORESTACK_FRAMESIZE+PARAMS+72
@@ -56,18 +55,11 @@
 	.type name,@function;				\
 name##:
 
-#ifdef __PCREL__
-#define ENTRY(name)					\
-	ENTRY0(name);					\
-	.localentry name, 1
-#define JUMP_TARGET(name) name##@notoc
-#else
 #define ENTRY(name)					\
 	ENTRY0(name);					\
 0:	addis %r2,%r12,.TOC.-0b@ha;			\
         addi %r2,%r2,.TOC.-0b@l;			\
 	.localentry name, .-name
-#endif
 
 #else
 
@@ -89,9 +81,6 @@ BODY_LABEL(name)##:
 
 #define SIZE(name) .size name, .-BODY_LABEL(name)
 
-#ifndef JUMP_TARGET
-#define JUMP_TARGET(name) name
-#endif
 
 	.text
 # Just like __morestack, but with larger excess allocation
@@ -144,17 +133,6 @@ ENTRY0(__morestack_non_split)
 # cr7 must also be preserved.
 
 ENTRY0(__morestack)
-
-#if _CALL_ELF == 2
-# Functions with localentry bits of zero cannot make calls if those
-# calls might change r2.  This is true generally, and also true for
-# __morestack with its special calling convention.  When __morestack's
-# caller is non-pcrel but libgcc is pcrel, the functions called here
-# might modify r2.  r2 must be preserved on exit, and also restored
-# for the call back to our caller.
-	std %r2,R2_SAVE(%r1)
-#endif
-
 # Save parameter passing registers, our arguments, lr, r29
 # and use r29 as a frame pointer.
 	std %r3,PARAMREG_SAVE+0(%r1)
@@ -173,26 +151,12 @@ ENTRY0(__morestack)
 	std %r12,LINKREG_SAVE(%r1)
 	std %r3,NEWSTACKSIZE_SAVE(%r1)	# new stack size
 	mr %r29,%r1
-#if _CALL_ELF == 2
-	.cfi_offset %r2,R2_SAVE
-#endif
 	.cfi_offset %r29,R29_SAVE
 	.cfi_def_cfa_register %r29
 	stdu %r1,-MORESTACK_FRAMESIZE(%r1)
 
-#if _CALL_ELF == 2 && !defined __PCREL__
-# If this isn't a pcrel libgcc then the functions we call here will
-# require r2 to be valid.  If __morestack is called from pcrel code r2
-# won't be valid.  Set it up.
-	bcl 20,31,1f
-1:
-	mflr %r12
-	addis %r2,%r12,.TOC.-1b@ha
-	addi %r2,%r2,.TOC.-1b@l
-#endif
-
 	# void __morestack_block_signals (void)
-	bl JUMP_TARGET(__morestack_block_signals)
+	bl __morestack_block_signals
 
 	# void *__generic_morestack (size_t *pframe_size,
 	#			     void *old_stack,
@@ -200,7 +164,7 @@ ENTRY0(__morestack)
 	addi %r3,%r29,NEWSTACKSIZE_SAVE
 	mr %r4,%r29
 	li %r5,0			# no copying from old stack
-	bl JUMP_TARGET(__generic_morestack)
+	bl __generic_morestack
 
 # Start using new stack
 	stdu %r29,-32(%r3)		# back-chain
@@ -219,15 +183,12 @@ ENTRY0(__morestack)
 	std %r3,-0x7000-64(%r13)	# tcbhead_t.__private_ss
 
 	# void __morestack_unblock_signals (void)
-	bl JUMP_TARGET(__morestack_unblock_signals)
+	bl __morestack_unblock_signals
 
 # Set up for a call to the target function, located 3
 # instructions after __morestack's return address.
 #
 	ld %r12,LINKREG_SAVE(%r29)
-#if _CALL_ELF == 2
-	ld %r2,R2_SAVE(%r29)
-#endif
 	ld %r3,PARAMREG_SAVE+0(%r29)	# restore arg regs
 	ld %r4,PARAMREG_SAVE+8(%r29)
 	ld %r5,PARAMREG_SAVE+16(%r29)
@@ -257,20 +218,11 @@ ENTRY0(__morestack)
 	std %r10,PARAMREG_SAVE+56(%r29)
 #endif
 
-#if _CALL_ELF == 2 && !defined __PCREL__
-# r2 was restored for calling back into our caller.  Set it up again.
-	bcl 20,31,1f
-1:
-	mflr %r12
-	addis %r2,%r12,.TOC.-1b@ha
-	addi %r2,%r2,.TOC.-1b@l
-#endif
-
-	bl JUMP_TARGET(__morestack_block_signals)
+	bl __morestack_block_signals
 
 	# void *__generic_releasestack (size_t *pavailable)
 	addi %r3,%r29,NEWSTACKSIZE_SAVE
-	bl JUMP_TARGET(__generic_releasestack)
+	bl __generic_releasestack
 
 # Reset __private_ss stack guard to value for old stack
 	ld %r12,NEWSTACKSIZE_SAVE(%r29)
@@ -279,7 +231,7 @@ ENTRY0(__morestack)
 .LEHE0:
 	std %r3,-0x7000-64(%r13)	# tcbhead_t.__private_ss
 
-	bl JUMP_TARGET(__morestack_unblock_signals)
+	bl __morestack_unblock_signals
 
 # Use old stack again.
 	mr %r1,%r29
@@ -287,9 +239,6 @@ ENTRY0(__morestack)
 # Restore return value regs, and return.
 	ld %r0,LINKREG_SAVE(%r29)
 	mtlr %r0
-#if _CALL_ELF == 2
-	ld %r2,R2_SAVE(%r29)
-#endif
 	ld %r3,PARAMREG_SAVE+0(%r29)
 	ld %r4,PARAMREG_SAVE+8(%r29)
 	ld %r5,PARAMREG_SAVE+16(%r29)
@@ -311,15 +260,13 @@ cleanup:
 	std %r3,PARAMREG_SAVE(%r29)	# Save exception header
 	# size_t __generic_findstack (void *stack)
 	mr %r3,%r29
-	bl JUMP_TARGET(__generic_findstack)
+	bl __generic_findstack
 	sub %r3,%r29,%r3
 	addi %r3,%r3,BACKOFF
 	std %r3,-0x7000-64(%r13)	# tcbhead_t.__private_ss
 	ld %r3,PARAMREG_SAVE(%r29)
-	bl JUMP_TARGET(_Unwind_Resume)
-#ifndef __PCREL__
+	bl _Unwind_Resume
 	nop
-#endif
 	.cfi_endproc
 	SIZE (__morestack)
 
@@ -357,15 +304,12 @@ DW.ref.__gcc_personality_v0:
 # new thread starts.  This is called from a constructor.
 # void __stack_split_initialize (void)
 ENTRY(__stack_split_initialize)
-	.cfi_startproc
 	addi %r3,%r1,-0x4000		# We should have at least 16K.
 	std %r3,-0x7000-64(%r13)	# tcbhead_t.__private_ss
 	# void __generic_morestack_set_initial_sp (void *sp, size_t len)
 	mr %r3,%r1
 	li %r4, 0x4000
-	b JUMP_TARGET(__generic_morestack_set_initial_sp)
-# The lack of .cfi_endproc here is deliberate.  This function and the
-# following ones can all use the default FDE.
+	b __generic_morestack_set_initial_sp
 	SIZE (__stack_split_initialize)
 
 
@@ -391,7 +335,6 @@ ENTRY0(__morestack_make_guard)
 	sub %r3,%r3,%r4
 	addi %r3,%r3,BACKOFF
 	blr
-	.cfi_endproc
 	SIZE (__morestack_make_guard)
 
 

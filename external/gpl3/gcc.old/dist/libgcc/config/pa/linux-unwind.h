@@ -1,5 +1,5 @@
 /* DWARF2 EH unwinding support for PA Linux.
-   Copyright (C) 2004-2020 Free Software Foundation, Inc.
+   Copyright (C) 2004-2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -80,7 +80,7 @@ pa32_fallback_frame_state (struct _Unwind_Context *context,
   struct sigcontext *sc;
   struct rt_sigframe {
     siginfo_t info;
-    ucontext_t uc;
+    struct ucontext uc;
   } *frame;
 
   /* rt_sigreturn trampoline:
@@ -130,7 +130,7 @@ pa32_fallback_frame_state (struct _Unwind_Context *context,
     return _URC_END_OF_STACK;
 
   frame = (struct rt_sigframe *)(sp + off);
-  sc = (struct sigcontext *)&frame->uc.uc_mcontext;
+  sc = &frame->uc.uc_mcontext;
 
   new_cfa = sc->sc_gr[30];
   fs->regs.cfa_how = CFA_REG_OFFSET;
@@ -153,11 +153,10 @@ pa32_fallback_frame_state (struct _Unwind_Context *context,
     }
   fs->regs.reg[88].how = REG_SAVED_OFFSET;
   fs->regs.reg[88].loc.offset = (long) &sc->sc_sar - new_cfa;
-  fs->regs.reg[__LIBGCC_DWARF_ALT_FRAME_RETURN_COLUMN__].how
-    = REG_SAVED_OFFSET;
-  fs->regs.reg[__LIBGCC_DWARF_ALT_FRAME_RETURN_COLUMN__].loc.offset
+  fs->regs.reg[DWARF_ALT_FRAME_RETURN_COLUMN].how = REG_SAVED_OFFSET;
+  fs->regs.reg[DWARF_ALT_FRAME_RETURN_COLUMN].loc.offset
     = (long) &sc->sc_iaoq[0] - new_cfa;
-  fs->retaddr_column = __LIBGCC_DWARF_ALT_FRAME_RETURN_COLUMN__;
+  fs->retaddr_column = DWARF_ALT_FRAME_RETURN_COLUMN;
   fs->signal_frame = 1;
   return _URC_NO_REASON;
 }

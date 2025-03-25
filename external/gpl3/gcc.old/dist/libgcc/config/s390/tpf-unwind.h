@@ -1,5 +1,5 @@
 /* DWARF2 EH unwinding support for TPF OS.
-   Copyright (C) 2004-2020 Free Software Foundation, Inc.
+   Copyright (C) 2004-2013 Free Software Foundation, Inc.
    Contributed by P.J. Darcy (darcypj@us.ibm.com).
 
 This file is part of GCC.
@@ -24,7 +24,6 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 <http://www.gnu.org/licenses/>.  */
 
 #include <dlfcn.h>
-#include <stdbool.h>
 
 /* Function Name: __isPATrange
    Parameters passed into it:  address to check
@@ -32,29 +31,20 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
    Description: This function simply checks to see if the address
    passed to it is in the CP pat code range.  */
 
-#define CP_CNF  0x000000000000c18u /* location of BSS CINFC pointer */
-#define cinfc_fast(TAG) (void *) \
-  *((unsigned long *) *(unsigned long *) (CP_CNF) + (TAG))
-#define CINFC_CMRESET 187
-#define CINTFC_CMCENBKST 431
-#define CINTFC_CMCENBKED 432
+#define MIN_PATRANGE 0x10000
+#define MAX_PATRANGE 0x800000
 
 static inline unsigned int
 __isPATrange (void *addr)
 {
-  return !!(addr > cinfc_fast (CINTFC_CMCENBKST)
-	    && addr < cinfc_fast (CINTFC_CMCENBKED));
-}
-
-static inline unsigned int
-__isSkipResetAddr (void *addr)
-{
-  return !!(addr == cinfc_fast (CINFC_CMRESET));
+  if (addr > (void *)MIN_PATRANGE && addr < (void *)MAX_PATRANGE)
+    return 1;
+  else
+    return 0;
 }
 
 /* TPF return address offset from start of stack frame.  */
-#define ICST_CRET 168
-#define ICST_SRET 320
+#define TPFRA_OFFSET 168
 
 /* Exceptions macro defined for TPF so that functions without
    dwarf frame information can be used with exceptions.  */
@@ -72,12 +62,12 @@ s390_fallback_frame_state (struct _Unwind_Context *context,
         (((unsigned long int) context->cfa) - STACK_POINTER_OFFSET));
 
   /* Are we going through special linkage code?  */
-  if (__isPATrange (context->ra) || __isSkipResetAddr (context->ra))
+  if (__isPATrange (context->ra))
     {
 
       /* Our return register isn't zero for end of stack, so
          check backward stackpointer to see if it is zero.  */
-      if (regs == 0)
+      if (regs == NULL)
          return _URC_END_OF_STACK;
 
       /* No stack frame.  */
@@ -92,18 +82,11 @@ s390_fallback_frame_state (struct _Unwind_Context *context,
 	  fs->regs.reg[i].loc.reg = i;
 	}
 
-      /* ... except for %r14, which is stored at CFA+offset where offset
-	 is displacment of ICST_CRET or ICST_SRET from CFA */
-      if ( __isPATrange(context->ra) )  {
-	   fs->regs.reg[14].how = REG_SAVED_OFFSET;
-	   fs->regs.reg[14].loc.offset = ICST_CRET - STACK_POINTER_OFFSET;
-	   fs->retaddr_column = 14;
-      }  else  {
-	   fs->regs.reg[14].how = REG_SAVED_OFFSET;
-	   fs->regs.reg[14].loc.offset = ICST_SRET - STACK_POINTER_OFFSET;
-	   fs->retaddr_column = 14;
-
-      }
+      /* ... except for %r14, which is stored at CFA-112
+	 and used as return address.  */
+      fs->regs.reg[14].how = REG_SAVED_OFFSET;
+      fs->regs.reg[14].loc.offset = TPFRA_OFFSET - STACK_POINTER_OFFSET;
+      fs->retaddr_column = 14;
 
       return _URC_NO_REASON;
     }
@@ -156,22 +139,17 @@ s390_fallback_frame_state (struct _Unwind_Context *context,
 #define TPFAREA_SIZE STACK_POINTER_OFFSET-TPFAREA_OFFSET
 #define INVALID_RETURN 0
 
-#define LOWCORE_PAGE3_ADDR 4032
-#define PG3_SKIPPING_OFFSET 18
-
-void * __tpf_eh_return (void *target, void *origRA);
+void * __tpf_eh_return (void *target);
 
 void *
-__tpf_eh_return (void *target, void *origRA)
+__tpf_eh_return (void *target)
 {
   Dl_info targetcodeInfo, currentcodeInfo;
   int retval;
   void *current, *stackptr, *destination_frame;
-  unsigned char *skipFlagAddress;
-  unsigned long int shifter;
-  bool is_a_stub;
+  unsigned long int shifter, is_a_stub;
 
-  is_a_stub = false;
+  is_a_stub = 0;
 
   /* Get code info for target return's address.  */
   retval = dladdr (target, &targetcodeInfo);
@@ -179,17 +157,11 @@ __tpf_eh_return (void *target, void *origRA)
   /* Ensure the code info is valid (for target).  */
   if (retval != INVALID_RETURN)
     {
-      /* Begin climbing stack searching for target address. */
-      stackptr = (void *) *(CURRENT_STACK_PTR());
 
-      /* Get return address based on our stackptr. */
-      current = (void *) *(unsigned long *) (stackptr + RA_OFFSET);
-
-      /* Is current return address our initiating exception stack
-	 frame? If not, climb the stack one more frame. */
-      if (current != origRA)  {
-	   stackptr = (void *) *(unsigned long *) stackptr;
-      }
+      /* Get the stack pointer of the stack frame to be modified by
+         the exception unwinder.  So that we can begin our climb
+         there.  */
+      stackptr = (void *) *((unsigned long int *) (*(PREVIOUS_STACK_PTR())));
 
       /* Begin looping through stack frames.  Stop if invalid
          code information is retrieved or if a match between the
@@ -197,19 +169,19 @@ __tpf_eh_return (void *target, void *origRA)
          matches that of the target, calculated above.  */
       do
         {
-	  /* Get return address based on our stackptr iterator.  */
-	  current = (void *) *(unsigned long *) (stackptr + RA_OFFSET);
+          /* Get return address based on our stackptr iterator.  */
+          current = (void *) *((unsigned long int *)
+                      (stackptr+RA_OFFSET));
 
-	  /* Is it a Pat Stub?  */
-	  if (__isPATrange (current)
-	      || (__isSkipResetAddr (current)
-		  && __isPATrange ((void *) *(unsigned long *) (stackptr
-								+ ICST_SRET))))
-	    {
-	      /* Yes it was, get real return address in TPF stack area.  */
-	      current = (void *) *(unsigned long *) (stackptr + ICST_CRET);
-	      is_a_stub = true;
-	    }
+          /* Is it a Pat Stub?  */
+          if (__isPATrange (current))
+            {
+              /* Yes it was, get real return address
+                 in TPF stack area.  */
+              current = (void *) *((unsigned long int *)
+                          (stackptr+TPFRA_OFFSET));
+              is_a_stub = 1;
+            }
 
           /* Get codeinfo on RA so that we can figure out
              the module address.  */
@@ -237,8 +209,8 @@ __tpf_eh_return (void *target, void *origRA)
                /* Now overlay the
                   real target address into the TPF stack area of
                   the target frame we are jumping to.  */
-	       *(unsigned long *) (destination_frame + ICST_CRET) =
-		 (unsigned long) target;
+               *((unsigned long int *) (destination_frame +
+                   TPFRA_OFFSET)) = (unsigned long int) target;
 
                /* Before returning the desired pat stub address to
                   the exception handling unwinder so that it can
@@ -247,7 +219,8 @@ __tpf_eh_return (void *target, void *origRA)
                   This is necessary for CTOA stubs.
                   Otherwise we leap one byte past where we want to
                   go to in the TPF pat stub linkage code.  */
-	       shifter = *(unsigned long *) (stackptr + RA_OFFSET);
+               shifter = *((unsigned long int *)
+                     (stackptr + RA_OFFSET));
 
                shifter &= ~1ul;
 
@@ -259,13 +232,6 @@ __tpf_eh_return (void *target, void *origRA)
                   in linkage.  */
                shifter = shifter - 4;
 
-	       /* Reset the Function Trace Skipping Switch to re-enable */
-	       /* recording Trace entries if it was turned off. */
-	       skipFlagAddress =
-		 (unsigned char *) *(unsigned long *) LOWCORE_PAGE3_ADDR;
-	       skipFlagAddress += PG3_SKIPPING_OFFSET;
-	       *skipFlagAddress = '\x00';
-
                return (void *) shifter;
              }
 
@@ -273,19 +239,14 @@ __tpf_eh_return (void *target, void *origRA)
              Bump stack frame iterator.  */
           stackptr = (void *) *(unsigned long int *) stackptr;
 
-          is_a_stub = false;
+          is_a_stub = 0;
 
         }  while (stackptr && retval != INVALID_RETURN
                 && targetcodeInfo.dli_fbase != currentcodeInfo.dli_fbase);
     }
 
-  /* Reset the Function Trace Skipping Switch to re-enable */
-  /* recording Trace entries if it was turned off. */
-  skipFlagAddress = (unsigned char *) *(unsigned long *) LOWCORE_PAGE3_ADDR;
-  skipFlagAddress += PG3_SKIPPING_OFFSET;
-  *skipFlagAddress = '\x00';
-
   /* No pat stub found, could be a problem?  Simply return unmodified
      target address.  */
   return target;
 }
+

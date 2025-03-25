@@ -13,27 +13,18 @@
 
 #include "sanitizer_common/sanitizer_internal_defs.h"
 
-namespace __sanitizer {
-class FlagParser;
-}
-
 namespace __ubsan {
 
 struct Flags {
-#define UBSAN_FLAG(Type, Name, DefaultValue, Description) Type Name;
-#include "ubsan_flags.inc"
-#undef UBSAN_FLAG
-
-  void SetDefaults();
+  bool halt_on_error;
+  bool print_stacktrace;
 };
 
 extern Flags ubsan_flags;
 inline Flags *flags() { return &ubsan_flags; }
 
+void InitializeCommonFlags();
 void InitializeFlags();
-void RegisterUbsanFlags(FlagParser *parser, Flags *f);
-
-const char *MaybeCallUbsanDefaultOptions();
 
 }  // namespace __ubsan
 

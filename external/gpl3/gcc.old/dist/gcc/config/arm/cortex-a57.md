@@ -1,5 +1,5 @@
 ;; ARM Cortex-A57 pipeline description
-;; Copyright (C) 2014-2020 Free Software Foundation, Inc.
+;; Copyright (C) 2014-2015 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -76,7 +76,7 @@
 			   neon_mul_h_scalar_long, neon_mul_s_scalar_long,\
 			   neon_sat_mul_b_long, neon_sat_mul_h_long,\
 			   neon_sat_mul_s_long, neon_sat_mul_h_scalar_long,\
-			   neon_sat_mul_s_scalar_long, crypto_pmull")
+			   neon_sat_mul_s_scalar_long")
 	    (const_string "neon_multiply")
 	  (eq_attr "type" "neon_mul_b_q, neon_mul_h_q, neon_mul_s_q,\
 			   neon_mul_h_scalar_q, neon_mul_s_scalar_q,\
@@ -202,8 +202,7 @@
 	  (eq_attr "type" "neon_load1_3reg, neon_load1_3reg_q,\
 			   neon_load1_4reg, neon_load1_4reg_q")
 	    (const_string "neon_load_b")
-	  (eq_attr "type" "neon_ldp, neon_ldp_q,\
-			   neon_load1_one_lane, neon_load1_one_lane_q,\
+	  (eq_attr "type" "neon_load1_one_lane, neon_load1_one_lane_q,\
 			   neon_load1_all_lanes, neon_load1_all_lanes_q,\
 			   neon_load2_2reg, neon_load2_2reg_q,\
 			   neon_load2_all_lanes, neon_load2_all_lanes_q")
@@ -225,8 +224,7 @@
 	    (const_string "neon_store_a")
 	  (eq_attr "type" "neon_store1_2reg, neon_store1_1reg_q")
 	    (const_string "neon_store_b")
-	  (eq_attr "type" "neon_stp, neon_stp_q,\
-			   neon_store1_3reg, neon_store1_3reg_q,\
+	  (eq_attr "type" "neon_store1_3reg, neon_store1_3reg_q,\
 			   neon_store3_3reg, neon_store3_3reg_q,\
 			   neon_store2_4reg, neon_store2_4reg_q,\
 			   neon_store4_4reg, neon_store4_4reg_q,\
@@ -236,12 +234,7 @@
 			   neon_store1_4reg, neon_store1_4reg_q,\
 			   neon_store1_one_lane, neon_store1_one_lane_q,\
 			   neon_store2_one_lane, neon_store2_one_lane_q")
-	    (const_string "neon_store_complex")
-;; If it doesn't match any of the above that we want to treat specially but is
-;; still a NEON type, treat it as a basic NEON type.  This is better than
-;; dropping it on the floor and making no assumptions about it whatsoever.
-	  (eq_attr "is_neon_type" "yes")
-	    (const_string "neon_arith_basic")]
+	    (const_string "neon_store_complex")]
 	  (const_string "unknown")))
 
 ;; The Cortex-A57 core is modelled as a triple issue pipeline that has
@@ -302,17 +295,17 @@
        (eq_attr "type" "alu_imm,alus_imm,logic_imm,logics_imm,\
 			alu_sreg,alus_sreg,logic_reg,logics_reg,\
 			adc_imm,adcs_imm,adc_reg,adcs_reg,\
-			adr,bfx,extend,clz,rbit,rev,alu_dsp_reg,\
-			rotate_imm,shift_imm,shift_reg,\
+			adr,bfm,clz,rbit,rev,alu_dsp_reg,\
+			shift_imm,shift_reg,\
 			mov_imm,mov_reg,\
 			mvn_imm,mvn_reg,\
-			mrs,multiple"))
+			mrs,multiple,no_insn"))
   "ca57_sx1|ca57_sx2")
 
 ;; ALU ops with immediate shift
 (define_insn_reservation "cortex_a57_alu_shift" 3
   (and (eq_attr "tune" "cortexa57")
-       (eq_attr "type" "bfm,\
+       (eq_attr "type" "extend,\
 			alu_shift_imm,alus_shift_imm,\
 			crc,logic_shift_imm,logics_shift_imm,\
 			mov_shift,mvn_shift"))
@@ -329,11 +322,11 @@
    "ca57_mx")
 
 ;; All multiplies
-;; TODO: AArch32 and AArch64 have different behavior
+;; TODO: AArch32 and AArch64 have different behaviour
 (define_insn_reservation "cortex_a57_mult32" 3
   (and (eq_attr "tune" "cortexa57")
        (ior (eq_attr "mul32" "yes")
-	    (eq_attr "widen_mul64" "yes")))
+	    (eq_attr "mul64" "yes")))
   "ca57_mx")
 
 ;; Integer divide
@@ -362,25 +355,25 @@
 ;; Loads of up to two words.
 (define_insn_reservation "cortex_a57_load1" 5
   (and (eq_attr "tune" "cortexa57")
-       (eq_attr "type" "load_byte,load_4,load_8"))
+       (eq_attr "type" "load_byte,load1,load2"))
   "ca57_load_model")
 
 ;; Loads of three or four words.
 (define_insn_reservation "cortex_a57_load3" 5
   (and (eq_attr "tune" "cortexa57")
-       (eq_attr "type" "load_12,load_16"))
+       (eq_attr "type" "load3,load4"))
   "ca57_ls_issue*2,ca57_load_model")
 
 ;; Stores of up to two words.
 (define_insn_reservation "cortex_a57_store1" 0
   (and (eq_attr "tune" "cortexa57")
-       (eq_attr "type" "store_4,store_8"))
+       (eq_attr "type" "store1,store2"))
   "ca57_store_model")
 
 ;; Stores of three or four words.
 (define_insn_reservation "cortex_a57_store3" 0
   (and (eq_attr "tune" "cortexa57")
-       (eq_attr "type" "store_12,store_16"))
+       (eq_attr "type" "store3,store4"))
   "ca57_ls_issue*2,ca57_store_model")
 
 ;; Advanced SIMD Unit - Integer Arithmetic Instructions.
@@ -721,7 +714,7 @@
 
 (define_insn_reservation "cortex_a57_fp_cmp" 7
   (and (eq_attr "tune" "cortexa57")
-       (eq_attr "type" "fcmps,fcmpd,fccmps,fccmpd"))
+       (eq_attr "type" "fcmps,fcmpd"))
   "ca57_cx2")
 
 (define_insn_reservation "cortex_a57_fp_arith" 4
@@ -731,7 +724,7 @@
 
 (define_insn_reservation "cortex_a57_fp_cpys" 4
   (and (eq_attr "tune" "cortexa57")
-       (eq_attr "type" "fmov,fcsel"))
+       (eq_attr "type" "fmov"))
   "(ca57_cx1|ca57_cx2)")
 
 (define_insn_reservation "cortex_a57_fp_divs" 12
@@ -752,20 +745,20 @@
 			 neon_fp_sqrt_s_q, neon_fp_sqrt_d_q"))
   "ca57_cx2_block*3")
 
-(define_insn_reservation "cortex_a57_crypto_simple" 3
+(define_insn_reservation "cortex_a57_crypto_simple" 4
   (and (eq_attr "tune" "cortexa57")
        (eq_attr "type" "crypto_aese,crypto_aesmc,crypto_sha1_fast,crypto_sha256_fast"))
-  "ca57_cx1")
+  "ca57_cx2")
 
-(define_insn_reservation "cortex_a57_crypto_complex" 6
+(define_insn_reservation "cortex_a57_crypto_complex" 7
   (and (eq_attr "tune" "cortexa57")
        (eq_attr "type" "crypto_sha1_slow,crypto_sha256_slow"))
-  "ca57_cx1*2")
+  "ca57_cx2+(ca57_cx2_issue,ca57_cx2)")
 
-(define_insn_reservation "cortex_a57_crypto_xor" 6
+(define_insn_reservation "cortex_a57_crypto_xor" 7
   (and (eq_attr "tune" "cortexa57")
        (eq_attr "type" "crypto_sha1_xor"))
-  "(ca57_cx1*2)|(ca57_cx2*2)")
+  "(ca57_cx1+ca57_cx2)")
 
 ;; We lie with calls.  They take up all issue slots, but are otherwise
 ;; not harmful.
@@ -801,3 +794,4 @@
 ;; help.
 (define_bypass 1 "cortex_a57_*"
 		 "cortex_a57_call,cortex_a57_branch")
+

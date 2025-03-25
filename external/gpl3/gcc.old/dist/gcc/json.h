@@ -1,5 +1,5 @@
 /* JSON trees
-   Copyright (C) 2017-2020 Free Software Foundation, Inc.
+   Copyright (C) 2017-2019 Free Software Foundation, Inc.
    Contributed by David Malcolm <dmalcolm@redhat.com>.
 
 This file is part of GCC.
@@ -39,8 +39,7 @@ namespace json
 class value;
   class object;
   class array;
-  class float_number;
-  class integer_number;
+  class number;
   class string;
   class literal;
 
@@ -54,11 +53,8 @@ enum kind
   /* class json::array.  */
   JSON_ARRAY,
 
-  /* class json::integer_number.  */
-  JSON_INTEGER,
-
-  /* class json::float_number.  */
-  JSON_FLOAT,
+  /* class json::number.  */
+  JSON_NUMBER,
 
   /* class json::string.  */
   JSON_STRING,
@@ -94,7 +90,6 @@ class object : public value
   void print (pretty_printer *pp) const FINAL OVERRIDE;
 
   void set (const char *key, value *v);
-  value *get (const char *key) const;
 
  private:
   typedef hash_map <char *, value *,
@@ -118,14 +113,14 @@ class array : public value
   auto_vec<value *> m_elements;
 };
 
-/* Subclass of value for floating-point numbers.  */
+/* Subclass of value for numbers.  */
 
-class float_number : public value
+class number : public value
 {
  public:
-  float_number (double value) : m_value (value) {}
+  number (double value) : m_value (value) {}
 
-  enum kind get_kind () const FINAL OVERRIDE { return JSON_FLOAT; }
+  enum kind get_kind () const FINAL OVERRIDE { return JSON_NUMBER; }
   void print (pretty_printer *pp) const FINAL OVERRIDE;
 
   double get () const { return m_value; }
@@ -133,23 +128,6 @@ class float_number : public value
  private:
   double m_value;
 };
-
-/* Subclass of value for integer-valued numbers.  */
-
-class integer_number : public value
-{
- public:
-  integer_number (long value) : m_value (value) {}
-
-  enum kind get_kind () const FINAL OVERRIDE { return JSON_INTEGER; }
-  void print (pretty_printer *pp) const FINAL OVERRIDE;
-
-  long get () const { return m_value; }
-
- private:
-  long m_value;
-};
-
 
 /* Subclass of value for strings.  */
 

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.8 2023/02/20 02:12:36 mrg Exp $
+#	$NetBSD: Makefile,v 1.1 2018/02/01 20:50:22 kamil Exp $
 
 .include "../../../Makefile.gcc_path"
 
@@ -13,14 +13,12 @@ INCS+=	allocator_interface.h
 INCS+=	asan_interface.h
 INCS+=	common_interface_defs.h
 #INCS+=	dfsan_interface.h # not supported
-INCS+=	lsan_interface.h
+#INCS+=	lsan_interface.h # not supported
 #INCS+=	msan_interface.h # not ready in GCC
-INCS+=	netbsd_syscall_hooks.h
-INCS+=	tsan_interface.h
 INCS+=	tsan_interface_atomic.h
 
 .include <bsd.own.mk>
 
-INCSDIR=	${GCC_INCSDIR}/sanitizer
+INCSDIR=	/usr/include/gcc-5/sanitizer
 
 .include <bsd.prog.mk>

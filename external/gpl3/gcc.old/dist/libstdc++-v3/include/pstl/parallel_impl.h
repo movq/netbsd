@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef _PSTL_PARALLEL_IMPL_H
-#define _PSTL_PARALLEL_IMPL_H
+#ifndef __PSTL_parallel_impl_H
+#define __PSTL_parallel_impl_H
 
 #include <atomic>
 // This header defines the minimum set of parallel routines required to support Parallel STL,
@@ -78,4 +78,4 @@ __parallel_or(_ExecutionPolicy&& __exec, _Index __first, _Index __last, _Brick _
 } // namespace __internal
 } // namespace __pstl
 
-#endif /* _PSTL_PARALLEL_IMPL_H */
+#endif /* __PSTL_parallel_impl_H */

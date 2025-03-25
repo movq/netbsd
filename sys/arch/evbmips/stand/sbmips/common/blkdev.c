@@ -1,4 +1,4 @@
-/* $NetBSD: blkdev.c,v 1.3 2021/07/24 21:31:33 andvar Exp $ */
+/* $NetBSD: blkdev.c,v 1.1 2017/07/24 08:56:29 mrg Exp $ */
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -70,9 +70,9 @@
 #include <sys/param.h>
 #include <sys/disklabel.h>
 
-#include "stand/sbmips/common/cfe_api.h"
+#include "stand/common/cfe_api.h"
 
-#include "stand/sbmips/common/common.h"
+#include "stand/common/common.h"
 #include "blkdev.h"
 
 /*
@@ -151,7 +151,7 @@ devopen(struct open_file *f, const char *fname, char **file)
 
 int
 blkdevstrategy(void *devdata, int rw, daddr_t bn, size_t reqcnt, void *addrvoid, size_t *cnt)
-	/* cnt:	 out: number of bytes transferred */
+	/* cnt:	 out: number of bytes transfered */
 {
 	unsigned char *addr = addrvoid;
 	int res;

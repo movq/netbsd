@@ -226,10 +226,11 @@ void Macro::expand(OutBuffer *buf, size_t start, size_t *pend,
 {
     // limit recursive expansion
     static int nest;
-    if (nest > global.recursionLimit)
+    static const int nestLimit = 1000;
+    if (nest > nestLimit)
     {
-        error(Loc(), "DDoc macro expansion limit exceeded; more than %d expansions.",
-              global.recursionLimit);
+        error(Loc(), "DDoc macro expansion limit exceeded; more than %d "
+            "expansions.", nestLimit);
         return;
     }
     nest++;

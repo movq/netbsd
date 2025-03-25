@@ -1,6 +1,6 @@
 // Implementation of std::function -*- C++ -*-
 
-// Copyright (C) 2004-2020 Free Software Foundation, Inc.
+// Copyright (C) 2004-2017 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -22,7 +22,7 @@
 // see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 // <http://www.gnu.org/licenses/>.
 
-/** @file include/bits/std_function.h
+/** @file include/bits/function.h
  *  This is an internal header file, included by other library headers.
  *  Do not attempt to use it directly. @headername{functional}
  */
@@ -47,6 +47,25 @@
 namespace std _GLIBCXX_VISIBILITY(default)
 {
 _GLIBCXX_BEGIN_NAMESPACE_VERSION
+
+  /**
+   * Derives from @c unary_function or @c binary_function, or perhaps
+   * nothing, depending on the number of arguments provided. The
+   * primary template is the basis case, which derives nothing.
+   */
+  template<typename _Res, typename... _ArgTypes>
+    struct _Maybe_unary_or_binary_function { };
+
+  /// Derives from @c unary_function, as appropriate.
+  template<typename _Res, typename _T1>
+    struct _Maybe_unary_or_binary_function<_Res, _T1>
+    : std::unary_function<_T1, _Res> { };
+
+  /// Derives from @c binary_function, as appropriate.
+  template<typename _Res, typename _T1, typename _T2>
+    struct _Maybe_unary_or_binary_function<_Res, _T1, _T2>
+    : std::binary_function<_T1, _T2, _Res> { };
+
 
   /**
    *  @brief Exception class thrown when class template function's
@@ -109,6 +128,21 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     __destroy_functor
   };
 
+  // Simple type wrapper that helps avoid annoying const problems
+  // when casting between void pointers and pointers-to-pointers.
+  template<typename _Tp>
+    struct _Simple_type_wrapper
+    {
+      _Simple_type_wrapper(_Tp __value) : __value(__value) { }
+
+      _Tp __value;
+    };
+
+  template<typename _Tp>
+    struct __is_location_invariant<_Simple_type_wrapper<_Tp> >
+    : __is_location_invariant<_Tp>
+    { };
+
   template<typename _Signature>
     class function;
 
@@ -116,8 +150,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   class _Function_base
   {
   public:
-    static const size_t _M_max_size = sizeof(_Nocopy_types);
-    static const size_t _M_max_align = __alignof__(_Nocopy_types);
+    static const std::size_t _M_max_size = sizeof(_Nocopy_types);
+    static const std::size_t _M_max_align = __alignof__(_Nocopy_types);
 
     template<typename _Functor>
       class _Base_manager
@@ -135,13 +169,10 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	static _Functor*
 	_M_get_pointer(const _Any_data& __source)
 	{
-	  if _GLIBCXX17_CONSTEXPR (__stored_locally)
-	    {
-	      const _Functor& __f = __source._M_access<_Functor>();
-	      return const_cast<_Functor*>(std::__addressof(__f));
-	    }
-	  else // have stored a pointer
-	    return __source._M_access<_Functor*>();
+	  const _Functor* __ptr =
+	    __stored_locally? std::__addressof(__source._M_access<_Functor>())
+	    /* have stored a pointer */ : __source._M_access<_Functor*>();
+	  return const_cast<_Functor*>(__ptr);
 	}
 
 	// Clone a location-invariant function object that fits within
@@ -158,7 +189,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	_M_clone(_Any_data& __dest, const _Any_data& __source, false_type)
 	{
 	  __dest._M_access<_Functor*>() =
-	    new _Functor(*__source._M_access<const _Functor*>());
+	    new _Functor(*__source._M_access<_Functor*>());
 	}
 
 	// Destroying a location-invariant object may still require
@@ -264,6 +295,56 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       typedef _Function_base::_Base_manager<_Functor> _Base;
 
     public:
+      static _Res
+      _M_invoke(const _Any_data& __functor, _ArgTypes&&... __args)
+      {
+	return (*_Base::_M_get_pointer(__functor))(
+	    std::forward<_ArgTypes>(__args)...);
+      }
+    };
+
+  template<typename _Functor, typename... _ArgTypes>
+    class _Function_handler<void(_ArgTypes...), _Functor>
+    : public _Function_base::_Base_manager<_Functor>
+    {
+      typedef _Function_base::_Base_manager<_Functor> _Base;
+
+     public:
+      static void
+      _M_invoke(const _Any_data& __functor, _ArgTypes&&... __args)
+      {
+	(*_Base::_M_get_pointer(__functor))(
+	    std::forward<_ArgTypes>(__args)...);
+      }
+    };
+
+  template<typename _Class, typename _Member, typename _Res,
+	   typename... _ArgTypes>
+    class _Function_handler<_Res(_ArgTypes...), _Member _Class::*>
+    : public _Function_handler<void(_ArgTypes...), _Member _Class::*>
+    {
+      typedef _Function_handler<void(_ArgTypes...), _Member _Class::*>
+	_Base;
+
+     public:
+      static _Res
+      _M_invoke(const _Any_data& __functor, _ArgTypes&&... __args)
+      {
+	return std::__invoke(_Base::_M_get_pointer(__functor)->__value,
+			     std::forward<_ArgTypes>(__args)...);
+      }
+    };
+
+  template<typename _Class, typename _Member, typename... _ArgTypes>
+    class _Function_handler<void(_ArgTypes...), _Member _Class::*>
+    : public _Function_base::_Base_manager<
+		 _Simple_type_wrapper< _Member _Class::* > >
+    {
+      typedef _Member _Class::* _Functor;
+      typedef _Simple_type_wrapper<_Functor> _Wrapper;
+      typedef _Function_base::_Base_manager<_Wrapper> _Base;
+
+    public:
       static bool
       _M_manager(_Any_data& __dest, const _Any_data& __source,
 		 _Manager_operation __op)
@@ -276,7 +357,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    break;
 #endif
 	  case __get_functor_ptr:
-	    __dest._M_access<_Functor*>() = _Base::_M_get_pointer(__source);
+	    __dest._M_access<_Functor*>() =
+	      &_Base::_M_get_pointer(__source)->__value;
 	    break;
 
 	  default:
@@ -285,13 +367,17 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	return false;
       }
 
-      static _Res
+      static void
       _M_invoke(const _Any_data& __functor, _ArgTypes&&... __args)
       {
-	return std::__invoke_r<_Res>(*_Base::_M_get_pointer(__functor),
-				     std::forward<_ArgTypes>(__args)...);
+	std::__invoke(_Base::_M_get_pointer(__functor)->__value,
+		      std::forward<_ArgTypes>(__args)...);
       }
     };
+
+  template<typename _From, typename _To>
+    using __check_func_return_type
+      = __or_<is_void<_To>, is_same<_From, _To>, is_convertible<_From, _To>>;
 
   /**
    *  @brief Primary class template for std::function.
@@ -305,10 +391,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       private _Function_base
     {
       template<typename _Func,
-	       typename _Res2 = __invoke_result<_Func&, _ArgTypes...>>
-	struct _Callable
-	: __is_invocable_impl<_Res2, _Res>::type
-	{ };
+	       typename _Res2 = typename result_of<_Func&(_ArgTypes...)>::type>
+	struct _Callable : __check_func_return_type<_Res2, _Res> { };
 
       // Used so the return type convertibility checks aren't done when
       // performing overload resolution for copy construction/assignment.
@@ -537,7 +621,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       template<typename _Functor>       _Functor* target() noexcept;
 
       template<typename _Functor> const _Functor* target() const noexcept;
-      /// @}
+      // @}
 #endif
 
     private:
@@ -680,7 +764,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     operator==(const function<_Res(_Args...)>& __f, nullptr_t) noexcept
     { return !static_cast<bool>(__f); }
 
-#if __cpp_impl_three_way_comparison < 201907L
   /// @overload
   template<typename _Res, typename... _Args>
     inline bool
@@ -704,7 +787,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     inline bool
     operator!=(nullptr_t, const function<_Res(_Args...)>& __f) noexcept
     { return static_cast<bool>(__f); }
-#endif
+
 
   // [20.7.15.2.7] specialized algorithms
 
@@ -720,22 +803,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     swap(function<_Res(_Args...)>& __x, function<_Res(_Args...)>& __y) noexcept
     { __x.swap(__y); }
 
-#if __cplusplus >= 201703L
-  namespace __detail::__variant
-  {
-    template<typename> struct _Never_valueless_alt; // see <variant>
-
-    // Provide the strong exception-safety guarantee when emplacing a
-    // function into a variant.
-    template<typename _Signature>
-      struct _Never_valueless_alt<std::function<_Signature>>
-      : std::true_type
-      { };
-  }  // namespace __detail::__variant
-#endif // C++17
-
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace std
 
 #endif // C++11
+
 #endif // _GLIBCXX_STD_FUNCTION_H

@@ -1,5 +1,5 @@
 #!/bin/sh
-# $NetBSD: checksize.sh,v 1.1.1.1 2017/07/24 08:56:29 mrg Exp $
+# $NetBSD: checksize.sh,v 1.1 2017/07/24 08:56:29 mrg Exp $
 #
 # Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
 #

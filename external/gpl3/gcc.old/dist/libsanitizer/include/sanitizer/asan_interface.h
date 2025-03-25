@@ -48,67 +48,29 @@ extern "C" {
   ((void)(addr), (void)(size))
 #endif
 
-  // Returns 1 if addr is poisoned (i.e. 1-byte read/write access to this
+  // Returns true iff addr is poisoned (i.e. 1-byte read/write access to this
   // address will result in error report from AddressSanitizer).
-  // Otherwise returns 0.
-  int __asan_address_is_poisoned(void const volatile *addr);
+  bool __asan_address_is_poisoned(void const volatile *addr);
 
-  // If at least one byte in [beg, beg+size) is poisoned, return the address
+  // If at least on byte in [beg, beg+size) is poisoned, return the address
   // of the first such byte. Otherwise return 0.
   void *__asan_region_is_poisoned(void *beg, size_t size);
 
   // Print the description of addr (useful when debugging in gdb).
   void __asan_describe_address(void *addr);
 
-  // Useful for calling from a debugger to get information about an ASan error.
-  // Returns 1 if an error has been (or is being) reported, otherwise returns 0.
-  int __asan_report_present(void);
-
-  // Useful for calling from a debugger to get information about an ASan error.
-  // If an error has been (or is being) reported, the following functions return
-  // the pc, bp, sp, address, access type (0 = read, 1 = write), access size and
-  // bug description (e.g. "heap-use-after-free"). Otherwise they return 0.
-  void *__asan_get_report_pc(void);
-  void *__asan_get_report_bp(void);
-  void *__asan_get_report_sp(void);
-  void *__asan_get_report_address(void);
-  int __asan_get_report_access_type(void);
-  size_t __asan_get_report_access_size(void);
-  const char *__asan_get_report_description(void);
-
-  // Useful for calling from the debugger to get information about a pointer.
-  // Returns the category of the given pointer as a constant string.
-  // Possible return values are "global", "stack", "stack-fake", "heap",
-  // "heap-invalid", "shadow-low", "shadow-gap", "shadow-high", "unknown".
-  // If global or stack, tries to also return the variable name, address and
-  // size. If heap, tries to return the chunk address and size. 'name' should
-  // point to an allocated buffer of size 'name_size'.
-  const char *__asan_locate_address(void *addr, char *name, size_t name_size,
-                                    void **region_address, size_t *region_size);
-
-  // Useful for calling from the debugger to get the allocation stack trace
-  // and thread ID for a heap address. Stores up to 'size' frames into 'trace',
-  // returns the number of stored frames or 0 on error.
-  size_t __asan_get_alloc_stack(void *addr, void **trace, size_t size,
-                                int *thread_id);
-
-  // Useful for calling from the debugger to get the free stack trace
-  // and thread ID for a heap address. Stores up to 'size' frames into 'trace',
-  // returns the number of stored frames or 0 on error.
-  size_t __asan_get_free_stack(void *addr, void **trace, size_t size,
-                               int *thread_id);
-
-  // Useful for calling from the debugger to get the current shadow memory
-  // mapping.
-  void __asan_get_shadow_mapping(size_t *shadow_scale, size_t *shadow_offset);
-
   // This is an internal function that is called to report an error.
   // However it is still a part of the interface because users may want to
   // set a breakpoint on this function in a debugger.
   void __asan_report_error(void *pc, void *bp, void *sp,
-                           void *addr, int is_write, size_t access_size);
+                           void *addr, bool is_write, size_t access_size);
 
-  // Deprecated. Call __sanitizer_set_death_callback instead.
+  // Sets the exit code to use when reporting an error.
+  // Returns the old value.
+  int __asan_set_error_exit_code(int exit_code);
+
+  // Sets the callback to be called right before death on error.
+  // Passing 0 will unset the callback.
   void __asan_set_death_callback(void (*callback)(void));
 
   void __asan_set_error_report_callback(void (*callback)(const char*));
@@ -116,36 +78,56 @@ extern "C" {
   // User may provide function that would be called right when ASan detects
   // an error. This can be used to notice cases when ASan detects an error, but
   // the program crashes before ASan report is printed.
-  void __asan_on_error(void);
+  void __asan_on_error();
 
+  // User may provide its own implementation for symbolization function.
+  // It should print the description of instruction at address "pc" to
+  // "out_buffer". Description should be at most "out_size" bytes long.
+  // User-specified function should return true if symbolization was
+  // successful.
+  bool __asan_symbolize(const void *pc, char *out_buffer,
+                                       int out_size);
+
+  // Returns the estimated number of bytes that will be reserved by allocator
+  // for request of "size" bytes. If ASan allocator can't allocate that much
+  // memory, returns the maximal possible allocation size, otherwise returns
+  // "size".
+  size_t __asan_get_estimated_allocated_size(size_t size);
+  // Returns true if p was returned by the ASan allocator and
+  // is not yet freed.
+  bool __asan_get_ownership(const void *p);
+  // Returns the number of bytes reserved for the pointer p.
+  // Requires (get_ownership(p) == true) or (p == 0).
+  size_t __asan_get_allocated_size(const void *p);
+  // Number of bytes, allocated and not yet freed by the application.
+  size_t __asan_get_current_allocated_bytes();
+  // Number of bytes, mmaped by asan allocator to fulfill allocation requests.
+  // Generally, for request of X bytes, allocator can reserve and add to free
+  // lists a large number of chunks of size X to use them for future requests.
+  // All these chunks count toward the heap size. Currently, allocator never
+  // releases memory to OS (instead, it just puts freed chunks to free lists).
+  size_t __asan_get_heap_size();
+  // Number of bytes, mmaped by asan allocator, which can be used to fulfill
+  // allocation requests. When a user program frees memory chunk, it can first
+  // fall into quarantine and will count toward __asan_get_free_bytes() later.
+  size_t __asan_get_free_bytes();
+  // Number of bytes in unmapped pages, that are released to OS. Currently,
+  // always returns 0.
+  size_t __asan_get_unmapped_bytes();
   // Prints accumulated stats to stderr. Used for debugging.
-  void __asan_print_accumulated_stats(void);
+  void __asan_print_accumulated_stats();
 
   // This function may be optionally provided by user and should return
   // a string containing ASan runtime options. See asan_flags.h for details.
-  const char* __asan_default_options(void);
+  const char* __asan_default_options();
 
-  // The following 2 functions facilitate garbage collection in presence of
-  // asan's fake stack.
-
-  // Returns an opaque handler to be used later in __asan_addr_is_in_fake_stack.
-  // Returns NULL if the current thread does not have a fake stack.
-  void *__asan_get_current_fake_stack(void);
-
-  // If fake_stack is non-NULL and addr belongs to a fake frame in
-  // fake_stack, returns the address on real stack that corresponds to
-  // the fake frame and sets beg/end to the boundaries of this fake frame.
-  // Otherwise returns NULL and does not touch beg/end.
-  // If beg/end are NULL, they are not touched.
-  // This function may be called from a thread other than the owner of
-  // fake_stack, but the owner thread need to be alive.
-  void *__asan_addr_is_in_fake_stack(void *fake_stack, void *addr, void **beg,
-                                     void **end);
-
-  // Performs cleanup before a [[noreturn]] function.  Must be called
-  // before things like _exit and execl to avoid false positives on stack.
-  void __asan_handle_no_return(void);
-
+  // Malloc hooks that may be optionally provided by user.
+  // __asan_malloc_hook(ptr, size) is called immediately after
+  //   allocation of "size" bytes, which returned "ptr".
+  // __asan_free_hook(ptr) is called immediately before
+  //   deallocation of "ptr".
+  void __asan_malloc_hook(void *ptr, size_t size);
+  void __asan_free_hook(void *ptr);
 #ifdef __cplusplus
 }  // extern "C"
 #endif

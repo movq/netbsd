@@ -1,4 +1,4 @@
-/* Copyright (C) 2002-2020 Free Software Foundation, Inc.
+/* Copyright (C) 2002-2019 Free Software Foundation, Inc.
    Contributed by Andy Vaught
    Namelist transfer functions contributed by Paul Thomas
    F2003 I/O support contributed by Jerry DeLisle
@@ -193,8 +193,7 @@ static const st_option async_opt[] = {
 
 typedef enum
 { FORMATTED_SEQUENTIAL, UNFORMATTED_SEQUENTIAL,
-  FORMATTED_DIRECT, UNFORMATTED_DIRECT, FORMATTED_STREAM,
-  UNFORMATTED_STREAM, FORMATTED_UNSPECIFIED
+  FORMATTED_DIRECT, UNFORMATTED_DIRECT, FORMATTED_STREAM, UNFORMATTED_STREAM
 }
 file_mode;
 
@@ -204,7 +203,7 @@ current_mode (st_parameter_dt *dtp)
 {
   file_mode m;
 
-  m = FORMATTED_UNSPECIFIED;
+  m = FORM_UNSPECIFIED;
 
   if (dtp->u.p.current_unit->flags.access == ACCESS_DIRECT)
     {
@@ -1728,17 +1727,17 @@ formatted_transfer_scalar_read (st_parameter_dt *dtp, bt type, void *p, int kind
 
 	case FMT_S:
 	  consume_data_flag = 0;
-	  dtp->u.p.sign_status = SIGN_PROCDEFINED;
+	  dtp->u.p.sign_status = SIGN_S;
 	  break;
 
 	case FMT_SS:
 	  consume_data_flag = 0;
-	  dtp->u.p.sign_status = SIGN_SUPPRESS;
+	  dtp->u.p.sign_status = SIGN_SS;
 	  break;
 
 	case FMT_SP:
 	  consume_data_flag = 0;
-	  dtp->u.p.sign_status = SIGN_PLUS;
+	  dtp->u.p.sign_status = SIGN_SP;
 	  break;
 
 	case FMT_BN:
@@ -2008,10 +2007,7 @@ formatted_transfer_scalar_write (st_parameter_dt *dtp, bt type, void *p, int kin
 	    goto need_data;
 	  if (require_type (dtp, BT_REAL, type, f))
 	    return;
-	  if (f->u.real.w == 0)
-	    write_real_w0 (dtp, p, kind, f);
-	  else
-	    write_d (dtp, f, p, kind);
+	  write_d (dtp, f, p, kind);
 	  break;
 
 	case FMT_DT:
@@ -2074,10 +2070,7 @@ formatted_transfer_scalar_write (st_parameter_dt *dtp, bt type, void *p, int kin
 	    goto need_data;
 	  if (require_type (dtp, BT_REAL, type, f))
 	    return;
-	  if (f->u.real.w == 0)
-	    write_real_w0 (dtp, p, kind, f);
-	  else
-	    write_e (dtp, f, p, kind);
+	  write_e (dtp, f, p, kind);
 	  break;
 
 	case FMT_EN:
@@ -2085,10 +2078,7 @@ formatted_transfer_scalar_write (st_parameter_dt *dtp, bt type, void *p, int kin
 	    goto need_data;
 	  if (require_type (dtp, BT_REAL, type, f))
 	    return;
-	  if (f->u.real.w == 0)
-	    write_real_w0 (dtp, p, kind, f);
-	  else
-	    write_en (dtp, f, p, kind);
+	  write_en (dtp, f, p, kind);
 	  break;
 
 	case FMT_ES:
@@ -2096,10 +2086,7 @@ formatted_transfer_scalar_write (st_parameter_dt *dtp, bt type, void *p, int kin
 	    goto need_data;
 	  if (require_type (dtp, BT_REAL, type, f))
 	    return;
-	  if (f->u.real.w == 0)
-	    write_real_w0 (dtp, p, kind, f);
-	  else
-	    write_es (dtp, f, p, kind);
+	  write_es (dtp, f, p, kind);
 	  break;
 
 	case FMT_F:
@@ -2129,7 +2116,7 @@ formatted_transfer_scalar_write (st_parameter_dt *dtp, bt type, void *p, int kin
 		break;
 	      case BT_REAL:
 		if (f->u.real.w == 0)
-		  write_real_w0 (dtp, p, kind, f);
+                  write_real_g0 (dtp, p, kind, f->u.real.d);
 		else
 		  write_d (dtp, f, p, kind);
 		break;
@@ -2199,17 +2186,17 @@ formatted_transfer_scalar_write (st_parameter_dt *dtp, bt type, void *p, int kin
 
 	case FMT_S:
 	  consume_data_flag = 0;
-	  dtp->u.p.sign_status = SIGN_PROCDEFINED;
+	  dtp->u.p.sign_status = SIGN_S;
 	  break;
 
 	case FMT_SS:
 	  consume_data_flag = 0;
-	  dtp->u.p.sign_status = SIGN_SUPPRESS;
+	  dtp->u.p.sign_status = SIGN_SS;
 	  break;
 
 	case FMT_SP:
 	  consume_data_flag = 0;
-	  dtp->u.p.sign_status = SIGN_PLUS;
+	  dtp->u.p.sign_status = SIGN_SP;
 	  break;
 
 	case FMT_BN:
@@ -2815,8 +2802,6 @@ pre_position (st_parameter_dt *dtp)
     case UNFORMATTED_DIRECT:
       dtp->u.p.current_unit->bytes_left = dtp->u.p.current_unit->recl;
       break;
-    case FORMATTED_UNSPECIFIED:
-      gcc_unreachable ();
     }
 
   dtp->u.p.current_unit->current_record = 1;
@@ -3309,9 +3294,9 @@ data_transfer_init_worker (st_parameter_dt *dtp, int read_flag)
 
           if (dtp->pos != dtp->u.p.current_unit->strm_pos)
             {
-	      fbuf_reset (dtp->u.p.current_unit);
-	      if (sseek (dtp->u.p.current_unit->s, dtp->pos - 1,
-			 SEEK_SET) < 0)
+              fbuf_reset (dtp->u.p.current_unit);
+              if (sseek (dtp->u.p.current_unit->s, dtp->pos - 1,
+		  SEEK_SET) < 0)
                 {
                   generate_error (&dtp->common, LIBERROR_OS, NULL);
                   return;
@@ -3689,8 +3674,6 @@ next_record_r (st_parameter_dt *dtp, int done)
 	  while (p != '\n');
 	}
       break;
-    case FORMATTED_UNSPECIFIED:
-      gcc_unreachable ();
     }
 }
 
@@ -4056,8 +4039,6 @@ next_record_w (st_parameter_dt *dtp, int done)
 	}
 
       break;
-    case FORMATTED_UNSPECIFIED:
-      gcc_unreachable ();
 
     io_error:
       generate_error (&dtp->common, LIBERROR_OS, NULL);
@@ -4492,7 +4473,7 @@ void
 st_wait_async (st_parameter_wait *wtp)
 {
   gfc_unit *u = find_unit (wtp->common.unit);
-  if (ASYNC_IO && u && u->au)
+  if (ASYNC_IO && u->au)
     {
       if (wtp->common.flags & IOPARM_WAIT_HAS_ID)
 	async_wait_id (&(wtp->common), u->au, *wtp->id);

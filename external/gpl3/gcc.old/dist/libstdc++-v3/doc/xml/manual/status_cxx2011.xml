@@ -1,4 +1,4 @@
-<section xmlns="http://docbook.org/ns/docbook" version="5.0"
+<section xmlns="http://docbook.org/ns/docbook" version="5.0" 
 	 xml:id="status.iso.2011" xreflabel="Status C++ 2011">
 <?dbhtml filename="status_iso_cxx2011.html"?>
 
@@ -17,24 +17,18 @@ Final Draft International Standard, Standard for Programming Language C++
 </para>
 
 <para>
-In this implementation the <literal>-std=gnu++11</literal> or
-<literal>-std=c++11</literal> flag must be used to enable language
+In this implementation <literal>-std=gnu++11</literal> or
+<literal>-std=c++11</literal> flags must be used to enable language
 and library
 features. See <link linkend="manual.intro.using.flags">dialect</link>
 options. The pre-defined symbol
 <constant>__cplusplus</constant> is used to check for the
 presence of the required flag.
-GCC 5.1 was the first release with non-experimental C++11 support,
-so the API and ABI of features added in C++11 is only stable
-since that release.
 </para>
 
 <para>
-This status table is based on the table of contents of ISO/IEC 14882:2011.
-</para>
-
-<para>
-This section describes the C++11 support in the GCC 10 release series.
+This page describes the C++11 support in mainline GCC SVN, not in any
+particular release.
 </para>
 
 <!-- Status is Yes or No, Broken/Partial-->
@@ -46,7 +40,7 @@ This section describes the C++11 support in the GCC 10 release series.
    Broken/Partial
       <?dbhtml bgcolor="#B0B0B0" ?>
 -->
-<table frame="all" xml:id="table.cxx11_status">
+<table frame="all">
 <title>C++ 2011 Implementation Status</title>
 
 <tgroup cols="4" align="left" colsep="0" rowsep="1">
@@ -77,14 +71,15 @@ This section describes the C++11 support in the GCC 10 release series.
     <row>
       <entry>18.1</entry>
       <entry>General</entry>
-      <entry/>
+      <entry>Y</entry>
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>18.2</entry>
       <entry>Types</entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Missing offsetof, max_align_t</entry>
     </row>
     <row>
       <entry>18.3</entry>
@@ -159,10 +154,13 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry>C library dependency for quick_exit, at_quick_exit</entry>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>18.6</entry>
       <entry>Dynamic memory management</entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Missing <code>get_new_handler</code>.
+             <code>set_new_handler</code> is not thread-safe.
+      </entry>
     </row>
     <row>
       <entry>18.7</entry>
@@ -207,10 +205,13 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>18.8.3</entry>
       <entry>Abnormal termination</entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Missing <code>get_terminate</code>.
+             <code>set_terminate</code> is not thread-safe.
+      </entry>
     </row>
     <row>
       <entry>18.8.4</entry>
@@ -225,10 +226,12 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>18.8.6</entry>
       <entry><code>nested_exception</code></entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Follows an earlier C++0x draft, not the final specification.
+      </entry>
     </row>
     <row>
       <entry>18.9</entry>
@@ -271,14 +274,15 @@ This section describes the C++11 support in the GCC 10 release series.
     <row>
       <entry>19.1</entry>
       <entry>General</entry>
-      <entry/>
+      <entry>Y</entry>
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>19.2</entry>
       <entry>Exception classes</entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Missing <code>const char*</code> constructors.</entry>
     </row>
     <row>
       <entry>19.3</entry>
@@ -323,10 +327,11 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>19.5.5</entry>
       <entry>Class <code>system_error</code></entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Missing <code>const char*</code> constructors.</entry>
     </row>
     <row>
       <entry>
@@ -356,13 +361,13 @@ This section describes the C++11 support in the GCC 10 release series.
     </row>
     <row>
       <entry>20.2.2</entry>
-      <entry>swap</entry>
+      <entry>Swap</entry>
       <entry>Y</entry>
       <entry/>
     </row>
     <row>
       <entry>20.2.3</entry>
-      <entry>forward/move helpers</entry>
+      <entry><code>forward</code> and <code>move</code> helpers</entry>
       <entry>Y</entry>
       <entry/>
     </row>
@@ -535,15 +540,17 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>20.6.4</entry>
       <entry>Pointer safety</entry>
-      <entry>Y</entry>
+      <entry>Partial</entry>
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>20.6.5</entry>
       <entry>Align</entry>
-      <entry>Y</entry>
+      <entry>N</entry>
       <entry/>
     </row>
     <row>
@@ -607,10 +614,11 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>20.6.12.4</entry>
       <entry><code>uninitialized_fill_n</code></entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Returns <code>void</code>.</entry>
     </row>
     <row>
       <entry>20.6.13</entry>
@@ -633,7 +641,7 @@ This section describes the C++11 support in the GCC 10 release series.
     <row>
       <entry>20.7.2</entry>
       <entry>Shared-ownership pointers</entry>
-      <entry/>
+      <entry>Y</entry>
       <entry/>
     </row>
     <row>
@@ -647,8 +655,10 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry>Class template <code>shared_ptr</code></entry>
       <entry>Y</entry>
       <entry>
+	<para>
 	  Uses code from
 	  <link xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="http://www.boost.org/libs/smart_ptr/shared_ptr.htm">boost::shared_ptr</link>.
+	</para>
       </entry>
     </row>
     <row>
@@ -659,14 +669,15 @@ This section describes the C++11 support in the GCC 10 release series.
     </row>
     <row>
       <entry>20.7.2.4</entry>
-      <entry>Class template <code>enable_shared_from_this</code></entry>
+      <entry>Class template <code>emable_shared_from_this</code></entry>
       <entry>Y</entry>
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>20.7.2.5</entry>
       <entry><code>shared_ptr</code> atomic access</entry>
-      <entry>Y</entry>
+      <entry>Partial</entry>
       <entry/>
     </row>
     <row>
@@ -809,10 +820,16 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>20.9.4.3</entry>
       <entry>Type properties</entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Missing is_trivially_copyable,
+      is_trivially_constructible, is_trivially_default_constructible,
+      is_trivially_copy_constructible, is_trivially_move_constructible,
+      is_trivially_assignable, is_trivially_default_assignable,
+      is_trivially_copy_assignable, is_trivially_move_assignable
+      </entry>
     </row>
     <row>
       <entry>20.9.5</entry>
@@ -863,10 +880,11 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>20.9.7.6</entry>
       <entry>Other transformations</entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Missing <code>aligned_union</code>.</entry>
     </row>
     <row>
       <entry>20.10</entry>
@@ -947,10 +965,11 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>20.11.5</entry>
       <entry>Class template <code>duration</code></entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Missing constexpr for non-member arithmetic operations</entry>
     </row>
     <row>
       <entry>20.11.6</entry>
@@ -989,9 +1008,10 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>20.12</entry>
       <entry>Scoped allocator adaptor</entry>
-      <entry>Y</entry>
+      <entry>Partial</entry>
       <entry/>
     </row>
     <row>
@@ -1013,10 +1033,11 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>20.12.4</entry>
       <entry>Scoped allocator adaptor members</entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>OUTERMOST is not recursive.</entry>
     </row>
     <row>
       <entry>20.12.5</entry>
@@ -1069,16 +1090,18 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>21.2.3.1</entry>
       <entry>struct <code>char_traits&lt;char&gt;</code></entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>21.2.3.2</entry>
       <entry>struct <code>char_traits&lt;char16_t&gt;</code></entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
       <entry>21.2.3.3</entry>
@@ -1099,10 +1122,13 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>21.4</entry>
       <entry>Class template <code>basic_string</code></entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Non-conforming Copy-On-Write implementation.
+             Missing <code>getline</code> overloads for rvalue streams.
+      </entry>
     </row>
     <row>
       <entry>21.5</entry>
@@ -1121,7 +1147,9 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry>21.7</entry>
       <entry>Null-terminated sequence utilities</entry>
       <entry>Partial</entry>
-      <entry>C library dependency. </entry>
+      <entry>C library dependency.
+      Missing <filename class="headerfile">&lt;cuchar&gt;</filename>
+      </entry>
     </row>
     <row>
       <entry>
@@ -1168,10 +1196,11 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>22.3.3.1</entry>
       <entry>Character classification</entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Missing <code>isblank</code>.</entry>
     </row>
     <row>
       <entry>22.3.3.2</entry>
@@ -1186,15 +1215,17 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>22.3.3.2.2</entry>
       <entry><code>string</code> conversions</entry>
-      <entry>Y</entry>
+      <entry>N</entry>
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>22.3.3.2.3</entry>
       <entry>Buffer conversions</entry>
-      <entry>Y</entry>
+      <entry>N</entry>
       <entry/>
     </row>
     <row>
@@ -1204,10 +1235,12 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>22.4.1</entry>
       <entry>The <code>ctype</code> category</entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Missing <code>codecvt&lt;char16_t></code> and
+             <code>codecvt&lt;char32_t></code></entry>
     </row>
     <row>
       <entry>22.4.2</entry>
@@ -1246,16 +1279,18 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>22.4.5.1</entry>
       <entry>Class template <code>time_get</code></entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Missing <code>get</code> and <code>do_get</code></entry>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>22.4.5.2</entry>
       <entry>Class template <code>time_get_byname</code></entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Likewise</entry>
     </row>
     <row>
       <entry>22.4.5.3</entry>
@@ -1312,9 +1347,10 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>22.5</entry>
       <entry>Standard code conversion facets</entry>
-      <entry>Y</entry>
+      <entry>N</entry>
       <entry/>
     </row>
     <row>
@@ -1344,10 +1380,13 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>23.2.1</entry>
       <entry>General container requirements</entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Only <code>vector</code> and <code>forward_list</code>
+             meet the requirements
+             relating to allocator use and propagation.</entry>
     </row>
     <row>
       <entry>23.2.2</entry>
@@ -1386,10 +1425,12 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>23.3.3</entry>
       <entry>Class template <code>deque</code></entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry><code>insert</code> and <code>erase</code> members do not
+             take <code>const_iterator</code> arguments (N2350).</entry>
     </row>
     <row>
       <entry>23.3.4</entry>
@@ -1398,22 +1439,30 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>23.3.5</entry>
       <entry>Class template <code>list</code></entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>O(N) size.
+             <code>insert</code> and <code>erase</code> members do not
+             take <code>const_iterator</code> arguments (N2350).
+      </entry>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>23.3.6</entry>
       <entry>Class template <code>vector</code></entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry><code>insert</code> and <code>erase</code> members do not
+             take <code>const_iterator</code> arguments (N2350).</entry>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>23.3.7</entry>
       <entry>Class <code>vector&lt;bool&gt;</code></entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry><code>insert</code> and <code>erase</code> members do not
+             take <code>const_iterator</code> arguments (N2350).</entry>
     </row>
     <row>
       <entry>23.4</entry>
@@ -1612,10 +1661,11 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>25.3</entry>
       <entry>Mutating sequence operations</entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry><code>rotate</code> returns <code>void</code>.</entry>
     </row>
     <row>
       <entry>25.4</entry>
@@ -1640,7 +1690,7 @@ This section describes the C++11 support in the GCC 10 release series.
     <row>
       <entry>26.1</entry>
       <entry>General</entry>
-      <entry/>
+      <entry>Y</entry>
       <entry/>
     </row>
     <row>
@@ -1658,8 +1708,8 @@ This section describes the C++11 support in the GCC 10 release series.
     <row>
       <entry>26.4</entry>
       <entry>Complex numbers</entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
       <entry>26.5</entry>
@@ -1689,19 +1739,19 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry>26.5.3.1</entry>
       <entry>Class template <code>linear_congruential_engine</code></entry>
       <entry>Y</entry>
-      <entry/>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
       <entry>26.5.3.2</entry>
       <entry>Class template <code>mersenne_twister_engine</code></entry>
       <entry>Y</entry>
-      <entry/>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
       <entry>26.5.3.3</entry>
       <entry>Class template <code>subtract_with_carry_engine</code></entry>
       <entry>Y</entry>
-      <entry/>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
       <entry>26.5.4</entry>
@@ -1713,19 +1763,19 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry>26.5.4.2</entry>
       <entry>Class template <code>discard_block_engine</code></entry>
       <entry>Y</entry>
-      <entry/>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
       <entry>26.5.4.3</entry>
       <entry>Class template <code>independent_bits_engine</code></entry>
       <entry>Y</entry>
-      <entry/>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
       <entry>26.5.4.4</entry>
       <entry>Class template <code>shuffle_order_engine</code></entry>
       <entry>Y</entry>
-      <entry/>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
       <entry>26.5.5</entry>
@@ -1737,7 +1787,7 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry>26.5.6</entry>
       <entry>Class <code>random_device</code></entry>
       <entry>Y</entry>
-      <entry/>
+      <entry>Missing constexpr</entry>
     </row>
     <row>
       <entry>26.5.7</entry>
@@ -1993,39 +2043,42 @@ This section describes the C++11 support in the GCC 10 release series.
     </row>
     <row>
       <entry>26.7.2</entry>
-      <entry>Accumulate></entry>
+      <entry><code>accumulate</code></entry>
       <entry>Y</entry>
       <entry/>
     </row>
     <row>
       <entry>26.7.3</entry>
-      <entry>Inner product</entry>
+      <entry><code>inner_product</code></entry>
       <entry>Y</entry>
       <entry/>
     </row>
     <row>
       <entry>26.7.4</entry>
-      <entry>Partial sum</entry>
+      <entry><code>partial_sum</code></entry>
       <entry>Y</entry>
       <entry/>
     </row>
     <row>
       <entry>26.7.5</entry>
-      <entry>Adjacent difference</entry>
+      <entry><code>adjacent_difference</code></entry>
       <entry>Y</entry>
       <entry/>
     </row>
     <row>
       <entry>26.7.6</entry>
-      <entry>Iota</entry>
+      <entry>iota</entry>
       <entry>Y</entry>
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>26.8</entry>
       <entry>C Library</entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry><code>&lt;ctgmath&gt;</code> doesn't include
+	<code>&lt;ccomplex&gt;</code>
+      </entry>
     </row>
     <row>
       <entry>
@@ -2097,10 +2150,16 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>27.5</entry>
       <entry>Iostreams base classes</entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>
+        Missing move and swap operations on <code>basic_ios</code>.
+        Missing <code>io_errc</code> and <code>iostream_category</code>.
+        <code>ios_base::failure</code> is not derived from <code>system_error</code>.
+	Missing <code>ios_base::hexfloat</code>.
+      </entry>
     </row>
     <row>
       <entry>27.6</entry>
@@ -2109,22 +2168,28 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>27.7</entry>
       <entry>Formatting and manipulators</entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>
+        Missing move and swap operations
+        Missing <code>get_time</code> and <code>put_time</code> manipulators.
+      </entry>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>27.8</entry>
       <entry>String-based streams</entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Missing move and swap operations</entry>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>27.9</entry>
       <entry>File-based streams</entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Missing move and swap operations</entry>
     </row>
     <row>
       <entry>
@@ -2135,27 +2200,31 @@ This section describes the C++11 support in the GCC 10 release series.
       </entry>
     </row>
     <row>
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>28.1</entry>
       <entry>General</entry>
-      <entry>Y</entry>
+      <entry>N</entry>
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>28.2</entry>
       <entry>Definitions</entry>
-      <entry>Y</entry>
+      <entry>N</entry>
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>28.3</entry>
       <entry>Requirements</entry>
-      <entry>Y</entry>
+      <entry>N</entry>
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>28.4</entry>
       <entry>Header <code>&lt;regex&gt;</code> synopsis</entry>
-      <entry>Y</entry>
+      <entry>N</entry>
       <entry/>
     </row>
     <row>
@@ -2175,43 +2244,48 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry>28.7</entry>
       <entry>Class template <code>regex_traits</code></entry>
       <entry>Partial</entry>
-      <entry><code>transform_primary</code> is not correctly implemented</entry>
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>28.8</entry>
       <entry>Class template <code>basic_regex</code></entry>
-      <entry>Y</entry>
+      <entry>Partial</entry>
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>28.9</entry>
       <entry>Class template <code>sub_match</code></entry>
-      <entry>Y</entry>
+      <entry>Partial</entry>
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>28.10</entry>
       <entry>Class template <code>match_results</code></entry>
-      <entry>Y</entry>
+      <entry>Partial</entry>
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>28.11</entry>
       <entry>Regular expression algorithms</entry>
-      <entry>Y</entry>
+      <entry>N</entry>
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>28.12</entry>
       <entry>Regular expression Iterators</entry>
-      <entry>Y</entry>
+      <entry>N</entry>
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#C8B0B0" ?>
       <entry>28.13</entry>
       <entry>Modified ECMAScript regular expression grammar</entry>
-      <entry>Y</entry>
+      <entry>N</entry>
       <entry/>
     </row>
     <row>
@@ -2235,9 +2309,10 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>29.3</entry>
       <entry>Order and consistency</entry>
-      <entry>Y</entry>
+      <entry>Partial</entry>
       <entry/>
     </row>
     <row>
@@ -2349,7 +2424,8 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry>30.4.1.3</entry>
       <entry>Timed mutex types</entry>
       <entry/>
-      <entry/>
+      <entry>On POSIX sytems these types are only defined if the OS
+         supports the POSIX Timeouts option. </entry>
     </row>
     <row>
       <entry>30.4.1.3.1</entry>
@@ -2400,20 +2476,17 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
-      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>30.4.4.2</entry>
       <entry>Function <code>call_once</code></entry>
-      <entry>Broken</entry>
-      <entry>See <link xmlns:xlink="http://www.w3.org/1999/xlink"
-	xlink:href="https://gcc.gnu.org/bugzilla/show_bug.cgi?id=66146">PR
-	66146</link>
-      </entry>
-    </row>
-    <row>
-      <entry>30.5</entry>
-      <entry>Condition variables</entry>
       <entry>Y</entry>
       <entry/>
+    </row>
+    <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
+      <entry>30.5</entry>
+      <entry>Condition variables</entry>
+      <entry>Partial</entry>
+      <entry>Missing notify_all_at_thread_exit</entry>
     </row>
     <row>
       <entry>30.5.1</entry>
@@ -2458,22 +2531,25 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>30.6.5</entry>
       <entry>Class template <code>promise</code></entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Missing set_*_at_thread_exit</entry>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>30.6.6</entry>
       <entry>Class template <code>future</code></entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Timed waiting functions do not return future_status::deferred</entry>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>30.6.7</entry>
       <entry>Class template <code>shared_future</code></entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Timed waiting functions do not return future_status::deferred</entry>
     </row>
     <row>
       <entry>30.6.8</entry>
@@ -2482,10 +2558,11 @@ This section describes the C++11 support in the GCC 10 release series.
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>30.6.9</entry>
       <entry>Class template <code>packaged_task</code></entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Missing make_ready_at_thread_exit</entry>
     </row>
     <row>
       <entry>
@@ -2522,44 +2599,47 @@ This section describes the C++11 support in the GCC 10 release series.
     <row>
       <entry>D.5</entry>
       <entry>C standard library headers</entry>
-      <entry>Y</entry>
+      <entry/>
       <entry/>
     </row>
     <row>
       <entry>D.6</entry>
       <entry>Old iostreams members</entry>
-      <entry>Y</entry>
+      <entry/>
       <entry/>
     </row>
     <row>
       <entry>D.7</entry>
       <entry><code>char*</code> streams</entry>
-      <entry>Y</entry>
+      <entry/>
       <entry/>
     </row>
     <row>
       <entry>D.8</entry>
       <entry>Function objects</entry>
-      <entry>Y</entry>
+      <entry/>
       <entry/>
     </row>
     <row>
       <entry>D.9</entry>
       <entry>Binders</entry>
-      <entry>Y</entry>
+      <entry/>
       <entry/>
     </row>
     <row>
       <entry>D.10</entry>
       <entry><code>auto_ptr</code></entry>
-      <entry>Y</entry>
+      <entry/>
       <entry/>
     </row>
     <row>
+      <?dbhtml bgcolor="#B0B0B0" ?>
       <entry>D.11</entry>
       <entry>Violating exception-specifications</entry>
-      <entry>Y</entry>
-      <entry/>
+      <entry>Partial</entry>
+      <entry>Missing <code>get_unexpected</code>.
+             <code>set_unexpected</code> is not thread-safe.
+      </entry>
     </row>
 
   </tbody>
@@ -2575,95 +2655,9 @@ This section describes the C++11 support in the GCC 10 release series.
    </para>
 
    <para>
-      <emphasis>17.6.5.12 [res.on.exception.handling]</emphasis>
-      There are no implementation-defined exception classes, only standard
-      exception classes (or classes derived from them) will be thrown.
-   </para>
-
-   <para>
-      <emphasis>17.6.5.14 [value.error.codes]</emphasis>
-      The <classname>error_category</classname> for errors originating outside
-      the OS, and the possible error code values for each error category,
-      should be documented here.
-   </para>
-
-   <para>
-      <emphasis>18.6.2.2 [new.badlength]</emphasis>
-      <function>what()</function> returns
-      <literal>"std::bad_array_new_length"</literal>.
-   </para>
-
-   <para>
-      <emphasis>20.6.9.1 [allocator.member]/5</emphasis>
-      Over-aligned types are not supported by
-      <classname>std::allocator</classname>.
-   </para>
-
-   <para>
-      <emphasis>20.7.2.2.1 [util.smartptr.shared.const]</emphasis>
-      When a <classname>shared_ptr</classname> constructor fails
-      <classname>bad_alloc</classname> (or types derived from it) will
-      be thrown, or when an allocator is passed to the constructor then any
-      exceptions thrown by the allocator.
-   </para>
-
-   <para>
-      <emphasis>20.7.2.0 [util.smartptr.weakptr]</emphasis>
-      <code>what()</code> returns <literal>"bad_weak_ptr"</literal>.
-   </para>
-
-   <para>
       <emphasis>20.8.9.1.3 [func.bind.place]/1</emphasis> There are 29
       placeholders defined and the placeholder types are
       <literal>CopyAssignable</literal>.
-   </para>
-
-   <para>
-      <emphasis>20.11.7.1 [time.clock.system]/3, /4</emphasis>
-      Time point values are truncated to <code>time_t</code> values.
-      There is no loss of precision for conversions in the other direction.
-   </para>
-
-   <para>
-      <emphasis>20.15.7 [meta.trans]/2</emphasis>
-      <classname>aligned_storage</classname> does not support extended
-      alignment.
-   </para>
-
-   <para>
-      <emphasis>21.2.3.2 [char.traits.specializations.char16_t]</emphasis>,
-      <emphasis>21.2.3.3 [char.traits.specializations.char32_t]</emphasis>
-      The types <classname>u16streampos</classname> and
-      <classname>u32streampos</classname> are both synonyms for
-      <classname>fpos&lt;mbstate_t&gt;</classname>.
-      The function <function>eof</function> returns <code>int_type(-1)</code>.
-      <function>char_traits&lt;char16_t&gt;::to_int_type</function> will
-      transform the "noncharacter" U+FFFF to U+FFFD (REPLACEMENT CHARACTER).
-      This is done to ensure that <function>to_int_type</function> never
-      returns the same value as <function>eof</function>, which is U+FFFF.
-   </para>
-
-   <para>
-      <emphasis>22.3.1 [locale]</emphasis>
-      There is one global locale for the whole program, not per-thread.
-   </para>
-
-   <para>
-      <emphasis>22.4.5.1.2 [locale.time.get.virtuals]</emphasis>,
-      <emphasis>22.4.5.3.2 [locale.time.put.virtuals]</emphasis>
-      Additional supported formats should be documented here.
-   </para>
-
-   <para>
-      <emphasis> 22.4.7.1.2 [locale.messages.virtuals]</emphasis>
-      The mapping should be documented here.
-   </para>
-
-   <para>
-      <emphasis>23.3.2.1 [array.overview]</emphasis>
-      <classname>array&lt;T, N&gt;::iterator</classname> is <code>T*</code> and
-      <classname>array&lt;T, N&gt;::const_iterator</classname> is
-      <code>const T*</code>.
    </para>
 
    <para>
@@ -2671,173 +2665,40 @@ This section describes the C++11 support in the GCC 10 release series.
       <emphasis>23.5.5.2 [unord.multimap.cnstr]</emphasis>,
       <emphasis>23.5.6.2 [unord.set.cnstr]</emphasis>,
       <emphasis>23.5.7.2 [unord.multiset.cnstr]</emphasis>
-      The default minimal bucket count is 0 for the default constructors, range
-      constructors and initializer-list constructors.
-   </para>
-
-   <para>
-      <emphasis>25.3.12 [alg.random.shuffle]</emphasis>
-      The two-argument overload of <function>random_shuffle</function>
-      uses <function>rand</function> as the source of randomness.
-   </para>
-
-   <para>
-      <emphasis>26.5.5 [rand.predef]</emphasis>
-      The type <classname>default_random_engine</classname> is a synonym for
-      <classname>minstd_rand0</classname>.
-   </para>
-
-   <para>
-      <emphasis> 26.5.6 [rand.device] </emphasis>
-      The <code>token</code> parameter of the
-      <classname>random_device</classname> constructor can be used to select
-      a specific source of random bytes. The valid token values are shown
-      in the list below.
-      The default constructor uses the token <literal>"default"</literal>.
-      <variablelist>
-      <varlistentry>
-        <term><literal>"default"</literal></term>
-        <listitem>
-          Select the first available source from the other entries below.
-          This is the only token that is always valid.
-        </listitem>
-      </varlistentry>
-      <varlistentry>
-        <term><literal>"rand_s"</literal></term>
-        <listitem>
-          Use the MSVCRT <function>rand_s</function> function.
-          This token is only valid for mingw-w64 targets.
-        </listitem>
-      </varlistentry>
-      <varlistentry>
-        <term><literal>"rdseed"</literal></term>
-        <term><literal>"rdrand"</literal> or <literal>"rdrnd"</literal></term>
-        <listitem>
-          Use the IA-32 <literal>RDSEED</literal> or <literal>RDRAND</literal>
-          instruction to read from an on-chip hardware random number generator.
-          These tokens are only valid for x86 and x86_64 targets when both
-          the assembler and CPU support the corresponding instruction.
-        </listitem>
-      </varlistentry>
-      <varlistentry>
-        <term><literal>"/dev/urandom"</literal></term>
-        <term><literal>"/dev/random"</literal></term>
-        <listitem>
-          Use the named character special file to read random bytes from.
-          These tokens are only valid when the device files are present
-          and readable by the current user.
-        </listitem>
-      </varlistentry>
-      <varlistentry>
-        <term><literal>"mt19937"</literal></term>
-        <term>seed value</term>
-        <listitem>
-          When no source of nondeterministic random numbers is available a
-          <classname>mersenne_twister_engine</classname> will be used.
-          An integer seed value can be used as the token and will be converted
-          to an <code>unsigned long</code> using <function>strtoul</function>.
-          These tokens are only valid when no other source of random bytes
-          is available.
-        </listitem>
-      </varlistentry>
-      </variablelist>
-      An exception of type <classname>runtime_error</classname> will be
-      thrown if a <classname>random_device</classname> object is constructed
-      with an invalid token, or if it cannot open or read from the source
-      of random bytes.
-   </para>
-
-   <para>
-      <emphasis>26.5.8.1 [rand.dist.general]</emphasis>
-      The algorithms used by the distributions should be documented here.
-   </para>
-
-   <para>
-      <emphasis>26.8 [c.math]</emphasis> Whether the
-      <function>rand</function> function introduces data races depends on
-      the C library as the function is not provided by libstdc++.
-   </para>
-
-   <para>
-      <emphasis>27.8.2.1 [stringbuf.cons]</emphasis>
-      Whether the sequence pointers are copied by the
-      <classname>basic_stringbuf</classname> move constructor should be
-      documented here.
-   </para>
-
-   <para>
-      <emphasis>27.9.1.2 [filebuf.cons]</emphasis>
-      Whether the sequence pointers are copied by the
-      <classname>basic_filebuf</classname> move constructor should be
-      documented here.
-   </para>
-
-   <para>
-      <emphasis>28.5.1 [re.synopt]</emphasis>,
-      <emphasis> 28.5.2 [re.matchflag] </emphasis>,
-      <emphasis> 28.5.3 [re.err] </emphasis>
-      <code>syntax_option_type</code>, <code>match_flag_type</code>
-      and <code>error_type</code> are unscoped enumeration types.
-   </para>
-
-   <para>
-      <emphasis>28.7 [re.traits]</emphasis>
-      The <literal>blank</literal> character class corresponds to the
-      <code>ctype_base::blank</code> mask.
-   </para>
-
-   <para>
-      <emphasis>29.4 [atomics.lockfree]</emphasis>
-      The values of the <code>ATOMIC_xxx_LOCK_FREE</code> macros depend on
-      the target and cannot be listed here.
+      The default bucket count is 10 for the default constructors
+      and 0 for the range constructors and initializer-list constructors.
    </para>
 
    <para>
       <emphasis>30.2.3 [thread.req.native]/1</emphasis>
       <classname>native_handle_type</classname> and
       <methodname>native_handle</methodname> are provided. The handle types
-      are defined in terms of the Gthreads abstraction layer, although this
-      is subject to change at any time. Any use of
-      <classname>native_handle</classname> is inherently non-portable and
-      not guaranteed to work between major releases of GCC.
-      <variablelist>
-      <varlistentry>
-         <term><classname>thread</classname></term>
-         <listitem>
-            The native handle type is a typedef for <code>__gthread_t</code>
-            i.e. <code>pthread_t</code> when GCC is configured with the
-            <literal>posix</literal> thread model.
-            The value of the native handle is undefined for a thread
+      are defined in terms of the Gthreads abstraction layer.
+      <itemizedlist>
+         <listitem><para><classname>thread</classname>: The native handle type is
+            a typedef for <code>__gthread_t</code> i.e. <code>pthread_t</code>
+            when GCC is configured with the <literal>posix</literal> thread
+            model. The value of the native handle is undefined for a thread
             which is not joinable.
-         </listitem>
-      </varlistentry>
-      <varlistentry>
-         <term><classname>mutex</classname></term>
-         <term><classname>timed_mutex</classname></term>
-         <listitem>
+         </para></listitem>
+         <listitem><para><classname>mutex</classname> and
+            <classname>timed_mutex</classname>:
             The native handle type is <code>__gthread_mutex_t*</code> i.e.
             <code>pthread_mutex_t*</code> for the <literal>posix</literal>
             thread model.
-         </listitem>
-      </varlistentry>
-      <varlistentry>
-         <term><classname>recursive_mutex</classname></term>
-         <term><classname>recursive_timed_mutex</classname></term>
-         <listitem>
+         </para></listitem>
+         <listitem><para><classname>recursive_mutex</classname> and
+         <classname>recursive_timed_mutex</classname>:
             The native handle type is <code>__gthread_recursive_mutex_t*</code>
             i.e. <code>pthread_mutex_t*</code> for the <literal>posix</literal>
             thread model.
-         </listitem>
-      </varlistentry>
-      <varlistentry>
-         <term><classname>condition_variable</classname></term>
-         <listitem>
-            The native handle type is <code>__gthread_cond_t*</code> i.e.
+         </para></listitem>
+         <listitem><para><classname>condition_variable</classname>: The native
+            handle type is <code>__gthread_cond_t*</code> i.e.
             <code>pthread_cond_t*</code> for the <literal>posix</literal>
             thread model.
-         </listitem>
-      </varlistentry>
-      </variablelist>
+         </para></listitem>
+      </itemizedlist>
    </para>
 
    <para>

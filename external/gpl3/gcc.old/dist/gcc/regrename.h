@@ -1,5 +1,5 @@
 /* This file contains definitions for the register renamer.
-   Copyright (C) 2011-2020 Free Software Foundation, Inc.
+   Copyright (C) 2011-2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -22,15 +22,12 @@ along with GCC; see the file COPYING3.  If not see
 
 /* We keep linked lists of DU_HEAD structures, each of which describes
    a chain of occurrences of a reg.  */
-class du_head
+struct du_head
 {
-public:
   /* The next chain.  */
-  class du_head *next_chain;
+  struct du_head *next_chain;
   /* The first and last elements of this chain.  */
   struct du_chain *first, *last;
-  /* The chain that this chain is tied to.  */
-  class du_head *tied_chain;
   /* Describes the register being tracked.  */
   unsigned regno;
   int nregs;
@@ -41,25 +38,16 @@ public:
   bitmap_head conflicts;
   /* Conflicts with untracked hard registers.  */
   HARD_REG_SET hard_conflicts;
-  /* Which registers are fully or partially clobbered by the calls that
-     the chain crosses.  */
-  HARD_REG_SET call_clobber_mask;
 
-  /* A bitmask of ABIs used by the calls that the chain crosses.  */
-  unsigned int call_abis : NUM_ABI_IDS;
+  /* Nonzero if the chain crosses a call.  */
+  unsigned int need_caller_save_reg:1;
   /* Nonzero if the register is used in a way that prevents renaming,
      such as the SET_DEST of a CALL_INSN or an asm operand that used
      to be a hard register.  */
   unsigned int cannot_rename:1;
-  /* Nonzero if the chain has already been renamed.  */
-  unsigned int renamed:1;
-
-  /* Fields for use by target code.  */
-  unsigned int target_data_1;
-  unsigned int target_data_2;
 };
 
-typedef class du_head *du_head_p;
+typedef struct du_head *du_head_p;
 
 /* This struct describes a single occurrence of a register.  */
 struct du_chain
@@ -68,7 +56,7 @@ struct du_chain
   struct du_chain *next_use;
 
   /* The insn where the register appears.  */
-  rtx_insn *insn;
+  rtx insn;
   /* The location inside the insn.  */
   rtx *loc;
   /* The register class required by the insn at this location.  */
@@ -77,23 +65,22 @@ struct du_chain
 
 /* This struct describes data gathered during regrename_analyze about
    a single operand of an insn.  */
-struct operand_rr_info
+typedef struct
 {
   /* The number of chains recorded for this operand.  */
-  short n_chains;
-  bool failed;
+  int n_chains;
   /* Holds either the chain for the operand itself, or for the registers in
      a memory operand.  */
   struct du_chain *chains[MAX_REGS_PER_ADDRESS];
-  class du_head *heads[MAX_REGS_PER_ADDRESS];
-};
+  struct du_head *heads[MAX_REGS_PER_ADDRESS];
+} operand_rr_info;
 
 /* A struct to hold a vector of operand_rr_info structures describing the
    operands of an insn.  */
-struct insn_rr_info
+typedef struct
 {
   operand_rr_info *op_info;
-};
+} insn_rr_info;
 
 
 extern vec<insn_rr_info> insn_rr;
@@ -102,10 +89,8 @@ extern void regrename_init (bool);
 extern void regrename_finish (void);
 extern void regrename_analyze (bitmap);
 extern du_head_p regrename_chain_from_id (unsigned int);
-extern int find_rename_reg (du_head_p, enum reg_class, HARD_REG_SET *, int,
-			    bool);
-extern bool regrename_do_replace (du_head_p, int);
-extern reg_class regrename_find_superclass (du_head_p, int *,
-					    HARD_REG_SET *);
+extern int find_best_rename_reg (du_head_p, enum reg_class, HARD_REG_SET *,
+				 int);
+extern void regrename_do_replace (du_head_p, int);
 
 #endif

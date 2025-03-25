@@ -197,18 +197,12 @@ void Import::importAll(Scope *sc)
 void Import::semantic(Scope *sc)
 {
     //printf("Import::semantic('%s') %s\n", toPrettyChars(), id->toChars());
-    if (semanticRun > PASSinit)
-        return;
 
     if (_scope)
     {
         sc = _scope;
         _scope = NULL;
     }
-    if (!sc)
-        return;
-
-    semanticRun = PASSsemantic;
 
     // Load if not already done so
     if (!mod)
@@ -296,8 +290,6 @@ void Import::semantic(Scope *sc)
         }
         sc = sc->pop();
     }
-
-    semanticRun = PASSsemanticdone;
 
     // object self-imports itself, so skip that (Bugzilla 7547)
     // don't list pseudo modules __entrypoint.d, __main.d (Bugzilla 11117, 11164)

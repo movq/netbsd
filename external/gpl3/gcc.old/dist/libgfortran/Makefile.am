@@ -141,7 +141,6 @@ intrinsics/reshape_generic.c \
 intrinsics/reshape_packed.c \
 intrinsics/selected_int_kind.f90 \
 intrinsics/selected_real_kind.f90 \
-intrinsics/trigd.c \
 intrinsics/unpack_generic.c \
 runtime/in_pack_generic.c \
 runtime/in_unpack_generic.c
@@ -283,7 +282,6 @@ $(srcdir)/generated/findloc0_r10.c \
 $(srcdir)/generated/findloc0_r16.c \
 $(srcdir)/generated/findloc0_c4.c \
 $(srcdir)/generated/findloc0_c8.c \
-$(srcdir)/generated/findloc0_c10.c \
 $(srcdir)/generated/findloc0_c16.c
 
 i_findloc0s_c= \
@@ -302,7 +300,6 @@ $(srcdir)/generated/findloc1_r10.c \
 $(srcdir)/generated/findloc1_r16.c \
 $(srcdir)/generated/findloc1_c4.c \
 $(srcdir)/generated/findloc1_c8.c \
-$(srcdir)/generated/findloc1_c10.c \
 $(srcdir)/generated/findloc1_c16.c
 
 i_findloc1s_c= \

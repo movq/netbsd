@@ -2,7 +2,7 @@
    Contributed by Axis Communications.
    Written by Hans-Peter Nilsson <hp@axis.se>, c:a 1992.
 
-   Copyright (C) 1998-2020 Free Software Foundation, Inc.
+   Copyright (C) 1998-2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -38,14 +38,6 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define LZ(v) __builtin_clz (v)
 #endif
 
-/* In (at least) the 4.7 series, GCC doesn't automatically choose the
-   most optimal strategy, possibly related to insufficient modelling of
-   delay-slot costs.  */
-#if defined (__CRIS_arch_version) && __CRIS_arch_version >= 10
-#define SIGNMULT(s, a) ((s) * (a)) /* Cheap multiplication, better than branch.  */
-#else
-#define SIGNMULT(s, a) ((s) < 0 ? -(a) : (a)) /* Branches are still better.  */
-#endif
 
 #if defined (L_udivsi3) || defined (L_divsi3) || defined (L_umodsi3) \
     || defined (L_modsi3)
@@ -128,8 +120,7 @@ do_31div (unsigned long a, unsigned long b)
      i.e. "a - (b - 1) == (a - b) + 1".  */
   b--;
 
-#define DS __asm__ ("dstep %2,%0" : "=r" (a) : "0" (a), "r" (b)); \
- __attribute__ ((__fallthrough__))
+#define DS __asm__ ("dstep %2,%0" : "=r" (a) : "0" (a), "r" (b))
 
   switch (quot_digits)
     {
@@ -207,7 +198,6 @@ __Div (long a, long b)
 {
   long extra = 0;
   long sign = (b < 0) ? -1 : 1;
-  long res;
 
   /* We need to handle a == -2147483648 as expected and must while
      doing that avoid producing a sequence like "abs (a) < 0" as GCC
@@ -223,14 +213,15 @@ __Div (long a, long b)
       if ((a & 0x7fffffff) == 0)
 	{
 	  /* We're at 0x80000000.  Tread carefully.  */
-	  a -= SIGNMULT (sign, b);
+	  a -= b * sign;
 	  extra = sign;
 	}
       a = -a;
     }
 
-  res = do_31div (a, __builtin_labs (b)).quot;
-  return SIGNMULT (sign, res) + extra;
+  /* We knowingly penalize pre-v10 models by multiplication with the
+     sign.  */
+  return sign * do_31div (a, __builtin_labs (b)).quot + extra;
 }
 #endif /* L_divsi3 */
 
@@ -282,7 +273,6 @@ long
 __Mod (long a, long b)
 {
   long sign = 1;
-  long res;
 
   /* We need to handle a == -2147483648 as expected and must while
      doing that avoid producing a sequence like "abs (a) < 0" as GCC
@@ -300,8 +290,7 @@ __Mod (long a, long b)
       a = -a;
     }
 
-  res = do_31div (a, __builtin_labs (b)).rem;
-  return SIGNMULT (sign, res);
+  return sign * do_31div (a, __builtin_labs (b)).rem;
 }
 #endif /* L_modsi3 */
 #endif /* L_udivsi3 || L_divsi3 || L_umodsi3 || L_modsi3 */

@@ -1,5 +1,5 @@
 /* Shared code for before and after reload gcse implementations.
-   Copyright (C) 1997-2020 Free Software Foundation, Inc.
+   Copyright (C) 1997-2015 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -23,8 +23,12 @@
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "backend.h"
+#include "tm.h"
 #include "rtl.h"
+#include "vec.h"
+#include "predict.h"
+#include "bitmap.h"
+#include "basic-block.h"
 #include "df.h"
 #include "gcse-common.h"
 
@@ -36,7 +40,7 @@
 void
 canon_list_insert (rtx dest, const_rtx x ATTRIBUTE_UNUSED, void *data)
 {
-  rtx dest_addr;
+  rtx dest_addr, insn;
   int bb;
   modify_pair pair;
 
@@ -54,7 +58,7 @@ canon_list_insert (rtx dest, const_rtx x ATTRIBUTE_UNUSED, void *data)
 
   dest_addr = get_addr (XEXP (dest, 0));
   dest_addr = canon_rtx (dest_addr);
-  rtx_insn *insn = ((struct gcse_note_stores_info *)data)->insn;
+  insn = ((struct gcse_note_stores_info *)data)->insn;
   bb = BLOCK_FOR_INSN (insn)->index;
 
   pair.dest = dest;
@@ -89,7 +93,7 @@ record_last_mem_set_info_common (rtx_insn *insn,
       struct gcse_note_stores_info data;
       data.insn = insn;
       data.canon_mem_list = canon_modify_mem_list;
-      note_stores (insn, canon_list_insert, (void*) &data);
+      note_stores (PATTERN (insn), canon_list_insert, (void*) &data);
     }
 }
 

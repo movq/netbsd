@@ -11,7 +11,6 @@
 // with a few common GNU extensions.
 //
 //===----------------------------------------------------------------------===//
-
 #include <stdarg.h>
 
 static const char *parse_number(const char *p, int *out) {
@@ -190,7 +189,7 @@ static const char *scanf_parse_next(const char *p, bool allowGnuMalloc,
       continue;
     }
     if (*p == '\0') {
-      return nullptr;
+      return 0;
     }
     // %n$
     p = maybe_parse_param_index(p, &dir->argIdx);
@@ -205,7 +204,7 @@ static const char *scanf_parse_next(const char *p, bool allowGnuMalloc,
       p = parse_number(p, &dir->fieldWidth);
       CHECK(p);
       if (dir->fieldWidth <= 0)  // Width if at all must be non-zero
-        return nullptr;
+        return 0;
     }
     // m
     if (*p == 'm') {
@@ -225,8 +224,8 @@ static const char *scanf_parse_next(const char *p, bool allowGnuMalloc,
       while (*p && *p != ']')
         ++p;
       if (*p == 0)
-        return nullptr; // unexpected end of string
-                        // Consume the closing ']'.
+        return 0; // unexpected end of string
+                  // Consume the closing ']'.
       ++p;
     }
     // This is unfortunately ambiguous between old GNU extension
@@ -250,7 +249,7 @@ static const char *scanf_parse_next(const char *p, bool allowGnuMalloc,
         while (*q && *q != ']' && *q != '%')
           ++q;
         if (*q == 0 || *q == '%')
-          return nullptr;
+          return 0;
         p = q + 1; // Consume the closing ']'.
         dir->maybeGnuMalloc = true;
       }
@@ -323,8 +322,8 @@ static void scanf_common(void *ctx, int n_inputs, bool allowGnuMalloc,
       continue;
     int size = scanf_get_value_size(&dir);
     if (size == FSS_INVALID) {
-      Report("%s: WARNING: unexpected format specifier in scanf interceptor: ",
-             SanitizerToolName, "%.*s\n", dir.end - dir.begin, dir.begin);
+      Report("WARNING: unexpected format specifier in scanf interceptor: "
+        "%.*s\n", dir.end - dir.begin, dir.begin);
       break;
     }
     void *argp = va_arg(aq, void *);
@@ -394,7 +393,7 @@ static const char *printf_parse_next(const char *p, PrintfDirective *dir) {
       continue;
     }
     if (*p == '\0') {
-      return nullptr;
+      return 0;
     }
     // %n$
     p = maybe_parse_param_index(p, &dir->precisionIdx);
@@ -407,7 +406,7 @@ static const char *printf_parse_next(const char *p, PrintfDirective *dir) {
     p = maybe_parse_number_or_star(p, &dir->fieldWidth,
                                    &dir->starredWidth);
     if (!p)
-      return nullptr;
+      return 0;
     // Precision
     if (*p == '.') {
       ++p;
@@ -415,7 +414,7 @@ static const char *printf_parse_next(const char *p, PrintfDirective *dir) {
       p = maybe_parse_number_or_star(p, &dir->fieldPrecision,
                                      &dir->starredPrecision);
       if (!p)
-        return nullptr;
+        return 0;
       // m$
       if (dir->starredPrecision) {
         p = maybe_parse_param_index(p, &dir->precisionIdx);
@@ -433,6 +432,10 @@ static const char *printf_parse_next(const char *p, PrintfDirective *dir) {
 }
 
 static int printf_get_value_size(PrintfDirective *dir) {
+  if (dir->convSpecifier == 'm') {
+    return sizeof(char *);
+  }
+
   if (char_is_one_of(dir->convSpecifier, "cCsS")) {
     unsigned charSize =
         format_get_char_size(dir->convSpecifier, dir->lengthModifier);
@@ -513,17 +516,10 @@ static void printf_common(void *ctx, const char *format, va_list aq) {
       // Dynamic precision
       SKIP_SCALAR_ARG(&aq, 'd', sizeof(int));
     }
-    // %m does not require an argument: strlen(errno).
-    if (dir.convSpecifier == 'm')
-      continue;
     int size = printf_get_value_size(&dir);
     if (size == FSS_INVALID) {
-      static int ReportedOnce;
-      if (!ReportedOnce++)
-        Report(
-            "%s: WARNING: unexpected format specifier in printf "
-            "interceptor: %.*s (reported once per process)\n",
-            SanitizerToolName, dir.end - dir.begin, dir.begin);
+      Report("WARNING: unexpected format specifier in printf "
+             "interceptor: %.*s\n", dir.end - dir.begin, dir.begin);
       break;
     }
     if (dir.convSpecifier == 'n') {
@@ -558,4 +554,4 @@ static void printf_common(void *ctx, const char *format, va_list aq) {
   }
 }
 
-#endif // SANITIZER_INTERCEPT_PRINTF
+#endif  // SANITIZER_INTERCEPT_PRINTF

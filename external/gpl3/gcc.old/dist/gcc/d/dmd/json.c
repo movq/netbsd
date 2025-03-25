@@ -454,8 +454,6 @@ public:
 
     void jsonProperties(Declaration *d)
     {
-        if (d->storage_class & STClocal)
-            return;
         jsonProperties((Dsymbol *)d);
 
         propertyStorageClass("storageClass", d->storage_class);
@@ -845,8 +843,6 @@ public:
 
     void visit(VarDeclaration *d)
     {
-        if (d->storage_class & STClocal)
-            return;
         objectStart();
 
         jsonProperties(d);

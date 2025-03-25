@@ -1,5 +1,5 @@
 /* Dependency analysis
-   Copyright (C) 2000-2020 Free Software Foundation, Inc.
+   Copyright (C) 2000-2019 Free Software Foundation, Inc.
    Contributed by Paul Brook <paul@nowt.org>
 
 This file is part of GCC.
@@ -319,8 +319,6 @@ gfc_dep_compare_expr (gfc_expr *e1, gfc_expr *e2)
 
   if (e1 == NULL && e2 == NULL)
     return 0;
-  else if (e1 == NULL || e2 == NULL)
-    return -2;
 
   e1 = gfc_discard_nops (e1);
   e2 = gfc_discard_nops (e2);
@@ -981,14 +979,10 @@ gfc_check_argument_var_dependency (gfc_expr *var, sym_intent intent,
 		     If a dependency is found in the case
 		     elemental == ELEM_CHECK_VARIABLE, we will generate
 		     a temporary, so we don't need to bother the user.  */
-
-		  if (var->expr_type == EXPR_VARIABLE
-		      && expr->expr_type == EXPR_VARIABLE
-		      && strcmp(var->symtree->name, expr->symtree->name) == 0)
-		    gfc_warning (0, "INTENT(%s) actual argument at %L might "
-				 "interfere with actual argument at %L.",
-				 intent == INTENT_OUT ? "OUT" : "INOUT",
-				 &var->where, &expr->where);
+		  gfc_warning (0, "INTENT(%s) actual argument at %L might "
+			       "interfere with actual argument at %L.",
+		   	       intent == INTENT_OUT ? "OUT" : "INOUT",
+		   	       &var->where, &expr->where);
 		}
 	      return 0;
 	    }
@@ -1291,11 +1285,6 @@ gfc_check_dependency (gfc_expr *expr1, gfc_expr *expr2, bool identical)
   if (expr1->expr_type != EXPR_VARIABLE)
     gfc_internal_error ("gfc_check_dependency: expecting an EXPR_VARIABLE");
 
-  /* Prevent NULL pointer dereference while recursively analyzing invalid
-     expressions.  */
-  if (expr2 == NULL)
-    return 0;
-
   switch (expr2->expr_type)
     {
     case EXPR_OP:
@@ -1358,10 +1347,13 @@ gfc_check_dependency (gfc_expr *expr1, gfc_expr *expr2, bool identical)
 	  return 0;
 	}
 
+      if (identical)
+	return 1;
+
       /* Identical and disjoint ranges return 0,
 	 overlapping ranges return 1.  */
       if (expr1->ref && expr2->ref)
-	return gfc_dep_resolver (expr1->ref, expr2->ref, NULL, identical);
+	return gfc_dep_resolver (expr1->ref, expr2->ref, NULL);
 
       return 1;
 
@@ -1888,7 +1880,6 @@ gfc_check_element_vs_element (gfc_ref *lref, gfc_ref *rref, int n)
 
   if (i > -2)
     return GFC_DEP_NODEP;
-
   return GFC_DEP_EQUAL;
 }
 
@@ -2038,8 +2029,6 @@ ref_same_as_full_array (gfc_ref *full_ref, gfc_ref *ref)
     return false;
   if (ref->type != REF_ARRAY)
     return false;
-  if (ref->u.ar.type == AR_FULL)
-    return true;
   if (ref->u.ar.type != AR_SECTION)
     return false;
 
@@ -2091,21 +2080,18 @@ ref_same_as_full_array (gfc_ref *full_ref, gfc_ref *ref)
 
 /* Finds if two array references are overlapping or not.
    Return value
-	2 : array references are overlapping but reversal of one or
+   	2 : array references are overlapping but reversal of one or
 	    more dimensions will clear the dependency.
-	1 : array references are overlapping, or identical is true and
-	    there is some kind of overlap.
-	0 : array references are identical or not overlapping.  */
+   	1 : array references are overlapping.
+   	0 : array references are identical or not overlapping.  */
 
 int
-gfc_dep_resolver (gfc_ref *lref, gfc_ref *rref, gfc_reverse *reverse,
-		  bool identical)
+gfc_dep_resolver (gfc_ref *lref, gfc_ref *rref, gfc_reverse *reverse)
 {
   int n;
   int m;
   gfc_dependency fin_dep;
   gfc_dependency this_dep;
-  bool same_component = false;
 
   this_dep = GFC_DEP_ERROR;
   fin_dep = GFC_DEP_ERROR;
@@ -2114,18 +2100,6 @@ gfc_dep_resolver (gfc_ref *lref, gfc_ref *rref, gfc_reverse *reverse,
 
   while (lref && rref)
     {
-      /* The refs might come in mixed, one with a _data component and one
-	 without.  Look at their next reference in order to avoid an
-	 ICE.  */
-
-      if (lref && lref->type == REF_COMPONENT && lref->u.c.component
-	  && strcmp (lref->u.c.component->name, "_data") == 0)
-	lref = lref->next;
-
-      if (rref && rref->type == REF_COMPONENT && rref->u.c.component
-	  && strcmp (rref->u.c.component->name, "_data") == 0)
-	rref = rref->next;
-
       /* We're resolving from the same base symbol, so both refs should be
 	 the same type.  We traverse the reference chain until we find ranges
 	 that are not equal.  */
@@ -2137,8 +2111,6 @@ gfc_dep_resolver (gfc_ref *lref, gfc_ref *rref, gfc_reverse *reverse,
 	     components.  */
 	  if (lref->u.c.component != rref->u.c.component)
 	    return 0;
-
-	  same_component = true;
 	  break;
 
 	case REF_SUBSTRING:
@@ -2148,15 +2120,11 @@ gfc_dep_resolver (gfc_ref *lref, gfc_ref *rref, gfc_reverse *reverse,
 
 	case REF_ARRAY:
 
-	  /* For now, treat all coarrays as dangerous.  */
-	  if (lref->u.ar.codimen || rref->u.ar.codimen)
-	    return 1;
-
 	  if (ref_same_as_full_array (lref, rref))
-	    return identical;
+	    return 0;
 
 	  if (ref_same_as_full_array (rref, lref))
-	    return identical;
+	    return 0;
 
 	  if (lref->u.ar.dimen != rref->u.ar.dimen)
 	    {
@@ -2173,7 +2141,7 @@ gfc_dep_resolver (gfc_ref *lref, gfc_ref *rref, gfc_reverse *reverse,
 
 	  /* Index for the reverse array.  */
 	  m = -1;
-	  for (n = 0; n < lref->u.ar.dimen; n++)
+	  for (n=0; n < lref->u.ar.dimen; n++)
 	    {
 	      /* Handle dependency when either of array reference is vector
 		 subscript. There is no dependency if the vector indices
@@ -2195,8 +2163,7 @@ gfc_dep_resolver (gfc_ref *lref, gfc_ref *rref, gfc_reverse *reverse,
 
 	      if (lref->u.ar.dimen_type[n] == DIMEN_RANGE
 		  && rref->u.ar.dimen_type[n] == DIMEN_RANGE)
-		this_dep = check_section_vs_section (&lref->u.ar,
-						     &rref->u.ar, n);
+		this_dep = check_section_vs_section (&lref->u.ar, &rref->u.ar, n);
 	      else if (lref->u.ar.dimen_type[n] == DIMEN_ELEMENT
 		       && rref->u.ar.dimen_type[n] == DIMEN_RANGE)
 		this_dep = gfc_check_element_vs_section (lref, rref, n);
@@ -2208,8 +2175,6 @@ gfc_dep_resolver (gfc_ref *lref, gfc_ref *rref, gfc_reverse *reverse,
 		  gcc_assert (rref->u.ar.dimen_type[n] == DIMEN_ELEMENT
 			      && lref->u.ar.dimen_type[n] == DIMEN_ELEMENT);
 		  this_dep = gfc_check_element_vs_element (rref, lref, n);
-		  if (identical && this_dep == GFC_DEP_EQUAL)
-		    this_dep = GFC_DEP_OVERLAP;
 		}
 
 	      /* If any dimension doesn't overlap, we have no dependency.  */
@@ -2231,38 +2196,35 @@ gfc_dep_resolver (gfc_ref *lref, gfc_ref *rref, gfc_reverse *reverse,
 	      if (rref->u.ar.dimen_type[n] == DIMEN_RANGE
 		    && lref->u.ar.dimen_type[n] == DIMEN_RANGE)
 		{
-		  if (reverse)
+		  /* Set reverse if backward dependence and not inhibited.  */
+		  if (reverse && reverse[m] == GFC_ENABLE_REVERSE)
+		    reverse[m] = (this_dep == GFC_DEP_BACKWARD) ?
+			         GFC_REVERSE_SET : reverse[m];
+
+		  /* Set forward if forward dependence and not inhibited.  */
+		  if (reverse && reverse[m] == GFC_ENABLE_REVERSE)
+		    reverse[m] = (this_dep == GFC_DEP_FORWARD) ?
+			         GFC_FORWARD_SET : reverse[m];
+
+		  /* Flag up overlap if dependence not compatible with
+		     the overall state of the expression.  */
+		  if (reverse && reverse[m] == GFC_REVERSE_SET
+		        && this_dep == GFC_DEP_FORWARD)
 		    {
-		      /* Reverse if backward dependence and not inhibited.  */
-		      if (reverse[m] == GFC_ENABLE_REVERSE
-			  && this_dep == GFC_DEP_BACKWARD)
-			reverse[m] = GFC_REVERSE_SET;
-
-		      /* Forward if forward dependence and not inhibited.  */
-		      if (reverse[m] == GFC_ENABLE_REVERSE
-			  && this_dep == GFC_DEP_FORWARD)
-			reverse[m] = GFC_FORWARD_SET;
-
-		      /* Flag up overlap if dependence not compatible with
-			 the overall state of the expression.  */
-		      if (reverse[m] == GFC_REVERSE_SET
-			  && this_dep == GFC_DEP_FORWARD)
-			{
-			  reverse[m] = GFC_INHIBIT_REVERSE;
-			  this_dep = GFC_DEP_OVERLAP;
-			}
-		      else if (reverse[m] == GFC_FORWARD_SET
-			       && this_dep == GFC_DEP_BACKWARD)
-			{
-			  reverse[m] = GFC_INHIBIT_REVERSE;
-			  this_dep = GFC_DEP_OVERLAP;
-			}
+	              reverse[m] = GFC_INHIBIT_REVERSE;
+		      this_dep = GFC_DEP_OVERLAP;
+		    }
+		  else if (reverse && reverse[m] == GFC_FORWARD_SET
+		        && this_dep == GFC_DEP_BACKWARD)
+		    {
+	              reverse[m] = GFC_INHIBIT_REVERSE;
+		      this_dep = GFC_DEP_OVERLAP;
 		    }
 
 		  /* If no intention of reversing or reversing is explicitly
 		     inhibited, convert backward dependence to overlap.  */
-		  if ((!reverse && this_dep == GFC_DEP_BACKWARD)
-		      || (reverse && reverse[m] == GFC_INHIBIT_REVERSE))
+		  if ((reverse == NULL && this_dep == GFC_DEP_BACKWARD)
+		      || (reverse != NULL && reverse[m] == GFC_INHIBIT_REVERSE))
 		    this_dep = GFC_DEP_OVERLAP;
 		}
 
@@ -2270,9 +2232,6 @@ gfc_dep_resolver (gfc_ref *lref, gfc_ref *rref, gfc_reverse *reverse,
 		 know the worst one.*/
 
 	    update_fin_dep:
-	      if (identical && this_dep == GFC_DEP_EQUAL)
-		this_dep = GFC_DEP_OVERLAP;
-
 	      if (this_dep > fin_dep)
 		fin_dep = this_dep;
 	    }
@@ -2286,17 +2245,11 @@ gfc_dep_resolver (gfc_ref *lref, gfc_ref *rref, gfc_reverse *reverse,
 
 	  /* Exactly matching and forward overlapping ranges don't cause a
 	     dependency.  */
-	  if (fin_dep < GFC_DEP_BACKWARD && !identical)
+	  if (fin_dep < GFC_DEP_BACKWARD)
 	    return 0;
 
 	  /* Keep checking.  We only have a dependency if
 	     subsequent references also overlap.  */
-	  break;
-
-	case REF_INQUIRY:
-	  if (lref->u.i != rref->u.i)
-	    return 0;
-
 	  break;
 
 	default:
@@ -2306,18 +2259,11 @@ gfc_dep_resolver (gfc_ref *lref, gfc_ref *rref, gfc_reverse *reverse,
       rref = rref->next;
     }
 
-  /* Assume the worst if we nest to different depths.  */
-  if (lref || rref)
-    return 1;
-
-  /* This can result from concatenation of assumed length string components.  */
-  if (same_component && fin_dep == GFC_DEP_ERROR)
-    return 1;
-
   /* If we haven't seen any array refs then something went wrong.  */
   gcc_assert (fin_dep != GFC_DEP_ERROR);
 
-  if (identical && fin_dep != GFC_DEP_NODEP)
+  /* Assume the worst if we nest to different depths.  */
+  if (lref || rref)
     return 1;
 
   return fin_dep == GFC_DEP_OVERLAP;

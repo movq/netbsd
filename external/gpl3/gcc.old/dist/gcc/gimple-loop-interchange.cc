@@ -1,5 +1,5 @@
 /* Loop interchange.
-   Copyright (C) 2017-2020 Free Software Foundation, Inc.
+   Copyright (C) 2017-2018 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
 This file is part of GCC.
@@ -33,6 +33,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "gimple-iterator.h"
 #include "gimplify-me.h"
 #include "cfgloop.h"
+#include "params.h"
 #include "tree-ssa.h"
 #include "tree-scalar-evolution.h"
 #include "tree-ssa-loop-manip.h"
@@ -77,14 +78,14 @@ along with GCC; see the file COPYING3.  If not see
    simple reduction of inner loop and double reduction of the loop nest.  */
 
 /* Maximum number of stmts in each loop that should be interchanged.  */
-#define MAX_NUM_STMT    (param_loop_interchange_max_num_stmts)
+#define MAX_NUM_STMT    (PARAM_VALUE (PARAM_LOOP_INTERCHANGE_MAX_NUM_STMTS))
 /* Maximum number of data references in loop nest.  */
-#define MAX_DATAREFS    (param_loop_max_datarefs_for_datadeps)
+#define MAX_DATAREFS    (PARAM_VALUE (PARAM_LOOP_MAX_DATAREFS_FOR_DATADEPS))
 
 /* Comparison ratio of access stride between inner/outer loops to be
    interchanged.  This is the minimum stride ratio for loop interchange
    to be profitable.  */
-#define OUTER_STRIDE_RATIO  (param_loop_interchange_stride_ratio)
+#define OUTER_STRIDE_RATIO  (PARAM_VALUE (PARAM_LOOP_INTERCHANGE_STRIDE_RATIO))
 /* The same as above, but we require higher ratio for interchanging the
    innermost two loops.  */
 #define INNER_STRIDE_RATIO  ((OUTER_STRIDE_RATIO) + 1)
@@ -158,7 +159,7 @@ dump_reduction (reduction_p re)
 
 /* Dump LOOP's induction IV.  */
 static void
-dump_induction (class loop *loop, induction_p iv)
+dump_induction (struct loop *loop, induction_p iv)
 {
   fprintf (dump_file, "  Induction:  ");
   print_generic_expr (dump_file, iv->var, TDF_SLIM);
@@ -171,10 +172,9 @@ dump_induction (class loop *loop, induction_p iv)
 
 /* Loop candidate for interchange.  */
 
-class loop_cand
+struct loop_cand
 {
-public:
-  loop_cand (class loop *, class loop *);
+  loop_cand (struct loop *, struct loop *);
   ~loop_cand ();
 
   reduction_p find_reduction_by_stmt (gimple *);
@@ -188,10 +188,10 @@ public:
   void undo_simple_reduction (reduction_p, bitmap);
 
   /* The loop itself.  */
-  class loop *m_loop;
+  struct loop *m_loop;
   /* The outer loop for interchange.  It equals to loop if this loop cand
      itself represents the outer loop.  */
-  class loop *m_outer;
+  struct loop *m_outer;
   /* Vector of induction variables in loop.  */
   vec<induction_p> m_inductions;
   /* Vector of reduction variables in loop.  */
@@ -210,7 +210,7 @@ public:
 
 /* Constructor.  */
 
-loop_cand::loop_cand (class loop *loop, class loop *outer)
+loop_cand::loop_cand (struct loop *loop, struct loop *outer)
   : m_loop (loop), m_outer (outer), m_exit (single_exit (loop)),
     m_bbs (get_loop_body (loop)), m_num_stmts (0), m_const_init_reduc (0)
 {
@@ -240,7 +240,7 @@ loop_cand::~loop_cand ()
 /* Return single use stmt of VAR in LOOP, otherwise return NULL.  */
 
 static gimple *
-single_use_in_loop (tree var, class loop *loop)
+single_use_in_loop (tree var, struct loop *loop)
 {
   gimple *stmt, *res = NULL;
   use_operand_p use_p;
@@ -523,7 +523,7 @@ loop_cand::analyze_iloop_reduction_var (tree var)
 
   /* Handle and verify a series of stmts feeding the reduction op.  */
   if (single_use != next_def
-      && !check_reduction_path (dump_user_location_t (), m_loop, phi, next,
+      && !check_reduction_path (UNKNOWN_LOCATION, m_loop, phi, next,
 				gimple_assign_rhs_code (single_use)))
     return false;
 
@@ -879,7 +879,6 @@ loop_cand::undo_simple_reduction (reduction_p re, bitmap dce_seeds)
   if (re->producer != NULL)
     {
       gimple_set_vuse (re->producer, NULL_TREE);
-      update_stmt (re->producer);
       from = gsi_for_stmt (re->producer);
       gsi_remove (&from, false);
       gimple_seq_add_stmt_without_update (&stmts, re->producer);
@@ -921,7 +920,6 @@ loop_cand::undo_simple_reduction (reduction_p re, bitmap dce_seeds)
   gimple_set_vdef (re->consumer, NULL_TREE);
   gimple_set_vuse (re->consumer, NULL_TREE);
   gimple_assign_set_rhs1 (re->consumer, re->next);
-  update_stmt (re->consumer);
   from = gsi_for_stmt (re->consumer);
   to = gsi_for_stmt (SSA_NAME_DEF_STMT (re->next));
   gsi_move_after (&from, &to);
@@ -952,7 +950,7 @@ free_data_refs_with_aux (vec<data_reference_p> datarefs)
 class tree_loop_interchange
 {
 public:
-  tree_loop_interchange (vec<class loop *> loop_nest)
+  tree_loop_interchange (vec<struct loop *> loop_nest)
     : m_loop_nest (loop_nest), m_niters_iv_var (NULL_TREE),
       m_dce_seeds (BITMAP_ALLOC (NULL)) { }
   ~tree_loop_interchange () { BITMAP_FREE (m_dce_seeds); }
@@ -963,10 +961,10 @@ private:
   bool valid_data_dependences (unsigned, unsigned, vec<ddr_p>);
   void interchange_loops (loop_cand &, loop_cand &);
   void map_inductions_to_loop (loop_cand &, loop_cand &);
-  void move_code_to_inner_loop (class loop *, class loop *, basic_block *);
+  void move_code_to_inner_loop (struct loop *, struct loop *, basic_block *);
 
   /* The whole loop nest in which interchange is ongoing.  */
-  vec<class loop *> m_loop_nest;
+  vec<struct loop *> m_loop_nest;
   /* We create new IV which is only used in loop's exit condition check.
      In case of 3-level loop nest interchange, when we interchange the
      innermost two loops, new IV created in the middle level loop does
@@ -1044,10 +1042,7 @@ tree_loop_interchange::valid_data_dependences (unsigned i_idx, unsigned o_idx,
 
 	  /* Be conservative, skip case if either direction at i_idx/o_idx
 	     levels is not '=' or '<'.  */
-	  if ((!DDR_REVERSED_P (ddr) && dist_vect[i_idx] < 0)
-	      || (DDR_REVERSED_P (ddr) && dist_vect[i_idx] > 0)
-	      || (!DDR_REVERSED_P (ddr) && dist_vect[o_idx] < 0)
-	      || (DDR_REVERSED_P (ddr) && dist_vect[o_idx] > 0))
+	  if (dist_vect[i_idx] < 0 || dist_vect[o_idx] < 0)
 	    return false;
 	}
     }
@@ -1083,7 +1078,7 @@ tree_loop_interchange::interchange_loops (loop_cand &iloop, loop_cand &oloop)
     }
 
   /* Prepare niters for both loops.  */
-  class loop *loop_nest = m_loop_nest[0];
+  struct loop *loop_nest = m_loop_nest[0];
   edge instantiate_below = loop_preheader_edge (loop_nest);
   gsi = gsi_last_bb (loop_preheader_edge (loop_nest)->src);
   i_niters = number_of_latch_executions (iloop.m_loop);
@@ -1218,8 +1213,8 @@ tree_loop_interchange::map_inductions_to_loop (loop_cand &src, loop_cand &tgt)
 /* Move stmts of outer loop to inner loop.  */
 
 void
-tree_loop_interchange::move_code_to_inner_loop (class loop *outer,
-						class loop *inner,
+tree_loop_interchange::move_code_to_inner_loop (struct loop *outer,
+						struct loop *inner,
 						basic_block *outer_bbs)
 {
   basic_block oloop_exit_bb = single_exit (outer)->src;
@@ -1253,16 +1248,13 @@ tree_loop_interchange::move_code_to_inner_loop (class loop *outer,
 	      continue;
 	    }
 
+	  if (gimple_vuse (stmt))
+	    gimple_set_vuse (stmt, NULL_TREE);
 	  if (gimple_vdef (stmt))
 	    {
 	      unlink_stmt_vdef (stmt);
 	      release_ssa_name (gimple_vdef (stmt));
 	      gimple_set_vdef (stmt, NULL_TREE);
-	    }
-	  if (gimple_vuse (stmt))
-	    {
-	      gimple_set_vuse (stmt, NULL_TREE);
-	      update_stmt (stmt);
 	    }
 
 	  reset_debug_uses (stmt);
@@ -1283,7 +1275,7 @@ tree_loop_interchange::move_code_to_inner_loop (class loop *outer,
 	   arr[i][j - 1][k] = 0;  */
 
 static void
-compute_access_stride (class loop *loop_nest, class loop *loop,
+compute_access_stride (struct loop *loop_nest, struct loop *loop,
 		       data_reference_p dr)
 {
   vec<tree> *strides = new vec<tree> ();
@@ -1327,10 +1319,10 @@ compute_access_stride (class loop *loop_nest, class loop *loop,
   if (! chrec_contains_undetermined (scev))
     {
       tree sl = scev;
-      class loop *expected = loop;
+      struct loop *expected = loop;
       while (TREE_CODE (sl) == POLYNOMIAL_CHREC)
 	{
-	  class loop *sl_loop = get_chrec_loop (sl);
+	  struct loop *sl_loop = get_chrec_loop (sl);
 	  while (sl_loop != expected)
 	    {
 	      strides->safe_push (size_int (0));
@@ -1358,8 +1350,8 @@ compute_access_stride (class loop *loop_nest, class loop *loop,
    all data references.  If access strides cannot be computed at least
    for two levels of loop for any data reference, it returns NULL.  */
 
-static class loop *
-compute_access_strides (class loop *loop_nest, class loop *loop,
+static struct loop *
+compute_access_strides (struct loop *loop_nest, struct loop *loop,
 			vec<data_reference_p> datarefs)
 {
   unsigned i, j, num_loops = (unsigned) -1;
@@ -1397,8 +1389,8 @@ compute_access_strides (class loop *loop_nest, class loop *loop,
    of loops that isn't in current LOOP_NEST.  */
 
 static void
-prune_access_strides_not_in_loop (class loop *loop_nest,
-				  class loop *innermost,
+prune_access_strides_not_in_loop (struct loop *loop_nest,
+				  struct loop *innermost,
 				  vec<data_reference_p> datarefs)
 {
   data_reference_p dr;
@@ -1591,7 +1583,7 @@ bool
 tree_loop_interchange::interchange (vec<data_reference_p> datarefs,
 				    vec<ddr_p> ddrs)
 {
-  dump_user_location_t loc = find_loop_location (m_loop_nest[0]);
+  location_t loc = find_loop_location (m_loop_nest[0]);
   bool changed_p = false;
   /* In each iteration we try to interchange I-th loop with (I+1)-th loop.
      The overall effect is to push inner loop to outermost level in whole
@@ -1658,7 +1650,7 @@ tree_loop_interchange::interchange (vec<data_reference_p> datarefs,
     }
   simple_dce_from_worklist (m_dce_seeds);
 
-  if (changed_p && dump_enabled_p ())
+  if (changed_p)
     dump_printf_loc (MSG_OPTIMIZED_LOCATIONS, loc,
 		     "loops interchanged in loop nest\n");
 
@@ -1719,7 +1711,7 @@ public:
 	nest with LOOP.  */
 
 static bool
-proper_loop_form_for_interchange (class loop *loop, class loop **min_outer)
+proper_loop_form_for_interchange (struct loop *loop, struct loop **min_outer)
 {
   edge e0, e1, exit;
 
@@ -1818,14 +1810,14 @@ proper_loop_form_for_interchange (class loop *loop, class loop **min_outer)
    should be interchanged by looking into all DATAREFS.  */
 
 static bool
-should_interchange_loop_nest (class loop *loop_nest, class loop *innermost,
+should_interchange_loop_nest (struct loop *loop_nest, struct loop *innermost,
 			      vec<data_reference_p> datarefs)
 {
   unsigned idx = loop_depth (innermost) - loop_depth (loop_nest);
   gcc_assert (idx > 0);
 
   /* Check if any two adjacent loops should be interchanged.  */
-  for (class loop *loop = innermost;
+  for (struct loop *loop = innermost;
        loop != loop_nest; loop = loop_outer (loop), idx--)
     if (should_interchange_loops (idx, idx - 1, datarefs, 0, 0,
 				  loop == innermost, false))
@@ -1845,7 +1837,7 @@ tree_loop_interchange_compute_ddrs (vec<loop_p> loop_nest,
 				    vec<ddr_p> *ddrs)
 {
   struct data_reference *a, *b;
-  class loop *innermost = loop_nest.last ();
+  struct loop *innermost = loop_nest.last ();
 
   for (unsigned i = 0; datarefs.iterate (i, &a); ++i)
     {
@@ -1887,7 +1879,7 @@ tree_loop_interchange_compute_ddrs (vec<loop_p> loop_nest,
 /* Prune DATAREFS by removing any data reference not inside of LOOP.  */
 
 static inline void
-prune_datarefs_not_in_loop (class loop *loop, vec<data_reference_p> datarefs)
+prune_datarefs_not_in_loop (struct loop *loop, vec<data_reference_p> datarefs)
 {
   unsigned i, j;
   struct data_reference *dr;
@@ -1914,10 +1906,10 @@ prune_datarefs_not_in_loop (class loop *loop, vec<data_reference_p> datarefs)
    inner loop of that basic block's father loop.  On success, return the
    outer loop of the result loop nest.  */
 
-static class loop *
-prepare_data_references (class loop *loop, vec<data_reference_p> *datarefs)
+static struct loop *
+prepare_data_references (struct loop *loop, vec<data_reference_p> *datarefs)
 {
-  class loop *loop_nest = loop;
+  struct loop *loop_nest = loop;
   vec<data_reference_p> *bb_refs;
   basic_block bb, *bbs = get_loop_body_in_dom_order (loop);
 
@@ -1981,11 +1973,11 @@ prepare_data_references (class loop *loop, vec<data_reference_p> *datarefs)
    in interchange.  */
 
 static bool
-prepare_perfect_loop_nest (class loop *loop, vec<loop_p> *loop_nest,
+prepare_perfect_loop_nest (struct loop *loop, vec<loop_p> *loop_nest,
 			   vec<data_reference_p> *datarefs, vec<ddr_p> *ddrs)
 {
-  class loop *start_loop = NULL, *innermost = loop;
-  class loop *outermost = loops_for_fn (cfun)->tree_root;
+  struct loop *start_loop = NULL, *innermost = loop;
+  struct loop *outermost = loops_for_fn (cfun)->tree_root;
 
   /* Find loop nest from the innermost loop.  The outermost is the innermost
      outer*/
@@ -2071,7 +2063,7 @@ pass_linterchange::execute (function *fun)
     return 0;
 
   bool changed_p = false;
-  class loop *loop;
+  struct loop *loop;
   FOR_EACH_LOOP (loop, LI_ONLY_INNERMOST)
     {
       vec<loop_p> loop_nest = vNULL;

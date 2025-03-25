@@ -1,73 +1,67 @@
-# $NetBSD: Makefile,v 1.12 2025/03/25 18:03:33 christos Exp $
-
-UNSUPPORTED_COMPILER.clang=     # defined
-NOSANITIZER=    # defined
-NOCOMPAT=	# defined
+# $NetBSD: Makefile,v 1.1 2015/09/23 03:03:39 mrg Exp $
 
 .include <bsd.own.mk>
 
 .include "../Makefile.inc"
-.include "../Makefile.sanitizer"
 
-.PATH: ${SANITIZER}/tsan
+TSAN=${GCCDIST}/libsanitizer
+.PATH: ${TSAN}/tsan ${TSAN}/interception ${TSAN}/sanitizer_common
 
-# XXXmknative
 TSAN_SRCS= \
-	tsan_clock.cc \
-	tsan_debugging.cc \
-	tsan_external.cc \
-	tsan_fd.cc \
-	tsan_flags.cc \
-	tsan_ignoreset.cc \
-	tsan_interceptors.cc \
-	tsan_interceptors_mac.cc \
-	tsan_interface_ann.cc \
-	tsan_interface_atomic.cc \
-	tsan_interface.cc \
-	tsan_interface_java.cc \
-	tsan_libdispatch_mac.cc \
-	tsan_malloc_mac.cc \
-	tsan_md5.cc \
-	tsan_mman.cc \
-	tsan_mutex.cc \
-	tsan_mutexset.cc \
-	tsan_new_delete.cc \
-	tsan_platform_linux.cc \
-	tsan_platform_mac.cc \
-	tsan_platform_posix.cc \
-	tsan_platform_windows.cc \
-	tsan_report.cc \
-	tsan_rtl.cc \
-	tsan_rtl_mutex.cc \
-	tsan_rtl_proc.cc \
-	tsan_rtl_report.cc \
-	tsan_rtl_thread.cc \
-	tsan_stack_trace.cc \
-	tsan_stat.cc \
-	tsan_suppressions.cc \
-	tsan_symbolize.cc \
-	tsan_sync.cc 
+	tsan_clock.cc  \
+	tsan_fd.cc  \
+	tsan_flags.cc  \
+	tsan_interceptors.cc  \
+	tsan_interface.cc  \
+	tsan_interface_ann.cc  \
+	tsan_interface_atomic.cc  \
+	tsan_interface_java.cc  \
+	tsan_md5.cc  \
+	tsan_mman.cc  \
+	tsan_mutex.cc  \
+	tsan_mutexset.cc  \
+	tsan_platform_linux.cc  \
+	tsan_platform_mac.cc  \
+	tsan_report.cc  \
+	tsan_rtl.cc  \
+	tsan_rtl_amd64.S  \
+	tsan_rtl_mutex.cc  \
+	tsan_rtl_report.cc  \
+	tsan_rtl_thread.cc  \
+	tsan_stat.cc  \
+	tsan_suppressions.cc  \
+	tsan_symbolize.cc  \
+	tsan_symbolize_addr2line_linux.cc  \
+	tsan_sync.cc
 
-.if ${MACHINE_ARCH} == "x86_64"
-TSAN_SRCS+= tsan_rtl_amd64.S
-.elif ${MACHINE_ARCH} == "aarch64"
-TSAN_SRCS+= tsan_rtl_aarch64.S
-.elif ${MACHINE_MIPS64}
-TSAN_SRCS+= tsan_rtl_mips64.S
-.elif ${MACHINE_ARCH} == "powerpc64"
-TSAN_SRCS+= tsan_rtl_ppc64.S
-.else
-.error Unsupported
-.endif
+INTERCEPTION_SRCS= \
+	interception_linux.cc \
+	interception_type_test.cc
+
+SANITIZER_SRCS= \
+	sanitizer_allocator.cc \
+	sanitizer_common.cc \
+	sanitizer_flags.cc \
+	sanitizer_libc.cc \
+	sanitizer_netbsd.cc \
+	sanitizer_mac.cc \
+	sanitizer_posix.cc \
+	sanitizer_platform_limits_posix.cc \
+	sanitizer_printf.cc \
+	sanitizer_stackdepot.cc \
+	sanitizer_stacktrace.cc \
+	sanitizer_symbolizer.cc \
+	sanitizer_symbolizer_linux.cc \
+	sanitizer_win.cc
+
+# The linux build does this to avoid preinit sections on shared libraries
+CSHLIBFLAGS+= -DPIC
 
 LIB=	tsan
-SRCS+=	${TSAN_SRCS}
-LIBDPLIBS+= rt ${NETBSDSRCDIR}/lib/librt
-LIBDPLIBS+= m  ${NETBSDSRCDIR}/lib/libm
-LIBDPLIBS+= pthread ${NETBSDSRCDIR}/lib/libpthread
-CPPFLAGS+=-DCAN_SANITIZE_UB=0
-COPTS.tsan_interceptors.cc += -Wno-unused-function
+SRCS=	${TSAN_SRCS} ${INTERCEPTION_SRCS} ${SANITIZER_SRCS}
+CPPFLAGS+=-I${TSAN}/include -I${TSAN}
 
-.include "../preinit.mk"
+LDADD+=	-lstdc++ -lpthread
+DPADD+= ${LIBSTDCXX} ${LIBPTHREAD}
 
 .include <bsd.lib.mk>

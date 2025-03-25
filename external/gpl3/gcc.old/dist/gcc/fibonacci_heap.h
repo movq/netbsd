@@ -1,5 +1,5 @@
-/* Fibonacci heap for GNU compiler.
-   Copyright (C) 1998-2020 Free Software Foundation, Inc.
+/* Vector API for GNU compiler.
+   Copyright (C) 1998-2015 Free Software Foundation, Inc.
    Contributed by Daniel Berlin (dan@cgsoftware.com).
    Re-implemented in C++ by Martin Liska <mliska@suse.cz>
 
@@ -56,13 +56,13 @@ class fibonacci_node
 public:
   /* Default constructor.  */
   fibonacci_node (): m_parent (NULL), m_child (NULL), m_left (this),
-    m_right (this), m_data (NULL), m_degree (0), m_mark (0)
+    m_right (this), m_degree (0), m_mark (0)
   {
   }
 
   /* Constructor for a node with given KEY.  */
-  fibonacci_node (K key, V *data = NULL): m_parent (NULL), m_child (NULL),
-    m_left (this), m_right (this), m_key (key), m_data (data),
+  fibonacci_node (K key): m_parent (NULL), m_child (NULL), m_left (this),
+    m_right (this), m_key (key),
     m_degree (0), m_mark (0)
   {
   }
@@ -145,55 +145,36 @@ class fibonacci_heap
   friend class fibonacci_node<K,V>;
 
 public:
-  /* Default constructor.  ALLOCATOR is optional and is primarily useful
-     when heaps are going to be merged (in that case they need to be allocated
-     in same alloc pool).  */
-  fibonacci_heap (K global_min_key, pool_allocator *allocator = NULL):
-    m_nodes (0), m_min (NULL), m_root (NULL),
-    m_global_min_key (global_min_key),
-    m_allocator (allocator), m_own_allocator (false)
+  /* Default constructor.  */
+  fibonacci_heap (K global_min_key): m_nodes (0), m_min (NULL), m_root (NULL),
+    m_global_min_key (global_min_key)
   {
-    if (!m_allocator)
-      {
-	m_allocator = new pool_allocator ("Fibonacci heap",
-					    sizeof (fibonacci_node_t));
-	m_own_allocator = true;
-      }
   }
 
   /* Destructor.  */
   ~fibonacci_heap ()
   {
-    /* Actual memory will be released by the destructor of m_allocator.  */
-    if (need_finalization_p<fibonacci_node_t> () || !m_own_allocator)
-      while (m_min != NULL)
-	{
-	  fibonacci_node_t *n = extract_minimum_node ();
-	  n->~fibonacci_node_t ();
-	  if (!m_own_allocator)
-	    m_allocator->remove (n);
-	}
-    if (m_own_allocator)
-      delete m_allocator;
+    while (m_min != NULL)
+      delete (extract_minimum_node ());
   }
 
   /* Insert new node given by KEY and DATA associated with the key.  */
   fibonacci_node_t *insert (K key, V *data);
 
   /* Return true if no entry is present.  */
-  bool empty () const
+  bool empty ()
   {
     return m_nodes == 0;
   }
 
   /* Return the number of nodes.  */
-  size_t nodes () const
+  size_t nodes ()
   {
     return m_nodes;
   }
 
   /* Return minimal key presented in the heap.  */
-  K min_key () const
+  K min_key ()
   {
     if (m_min == NULL)
       gcc_unreachable ();
@@ -225,7 +206,7 @@ public:
   V *extract_min (bool release = true);
 
   /* Return value associated with minimum node in the heap.  */
-  V *min () const
+  V *min ()
   {
     if (m_min == NULL)
       return NULL;
@@ -248,9 +229,6 @@ public:
 private:
   /* Insert new NODE given by KEY and DATA associated with the key.  */
   fibonacci_node_t *insert (fibonacci_node_t *node, K key, V *data);
-
-  /* Insert new NODE that has already filled key and value.  */
-  fibonacci_node_t *insert_node (fibonacci_node_t *node);
 
   /* Insert it into the root list.  */
   void insert_root (fibonacci_node_t *node);
@@ -278,11 +256,6 @@ private:
   fibonacci_node_t *m_root;
   /* Global minimum given in the heap construction.  */
   K m_global_min_key;
-
-  /* Allocator used to hold nodes.  */
-  pool_allocator *m_allocator;
-  /* True if alocator is owned by the current heap only.  */
-  bool m_own_allocator;
 };
 
 /* Remove fibonacci heap node.  */
@@ -357,13 +330,12 @@ fibonacci_node<K,V>*
 fibonacci_heap<K,V>::insert (K key, V *data)
 {
   /* Create the new node.  */
-  fibonacci_node<K,V> *node = new (m_allocator->allocate ())
-				  fibonacci_node_t (key, data);
+  fibonacci_node<K,V> *node = new fibonacci_node_t ();
 
-  return insert_node (node);
+  return insert (node, key, data);
 }
 
-/* Insert new NODE given by DATA associated with the key.  */
+/* Insert new NODE given by KEY and DATA associated with the key.  */
 
 template<class K, class V>
 fibonacci_node<K,V>*
@@ -373,15 +345,6 @@ fibonacci_heap<K,V>::insert (fibonacci_node_t *node, K key, V *data)
   node->m_data = data;
   node->m_key = key;
 
-  return insert_node (node);
-}
-
-/* Insert new NODE that has already filled key and value.  */
-
-template<class K, class V>
-fibonacci_node<K,V>*
-fibonacci_heap<K,V>::insert_node (fibonacci_node_t *node)
-{
   /* Insert it into the root list.  */
   insert_root (node);
 
@@ -396,7 +359,6 @@ fibonacci_heap<K,V>::insert_node (fibonacci_node_t *node)
 }
 
 /* For given NODE, set new KEY and DATA value.  */
-
 template<class K, class V>
 V*
 fibonacci_heap<K,V>::replace_key_data (fibonacci_node<K,V> *node, K key,
@@ -444,9 +406,7 @@ fibonacci_heap<K,V>::replace_key_data (fibonacci_node<K,V> *node, K key,
   return odata;
 }
 
-/* Extract minimum node in the heap.  Delete fibonacci node if RELEASE
-   is true.  */
-
+/* Extract minimum node in the heap.  */
 template<class K, class V>
 V*
 fibonacci_heap<K,V>::extract_min (bool release)
@@ -463,10 +423,7 @@ fibonacci_heap<K,V>::extract_min (bool release)
       ret = z->m_data;
 
       if (release)
-	{
-	  z->~fibonacci_node_t ();
-	  m_allocator->remove (z);
-	}
+        delete (z);
     }
 
   return ret;
@@ -492,7 +449,7 @@ fibonacci_heap<K,V>::delete_node (fibonacci_node<K,V> *node, bool release)
   return ret;
 }
 
-/* Union the heap with HEAPB.  One of the heaps is going to be deleted.  */
+/* Union the heap with HEAPB.  */
 
 template<class K, class V>
 fibonacci_heap<K,V>*
@@ -500,10 +457,7 @@ fibonacci_heap<K,V>::union_with (fibonacci_heap<K,V> *heapb)
 {
   fibonacci_heap<K,V> *heapa = this;
 
-  fibonacci_node<K,V> *a_root, *b_root;
-
-  /* Both heaps must share allocator.  */
-  gcc_checking_assert (m_allocator == heapb->m_allocator);
+  fibonacci_node<K,V> *a_root, *b_root, *temp;
 
   /* If one of the heaps is empty, the union is just the other heap.  */
   if ((a_root = heapa->m_root) == NULL)
@@ -520,17 +474,16 @@ fibonacci_heap<K,V>::union_with (fibonacci_heap<K,V> *heapb)
   /* Merge them to the next nodes on the opposite chain.  */
   a_root->m_left->m_right = b_root;
   b_root->m_left->m_right = a_root;
-  std::swap (a_root->m_left, b_root->m_left);
+  temp = a_root->m_left;
+  a_root->m_left = b_root->m_left;
+  b_root->m_left = temp;
   heapa->m_nodes += heapb->m_nodes;
 
   /* And set the new minimum, if it's changed.  */
-  if (heapb->m_min->compare (heapa->m_min) < 0)
+  if (heapb->min->compare (heapa->min) < 0)
     heapa->m_min = heapb->m_min;
 
-  /* Set m_min to NULL to not to delete live fibonacci nodes.  */
-  heapb->m_min = NULL;
   delete (heapb);
-
   return heapa;
 }
 
@@ -593,7 +546,6 @@ fibonacci_heap<K,V>::cascading_cut (fibonacci_node<K,V> *y)
 }
 
 /* Extract minimum node from the heap.  */
-
 template<class K, class V>
 fibonacci_node<K,V>*
 fibonacci_heap<K,V>::extract_minimum_node ()
@@ -647,19 +599,17 @@ fibonacci_heap<K,V>::remove_root (fibonacci_node<K,V> *node)
 template<class K, class V>
 void fibonacci_heap<K,V>::consolidate ()
 {
-  const int D = 1 + 8 * sizeof (long);
-  fibonacci_node<K,V> *a[D];
+  int D = 1 + 8 * sizeof (long);
+  auto_vec<fibonacci_node<K,V> *> a (D);
+  a.safe_grow_cleared (D);
   fibonacci_node<K,V> *w, *x, *y;
   int i, d;
-
-  memset (a, 0, sizeof (a));
 
   while ((w = m_root) != NULL)
     {
       x = w;
       remove_root (w);
       d = x->m_degree;
-      gcc_checking_assert (d < D);
       while (a[d] != NULL)
 	{
 	  y = a[d];

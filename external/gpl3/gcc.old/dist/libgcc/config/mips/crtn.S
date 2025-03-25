@@ -1,4 +1,4 @@
-/* Copyright (C) 2001-2020 Free Software Foundation, Inc.
+/* Copyright (C) 2001-2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -21,9 +21,6 @@ a copy of the GCC Runtime Library Exception along with this program;
 see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 <http://www.gnu.org/licenses/>.  */
 
-/* An executable stack is *not* required for these functions.  */
-#include "gnustack.h"
-
 /* 4 slots for argument spill area.  1 for cpreturn, 1 for stack.
    Return spill offset of 40 and 20.  Aligned to 16 bytes for n32.  */
 
@@ -34,7 +31,6 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #endif
 
 	.section .init,"ax",@progbits
-init:	
 #ifdef __mips64
 	ld      RA,40($sp)
 	daddu	$sp,$sp,48
@@ -45,7 +41,6 @@ init:
 	j	RA
 
 	.section .fini,"ax",@progbits
-fini:	
 #ifdef	__mips64
 	ld	RA,40($sp)
 	daddu	$sp,$sp,48

@@ -1,5 +1,5 @@
 /* RTL iterators
-   Copyright (C) 2014-2020 Free Software Foundation, Inc.
+   Copyright (C) 2014-2015 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -56,9 +56,8 @@ class generic_subrtx_iterator
   typedef typename T::rtunion_type rtunion_type;
 
 public:
-  class array_type
+  struct array_type
   {
-  public:
     array_type ();
     ~array_type ();
     value_type stack[LOCAL_ELEMS];

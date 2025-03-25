@@ -30,10 +30,8 @@ enum processor_vendor
   VENDOR_INTEL = 1,
   VENDOR_AMD,
   VENDOR_OTHER,
-
-  /* Maximum values must be at the end of this enum.  */
-  VENDOR_MAX,
-  BUILTIN_VENDOR_MAX = VENDOR_OTHER
+  BUILTIN_VENDOR_MAX = VENDOR_OTHER,
+  VENDOR_MAX
 };
 
 /* Any new types or subtypes have to be inserted at the end. */

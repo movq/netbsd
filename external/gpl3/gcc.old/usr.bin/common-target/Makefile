@@ -1,6 +1,5 @@
-#	$NetBSD: Makefile,v 1.12 2023/07/14 19:46:41 mrg Exp $
+#	$NetBSD: Makefile,v 1.1 2015/09/23 03:03:40 mrg Exp $
 
-HOSTPROG_CXX=	1
 LIBISPRIVATE=	yes
 
 # For ../Makefile.inc and bsd.own.mk
@@ -8,8 +7,9 @@ LIBISPRIVATE=	yes
 
 LIB=		common-target
 
-.include "${.CURDIR}/arch/${GCC_MACHINE_ARCH}.mk"
-SRCS=		${G_OBJS-libcommon-target:S/common\///:.o=.c}
+SRCS=		prefix.c params.c opts.c opts-common.c options.c vec.c \
+		hooks.c common-targhooks.c hash-table.c file-find.c \
+		${G_common_out_file:T}
 
 CPPFLAGS+=	-I${GCCARCH} -I${BACKENDOBJ} -I. \
 		${G_ALL_CFLAGS:M-D*} ${G_INCLUDES:M-I*:N-I.*} \
@@ -19,13 +19,8 @@ CPPFLAGS+=	-I${GCCARCH} -I${BACKENDOBJ} -I. \
 		-DCONFIGURE_SPECS="\"\"" \
 		-I${BACKENDOBJ}
 
-COPTS.prefix.c+=	-Wno-stack-protector
-COPTS.opts-common.c+=	-Wno-stack-protector
-COPTS.rs6000-common.c+=	-Wno-stack-protector
-COPTS.arm-common.c+=	-Wno-stack-protector
-.if ${MACHINE_CPU} == "sh3"
-COPTS.opts.c+=		${CC_WNO_FORMAT_TRUNCATION}
-.endif
+COPTS.prefix.c=		-Wno-stack-protector
+COPTS.opts-common.c=	-Wno-stack-protector
 
 GENPROG_ERROR_DEPENDS=errors.lo
 
@@ -44,11 +39,12 @@ HOST_CPPFLAGS+=	-DGENERATOR_FILE
 MKPIC:=		no
 MKPICLIB:=	no
 
+HOSTPROG_CXX=	1
+
 .include <bsd.lib.mk>
 
 # Force using C++ for this
 HOST_CC:=	${HOST_CXX}
-HOST_CFLAGS:=	${HOST_CXXFLAGS}
 CC:=		${CXX}
 CFLAGS:=	${CXXFLAGS}
 

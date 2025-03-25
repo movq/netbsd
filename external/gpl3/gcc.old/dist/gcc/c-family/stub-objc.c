@@ -1,7 +1,7 @@
 /* Stub functions for Objective-C and Objective-C++ routines
    that are called from within the C and C++ front-ends,
    respectively.
-   Copyright (C) 1991-2020 Free Software Foundation, Inc.
+   Copyright (C) 1991-2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -23,9 +23,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "tree.h"
-#include "vec.h"
-
-#include "c-common.h" /* for enum rid.  */
+#include "c-common.h"
 #include "c-objc.h"
 
 tree
@@ -317,19 +315,19 @@ objc_get_class_ivars (tree ARG_UNUSED (name))
 void
 objc_add_property_declaration (location_t ARG_UNUSED (location), 
 			       tree ARG_UNUSED (decl),
-			       vec<property_attribute_info *>&
-			       /*prop_attr_list*/)
+			       bool ARG_UNUSED (parsed_property_readonly),
+			       bool ARG_UNUSED (parsed_property_readwrite),
+			       bool ARG_UNUSED (parsed_property_assign),
+			       bool ARG_UNUSED (parsed_property_retain),
+			       bool ARG_UNUSED (parsed_property_copy),
+			       bool ARG_UNUSED (parsed_property_nonatomic),
+			       tree ARG_UNUSED (parsed_property_getter_ident),
+			       tree ARG_UNUSED (parsed_property_setter_ident))
 {
 }
 
 bool
 objc_is_property_ref (tree ARG_UNUSED (node))
-{
-  return 0;
-}
-
-bool
-objc_non_constant_expr_p (tree)
 {
   return 0;
 }
@@ -461,9 +459,4 @@ objc_finish_function (void)
 void
 objc_maybe_warn_exceptions (location_t ARG_UNUSED (loc))
 {
-}
-
-enum objc_property_attribute_kind objc_prop_attr_kind_for_rid (enum rid)
-{
-  return OBJC_PROPERTY_ATTR_UNKNOWN;
 }

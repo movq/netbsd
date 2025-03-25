@@ -1,4 +1,4 @@
-/* $NetBSD: sb1250_icu.c,v 1.4 2023/12/05 19:16:48 andvar Exp $ */
+/* $NetBSD: sb1250_icu.c,v 1.1 2017/07/24 08:56:29 mrg Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sb1250_icu.c,v 1.4 2023/12/05 19:16:48 andvar Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sb1250_icu.c,v 1.1 2017/07/24 08:56:29 mrg Exp $");
 
 #define	__INTR_PRIVATE
 
@@ -49,8 +49,8 @@ __KERNEL_RCSID(0, "$NetBSD: sb1250_icu.c,v 1.4 2023/12/05 19:16:48 andvar Exp $"
 
 #include <mips/locore.h>
 
-#include <evbmips/sbmips/cpuvar.h>
-#include <evbmips/sbmips/systemsw.h>
+#include <sbmips/cpuvar.h>
+#include <sbmips/systemsw.h>
 
 #include <mips/sibyte/include/sb1250_regs.h>
 #include <mips/sibyte/include/sb1250_int.h>
@@ -179,7 +179,7 @@ sb1250_lsw_send_ipi(struct cpu_info *ci, int tag)
 	struct cpu_softc * const cpu = ci->ci_softc;
 	const uint64_t mbox_mask = 1LLU << tag;
 
-	if (kcpuset_isset(cpus_running, cpu_index(ci)))
+	if (cpus_running & (1 << cpu_index(ci)))
 		WRITE_REG(cpu->sb1cpu_imr_base + R_IMR_MAILBOX_SET_CPU, mbox_mask);
 
 	return 0;
@@ -338,16 +338,6 @@ sb1250_intr_establish(u_int num, u_int ipl,
 	struct cpu_softc * const cpu = curcpu()->ci_softc;
 	struct sb1250_ihand * const ih = &sb1250_ihands[num];
 	const int s = splhigh();
-
-	/*
-	 * XXX simonb 
-	 * The swarm wedges hard on first serial interrupt when
-	 * we try to map IPL_SERIAL at a higher priority than
-	 * other device interrupts.  For now, just force all
-	 * devices to interrupt at IPL_VM.
-	 *
-	 */
-	ipl = IPL_VM;	/* XXX */
 
 	if (num >= K_INT_SOURCES)
 		panic("%s: invalid interrupt number (0x%x)", __func__, num);

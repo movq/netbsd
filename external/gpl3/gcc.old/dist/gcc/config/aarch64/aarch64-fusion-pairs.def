@@ -1,4 +1,4 @@
-/* Copyright (C) 2015-2020 Free Software Foundation, Inc.
+/* Copyright (C) 2015-2016 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of GCC.
@@ -34,8 +34,4 @@ AARCH64_FUSION_PAIR ("movk+movk", MOVK_MOVK)
 AARCH64_FUSION_PAIR ("adrp+ldr", ADRP_LDR)
 AARCH64_FUSION_PAIR ("cmp+branch", CMP_BRANCH)
 AARCH64_FUSION_PAIR ("aes+aesmc", AES_AESMC)
-AARCH64_FUSION_PAIR ("alu+branch", ALU_BRANCH)
-AARCH64_FUSION_PAIR ("alu+cbz", ALU_CBZ)
-AARCH64_FUSION_PAIR ("addsub_2reg_const1", ADDSUB_2REG_CONST1)
 
-#undef AARCH64_FUSION_PAIR

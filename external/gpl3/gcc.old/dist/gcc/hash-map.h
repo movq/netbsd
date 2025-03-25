@@ -1,5 +1,5 @@
 /* A type-safe hash map.
-   Copyright (C) 2014-2020 Free Software Foundation, Inc.
+   Copyright (C) 2014-2015 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -21,24 +21,92 @@ along with GCC; see the file COPYING3.  If not see
 #ifndef hash_map_h
 #define hash_map_h
 
-/* Class hash_map is a hash-value based container mapping objects of
-   KeyId type to those of the Value type.
-   Both KeyId and Value may be non-trivial (non-POD) types provided
-   a suitabe Traits class.  A few default Traits specializations are
-   provided for basic types such as integers, pointers, and std::pair.
-   Inserted elements are value-initialized either to zero for POD types
-   or by invoking their default ctor.  Removed elements are destroyed
-   by invoking their dtor.   On hash_map destruction all elements are
-   removed.  Objects of hash_map type are copy-constructible but not
-   assignable.  */
+#include <new>
+#include <utility>
+#include "hash-table.h"
 
-const size_t default_hash_map_size = 13;
-template<typename KeyId, typename Value,
-	 typename Traits /* = simple_hashmap_traits<default_hash_traits<Key>,
-			                            Value> */>
+/* implement default behavior for traits when types allow it.  */
+
+struct default_hashmap_traits
+{
+  /* Hashes the passed in key.  */
+
+  template<typename T>
+  static hashval_t
+  hash (T *p)
+    {
+      return uintptr_t(p) >> 3;
+    }
+
+  /* If the value converts to hashval_t just use it.  */
+
+  template<typename T> static hashval_t hash (T v) { return v; }
+
+  /* Return true if the two keys passed as arguments are equal.  */
+
+  template<typename T>
+  static bool
+  equal_keys (const T &a, const T &b)
+    {
+      return a == b;
+    }
+
+  /* Called to dispose of the key and value before marking the entry as
+     deleted.  */
+
+  template<typename T> static void remove (T &v) { v.~T (); }
+
+  /* Mark the passed in entry as being deleted.  */
+
+  template<typename T>
+  static void
+  mark_deleted (T &e)
+    {
+      mark_key_deleted (e.m_key);
+    }
+
+  /* Mark the passed in entry as being empty.  */
+
+  template<typename T>
+  static void
+  mark_empty (T &e)
+    {
+      mark_key_empty (e.m_key);
+    }
+
+  /* Return true if the passed in entry is marked as deleted.  */
+
+  template<typename T>
+  static bool
+  is_deleted (T &e)
+    {
+      return e.m_key == (void *)1;
+    }
+
+  /* Return true if the passed in entry is marked as empty.  */
+
+  template<typename T> static bool is_empty (T &e) { return e.m_key == NULL; }
+
+private:
+  template<typename T>
+  static void
+  mark_key_deleted (T *&k)
+    {
+      k = reinterpret_cast<T *> (1);
+    }
+
+  template<typename T>
+  static void
+  mark_key_empty (T *&k)
+    {
+      k = static_cast<T *> (0);
+    }
+};
+
+template<typename Key, typename Value,
+	 typename Traits = default_hashmap_traits>
 class GTY((user)) hash_map
 {
-  typedef typename Traits::key_type Key;
   struct hash_entry
   {
     Key m_key;
@@ -46,6 +114,7 @@ class GTY((user)) hash_map
 
     typedef hash_entry value_type;
     typedef Key compare_type;
+    typedef int store_values_directly;
 
     static hashval_t hash (const hash_entry &e)
       {
@@ -66,7 +135,6 @@ class GTY((user)) hash_map
        	return Traits::is_deleted (e);
       }
 
-    static const bool empty_zero_p = Traits::empty_zero_p;
     static void mark_empty (hash_entry &e) { Traits::mark_empty (e); }
     static bool is_empty (const hash_entry &e) { return Traits::is_empty (e); }
 
@@ -74,12 +142,6 @@ class GTY((user)) hash_map
       {
 	gt_ggc_mx (e.m_key);
 	gt_ggc_mx (e.m_value);
-      }
-
-    static void ggc_maybe_mx (hash_entry &e)
-      {
-	if (Traits::maybe_mx)
-	  ggc_mx (e);
       }
 
     static void pch_nx (hash_entry &e)
@@ -92,11 +154,6 @@ class GTY((user)) hash_map
       {
 	pch_nx_helper (e.m_key, op, c);
 	pch_nx_helper (e.m_value, op, c);
-      }
-
-    static int keep_cache_entry (hash_entry &e)
-      {
-	return ggc_marked_p (e.m_key);
       }
 
   private:
@@ -131,29 +188,13 @@ class GTY((user)) hash_map
   };
 
 public:
-  explicit hash_map (size_t n = default_hash_map_size, bool ggc = false,
-		     bool sanitize_eq_and_hash = true,
-		     bool gather_mem_stats = GATHER_STATISTICS
-		     CXX_MEM_STAT_INFO)
-    : m_table (n, ggc, sanitize_eq_and_hash, gather_mem_stats,
-	       HASH_MAP_ORIGIN PASS_MEM_STAT)
-  {
-  }
-
-  explicit hash_map (const hash_map &h, bool ggc = false,
-		     bool sanitize_eq_and_hash = true,
-		     bool gather_mem_stats = GATHER_STATISTICS
-		     CXX_MEM_STAT_INFO)
-    : m_table (h.m_table, ggc, sanitize_eq_and_hash, gather_mem_stats,
-	       HASH_MAP_ORIGIN PASS_MEM_STAT) {}
+  explicit hash_map (size_t n = 13, bool ggc = false) : m_table (n, ggc) {}
 
   /* Create a hash_map in ggc memory.  */
-  static hash_map *create_ggc (size_t size = default_hash_map_size,
-			       bool gather_mem_stats = GATHER_STATISTICS
-			       CXX_MEM_STAT_INFO)
+  static hash_map *create_ggc (size_t size)
     {
       hash_map *map = ggc_alloc<hash_map> ();
-      new (map) hash_map (size, true, true, gather_mem_stats PASS_MEM_STAT);
+      new (map) hash_map (size, true);
       return map;
     }
 
@@ -165,16 +206,12 @@ public:
     {
       hash_entry *e = m_table.find_slot_with_hash (k, Traits::hash (k),
 						   INSERT);
-      bool ins = hash_entry::is_empty (*e);
-      if (ins)
-	{
-	  e->m_key = k;
-	  new ((void *) &e->m_value) Value (v);
-	}
-      else
-	e->m_value = v;
+      bool existed = !hash_entry::is_empty (*e);
+      if (!existed)
+	e->m_key = k;
 
-      return !ins;
+      e->m_value = v;
+      return existed;
     }
 
   /* if the passed in key is in the map return its value otherwise NULL.  */
@@ -186,8 +223,8 @@ public:
     }
 
   /* Return a reference to the value for the passed in key, creating the entry
-     if it doesn't already exist.  If existed is not NULL then it is set to
-     false if the key was not previously in the map, and true otherwise.  */
+     if it doesn't already exist.  If existed is not NULL then it is set to false
+     if the key was not previously in the map, and true otherwise.  */
 
   Value &get_or_insert (const Key &k, bool *existed = NULL)
     {
@@ -195,10 +232,7 @@ public:
 						   INSERT);
       bool ins = Traits::is_empty (*e);
       if (ins)
-	{
-	  e->m_key = k;
-	  new ((void *)&e->m_value) Value ();
-	}
+	e->m_key = k;
 
       if (existed != NULL)
 	*existed = !ins;
@@ -214,8 +248,7 @@ public:
   /* Call the call back on each pair of key and value with the passed in
      arg.  */
 
-  template<typename Arg, bool (*f)(const typename Traits::key_type &,
-				   const Value &, Arg)>
+  template<typename Arg, bool (*f)(const Key &, const Value &, Arg)>
   void traverse (Arg a) const
     {
       for (typename hash_table<hash_entry>::iterator iter = m_table.begin ();
@@ -223,8 +256,7 @@ public:
 	f ((*iter).m_key, (*iter).m_value, a);
     }
 
-  template<typename Arg, bool (*f)(const typename Traits::key_type &,
-				   Value *, Arg)>
+  template<typename Arg, bool (*f)(const Key &, Value *, Arg)>
   void traverse (Arg a) const
     {
       for (typename hash_table<hash_entry>::iterator iter = m_table.begin ();
@@ -234,11 +266,6 @@ public:
     }
 
   size_t elements () const { return m_table.elements (); }
-
-  void empty () { m_table.empty(); }
-
-  /* Return true when there are no elements in this hash map.  */
-  bool is_empty () const { return m_table.is_empty (); }
 
   class iterator
   {
@@ -252,24 +279,10 @@ public:
       return *this;
     }
 
-    /* Can't use std::pair here, because GCC before 4.3 don't handle
-       std::pair where template parameters are references well.
-       See PR86739.  */
-    class reference_pair {
-    public:
-      const Key &first;
-      Value &second;
-
-      reference_pair (const Key &key, Value &value) : first (key), second (value) {}
-
-      template <typename K, typename V>
-      operator std::pair<K, V> () const { return std::pair<K, V> (first, second); }
-    };
-
-    reference_pair operator* ()
+    std::pair<Key, Value> operator* ()
     {
       hash_entry &e = *m_iter;
-      return reference_pair (e.m_key, e.m_value);
+      return std::pair<Key, Value> (e.m_key, e.m_value);
     }
 
     bool
@@ -291,8 +304,7 @@ private:
 
   template<typename T, typename U, typename V> friend void gt_ggc_mx (hash_map<T, U, V> *);
   template<typename T, typename U, typename V> friend void gt_pch_nx (hash_map<T, U, V> *);
-  template<typename T, typename U, typename V> friend void gt_pch_nx (hash_map<T, U, V> *, gt_pointer_operator, void *);
-  template<typename T, typename U, typename V> friend void gt_cleare_cache (hash_map<T, U, V> *);
+      template<typename T, typename U, typename V> friend void gt_pch_nx (hash_map<T, U, V> *, gt_pointer_operator, void *);
 
   hash_table<hash_entry> m_table;
 };
@@ -315,59 +327,9 @@ gt_pch_nx (hash_map<K, V, H> *h)
 
 template<typename K, typename V, typename H>
 static inline void
-gt_cleare_cache (hash_map<K, V, H> *h)
-{
-  if (h)
-    gt_cleare_cache (&h->m_table);
-}
-
-template<typename K, typename V, typename H>
-static inline void
 gt_pch_nx (hash_map<K, V, H> *h, gt_pointer_operator op, void *cookie)
 {
   op (&h->m_table.m_entries, cookie);
-}
-
-enum hm_alloc { hm_heap = false, hm_ggc = true };
-template<bool ggc, typename K, typename V, typename H>
-inline hash_map<K,V,H> *
-hash_map_maybe_create (hash_map<K,V,H> *&h,
-		       size_t size = default_hash_map_size)
-{
-  if (!h)
-    {
-      if (ggc)
-	h = hash_map<K,V,H>::create_ggc (size);
-      else
-	h = new hash_map<K,V,H> (size);
-    }
-  return h;
-}
-
-/* Like h->get, but handles null h.  */
-template<typename K, typename V, typename H>
-inline V*
-hash_map_safe_get (hash_map<K,V,H> *h, const K& k)
-{
-  return h ? h->get (k) : NULL;
-}
-
-/* Like h->get, but handles null h.  */
-template<bool ggc, typename K, typename V, typename H>
-inline V&
-hash_map_safe_get_or_insert (hash_map<K,V,H> *&h, const K& k, bool *e = NULL,
-			     size_t size = default_hash_map_size)
-{
-  return hash_map_maybe_create<ggc> (h, size)->get_or_insert (k, e);
-}
-
-/* Like h->put, but handles null h.  */
-template<bool ggc, typename K, typename V, typename H>
-inline bool
-hash_map_safe_put (hash_map<K,V,H> *&h, const K& k, const V& v,
-		   size_t size = default_hash_map_size)
-{
-  return hash_map_maybe_create<ggc> (h, size)->put (k, v);
 }
 
 #endif

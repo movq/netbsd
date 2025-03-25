@@ -1,5 +1,5 @@
 ;; ARM Cortex-M7 pipeline description
-;; Copyright (C) 2014-2020 Free Software Foundation, Inc.
+;; Copyright (C) 2014-2015 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -48,7 +48,7 @@
                         logic_shift_imm,logics_shift_imm,\
                         alu_shift_reg,alus_shift_reg,\
                         logic_shift_reg,logics_shift_reg,\
-                        mrs,clz,f_mcr,f_mrc,multiple"))
+                        mrs,clz,f_mcr,f_mrc,multiple,no_insn"))
   "cm7_i0|cm7_i1,cm7_a0|cm7_a1")
 
 ;; Simple alu with inline shift operation.
@@ -93,33 +93,33 @@
 ;; The load instructions.
 (define_insn_reservation "cortex_m7_load1" 2
    (and (eq_attr "tune" "cortexm7")
-        (eq_attr "type" "load_byte, load_4"))
+        (eq_attr "type" "load_byte, load1"))
    "cm7_i0|cm7_i1,cm7_lsu")
 
 (define_insn_reservation "cortex_m7_load2" 2
    (and (eq_attr "tune" "cortexm7")
-        (eq_attr "type" "load_8"))
+        (eq_attr "type" "load2"))
    "cm7_all_units")
 
 (define_insn_reservation "cortex_m7_loadm" 2
    (and (eq_attr "tune" "cortexm7")
-        (eq_attr "type" "load_12,load_16"))
+        (eq_attr "type" "load3,load4"))
    "cm7_all_units*2")
 
 ;; The store instructions.
 (define_insn_reservation "cortex_m7_store1" 0
    (and (eq_attr "tune" "cortexm7")
-        (eq_attr "type" "store_4"))
+        (eq_attr "type" "store1"))
    "cm7_i0|cm7_i1,cm7_lsu+cm7_wb")
 
 (define_insn_reservation "cortex_m7_store2" 0
    (and (eq_attr "tune" "cortexm7")
-        (eq_attr "type" "store_8"))
+        (eq_attr "type" "store2"))
    "cm7_all_units")
 
 (define_insn_reservation "cortex_m7_storem" 0
    (and (eq_attr "tune" "cortexm7")
-        (eq_attr "type" "store_12,store_16"))
+        (eq_attr "type" "store3,store4"))
    "cm7_all_units*2")
 
 ;; The FPU instructions.

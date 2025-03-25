@@ -22,9 +22,9 @@
 #include "statement.h"
 #include "template.h"
 #include "tokens.h"
-#include "target.h"
 
 Type *getTypeInfoType(Loc loc, Type *t, Scope *sc);
+TypeTuple *toArgTypes(Type *t);
 void unSpeculative(Scope *sc, RootObject *o);
 bool MODimplicitConv(MOD modfrom, MOD modto);
 Expression *resolve(Loc loc, Scope *sc, Dsymbol *s, bool hasOverloads);
@@ -116,7 +116,7 @@ void semanticTypeInfo(Scope *sc, Type *t)
 
                 // Bugzilla 15149, if the typeid operand type comes from a
                 // result of auto function, it may be yet speculative.
-                // unSpeculative(sc, sd);
+                unSpeculative(sc, sd);
             }
 
             /* Step 2: If the TypeInfo generation requires sd.semantic3, run it later.
@@ -194,7 +194,6 @@ AggregateDeclaration::AggregateDeclaration(Loc loc, Identifier *id)
     sizeok = SIZEOKnone;        // size not determined yet
     deferred = NULL;
     isdeprecated = false;
-    classKind = ClassKind::d;
     inv = NULL;
     aggNew = NULL;
     aggDelete = NULL;
@@ -325,7 +324,6 @@ void AggregateDeclaration::semantic3(Scope *sc)
 
     if (sd)
         sd->semanticTypeInfoMembers();
-    semanticRun = PASSsemantic3done;
 }
 
 /***************************************
@@ -361,7 +359,7 @@ bool AggregateDeclaration::determineFields()
 
             AggregateDeclaration *ad = ((SV *)param)->agg;
 
-            if (v->semanticRun < PASSsemanticdone)
+            if (v->_scope)
                 v->semantic(NULL);
             // Note: Aggregate fields or size could have determined during v->semantic.
             if (ad->sizeok != SIZEOKnone)
@@ -1072,9 +1070,6 @@ void StructDeclaration::semantic(Scope *sc)
         if (storage_class & STCabstract)
             error("structs, unions cannot be abstract");
         userAttribDecl = sc->userAttribDecl;
-
-        if (sc->linkage == LINKcpp)
-            classKind = ClassKind::cpp;
     }
     else if (symtab && !scx)
     {
@@ -1206,13 +1201,6 @@ void StructDeclaration::semantic(Scope *sc)
         }
     }
 
-    if (type->ty == Tstruct && ((TypeStruct *)type)->sym != this)
-    {
-        // https://issues.dlang.org/show_bug.cgi?id=19024
-        StructDeclaration *sd = ((TypeStruct *)type)->sym;
-        error("already exists at %s. Perhaps in another function with the same name?", sd->loc.toChars());
-    }
-
     if (global.errors != errors)
     {
         // The type is no good.
@@ -1227,6 +1215,8 @@ void StructDeclaration::semantic(Scope *sc)
         deferred->semantic2(sc);
         deferred->semantic3(sc);
     }
+
+    assert(type->ty != Tstruct || ((TypeStruct *)type)->sym == this);
 }
 
 Dsymbol *StructDeclaration::search(const Loc &loc, Identifier *ident, int flags)
@@ -1312,8 +1302,8 @@ void StructDeclaration::finalizeSize()
         }
     }
 
-    TypeTuple *tt = Target::toArgTypes(type);
-    size_t dim = tt ? tt->arguments->dim : 0;
+    TypeTuple *tt = toArgTypes(type);
+    size_t dim = tt->arguments->dim;
     if (dim >= 1)
     {
         assert(dim <= 2);

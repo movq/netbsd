@@ -1,5 +1,5 @@
 /* read-rtl-function.c - Reader for RTL function dumps
-   Copyright (C) 2016-2020 Free Software Foundation, Inc.
+   Copyright (C) 2016-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -41,8 +41,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "read-rtl-function.h"
 #include "selftest.h"
 #include "selftest-rtl.h"
-#include "regs.h"
-#include "function-abi.h"
 
 /* Forward decls.  */
 class function_reader;
@@ -54,9 +52,8 @@ class fixup;
    at LOC, which will be turned into an actual CFG edge once
    the "insn-chain" is fully parsed.  */
 
-class deferred_edge
+struct deferred_edge
 {
-public:
   deferred_edge (file_location loc, int src_bb_idx, int dest_bb_idx, int flags)
   : m_loc (loc), m_src_bb_idx (src_bb_idx), m_dest_bb_idx (dest_bb_idx),
     m_flags (flags)
@@ -115,7 +112,7 @@ class function_reader : public rtx_reader
 					int operand_idx, int bb_idx);
 
   void add_fixup_source_location (file_location loc, rtx_insn *insn,
-				  const char *filename, int lineno, int colno);
+				  const char *filename, int lineno);
 
   void add_fixup_expr (file_location loc, rtx x,
 		       const char *desc);
@@ -324,7 +321,7 @@ static int
 parse_note_insn_name (const char *string)
 {
   for (int i = 0; i < NOTE_INSN_MAX; i++)
-    if (strcmp (string, GET_NOTE_INSN_NAME (i)) == 0)
+    if (0 == strcmp (string, GET_NOTE_INSN_NAME (i)))
       return i;
   fatal_with_file_and_line ("unrecognized NOTE_INSN name: `%s'", string);
 }
@@ -532,14 +529,14 @@ function_reader::create_function ()
 
 }
 
-/* Look within the params of FNDECL for a param named NAME.
+/* Look within the the params of FNDECL for a param named NAME.
    Return NULL_TREE if one isn't found.  */
 
 static tree
 find_param_by_name (tree fndecl, const char *name)
 {
   for (tree arg = DECL_ARGUMENTS (fndecl); arg; arg = TREE_CHAIN (arg))
-    if (id_equal (DECL_NAME (arg), name))
+    if (strcmp (name, IDENTIFIER_POINTER (DECL_NAME (arg))) == 0)
       return arg;
   return NULL_TREE;
 }
@@ -710,7 +707,7 @@ parse_edge_flag_token (const char *tok)
   } while (0);
 #include "cfg-flags.def"
 #undef DEF_EDGE_FLAG
-  error ("unrecognized edge flag: %qs", tok);
+  error ("unrecognized edge flag: '%s'", tok);
   return 0;
 }
 
@@ -969,7 +966,7 @@ function_reader::read_rtx_operand_u (rtx x, int idx)
 
 /* Read a name, looking for a match against a string found in array
    STRINGS of size NUM_VALUES.
-   Return the index of the matched string, or emit an error.  */
+   Return the index of the the matched string, or emit an error.  */
 
 int
 function_reader::parse_enum_value (int num_values, const char *const *strings)
@@ -981,7 +978,7 @@ function_reader::parse_enum_value (int num_values, const char *const *strings)
       if (strcmp (name.string, strings[i]) == 0)
 	return i;
     }
-  error ("unrecognized enum value: %qs", name.string);
+  error ("unrecognized enum value: '%s'", name.string);
   return 0;
 }
 
@@ -1082,7 +1079,7 @@ function_reader::read_rtx_operand_r (rtx x)
 	 "orig:%i", ORIGINAL_REGNO (rtx).
 	 Consume it, we don't set ORIGINAL_REGNO, since we can
 	 get that from the 2nd copy later.  */
-      if (strncmp (desc, "orig:", 5) == 0)
+      if (0 == strncmp (desc, "orig:", 5))
 	{
 	  expect_original_regno = true;
 	  desc_start += 5;
@@ -1315,7 +1312,7 @@ function_reader::parse_mem_expr (const char *desc)
 {
   tree fndecl = cfun->decl;
 
-  if (strcmp (desc, "<retval>") == 0)
+  if (0 == strcmp (desc, "<retval>"))
     return DECL_RESULT (fndecl);
 
   tree param = find_param_by_name (fndecl, desc);
@@ -1327,7 +1324,7 @@ function_reader::parse_mem_expr (const char *desc)
   int i;
   tree t;
   FOR_EACH_VEC_ELT (m_fake_scope, i, t)
-    if (id_equal (DECL_NAME (t), desc))
+    if (strcmp (desc, IDENTIFIER_POINTER (DECL_NAME (t))) == 0)
       return t;
 
   /* Not found?  Create it.
@@ -1371,7 +1368,7 @@ function_reader::add_fixup_note_insn_basic_block (file_location loc, rtx insn,
 
 void
 function_reader::add_fixup_source_location (file_location, rtx_insn *,
-					    const char *, int, int)
+					    const char *, int)
 {
 }
 
@@ -1557,20 +1554,7 @@ function_reader::maybe_read_location (rtx_insn *insn)
       require_char (':');
       struct md_name line_num;
       read_name (&line_num);
-
-      int column = 0;
-      int ch = read_char ();
-      if (ch == ':')
-	{
-	  struct md_name column_num;
-	  read_name (&column_num);
-	  column = atoi (column_num.string);
-	}
-      else
-	unread_char (ch);
-      add_fixup_source_location (loc, insn, filename,
-				 atoi (line_num.string),
-				 column);
+      add_fixup_source_location (loc, insn, filename, atoi (line_num.string));
     }
   else
     unread_char (ch);
@@ -1611,7 +1595,7 @@ function_reader::apply_fixups ()
 }
 
 /* Given a UID value, try to locate a pointer to the corresponding
-   rtx_insn *, or NULL if it can't be found.  */
+   rtx_insn *, or NULL if if can't be found.  */
 
 rtx_insn **
 function_reader::get_insn_by_uid (int uid)
@@ -1626,7 +1610,6 @@ bool
 read_rtl_function_body (const char *path)
 {
   initialize_rtl ();
-  crtl->abi = &default_function_abi;
   init_emit ();
   init_varasm_status ();
 
@@ -1660,7 +1643,6 @@ read_rtl_function_body_from_file_range (location_t start_loc,
     }
 
   initialize_rtl ();
-  crtl->abi = &fndecl_abi (cfun->decl).base_abi ();
   init_emit ();
   init_varasm_status ();
 
@@ -2161,9 +2143,9 @@ test_loading_mem ()
   ASSERT_EQ (42, MEM_ALIAS_SET (mem1));
   /* "+17".  */
   ASSERT_TRUE (MEM_OFFSET_KNOWN_P (mem1));
-  ASSERT_KNOWN_EQ (17, MEM_OFFSET (mem1));
+  ASSERT_EQ (17, MEM_OFFSET (mem1));
   /* "S8".  */
-  ASSERT_KNOWN_EQ (8, MEM_SIZE (mem1));
+  ASSERT_EQ (8, MEM_SIZE (mem1));
   /* "A128.  */
   ASSERT_EQ (128, MEM_ALIGN (mem1));
   /* "AS5.  */
@@ -2177,25 +2159,11 @@ test_loading_mem ()
   ASSERT_EQ (43, MEM_ALIAS_SET (mem2));
   /* "+18".  */
   ASSERT_TRUE (MEM_OFFSET_KNOWN_P (mem2));
-  ASSERT_KNOWN_EQ (18, MEM_OFFSET (mem2));
+  ASSERT_EQ (18, MEM_OFFSET (mem2));
   /* "S9".  */
-  ASSERT_KNOWN_EQ (9, MEM_SIZE (mem2));
+  ASSERT_EQ (9, MEM_SIZE (mem2));
   /* "AS6.  */
   ASSERT_EQ (6, MEM_ADDR_SPACE (mem2));
-}
-
-/* Verify that "repeated xN" is read correctly.  */
-
-static void
-test_loading_repeat ()
-{
-  rtl_dump_test t (SELFTEST_LOCATION, locate_file ("repeat.rtl"));
-
-  rtx_insn *insn_1 = get_insn_by_uid (1);
-  ASSERT_EQ (PARALLEL, GET_CODE (PATTERN (insn_1)));
-  ASSERT_EQ (64, XVECLEN (PATTERN (insn_1), 0));
-  for (int i = 0; i < 64; i++)
-    ASSERT_EQ (const0_rtx, XVECEXP (PATTERN (insn_1), 0, i));
 }
 
 /* Run all of the selftests within this file.  */
@@ -2219,7 +2187,6 @@ read_rtl_function_c_tests ()
   test_loading_cfg ();
   test_loading_bb_index ();
   test_loading_mem ();
-  test_loading_repeat ();
 }
 
 } // namespace selftest

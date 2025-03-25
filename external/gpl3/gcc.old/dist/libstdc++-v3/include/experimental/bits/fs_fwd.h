@@ -1,6 +1,6 @@
 // Filesystem declarations -*- C++ -*-
 
-// Copyright (C) 2014-2020 Free Software Foundation, Inc.
+// Copyright (C) 2014-2016 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -40,26 +40,28 @@
 
 namespace std _GLIBCXX_VISIBILITY(default)
 {
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
-
 namespace experimental
 {
 namespace filesystem
 {
 inline namespace v1
 {
+#if _GLIBCXX_INLINE_VERSION
+inline namespace __7 { }
+#endif
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
+
 #if _GLIBCXX_USE_CXX11_ABI
 inline namespace __cxx11 __attribute__((__abi_tag__ ("cxx11"))) { }
 #endif
 
   /**
-   * @defgroup filesystem-ts Filesystem TS
+   * @defgroup filesystem Filesystem
    * @ingroup experimental
    *
    * Utilities for performing operations on file systems and their components,
    * such as paths, regular files, and directories.
    *
-   * ISO/IEC TS 18822:2015	C++ File System Technical Specification
    * @{
    */
 
@@ -254,7 +256,7 @@ _GLIBCXX_END_NAMESPACE_CXX11
   operator^=(directory_options& __x, directory_options __y) noexcept
   { return __x = __x ^ __y; }
 
-  using file_time_type = std::chrono::system_clock::time_point;
+  typedef chrono::time_point<chrono::system_clock> file_time_type;
 
   // operational functions
 
@@ -264,7 +266,7 @@ _GLIBCXX_END_NAMESPACE_CXX11
 
   bool copy_file(const path& __from, const path& __to, copy_options __option);
   bool copy_file(const path& __from, const path& __to, copy_options __option,
-		 error_code&);
+		 error_code&) noexcept;
 
   path current_path();
 
@@ -279,12 +281,11 @@ _GLIBCXX_END_NAMESPACE_CXX11
   bool is_regular_file(file_status) noexcept;
   bool is_symlink(file_status) noexcept;
 
-  /// @} group filesystem-ts
+  // @} group filesystem
+_GLIBCXX_END_NAMESPACE_VERSION
 } // namespace v1
 } // namespace filesystem
 } // namespace experimental
-
-_GLIBCXX_END_NAMESPACE_VERSION
 } // namespace std
 
 #endif // C++11

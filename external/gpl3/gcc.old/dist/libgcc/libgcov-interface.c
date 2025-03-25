@@ -1,6 +1,6 @@
 /* Routines required for instrumenting a program.  */
 /* Compile this one with gcc.  */
-/* Copyright (C) 1989-2020 Free Software Foundation, Inc.
+/* Copyright (C) 1989-2015 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -51,6 +51,7 @@ void __gcov_dump (void) {}
   void dst (void)	    \
   { src (); }
 
+extern __gthread_mutex_t __gcov_flush_mx ATTRIBUTE_HIDDEN;
 extern __gthread_mutex_t __gcov_flush_mx ATTRIBUTE_HIDDEN;
 
 #ifdef L_gcov_flush

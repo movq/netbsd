@@ -13,11 +13,21 @@
 #ifndef ASAN_ALLOCATOR_H
 #define ASAN_ALLOCATOR_H
 
-#include "asan_flags.h"
 #include "asan_internal.h"
 #include "asan_interceptors.h"
-#include "sanitizer_common/sanitizer_allocator.h"
 #include "sanitizer_common/sanitizer_list.h"
+
+// We are in the process of transitioning from the old allocator (version 1)
+// to a new one (version 2). The change is quite intrusive so both allocators
+// will co-exist in the source base for a while. The actual allocator is chosen
+// at build time by redefining this macro.
+#ifndef ASAN_ALLOCATOR_VERSION
+# if (ASAN_LINUX && !ASAN_ANDROID) || ASAN_MAC || ASAN_WINDOWS
+#  define ASAN_ALLOCATOR_VERSION 2
+# else
+#  define ASAN_ALLOCATOR_VERSION 1
+# endif
+#endif  // ASAN_ALLOCATOR_VERSION
 
 namespace __asan {
 
@@ -27,52 +37,30 @@ enum AllocType {
   FROM_NEW_BR = 3   // Memory block came from operator new [ ]
 };
 
+static const uptr kNumberOfSizeClasses = 255;
 struct AsanChunk;
 
-struct AllocatorOptions {
-  u32 quarantine_size_mb;
-  u32 thread_local_quarantine_size_kb;
-  u16 min_redzone;
-  u16 max_redzone;
-  u8 may_return_null;
-  u8 alloc_dealloc_mismatch;
-  s32 release_to_os_interval_ms;
-
-  void SetFrom(const Flags *f, const CommonFlags *cf);
-  void CopyTo(Flags *f, CommonFlags *cf);
-};
-
-void InitializeAllocator(const AllocatorOptions &options);
-void ReInitializeAllocator(const AllocatorOptions &options);
-void GetAllocatorOptions(AllocatorOptions *options);
+void InitializeAllocator();
 
 class AsanChunkView {
  public:
   explicit AsanChunkView(AsanChunk *chunk) : chunk_(chunk) {}
-  bool IsValid() const;        // Checks if AsanChunkView points to a valid
-                               // allocated or quarantined chunk.
-  bool IsAllocated() const;    // Checks if the memory is currently allocated.
-  bool IsQuarantined() const;  // Checks if the memory is currently quarantined.
-  uptr Beg() const;            // First byte of user memory.
-  uptr End() const;            // Last byte of user memory.
-  uptr UsedSize() const;       // Size requested by the user.
-  u32 UserRequestedAlignment() const;  // Originally requested alignment.
-  uptr AllocTid() const;
-  uptr FreeTid() const;
-  bool Eq(const AsanChunkView &c) const { return chunk_ == c.chunk_; }
-  u32 GetAllocStackId() const;
-  u32 GetFreeStackId() const;
-  StackTrace GetAllocStack() const;
-  StackTrace GetFreeStack() const;
-  AllocType GetAllocType() const;
-  bool AddrIsInside(uptr addr, uptr access_size, sptr *offset) const {
+  bool IsValid() { return chunk_ != 0; }
+  uptr Beg();       // first byte of user memory.
+  uptr End();       // last byte of user memory.
+  uptr UsedSize();  // size requested by the user.
+  uptr AllocTid();
+  uptr FreeTid();
+  void GetAllocStack(StackTrace *stack);
+  void GetFreeStack(StackTrace *stack);
+  bool AddrIsInside(uptr addr, uptr access_size, sptr *offset) {
     if (addr >= Beg() && (addr + access_size) <= End()) {
       *offset = addr - Beg();
       return true;
     }
     return false;
   }
-  bool AddrIsAtLeft(uptr addr, uptr access_size, sptr *offset) const {
+  bool AddrIsAtLeft(uptr addr, uptr access_size, sptr *offset) {
     (void)access_size;
     if (addr < Beg()) {
       *offset = Beg() - addr;
@@ -80,7 +68,7 @@ class AsanChunkView {
     }
     return false;
   }
-  bool AddrIsAtRight(uptr addr, uptr access_size, sptr *offset) const {
+  bool AddrIsAtRight(uptr addr, uptr access_size, sptr *offset) {
     if (addr + access_size > End()) {
       *offset = addr - End();
       return true;
@@ -93,7 +81,6 @@ class AsanChunkView {
 };
 
 AsanChunkView FindHeapChunkByAddress(uptr address);
-AsanChunkView FindHeapChunkByAllocBeg(uptr address);
 
 // List of AsanChunks with total size.
 class AsanChunkFifoList: public IntrusiveList<AsanChunk> {
@@ -112,120 +99,130 @@ class AsanChunkFifoList: public IntrusiveList<AsanChunk> {
   uptr size_;
 };
 
-struct AsanMapUnmapCallback {
-  void OnMap(uptr p, uptr size) const;
-  void OnUnmap(uptr p, uptr size) const;
-};
-
-#if SANITIZER_CAN_USE_ALLOCATOR64
-# if SANITIZER_FUCHSIA
-const uptr kAllocatorSpace = ~(uptr)0;
-const uptr kAllocatorSize  =  0x40000000000ULL;  // 4T.
-typedef DefaultSizeClassMap SizeClassMap;
-# elif defined(__powerpc64__)
-const uptr kAllocatorSpace = ~(uptr)0;
-const uptr kAllocatorSize  =  0x20000000000ULL;  // 2T.
-typedef DefaultSizeClassMap SizeClassMap;
-# elif defined(__aarch64__) && SANITIZER_ANDROID
-// Android needs to support 39, 42 and 48 bit VMA.
-const uptr kAllocatorSpace =  ~(uptr)0;
-const uptr kAllocatorSize  =  0x2000000000ULL;  // 128G.
-typedef VeryCompactSizeClassMap SizeClassMap;
-# elif defined(__aarch64__)
-// AArch64/SANITIZER_CAN_USE_ALLOCATOR64 is only for 42-bit VMA
-// so no need to different values for different VMA.
-const uptr kAllocatorSpace =  0x10000000000ULL;
-const uptr kAllocatorSize  =  0x10000000000ULL;  // 3T.
-typedef DefaultSizeClassMap SizeClassMap;
-# elif defined(__sparc__)
-const uptr kAllocatorSpace = ~(uptr)0;
-const uptr kAllocatorSize  =  0x20000000000ULL;  // 2T.
-typedef DefaultSizeClassMap SizeClassMap;
-# elif SANITIZER_WINDOWS
-const uptr kAllocatorSpace = ~(uptr)0;
-const uptr kAllocatorSize  =  0x8000000000ULL;  // 500G
-typedef DefaultSizeClassMap SizeClassMap;
-# else
-#if _LP64
-const uptr kAllocatorSpace = 0x600000000000ULL;
-const uptr kAllocatorSize  =  0x40000000000ULL;  // 4T.
-#else
-const uptr kAllocatorSpace = 0x60000000UL;
-const uptr kAllocatorSize  =  0x40000000ULL;     // 2G.
-#endif
-typedef DefaultSizeClassMap SizeClassMap;
-# endif
-struct AP64 {  // Allocator64 parameters. Deliberately using a short name.
-  static const uptr kSpaceBeg = kAllocatorSpace;
-  static const uptr kSpaceSize = kAllocatorSize;
-  static const uptr kMetadataSize = 0;
-  typedef __asan::SizeClassMap SizeClassMap;
-  typedef AsanMapUnmapCallback MapUnmapCallback;
-  static const uptr kFlags = 0;
-};
-
-typedef SizeClassAllocator64<AP64> PrimaryAllocator;
-#else  // Fallback to SizeClassAllocator32.
-static const uptr kRegionSizeLog = 20;
-static const uptr kNumRegions = SANITIZER_MMAP_RANGE_SIZE >> kRegionSizeLog;
-# if SANITIZER_WORDSIZE == 32
-typedef FlatByteMap<kNumRegions> ByteMap;
-# elif SANITIZER_WORDSIZE == 64
-typedef TwoLevelByteMap<(kNumRegions >> 12), 1 << 12> ByteMap;
-# endif
-typedef CompactSizeClassMap SizeClassMap;
-struct AP32 {
-  static const uptr kSpaceBeg = 0;
-  static const u64 kSpaceSize = SANITIZER_MMAP_RANGE_SIZE;
-  static const uptr kMetadataSize = 16;
-  typedef __asan::SizeClassMap SizeClassMap;
-  static const uptr kRegionSizeLog = __asan::kRegionSizeLog;
-  typedef __asan::ByteMap ByteMap;
-  typedef AsanMapUnmapCallback MapUnmapCallback;
-  static const uptr kFlags = 0;
-};
-typedef SizeClassAllocator32<AP32> PrimaryAllocator;
-#endif  // SANITIZER_CAN_USE_ALLOCATOR64
-
-static const uptr kNumberOfSizeClasses = SizeClassMap::kNumClasses;
-typedef SizeClassAllocatorLocalCache<PrimaryAllocator> AllocatorCache;
-typedef LargeMmapAllocator<AsanMapUnmapCallback> SecondaryAllocator;
-typedef CombinedAllocator<PrimaryAllocator, AllocatorCache,
-    SecondaryAllocator> AsanAllocator;
-
-
 struct AsanThreadLocalMallocStorage {
+  explicit AsanThreadLocalMallocStorage(LinkerInitialized x)
+#if ASAN_ALLOCATOR_VERSION == 1
+      : quarantine_(x)
+#endif
+      { }
+  AsanThreadLocalMallocStorage() {
+    CHECK(REAL(memset));
+    REAL(memset)(this, 0, sizeof(AsanThreadLocalMallocStorage));
+  }
+
+#if ASAN_ALLOCATOR_VERSION == 1
+  AsanChunkFifoList quarantine_;
+  AsanChunk *free_lists_[kNumberOfSizeClasses];
+#else
   uptr quarantine_cache[16];
-  AllocatorCache allocator_cache;
+  uptr allocator2_cache[96 * (512 * 8 + 16)];  // Opaque.
+#endif
   void CommitBack();
- private:
-  // These objects are allocated via mmap() and are zero-initialized.
-  AsanThreadLocalMallocStorage() {}
 };
 
-void *asan_memalign(uptr alignment, uptr size, BufferedStackTrace *stack,
+// Fake stack frame contains local variables of one function.
+// This struct should fit into a stack redzone (32 bytes).
+struct FakeFrame {
+  uptr magic;  // Modified by the instrumented code.
+  uptr descr;  // Modified by the instrumented code.
+  FakeFrame *next;
+  u64 real_stack     : 48;
+  u64 size_minus_one : 16;
+};
+
+struct FakeFrameFifo {
+ public:
+  void FifoPush(FakeFrame *node);
+  FakeFrame *FifoPop();
+ private:
+  FakeFrame *first_, *last_;
+};
+
+class FakeFrameLifo {
+ public:
+  void LifoPush(FakeFrame *node) {
+    node->next = top_;
+    top_ = node;
+  }
+  void LifoPop() {
+    CHECK(top_);
+    top_ = top_->next;
+  }
+  FakeFrame *top() { return top_; }
+ private:
+  FakeFrame *top_;
+};
+
+// For each thread we create a fake stack and place stack objects on this fake
+// stack instead of the real stack. The fake stack is not really a stack but
+// a fast malloc-like allocator so that when a function exits the fake stack
+// is not poped but remains there for quite some time until gets used again.
+// So, we poison the objects on the fake stack when function returns.
+// It helps us find use-after-return bugs.
+// We can not rely on __asan_stack_free being called on every function exit,
+// so we maintain a lifo list of all current fake frames and update it on every
+// call to __asan_stack_malloc.
+class FakeStack {
+ public:
+  FakeStack();
+  explicit FakeStack(LinkerInitialized) {}
+  void Init(uptr stack_size);
+  void StopUsingFakeStack() { alive_ = false; }
+  void Cleanup();
+  uptr AllocateStack(uptr size, uptr real_stack);
+  static void OnFree(uptr ptr, uptr size, uptr real_stack);
+  // Return the bottom of the maped region.
+  uptr AddrIsInFakeStack(uptr addr);
+  bool StackSize() { return stack_size_; }
+
+ private:
+  static const uptr kMinStackFrameSizeLog = 9;  // Min frame is 512B.
+  static const uptr kMaxStackFrameSizeLog = 16;  // Max stack frame is 64K.
+  static const uptr kMaxStackMallocSize = 1 << kMaxStackFrameSizeLog;
+  static const uptr kNumberOfSizeClasses =
+      kMaxStackFrameSizeLog - kMinStackFrameSizeLog + 1;
+
+  bool AddrIsInSizeClass(uptr addr, uptr size_class);
+
+  // Each size class should be large enough to hold all frames.
+  uptr ClassMmapSize(uptr size_class);
+
+  uptr ClassSize(uptr size_class) {
+    return 1UL << (size_class + kMinStackFrameSizeLog);
+  }
+
+  void DeallocateFrame(FakeFrame *fake_frame);
+
+  uptr ComputeSizeClass(uptr alloc_size);
+  void AllocateOneSizeClass(uptr size_class);
+
+  uptr stack_size_;
+  bool   alive_;
+
+  uptr allocated_size_classes_[kNumberOfSizeClasses];
+  FakeFrameFifo size_classes_[kNumberOfSizeClasses];
+  FakeFrameLifo call_stack_;
+};
+
+void *asan_memalign(uptr alignment, uptr size, StackTrace *stack,
                     AllocType alloc_type);
-void asan_free(void *ptr, BufferedStackTrace *stack, AllocType alloc_type);
-void asan_delete(void *ptr, uptr size, uptr alignment,
-                 BufferedStackTrace *stack, AllocType alloc_type);
+void asan_free(void *ptr, StackTrace *stack, AllocType alloc_type);
 
-void *asan_malloc(uptr size, BufferedStackTrace *stack);
-void *asan_calloc(uptr nmemb, uptr size, BufferedStackTrace *stack);
-void *asan_realloc(void *p, uptr size, BufferedStackTrace *stack);
-void *asan_valloc(uptr size, BufferedStackTrace *stack);
-void *asan_pvalloc(uptr size, BufferedStackTrace *stack);
+void *asan_malloc(uptr size, StackTrace *stack);
+void *asan_calloc(uptr nmemb, uptr size, StackTrace *stack);
+void *asan_realloc(void *p, uptr size, StackTrace *stack);
+void *asan_valloc(uptr size, StackTrace *stack);
+void *asan_pvalloc(uptr size, StackTrace *stack);
 
-void *asan_aligned_alloc(uptr alignment, uptr size, BufferedStackTrace *stack);
 int asan_posix_memalign(void **memptr, uptr alignment, uptr size,
-                        BufferedStackTrace *stack);
-uptr asan_malloc_usable_size(const void *ptr, uptr pc, uptr bp);
+                          StackTrace *stack);
+uptr asan_malloc_usable_size(void *ptr, StackTrace *stack);
 
 uptr asan_mz_size(const void *ptr);
 void asan_mz_force_lock();
 void asan_mz_force_unlock();
 
 void PrintInternalAllocatorStats();
-void AsanSoftRssLimitExceededCallback(bool exceeded);
 
 }  // namespace __asan
 #endif  // ASAN_ALLOCATOR_H

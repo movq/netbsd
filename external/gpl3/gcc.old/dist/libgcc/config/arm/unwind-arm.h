@@ -1,5 +1,5 @@
 /* Header file for the ARM EABI unwinder
-   Copyright (C) 2003-2020 Free Software Foundation, Inc.
+   Copyright (C) 2003-2013 Free Software Foundation, Inc.
    Contributed by Paul Brook
 
    This file is free software; you can redistribute it and/or modify it
@@ -33,29 +33,9 @@
 /* Use IP as a scratch register within the personality routine.  */
 #define UNWIND_POINTER_REG 12
 
-#define FDPIC_REGNUM 9
-
-#define STR(x) #x
-#define XSTR(x) STR(x)
-
 #ifdef __cplusplus
 extern "C" {
 #endif
-_Unwind_Ptr __attribute__((weak)) __gnu_Unwind_Find_got (_Unwind_Ptr);
-
-static inline _Unwind_Ptr _Unwind_gnu_Find_got (_Unwind_Ptr ptr)
-{
-    _Unwind_Ptr res;
-
-    if (__gnu_Unwind_Find_got)
-	res = __gnu_Unwind_Find_got (ptr);
-    else
-	__asm volatile ("mov %[result], r" XSTR(FDPIC_REGNUM)
-			: [result] "=r" (res));
-
-    return res;
-}
-
   /* Decode an R_ARM_TARGET2 relocation.  */
   static inline _Unwind_Word
   _Unwind_decode_typeinfo_ptr (_Unwind_Word base __attribute__ ((unused)),
@@ -68,13 +48,7 @@ static inline _Unwind_Ptr _Unwind_gnu_Find_got (_Unwind_Ptr ptr)
       if (!tmp)
 	return 0;
 
-#if __FDPIC__
-      /* For FDPIC, we store the offset of the GOT entry.  */
-      /* So, first get GOT from dynamic linker and then use indirect access.  */
-      tmp += _Unwind_gnu_Find_got (ptr);
-      tmp = *(_Unwind_Word *) tmp;
-#elif (defined(linux) && !defined(__uClinux__)) || defined(__NetBSD__) \
-    || defined(__FreeBSD__) || defined(__fuchsia__)
+#if (defined(linux) && !defined(__uClinux__)) || defined(__NetBSD__)
       /* Pc-relative indirect.  */
 #define _GLIBCXX_OVERRIDE_TTYPE_ENCODING (DW_EH_PE_pcrel | DW_EH_PE_indirect)
       tmp += ptr;
@@ -97,19 +71,12 @@ static inline _Unwind_Ptr _Unwind_gnu_Find_got (_Unwind_Ptr ptr)
     {
       return _URC_FAILURE;
     }
-#ifndef __FreeBSD__
   /* Return the address of the instruction, not the actual IP value.  */
 #define _Unwind_GetIP(context) \
   (_Unwind_GetGR (context, 15) & ~(_Unwind_Word)1)
 
 #define _Unwind_SetIP(context, val) \
   _Unwind_SetGR (context, 15, val | (_Unwind_GetGR (context, 15) & 1))
-#else
-  #undef _Unwind_GetIPInfo
-  _Unwind_Ptr _Unwind_GetIP (struct _Unwind_Context *);
-  _Unwind_Ptr _Unwind_GetIPInfo (struct _Unwind_Context *, int *);
-  void _Unwind_SetIP (struct _Unwind_Context *, _Unwind_Ptr);
-#endif
 
 #ifdef __cplusplus
 }   /* extern "C" */

@@ -1,24 +1,11 @@
-# $NetBSD: Makefile.bootprogs,v 1.6 2022/05/28 22:16:43 andvar Exp $
-
-NOSSP=yes
-NOPIE=yes
+# $NetBSD: Makefile.bootprogs,v 1.1 2017/07/24 08:56:29 mrg Exp $
 
 .include <bsd.own.mk>
 .include <bsd.klinks.mk>
 
-S=	${.CURDIR}/../../../../..
-COMMON=	${.CURDIR}/../common
+S=	${.CURDIR}/../../../..
 
-.PATH:	${COMMON}
-
-.if ${MACHINE_ARCH:M*64*}
-.	if ${MACHINE_ARCH:M*eb}
-LDABI=	-melf32btsmipn32
-.	else
-LDABI=	-melf32ltsmipn32
-.	endif
-CPUFLAGS+=	-mabi=n32
-.endif
+.PATH:	${.CURDIR}/../common
 
 STRIPFLAG=
 BINMODE= 444
@@ -32,16 +19,16 @@ LIBCRTEND=
 
 STRIP?=	strip
 
-CHECKSIZE_CMD=	SIZE=${SIZE} ${HOST_SH} ${COMMON}/checksize.sh
+CHECKSIZE_CMD=	SIZE=${SIZE} ${HOST_SH} ${.CURDIR}/../common/checksize.sh
 
-AFLAGS+=	-DASSEMBLER -D_LOCORE -mno-abicalls -mips64 -msoft-float
+AFLAGS+=	-DASSEMBLER -D_LOCORE -mno-abicalls -mips64
 # -I${.CURDIR}/../.. done by Makefile.inc
 CPPFLAGS+=	-nostdinc -I${.OBJDIR} -D_STANDALONE -I${S}
 CFLAGS=		-Os -g -ffreestanding -mno-abicalls -msoft-float -G 0
 CFLAGS+=	-mips64
 CFLAGS+=	-Werror ${CWARNFLAGS}
 
-NETBSD_VERS!=${HOST_SH} ${S}/conf/osrelease.sh
+NETBSD_VERS!=${HOST_SH} ${.CURDIR}/../../../../conf/osrelease.sh
 CPPFLAGS+= -DNETBSD_VERS='"${NETBSD_VERS}"'
 
 CWARNFLAGS+=	-Wno-main 
@@ -58,7 +45,7 @@ VERSIONFLAGS+=-n
 REGION1_START=		0x20000000		# "Region 1 start"
 REGION1_SIZE!=		expr 256 \* 1024	# 256k
 
-LDSCRIPT=		${COMMON}/boot.ldscript
+LDSCRIPT=		${.CURDIR}/../common/boot.ldscript
 
 # our memory lauout:
 
@@ -73,7 +60,7 @@ UNIFIED_MAX_TOTAL!=	expr ${REGION1_SIZE}
 UNIFIED_HEAP_LIMIT=	(${REGION1_START} + ${REGION1_SIZE})
 
 #	two-stage boot loaders must share region 1.  The first stage
-#	loads into the lowest portion, and uses the highest portion
+#	loads into the lowest portion, and uses the higest portion
 #	for its heap.  The second stage loads in between the primary image
 #	and the heap, and can reuse the memory after it (i.e. the primary's
 #	heap) for its own heap.

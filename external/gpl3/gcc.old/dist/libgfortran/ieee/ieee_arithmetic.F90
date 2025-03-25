@@ -1,5 +1,5 @@
 !    Implementation of the IEEE_ARITHMETIC standard intrinsic module
-!    Copyright (C) 2013-2020 Free Software Foundation, Inc.
+!    Copyright (C) 2013-2019 Free Software Foundation, Inc.
 !    Contributed by Francois-Xavier Coudert <fxcoudert@gcc.gnu.org>
 ! 
 ! This file is part of the GNU Fortran runtime library (libgfortran).
@@ -77,16 +77,15 @@ module IEEE_ARITHMETIC
 
 
   ! Equality operators on the derived types
-  ! Note, the FE overloads .eq. to == and .ne. to /=
-  interface operator (.eq.)
+  interface operator (==)
     module procedure IEEE_CLASS_TYPE_EQ, IEEE_ROUND_TYPE_EQ
   end interface
-  public :: operator(.eq.)
+  public :: operator(==)
 
-  interface operator (.ne.)
+  interface operator (/=)
     module procedure IEEE_CLASS_TYPE_NE, IEEE_ROUND_TYPE_NE
   end interface
-  public :: operator (.ne.)
+  public :: operator (/=)
 
 
   ! IEEE_IS_FINITE
