@@ -1,5 +1,5 @@
 /* Implementation of the MATMUL intrinsic
-   Copyright (C) 2002-2020 Free Software Foundation, Inc.
+   Copyright (C) 2002-2019 Free Software Foundation, Inc.
    Contributed by Thomas Koenig <tkoenig@gcc.gnu.org>.
 
 This file is part of the GNU Fortran runtime library (libgfortran).
@@ -241,8 +241,7 @@ matmul_r4_avx128_fma3 (gfc_array_r4 * const restrict retarray,
 	}
     }
 
-  if (rxstride == 1 && axstride == 1 && bxstride == 1
-      && GFC_DESCRIPTOR_RANK (b) != 1)
+  if (rxstride == 1 && axstride == 1 && bxstride == 1)
     {
       /* This block of code implements a tuned matmul, derived from
          Superscalar GEMM-based level 3 BLAS,  Beta version 0.1
@@ -556,20 +555,6 @@ matmul_r4_avx128_fma3 (gfc_array_r4 * const restrict retarray,
 	    }
 	}
     }
-  else if (GFC_DESCRIPTOR_RANK (a) == 1)
-    {
-      const GFC_REAL_4 *restrict bbase_y;
-      GFC_REAL_4 s;
-
-      for (y = 0; y < ycount; y++)
-	{
-	  bbase_y = &bbase[y*bystride];
-	  s = (GFC_REAL_4) 0;
-	  for (n = 0; n < count; n++)
-	    s += abase[n*axstride] * bbase_y[n*bxstride];
-	  dest[y*rxstride] = s;
-	}
-    }
   else if (axstride < aystride)
     {
       for (y = 0; y < ycount; y++)
@@ -583,6 +568,20 @@ matmul_r4_avx128_fma3 (gfc_array_r4 * const restrict retarray,
 	    dest[x*rxstride + y*rystride] +=
 					abase[x*axstride + n*aystride] *
 					bbase[n*bxstride + y*bystride];
+    }
+  else if (GFC_DESCRIPTOR_RANK (a) == 1)
+    {
+      const GFC_REAL_4 *restrict bbase_y;
+      GFC_REAL_4 s;
+
+      for (y = 0; y < ycount; y++)
+	{
+	  bbase_y = &bbase[y*bystride];
+	  s = (GFC_REAL_4) 0;
+	  for (n = 0; n < count; n++)
+	    s += abase[n*axstride] * bbase_y[n*bxstride];
+	  dest[y*rxstride] = s;
+	}
     }
   else
     {
@@ -811,8 +810,7 @@ matmul_r4_avx128_fma4 (gfc_array_r4 * const restrict retarray,
 	}
     }
 
-  if (rxstride == 1 && axstride == 1 && bxstride == 1
-      && GFC_DESCRIPTOR_RANK (b) != 1)
+  if (rxstride == 1 && axstride == 1 && bxstride == 1)
     {
       /* This block of code implements a tuned matmul, derived from
          Superscalar GEMM-based level 3 BLAS,  Beta version 0.1
@@ -1126,20 +1124,6 @@ matmul_r4_avx128_fma4 (gfc_array_r4 * const restrict retarray,
 	    }
 	}
     }
-  else if (GFC_DESCRIPTOR_RANK (a) == 1)
-    {
-      const GFC_REAL_4 *restrict bbase_y;
-      GFC_REAL_4 s;
-
-      for (y = 0; y < ycount; y++)
-	{
-	  bbase_y = &bbase[y*bystride];
-	  s = (GFC_REAL_4) 0;
-	  for (n = 0; n < count; n++)
-	    s += abase[n*axstride] * bbase_y[n*bxstride];
-	  dest[y*rxstride] = s;
-	}
-    }
   else if (axstride < aystride)
     {
       for (y = 0; y < ycount; y++)
@@ -1153,6 +1137,20 @@ matmul_r4_avx128_fma4 (gfc_array_r4 * const restrict retarray,
 	    dest[x*rxstride + y*rystride] +=
 					abase[x*axstride + n*aystride] *
 					bbase[n*bxstride + y*bystride];
+    }
+  else if (GFC_DESCRIPTOR_RANK (a) == 1)
+    {
+      const GFC_REAL_4 *restrict bbase_y;
+      GFC_REAL_4 s;
+
+      for (y = 0; y < ycount; y++)
+	{
+	  bbase_y = &bbase[y*bystride];
+	  s = (GFC_REAL_4) 0;
+	  for (n = 0; n < count; n++)
+	    s += abase[n*axstride] * bbase_y[n*bxstride];
+	  dest[y*rxstride] = s;
+	}
     }
   else
     {

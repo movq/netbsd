@@ -1,5 +1,5 @@
 /* types.cc -- Lower D frontend types to GCC trees.
-   Copyright (C) 2006-2020 Free Software Foundation, Inc.
+   Copyright (C) 2006-2019 Free Software Foundation, Inc.
 
 GCC is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -142,11 +142,8 @@ make_array_type (Type *type, unsigned HOST_WIDE_INT size)
       return t;
     }
 
-  tree t = build_array_type (build_ctype (type),
-			     build_index_type (size_int (size - 1)));
-  /* Propagate TREE_ADDRESSABLE to the static array type.  */
-  TREE_ADDRESSABLE (t) = TREE_ADDRESSABLE (TREE_TYPE (t));
-  return t;
+  return build_array_type (build_ctype (type),
+			   build_index_type (size_int (size - 1)));
 }
 
 /* Builds a record type whose name is NAME.  NFIELDS is the number of fields,
@@ -237,20 +234,16 @@ insert_aggregate_field (tree type, tree field, size_t offset)
 static void
 fixup_anonymous_offset (tree fields, tree offset)
 {
-  /* No adjustment in field offset required.  */
-  if (integer_zerop (offset))
-    return;
-
   while (fields != NULL_TREE)
     {
-      /* Traverse all nested anonymous aggregates to update the offset of their
-	 fields.  Note that the anonymous field itself is not adjusted, as it
-	 already has an offset relative to its outer aggregate.  */
+      /* Traverse all nested anonymous aggregates to update their offset.
+	 Set the anonymous decl offset to its first member.  */
       tree ftype = TREE_TYPE (fields);
-      if (TYPE_NAME (ftype) && IDENTIFIER_ANON_P (TYPE_IDENTIFIER (ftype)))
+      if (TYPE_NAME (ftype) && anon_aggrname_p (TYPE_IDENTIFIER (ftype)))
 	{
 	  tree vfields = TYPE_FIELDS (ftype);
 	  fixup_anonymous_offset (vfields, offset);
+	  DECL_FIELD_OFFSET (fields) = DECL_FIELD_OFFSET (vfields);
 	}
       else
 	{
@@ -331,7 +324,12 @@ layout_aggregate_members (Dsymbols *members, tree context, bool inherited_p)
       AnonDeclaration *ad = sym->isAnonDeclaration ();
       if (ad != NULL)
 	{
-	  tree ident = make_anon_name ();
+	  /* Use a counter to create anonymous type names.  */
+	  static int anon_cnt = 0;
+	  char buf[32];
+	  sprintf (buf, anon_aggrname_format (), anon_cnt++);
+
+	  tree ident = get_identifier (buf);
 	  tree type = make_node (ad->isunion ? UNION_TYPE : RECORD_TYPE);
 	  ANON_AGGR_TYPE_P (type) = 1;
 	  d_keep (type);
@@ -355,7 +353,8 @@ layout_aggregate_members (Dsymbols *members, tree context, bool inherited_p)
 	  tree offset = size_int (ad->anonoffset);
 	  fixup_anonymous_offset (TYPE_FIELDS (type), offset);
 
-	  finish_aggregate_type (ad->anonstructsize, ad->anonalignsize, type);
+	  finish_aggregate_type (ad->anonstructsize, ad->anonalignsize,
+				 type, NULL);
 
 	  /* And make the corresponding data member.  */
 	  tree field = create_field_decl (type, NULL, 0, 0);
@@ -464,8 +463,19 @@ layout_aggregate_type (AggregateDeclaration *decl, tree type,
    the finalized record mode.  */
 
 void
-finish_aggregate_type (unsigned structsize, unsigned alignsize, tree type)
+finish_aggregate_type (unsigned structsize, unsigned alignsize,
+		       tree type, UserAttributeDeclaration *attrs)
 {
+  TYPE_SIZE (type) = NULL_TREE;
+
+  /* Write out any GCC attributes that were applied to the type declaration.  */
+  if (attrs)
+    {
+      Expressions *eattrs = attrs->getAttributes ();
+      decl_attributes (&type, build_attributes (eattrs),
+		       ATTR_FLAG_TYPE_IN_PLACE);
+    }
+
   /* Set size and alignment as requested by frontend.  */
   TYPE_SIZE (type) = bitsize_int (structsize * BITS_PER_UNIT);
   TYPE_SIZE_UNIT (type) = size_int (structsize);
@@ -489,40 +499,6 @@ finish_aggregate_type (unsigned structsize, unsigned alignsize, tree type)
     }
 }
 
-/* Returns true if the class or struct type TYPE has already been layed out by
-   the lowering of another front-end AST type.  In which case, there will either
-   be a reuse of the back-end type, or a multiple definition error.
-   DECO is the uniquely mangled decoration for the type.  */
-
-static bool
-merge_aggregate_types (Type *type, tree deco)
-{
-  AggregateDeclaration *sym;
-
-  if (type->ty == Tstruct)
-    sym = ((TypeStruct *) type)->sym;
-  else if (type->ty == Tclass)
-    sym = ((TypeClass *) type)->sym;
-  else
-    gcc_unreachable ();
-
-  if (IDENTIFIER_DAGGREGATE (deco))
-    {
-      AggregateDeclaration *ad = IDENTIFIER_DAGGREGATE (deco);
-      /* There should never be a class/struct mismatch in mangled names.  */
-      gcc_assert ((sym->isStructDeclaration () && ad->isStructDeclaration ())
-		  || (sym->isClassDeclaration () && ad->isClassDeclaration ()));
-
-      /* Non-templated variables shouldn't be defined twice.  */
-      if (!sym->isInstantiated ())
-	ScopeDsymbol::multiplyDefined (sym->loc, sym, ad);
-
-      type->ctype = build_ctype (ad->type);
-      return true;
-    }
-
-  return false;
-}
 
 /* Implements the visitor interface to build the GCC trees of all
    Type AST classes emitted from the D Front-end, where CTYPE holds
@@ -723,7 +699,7 @@ public:
 
 	for (size_t i = 0; i < n_args; i++)
 	  {
-	    tree type = parameter_type (Parameter::getNth (t->parameters, i));
+	    tree type = type_passed_as (Parameter::getNth (t->parameters, i));
 	    fnparams = chainon (fnparams, build_tree_list (0, type));
 	  }
       }
@@ -869,7 +845,12 @@ public:
 	build_type_decl (t->ctype, t->sym);
       }
 
-    apply_user_attributes (t->sym, t->ctype);
+    if (t->sym->userAttribDecl)
+      {
+	Expressions *eattrs = t->sym->userAttribDecl->getAttributes ();
+	decl_attributes (&t->ctype, build_attributes (eattrs),
+			 ATTR_FLAG_TYPE_IN_PLACE);
+      }
   }
 
   /* Build a struct or union type.  Layout should be exactly represented
@@ -877,19 +858,12 @@ public:
 
   void visit (TypeStruct *t)
   {
-    /* Merge types in the back-end if the front-end did not itself do so.  */
-    tree deco = get_identifier (d_mangle_decl (t->sym));
-    if (merge_aggregate_types (t, deco))
-      return;
-
     /* Need to set this right away in case of self-references.  */
     t->ctype = make_node (t->sym->isUnionDeclaration ()
 			  ? UNION_TYPE : RECORD_TYPE);
     d_keep (t->ctype);
-    IDENTIFIER_DAGGREGATE (deco) = t->sym;
 
     TYPE_LANG_SPECIFIC (t->ctype) = build_lang_type (t);
-    TYPE_CXX_ODR_P (t->ctype) = 1;
 
     if (t->sym->members)
       {
@@ -908,8 +882,8 @@ public:
 
 	/* Put out all fields.  */
 	layout_aggregate_type (t->sym, t->ctype, t->sym);
-	apply_user_attributes (t->sym, t->ctype);
-	finish_aggregate_type (structsize, alignsize, t->ctype);
+	finish_aggregate_type (structsize, alignsize, t->ctype,
+			       t->sym->userAttribDecl);
       }
 
     TYPE_CONTEXT (t->ctype) = d_decl_context (t->sym);
@@ -918,7 +892,7 @@ public:
     /* For structs with a user defined postblit or a destructor,
        also set TREE_ADDRESSABLE on the type and all variants.
        This will make the struct be passed around by reference.  */
-    if (!t->sym->isPOD ())
+    if (t->sym->postblit || t->sym->dtor)
       {
 	for (tree tv = t->ctype; tv != NULL_TREE; tv = TYPE_NEXT_VARIANT (tv))
 	  TREE_ADDRESSABLE (tv) = 1;
@@ -930,29 +904,22 @@ public:
 
   void visit (TypeClass *t)
   {
-    /* Merge types in the back-end if the front-end did not itself do so.  */
-    tree deco = get_identifier (d_mangle_decl (t->sym));
-    if (merge_aggregate_types (t, deco))
-      return;
-
     /* Need to set ctype right away in case of self-references to
        the type during this call.  */
     tree basetype = make_node (RECORD_TYPE);
     t->ctype = build_pointer_type (basetype);
     d_keep (t->ctype);
-    IDENTIFIER_DAGGREGATE (deco) = t->sym;
 
     /* Note that lang_specific data is assigned to both the reference
        and the underlying record type.  */
     TYPE_LANG_SPECIFIC (t->ctype) = build_lang_type (t);
     TYPE_LANG_SPECIFIC (basetype) = TYPE_LANG_SPECIFIC (t->ctype);
     CLASS_TYPE_P (basetype) = 1;
-    TYPE_CXX_ODR_P (basetype) = 1;
 
     /* Put out all fields, including from each base class.  */
     layout_aggregate_type (t->sym, basetype, t->sym);
-    apply_user_attributes (t->sym, basetype);
-    finish_aggregate_type (t->sym->structsize, t->sym->alignsize, basetype);
+    finish_aggregate_type (t->sym->structsize, t->sym->alignsize,
+			   basetype, t->sym->userAttribDecl);
 
     /* Classes only live in memory, so always set the TREE_ADDRESSABLE bit.  */
     for (tree tv = basetype; tv != NULL_TREE; tv = TYPE_NEXT_VARIANT (tv))

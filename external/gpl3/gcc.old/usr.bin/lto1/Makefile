@@ -1,25 +1,20 @@
-#	$NetBSD: Makefile,v 1.9 2023/10/07 12:15:52 rin Exp $
+#	$NetBSD: Makefile,v 1.1 2015/09/23 03:03:40 mrg Exp $
 
 PROG=		lto1
-SRCS=		attribs.c \
-		lto-common.c \
-		lto-lang.c \
-		lto-object.c \
-		lto-partition.c \
-		lto-symtab.c \
-		lto.c \
-		main.c
+SRCS=		lto-partition.c lto-object.c lto.c lto-lang.c attribs.c main.c
 
 CPPFLAGS+=	-DPREFIX=\"/usr\"
 
 COPTS.lto.c+=		-Wno-stack-protector
 COPTS.lto-lang.c+=	-Wno-stack-protector
-COPTS.lto-common.c+=	-Wno-stack-protector
 
 .include "../Makefile.backend"
 .include "../Makefile.backtrace"
+.include "../Makefile.common"
+.include "../Makefile.common-target"
 .include "../Makefile.libcpp"
 .include "../Makefile.libdecnumber"
+.include "../Makefile.libiberty"
 
 LDADD+= ${LIBIBERTYOBJ}/libiberty.a
 DPADD+= ${LIBIBERTYOBJ}/libiberty.a

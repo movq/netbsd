@@ -1,5 +1,5 @@
 /* Callgraph based analysis of static variables.
-   Copyright (C) 2015-2020 Free Software Foundation, Inc.
+   Copyright (C) 2015-2016 Free Software Foundation, Inc.
    Contributed by Martin Liska <mliska@suse.cz>
 
 This file is part of GCC.
@@ -40,9 +40,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "stringpool.h"
 #include "cgraph.h"
 #include "print-tree.h"
-#include "alloc-pool.h"
 #include "symbol-summary.h"
-#include "hsa-common.h"
+#include "hsa.h"
 
 namespace {
 
@@ -52,11 +51,11 @@ namespace {
 static bool
 check_warn_node_versionable (cgraph_node *node)
 {
-  if (!node->versionable)
+  if (!node->local.versionable)
     {
       warning_at (EXPR_LOCATION (node->decl), OPT_Whsa,
 		  "could not emit HSAIL for function %s: function cannot be "
-		  "cloned", node->dump_name ());
+		  "cloned", node->name ());
       return false;
     }
   return true;
@@ -80,47 +79,42 @@ process_hsa_functions (void)
       hsa_function_summary *s = hsa_summaries->get (node);
 
       /* A linked function is skipped.  */
-      if (s != NULL && s->m_bound_function != NULL)
+      if (s->m_binded_function != NULL)
 	continue;
 
-      if (s != NULL)
+      if (s->m_kind != HSA_NONE)
 	{
 	  if (!check_warn_node_versionable (node))
 	    continue;
 	  cgraph_node *clone
 	    = node->create_virtual_clone (vec <cgraph_edge *> (),
-					  NULL, NULL, "hsa", 0);
+					  NULL, NULL, "hsa");
 	  TREE_PUBLIC (clone->decl) = TREE_PUBLIC (node->decl);
-	  clone->externally_visible = node->externally_visible;
 
 	  clone->force_output = true;
 	  hsa_summaries->link_functions (clone, node, s->m_kind, false);
 
 	  if (dump_file)
 	    fprintf (dump_file, "Created a new HSA clone: %s, type: %s\n",
-		     clone->dump_name (),
+		     clone->name (),
 		     s->m_kind == HSA_KERNEL ? "kernel" : "function");
 	}
-      else if (hsa_callable_function_p (node->decl)
-	       /* At this point, this is enough to identify clones for
-		  parallel, which for HSA would need to be kernels anyway.  */
-	       && !DECL_ARTIFICIAL (node->decl))
+      else if (hsa_callable_function_p (node->decl))
 	{
 	  if (!check_warn_node_versionable (node))
 	    continue;
 	  cgraph_node *clone
 	    = node->create_virtual_clone (vec <cgraph_edge *> (),
-					  NULL, NULL, "hsa", 0);
+					  NULL, NULL, "hsa");
 	  TREE_PUBLIC (clone->decl) = TREE_PUBLIC (node->decl);
-	  clone->externally_visible = node->externally_visible;
 
-	  if (!node->local)
+	  if (!cgraph_local_p (node))
 	    clone->force_output = true;
 	  hsa_summaries->link_functions (clone, node, HSA_FUNCTION, false);
 
 	  if (dump_file)
 	    fprintf (dump_file, "Created a new HSA function clone: %s\n",
-		     clone->dump_name ());
+		     clone->name ());
 	}
     }
 
@@ -132,17 +126,17 @@ process_hsa_functions (void)
       while (e)
 	{
 	  hsa_function_summary *src = hsa_summaries->get (node);
-	  if (src != NULL && src->m_gpu_implementation_p)
+	  if (src->m_kind != HSA_NONE && src->m_gpu_implementation_p)
 	    {
 	      hsa_function_summary *dst = hsa_summaries->get (e->callee);
-	      if (dst != NULL && !dst->m_gpu_implementation_p)
+	      if (dst->m_kind != HSA_NONE && !dst->m_gpu_implementation_p)
 		{
-		  e->redirect_callee (dst->m_bound_function);
+		  e->redirect_callee (dst->m_binded_function);
 		  if (dump_file)
 		    fprintf (dump_file,
 			     "Redirecting edge to HSA function: %s->%s\n",
-			     e->caller->dump_name (),
-			     e->callee->dump_name ());
+			     xstrdup_for_dump (e->caller->name ()),
+			     xstrdup_for_dump (e->callee->name ()));
 		}
 	    }
 
@@ -177,7 +171,7 @@ ipa_hsa_write_summary (void)
       node = lsei_cgraph_node (lsei);
       hsa_function_summary *s = hsa_summaries->get (node);
 
-      if (s != NULL)
+      if (s->m_kind != HSA_NONE)
 	count++;
     }
 
@@ -190,7 +184,7 @@ ipa_hsa_write_summary (void)
       node = lsei_cgraph_node (lsei);
       hsa_function_summary *s = hsa_summaries->get (node);
 
-      if (s != NULL)
+      if (s->m_kind != HSA_NONE)
 	{
 	  encoder = ob->decl_state->symtab_node_encoder;
 	  int node_ref = lto_symtab_encoder_encode (encoder, node);
@@ -199,10 +193,10 @@ ipa_hsa_write_summary (void)
 	  bp = bitpack_create (ob->main_stream);
 	  bp_pack_value (&bp, s->m_kind, 2);
 	  bp_pack_value (&bp, s->m_gpu_implementation_p, 1);
-	  bp_pack_value (&bp, s->m_bound_function != NULL, 1);
+	  bp_pack_value (&bp, s->m_binded_function != NULL, 1);
 	  streamer_write_bitpack (&bp);
-	  if (s->m_bound_function)
-	    stream_write_tree (ob, s->m_bound_function->decl, true);
+	  if (s->m_binded_function)
+	    stream_write_tree (ob, s->m_binded_function->decl, true);
 	}
     }
 
@@ -222,7 +216,7 @@ ipa_hsa_read_section (struct lto_file_decl_data *file_data, const char *data,
   const int cfg_offset = sizeof (struct lto_function_header);
   const int main_offset = cfg_offset + header->cfg_size;
   const int string_offset = main_offset + header->main_size;
-  class data_in *data_in;
+  struct data_in *data_in;
   unsigned int i;
   unsigned int count;
 
@@ -245,7 +239,7 @@ ipa_hsa_read_section (struct lto_file_decl_data *file_data, const char *data,
       node = dyn_cast<cgraph_node *> (lto_symtab_encoder_deref (encoder,
 								index));
       gcc_assert (node->definition);
-      hsa_function_summary *s = hsa_summaries->get_create (node);
+      hsa_function_summary *s = hsa_summaries->get (node);
 
       struct bitpack_d bp = streamer_read_bitpack (&ib_main);
       s->m_kind = (hsa_function_kind) bp_unpack_value (&bp, 2);
@@ -255,7 +249,7 @@ ipa_hsa_read_section (struct lto_file_decl_data *file_data, const char *data,
       if (has_tree)
 	{
 	  tree decl = stream_read_tree (&ib_main, data_in);
-	  s->m_bound_function = cgraph_node::get_create (decl);
+	  s->m_binded_function = cgraph_node::get_create (decl);
 	}
     }
   lto_free_section_data (file_data, LTO_section_ipa_hsa, NULL, data,
@@ -278,8 +272,9 @@ ipa_hsa_read_summary (void)
   while ((file_data = file_data_vec[j++]))
     {
       size_t len;
-      const char *data
-	= lto_get_summary_section_data (file_data, LTO_section_ipa_hsa, &len);
+      const char *data = lto_get_section_data (file_data, LTO_section_ipa_hsa,
+					       NULL, &len);
+
       if (data)
 	ipa_hsa_read_section (file_data, data, len);
     }
@@ -289,7 +284,7 @@ const pass_data pass_data_ipa_hsa =
 {
   IPA_PASS, /* type */
   "hsa", /* name */
-  OPTGROUP_OMP, /* optinfo_flags */
+  OPTGROUP_NONE, /* optinfo_flags */
   TV_IPA_HSA, /* tv_id */
   0, /* properties_required */
   0, /* properties_provided */

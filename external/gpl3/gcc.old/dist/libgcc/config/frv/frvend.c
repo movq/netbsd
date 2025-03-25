@@ -1,5 +1,5 @@
 /* Frv initialization file linked after all user modules
-   Copyright (C) 1999-2020 Free Software Foundation, Inc.
+   Copyright (C) 1999-2013 Free Software Foundation, Inc.
     Contributed by Red Hat, Inc.
   
    This file is part of GCC.
@@ -23,6 +23,7 @@
    see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
    <http://www.gnu.org/licenses/>.  */
 
+#include "defaults.h"
 #include <stddef.h>
 #include "../libgcc/unwind-dw2-fde.h"
 
@@ -52,8 +53,8 @@ __asm__ (".section " SECTION "," FLAGS "\n\t"				\
 /* End of .ctor/.dtor sections that provides a list of constructors and
    destructors to run.  */
 
-FINI_SECTION_ZERO (".ctors", "\"a\"", "__CTOR_END__");
-FINI_SECTION_ZERO (".dtors", "\"a\"", "__DTOR_END__");
+FINI_SECTION_ZERO (".ctors", "\"aw\"", "__CTOR_END__");
+FINI_SECTION_ZERO (".dtors", "\"aw\"", "__DTOR_END__");
 
 /* End of .eh_frame section that provides all of the exception handling
    tables.  */

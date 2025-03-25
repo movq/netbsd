@@ -459,6 +459,11 @@ Expression *resolvePropertiesX(Scope *sc, Expression *e1, Expression *e2 = NULL)
             if (checkUnsafeAccess(sc, e1, true, true))
                 return new ErrorExp();
         }
+        else if (e1->op == TOKdot)
+        {
+            e1->error("expression has no value");
+            return new ErrorExp();
+        }
         else if (e1->op == TOKcall)
         {
             CallExp *ce = (CallExp *)e1;
@@ -511,9 +516,9 @@ static bool checkPropertyCall(Expression *e)
             tf = (TypeFunction *)ce->f->type;
             /* If a forward reference to ce->f, try to resolve it
              */
-            if (!tf->deco && ce->f->semanticRun < PASSsemanticdone)
+            if (!tf->deco && ce->f->_scope)
             {
-                ce->f->semantic(NULL);
+                ce->f->semantic(ce->f->_scope);
                 tf = (TypeFunction *)ce->f->type;
             }
         }
@@ -1120,8 +1125,6 @@ bool arrayExpressionToCommonType(Scope *sc, Expressions *exps, Type **pt)
     Type *t0 = NULL;
     Expression *e0 = NULL;      // dead-store to prevent spurious warning
     size_t j0 = ~0;             // dead-store to prevent spurious warning
-    bool foundType = false;
-
     for (size_t i = 0; i < exps->dim; i++)
     {
         Expression *e = (*exps)[i];
@@ -1137,7 +1140,6 @@ bool arrayExpressionToCommonType(Scope *sc, Expressions *exps, Type **pt)
         }
         if (e->op == TOKtype)
         {
-            foundType = true;   // do not break immediately, there might be more errors
             e->checkValue();    // report an error "type T has no value"
             t0 = Type::terror;
             continue;
@@ -1156,7 +1158,7 @@ bool arrayExpressionToCommonType(Scope *sc, Expressions *exps, Type **pt)
 
         e = doCopyOrMove(sc, e);
 
-        if (!foundType && t0 && !t0->equals(e->type))
+        if (t0 && !t0->equals(e->type))
         {
             /* This applies ?: to merge the types. It's backwards;
              * ?: should call this function to merge types.
@@ -2180,11 +2182,6 @@ StringExp *Expression::toStringExp()
     return NULL;
 }
 
-TupleExp *Expression::toTupleExp()
-{
-    return NULL;
-}
-
 /***************************************
  * Return !=0 if expression is an lvalue.
  */
@@ -2650,11 +2647,8 @@ bool Expression::checkPostblit(Scope *sc, Type *t)
     t = t->baseElemOf();
     if (t->ty == Tstruct)
     {
-        if (global.params.useTypeInfo && Type::dtypeinfo)
-        {
-            // Bugzilla 11395: Require TypeInfo generation for array concatenation
-            semanticTypeInfo(sc, t);
-        }
+        // Bugzilla 11395: Require TypeInfo generation for array concatenation
+        semanticTypeInfo(sc, t);
 
         StructDeclaration *sd = ((TypeStruct *)t)->sym;
         if (sd->postblit)
@@ -2923,12 +2917,10 @@ void IntegerExp::normalize()
         case Tint64:        value = (d_int64) value;        break;
         case Tuns64:        value = (d_uns64) value;        break;
         case Tpointer:
-            if (Target::ptrsize == 8)
-                value = (d_uns64) value;
-            else if (Target::ptrsize == 4)
+            if (Target::ptrsize == 4)
                 value = (d_uns32) value;
-            else if (Target::ptrsize == 2)
-                value = (d_uns16) value;
+            else if (Target::ptrsize == 8)
+                value = (d_uns64) value;
             else
                 assert(0);
             break;
@@ -4545,11 +4537,6 @@ Expression *TupleExp::syntaxCopy()
     return new TupleExp(loc, e0 ? e0->syntaxCopy() : NULL, arraySyntaxCopy(exps));
 }
 
-TupleExp *TupleExp::toTupleExp()
-{
-    return this;
-}
-
 /******************************** FuncExp *********************************/
 
 FuncExp::FuncExp(Loc loc, Dsymbol *s)
@@ -5248,18 +5235,6 @@ DotTemplateExp::DotTemplateExp(Loc loc, Expression *e, TemplateDeclaration *td)
     this->td = td;
 }
 
-bool DotTemplateExp::checkType()
-{
-    error("%s %s has no type", td->kind(), toChars());
-    return true;
-}
-
-bool DotTemplateExp::checkValue()
-{
-    error("%s %s has no value", td->kind(), toChars());
-    return true;
-}
-
 /************************************************************/
 
 DotVarExp::DotVarExp(Loc loc, Expression *e, Declaration *var, bool hasOverloads)
@@ -5785,7 +5760,7 @@ Expression *VectorExp::syntaxCopy()
 /************************************************************/
 
 VectorArrayExp::VectorArrayExp(Loc loc, Expression *e1)
-        : UnaExp(loc, TOKvectorarray, sizeof(VectorArrayExp), e1)
+        : UnaExp(loc, TOKvectorarray, sizeof(VectorExp), e1)
 {
 }
 
@@ -6739,7 +6714,7 @@ Expression *FuncInitExp::resolveLoc(Loc loc, Scope *sc)
         s = "";
     Expression *e = new StringExp(loc, const_cast<char *>(s));
     e = semantic(e, sc);
-    e->type = Type::tstring;
+    e = e->castTo(sc, type);
     return e;
 }
 
@@ -6773,7 +6748,7 @@ Expression *PrettyFuncInitExp::resolveLoc(Loc loc, Scope *sc)
 
     Expression *e = new StringExp(loc, const_cast<char *>(s));
     e = semantic(e, sc);
-    e->type = Type::tstring;
+    e = e->castTo(sc, type);
     return e;
 }
 

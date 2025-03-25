@@ -13,7 +13,6 @@
 
 #include "scope.h"
 #include "declaration.h"
-#include "errors.h"
 #include "parse.h"
 #include "statement.h"
 
@@ -24,8 +23,8 @@ Statement *semantic(Statement *s, Scope *sc);
  * Parse list of extended asm input or output operands.
  * Grammar:
  *      | Operands:
- *      |     SymbolicName(opt) StringLiteral ( AssignExpression )
- *      |     SymbolicName(opt) StringLiteral ( AssignExpression ), Operands
+ *      |     SymbolicName(opt) StringLiteral AssignExpression
+ *      |     SymbolicName(opt) StringLiteral AssignExpression , Operands
  *      |
  *      | SymbolicName:
  *      |     [ Identifier ]
@@ -55,9 +54,7 @@ static int parseExtAsmOperands(Parser *p, GccAsmStatement *s)
             case TOKlbracket:
                 if (p->peekNext() == TOKidentifier)
                 {
-                    // Skip over openings `[`
                     p->nextToken();
-                    // Store the symbolic name
                     name = p->token.ident;
                     p->nextToken();
                 }
@@ -66,32 +63,12 @@ static int parseExtAsmOperands(Parser *p, GccAsmStatement *s)
                     p->error(s->loc, "expected identifier after `[`");
                     goto Lerror;
                 }
-                // Look for closing `]`
                 p->check(TOKrbracket);
-                // Look for the string literal and fall through
-                if (p->token.value != TOKstring)
-                    goto Ldefault;
                 // fall through
 
             case TOKstring:
                 constraint = p->parsePrimaryExp();
-                // @@@DEPRECATED@@@
-                // Old parser allowed omitting parentheses around the expression.
-                // Deprecated in 2.091. Can be made permanent error after 2.100
-                if (p->token.value != TOKlparen)
-                {
-                    arg = p->parseAssignExp();
-                    deprecation(arg->loc, "`%s` must be surrounded by parentheses", arg->toChars());
-                }
-                else
-                {
-                    // Look for the opening `(`
-                    p->check(TOKlparen);
-                    // Parse the assign expression
-                    arg = p->parseAssignExp();
-                    // Look for the closing `)`
-                    p->check(TOKrparen);
-                }
+                arg = p->parseAssignExp();
 
                 if (!s->args)
                 {
@@ -109,7 +86,6 @@ static int parseExtAsmOperands(Parser *p, GccAsmStatement *s)
                 break;
 
             default:
-            Ldefault:
                 p->error("expected constant string constraint for operand, not `%s`",
                         p->token.toChars());
                 goto Lerror;

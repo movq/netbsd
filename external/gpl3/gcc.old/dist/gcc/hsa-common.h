@@ -1,5 +1,5 @@
 /* HSAIL and BRIG related macros and definitions.
-   Copyright (C) 2013-2020 Free Software Foundation, Inc.
+   Copyright (C) 2013-2017 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -27,7 +27,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "vec.h"
 #include "hash-table.h"
 #include "basic-block.h"
-#include "bitmap.h"
 
 
 /* Return true if the compiler should produce HSAIL.  */
@@ -55,9 +54,8 @@ class hsa_bb;
 /* Class representing an input argument, output argument (result) or a
    variable, that will eventually end up being a symbol directive.  */
 
-class hsa_symbol
+struct hsa_symbol
 {
-public:
   /* Constructor.  */
   hsa_symbol (BrigType16_t type, BrigSegment8_t segment,
 	      BrigLinkage8_t linkage, bool global_scope_p = false,
@@ -158,9 +156,6 @@ public:
   /* Convert an operand to a destination type DTYPE and attach insns
      to HBB if needed.  */
   hsa_op_with_type *get_in_type (BrigType16_t dtype, hsa_bb *hbb);
-  /* If this operand has integer type smaller than 32 bits, extend it to 32
-     bits, adding instructions to HBB if needed.  */
-  hsa_op_with_type *extend_int_to_32bit (hsa_bb *hbb);
 
 protected:
   hsa_op_with_type (BrigKind16_t k, BrigType16_t t);
@@ -199,7 +194,7 @@ private:
   void operator delete (void *) {}
 };
 
-/* Report whether or not P is an immediate operand.  */
+/* Report whether or not P is a an immediate operand.  */
 
 template <>
 template <>
@@ -1032,6 +1027,7 @@ class hsa_bb
 public:
   hsa_bb (basic_block cfg_bb);
   hsa_bb (basic_block cfg_bb, int idx);
+  ~hsa_bb ();
 
   /* Append an instruction INSN into the basic block.  */
   void append_insn (hsa_insn_basic *insn);
@@ -1053,7 +1049,7 @@ public:
   /* Just a number to construct names from.  */
   int m_index;
 
-  auto_bitmap m_liveout, m_livein;
+  bitmap m_liveout, m_livein;
 private:
   /* Make the default constructor inaccessible.  */
   hsa_bb ();
@@ -1068,7 +1064,7 @@ private:
 static inline hsa_bb *
 hsa_bb_for_bb (basic_block bb)
 {
-  return (class hsa_bb *) bb->aux;
+  return (struct hsa_bb *) bb->aux;
 }
 
 /* Class for hashing local hsa_symbols.  */
@@ -1150,14 +1146,14 @@ public:
   hash_map <tree, hsa_symbol *> m_string_constants_map;
 
   /* Vector of pointers to spill symbols.  */
-  vec <class hsa_symbol *> m_spill_symbols;
+  vec <struct hsa_symbol *> m_spill_symbols;
 
   /* Vector of pointers to global variables and transformed string constants
      that are used by the function.  */
-  vec <class hsa_symbol *> m_global_symbols;
+  vec <struct hsa_symbol *> m_global_symbols;
 
   /* Private function artificial variables.  */
-  vec <class hsa_symbol *> m_private_variables;
+  vec <struct hsa_symbol *> m_private_variables;
 
   /* Vector of called function declarations.  */
   vec <tree> m_called_functions;
@@ -1209,14 +1205,13 @@ public:
 
 enum hsa_function_kind
 {
-  HSA_INVALID,
+  HSA_NONE,
   HSA_KERNEL,
   HSA_FUNCTION
 };
 
-class hsa_function_summary
+struct hsa_function_summary
 {
-public:
   /* Default constructor.  */
   hsa_function_summary ();
 
@@ -1236,7 +1231,7 @@ public:
 };
 
 inline
-hsa_function_summary::hsa_function_summary (): m_kind (HSA_INVALID),
+hsa_function_summary::hsa_function_summary (): m_kind (HSA_NONE),
   m_bound_function (NULL), m_gpu_implementation_p (false)
 {
 }
@@ -1246,10 +1241,7 @@ class hsa_summary_t: public function_summary <hsa_function_summary *>
 {
 public:
   hsa_summary_t (symbol_table *table):
-    function_summary<hsa_function_summary *> (table)
-  {
-    disable_insertion_hook ();
-  }
+    function_summary<hsa_function_summary *> (table) { }
 
   /* Couple GPU and HOST as gpu-specific and host-specific implementation of
      the same function.  KIND determines whether GPU is a host-invokable kernel
@@ -1318,7 +1310,7 @@ hsa_internal_fn_hasher::equal (const value_type a, const compare_type b)
 }
 
 /* in hsa-common.c */
-extern class hsa_function_representation *hsa_cfun;
+extern struct hsa_function_representation *hsa_cfun;
 extern hash_map <tree, vec <const char *> *> *hsa_decl_kernel_dependencies;
 extern hsa_summary_t *hsa_summaries;
 extern hsa_symbol *hsa_num_threads;
@@ -1413,7 +1405,8 @@ hsa_gpu_implementation_p (tree decl)
     return false;
 
   hsa_function_summary *s = hsa_summaries->get (cgraph_node::get_create (decl));
-  return s != NULL && s->m_gpu_implementation_p;
+
+  return s->m_gpu_implementation_p;
 }
 
 #endif /* HSA_H */

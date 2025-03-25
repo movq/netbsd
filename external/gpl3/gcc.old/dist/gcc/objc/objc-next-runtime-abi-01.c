@@ -1,5 +1,5 @@
 /* Next Runtime (ABI-0/1) private.
-   Copyright (C) 2011-2020 Free Software Foundation, Inc.
+   Copyright (C) 2011-2013 Free Software Foundation, Inc.
    Contributed by Iain Sandoe (split from objc-act.c)
 
 This file is part of GCC.
@@ -27,8 +27,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "tree.h"
-#include "stringpool.h"
-#include "attribs.h"
 
 #ifdef OBJCPLUS
 #include "cp/cp-tree.h"
@@ -48,13 +46,13 @@ along with GCC; see the file COPYING3.  If not see
 #include "objcp-decl.h"
 #endif  /* OBJCPLUS */
 
+#include "ggc.h"
 #include "target.h"
 #include "c-family/c-target.h"
 #include "tree-iterator.h"
 
 #include "objc-runtime-hooks.h"
 #include "objc-runtime-shared-support.h"
-#include "objc-next-metadata-tags.h"
 #include "objc-encoding.h"
 
 /* NeXT ABI 0 and 1 private definitions.  */
@@ -98,6 +96,14 @@ along with GCC; see the file COPYING3.  If not see
 #define UTAG_PROTOCOL_EXT		"_objc_protocol_extension"
 
 #define CLS_HAS_CXX_STRUCTORS		0x2000L
+
+/* rt_trees identifiers - shared between NeXT implementations.  These
+   allow the FE to tag meta-data in a manner that survives LTO and can
+   be used when the runtime requires that certain meta-data items
+   appear in particular named sections.  */
+
+#include "objc-next-metadata-tags.h"
+extern GTY(()) tree objc_rt_trees[OCTI_RT_META_MAX];
 
 static void next_runtime_01_initialize (void);
 
@@ -143,8 +149,7 @@ objc_next_runtime_abi_01_init (objc_runtime_hooks *rthooks)
     {
       warning_at (UNKNOWN_LOCATION, OPT_Wall,
 		"%<-fobjc-sjlj-exceptions%> is the only supported exceptions "
-		"system for %<-fnext-runtime%> with %<-fobjc-abi-version%> "
-		"argument less than 2");
+		"system for %<-fnext-runtime%> with %<-fobjc-abi-version%> < 2");
     }
 
   rthooks->initialize = next_runtime_01_initialize;
@@ -269,13 +274,6 @@ static void next_runtime_01_initialize (void)
   /* `struct objc_selector *' */
   objc_selector_type = build_pointer_type (xref_tag (RECORD_TYPE,
 					   get_identifier (TAG_SELECTOR)));
-
-  /* SEL typedef.  */
-  type = lang_hooks.decls.pushdecl (build_decl (input_location,
-						TYPE_DECL,
-						objc_selector_name,
-						objc_selector_type));
-  TREE_NO_WARNING (type) = 1;
 
   build_v1_class_template ();
   build_super_template ();
@@ -585,7 +583,7 @@ build_v1_protocol_template (void)
   objc_finish_struct (objc_protocol_template, decls);
 }
 
-/* --- names, decls identifiers --- */
+/* --- names, decls identifers --- */
 
 static tree
 next_runtime_abi_01_super_superclassfield_id (void)
@@ -883,7 +881,7 @@ build_objc_method_call (location_t loc, int super_flag, tree method_prototype,
   /* Build an obj_type_ref, with the correct cast for the method call.  */
   t = build3 (OBJ_TYPE_REF, sender_cast, method,
 			    lookup_object, size_zero_node);
-  t = build_function_call_vec (loc, vNULL, t, parms, NULL);
+  t = build_function_call_vec (loc, t, parms, NULL);
   vec_free (parms);
   return t;
 }
@@ -1663,7 +1661,7 @@ generate_dispatch_table (tree chain, const char *name, tree attr)
 {
   tree decl, method_list_template, initlist;
   vec<constructor_elt, va_gc> *v = NULL;
-  int size;
+  int size;;
 
   if (!chain || !name || !(size = list_length (chain)))
     return NULL_TREE;
@@ -2815,7 +2813,7 @@ objc_eh_runtime_type (tree type)
 	 we use c++'s typeinfo decl. */
       return build_eh_type_type (type);
 #else
-      error ("non-objective-c type %qT cannot be caught", type);
+      error ("non-objective-c type '%T' cannot be caught", type);
       ident = get_identifier ("ErrorMarkNode");
       goto make_err_class;
 #endif
@@ -2867,8 +2865,7 @@ build_throw_stmt (location_t loc, tree throw_expr, bool rethrown ATTRIBUTE_UNUSE
   /* A throw is just a call to the runtime throw function with the
      object as a parameter.  */
   parms->quick_push (throw_expr);
-  t = build_function_call_vec (loc, vNULL, objc_exception_throw_decl, parms,
-			       NULL);
+  t = build_function_call_vec (loc, objc_exception_throw_decl, parms, NULL);
   vec_free (parms);
   return add_stmt (t);
 }

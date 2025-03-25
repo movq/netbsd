@@ -1,5 +1,5 @@
 /* Machine description for AArch64 architecture.
-   Copyright (C) 2012-2020 Free Software Foundation, Inc.
+   Copyright (C) 2012-2013 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
 This file is part of GCC.
@@ -23,9 +23,6 @@ a copy of the GCC Runtime Library Exception along with this program;
 see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 <http://www.gnu.org/licenses/>.  */
 
-#define CTR_IDC_SHIFT           28
-#define CTR_DIC_SHIFT           29
-
 void __aarch64_sync_cache_range (const void *, const void *);
 
 void
@@ -44,44 +41,32 @@ __aarch64_sync_cache_range (const void *base, const void *end)
   icache_lsize = 4 << (cache_info & 0xF);
   dcache_lsize = 4 << ((cache_info >> 16) & 0xF);
 
-  /* If CTR_EL0.IDC is enabled, Data cache clean to the Point of Unification is
-     not required for instruction to data coherence.  */
+  /* Loop over the address range, clearing one cache line at once.
+     Data cache must be flushed to unification first to make sure the
+     instruction cache fetches the updated data.  'end' is exclusive,
+     as per the GNU definition of __clear_cache.  */
 
-  if (((cache_info >> CTR_IDC_SHIFT) & 0x1) == 0x0) {
-    /* Loop over the address range, clearing one cache line at once.
-       Data cache must be flushed to unification first to make sure the
-       instruction cache fetches the updated data.  'end' is exclusive,
-       as per the GNU definition of __clear_cache.  */
+  /* Make the start address of the loop cache aligned.  */
+  address = (const char*) ((__UINTPTR_TYPE__) base
+			   & ~ (__UINTPTR_TYPE__) (dcache_lsize - 1));
 
-    /* Make the start address of the loop cache aligned.  */
-    address = (const char*) ((__UINTPTR_TYPE__) base
-			     & ~ (__UINTPTR_TYPE__) (dcache_lsize - 1));
-
-    for (; address < (const char *) end; address += dcache_lsize)
-      asm volatile ("dc\tcvau, %0"
-		    :
-		    : "r" (address)
-		    : "memory");
-  }
+  for (; address < (const char *) end; address += dcache_lsize)
+    asm volatile ("dc\tcvau, %0"
+		  :
+		  : "r" (address)
+		  : "memory");
 
   asm volatile ("dsb\tish" : : : "memory");
 
-  /* If CTR_EL0.DIC is enabled, Instruction cache cleaning to the Point of
-     Unification is not required for instruction to data coherence.  */
+  /* Make the start address of the loop cache aligned.  */
+  address = (const char*) ((__UINTPTR_TYPE__) base
+			   & ~ (__UINTPTR_TYPE__) (icache_lsize - 1));
 
-  if (((cache_info >> CTR_DIC_SHIFT) & 0x1) == 0x0) {
-    /* Make the start address of the loop cache aligned.  */
-    address = (const char*) ((__UINTPTR_TYPE__) base
-			     & ~ (__UINTPTR_TYPE__) (icache_lsize - 1));
+  for (; address < (const char *) end; address += icache_lsize)
+    asm volatile ("ic\tivau, %0"
+		  :
+		  : "r" (address)
+		  : "memory");
 
-    for (; address < (const char *) end; address += icache_lsize)
-      asm volatile ("ic\tivau, %0"
-		    :
-		    : "r" (address)
-		    : "memory");
-
-    asm volatile ("dsb\tish" : : : "memory");
-  }
-
-  asm volatile("isb" : : : "memory");
+  asm volatile ("dsb\tish; isb" : : : "memory");
 }

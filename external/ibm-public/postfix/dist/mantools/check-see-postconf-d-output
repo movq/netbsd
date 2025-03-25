@@ -1,6 +1,0 @@
-#!/bin/sh
-
-# check-see-postconf-d-output - find missing is misplaced quotes
-
-grep -r "see *'*postconf -d'* *output'*" proto html man |
-    grep -v "see 'postconf -d' output"

@@ -1,4 +1,4 @@
-/* Copyright (C) 2014-2020 Free Software Foundation, Inc.
+/* Copyright (C) 2014-2015 Free Software Foundation, Inc.
 
    Contributed by Mentor Embedded.
 
@@ -29,22 +29,13 @@
 #include "libgomp.h"
 #include "oacc-plugin.h"
 #include "oacc-int.h"
-#include "acc_prof.h"
 
-/* This plugin function is now obsolete.  */
 void
-GOMP_PLUGIN_async_unmap_vars (void *ptr __attribute__((unused)),
-			      int async __attribute__((unused)))
+GOMP_PLUGIN_async_unmap_vars (void *ptr)
 {
-  gomp_fatal ("invalid plugin function");
-}
+  struct target_mem_desc *tgt = ptr;
 
-/* Return the TLS data for the current thread.  */
-
-struct goacc_thread *
-GOMP_PLUGIN_goacc_thread (void)
-{
-  return goacc_thread ();
+  gomp_unmap_vars (tgt, false);
 }
 
 /* Return the target-specific part of the TLS data for the current thread.  */
@@ -54,23 +45,4 @@ GOMP_PLUGIN_acc_thread (void)
 {
   struct goacc_thread *thr = goacc_thread ();
   return thr ? thr->target_tls : NULL;
-}
-
-int
-GOMP_PLUGIN_acc_default_dim (unsigned int i)
-{
-  if (i >= GOMP_DIM_MAX)
-    {
-      gomp_fatal ("invalid dimension argument: %d", i);
-      return -1;
-    }
-  return goacc_default_dims[i];
-}
-
-void
-GOMP_PLUGIN_goacc_profiling_dispatch (acc_prof_info *prof_info,
-				      acc_event_info *event_info,
-				      acc_api_info *api_info)
-{
-  goacc_profiling_dispatch (prof_info, event_info, api_info);
 }

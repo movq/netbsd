@@ -81,7 +81,6 @@ class TypeClass;
 class TypeTuple;
 class TypeSlice;
 class TypeNull;
-class TypeTraits;
 
 class Dsymbol;
 
@@ -108,7 +107,6 @@ class StaticIfDeclaration;
 class CompileDeclaration;
 class StaticForeachDeclaration;
 class UserAttributeDeclaration;
-class ForwardingAttribDeclaration;
 
 class ScopeDsymbol;
 class TemplateDeclaration;
@@ -375,7 +373,6 @@ public:
     virtual void visit(TypeTuple *t) { visit((Type *)t); }
     virtual void visit(TypeSlice *t) { visit((TypeNext *)t); }
     virtual void visit(TypeNull *t) { visit((Type *)t); }
-    virtual void visit(TypeTraits *t) { visit((Type *)t); }
 
     virtual void visit(Dsymbol *) { assert(0); }
 
@@ -402,7 +399,6 @@ public:
     virtual void visit(StaticForeachDeclaration *s) { visit((AttribDeclaration *)s); }
     virtual void visit(CompileDeclaration *s) { visit((AttribDeclaration *)s); }
     virtual void visit(UserAttributeDeclaration *s) { visit((AttribDeclaration *)s); }
-    virtual void visit(ForwardingAttribDeclaration *s) { visit((AttribDeclaration *)s); }
 
     virtual void visit(ScopeDsymbol *s) { visit((Dsymbol *)s); }
     virtual void visit(TemplateDeclaration *s) { visit((ScopeDsymbol *)s); }

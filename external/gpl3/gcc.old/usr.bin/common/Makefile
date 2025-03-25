@@ -1,6 +1,5 @@
-#	$NetBSD: Makefile,v 1.12 2023/07/14 19:46:41 mrg Exp $
+#	$NetBSD: Makefile,v 1.1 2015/09/23 03:03:40 mrg Exp $
 
-HOSTPROG_CXX=	1
 LIBISPRIVATE=	yes
 
 # For ../Makefile.inc and bsd.own.mk
@@ -8,8 +7,7 @@ LIBISPRIVATE=	yes
 
 LIB=		common
 
-.include "${.CURDIR}/defs.mk"
-SRCS=	${G_OBJS-libcommon:S/memory-block.o/memory-block.cc/:S/diagnostic-format-json.o/diagnostic-format-json.cc/:S/sort.o/sort.cc/:S/json.o/json.cc/:.o=.c}
+SRCS=		diagnostic.c pretty-print.c intl.c input.c version.c
 
 # XXX make sure this doesn't have more than it needs
 CPPFLAGS+=	-I${GCCARCH} -I${BACKENDOBJ} -I. \
@@ -22,10 +20,10 @@ CPPFLAGS+=	-I${GCCARCH} -I${BACKENDOBJ} -I. \
 MKPIC:=		no
 MKPICLIB:=	no
 
+HOSTPROG_CXX=	1
+
 COPTS.diagnostic.c=	-Wno-stack-protector
 COPTS.intl.c=		-Wno-stack-protector
-
-version.c: ${GCCARCH}/defs.mk ${TOP}/tools/gcc/gcc-version.mk
 
 ${SRCS}: ${GCCARCH}/defs.mk
 
@@ -33,7 +31,6 @@ ${SRCS}: ${GCCARCH}/defs.mk
 
 # Force using C++ for this
 HOST_CC:=	${HOST_CXX}
-HOST_CFLAGS:=	${HOST_CXXFLAGS}
 CC:=		${CXX}
 CFLAGS:=	${CXXFLAGS}
 

@@ -1,6 +1,6 @@
 // Mathematical Special Functions for -*- C++ -*-
 
-// Copyright (C) 2006-2020 Free Software Foundation, Inc.
+// Copyright (C) 2006-2016 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -38,7 +38,7 @@
 
 #define __cpp_lib_math_special_functions 201603L
 
-#if __cplusplus <= 201403L && __STDCPP_WANT_MATH_SPEC_FUNCS__ == 0
+#if __STDCPP_WANT_MATH_SPEC_FUNCS__ == 0
 # error include <cmath> and define __STDCPP_WANT_MATH_SPEC_FUNCS__
 #endif
 
@@ -66,13 +66,15 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    * @defgroup mathsf Mathematical Special Functions
    * @ingroup numerics
    *
-   * @section mathsf_desc Mathematical Special Functions
-   *
    * A collection of advanced mathematical special functions,
-   * defined by ISO/IEC IS 29124 and then added to ISO C++ 2017.
+   * defined by ISO/IEC IS 29124.
+   * @{
+   */
+
+  /**
+   * @mainpage Mathematical Special Functions
    *
-   *
-   * @subsection mathsf_intro Introduction and History
+   * @section intro Introduction and History
    * The first significant library upgrade on the road to C++2011,
    * <a href="http://www.open-std.org/JTC1/SC22/WG21/docs/papers/2005/n1836.pdf">
    * TR1</a>, included a set of 23 mathematical functions that significantly
@@ -88,7 +90,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    *
    * For C++17 these functions were incorporated into the main standard.
    *
-   * @subsection mathsf_contents Contents
+   * @section contents Contents
    * The following functions are implemented in namespace @c std:
    * - @ref assoc_laguerre "assoc_laguerre - Associated Laguerre functions"
    * - @ref assoc_legendre "assoc_legendre - Associated Legendre functions"
@@ -116,25 +118,25 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    * versions of this math library because of implementation concerns.
    * However, since they were in the TR1 version and since they are popular
    * we kept them as an extension in namespace @c __gnu_cxx:
-   * - @ref __gnu_cxx::conf_hyperg "conf_hyperg - Confluent hypergeometric functions"
-   * - @ref __gnu_cxx::hyperg "hyperg - Hypergeometric functions"
+   * - @ref conf_hyperg "conf_hyperg - Confluent hypergeometric functions"
+   * - @ref hyperg "hyperg - Hypergeometric functions"
    *
-   * <!-- @subsection mathsf_general General Features -->
+   * @section general General Features
    *
-   * @subsection mathsf_promotion Argument Promotion
+   * @subsection promotion Argument Promotion
    * The arguments suppled to the non-suffixed functions will be promoted
    * according to the following rules:
-   * 1. If any argument intended to be floating point is given an integral value
+   * 1. If any argument intended to be floating opint is given an integral value
    * That integral value is promoted to double.
    * 2. All floating point arguments are promoted up to the largest floating
    *    point precision among them.
    *
-   * @subsection mathsf_NaN NaN Arguments
+   * @subsection NaN NaN Arguments
    * If any of the floating point arguments supplied to these functions is
    * invalid or NaN (std::numeric_limits<Tp>::quiet_NaN),
    * the value NaN is returned.
    *
-   * @subsection mathsf_impl Implementation
+   * @section impl Implementation
    *
    * We strive to implement the underlying math with type generic algorithms
    * to the greatest extent possible.  In practice, the functions are thin
@@ -147,23 +149,23 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    * Similaryly, <tt>long double</tt> should give you more dynamic range
    * and slightly more pecision than @c double on many systems.
    *
-   * @subsection mathsf_testing Testing
+   * @section testing Testing
    *
    * These functions have been tested against equivalent implementations
    * from the <a href="http://www.gnu.org/software/gsl">
    * Gnu Scientific Library, GSL</a> and
-   * <a href="http://www.boost.org/doc/libs/1_60_0/libs/math/doc/html/index.html">Boost</a>
+   * <a href="http://www.boost.org/doc/libs/1_60_0/libs/math/doc/html/index.html>Boost</a>
    * and the ratio
    * @f[
    *   \frac{|f - f_{test}|}{|f_{test}|}
    * @f]
-   * is generally found to be within 10<sup>-15</sup> for 64-bit double on
-   * linux-x86_64 systems over most of the ranges of validity.
+   * is generally found to be within 10^-15 for 64-bit double on linux-x86_64 systems
+   * over most of the ranges of validity.
    * 
    * @todo Provide accuracy comparisons on a per-function basis for a small
    *       number of targets.
    *
-   * @subsection mathsf_bibliography General Bibliography
+   * @section bibliography General Bibliography
    *
    * @see Abramowitz and Stegun: Handbook of Mathematical Functions,
    * with Formulas, Graphs, and Mathematical Tables
@@ -190,8 +192,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    *
    * @see The Special Functions and Their Approximations: Volumes 1 and 2,
    * by Yudell L. Luke, Academic Press, 1969
-   *
-   * @{
    */
 
   // Associated Laguerre polynomials
@@ -1196,91 +1196,13 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return __detail::__sph_neumann<__type>(__n, __x);
     }
 
-  /// @} group mathsf
+  // @} group mathsf
 
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace std
 
-#ifndef __STRICT_ANSI__
 namespace __gnu_cxx _GLIBCXX_VISIBILITY(default)
 {
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
-
-  /** @addtogroup mathsf
-   *  @{
-   */
-
-  // Airy functions
-
-  /**
-   * Return the Airy function @f$ Ai(x) @f$ of @c float argument x.
-   */
-  inline float
-  airy_aif(float __x)
-  {
-    float __Ai, __Bi, __Aip, __Bip;
-    std::__detail::__airy<float>(__x, __Ai, __Bi, __Aip, __Bip);
-    return __Ai;
-  }
-
-  /**
-   * Return the Airy function @f$ Ai(x) @f$ of <tt>long double</tt> argument x.
-   */
-  inline long double
-  airy_ail(long double __x)
-  {
-    long double __Ai, __Bi, __Aip, __Bip;
-    std::__detail::__airy<long double>(__x, __Ai, __Bi, __Aip, __Bip);
-    return __Ai;
-  }
-
-  /**
-   * Return the Airy function @f$ Ai(x) @f$ of real argument x.
-   */
-  template<typename _Tp>
-    inline typename __gnu_cxx::__promote<_Tp>::__type
-    airy_ai(_Tp __x)
-    {
-      typedef typename __gnu_cxx::__promote<_Tp>::__type __type;
-      __type __Ai, __Bi, __Aip, __Bip;
-      std::__detail::__airy<__type>(__x, __Ai, __Bi, __Aip, __Bip);
-      return __Ai;
-    }
-
-  /**
-   * Return the Airy function @f$ Bi(x) @f$ of @c float argument x.
-   */
-  inline float
-  airy_bif(float __x)
-  {
-    float __Ai, __Bi, __Aip, __Bip;
-    std::__detail::__airy<float>(__x, __Ai, __Bi, __Aip, __Bip);
-    return __Bi;
-  }
-
-  /**
-   * Return the Airy function @f$ Bi(x) @f$ of <tt>long double</tt> argument x.
-   */
-  inline long double
-  airy_bil(long double __x)
-  {
-    long double __Ai, __Bi, __Aip, __Bip;
-    std::__detail::__airy<long double>(__x, __Ai, __Bi, __Aip, __Bip);
-    return __Bi;
-  }
-
-  /**
-   * Return the Airy function @f$ Bi(x) @f$ of real argument x.
-   */
-  template<typename _Tp>
-    inline typename __gnu_cxx::__promote<_Tp>::__type
-    airy_bi(_Tp __x)
-    {
-      typedef typename __gnu_cxx::__promote<_Tp>::__type __type;
-      __type __Ai, __Bi, __Aip, __Bip;
-      std::__detail::__airy<__type>(__x, __Ai, __Bi, __Aip, __Bip);
-      return __Bi;
-    }
 
   // Confluent hypergeometric functions
 
@@ -1380,10 +1302,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return std::__detail::__hyperg<__type>(__a, __b, __c, __x);
     }
 
-  /// @}
-_GLIBCXX_END_NAMESPACE_VERSION
 } // namespace __gnu_cxx
-#endif // __STRICT_ANSI__
 
 #pragma GCC visibility pop
 

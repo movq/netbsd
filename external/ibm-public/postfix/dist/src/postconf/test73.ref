@@ -1,3 +1,0 @@
-smtp       unix  -       n       n       -       0       otherx
-smtp       fifo  -       n       n       -       0       other
-smtp       inet  -       n       n       -       0       other

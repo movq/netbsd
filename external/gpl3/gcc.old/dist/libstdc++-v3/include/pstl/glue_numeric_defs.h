@@ -7,8 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef _PSTL_GLUE_NUMERIC_DEFS_H
-#define _PSTL_GLUE_NUMERIC_DEFS_H
+#ifndef __PSTL_glue_numeric_defs_H
+#define __PSTL_glue_numeric_defs_H
 
 #include "execution_defs.h"
 
@@ -113,4 +113,4 @@ adjacent_difference(_ExecutionPolicy&& __exec, _ForwardIterator1 __first, _Forwa
                     _ForwardIterator2 __d_first);
 
 } // namespace std
-#endif /* _PSTL_GLUE_NUMERIC_DEFS_H */
+#endif /* __PSTL_glue_numeric_defs_H */

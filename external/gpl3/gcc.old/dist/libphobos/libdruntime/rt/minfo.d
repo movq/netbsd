@@ -125,7 +125,7 @@ struct ModuleGroup
                     break;
             distloop:
                 // search for next (previous) module in cycle.
-                foreach (m, d; distance)
+                foreach (int m, d; distance)
                 {
                     if (d == curdist)
                     {
@@ -470,7 +470,7 @@ struct ModuleGroup
             // pre-allocate enough space to hold all modules.
             ctors = (cast(immutable(ModuleInfo)**).malloc(len * (void*).sizeof));
             ctoridx = 0;
-            foreach (idx, m; _modules)
+            foreach (int idx, m; _modules)
             {
                 if (m.flags & relevantFlags)
                 {
@@ -582,8 +582,8 @@ struct ModuleGroup
         }
 
         // initialize the initial edges
-        foreach (i, ref v; initialEdges)
-            v = cast(int)i;
+        foreach (int i, ref v; initialEdges)
+            v = i;
 
         bool sort(ref immutable(ModuleInfo)*[] ctors, uint mask)
         {

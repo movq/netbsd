@@ -110,8 +110,7 @@ Strings *FileName::splitPath(const char *path)
                     case '~':
                     {
                         char *home = getenv("HOME");
-                        // Expand ~ only if it is prefixing the rest of the path.
-                        if (!buf.offset && p[1] == '/' && home)
+                        if (home)
                             buf.writestring(home);
                         else
                             buf.writestring("~");

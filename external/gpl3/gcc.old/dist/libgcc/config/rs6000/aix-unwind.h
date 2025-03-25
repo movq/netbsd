@@ -1,5 +1,5 @@
 /* DWARF2 EH unwinding support for AIX.
-   Copyright (C) 2011-2020 Free Software Foundation, Inc.
+   Copyright (C) 2011-2013 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -24,12 +24,12 @@
 
 /* Useful register numbers.  */
 
-#define R_LR             65
-#define R_CR2            70
-#define R_XER            76
-#define R_FIRST_ALTIVEC  77
-#define R_VRSAVE        109
-#define R_VSCR          110
+#define LR_REGNO             65
+#define CR2_REGNO            70
+#define XER_REGNO            76
+#define FIRST_ALTIVEC_REGNO  77
+#define VRSAVE_REGNO        109
+#define VSCR_REGNO          110
 
 /* If the current unwind info (FS) does not contain explicit info
    saving R2, then we have to do a minor amount of code reading to
@@ -44,7 +44,7 @@
       {									\
 	unsigned int *insn						\
 	  = (unsigned int *)						\
-	    _Unwind_GetGR ((CTX), R_LR);				\
+	    _Unwind_GetGR ((CTX), LR_REGNO);				\
 	if (*insn == 0xE8410028)					\
 	  _Unwind_SetGRPtr ((CTX), 2, (CTX)->cfa + 40);			\
       }									\
@@ -56,7 +56,7 @@
       {									\
 	unsigned int *insn						\
 	  = (unsigned int *)						\
-	    _Unwind_GetGR ((CTX), R_LR);				\
+	    _Unwind_GetGR ((CTX), LR_REGNO);				\
 	if (*insn == 0x80410014)					\
 	  _Unwind_SetGRPtr ((CTX), 2, (CTX)->cfa + 20);			\
       }									\
@@ -64,8 +64,7 @@
 #endif
 
 /* Now on to MD_FALLBACK_FRAME_STATE_FOR.
-   32bit AIX 5.2, 5.3, 6.1, 7.X and
-   64bit AIX 6.1, 7.X only at this stage.  */
+   32bit AIX 5.2 and 5.3 only at this stage.  */
 
 #include <stdlib.h>
 #include <stddef.h>
@@ -74,15 +73,17 @@
 
 #ifdef __64BIT__
 
+/* 64bit fallback not implemented yet, so MD_FALLBACK_FRAME_STATE_FOR not
+   defined.  Arrange just for the code below to compile.  */
 typedef struct __context64 mstate_t;
 
 #else
 
 typedef struct mstsave mstate_t;
 
-#endif
-
 #define MD_FALLBACK_FRAME_STATE_FOR ppc_aix_fallback_frame_state
+
+#endif
 
 /* If we are compiling on AIX < 5.3, the VMX related datastructs are not
    defined and we take measures to obtain proper runtime behavior if the
@@ -127,26 +128,9 @@ ucontext_for (struct _Unwind_Context *context)
 {
   const unsigned int * ra = context->ra;
 
-  /* AIX 5.2, 5.3, 6.1 and 7.X, threaded or not, share common patterns
-     and feature variants depending on the configured kernel (unix_mp
-     or unix_64).  */
+  /* AIX 5.2 and 5.3, threaded or not, share common patterns and feature
+     variants depending on the configured kernel (unix_mp or unix_64).  */
 
-#ifdef __64BIT__
-  if (*(ra - 5) == 0x4c00012c     /* isync             */
-      && *(ra - 4) == 0xe8ec0000  /* ld      r7,0(r12) */
-      && *(ra - 3) == 0xe84c0008  /* ld      r2,8(r12) */
-      && *(ra - 2) == 0x7ce903a6  /* mtctr   r7        */
-      && *(ra - 1) == 0x4e800421  /* bctrl             */
-      && *(ra - 0) == 0x7de27b78) /* mr      r2,r15   <-- context->ra */
-    {
-      /* unix_64 */
-      if (*(ra - 6) == 0x7d000164)  /* mtmsrd  r8 */
-	{
-	  /* AIX 6.1, 7.1 and 7.2 */
-	  return (ucontext_t *)(context->cfa + 0x70);
-	}
-    }
-#else
   if (*(ra - 5) == 0x4c00012c     /* isync             */
       && *(ra - 4) == 0x80ec0000  /* lwz     r7,0(r12) */
       && *(ra - 3) == 0x804c0004  /* lwz     r2,4(r12) */
@@ -166,15 +150,7 @@ ucontext_for (struct _Unwind_Context *context)
 	      /* AIX 5.3 */
 	    case 0x835a0570:  /* lwz r26,1392(r26) */
 	      return (ucontext_t *)(context->cfa + 0x40);
-
-	      /* AIX 6.1 and 7.1 */
-	    case 0x2c1a0000:  /* cmpwi   r26,0 */
-	      return (ucontext_t *)(context->cfa + 0x40);
-
-	      /* AIX 7.2 */
-	    case 0x3800000a:  /* li   r0,A */
-	      return (ucontext_t *)(context->cfa + 0x40);
-
+		
 	    default:
 	      return 0;
 	    }
@@ -193,14 +169,14 @@ ucontext_for (struct _Unwind_Context *context)
 	  return &frame->ucontext;
 	}
     }
-#endif
+
   return 0;
 }
 
 /* The fallback proper.  */
 
-#ifdef __LIBGCC_DWARF_ALT_FRAME_RETURN_COLUMN__
-#define RETURN_COLUMN __LIBGCC_DWARF_ALT_FRAME_RETURN_COLUMN__
+#ifdef DWARF_ALT_FRAME_RETURN_COLUMN
+#define RETURN_COLUMN DWARF_ALT_FRAME_RETURN_COLUMN
 #else
 #define RETURN_COLUMN ARG_POINTER_REGNUM
 #endif
@@ -209,7 +185,7 @@ ucontext_for (struct _Unwind_Context *context)
 do { \
 (FS)->regs.reg[REGNO].how = REG_SAVED_OFFSET; \
 (FS)->regs.reg[REGNO].loc.offset = (long) (ADDR) - (CFA); \
-} while (0)
+} while (0);
 
 static _Unwind_Reason_Code
 ppc_aix_fallback_frame_state (struct _Unwind_Context *context,
@@ -228,22 +204,22 @@ ppc_aix_fallback_frame_state (struct _Unwind_Context *context,
 
   /* The "kernel" frame cfa is the stack pointer at the signal occurrence
      point.  */
-  new_cfa = mctx->gpr[__LIBGCC_STACK_POINTER_REGNUM__];
+  new_cfa = mctx->gpr[STACK_POINTER_REGNUM];
 
   fs->regs.cfa_how = CFA_REG_OFFSET;
-  fs->regs.cfa_reg = __LIBGCC_STACK_POINTER_REGNUM__;
+  fs->regs.cfa_reg = STACK_POINTER_REGNUM;
   fs->regs.cfa_offset = new_cfa - (long) context->cfa;
 
   /* And we state how to find the various registers it has saved with
      relative offset rules from there.  */
 
   for (i = 0; i < 32; i++)
-    if (i != __LIBGCC_STACK_POINTER_REGNUM__)
+    if (i != STACK_POINTER_REGNUM)
       REGISTER_CFA_OFFSET_FOR (fs, i, &mctx->gpr[i], new_cfa);
 
-  REGISTER_CFA_OFFSET_FOR (fs, R_CR2, &mctx->cr, new_cfa);
-  REGISTER_CFA_OFFSET_FOR (fs, R_XER, &mctx->xer, new_cfa);
-  REGISTER_CFA_OFFSET_FOR (fs, R_LR, &mctx->lr, new_cfa);
+  REGISTER_CFA_OFFSET_FOR (fs, CR2_REGNO, &mctx->cr, new_cfa);
+  REGISTER_CFA_OFFSET_FOR (fs, XER_REGNO, &mctx->xer, new_cfa);
+  REGISTER_CFA_OFFSET_FOR (fs, LR_REGNO, &mctx->lr, new_cfa);
 
   fs->retaddr_column = RETURN_COLUMN;
   REGISTER_CFA_OFFSET_FOR (fs, RETURN_COLUMN, &mctx->iar, new_cfa);
@@ -268,10 +244,10 @@ ppc_aix_fallback_frame_state (struct _Unwind_Context *context,
 
 	  for (i = 0; i < 32; i++)
 	    REGISTER_CFA_OFFSET_FOR
-	    (fs, i+R_FIRST_ALTIVEC, &vstate->regs[i], new_cfa);
+	    (fs, i+FIRST_ALTIVEC_REGNO, &vstate->regs[i], new_cfa);
 
-	  REGISTER_CFA_OFFSET_FOR (fs, R_VSCR, &vstate->vscr, new_cfa);
-	  REGISTER_CFA_OFFSET_FOR (fs, R_VRSAVE, &vstate->vrsave, new_cfa);
+	  REGISTER_CFA_OFFSET_FOR (fs, VSCR_REGNO, &vstate->vscr, new_cfa);
+	  REGISTER_CFA_OFFSET_FOR (fs, VRSAVE_REGNO, &vstate->vrsave, new_cfa);
 	}
     }
 

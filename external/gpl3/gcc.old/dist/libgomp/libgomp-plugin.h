@@ -1,6 +1,4 @@
-/* The libgomp plugin API.
-
-   Copyright (C) 2014-2020 Free Software Foundation, Inc.
+/* Copyright (C) 2014-2015 Free Software Foundation, Inc.
 
    Contributed by Mentor Embedded.
 
@@ -26,10 +24,11 @@
    see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
    <http://www.gnu.org/licenses/>.  */
 
+/* An interface to various libgomp-internal functions for use by plugins.  */
+
 #ifndef LIBGOMP_PLUGIN_H
 #define LIBGOMP_PLUGIN_H 1
 
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -47,52 +46,10 @@ extern "C" {
 enum offload_target_type
 {
   OFFLOAD_TARGET_TYPE_HOST = 2,
-  /* OFFLOAD_TARGET_TYPE_HOST_NONSHM = 3 removed.  */
+  OFFLOAD_TARGET_TYPE_HOST_NONSHM = 3,
   OFFLOAD_TARGET_TYPE_NVIDIA_PTX = 5,
-  OFFLOAD_TARGET_TYPE_INTEL_MIC = 6,
-  OFFLOAD_TARGET_TYPE_HSA = 7,
-  OFFLOAD_TARGET_TYPE_GCN = 8
+  OFFLOAD_TARGET_TYPE_INTEL_MIC = 6
 };
-
-/* Opaque type to represent plugin-dependent implementation of an
-   OpenACC asynchronous queue.  */
-struct goacc_asyncqueue;
-
-/* Used to keep a list of active asynchronous queues.  */
-struct goacc_asyncqueue_list
-{
-  struct goacc_asyncqueue *aq;
-  struct goacc_asyncqueue_list *next;
-};
-
-typedef struct goacc_asyncqueue *goacc_aq;
-typedef struct goacc_asyncqueue_list *goacc_aq_list;
-
-
-/* OpenACC 'acc_get_property' support.  */
-
-/* Device property values.  Keep in sync with
-   'libgomp/{openacc.h,openacc.f90}:acc_device_property_t'.  */
-enum goacc_property
-  {
-   /* Mask to tell numeric and string values apart.  */
-#define GOACC_PROPERTY_STRING_MASK 0x10000
-
-   /* Start from 1 to catch uninitialized use.  */
-   GOACC_PROPERTY_MEMORY =		1,
-   GOACC_PROPERTY_FREE_MEMORY =		2,
-   GOACC_PROPERTY_NAME =		GOACC_PROPERTY_STRING_MASK | 1,
-   GOACC_PROPERTY_VENDOR =		GOACC_PROPERTY_STRING_MASK | 2,
-   GOACC_PROPERTY_DRIVER =		GOACC_PROPERTY_STRING_MASK | 3
-  };
-
-/* Container type for passing device properties.  */
-union goacc_property_value
-{
-  const char *ptr;
-  size_t val;
-};
-
 
 /* Auxiliary struct, used for transferring pairs of addresses from plugin
    to libgomp.  */
@@ -106,7 +63,6 @@ struct addr_pair
 extern void *GOMP_PLUGIN_malloc (size_t) __attribute__ ((malloc));
 extern void *GOMP_PLUGIN_malloc_cleared (size_t) __attribute__ ((malloc));
 extern void *GOMP_PLUGIN_realloc (void *, size_t);
-void GOMP_PLUGIN_target_task_completion (void *);
 
 extern void GOMP_PLUGIN_debug (int, const char *, ...)
 	__attribute__ ((format (printf, 2, 3)));
@@ -114,53 +70,6 @@ extern void GOMP_PLUGIN_error (const char *, ...)
 	__attribute__ ((format (printf, 1, 2)));
 extern void GOMP_PLUGIN_fatal (const char *, ...)
 	__attribute__ ((noreturn, format (printf, 1, 2)));
-
-/* Prototypes for functions implemented by libgomp plugins.  */
-extern const char *GOMP_OFFLOAD_get_name (void);
-extern unsigned int GOMP_OFFLOAD_get_caps (void);
-extern int GOMP_OFFLOAD_get_type (void);
-extern int GOMP_OFFLOAD_get_num_devices (void);
-extern bool GOMP_OFFLOAD_init_device (int);
-extern bool GOMP_OFFLOAD_fini_device (int);
-extern unsigned GOMP_OFFLOAD_version (void);
-extern int GOMP_OFFLOAD_load_image (int, unsigned, const void *,
-				    struct addr_pair **);
-extern bool GOMP_OFFLOAD_unload_image (int, unsigned, const void *);
-extern void *GOMP_OFFLOAD_alloc (int, size_t);
-extern bool GOMP_OFFLOAD_free (int, void *);
-extern bool GOMP_OFFLOAD_dev2host (int, void *, const void *, size_t);
-extern bool GOMP_OFFLOAD_host2dev (int, void *, const void *, size_t);
-extern bool GOMP_OFFLOAD_dev2dev (int, void *, const void *, size_t);
-extern bool GOMP_OFFLOAD_can_run (void *);
-extern void GOMP_OFFLOAD_run (int, void *, void *, void **);
-extern void GOMP_OFFLOAD_async_run (int, void *, void *, void **, void *);
-
-extern void GOMP_OFFLOAD_openacc_exec (void (*) (void *), size_t, void **,
-				       void **, unsigned *, void *);
-extern void *GOMP_OFFLOAD_openacc_create_thread_data (int);
-extern void GOMP_OFFLOAD_openacc_destroy_thread_data (void *);
-extern struct goacc_asyncqueue *GOMP_OFFLOAD_openacc_async_construct (int);
-extern bool GOMP_OFFLOAD_openacc_async_destruct (struct goacc_asyncqueue *);
-extern int GOMP_OFFLOAD_openacc_async_test (struct goacc_asyncqueue *);
-extern bool GOMP_OFFLOAD_openacc_async_synchronize (struct goacc_asyncqueue *);
-extern bool GOMP_OFFLOAD_openacc_async_serialize (struct goacc_asyncqueue *,
-						  struct goacc_asyncqueue *);
-extern void GOMP_OFFLOAD_openacc_async_queue_callback (struct goacc_asyncqueue *,
-						       void (*)(void *), void *);
-extern void GOMP_OFFLOAD_openacc_async_exec (void (*) (void *), size_t, void **,
-					     void **, unsigned *, void *,
-					     struct goacc_asyncqueue *);
-extern bool GOMP_OFFLOAD_openacc_async_dev2host (int, void *, const void *, size_t,
-						 struct goacc_asyncqueue *);
-extern bool GOMP_OFFLOAD_openacc_async_host2dev (int, void *, const void *, size_t,
-						 struct goacc_asyncqueue *);
-extern void *GOMP_OFFLOAD_openacc_cuda_get_current_device (void);
-extern void *GOMP_OFFLOAD_openacc_cuda_get_current_context (void);
-extern void *GOMP_OFFLOAD_openacc_cuda_get_stream (struct goacc_asyncqueue *);
-extern int GOMP_OFFLOAD_openacc_cuda_set_stream (struct goacc_asyncqueue *,
-						 void *);
-extern union goacc_property_value
-  GOMP_OFFLOAD_openacc_get_property (int, enum goacc_property);
 
 #ifdef __cplusplus
 }

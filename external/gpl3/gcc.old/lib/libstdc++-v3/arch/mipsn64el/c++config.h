@@ -38,7 +38,7 @@
 #define _GLIBCXX_RELEASE 10
 
 // The datestamp of the C++ library in compressed ISO date format.
-#define __GLIBCXX__ 20230707
+#define __GLIBCXX__ 20220628
 
 // Macros for various attributes.
 //   _GLIBCXX_PURE
@@ -1011,13 +1011,13 @@ namespace std
 #define _GLIBCXX_HAVE_SETENV 1
 
 /* Define to 1 if you have the `sincos' function. */
-#define _GLIBCXX_HAVE_SINCOS 1
+/* #undef _GLIBCXX_HAVE_SINCOS */
 
 /* Define to 1 if you have the `sincosf' function. */
-#define _GLIBCXX_HAVE_SINCOSF 1
+/* #undef _GLIBCXX_HAVE_SINCOSF */
 
 /* Define to 1 if you have the `sincosl' function. */
-#define _GLIBCXX_HAVE_SINCOSL 1
+/* #undef _GLIBCXX_HAVE_SINCOSL */
 
 /* Define to 1 if you have the `sinf' function. */
 #define _GLIBCXX_HAVE_SINF 1

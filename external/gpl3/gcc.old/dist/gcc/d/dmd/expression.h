@@ -157,7 +157,6 @@ public:
     virtual real_t toImaginary();
     virtual complex_t toComplex();
     virtual StringExp *toStringExp();
-    virtual TupleExp *toTupleExp();
     virtual bool isLvalue();
     virtual Expression *toLvalue(Scope *sc, Expression *e);
     virtual Expression *modifiableLvalue(Scope *sc, Expression *e);
@@ -398,7 +397,6 @@ public:
     TupleExp(Loc loc, Expression *e0, Expressions *exps);
     TupleExp(Loc loc, Expressions *exps);
     TupleExp(Loc loc, TupleDeclaration *tup);
-    TupleExp *toTupleExp();
     Expression *syntaxCopy();
     bool equals(RootObject *o);
 
@@ -807,8 +805,6 @@ public:
     TemplateDeclaration *td;
 
     DotTemplateExp(Loc loc, Expression *e, TemplateDeclaration *td);
-    bool checkType();
-    bool checkValue();
     void accept(Visitor *v) { v->visit(this); }
 };
 

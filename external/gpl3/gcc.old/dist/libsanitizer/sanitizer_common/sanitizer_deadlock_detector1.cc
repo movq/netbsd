@@ -38,20 +38,19 @@ struct DD : public DDetector {
 
   explicit DD(const DDFlags *flags);
 
-  DDPhysicalThread *CreatePhysicalThread() override;
-  void DestroyPhysicalThread(DDPhysicalThread *pt) override;
+  DDPhysicalThread* CreatePhysicalThread();
+  void DestroyPhysicalThread(DDPhysicalThread *pt);
 
-  DDLogicalThread *CreateLogicalThread(u64 ctx) override;
-  void DestroyLogicalThread(DDLogicalThread *lt) override;
+  DDLogicalThread* CreateLogicalThread(u64 ctx);
+  void DestroyLogicalThread(DDLogicalThread *lt);
 
-  void MutexInit(DDCallback *cb, DDMutex *m) override;
-  void MutexBeforeLock(DDCallback *cb, DDMutex *m, bool wlock) override;
-  void MutexAfterLock(DDCallback *cb, DDMutex *m, bool wlock,
-                      bool trylock) override;
-  void MutexBeforeUnlock(DDCallback *cb, DDMutex *m, bool wlock) override;
-  void MutexDestroy(DDCallback *cb, DDMutex *m) override;
+  void MutexInit(DDCallback *cb, DDMutex *m);
+  void MutexBeforeLock(DDCallback *cb, DDMutex *m, bool wlock);
+  void MutexAfterLock(DDCallback *cb, DDMutex *m, bool wlock, bool trylock);
+  void MutexBeforeUnlock(DDCallback *cb, DDMutex *m, bool wlock);
+  void MutexDestroy(DDCallback *cb, DDMutex *m);
 
-  DDReport *GetReport(DDCallback *cb) override;
+  DDReport *GetReport(DDCallback *cb);
 
   void MutexEnsureID(DDLogicalThread *lt, DDMutex *m);
   void ReportDeadlock(DDCallback *cb, DDMutex *m);
@@ -69,7 +68,7 @@ DD::DD(const DDFlags *flags)
 }
 
 DDPhysicalThread* DD::CreatePhysicalThread() {
-  return nullptr;
+  return 0;
 }
 
 void DD::DestroyPhysicalThread(DDPhysicalThread *pt) {
@@ -117,16 +116,11 @@ void DD::MutexBeforeLock(DDCallback *cb,
 
 void DD::ReportDeadlock(DDCallback *cb, DDMutex *m) {
   DDLogicalThread *lt = cb->lt;
-  uptr path[20];
+  uptr path[10];
   uptr len = dd.findPathToLock(&lt->dd, m->id, path, ARRAY_SIZE(path));
-  if (len == 0U) {
-    // A cycle of 20+ locks? Well, that's a bit odd...
-    Printf("WARNING: too long mutex cycle found\n");
-    return;
-  }
+  CHECK_GT(len, 0U);  // Hm.. cycle of 10 locks? I'd like to see that.
   CHECK_EQ(m->id, path[0]);
   lt->report_pending = true;
-  len = Min<uptr>(len, DDReport::kMaxLoopSize);
   DDReport *rep = &lt->rep;
   rep->n = len;
   for (uptr i = 0; i < len; i++) {
@@ -184,10 +178,10 @@ void DD::MutexDestroy(DDCallback *cb,
 
 DDReport *DD::GetReport(DDCallback *cb) {
   if (!cb->lt->report_pending)
-    return nullptr;
+    return 0;
   cb->lt->report_pending = false;
   return &cb->lt->rep;
 }
 
-} // namespace __sanitizer
-#endif // #if SANITIZER_DEADLOCK_DETECTOR_VERSION == 1
+}  // namespace __sanitizer
+#endif  // #if SANITIZER_DEADLOCK_DETECTOR_VERSION == 1

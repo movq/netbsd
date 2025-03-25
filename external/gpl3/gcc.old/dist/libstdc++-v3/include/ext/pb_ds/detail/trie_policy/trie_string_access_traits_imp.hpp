@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2005-2020 Free Software Foundation, Inc.
+// Copyright (C) 2005-2013 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
@@ -38,8 +38,6 @@
  * Contains a policy for extracting character positions from
  *    a string for a vector-based PATRICIA tree
  */
-
-#ifdef PB_DS_CLASS_C_DEC
 
 PB_DS_CLASS_T_DEC
 detail::integral_constant<int, Reverse> PB_DS_CLASS_C_DEC::s_rev_ind;
@@ -99,4 +97,3 @@ end_imp(key_const_reference r_key, detail::true_type)
 {
   return (r_key.rend());
 }
-#endif

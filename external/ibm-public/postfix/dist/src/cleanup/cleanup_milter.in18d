@@ -1,8 +1,0 @@
-#verbose on
-open test-queue-file18d.tmp
-#
-# Delete our Received: header.  This should do nothing.
-#
-del_header 1 Received
-
-close

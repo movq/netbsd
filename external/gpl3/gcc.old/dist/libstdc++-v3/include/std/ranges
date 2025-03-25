@@ -264,6 +264,8 @@ namespace ranges
 	requires (_Kind == subrange_kind::sized)
       : _M_begin(std::move(__i)), _M_end(__s)
       {
+	using __detail::__to_unsigned_like;
+	__glibcxx_assert(__n == __to_unsigned_like(ranges::distance(__i, __s)));
 	if constexpr (_S_store_size)
 	  _M_size._M_size = __n;
       }
@@ -516,7 +518,7 @@ namespace ranges
     class single_view : public view_interface<single_view<_Tp>>
     {
     public:
-      single_view() = default;
+      single_view() requires default_initializable<_Tp> = default;
 
       constexpr explicit
       single_view(const _Tp& __t)
@@ -1590,7 +1592,9 @@ namespace views
       [[no_unique_address]] __detail::_CachedPosition<_Vp> _M_cached_begin;
 
     public:
-      filter_view() requires default_initializable<_Vp> = default;
+      filter_view() requires (default_initializable<_Vp>
+			      && default_initializable<_Pred>)
+	= default;
 
       constexpr
       filter_view(_Vp __base, _Pred __pred)
@@ -1936,7 +1940,9 @@ namespace views
       __detail::__box<_Fp> _M_fun;
 
     public:
-      transform_view() requires default_initializable<_Vp> = default;
+      transform_view() requires (default_initializable<_Vp>
+				 && default_initializable<_Fp>)
+	= default;
 
       constexpr
       transform_view(_Vp __base, _Fp __fun)
@@ -2214,7 +2220,9 @@ namespace views
       __detail::__box<_Pred> _M_pred;
 
     public:
-      take_while_view() requires default_initializable<_Vp> = default;
+      take_while_view() requires (default_initializable<_Vp>
+				  && default_initializable<_Pred>)
+	= default;
 
       constexpr
       take_while_view(_Vp base, _Pred __pred)
@@ -2381,7 +2389,9 @@ namespace views
       [[no_unique_address]] __detail::_CachedPosition<_Vp> _M_cached_begin;
 
     public:
-      drop_while_view() requires default_initializable<_Vp> = default;
+      drop_while_view() requires (default_initializable<_Vp>
+				  && default_initializable<_Pred>)
+	= default;
 
       constexpr
       drop_while_view(_Vp __base, _Pred __pred)

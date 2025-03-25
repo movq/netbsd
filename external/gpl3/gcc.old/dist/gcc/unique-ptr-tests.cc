@@ -1,5 +1,5 @@
 /* Unit tests for unique-ptr.h.
-   Copyright (C) 2017-2020 Free Software Foundation, Inc.
+   Copyright (C) 2017-2018 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -31,9 +31,8 @@ namespace {
 
 /* A class for counting ctor and dtor invocations.  */
 
-class stats
+struct stats
 {
-public:
   stats () : ctor_count (0), dtor_count (0) {}
 
   int ctor_count;
@@ -60,9 +59,8 @@ private:
 
 /* A struct for testing unique_ptr<T[]>.  */
 
-class has_default_ctor
+struct has_default_ctor
 {
-public:
   has_default_ctor () : m_field (42) {}
   int m_field;
 };

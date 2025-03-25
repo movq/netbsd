@@ -1,5 +1,5 @@
 /* TILE atomics.
-   Copyright (C) 2011-2020 Free Software Foundation, Inc.
+   Copyright (C) 2011-2013 Free Software Foundation, Inc.
    Contributed by Walter Lee (walt@tilera.com)
 
    This file is free software; you can redistribute it and/or modify it
@@ -21,11 +21,9 @@
    see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
    <http://www.gnu.org/licenses/>.  */
 
-#include "tconfig.h"
+#include "system.h"
 #include "coretypes.h"
 #include "atomic.h"
-
-#define bool unsigned char
 
 /* This code should be inlined by the compiler, but for now support
    it as out-of-line methods in libgcc.  */
@@ -33,11 +31,11 @@
 static inline void
 pre_atomic_barrier (int model)
 {
-  switch (model)
+  switch ((enum memmodel) model)
     {
-    case __ATOMIC_RELEASE:
-    case __ATOMIC_ACQ_REL:
-    case __ATOMIC_SEQ_CST:
+    case MEMMODEL_RELEASE:
+    case MEMMODEL_ACQ_REL:
+    case MEMMODEL_SEQ_CST:
       __atomic_thread_fence (model);
       break;
     default:
@@ -49,11 +47,11 @@ pre_atomic_barrier (int model)
 static inline void
 post_atomic_barrier (int model)
 {
-  switch (model)
+  switch ((enum memmodel) model)
     {
-    case __ATOMIC_ACQUIRE:
-    case __ATOMIC_ACQ_REL:
-    case __ATOMIC_SEQ_CST:
+    case MEMMODEL_ACQUIRE:
+    case MEMMODEL_ACQ_REL:
+    case MEMMODEL_SEQ_CST:
       __atomic_thread_fence (model);
       break;
     default:

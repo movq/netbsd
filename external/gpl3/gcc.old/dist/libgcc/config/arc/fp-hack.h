@@ -1,4 +1,4 @@
-/* Copyright (C) 2007-2020 Free Software Foundation, Inc.
+/* Copyright (C) 2007-2015 Free Software Foundation, Inc.
    Contributor: Joern Rennecke <joern.rennecke@embecosm.com>
 		on behalf of Synopsys Inc.
 
@@ -30,18 +30,13 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 
 #define ARC_FP_DEBUG 1
 #define FINE_GRAINED_LIBRARIES
-
-#if defined (__ARC700__) || defined (__ARC_FPX_QUARK__)
-#define ARC_OPTFPE 1
-#endif
-
-#if !ARC_OPTFPE || ARC_FP_DEBUG
+#if !defined (__ARC_NORM__) || ARC_FP_DEBUG
 #define L_pack_sf
 #define L_unpack_sf
 #define L_make_sf
 #define L_thenan_sf
 #endif
-#if !ARC_OPTFPE
+#ifndef __ARC_NORM__
 #define L_addsub_sf
 #define L_mul_sf
 #define L_div_sf
@@ -66,7 +61,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #define L_usi_to_sf
 #define __floatunsisf __floatunsisf_c
 #endif
-#if !ARC_OPTFPE
+#ifndef __ARC_NORM__
 #define L_fpcmp_parts_sf
 #define L_compare_sf
 #define L_eq_sf

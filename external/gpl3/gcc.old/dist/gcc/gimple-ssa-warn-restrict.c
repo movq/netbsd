@@ -1,6 +1,6 @@
 /* Pass to detect and issue warnings for violations of the restrict
    qualifier.
-   Copyright (C) 2017-2020 Free Software Foundation, Inc.
+   Copyright (C) 2017-2018 Free Software Foundation, Inc.
    Contributed by Martin Sebor <msebor@redhat.com>.
 
    This file is part of GCC.
@@ -36,6 +36,7 @@
 #include "gimple-iterator.h"
 #include "tree-dfa.h"
 #include "tree-ssa.h"
+#include "params.h"
 #include "tree-cfg.h"
 #include "tree-object-size.h"
 #include "calls.h"
@@ -74,7 +75,7 @@ class pass_wrestrict : public gimple_opt_pass
 bool
 pass_wrestrict::gate (function *fun ATTRIBUTE_UNUSED)
 {
-  return warn_array_bounds || warn_restrict || warn_stringop_overflow;
+  return warn_array_bounds != 0 || warn_restrict != 0;
 }
 
 /* Class to walk the basic blocks of a function in dominator order.  */
@@ -87,7 +88,7 @@ class wrestrict_dom_walker : public dom_walker
   bool handle_gimple_call (gimple_stmt_iterator *);
 
  private:
-  void check_call (gimple *);
+  void check_call (gcall *);
 };
 
 edge
@@ -101,7 +102,8 @@ wrestrict_dom_walker::before_dom_children (basic_block bb)
       if (!is_gimple_call (stmt))
 	continue;
 
-      check_call (stmt);
+      if (gcall *call = as_a <gcall *> (stmt))
+	check_call (call);
     }
 
   return NULL;
@@ -123,9 +125,8 @@ pass_wrestrict::execute (function *fun)
 /* Description of a memory reference by a built-in function.  This
    is similar to ao_ref but made especially suitable for -Wrestrict
    and not for optimization.  */
-class builtin_memref
+struct builtin_memref
 {
-public:
   /* The original pointer argument to the built-in function.  */
   tree ptr;
   /* The referenced subobject or NULL if not available, and the base
@@ -136,8 +137,6 @@ public:
   /* The size of the BASE object, PTRDIFF_MAX if indeterminate,
      and negative until (possibly lazily) initialized.  */
   offset_int basesize;
-  /* Same for the subobject.  */
-  offset_int refsize;
 
   /* The non-negative offset of the referenced subobject.  Used to avoid
      warnings for (apparently) possibly but not definitively overlapping
@@ -149,9 +148,6 @@ public:
   /* The size range of the access to this reference.  */
   offset_int sizrange[2];
 
-  /* Cached result of get_max_objsize().  */
-  const offset_int maxobjsize;
-
   /* True for "bounded" string functions like strncat, and strncpy
      and their variants that specify either an exact or upper bound
      on the size of the accesses they perform.  For strncat both
@@ -161,7 +157,7 @@ public:
 
   builtin_memref (tree, tree);
 
-  tree offset_out_of_bounds (int, offset_int[3]) const;
+  tree offset_out_of_bounds (int, offset_int[2]) const;
 
 private:
 
@@ -193,18 +189,13 @@ class builtin_access
      and false for raw memory functions.  */
   bool strict () const
   {
-    return (detect_overlap != &builtin_access::generic_overlap
-	    && detect_overlap != &builtin_access::no_overlap);
+    return detect_overlap != &builtin_access::generic_overlap;
   }
 
-  builtin_access (gimple *, builtin_memref &, builtin_memref &);
+  builtin_access (gcall *, builtin_memref &, builtin_memref &);
 
   /* Entry point to determine overlap.  */
   bool overlap ();
-
-  offset_int write_off (tree) const;
-
-  void dump (FILE *) const;
 
  private:
   /* Implementation functions used to determine overlap.  */
@@ -240,11 +231,9 @@ builtin_memref::builtin_memref (tree expr, tree size)
   ref (),
   base (),
   basesize (-1),
-  refsize (-1),
   refoff (HOST_WIDE_INT_MIN),
   offrange (),
   sizrange (),
-  maxobjsize (tree_to_shwi (max_object_size ())),
   strbounded_p ()
 {
   /* Unfortunately, wide_int default ctor is a no-op so array members
@@ -252,8 +241,7 @@ builtin_memref::builtin_memref (tree expr, tree size)
   offrange[0] = offrange[1] = 0;
   sizrange[0] = sizrange[1] = 0;
 
-  if (!expr)
-    return;
+  const offset_int maxobjsize = tree_to_shwi (max_object_size ());
 
   /* Find the BASE object or pointer referenced by EXPR and set
      the offset range OFFRANGE in the process.  */
@@ -269,62 +257,43 @@ builtin_memref::builtin_memref (tree expr, tree size)
       sizrange[1] = wi::to_offset (range[1]);
       /* get_size_range returns SIZE_MAX for the maximum size.
 	 Constrain it to the real maximum of PTRDIFF_MAX.  */
-      if (sizrange[0] <= maxobjsize && sizrange[1] > maxobjsize)
+      if (sizrange[1] > maxobjsize)
 	sizrange[1] = maxobjsize;
     }
   else
     sizrange[1] = maxobjsize;
 
-  if (!DECL_P (base))
-    return;
-
-  /* If the offset could be in the range of the referenced object
-     constrain its bounds so neither exceeds those of the object.  */
-  if (offrange[0] < 0 && offrange[1] > 0)
-    offrange[0] = 0;
-
-  offset_int maxoff = maxobjsize;
   tree basetype = TREE_TYPE (base);
-  if (TREE_CODE (basetype) == ARRAY_TYPE)
+  if (DECL_P (base) && TREE_CODE (basetype) == ARRAY_TYPE)
     {
+      /* If the offset could be in range of the referenced object
+	 constrain its bounds so neither exceeds those of the object.  */
+      if (offrange[0] < 0 && offrange[1] > 0)
+	offrange[0] = 0;
+
+      offset_int maxoff = maxobjsize;
       if (ref && array_at_struct_end_p (ref))
 	;   /* Use the maximum possible offset for last member arrays.  */
       else if (tree basesize = TYPE_SIZE_UNIT (basetype))
-	if (TREE_CODE (basesize) == INTEGER_CST)
-	  /* Size could be non-constant for a variable-length type such
-	     as a struct with a VLA member (a GCC extension).  */
-	  maxoff = wi::to_offset (basesize);
-    }
+	maxoff = wi::to_offset (basesize);
 
-  if (offrange[0] >= 0)
-    {
-      if (offrange[1] < 0)
-	offrange[1] = offrange[0] <= maxoff ? maxoff : maxobjsize;
-      else if (offrange[0] <= maxoff && offrange[1] > maxoff)
-	offrange[1] = maxoff;
+      if (offrange[0] >= 0)
+	{
+	  if (offrange[1] < 0)
+	    offrange[1] = offrange[0] <= maxoff ? maxoff : maxobjsize;
+	  else if (offrange[0] <= maxoff && offrange[1] > maxoff)
+	    offrange[1] = maxoff;
+	}
     }
 }
 
-/* Based on the initial length of the destination STARTLEN, returns
-   the offset of the first write access from the beginning of
-   the destination.  Nonzero only for strcat-type of calls.  */
-
-offset_int builtin_access::write_off (tree startlen) const
-{
-  if (detect_overlap != &builtin_access::strcat_overlap
-      || !startlen || TREE_CODE (startlen) != INTEGER_CST)
-    return 0;
-
-  return wi::to_offset (startlen);
-}
-
-/* Ctor helper to set or extend OFFRANGE based on the OFFSET argument.
-   Pointer offsets are represented as unsigned sizetype but must be
-   treated as signed.  */
+/* Ctor helper to set or extend OFFRANGE based on the OFFSET argument.  */
 
 void
 builtin_memref::extend_offset_range (tree offset)
 {
+  const offset_int maxobjsize = tree_to_shwi (max_object_size ());
+
   if (TREE_CODE (offset) == INTEGER_CST)
     {
       offset_int off = int_cst_value (offset);
@@ -338,57 +307,36 @@ builtin_memref::extend_offset_range (tree offset)
 
   if (TREE_CODE (offset) == SSA_NAME)
     {
-      /* A pointer offset is represented as sizetype but treated
-	 as signed.  */
       wide_int min, max;
-      value_range_kind rng = get_range_info (offset, &min, &max);
-      if (rng == VR_ANTI_RANGE && wi::lts_p (max, min))
+      value_range_type rng = get_range_info (offset, &min, &max);
+      if (rng == VR_RANGE)
 	{
-	  /* Convert an anti-range whose upper bound is less than
-	     its lower bound to a signed range.  */
-	  offrange[0] += offset_int::from (max + 1, SIGNED);
-	  offrange[1] += offset_int::from (min - 1, SIGNED);
-	  return;
-	}
-
-      if (rng == VR_RANGE
-	  && (DECL_P (base) || wi::lts_p (min, max)))
-	{
-	  /* Preserve the bounds of the range for an offset into
-	     a known object (it may be adjusted later relative to
-	     a constant offset from its beginning).  Otherwise use
-	     the bounds only when they are ascending when treated
-	     as signed.  */
 	  offrange[0] += offset_int::from (min, SIGNED);
 	  offrange[1] += offset_int::from (max, SIGNED);
-	  return;
 	}
-
-      /* Handle an anti-range the same as no range at all.  */
-      gimple *stmt = SSA_NAME_DEF_STMT (offset);
-      tree type;
-      if (is_gimple_assign (stmt)
-	  && (type = TREE_TYPE (gimple_assign_rhs1 (stmt)))
-	  && INTEGRAL_TYPE_P (type))
+      else
 	{
-	  tree_code code = gimple_assign_rhs_code (stmt);
-	  if (code == NOP_EXPR)
+	  /* Handle an anti-range the same as no range at all.  */
+	  gimple *stmt = SSA_NAME_DEF_STMT (offset);
+	  tree type;
+	  if (is_gimple_assign (stmt)
+	      && gimple_assign_rhs_code (stmt) == NOP_EXPR
+	      && (type = TREE_TYPE (gimple_assign_rhs1 (stmt)))
+	      && INTEGRAL_TYPE_P (type))
 	    {
 	      /* Use the bounds of the type of the NOP_EXPR operand
 		 even if it's signed.  The result doesn't trigger
 		 warnings but makes their output more readable.  */
 	      offrange[0] += wi::to_offset (TYPE_MIN_VALUE (type));
 	      offrange[1] += wi::to_offset (TYPE_MAX_VALUE (type));
-	      return;
 	    }
+	  else
+	    offrange[1] += maxobjsize;
 	}
+      return;
     }
 
-  const offset_int maxoff = tree_to_shwi (max_object_size ()) >> 1;
-  const offset_int minoff = -maxoff - 1;
-
-  offrange[0] += minoff;
-  offrange[1] += maxoff;
+  offrange[1] += maxobjsize;
 }
 
 /* Determines the base object or pointer of the reference EXPR
@@ -397,7 +345,7 @@ builtin_memref::extend_offset_range (tree offset)
 void
 builtin_memref::set_base_and_offset (tree expr)
 {
-  tree offset = NULL_TREE;
+  const offset_int maxobjsize = tree_to_shwi (max_object_size ());
 
   if (TREE_CODE (expr) == SSA_NAME)
     {
@@ -424,7 +372,9 @@ builtin_memref::set_base_and_offset (tree expr)
 	  else if (code == POINTER_PLUS_EXPR)
 	    {
 	      expr = gimple_assign_rhs1 (stmt);
-	      offset = gimple_assign_rhs2 (stmt);
+
+	      tree offset = gimple_assign_rhs2 (stmt);
+	      extend_offset_range (offset);
 	    }
 	  else
 	    {
@@ -434,12 +384,6 @@ builtin_memref::set_base_and_offset (tree expr)
 	}
       else
 	{
-	  /* FIXME: Handle PHI nodes in case like:
-	     _12 = &MEM[(void *)&a + 2B] + _10;
-
-	     <bb> [local count: 1073741824]:
-	     # prephitmp_13 = PHI <_12, &MEM[(void *)&a + 2B]>
-	     memcpy (prephitmp_13, p_7(D), 6);  */
 	  base = expr;
 	  return;
 	}
@@ -466,9 +410,6 @@ builtin_memref::set_base_and_offset (tree expr)
 
   /* get_inner_reference is not expected to return null.  */
   gcc_assert (base != NULL);
-
-  if (offset)
-    extend_offset_range (offset);
 
   poly_int64 bytepos = exact_div (bitpos, BITS_PER_UNIT);
 
@@ -503,67 +444,32 @@ builtin_memref::set_base_and_offset (tree expr)
 
   if (TREE_CODE (base) == MEM_REF)
     {
-      tree memrefoff = fold_convert (ptrdiff_type_node, TREE_OPERAND (base, 1));
+      tree memrefoff = TREE_OPERAND (base, 1);
       extend_offset_range (memrefoff);
-
-      if (refoff != HOST_WIDE_INT_MIN
-      	  && TREE_CODE (expr) == COMPONENT_REF)
-      	{
-	  /* Bump up the offset of the referenced subobject to reflect
-	     the offset to the enclosing object.  For example, so that
-	     in
-	       struct S { char a, b[3]; } s[2];
-	       strcpy (s[1].b, "1234");
-	     REFOFF is set to s[1].b - (char*)s.  */
-	  offset_int off = tree_to_shwi (memrefoff);
-	  refoff += off;
-
-	  if (!integer_zerop (memrefoff)
-	      && !COMPLETE_TYPE_P (TREE_TYPE (expr))
-	      && multiple_of_p (sizetype, memrefoff,
-				TYPE_SIZE_UNIT (TREE_TYPE (base))))
-	    /* A non-zero offset into an array of struct with flexible array
-	       members implies that the array is empty because there is no
-	       way to initialize such a member when it belongs to an array.
-	       This must be some sort of a bug.  */
-	    refsize = 0;
-	}
-
       base = TREE_OPERAND (base, 0);
     }
-
-  if (TREE_CODE (ref) == COMPONENT_REF)
-    if (tree size = component_ref_size (ref))
-      if (TREE_CODE (size) == INTEGER_CST)
-	refsize = wi::to_offset (size);
 
   if (TREE_CODE (base) == SSA_NAME)
     set_base_and_offset (base);
 }
 
 /* Return error_mark_node if the signed offset exceeds the bounds
-   of the address space (PTRDIFF_MAX).  Otherwise, return either BASE
-   or REF when the offset exceeds the bounds of the BASE or REF object,
-   and set OOBOFF to the past-the-end offset formed by the reference,
-   including its size.  OOBOFF is initially setto the range of offsets,
-   and OOBOFF[2] to the offset of the first write access (nonzero for
-   the strcat family).  When STRICT is nonzero use REF size, when
-   available, otherwise use BASE size.  When STRICT is greater than 1,
-   use the size of the last array member as the bound, otherwise treat
-   such a member as a flexible array member.  Return NULL when the offset
-   is in bounds.  */
+   of the address space (PTRDIFF_MAX).  Otherwise, return either
+   BASE or REF when the offset exceeds the bounds of the BASE or
+   REF object, and set OOBOFF to the past-the-end offset formed
+   by the reference, including its size.  When STRICT is non-zero
+   use REF size, when available, otherwise use BASE size.  When
+   STRICT is greater than 1, use the size of the last array member
+   as the bound, otherwise treat such a member as a flexible array
+   member.  Return NULL when the offset is in bounds.  */
 
 tree
-builtin_memref::offset_out_of_bounds (int strict, offset_int ooboff[3]) const
+builtin_memref::offset_out_of_bounds (int strict, offset_int ooboff[2]) const
 {
-  if (!ptr)
-    return NULL_TREE;
-
-  /* The offset of the first write access or zero.  */
-  offset_int wroff = ooboff[2];
+  const offset_int maxobjsize = tree_to_shwi (max_object_size ());
 
   /* A temporary, possibly adjusted, copy of the offset range.  */
-  offset_int offrng[2] = { ooboff[0], ooboff[1] };
+  offset_int offrng[2] = { offrange[0], offrange[1] };
 
   if (DECL_P (base) && TREE_CODE (TREE_TYPE (base)) == ARRAY_TYPE)
     {
@@ -581,19 +487,9 @@ builtin_memref::offset_out_of_bounds (int strict, offset_int ooboff[3]) const
   bool hib = wi::les_p (offrng[0], offrng[1]);
   bool lob = !hib;
 
-  /* Set to the size remaining in the object after subtracting
-     REFOFF.  It may become negative as a result of negative indices
-     into the enclosing object, such as in:
-       extern struct S { char a[4], b[3], c[1]; } *p;
-       strcpy (p[-3].b, "123");  */
-  offset_int size = basesize;
-  tree obj = base;
-
-  const bool decl_p = DECL_P (obj);
-
   if (basesize < 0)
     {
-      endoff = offrng[lob] + (sizrange[0] - wroff);
+      endoff = offrng[lob] + sizrange[0];
 
       /* For a reference through a pointer to an object of unknown size
 	 all initial offsets are considered valid, positive as well as
@@ -603,45 +499,41 @@ builtin_memref::offset_out_of_bounds (int strict, offset_int ooboff[3]) const
       if (endoff > maxobjsize)
 	return error_mark_node;
 
-      /* When the referenced subobject is known, the end offset must be
-	 within its bounds.  Otherwise there is nothing to do.  */
-      if (strict
-	  && !decl_p
-	  && ref
-	  && refsize >= 0
-	  && TREE_CODE (ref) == COMPONENT_REF)
-	{
-	  /* If REFOFF is negative, SIZE will become negative here.  */
-	  size = refoff + refsize;
-	  obj = ref;
-	}
-      else
-	return NULL_TREE;
+      return NULL_TREE;
     }
 
   /* A reference to an object of known size must be within the bounds
-     of either the base object or the subobject (see above for when
-     a subobject can be used).  */
-  if ((decl_p && offrng[hib] < 0) || offrng[lob] > size)
-    return obj;
+     of the base object.  */
+  if (offrng[hib] < 0 || offrng[lob] > basesize)
+    return base;
 
   /* The extent of the reference must also be within the bounds of
-     the base object (if known) or the subobject or the maximum object
-     size otherwise.  */
-  endoff = offrng[lob] + sizrange[0];
+     the base object (if known) or the maximum object size otherwise.  */
+  endoff = wi::smax (offrng[lob], 0) + sizrange[0];
   if (endoff > maxobjsize)
     return error_mark_node;
 
+  offset_int size = basesize;
+  tree obj = base;
+
   if (strict
-      && decl_p
+      && DECL_P (obj)
       && ref
-      && refsize >= 0
-      && TREE_CODE (ref) == COMPONENT_REF)
+      && refoff >= 0
+      && TREE_CODE (ref) == COMPONENT_REF
+      && (strict > 1
+	  || !array_at_struct_end_p (ref)))
     {
-      /* If the reference is to a member subobject of a declared object,
-	 the offset must be within the bounds of the subobject.  */
-      size = refoff + refsize;
-      obj = ref;
+      /* If the reference is to a member subobject, the offset must
+	 be within the bounds of the subobject.  */
+      tree field = TREE_OPERAND (ref, 1);
+      tree type = TREE_TYPE (field);
+      if (tree sz = TYPE_SIZE_UNIT (type))
+	if (TREE_CODE (sz) == INTEGER_CST)
+	  {
+	    size = refoff + wi::to_offset (sz);
+	    obj = ref;
+	  }
     }
 
   if (endoff <= size)
@@ -649,12 +541,12 @@ builtin_memref::offset_out_of_bounds (int strict, offset_int ooboff[3]) const
 
   /* Set the out-of-bounds offset range to be one greater than
      that delimited by the reference including its size.  */
-  ooboff[lob] = size;
+  ooboff[lob] = size + 1;
 
   if (endoff > ooboff[lob])
-    ooboff[hib] = endoff - 1;
+    ooboff[hib] = endoff;
   else
-    ooboff[hib] = offrng[lob] + sizrange[1];
+    ooboff[hib] = wi::smax (offrng[lob], 0) + sizrange[1];
 
   return obj;
 }
@@ -662,15 +554,13 @@ builtin_memref::offset_out_of_bounds (int strict, offset_int ooboff[3]) const
 /* Create an association between the memory references DST and SRC
    for access by a call EXPR to a memory or string built-in funtion.  */
 
-builtin_access::builtin_access (gimple *call, builtin_memref &dst,
+builtin_access::builtin_access (gcall *call, builtin_memref &dst,
 				builtin_memref &src)
 : dstref (&dst), srcref (&src), sizrange (), ovloff (), ovlsiz (),
   dstoff (), srcoff (), dstsiz (), srcsiz ()
 {
-  dstoff[0] = dst.offrange[0];
-  dstoff[1] = dst.offrange[1];
-
   /* Zero out since the offset_int ctors invoked above are no-op.  */
+  dstoff[0] = dstoff[1] = 0;
   srcoff[0] = srcoff[1] = 0;
   dstsiz[0] = dstsiz[1] = 0;
   srcsiz[0] = srcsiz[1] = 0;
@@ -690,14 +580,20 @@ builtin_access::builtin_access (gimple *call, builtin_memref &dst,
 
   /* The size argument number (depends on the built-in).  */
   unsigned sizeargno = 2;
+  if (gimple_call_with_bounds_p (call))
+    sizeargno += 2;
 
   tree func = gimple_call_fndecl (call);
   switch (DECL_FUNCTION_CODE (func))
     {
     case BUILT_IN_MEMCPY:
     case BUILT_IN_MEMCPY_CHK:
+    case BUILT_IN_MEMCPY_CHKP:
+    case BUILT_IN_MEMCPY_CHK_CHKP:
     case BUILT_IN_MEMPCPY:
     case BUILT_IN_MEMPCPY_CHK:
+    case BUILT_IN_MEMPCPY_CHKP:
+    case BUILT_IN_MEMPCPY_CHK_CHKP:
       ostype = 0;
       depends_p = false;
       detect_overlap = &builtin_access::generic_overlap;
@@ -705,15 +601,9 @@ builtin_access::builtin_access (gimple *call, builtin_memref &dst,
 
     case BUILT_IN_MEMMOVE:
     case BUILT_IN_MEMMOVE_CHK:
+    case BUILT_IN_MEMMOVE_CHKP:
+    case BUILT_IN_MEMMOVE_CHK_CHKP:
       /* For memmove there is never any overlap to check for.  */
-      ostype = 0;
-      depends_p = false;
-      detect_overlap = &builtin_access::no_overlap;
-      break;
-
-    case BUILT_IN_MEMSET:
-    case BUILT_IN_MEMSET_CHK:
-      /* For memset there is never any overlap to check for.  */
       ostype = 0;
       depends_p = false;
       detect_overlap = &builtin_access::no_overlap;
@@ -729,13 +619,19 @@ builtin_access::builtin_access (gimple *call, builtin_memref &dst,
 
     case BUILT_IN_STPCPY:
     case BUILT_IN_STPCPY_CHK:
+    case BUILT_IN_STPCPY_CHKP:
+    case BUILT_IN_STPCPY_CHK_CHKP:
     case BUILT_IN_STRCPY:
     case BUILT_IN_STRCPY_CHK:
+    case BUILT_IN_STRCPY_CHKP:
+    case BUILT_IN_STRCPY_CHK_CHKP:
       detect_overlap = &builtin_access::strcpy_overlap;
       break;
 
     case BUILT_IN_STRCAT:
     case BUILT_IN_STRCAT_CHK:
+    case BUILT_IN_STRCAT_CHKP:
+    case BUILT_IN_STRCAT_CHK_CHKP:
       detect_overlap = &builtin_access::strcat_overlap;
       break;
 
@@ -749,11 +645,12 @@ builtin_access::builtin_access (gimple *call, builtin_memref &dst,
     default:
       /* Handle other string functions here whose access may need
 	 to be validated for in-bounds offsets and non-overlapping
-	 copies.  */
+	 copies.  (Not all _chkp functions have BUILT_IN_XXX_CHKP
+	 macros so they need to be handled here.)  */
       return;
     }
 
-  const offset_int maxobjsize = dst.maxobjsize;
+  const offset_int maxobjsize = tree_to_shwi (max_object_size ());
 
   /* Try to determine the size of the base object.  compute_objsize
      expects a pointer so create one if BASE is a non-pointer object.  */
@@ -772,7 +669,7 @@ builtin_access::builtin_access (gimple *call, builtin_memref &dst,
 	dst.basesize = maxobjsize;
     }
 
-  if (src.base && src.basesize < 0)
+  if (src.basesize < 0)
     {
       addr = src.base;
       if (!POINTER_TYPE_P (TREE_TYPE (addr)))
@@ -786,9 +683,15 @@ builtin_access::builtin_access (gimple *call, builtin_memref &dst,
 	src.basesize = maxobjsize;
     }
 
-  /* Make adjustments for references to the same object by string
-     built-in functions to reflect the constraints imposed by
-     the function.  */
+  /* If there is no dependency between the references or the base
+     objects of the two references aren't the same there's nothing
+     else to do.  */
+  if (depends_p && dstref->base != srcref->base)
+    return;
+
+  /* ...otherwise, make adjustments for references to the same object
+     by string built-in functions to reflect the constraints imposed
+     by the function.  */
 
   /* For bounded string functions determine the range of the bound
      on the access.  For others, the range stays unbounded.  */
@@ -819,7 +722,6 @@ builtin_access::builtin_access (gimple *call, builtin_memref &dst,
 	}
     }
 
-  bool dstsize_set = false;
   /* The size range of one reference involving the same base object
      can be determined from the size range of the other reference.
      This makes it possible to compute accurate offsets for warnings
@@ -831,12 +733,11 @@ builtin_access::builtin_access (gimple *call, builtin_memref &dst,
 	 the source.  */
       dstref->sizrange[0] = srcref->sizrange[0];
       dstref->sizrange[1] = srcref->sizrange[1];
-      dstsize_set = true;
     }
   else if (srcref->sizrange[0] == 0 && srcref->sizrange[1] == maxobjsize)
     {
-      /* When the size of the source access is unknown set it to the size
-	 of the destination first and adjust it later if necessary.  */
+      /* When the source size is unknown set it to the size of
+	 the destination.  */
       srcref->sizrange[0] = dstref->sizrange[0];
       srcref->sizrange[1] = dstref->sizrange[1];
 
@@ -844,13 +745,13 @@ builtin_access::builtin_access (gimple *call, builtin_memref &dst,
 	{
 	  if (dstref->strbounded_p)
 	    {
-	      /* Read access by strncpy is constrained by the third
-		 argument but except for a zero bound is at least one.  */
-	      srcref->sizrange[0] = bounds[1] > 0 ? 1 : 0;
-	      offset_int bound = wi::umin (srcref->basesize, bounds[1]);
-	      if (bound < srcref->sizrange[1])
-		srcref->sizrange[1] = bound;
+	      /* Read access by strncpy is bounded.  */
+	      if (bounds[0] < srcref->sizrange[0])
+		srcref->sizrange[0] = bounds[0];
+	      if (bounds[1] < srcref->sizrange[1])
+		srcref->sizrange[1] = bounds[1];
 	    }
+
 	  /* For string functions, adjust the size range of the source
 	     reference by the inverse boundaries of the offset (because
 	     the higher the offset into the string the shorter its
@@ -859,7 +760,7 @@ builtin_access::builtin_access (gimple *call, builtin_memref &dst,
 	      && srcref->offrange[1] < srcref->sizrange[0])
 	    srcref->sizrange[0] -= srcref->offrange[1];
 	  else
-	    srcref->sizrange[0] = 1;
+	    srcref->sizrange[0] = 0;
 
 	  if (srcref->offrange[0] > 0)
 	    {
@@ -899,11 +800,6 @@ builtin_access::builtin_access (gimple *call, builtin_memref &dst,
 	      dstref->sizrange[1] = srcref->sizrange[1];
 	    }
 	}
-    }
-  else if (!dstsize_set && detect_overlap == &builtin_access::strcat_overlap)
-    {
-      dstref->sizrange[0] += srcref->sizrange[0] - 1;
-      dstref->sizrange[1] += srcref->sizrange[1] - 1;
     }
 
   if (dstref->strbounded_p)
@@ -963,9 +859,10 @@ builtin_access::generic_overlap ()
 
   gcc_assert (dstref->base == srcref->base);
 
-  const offset_int maxobjsize = acs.dstref->maxobjsize;
+  const offset_int maxobjsize = tree_to_shwi (max_object_size ());
 
   offset_int maxsize = dstref->basesize < 0 ? maxobjsize : dstref->basesize;
+  gcc_assert (maxsize <= maxobjsize);
 
   /* Adjust the larger bounds of the offsets (which may be the first
      element if the lower bound is larger than the upper bound) to
@@ -1060,8 +957,16 @@ builtin_access::generic_overlap ()
   ovloff[0] = HOST_WIDE_INT_MAX;
   ovloff[1] = HOST_WIDE_INT_MIN;
 
+  /* Adjustment to the lower bound of the offset of the overlap to
+     account for a subset of unbounded string calls where the size
+     of the destination string depends on the length of the source
+     which in turn depends on the offset into it.  */
+  bool sub1;
+
   if (stxcpy_p)
     {
+      sub1 = acs.dstoff[0] <= acs.srcoff[0];
+
       /* Iterate over the extreme locations (on the horizontal axis formed
 	 by their offsets) and sizes of two regions and find their smallest
 	 and largest overlap and the corresponding offsets.  */
@@ -1094,9 +999,11 @@ builtin_access::generic_overlap ()
     }
   else
     {
+      sub1 = !depends_p;
+
       /* Iterate over the extreme locations (on the horizontal axis
-	 formed by their offsets) and sizes of the two regions and
-	 find their smallest and largest overlap and the corresponding
+	 formed by their offsets) and sizes of two regions and find
+	 their smallest and largest overlap and the corresponding
 	 offsets.  */
 
       for (unsigned io = 0; io != 2; ++io)
@@ -1109,6 +1016,15 @@ builtin_access::generic_overlap ()
 	    for (unsigned jo = 0; jo != 2; ++jo)
 	      for (unsigned js = 0; js != 2; ++js)
 		{
+		  if (depends_p)
+		    {
+		      /* For st{p,r}ncpy the size of the source sequence
+			 depends on the offset into it.  */
+		      if (js)
+			break;
+		      js = !jo;
+		    }
+
 		  const offset_int b[2] = {
 		    acs.srcoff[jo], acs.srcoff[jo] + acs.srcsiz[js]
 		  };
@@ -1135,9 +1051,8 @@ builtin_access::generic_overlap ()
   ovlsiz[0] = siz[0].to_shwi ();
   ovlsiz[1] = siz[1].to_shwi ();
 
-  /* Adjust the overlap offset range to reflect the overlap size range.  */
   if (ovlsiz[0] == 0 && ovlsiz[1] > 1)
-    ovloff[1] = ovloff[0] + ovlsiz[1] - 1;
+    ovloff[0] = ovloff[1] + ovlsiz[1] - 1 - sub1;
 
   return true;
 }
@@ -1153,18 +1068,17 @@ builtin_access::strcat_overlap ()
 
   gcc_assert (dstref->base == srcref->base);
 
-  const offset_int maxobjsize = acs.dstref->maxobjsize;
+  const offset_int maxobjsize = tree_to_shwi (max_object_size ());
 
   gcc_assert (dstref->base && dstref->base == srcref->base);
 
   /* Adjust for strcat-like accesses.  */
 
   /* As a special case for strcat, set the DSTREF offsets to the length
-     of the destination string since the function starts writing over
-     its terminating nul, and set the destination size to 1 for the length
-     of the nul.  */
-  acs.dstoff[0] += dstsiz[0] - srcref->sizrange[0];
-  acs.dstoff[1] += dstsiz[1] - srcref->sizrange[1];
+     of the source string since the function starts writing at the first
+     nul, and set the size to 1 for the length of the nul.  */
+  acs.dstoff[0] += acs.dstsiz[0];
+  acs.dstoff[1] += acs.dstsiz[1];
 
   bool strfunc_unknown_args = acs.dstsiz[0] == 0 && acs.dstsiz[1] != 0;
 
@@ -1174,6 +1088,7 @@ builtin_access::strcat_overlap ()
   acs.dstsiz[1] = 1;
 
   offset_int maxsize = dstref->basesize < 0 ? maxobjsize : dstref->basesize;
+  gcc_assert (maxsize <= maxobjsize);
 
   /* For references to the same base object, determine if there's a pair
      of valid offsets into the two references such that access between
@@ -1241,8 +1156,7 @@ builtin_access::strcat_overlap ()
   acs.ovlsiz[0] = dstref->sizrange[0] == dstref->sizrange[1] ? 1 : 0;
   acs.ovlsiz[1] = 1;
 
-  offset_int endoff
-    = dstref->offrange[0] + (dstref->sizrange[0] - srcref->sizrange[0]);
+  offset_int endoff = dstref->offrange[0] + dstref->sizrange[0];
   if (endoff <= srcref->offrange[0])
     acs.ovloff[0] = wi::smin (maxobjsize, srcref->offrange[0]).to_shwi ();
   else
@@ -1291,7 +1205,7 @@ builtin_access::overlap ()
 {
   builtin_access &acs = *this;
 
-  const offset_int maxobjsize = dstref->maxobjsize;
+  const offset_int maxobjsize = tree_to_shwi (max_object_size ());
 
   acs.sizrange[0] = wi::smax (dstref->sizrange[0],
 			      srcref->sizrange[0]).to_shwi ();
@@ -1313,6 +1227,10 @@ builtin_access::overlap ()
      offset that would make them not overlap.  */
   if (!dstref->base || !srcref->base)
     return false;
+
+  /* Set the access offsets.  */
+  acs.dstoff[0] = dstref->offrange[0];
+  acs.dstoff[1] = dstref->offrange[1];
 
   /* If the base object is an array adjust the bounds of the offset
      to be non-negative and within the bounds of the array if possible.  */
@@ -1412,17 +1330,14 @@ builtin_access::overlap ()
 }
 
 /* Attempt to detect and diagnose an overlapping copy in a call expression
-   EXPR involving an access ACS to a built-in memory or string function.
+   EXPR involving an an access ACS to a built-in memory or string function.
    Return true when one has been detected, false otherwise.  */
 
 static bool
-maybe_diag_overlap (location_t loc, gimple *call, builtin_access &acs)
+maybe_diag_overlap (location_t loc, gcall *call, builtin_access &acs)
 {
   if (!acs.overlap ())
     return false;
-
-  if (gimple_no_warning_p (call))
-    return true;
 
   /* For convenience.  */
   const builtin_memref &dstref = *acs.dstref;
@@ -1468,7 +1383,7 @@ maybe_diag_overlap (location_t loc, gimple *call, builtin_access &acs)
 	     "[" HOST_WIDE_INT_PRINT_DEC ", " HOST_WIDE_INT_PRINT_DEC "]",
 	     ovloff[0], ovloff[1]);
 
-  const offset_int maxobjsize = dstref.maxobjsize;
+  const offset_int maxobjsize = tree_to_shwi (max_object_size ());
   bool must_overlap = ovlsiz[0] > 0;
 
   if (ovlsiz[1] == 0)
@@ -1663,74 +1578,32 @@ maybe_diag_overlap (location_t loc, gimple *call, builtin_access &acs)
   return true;
 }
 
-/* Validate REF size and offsets in an expression passed as an argument
-   to a CALL to a built-in function FUNC to make sure they are within
-   the bounds of the referenced object if its size is known, or
-   PTRDIFF_MAX otherwise.  DO_WARN is true when a diagnostic should
-   be issued, false otherwise.
-   Both initial values of the offsets and their final value computed
-   by the function by incrementing the initial value by the size are
+/* Validate REF offsets in an EXPRession passed as an argument to a CALL
+   to a built-in function FUNC to make sure they are within the bounds
+   of the referenced object if its size is known, or PTRDIFF_MAX otherwise.
+   Both initial values of the offsets and their final value computed by
+   the function by incrementing the initial value by the size are
    validated.  Return true if the offsets are not valid and a diagnostic
-   has been issued, or would have been issued if DO_WARN had been true.  */
+   has been issued.  */
 
 static bool
-maybe_diag_access_bounds (gimple *call, tree func, int strict,
-			  const builtin_memref &ref, offset_int wroff,
-			  bool do_warn)
+maybe_diag_offset_bounds (location_t loc, gcall *call, tree func, int strict,
+			  tree expr, const builtin_memref &ref)
 {
-  location_t loc = gimple_or_expr_nonartificial_location (call, ref.ptr);
-  const offset_int maxobjsize = ref.maxobjsize;
+  if (!warn_array_bounds)
+    return false;
 
-  /* Check for excessive size first and regardless of warning options
-     since the result is used to make codegen decisions.  */
-  if (ref.sizrange[0] > maxobjsize)
-    {
-      /* Return true without issuing a warning.  */
-      if (!do_warn)
-	return true;
-
-      if (ref.ref && TREE_NO_WARNING (ref.ref))
-	return false;
-
-      if (warn_stringop_overflow)
-	{
-	  if (ref.sizrange[0] == ref.sizrange[1])
-	    return warning_at (loc, OPT_Wstringop_overflow_,
-			       "%G%qD specified bound %wu "
-			       "exceeds maximum object size %wu",
-			       call, func, ref.sizrange[0].to_uhwi (),
-			       maxobjsize.to_uhwi ());
-
-	  return warning_at (loc, OPT_Wstringop_overflow_,
-			     "%G%qD specified bound between %wu and %wu "
-			     "exceeds maximum object size %wu",
-			     call, func, ref.sizrange[0].to_uhwi (),
-			     ref.sizrange[1].to_uhwi (),
-			     maxobjsize.to_uhwi ());
-	}
-    }
-
-  /* Check for out-bounds pointers regardless of warning options since
-     the result is used to make codegen decisions.  An excessive WROFF
-     can only come up as a result of an invalid strncat bound and is
-     diagnosed separately using a more meaningful warning.  */
-  if (maxobjsize < wroff)
-    wroff = 0;
-  offset_int ooboff[] = { ref.offrange[0], ref.offrange[1], wroff };
+  offset_int ooboff[] = { ref.offrange[0], ref.offrange[1] };
   tree oobref = ref.offset_out_of_bounds (strict, ooboff);
   if (!oobref)
     return false;
 
-  /* Return true without issuing a warning.  */
-  if (!do_warn)
-    return true;
+  if (EXPR_HAS_LOCATION (expr))
+    loc = EXPR_LOCATION (expr);
 
-  if (!warn_array_bounds)
-    return false;
+  loc = expansion_point_location_if_in_system_header (loc);
 
-  if (TREE_NO_WARNING (ref.ptr)
-      || (ref.ref && TREE_NO_WARNING (ref.ref)))
-    return false;
+  tree type;
 
   char rangestr[2][64];
   if (ooboff[0] == ooboff[1]
@@ -1742,47 +1615,40 @@ maybe_diag_access_bounds (gimple *call, tree func, int strict,
 	     (long long) ooboff[0].to_shwi (),
 	     (long long) ooboff[1].to_shwi ());
 
-  bool warned = false;
-
   if (oobref == error_mark_node)
     {
       if (ref.sizrange[0] == ref.sizrange[1])
-	sprintf (rangestr[1], "%llu",
-		 (unsigned long long) ref.sizrange[0].to_shwi ());
+	sprintf (rangestr[1], "%lli", (long long) ref.sizrange[0].to_shwi ());
       else
 	sprintf (rangestr[1], "[%lli, %lli]",
-		 (unsigned long long) ref.sizrange[0].to_uhwi (),
-		 (unsigned long long) ref.sizrange[1].to_uhwi ());
-
-      tree type;
+		 (long long) ref.sizrange[0].to_shwi (),
+		 (long long) ref.sizrange[1].to_shwi ());
 
       if (DECL_P (ref.base)
 	  && TREE_CODE (type = TREE_TYPE (ref.base)) == ARRAY_TYPE)
 	{
-	  auto_diagnostic_group d;
 	  if (warning_at (loc, OPT_Warray_bounds,
 			  "%G%qD pointer overflow between offset %s "
 			  "and size %s accessing array %qD with type %qT",
 			  call, func, rangestr[0], rangestr[1], ref.base, type))
-	    {
-	      inform (DECL_SOURCE_LOCATION (ref.base),
-		      "array %qD declared here", ref.base);
-	      warned = true;
-	    }
+	    inform (DECL_SOURCE_LOCATION (ref.base),
+		    "array %qD declared here", ref.base);
 	  else
-	    warned = warning_at (loc, OPT_Warray_bounds,
-				 "%G%qD pointer overflow between offset %s "
-				 "and size %s",
-				 call, func, rangestr[0], rangestr[1]);
+	    warning_at (loc, OPT_Warray_bounds,
+			"%G%qD pointer overflow between offset %s "
+			"and size %s",
+			call, func, rangestr[0], rangestr[1]);
 	}
       else
-	warned = warning_at (loc, OPT_Warray_bounds,
-			     "%G%qD pointer overflow between offset %s "
-			     "and size %s",
-			     call, func, rangestr[0], rangestr[1]);
+	warning_at (loc, OPT_Warray_bounds,
+		    "%G%qD pointer overflow between offset %s "
+		    "and size %s",
+		    call, func, rangestr[0], rangestr[1]);
     }
   else if (oobref == ref.base)
     {
+      const offset_int maxobjsize = tree_to_shwi (max_object_size ());
+
       /* True when the offset formed by an access to the reference
 	 is out of bounds, rather than the initial offset wich is
 	 in bounds.  This implies access past the end.  */
@@ -1790,7 +1656,6 @@ maybe_diag_access_bounds (gimple *call, tree func, int strict,
 
       if (DECL_P (ref.base))
 	{
-	  auto_diagnostic_group d;
 	  if ((ref.basesize < maxobjsize
 	       && warning_at (loc, OPT_Warray_bounds,
 			      form
@@ -1809,78 +1674,55 @@ maybe_diag_access_bounds (gimple *call, tree func, int strict,
 				  "of object %qD with type %qT"),
 			     call, func, rangestr[0],
 			     ref.base, TREE_TYPE (ref.base)))
-	    {
-	      inform (DECL_SOURCE_LOCATION (ref.base),
-		      "%qD declared here", ref.base);
-	      warned = true;
-	    }
+	    inform (DECL_SOURCE_LOCATION (ref.base),
+		    "%qD declared here", ref.base);
 	}
       else if (ref.basesize < maxobjsize)
-	warned = warning_at (loc, OPT_Warray_bounds,
-			     form
-			     ? G_("%G%qD forming offset %s is out "
-				  "of the bounds [0, %wu]")
-			     : G_("%G%qD offset %s is out "
-				  "of the bounds [0, %wu]"),
-			     call, func, rangestr[0], ref.basesize.to_uhwi ());
+	warning_at (loc, OPT_Warray_bounds,
+		    form
+		    ? G_("%G%qD forming offset %s is out of the bounds "
+			 "[0, %wu]")
+		    : G_("%G%qD offset %s is out of the bounds [0, %wu]"),
+		    call, func, rangestr[0], ref.basesize.to_uhwi ());
       else
-	warned = warning_at (loc, OPT_Warray_bounds,
-			     form
-			     ? G_("%G%qD forming offset %s is out of bounds")
-			     : G_("%G%qD offset %s is out of bounds"),
-			     call, func, rangestr[0]);
+	warning_at (loc, OPT_Warray_bounds,
+		    form
+		    ? G_("%G%qD forming offset %s is out of bounds")
+		    : G_("%G%qD offset %s is out of bounds"),
+		    call, func, rangestr[0]);
     }
   else if (TREE_CODE (ref.ref) == MEM_REF)
     {
-      tree refop = TREE_OPERAND (ref.ref, 0);
-      tree type = TREE_TYPE (refop);
+      tree type = TREE_TYPE (TREE_OPERAND (ref.ref, 0));
       if (POINTER_TYPE_P (type))
 	type = TREE_TYPE (type);
       type = TYPE_MAIN_VARIANT (type);
 
-      if (warning_at (loc, OPT_Warray_bounds,
-		      "%G%qD offset %s from the object at %qE is out "
-		      "of the bounds of %qT",
-		      call, func, rangestr[0], ref.base, type))
-	{
-	  if (TREE_CODE (ref.ref) == COMPONENT_REF)
-	    refop = TREE_OPERAND (ref.ref, 1);
-	  if (DECL_P (refop))
-	    inform (DECL_SOURCE_LOCATION (refop),
-		    "subobject %qD declared here", refop);
-	  warned = true;
-	}
+      warning_at (loc, OPT_Warray_bounds,
+		  "%G%qD offset %s from the object at %qE is out "
+		  "of the bounds of %qT",
+		  call, func, rangestr[0], ref.base, type);
     }
   else
     {
-      tree refop = TREE_OPERAND (ref.ref, 0);
-      tree type = TYPE_MAIN_VARIANT (TREE_TYPE (ref.ref));
+      type = TYPE_MAIN_VARIANT (TREE_TYPE (ref.ref));
 
-      if (warning_at (loc, OPT_Warray_bounds,
-		      "%G%qD offset %s from the object at %qE is out "
-		      "of the bounds of referenced subobject %qD with "
-		      "type %qT at offset %wi",
-		      call, func, rangestr[0], ref.base,
-		      TREE_OPERAND (ref.ref, 1), type,
-		      ref.refoff.to_shwi ()))
-	{
-	  if (TREE_CODE (ref.ref) == COMPONENT_REF)
-	    refop = TREE_OPERAND (ref.ref, 1);
-	  if (DECL_P (refop))
-	    inform (DECL_SOURCE_LOCATION (refop),
-		    "subobject %qD declared here", refop);
-	  warned = true;
-	}
+      warning_at (loc, OPT_Warray_bounds,
+		"%G%qD offset %s from the object at %qE is out "
+		"of the bounds of referenced subobject %qD with type %qT "
+		"at offset %wu",
+		call, func, rangestr[0], ref.base, TREE_OPERAND (ref.ref, 1),
+		type, ref.refoff.to_uhwi ());
     }
 
-  return warned;
+  return true;
 }
 
 /* Check a CALL statement for restrict-violations and issue warnings
    if/when appropriate.  */
 
 void
-wrestrict_dom_walker::check_call (gimple *call)
+wrestrict_dom_walker::check_call (gcall *call)
 {
   /* Avoid checking the call if it has already been diagnosed for
      some reason.  */
@@ -1888,8 +1730,10 @@ wrestrict_dom_walker::check_call (gimple *call)
     return;
 
   tree func = gimple_call_fndecl (call);
-  if (!func || !fndecl_built_in_p (func, BUILT_IN_NORMAL))
+  if (!func || DECL_BUILT_IN_CLASS (func) != BUILT_IN_NORMAL)
     return;
+
+  bool with_bounds = gimple_call_with_bounds_p (call);
 
   /* Argument number to extract from the call (depends on the built-in
      and its kind).  */
@@ -1905,10 +1749,16 @@ wrestrict_dom_walker::check_call (gimple *call)
     {
     case BUILT_IN_MEMCPY:
     case BUILT_IN_MEMCPY_CHK:
+    case BUILT_IN_MEMCPY_CHKP:
+    case BUILT_IN_MEMCPY_CHK_CHKP:
     case BUILT_IN_MEMPCPY:
     case BUILT_IN_MEMPCPY_CHK:
+    case BUILT_IN_MEMPCPY_CHKP:
+    case BUILT_IN_MEMPCPY_CHK_CHKP:
     case BUILT_IN_MEMMOVE:
     case BUILT_IN_MEMMOVE_CHK:
+    case BUILT_IN_MEMMOVE_CHKP:
+    case BUILT_IN_MEMMOVE_CHK_CHKP:
       strfun = false;
       /* Fall through.  */
 
@@ -1919,30 +1769,31 @@ wrestrict_dom_walker::check_call (gimple *call)
     case BUILT_IN_STRNCPY:
     case BUILT_IN_STRNCPY_CHK:
       dst_idx = 0;
-      src_idx = 1;
-      bnd_idx = 2;
-      break;
-
-    case BUILT_IN_MEMSET:
-    case BUILT_IN_MEMSET_CHK:
-      dst_idx = 0;
-      bnd_idx = 2;
+      src_idx = 1 + with_bounds;
+      bnd_idx = 2 + 2 * with_bounds;
       break;
 
     case BUILT_IN_STPCPY:
     case BUILT_IN_STPCPY_CHK:
+    case BUILT_IN_STPCPY_CHKP:
+    case BUILT_IN_STPCPY_CHK_CHKP:
     case BUILT_IN_STRCPY:
     case BUILT_IN_STRCPY_CHK:
+    case BUILT_IN_STRCPY_CHKP:
+    case BUILT_IN_STRCPY_CHK_CHKP:
     case BUILT_IN_STRCAT:
     case BUILT_IN_STRCAT_CHK:
+    case BUILT_IN_STRCAT_CHKP:
+    case BUILT_IN_STRCAT_CHK_CHKP:
       dst_idx = 0;
-      src_idx = 1;
+      src_idx = 1 + with_bounds;
       break;
 
     default:
       /* Handle other string functions here whose access may need
 	 to be validated for in-bounds offsets and non-overlapping
-	 copies.  */
+	 copies.  (Not all _chkp functions have BUILT_IN_XXX_CHKP
+	 macros so they need to be handled here.)  */
       return;
     }
 
@@ -1959,18 +1810,18 @@ wrestrict_dom_walker::check_call (gimple *call)
 
   /* DST and SRC can be null for a call with an insufficient number
      of arguments to a built-in function declared without a protype.  */
-  if (!dst || (src_idx < nargs && !src))
+  if (!dst || !src)
     return;
 
   /* DST, SRC, or DSTWR can also have the wrong type in a call to
      a function declared without a prototype.  Avoid checking such
      invalid calls.  */
   if (TREE_CODE (TREE_TYPE (dst)) != POINTER_TYPE
-      || (src && TREE_CODE (TREE_TYPE (src)) != POINTER_TYPE)
+      || TREE_CODE (TREE_TYPE (src)) != POINTER_TYPE
       || (dstwr && !INTEGRAL_TYPE_P (TREE_TYPE (dstwr))))
     return;
 
-  if (!check_bounds_or_overlap (call, dst, src, dstwr, NULL_TREE))
+  if (check_bounds_or_overlap (call, dst, src, dstwr, NULL_TREE))
     return;
 
   /* Avoid diagnosing the call again.  */
@@ -1982,61 +1833,51 @@ wrestrict_dom_walker::check_call (gimple *call)
 /* Attempt to detect and diagnose invalid offset bounds and (except for
    memmove) overlapping copy in a call expression EXPR from SRC to DST
    and DSTSIZE and SRCSIZE bytes, respectively.  Both DSTSIZE and
-   SRCSIZE may be NULL.  DO_WARN is false to detect either problem
-   without issue a warning.  Return the OPT_Wxxx constant corresponding
-   to the warning if one has been detected and zero otherwise.  */
+   SRCSIZE may be NULL.  Return false when one or the other has been
+   detected and diagnosed, true otherwise.  */
 
-int
-check_bounds_or_overlap (gimple *call, tree dst, tree src, tree dstsize,
-			 tree srcsize, bool bounds_only /* = false */,
-			 bool do_warn /* = true */)
+bool
+check_bounds_or_overlap (gcall *call, tree dst, tree src, tree dstsize,
+			 tree srcsize, bool bounds_only /* = false */)
 {
+  location_t loc = gimple_location (call);
+
+  if (tree block = gimple_block (call))
+    if (location_t *pbloc = block_nonartificial_location (block))
+      loc = *pbloc;
+
+  loc = expansion_point_location_if_in_system_header (loc);
+
   tree func = gimple_call_fndecl (call);
 
   builtin_memref dstref (dst, dstsize);
   builtin_memref srcref (src, srcsize);
 
-  /* Create a descriptor of the access.  This may adjust both DSTREF
-     and SRCREF based on one another and the kind of the access.  */
   builtin_access acs (call, dstref, srcref);
 
   /* Set STRICT to the value of the -Warray-bounds=N argument for
      string functions or when N > 1.  */
   int strict = (acs.strict () || warn_array_bounds > 1 ? warn_array_bounds : 0);
 
-  /* The starting offset of the destination write access.  Nonzero only
-     for the strcat family of functions.  */
-  offset_int wroff = acs.write_off (dstsize);
-
-  /* Validate offsets to each reference before the access first to make
-     sure they are within the bounds of the destination object if its
-     size is known, or PTRDIFF_MAX otherwise.  */
-  if (maybe_diag_access_bounds (call, func, strict, dstref, wroff, do_warn)
-      || maybe_diag_access_bounds (call, func, strict, srcref, 0, do_warn))
+  /* Validate offsets first to make sure they are within the bounds
+     of the destination object if its size is known, or PTRDIFF_MAX
+     otherwise.  */
+  if (maybe_diag_offset_bounds (loc, call, func, strict, dst, dstref)
+      || maybe_diag_offset_bounds (loc, call, func, strict, src, srcref))
     {
-      if (do_warn)
-	gimple_set_no_warning (call, true);
-      return OPT_Warray_bounds;
+      gimple_set_no_warning (call, true);
+      return false;
     }
 
-  if (!warn_restrict || bounds_only || !src)
-    return 0;
+  bool check_overlap
+    = (warn_restrict
+       && (bounds_only
+	   || (DECL_FUNCTION_CODE (func) != BUILT_IN_MEMMOVE
+	       && DECL_FUNCTION_CODE (func) != BUILT_IN_MEMMOVE_CHK)));
 
-  if (!bounds_only)
-    {
-      switch (DECL_FUNCTION_CODE (func))
-	{
-	case BUILT_IN_MEMMOVE:
-	case BUILT_IN_MEMMOVE_CHK:
-	case BUILT_IN_MEMSET:
-	case BUILT_IN_MEMSET_CHK:
-	  return 0;
-	default:
-	  break;
-	}
-    }
+  if (!check_overlap)
+    return true;
 
-  location_t loc = gimple_or_expr_nonartificial_location (call, dst);
   if (operand_equal_p (dst, src, 0))
     {
       /* Issue -Wrestrict unless the pointers are null (those do
@@ -2049,97 +1890,24 @@ check_bounds_or_overlap (gimple *call, tree dst, tree src, tree dstsize,
 		      "%G%qD source argument is the same as destination",
 		      call, func);
 	  gimple_set_no_warning (call, true);
-	  return OPT_Wrestrict;
+	  return false;
 	}
 
-      return 0;
+      return true;
     }
 
   /* Return false when overlap has been detected.  */
   if (maybe_diag_overlap (loc, call, acs))
     {
       gimple_set_no_warning (call, true);
-      return OPT_Wrestrict;
+      return false;
     }
 
-  return 0;
+  return true;
 }
 
 gimple_opt_pass *
 make_pass_warn_restrict (gcc::context *ctxt)
 {
   return new pass_wrestrict (ctxt);
-}
-
-DEBUG_FUNCTION void
-dump_builtin_memref (FILE *fp, const builtin_memref &ref)
-{
-  fprintf (fp, "\n    ptr = ");
-  print_generic_expr (fp, ref.ptr, TDF_LINENO);
-  fprintf (fp, "\n    ref = ");
-  if (ref.ref)
-    print_generic_expr (fp, ref.ref, TDF_LINENO);
-  else
-    fputs ("null", fp);
-  fprintf (fp, "\n    base = ");
-  print_generic_expr (fp, ref.base, TDF_LINENO);
-  fprintf (fp,
-	   "\n    basesize = %lli"
-	   "\n    refsize = %lli"
-	   "\n    refoff = %lli"
-	   "\n    offrange = [%lli, %lli]"
-	   "\n    sizrange = [%lli, %lli]"
-	   "\n    strbounded_p = %s\n",
-	   (long long)ref.basesize.to_shwi (),
-	   (long long)ref.refsize.to_shwi (),
-	   (long long)ref.refoff.to_shwi (),
-	   (long long)ref.offrange[0].to_shwi (),
-	   (long long)ref.offrange[1].to_shwi (),
-	   (long long)ref.sizrange[0].to_shwi (),
-	   (long long)ref.sizrange[1].to_shwi (),
-	   ref.strbounded_p ? "true" : "false");
-}
-
-void
-builtin_access::dump (FILE *fp) const
-{
-  fprintf (fp, "  dstref:");
-  dump_builtin_memref (fp, *dstref);
-  fprintf (fp, "\n  srcref:");
-  dump_builtin_memref (fp, *srcref);
-
-  fprintf (fp,
-	   "  sizrange = [%lli, %lli]\n"
-	   "  ovloff = [%lli, %lli]\n"
-	   "  ovlsiz = [%lli, %lli]\n"
-	   "  dstoff = [%lli, %lli]\n"
-	   "  dstsiz = [%lli, %lli]\n"
-	   "  srcoff = [%lli, %lli]\n"
-	   "  srcsiz = [%lli, %lli]\n",
-	   (long long)sizrange[0], (long long)sizrange[1],
-	   (long long)ovloff[0], (long long)ovloff[1],
-	   (long long)ovlsiz[0], (long long)ovlsiz[1],
-	   (long long)dstoff[0].to_shwi (), (long long)dstoff[1].to_shwi (),
-	   (long long)dstsiz[0].to_shwi (), (long long)dstsiz[1].to_shwi (),
-	   (long long)srcoff[0].to_shwi (), (long long)srcoff[1].to_shwi (),
-	   (long long)srcsiz[0].to_shwi (), (long long)srcsiz[1].to_shwi ());
-}
-
-DEBUG_FUNCTION void
-dump_builtin_access (FILE *fp, gimple *stmt, const builtin_access &acs)
-{
-  if (stmt)
-    {
-      fprintf (fp, "\nDumping builtin_access for ");
-      print_gimple_expr (fp, stmt, TDF_LINENO);
-      fputs (":\n", fp);
-    }
-
-  acs.dump (fp);
-}
-
-DEBUG_FUNCTION void
-debug (gimple *stmt, const builtin_access &acs)
-{
-  dump_builtin_access (stdout, stmt, acs);
 }

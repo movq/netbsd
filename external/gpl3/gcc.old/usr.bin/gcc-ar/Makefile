@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.8 2023/02/20 02:12:35 mrg Exp $
+#	$NetBSD: Makefile,v 1.1 2015/09/23 03:03:40 mrg Exp $
 
 GCC_TOOL=	ar
 

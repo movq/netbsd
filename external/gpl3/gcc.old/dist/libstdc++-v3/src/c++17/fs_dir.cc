@@ -1,6 +1,6 @@
 // Class filesystem::directory_entry etc. -*- C++ -*-
 
-// Copyright (C) 2014-2020 Free Software Foundation, Inc.
+// Copyright (C) 2014-2019 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -148,8 +148,12 @@ directory_iterator(const path& p, directory_options options, error_code* ecptr)
 }
 
 const fs::directory_entry&
-fs::directory_iterator::operator*() const noexcept
+fs::directory_iterator::operator*() const
 {
+  if (!_M_dir)
+    _GLIBCXX_THROW_OR_ABORT(filesystem_error(
+	  "non-dereferenceable directory iterator",
+	  std::make_error_code(errc::invalid_argument)));
   return _M_dir->entry;
 }
 
@@ -207,7 +211,7 @@ recursive_directory_iterator(const path& p, directory_options options,
   else
     {
       const int err = errno;
-      if (fs::is_permission_denied_error(err)
+      if (err == EACCES
 	  && is_set(options, fs::directory_options::skip_permission_denied))
 	{
 	  if (ecptr)
@@ -306,10 +310,6 @@ fs::recursive_directory_iterator::increment(error_code& ec)
 	  return *this;
 	}
     }
-
-  if (ec)
-    _M_dirs.reset();
-
   return *this;
 }
 
@@ -333,20 +333,16 @@ fs::recursive_directory_iterator::pop(error_code& ec)
 	ec.clear();
 	return;
       }
-  } while (!_M_dirs->top().advance(skip_permission_denied, ec) && !ec);
-
-  if (ec)
-    _M_dirs.reset();
+  } while (!_M_dirs->top().advance(skip_permission_denied, ec));
 }
 
 void
 fs::recursive_directory_iterator::pop()
 {
-  [[maybe_unused]] const bool dereferenceable = _M_dirs != nullptr;
   error_code ec;
   pop(ec);
   if (ec)
-    _GLIBCXX_THROW_OR_ABORT(filesystem_error(dereferenceable
+    _GLIBCXX_THROW_OR_ABORT(filesystem_error(_M_dirs
 	  ? "recursive directory iterator cannot pop"
 	  : "non-dereferenceable recursive directory iterator cannot pop",
 	  ec));

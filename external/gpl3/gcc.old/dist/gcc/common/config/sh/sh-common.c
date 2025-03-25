@@ -1,5 +1,5 @@
 /* Common hooks for Renesas / SuperH SH.
-   Copyright (C) 1993-2020 Free Software Foundation, Inc.
+   Copyright (C) 1993-2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -25,13 +25,22 @@ along with GCC; see the file COPYING3.  If not see
 #include "common/common-target-def.h"
 #include "opts.h"
 #include "flags.h"
+#include "params.h"
 
 /* Set default optimization options.  */
 static const struct default_options sh_option_optimization_table[] =
   {
+    { OPT_LEVELS_1_PLUS, OPT_fomit_frame_pointer, NULL, 1 },
+    { OPT_LEVELS_1_PLUS_SPEED_ONLY, OPT_mdiv_, "inv:minlat", 1 },
     { OPT_LEVELS_SIZE, OPT_mdiv_, SH_DIV_STR_FOR_SIZE, 1 },
     { OPT_LEVELS_0_ONLY, OPT_mdiv_, "", 1 },
-    { OPT_LEVELS_ALL, OPT__param_simultaneous_prefetches_, NULL, 2 },
+    { OPT_LEVELS_SIZE, OPT_mcbranchdi, NULL, 0 },
+    /* We can't meaningfully test TARGET_SHMEDIA here, because -m
+       options haven't been parsed yet, hence we'd read only the
+       default.  sh_target_reg_class will return NO_REGS if this is
+       not SHMEDIA, so it's OK to always set
+       flag_branch_target_load_optimize.  */
+    { OPT_LEVELS_2_PLUS, OPT_fbranch_target_load_optimize, NULL, 1 },
     { OPT_LEVELS_NONE, 0, NULL, 0 }
   };
 
@@ -140,13 +149,52 @@ sh_handle_option (struct gcc_options *opts,
 	= (opts->x_target_flags & ~MASK_ARCH) | SELECT_SH4A_SINGLE_ONLY;
       return true;
 
+    case OPT_m5_32media:
+      opts->x_target_flags
+	= (opts->x_target_flags & ~MASK_ARCH) | SELECT_SH5_32MEDIA;
+      return true;
+
+    case OPT_m5_32media_nofpu:
+      opts->x_target_flags
+	= (opts->x_target_flags & ~MASK_ARCH) | SELECT_SH5_32MEDIA_NOFPU;
+      return true;
+
+    case OPT_m5_64media:
+      opts->x_target_flags
+	= (opts->x_target_flags & ~MASK_ARCH) | SELECT_SH5_64MEDIA;
+      return true;
+
+    case OPT_m5_64media_nofpu:
+      opts->x_target_flags
+	= (opts->x_target_flags & ~MASK_ARCH) | SELECT_SH5_64MEDIA_NOFPU;
+      return true;
+
+    case OPT_m5_compact:
+      opts->x_target_flags
+	= (opts->x_target_flags & ~MASK_ARCH) | SELECT_SH5_COMPACT;
+      return true;
+
+    case OPT_m5_compact_nofpu:
+      opts->x_target_flags
+	= (opts->x_target_flags & ~MASK_ARCH) | SELECT_SH5_COMPACT_NOFPU;
+      return true;
+
     default:
       return true;
     }
 }
 
+/* Implement TARGET_OPTION_DEFAULT_PARAMS.  */
+static void
+sh_option_default_params (void)
+{
+  set_default_param_value (PARAM_SIMULTANEOUS_PREFETCHES, 2);
+}
+
 #undef TARGET_OPTION_OPTIMIZATION_TABLE
 #define TARGET_OPTION_OPTIMIZATION_TABLE sh_option_optimization_table
+#undef TARGET_OPTION_DEFAULT_PARAMS
+#define TARGET_OPTION_DEFAULT_PARAMS sh_option_default_params
 #undef TARGET_DEFAULT_TARGET_FLAGS
 #define TARGET_DEFAULT_TARGET_FLAGS TARGET_DEFAULT
 #undef TARGET_HANDLE_OPTION

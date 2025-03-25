@@ -1,6 +1,6 @@
 // localization implementation details, DragonFly version -*- C++ -*-
 
-// Copyright (C) 2001-2020 Free Software Foundation, Inc.
+// Copyright (C) 2001-2016 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -33,8 +33,6 @@
 
 // Written by Benjamin Kosnik <bkoz@redhat.com>
 // Modified for DragonFly by John Marino <gnugcc@marino.st>
-// Modified for NetBSD by Christos Zoulas <christos@zoulas.com> and
-// matthew green <mrg@eterna.com.au>
 
 #ifndef _GLIBCXX_CXX_LOCALE_H
 #define _GLIBCXX_CXX_LOCALE_H 1
@@ -42,9 +40,7 @@
 #pragma GCC system_header
 
 #include <clocale>
-#ifndef __NetBSD__
 #include <xlocale.h>
-#endif
 
 #define _GLIBCXX_NUM_CATEGORIES 0
 
@@ -54,7 +50,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   typedef int*			__c_locale;
 
-#ifndef __NetBSD__
   // Convert numeric value of type double and long double to string and
   // return length of string.  If vsnprintf is available use it, otherwise
   // fall back to the unsafe vsprintf which, in general, can be dangerous
@@ -80,15 +75,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     uselocale((locale_t)__old);
     return __ret;
   }
-#else
-  // NetBSD backend requires vasprintf_l() which may not be visible in
-  // all complation environments (eg, _XOPEN_SOURCE=600) so the backend
-  // lives in the library code, instead of this header.
-  int
-  __convert_from_v(const __c_locale& __cloc, char* __out,
-		   const int __size __attribute__ ((__unused__)),
-		   const char* __fmt, ...);
-#endif
 
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace

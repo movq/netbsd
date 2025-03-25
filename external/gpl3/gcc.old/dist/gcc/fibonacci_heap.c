@@ -1,5 +1,5 @@
 /* Fibonacci heap for GNU compiler.
-   Copyright (C) 2016-2020 Free Software Foundation, Inc.
+   Copyright (C) 2016-2017 Free Software Foundation, Inc.
    Contributed by Martin Liska <mliska@suse.cz>
 
 This file is part of GCC.
@@ -21,7 +21,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "alloc-pool.h"
 #include "fibonacci_heap.h"
 #include "selftest.h"
 
@@ -39,14 +38,13 @@ typedef fibonacci_heap <int, int> int_heap_t;
 static void
 test_empty_heap ()
 {
-  pool_allocator allocator ("fibheap test", sizeof (int_heap_node_t));
-  int_heap_t *h1 = new int_heap_t (INT_MIN, &allocator);
+  int_heap_t *h1 = new int_heap_t (INT_MIN);
 
   ASSERT_TRUE (h1->empty ());
   ASSERT_EQ (0, h1->nodes ());
   ASSERT_EQ (NULL, h1->min ());
 
-  int_heap_t *h2 = new int_heap_t (INT_MIN, &allocator);
+  int_heap_t *h2 = new int_heap_t (INT_MIN);
 
   int_heap_t *r = h1->union_with (h2);
   ASSERT_TRUE (r->empty ());
@@ -171,13 +169,12 @@ static void
 test_union ()
 {
   int value = 777;
-  pool_allocator allocator ("fibheap test", sizeof (int_heap_node_t));
 
-  int_heap_t *heap1 = new int_heap_t (INT_MIN, &allocator);
+  int_heap_t *heap1 = new int_heap_t (INT_MIN);
   for (unsigned i = 0; i < 2 * TEST_HEAP_N; i++)
     heap1->insert (i, &value);
 
-  int_heap_t *heap2 = new int_heap_t (INT_MIN, &allocator);
+  int_heap_t *heap2 = new int_heap_t (INT_MIN);
   for (unsigned i = 2 * TEST_HEAP_N; i < 3 * TEST_HEAP_N; i++)
     heap2->insert (i, &value);
 
@@ -199,13 +196,12 @@ static void
 test_union_of_equal_heaps ()
 {
   int value = 777;
-  pool_allocator allocator ("fibheap test", sizeof (int_heap_node_t));
 
-  int_heap_t *heap1 = new int_heap_t (INT_MIN, &allocator);
+  int_heap_t *heap1 = new int_heap_t (INT_MIN);
   for (unsigned i = 0; i < TEST_HEAP_N; i++)
     heap1->insert (i, &value);
 
-  int_heap_t *heap2 = new int_heap_t (INT_MIN, &allocator);
+  int_heap_t *heap2 = new int_heap_t (INT_MIN);
   for (unsigned i = 0; i < TEST_HEAP_N; i++)
     heap2->insert (i, &value);
 
@@ -223,9 +219,8 @@ test_union_of_equal_heaps ()
 
 /* Dummy struct for testing.  */
 
-class heap_key
+struct heap_key
 {
-public:
   heap_key (int k): key (k)
   {
   }

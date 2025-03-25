@@ -340,16 +340,6 @@ void AliasDeclaration::semantic(Scope *sc)
 void AliasDeclaration::aliasSemantic(Scope *sc)
 {
     //printf("AliasDeclaration::semantic() %s\n", toChars());
-
-    // as AliasDeclaration::semantic, in case we're called first.
-    // see https://issues.dlang.org/show_bug.cgi?id=21001
-    storage_class |= sc->stc & STCdeprecated;
-    protection = sc->protection;
-    userAttribDecl = sc->userAttribDecl;
-
-    // TypeTraits needs to know if it's located in an AliasDeclaration
-    sc->flags |= SCOPEalias;
-
     if (aliassym)
     {
         FuncDeclaration *fd = aliassym->isFuncLiteralDeclaration();
@@ -357,10 +347,7 @@ void AliasDeclaration::aliasSemantic(Scope *sc)
         if (fd || (td && td->literal))
         {
             if (fd && fd->semanticRun >= PASSsemanticdone)
-            {
-                sc->flags &= ~SCOPEalias;
                 return;
-            }
 
             Expression *e = new FuncExp(loc, aliassym);
             e = ::semantic(e, sc);
@@ -374,13 +361,11 @@ void AliasDeclaration::aliasSemantic(Scope *sc)
                 aliassym = NULL;
                 type = Type::terror;
             }
-            sc->flags &= ~SCOPEalias;
             return;
         }
 
         if (aliassym->isTemplateInstance())
             aliassym->semantic(sc);
-        sc->flags &= ~SCOPEalias;
         return;
     }
     inuse = 1;
@@ -485,7 +470,6 @@ void AliasDeclaration::aliasSemantic(Scope *sc)
         if (!overloadInsert(sx))
             ScopeDsymbol::multiplyDefined(Loc(), sx, this);
     }
-    sc->flags &= ~SCOPEalias;
 }
 
 bool AliasDeclaration::overloadInsert(Dsymbol *s)
@@ -846,11 +830,6 @@ VarDeclaration::VarDeclaration(Loc loc, Type *type, Identifier *id, Initializer 
     this->sequenceNumber = ++nextSequenceNumber;
 }
 
-VarDeclaration *VarDeclaration::create(Loc loc, Type *type, Identifier *id, Initializer *init)
-{
-    return new VarDeclaration(loc, type, id, init);
-}
-
 Dsymbol *VarDeclaration::syntaxCopy(Dsymbol *s)
 {
     //printf("VarDeclaration::syntaxCopy(%s)\n", toChars());
@@ -880,11 +859,6 @@ void VarDeclaration::semantic(Scope *sc)
         scx = sc;
         _scope = NULL;
     }
-
-    if (!sc)
-        return;
-
-    semanticRun = PASSsemantic;
 
     /* Pick up storage classes from context, but except synchronized,
      * override, abstract, and final.
@@ -1059,7 +1033,6 @@ void VarDeclaration::semantic(Scope *sc)
                 else if (isAliasThisTuple(e))
                 {
                     VarDeclaration *v = copyToTemp(0, "__tup", e);
-                    v->semantic(sc);
                     VarExp *ve = new VarExp(loc, v);
                     ve->type = e->type;
 
@@ -1461,7 +1434,7 @@ Lnomatch:
                         if (!e)
                         {
                             error("is not a static and cannot have static initializer");
-                            e = new ErrorExp();
+                            return;
                         }
                     }
                     ei = new ExpInitializer(_init->loc, e);
@@ -2181,7 +2154,7 @@ Expression *VarDeclaration::callScopeDtor(Scope *)
 
             // Destroying C++ scope classes crashes currently. Since C++ class dtors are not currently supported, simply do not run dtors for them.
             // See https://issues.dlang.org/show_bug.cgi?id=13182
-            if (cd->isCPPclass())
+            if (cd->cpp)
             {
                 break;
             }

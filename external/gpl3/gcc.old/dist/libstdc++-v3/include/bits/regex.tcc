@@ -1,6 +1,6 @@
 // class template regex -*- C++ -*-
 
-// Copyright (C) 2013-2020 Free Software Foundation, Inc.
+// Copyright (C) 2013-2015 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -28,13 +28,18 @@
  *  Do not attempt to use it directly. @headername{regex}
  */
 
+// A non-standard switch to let the user pick the matching algorithm.
+// If _GLIBCXX_REGEX_USE_THOMPSON_NFA is defined, the thompson NFA
+// algorithm will be used. This algorithm is not enabled by default,
+// and cannot be used if the regex contains back-references, but has better
+// (polynomial instead of exponential) worst case performance.
+// See __regex_algo_impl below.
+
 namespace std _GLIBCXX_VISIBILITY(default)
 {
-_GLIBCXX_BEGIN_NAMESPACE_VERSION
-
 namespace __detail
 {
-  /// @cond undocumented
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   // Result of merging regex_match and regex_search.
   //
@@ -59,11 +64,19 @@ namespace __detail
       typename match_results<_BiIter, _Alloc>::_Base_type& __res = __m;
       __m._M_begin = __s;
       __m._M_resize(__re._M_automaton->_M_sub_count());
+      for (auto& __it : __res)
+	__it.matched = false;
 
+      // __policy is used by testsuites so that they can use Thompson NFA
+      // without defining a macro. Users should define
+      // _GLIBCXX_REGEX_USE_THOMPSON_NFA if they need to use this approach.
       bool __ret;
-      if ((__re.flags() & regex_constants::__polynomial)
-	  || (__policy == _RegexExecutorPolicy::_S_alternate
-	      && !__re._M_automaton->_M_has_backref))
+      if (!__re._M_automaton->_M_has_backref
+	  && !(__re._M_flags & regex_constants::ECMAScript)
+#ifndef _GLIBCXX_REGEX_USE_THOMPSON_NFA
+	  && __policy == _RegexExecutorPolicy::_S_alternate
+#endif
+	  )
 	{
 	  _Executor<_BiIter, _Alloc, _TraitsT, false>
 	    __executor(__s, __e, __m, __re, __flags);
@@ -109,14 +122,20 @@ namespace __detail
 	}
       else
 	{
-	  __m._M_establish_failed_match(__e);
+	  __m._M_resize(0);
+	  for (auto& __it : __res)
+	    {
+	      __it.matched = false;
+	      __it.first = __it.second = __e;
+	    }
 	}
       return __ret;
     }
-  /// @endcond
-} // namespace __detail
 
-  /// @cond
+_GLIBCXX_END_NAMESPACE_VERSION
+}
+
+_GLIBCXX_BEGIN_NAMESPACE_VERSION
 
   template<typename _Ch_type>
   template<typename _Fwd_iter>
@@ -350,14 +369,13 @@ namespace __detail
 
   template<typename _Bi_iter, typename _Alloc>
   template<typename _Out_iter>
-    _Out_iter
-    match_results<_Bi_iter, _Alloc>::
+    _Out_iter match_results<_Bi_iter, _Alloc>::
     format(_Out_iter __out,
 	   const match_results<_Bi_iter, _Alloc>::char_type* __fmt_first,
 	   const match_results<_Bi_iter, _Alloc>::char_type* __fmt_last,
 	   match_flag_type __flags) const
     {
-      __glibcxx_assert( ready() );
+      _GLIBCXX_DEBUG_ASSERT( ready() );
       regex_traits<char_type> __traits;
       typedef std::ctype<char_type> __ctype_type;
       const __ctype_type&
@@ -372,32 +390,22 @@ namespace __detail
 
       if (__flags & regex_constants::format_sed)
 	{
-	  bool __escaping = false;
-	  for (; __fmt_first != __fmt_last; __fmt_first++)
-	    {
-	      if (__escaping)
-		{
-		  __escaping = false;
-		  if (__fctyp.is(__ctype_type::digit, *__fmt_first))
-		    __output(__traits.value(*__fmt_first, 10));
-		  else
-		    *__out++ = *__fmt_first;
-		  continue;
-		}
-	      if (*__fmt_first == '\\')
-		{
-		  __escaping = true;
-		  continue;
-		}
-	      if (*__fmt_first == '&')
-		{
-		  __output(0);
-		  continue;
-		}
-	      *__out++ = *__fmt_first;
-	    }
-	  if (__escaping)
-	    *__out++ = '\\';
+	  for (; __fmt_first != __fmt_last;)
+	    if (*__fmt_first == '&')
+	      {
+		__output(0);
+		++__fmt_first;
+	      }
+	    else if (*__fmt_first == '\\')
+	      {
+		if (++__fmt_first != __fmt_last
+		    && __fctyp.is(__ctype_type::digit, *__fmt_first))
+		  __output(__traits.value(*__fmt_first++, 10));
+		else
+		  *__out++ = '\\';
+	      }
+	    else
+	      *__out++ = *__fmt_first++;
 	}
       else
 	{
@@ -461,10 +469,10 @@ namespace __detail
   template<typename _Out_iter, typename _Bi_iter,
 	   typename _Rx_traits, typename _Ch_type>
     _Out_iter
-    __regex_replace(_Out_iter __out, _Bi_iter __first, _Bi_iter __last,
-		    const basic_regex<_Ch_type, _Rx_traits>& __e,
-		    const _Ch_type* __fmt, size_t __len,
-		    regex_constants::match_flag_type __flags)
+    regex_replace(_Out_iter __out, _Bi_iter __first, _Bi_iter __last,
+		  const basic_regex<_Ch_type, _Rx_traits>& __e,
+		  const _Ch_type* __fmt,
+		  regex_constants::match_flag_type __flags)
     {
       typedef regex_iterator<_Bi_iter, _Ch_type, _Rx_traits> _IterT;
       _IterT __i(__first, __last, __e, __flags);
@@ -477,6 +485,7 @@ namespace __detail
       else
 	{
 	  sub_match<_Bi_iter> __last;
+	  auto __len = char_traits<_Ch_type>::length(__fmt);
 	  for (; __i != __end; ++__i)
 	    {
 	      if (!(__flags & regex_constants::format_no_copy))
@@ -498,15 +507,14 @@ namespace __detail
 	   typename _Rx_traits>
     bool
     regex_iterator<_Bi_iter, _Ch_type, _Rx_traits>::
-    operator==(const regex_iterator& __rhs) const noexcept
+    operator==(const regex_iterator& __rhs) const
     {
-      if (_M_pregex == nullptr && __rhs._M_pregex == nullptr)
-	return true;
-      return _M_pregex == __rhs._M_pregex
-	  && _M_begin == __rhs._M_begin
-	  && _M_end == __rhs._M_end
-	  && _M_flags == __rhs._M_flags
-	  && _M_match[0] == __rhs._M_match[0];
+      return (_M_match.empty() && __rhs._M_match.empty())
+	|| (_M_begin == __rhs._M_begin
+	    && _M_end == __rhs._M_end
+	    && _M_pregex == __rhs._M_pregex
+	    && _M_flags == __rhs._M_flags
+	    && _M_match[0] == __rhs._M_match[0]);
     }
 
   template<typename _Bi_iter,
@@ -530,7 +538,7 @@ namespace __detail
 	    {
 	      if (__start == _M_end)
 		{
-		  _M_pregex = nullptr;
+		  _M_match = value_type();
 		  return *this;
 		}
 	      else
@@ -540,7 +548,7 @@ namespace __detail
 				   | regex_constants::match_not_null
 				   | regex_constants::match_continuous))
 		    {
-		      __glibcxx_assert(_M_match[0].matched);
+		      _GLIBCXX_DEBUG_ASSERT(_M_match[0].matched);
 		      auto& __prefix = _M_match._M_prefix();
 		      __prefix.first = __prefix_first;
 		      __prefix.matched = __prefix.first != __prefix.second;
@@ -555,7 +563,7 @@ namespace __detail
 	  _M_flags |= regex_constants::match_prev_avail;
 	  if (regex_search(__start, _M_end, _M_match, *_M_pregex, _M_flags))
 	    {
-	      __glibcxx_assert(_M_match[0].matched);
+	      _GLIBCXX_DEBUG_ASSERT(_M_match[0].matched);
 	      auto& __prefix = _M_match._M_prefix();
 	      __prefix.first = __prefix_first;
 	      __prefix.matched = __prefix.first != __prefix.second;
@@ -563,7 +571,7 @@ namespace __detail
 	      _M_match._M_begin = _M_begin;
 	    }
 	  else
-	    _M_pregex = nullptr;
+	    _M_match = value_type();
 	}
       return *this;
     }
@@ -665,7 +673,6 @@ namespace __detail
 	_M_result = nullptr;
     }
 
-  /// @endcond
-
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace
+

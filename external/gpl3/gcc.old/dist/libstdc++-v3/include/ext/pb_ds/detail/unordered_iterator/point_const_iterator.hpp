@@ -1,6 +1,6 @@
 // -*- C++ -*-
 
-// Copyright (C) 2005-2020 Free Software Foundation, Inc.
+// Copyright (C) 2005-2013 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the terms
@@ -36,13 +36,9 @@
 /**
  * @file unordered_iterator/point_const_iterator.hpp
  * Contains an iterator class returned by the tables' const find and insert
- * methods.
- *
- * * This file is intended to be included inside a class definition, with
- * PB_DS_CLASS_C_DEC defined to the name of the enclosing class.
+ *     methods.
  */
 
-#ifdef PB_DS_CLASS_C_DEC
 class point_iterator_;
 
 /// Const point-type iterator.
@@ -134,4 +130,4 @@ protected:
 
   friend class PB_DS_CLASS_C_DEC;
 };
-#endif
+

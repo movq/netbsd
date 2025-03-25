@@ -12,7 +12,7 @@
 @include gcc-common.texi
 
 @c Copyright years for this manual.
-@set copyrights-d 2006-2020
+@set copyrights-d 2006-2019
 
 @copying
 @c man begin COPYRIGHT
@@ -633,11 +633,9 @@ Give deprecation messages about @option{-ftransition=import} anomalies.
 @item complex
 List all usages of complex or imaginary types.
 @item dip1000
-Implements @uref{https://github.com/dlang/DIPs/blob/master/DIPs/other/DIP1000.md}
-(Scoped pointers).
+Implements @uref{http://wiki.dlang.org/DIP1000} (experimental).
 @item dip25
-Implements @uref{https://github.com/dlang/DIPs/blob/master/DIPs/archive/DIP25.md}
-(Sealed references).
+Implements @uref{http://wiki.dlang.org/DIP25} (experimental).
 @item field
 List all non-mutable fields which occupy an object instance.
 @item import
@@ -667,14 +665,14 @@ a link step.
 
 @table @gcctabopt
 
-@item -defaultlib=@var{libname}
-@cindex @option{-defaultlib=}
+@item -defaultlib @var{libname}
+@cindex @option{-defaultlib}
 Specify the library to use instead of libphobos when linking.  Options
 specifying the linkage of libphobos, such as @option{-static-libphobos}
 or @option{-shared-libphobos}, are ignored.
 
-@item -debuglib=@var{libname}
-@cindex @option{-debuglib=}
+@item -debuglib
+@cindex @option{-debuglib}
 Specify the debug library to use instead of libphobos when linking.
 This option has no effect unless the @option{-g} option was also given
 on the command line.  Options specifying the linkage of libphobos, such

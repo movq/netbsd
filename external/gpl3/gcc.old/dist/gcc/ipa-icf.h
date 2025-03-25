@@ -1,5 +1,5 @@
 /* Interprocedural semantic function equality pass
-   Copyright (C) 2014-2020 Free Software Foundation, Inc.
+   Copyright (C) 2014-2015 Free Software Foundation, Inc.
 
    Contributed by Jan Hubicka <hubicka@ucw.cz> and Martin Liska <mliska@suse.cz>
 
@@ -24,13 +24,12 @@ class sem_item;
 
 /* Congruence class encompasses a collection of either functions or
    read-only variables. These items are considered to be equivalent
-   if not proved the opposite.  */
+   if not proved the oposite.  */
 class congruence_class
 {
 public:
   /* Congruence class constructor for a new class with _ID.  */
-  congruence_class (unsigned int _id): in_worklist (false), id (_id),
-  referenced_by_count (0)
+  congruence_class (unsigned int _id): in_worklist (false), id(_id)
   {
   }
 
@@ -55,9 +54,6 @@ public:
 
   /* Global unique class identifier.  */
   unsigned int id;
-
-  /* Total number of references to items of this class.  */
-  unsigned referenced_by_count;
 };
 
 /* Semantic item type enum.  */
@@ -91,10 +87,10 @@ public:
 
 /* Hash traits for symbol_compare_collection map.  */
 
-struct symbol_compare_hash : nofree_ptr_hash <symbol_compare_collection>
+struct symbol_compare_hashmap_traits: default_hashmap_traits
 {
   static hashval_t
-  hash (value_type v)
+  hash (const symbol_compare_collection *v)
   {
     inchash::hash hstate;
     hstate.add_int (v->m_references.length ());
@@ -111,7 +107,8 @@ struct symbol_compare_hash : nofree_ptr_hash <symbol_compare_collection>
   }
 
   static bool
-  equal (value_type a, value_type b)
+  equal_keys (const symbol_compare_collection *a,
+	      const symbol_compare_collection *b)
   {
     if (a->m_references.length () != b->m_references.length ()
 	|| a->m_interposables.length () != b->m_interposables.length ())
@@ -130,6 +127,7 @@ struct symbol_compare_hash : nofree_ptr_hash <symbol_compare_collection>
   }
 };
 
+
 /* Semantic item usage pair.  */
 class sem_usage_pair
 {
@@ -144,34 +142,6 @@ public:
   unsigned int index;
 };
 
-struct sem_usage_pair_hash : pointer_hash <sem_usage_pair>
-{
-  static inline hashval_t hash (sem_usage_pair *);
-  static inline bool equal (sem_usage_pair *, sem_usage_pair *);
-};
-
-inline hashval_t
-sem_usage_pair_hash::hash (sem_usage_pair *pair)
-{
-  inchash::hash hstate;
-
-  hstate.add_ptr (pair->item);
-  hstate.add_int (pair->index);
-
-  return hstate.end ();
-}
-
-inline bool
-sem_usage_pair_hash::equal (sem_usage_pair *p1, sem_usage_pair *p2)
-{
-  return p1->item == p2->item && p1->index == p2->index;
-}
-
-struct sem_usage_hash : sem_usage_pair_hash, typed_delete_remove <sem_usage_pair> {};
-typedef hash_map<sem_usage_hash, auto_vec<sem_item *> > ref_map;
-
-typedef std::pair<symtab_node *, symtab_node *> symtab_pair;
-
 /* Semantic item is a base class that encapsulates all shared functionality
    for both semantic function and variable items.  */
 class sem_item
@@ -182,33 +152,35 @@ public:
   sem_item (sem_item_type _type, bitmap_obstack *stack);
 
   /* Semantic item constructor for a node of _TYPE, where STACK is used
-     for bitmap memory allocation.  The item is based on symtab node _NODE.  */
-  sem_item (sem_item_type _type, symtab_node *_node, bitmap_obstack *stack);
+     for bitmap memory allocation. The item is based on symtab node _NODE
+     with computed _HASH.  */
+  sem_item (sem_item_type _type, symtab_node *_node, hashval_t _hash,
+	    bitmap_obstack *stack);
 
   virtual ~sem_item ();
 
   /* Dump function for debugging purpose.  */
   DEBUG_FUNCTION void dump (void);
 
+  /* Initialize semantic item by info reachable during LTO WPA phase.  */
+  virtual void init_wpa (void) = 0;
+
   /* Semantic item initialization function.  */
-  virtual void init (ipa_icf_gimple::func_checker *) = 0;
+  virtual void init (void) = 0;
 
   /* Add reference to a semantic TARGET.  */
-  void add_reference (ref_map *map, sem_item *target);
+  void add_reference (sem_item *target);
 
   /* Fast equality function based on knowledge known in WPA.  */
   virtual bool equals_wpa (sem_item *item,
 			   hash_map <symtab_node *, sem_item *> &ignored_nodes) = 0;
 
-  /* Returns true if the item equals to ITEM given as argument.  */
+  /* Returns true if the item equals to ITEM given as arguemnt.  */
   virtual bool equals (sem_item *item,
 		       hash_map <symtab_node *, sem_item *> &ignored_nodes) = 0;
 
   /* References independent hash function.  */
   virtual hashval_t get_hash (void) = 0;
-
-  /* Set new hash value of the item.  */
-  void set_hash (hashval_t hash);
 
   /* Merges instance with an ALIAS_ITEM, where alias, thunk or redirection can
      be applied.  */
@@ -242,15 +214,17 @@ public:
   /* Declaration tree node.  */
   tree decl;
 
-  /* Number of references to a semantic symbols (function calls,
-     variable references).  */
-  unsigned reference_count;
+  /* Semantic references used that generate congruence groups.  */
+  vec <sem_item *> refs;
 
   /* Pointer to a congruence class the item belongs to.  */
   congruence_class *cls;
 
   /* Index of the item in a class belonging to.  */
   unsigned int index_in_class;
+
+  /* List of semantic items where the instance is used.  */
+  vec <sem_usage_pair *> usages;
 
   /* A bitmap with indices of all classes referencing this item.  */
   bitmap usage_index_bitmap;
@@ -261,48 +235,31 @@ public:
   /* A set with symbol table references.  */
   hash_set <symtab_node *> refs_set;
 
+  /* Hash of item.  */
+  hashval_t hash;
+
   /* Temporary hash used where hash values of references are added.  */
   hashval_t global_hash;
-
-  /* Number of references to this symbol.  */
-  unsigned referenced_by_count;
 protected:
   /* Cached, once calculated hash for the item.  */
 
-  /* Compare properties of symbol that does not affect semantics of symbol
-     itself but affects semantics of its references.
-     If ADDRESS is true, do extra checking needed for IPA_REF_ADDR.  */
-  static bool compare_referenced_symbol_properties (symtab_node *used_by,
-						    symtab_node *n1,
-					            symtab_node *n2,
-					            bool address);
-
-  /* Hash properties compared by compare_referenced_symbol_properties.  */
-  void hash_referenced_symbol_properties (symtab_node *ref,
-					  inchash::hash &hstate,
-					  bool address);
+  /* Accumulate to HSTATE a hash of expression EXP.  */
+  static void add_expr (const_tree exp, inchash::hash &hstate);
+  /* Accumulate to HSTATE a hash of type T.  */
+  static void add_type (const_tree t, inchash::hash &hstate);
 
   /* For a given symbol table nodes N1 and N2, we check that FUNCTION_DECLs
      point to a same function. Comparison can be skipped if IGNORED_NODES
      contains these nodes.  ADDRESS indicate if address is taken.  */
-  bool compare_symbol_references (hash_map <symtab_node *, sem_item *>
+  bool compare_cgraph_references (hash_map <symtab_node *, sem_item *>
 				  &ignored_nodes,
 				  symtab_node *n1, symtab_node *n2,
 				  bool address);
-protected:
-  /* Hash of item.  */
-  hashval_t m_hash;
-
-  /* Indicated whether a hash value has been set or not.  */
-  bool m_hash_set;
 
 private:
   /* Initialize internal data structures. Bitmap STACK is used for
      bitmap memory allocation process.  */
   void setup (bitmap_obstack *stack);
-
-  /* Because types can be arbitrarily large, avoid quadratic bottleneck.  */
-  static hash_map<const_tree, hashval_t> m_type_hash_cache;
 }; // class sem_item
 
 class sem_function: public sem_item
@@ -311,13 +268,17 @@ public:
   /* Semantic function constructor that uses STACK as bitmap memory stack.  */
   sem_function (bitmap_obstack *stack);
 
-  /*  Constructor based on callgraph node _NODE.
+  /*  Constructor based on callgraph node _NODE with computed hash _HASH.
       Bitmap STACK is used for memory allocation.  */
-  sem_function (cgraph_node *_node, bitmap_obstack *stack);
+  sem_function (cgraph_node *_node, hashval_t _hash, bitmap_obstack *stack);
 
   ~sem_function ();
 
-  virtual void init (ipa_icf_gimple::func_checker *);
+  inline virtual void init_wpa (void)
+  {
+  }
+
+  virtual void init (void);
   virtual bool equals_wpa (sem_item *item,
 			   hash_map <symtab_node *, sem_item *> &ignored_nodes);
   virtual hashval_t get_hash (void);
@@ -339,18 +300,17 @@ public:
   }
 
   /* Improve accumulated hash for HSTATE based on a gimple statement STMT.  */
-  void hash_stmt (gimple *stmt, inchash::hash &inchash);
+  void hash_stmt (gimple stmt, inchash::hash &inchash);
 
   /* Return true if polymorphic comparison must be processed.  */
   bool compare_polymorphic_p (void);
 
   /* For a given call graph NODE, the function constructs new
      semantic function item.  */
-  static sem_function *parse (cgraph_node *node, bitmap_obstack *stack,
-			      ipa_icf_gimple::func_checker *checker);
+  static sem_function *parse (cgraph_node *node, bitmap_obstack *stack);
 
   /* Perform additional checks needed to match types of used function
-     parameters.  */
+     paramters.  */
   bool compatible_parm_types_p (tree, tree);
 
   /* Exception handling region tree.  */
@@ -398,7 +358,11 @@ private:
   bool compare_edge_flags (cgraph_edge *e1, cgraph_edge *e2);
 
   /* Processes function equality comparison.  */
-  bool equals_private (sem_item *item);
+  bool equals_private (sem_item *item,
+		       hash_map <symtab_node *, sem_item *> &ignored_nodes);
+
+  /* Returns true if tree T can be compared as a handled component.  */
+  static bool icf_handled_component_p (tree t);
 
   /* Function checker stores binding between functions.   */
   ipa_icf_gimple::func_checker *m_checker;
@@ -413,13 +377,18 @@ public:
   /* Semantic variable constructor that uses STACK as bitmap memory stack.  */
   sem_variable (bitmap_obstack *stack);
 
-  /*  Constructor based on callgraph node _NODE.
+  /*  Constructor based on callgraph node _NODE with computed hash _HASH.
       Bitmap STACK is used for memory allocation.  */
 
-  sem_variable (varpool_node *_node, bitmap_obstack *stack);
+  sem_variable (varpool_node *_node, hashval_t _hash, bitmap_obstack *stack);
+
+  inline virtual void init_wpa (void) {}
 
   /* Semantic variable initialization function.  */
-  virtual void init (ipa_icf_gimple::func_checker *);
+  inline virtual void init (void)
+  {
+    decl = get_node ()->decl;
+  }
 
   virtual hashval_t get_hash (void);
   virtual bool merge (sem_item *alias_item);
@@ -438,8 +407,7 @@ public:
   }
 
   /* Parser function that visits a varpool NODE.  */
-  static sem_variable *parse (varpool_node *node, bitmap_obstack *stack,
-			      ipa_icf_gimple::func_checker *checker);
+  static sem_variable *parse (varpool_node *node, bitmap_obstack *stack);
 
 private:
   /* Compares trees T1 and T2 for semantic equality.  */
@@ -456,15 +424,17 @@ struct congruence_class_group
 };
 
 /* Congruence class set structure.  */
-struct congruence_class_hash : nofree_ptr_hash <congruence_class_group>
+struct congruence_class_group_hash: typed_noop_remove <congruence_class_group>
 {
-  static inline hashval_t hash (const congruence_class_group *item)
+  typedef congruence_class_group value_type;
+  typedef congruence_class_group compare_type;
+
+  static inline hashval_t hash (const value_type *item)
   {
     return item->hash;
   }
 
-  static inline int equal (const congruence_class_group *item1,
-			   const congruence_class_group *item2)
+  static inline int equal (const value_type *item1, const compare_type *item2)
   {
     return item1->hash == item2->hash && item1->type == item2->type;
   }
@@ -497,15 +467,12 @@ public:
   void dump (void);
 
   /* Verify congruence classes if checking is enabled.  */
-  void checking_verify_classes (void);
-
-  /* Verify congruence classes.  */
   void verify_classes (void);
 
   /* Write IPA ICF summary for symbols.  */
   void write_summary (void);
 
-  /* Read IPA ICF summary for symbols.  */
+  /* Read IPA IPA ICF summary for symbols.  */
   void read_summary (void);
 
   /* Callgraph removal hook called for a NODE with a custom DATA.  */
@@ -516,7 +483,7 @@ public:
 
   /* Worklist of congruence classes that can potentially
      refine classes of congruence.  */
-  fibonacci_heap<unsigned, congruence_class> worklist;
+  std::list<congruence_class *> worklist;
 
   /* Remove semantic ITEM and release memory.  */
   void remove_item (sem_item *item);
@@ -536,6 +503,9 @@ public:
   /* Gets a congruence class group based on given HASH value and TYPE.  */
   congruence_class_group *get_group_by_hash (hashval_t hash,
       sem_item_type type);
+
+  /* Because types can be arbitrarily large, avoid quadratic bottleneck.  */
+  hash_map<const_tree, hashval_t> m_type_hash_cache;
 private:
 
   /* For each semantic item, append hash values of references.  */
@@ -546,7 +516,7 @@ private:
 
   /* Semantic items in classes having more than one element and initialized.
      In case of WPA, we load function body.  */
-  unsigned int parse_nonsingleton_classes (void);
+  void parse_nonsingleton_classes (void);
 
   /* Equality function for semantic items is used to subdivide existing
      classes. If IN_WPA, fast equality function is invoked.  */
@@ -571,16 +541,8 @@ private:
   /* After reduction is done, we can declare all items in a group
      to be equal. PREV_CLASS_COUNT is start number of classes
      before reduction. True is returned if there's a merge operation
-     processed.  LOADED_SYMBOLS is number of symbols that were loaded
-     in WPA.  */
-  bool merge_classes (unsigned int prev_class_count,
-		      unsigned int loaded_symbols);
-
-  /* Fixup points to analysis info.  */
-  void fixup_points_to_sets (void);
-
-  /* Fixup points to set PT.  */
-  void fixup_pt_set (struct pt_solution *pt);
+     processed.  */
+  bool merge_classes (unsigned int prev_class_count);
 
   /* Adds a newly created congruence class CLS to worklist.  */
   void worklist_push (congruence_class *cls);
@@ -595,7 +557,7 @@ private:
 
   /* Tests if a class CLS used as INDEXth splits any congruence classes.
      Bitmap stack BMSTACK is used for bitmap allocation.  */
-  bool do_congruence_step_for_index (congruence_class *cls, unsigned int index);
+  void do_congruence_step_for_index (congruence_class *cls, unsigned int index);
 
   /* Makes pairing between a congruence class CLS and semantic ITEM.  */
   static void add_item_to_class (congruence_class *cls, sem_item *item);
@@ -606,15 +568,12 @@ private:
   static bool release_split_map (congruence_class * const &cls, bitmap const &b,
 				 traverse_split_pair *pair);
 
-  /* Process split operation for a congruence class CLS,
+  /* Process split operation for a cognruence class CLS,
      where bitmap B splits congruence class members. DATA is used
      as argument of split pair.  */
   static bool traverse_congruence_split (congruence_class * const &cls,
 					 bitmap const &b,
 					 traverse_split_pair *pair);
-
-  /* Compare function for sorting pairs in do_congruence_step_f.  */
-  static int sort_congruence_split (const void *, const void *);
 
   /* Reads a section from LTO stream file FILE_DATA. Input block for DATA
      contains LEN bytes.  */
@@ -631,8 +590,8 @@ private:
   /* A set containing all items removed by hooks.  */
   hash_set <symtab_node *> m_removed_items_set;
 
-  /* Hashtable of congruence classes.  */
-  hash_table <congruence_class_hash> m_classes;
+  /* Hashtable of congruence classes */
+  hash_table <congruence_class_group_hash> m_classes;
 
   /* Count of congruence classes.  */
   unsigned int m_classes_count;
@@ -654,13 +613,6 @@ private:
 
   /* Bitmap stack.  */
   bitmap_obstack m_bmstack;
-
-  /* Vector of merged variables.  Needed for fixup of points-to-analysis
-     info.  */
-  vec <symtab_pair> m_merged_variables;
-
-  /* Hash map will all references.  */
-  ref_map m_references;
 }; // class sem_item_optimizer
 
 } // ipa_icf namespace

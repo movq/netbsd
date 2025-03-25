@@ -25,11 +25,9 @@
 #include "sanitizer_common/sanitizer_mac.h"
 
 // Similar code is used in Google Perftools,
-// https://github.com/gperftools/gperftools.
+// http://code.google.com/p/google-perftools.
 
-namespace __sanitizer {
-extern malloc_zone_t sanitizer_zone;
-}
+static malloc_zone_t sanitizer_zone;
 
 INTERCEPTOR(malloc_zone_t *, malloc_create_zone,
                              vm_size_t start_size, unsigned zone_flags) {
@@ -46,23 +44,7 @@ INTERCEPTOR(malloc_zone_t *, malloc_create_zone,
     // This matches the behavior of malloc_create_zone() on OSX 10.7 and higher.
     mprotect(new_zone, allocated_size, PROT_READ);
   }
-  // We're explicitly *NOT* registering the zone.
   return new_zone;
-}
-
-INTERCEPTOR(void, malloc_destroy_zone, malloc_zone_t *zone) {
-  COMMON_MALLOC_ENTER();
-  // We don't need to do anything here.  We're not registering new zones, so we
-  // don't to unregister.  Just un-mprotect and free() the zone.
-  if (GetMacosVersion() >= MACOS_VERSION_LION) {
-    uptr page_size = GetPageSizeCached();
-    uptr allocated_size = RoundUpTo(sizeof(sanitizer_zone), page_size);
-    mprotect(zone, allocated_size, PROT_READ | PROT_WRITE);
-  }
-  if (zone->zone_name) {
-    COMMON_MALLOC_FREE((void *)zone->zone_name);
-  }
-  COMMON_MALLOC_FREE(zone);
 }
 
 INTERCEPTOR(malloc_zone_t *, malloc_default_zone, void) {
@@ -72,7 +54,7 @@ INTERCEPTOR(malloc_zone_t *, malloc_default_zone, void) {
 
 INTERCEPTOR(malloc_zone_t *, malloc_default_purgeable_zone, void) {
   // FIXME: ASan should support purgeable allocations.
-  // https://github.com/google/sanitizers/issues/139
+  // https://code.google.com/p/address-sanitizer/issues/detail?id=139
   COMMON_MALLOC_ENTER();
   return &sanitizer_zone;
 }
@@ -147,8 +129,12 @@ INTERCEPTOR(size_t, malloc_good_size, size_t size) {
 INTERCEPTOR(int, posix_memalign, void **memptr, size_t alignment, size_t size) {
   COMMON_MALLOC_ENTER();
   CHECK(memptr);
-  COMMON_MALLOC_POSIX_MEMALIGN(memptr, alignment, size);
-  return res;
+  COMMON_MALLOC_MEMALIGN(alignment, size);
+  if (p) {
+    *memptr = p;
+    return 0;
+  }
+  return -1;
 }
 
 namespace {
@@ -196,17 +182,27 @@ void *__sanitizer_mz_valloc(malloc_zone_t *zone, size_t size) {
   return p;
 }
 
+#define GET_ZONE_FOR_PTR(ptr) \
+  malloc_zone_t *zone_ptr = malloc_zone_from_ptr(ptr); \
+  const char *zone_name = (zone_ptr == 0) ? 0 : zone_ptr->zone_name
+
+void ALWAYS_INLINE free_common(void *context, void *ptr) {
+  if (!ptr) return;
+  // FIXME: need to retire this flag.
+  if (!COMMON_MALLOC_IGNORE_INVALID_FREE) {
+    COMMON_MALLOC_FREE(ptr);
+  } else {
+    GET_ZONE_FOR_PTR(ptr);
+    COMMON_MALLOC_REPORT_FREE_UNALLOCATED(ptr, zone_ptr, zone_name);
+  }
+}
+
 // TODO(glider): the allocation callbacks need to be refactored.
 extern "C"
 SANITIZER_INTERFACE_ATTRIBUTE
 void __sanitizer_mz_free(malloc_zone_t *zone, void *ptr) {
-  if (!ptr) return;
-  COMMON_MALLOC_FREE(ptr);
+  free_common(zone, ptr);
 }
-
-#define GET_ZONE_FOR_PTR(ptr) \
-  malloc_zone_t *zone_ptr = malloc_zone_from_ptr(ptr); \
-  const char *zone_name = (zone_ptr == 0) ? 0 : zone_ptr->zone_name
 
 extern "C"
 SANITIZER_INTERFACE_ATTRIBUTE

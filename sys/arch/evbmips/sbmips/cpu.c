@@ -1,4 +1,4 @@
-/* $NetBSD: cpu.c,v 1.4 2023/12/05 19:16:48 andvar Exp $ */
+/* $NetBSD: cpu.c,v 1.1 2017/07/24 08:56:29 mrg Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.4 2023/12/05 19:16:48 andvar Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.1 2017/07/24 08:56:29 mrg Exp $");
 
 #include "opt_multiprocessor.h"
 
@@ -46,8 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.4 2023/12/05 19:16:48 andvar Exp $");
 #include <mips/locore.h>
 #include <mips/cache.h>
 
-#include <evbmips/sbmips/cpuvar.h>
-#include <evbmips/sbmips/systemsw.h>
+#include <sbmips/cpuvar.h>
 
 #include <mips/sibyte/include/zbbusvar.h>
 #include <mips/sibyte/include/sb1250_regs.h>
@@ -151,17 +150,17 @@ cpu_attach(device_t parent, device_t self, void *aux)
 			aprint_error(": CFE call to start failed: %d\n",
 			    status);
 		}
+		const u_long cpu_mask = 1L << cpu_index(ci);
 		for (size_t i = 0; i < 10000; i++) {
-			if (kcpuset_isset(cpus_hatched, cpu_index(ci)))
+			if (cpus_hatched & cpu_mask)
 				 break;
 			DELAY(100);
 		}
-		if (!kcpuset_isset(cpus_hatched, cpu_index(ci))) {
+		if ((cpus_hatched & cpu_mask) == 0) {
 			aprint_error(": failed to hatch!\n");
 			return;
 		}
 #else
-		aprint_normal("\n");
 		aprint_normal_dev(self,
 		    "processor off-line; "
 		    "multiprocessor support not present in kernel\n");

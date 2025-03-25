@@ -1,5 +1,5 @@
 (* Auto-generate ARM ldm/stm patterns
-   Copyright (C) 2010-2020 Free Software Foundation, Inc.
+   Copyright (C) 2010-2013 Free Software Foundation, Inc.
    Contributed by CodeSourcery.
 
    This file is part of GCC.
@@ -33,20 +33,9 @@ type amode = IA | IB | DA | DB
 
 type optype = IN | OUT | INOUT
 
-let rec string_of_addrmode addrmode thumb update =
-  if thumb || update
-then
+let rec string_of_addrmode addrmode =
   match addrmode with
-    IA -> "ia"
-  | IB -> "ib"
-  | DA -> "da"
-  | DB -> "db"
-else
-  match addrmode with
-    IA -> ""
-  | IB -> "ib"
-  | DA -> "da"
-  | DB -> "db"
+    IA -> "ia" | IB -> "ib" | DA -> "da" | DB -> "db"
 
 let rec initial_offset addrmode nregs =
   match addrmode with
@@ -160,18 +149,15 @@ let can_thumb addrmode update is_store =
   | IA, true, true -> true
   | _ -> false
 
-exception InvalidAddrMode of string;;
-
 let target addrmode thumb =
   match addrmode, thumb with
     IA, true -> "TARGET_THUMB1"
   | IA, false -> "TARGET_32BIT"
   | DB, false -> "TARGET_32BIT"
   | _, false -> "TARGET_ARM"
-  | _, _ -> raise (InvalidAddrMode "ERROR: Invalid Addressing mode for Thumb1.")
 
 let write_pattern_1 name ls addrmode nregs write_set_fn update thumb =
-  let astr = string_of_addrmode addrmode thumb update in
+  let astr = string_of_addrmode addrmode in
   Printf.printf "(define_insn \"*%s%s%d_%s%s\"\n"
     (if thumb then "thumb_" else "") name nregs astr
     (if update then "_update" else "");
@@ -191,19 +177,15 @@ let write_pattern_1 name ls addrmode nregs write_set_fn update thumb =
   Printf.printf ")]\n  \"%s && XVECLEN (operands[0], 0) == %d\"\n"
     (target addrmode thumb)
     (if update then nregs + 1 else nregs);
-  if thumb then
-      Printf.printf "  \"%s%s\\t%%%d%s, {"   name astr (nregs + 1) (if update then "!" else "")
-   else
-      Printf.printf "  \"%s%s%%?\\t%%%d%s, {"  name astr (nregs + 1) (if update then "!" else "");
+  Printf.printf "  \"%s%%(%s%%)\\t%%%d%s, {"
+    name astr (nregs + 1) (if update then "!" else "");
   for n = 1 to nregs; do
     Printf.printf "%%%d%s" n (if n < nregs then ", " else "")
   done;
   Printf.printf "}\"\n";
   Printf.printf "  [(set_attr \"type\" \"%s%d\")" ls nregs;
-  if not thumb then begin
+  begin if not thumb then
     Printf.printf "\n   (set_attr \"predicable\" \"yes\")";
-    if addrmode == IA || addrmode == DB then
-      Printf.printf "\n   (set_attr \"predicable_short_it\" \"no\")";
   end;
   Printf.printf "])\n\n"
 
@@ -335,7 +317,7 @@ let _ =
 "/* ARM ldm/stm instruction patterns.  This file was automatically generated";
 "   using arm-ldmstm.ml.  Please do not edit manually.";
 "";
-"   Copyright (C) 2010-2020 Free Software Foundation, Inc.";
+"   Copyright (C) 2010-2013 Free Software Foundation, Inc.";
 "   Contributed by CodeSourcery.";
 "";
 "   This file is part of GCC.";

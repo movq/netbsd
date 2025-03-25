@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.8 2024/03/05 14:15:31 thorpej Exp $ */
+/* $NetBSD: machdep.c,v 1.1 2017/07/24 08:56:29 mrg Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.8 2024/03/05 14:15:31 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.1 2017/07/24 08:56:29 mrg Exp $");
 
 #include "opt_ddb.h"
 #include "opt_execfmt.h"
@@ -75,6 +75,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.8 2024/03/05 14:15:31 thorpej Exp $");
 #include <sys/kcore.h>
 #include <sys/kernel.h>
 #include <sys/ksyms.h>
+#include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/mount.h>
 #include <sys/msgbuf.h>
@@ -92,14 +93,13 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.8 2024/03/05 14:15:31 thorpej Exp $");
 
 #include <mips/cfe/cfe_api.h>
 
-#include <evbmips/sbmips/autoconf.h>
-#include <evbmips/sbmips/swarm.h>
-#include <evbmips/sbmips/systemsw.h>
+#include <sbmips/autoconf.h>
+#include <sbmips/swarm.h>
 
 #if 0 /* XXXCGD */
-#include <evbmips/sbmips/nvram.h>
+#include <sbmips/nvram.h>
 #endif /* XXXCGD */
-#include <evbmips/sbmips/leds.h>
+#include <sbmips/leds.h>
 
 #include <mips/sibyte/dev/sbbuswatchvar.h>
 
@@ -110,6 +110,10 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.8 2024/03/05 14:15:31 thorpej Exp $");
 #include <ddb/db_access.h>
 #include <ddb/db_sym.h>
 #include <ddb/db_extern.h>
+#ifndef DB_ELFSIZE
+#error Must define DB_ELFSIZE!
+#endif
+#define	ELFSIZE		DB_ELFSIZE
 #include <sys/exec_elf.h>
 #endif
 
@@ -136,19 +140,6 @@ void	configure(void);
 void	mach_init(long, long, long, long);
 
 extern void *esym;
-
-#ifdef _LP64
-/*
- * We do this KSEG0 to PHYS to KSEG0 dance if running 64-bit because
- * CFE passes in parameters as 32-bit addresses.  When used as a 64-bit
- * address these CFE parameters are in user (XKUSEG) space and can't be
- * accessed!  Convert these to a physical address and and then to the
- * proper KSEG0 address so we can use them in the kernel.
- */
-#define	CFE_TO_KERNEL_PTR(x)	MIPS_PHYS_TO_KSEG0(MIPS_KSEG0_TO_PHYS(x))
-#else
-#define	CFE_TO_KERNEL_PTR(x)	(x)
-#endif
 
 /*
  * Do all the stuff that locore normally does before calling main().
@@ -191,8 +182,8 @@ mach_init(long fwhandle, long magic, long bootdata, long reserved)
 	kernend = (void *)mips_round_page(end);
 #if NKSYMS || defined(DDB) || defined(MODULAR)
 	if (magic == BOOTINFO_MAGIC) {
-		ksym_start = (void *)CFE_TO_KERNEL_PTR(bootinfo.ssym);
-		ksym_end   = (void *)CFE_TO_KERNEL_PTR(bootinfo.esym);
+		ksym_start = (void *)(intptr_t)bootinfo.ssym;
+		ksym_end   = (void *)(intptr_t)bootinfo.esym;
 		kernend = (void *)mips_round_page((vaddr_t)ksym_end);
 	}
 #endif
@@ -228,8 +219,7 @@ mach_init(long fwhandle, long magic, long bootdata, long reserved)
 		int added;
 		uint64_t start, len, type;
 
-		cfe_init(CFE_TO_KERNEL_PTR(bootinfo.fwhandle),
-		    CFE_TO_KERNEL_PTR(bootinfo.fwentry));
+		cfe_init(bootinfo.fwhandle, bootinfo.fwentry);
 		cfe_present = 1;
 
 		idx = 0;
@@ -237,7 +227,7 @@ mach_init(long fwhandle, long magic, long bootdata, long reserved)
 		mem_cluster_cnt = 0;
 		while (cfe_enummem(idx, 0, &start, &len, &type) == 0) {
 			added = 0;
-			printf("Memory Block #%d start %08"PRIx64" len %08"PRIx64": %s: ",
+			printf("Memory Block #%d start %08"PRIx64"X len %08"PRIx64"X: %s: ",
 			    idx, start, len, (type == CFE_MI_AVAILABLE) ?
 			    "Available" : "Reserved");
 			if ((type == CFE_MI_AVAILABLE) &&
@@ -333,7 +323,7 @@ mach_init(long fwhandle, long magic, long bootdata, long reserved)
 	}
 
 #ifdef MULTIPROCESSOR
-	mips_fixup_exceptions(mips_fixup_zero_relative, NULL);
+	mips_fixup_exceptions(mips_fixup_zero_relative);
 #endif
 }
 
@@ -371,6 +361,12 @@ cpu_reboot(int howto, char *bootstr)
 	if ((howto & RB_NOSYNC) == 0 && (waittime < 0)) {
 		waittime = 0;
 		vfs_shutdown();
+
+		/*
+		 * If we've been adjusting the clock, the todr
+		 * will be out of synch; adjust it now.
+		 */
+		resettodr();
 	}
 
 	splhigh();

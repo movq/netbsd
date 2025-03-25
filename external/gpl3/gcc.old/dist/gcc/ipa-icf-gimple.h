@@ -1,5 +1,5 @@
 /* Interprocedural semantic function equality pass
-   Copyright (C) 2014-2020 Free Software Foundation, Inc.
+   Copyright (C) 2014-2015 Free Software Foundation, Inc.
 
    Contributed by Jan Hubicka <hubicka@ucw.cz> and Martin Liska <mliska@suse.cz>
 
@@ -19,13 +19,13 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
-/* Gimple identical code folding (class func_checker) is an infrastructure
+/* Gimple identical code folding (class func_checker) is an infastructure
    capable of comparing two given functions. The class compares every
    gimple statement and uses many dictionaries to map source and target
    SSA_NAMEs, declarations and other components.
 
-   To use the infrastructure, create an instance of func_checker and call
-   a comparison function based on type of gimple statement.  */
+   To use the infrastructure, create an instanse of func_checker and call
+   a comparsion function based on type of gimple statement.  */
 
 /* Prints string STRING to a FILE with a given number of SPACE_COUNT.  */
 #define FPUTS_SPACES(file, space_count, string) \
@@ -36,22 +36,34 @@ along with GCC; see the file COPYING3.  If not see
 #define FPRINTF_SPACES(file, space_count, format, ...) \
   fprintf (file, "%*s" format, space_count, " ", ##__VA_ARGS__);
 
+/* Prints a MESSAGE to dump_file if exists. FUNC is name of function and
+   LINE is location in the source file.  */
+
+static inline void
+dump_message_1 (const char *message, const char *func, unsigned int line)
+{
+  if (dump_file && (dump_flags & TDF_DETAILS))
+    fprintf (dump_file, "  debug message: %s (%s:%u)\n", message, func, line);
+}
+
+/* Prints a MESSAGE to dump_file if exists.  */
+#define dump_message(message) dump_message_1 (message, __func__, __LINE__)
+
 /* Logs a MESSAGE to dump_file if exists and returns false. FUNC is name
    of function and LINE is location in the source file.  */
 
 static inline bool
-return_false_with_message_1 (const char *message, const char *filename,
-			     const char *func, unsigned int line)
+return_false_with_message_1 (const char *message, const char *func,
+			     unsigned int line)
 {
   if (dump_file && (dump_flags & TDF_DETAILS))
-    fprintf (dump_file, "  false returned: '%s' in %s at %s:%u\n", message, func,
-	     filename, line);
+    fprintf (dump_file, "  false returned: '%s' (%s:%u)\n", message, func, line);
   return false;
 }
 
 /* Logs a MESSAGE to dump_file if exists and returns false.  */
 #define return_false_with_msg(message) \
-  return_false_with_message_1 (message, __FILE__, __func__, __LINE__)
+  return_false_with_message_1 (message, __func__, __LINE__)
 
 /* Return false and log that false value is returned.  */
 #define return_false() return_false_with_msg ("")
@@ -60,25 +72,22 @@ return_false_with_message_1 (const char *message, const char *filename,
    is location in the source file.  */
 
 static inline bool
-return_with_result (bool result, const char *filename,
-		    const char *func, unsigned int line)
+return_with_result (bool result, const char *func, unsigned int line)
 {
   if (!result && dump_file && (dump_flags & TDF_DETAILS))
-    fprintf (dump_file, "  false returned: '' in %s at %s:%u\n", func,
-	     filename, line);
+    fprintf (dump_file, "  false returned: (%s:%u)\n", func, line);
 
   return result;
 }
 
 /* Logs return value if RESULT is false.  */
-#define return_with_debug(result) return_with_result \
-  (result, __FILE__, __func__, __LINE__)
+#define return_with_debug(result) return_with_result (result, __func__, __LINE__)
 
 /* Verbose logging function logging statements S1 and S2 of a CODE.
    FUNC is name of function and LINE is location in the source file.  */
 
 static inline bool
-return_different_stmts_1 (gimple *s1, gimple *s2, const char *code,
+return_different_stmts_1 (gimple s1, gimple s2, const char *code,
 			  const char *func, unsigned int line)
 {
   if (dump_file && (dump_flags & TDF_DETAILS))
@@ -118,19 +127,9 @@ public:
 
 /* A class aggregating all connections and semantic equivalents
    for a given pair of semantic function candidates.  */
-class func_checker : operand_compare
+class func_checker
 {
 public:
-  /* Default constructor.  */
-  func_checker ():
-    m_source_func_decl (NULL_TREE), m_target_func_decl (NULL_TREE),
-    m_ignored_source_nodes (NULL), m_ignored_target_nodes (NULL),
-    m_ignore_labels (false)
-  {
-    m_source_ssa_names.create (0);
-    m_target_ssa_names.create (0);
-  }
-
   /* Initialize internal structures for a given SOURCE_FUNC_DECL and
      TARGET_FUNC_DECL. Strict polymorphic comparison is processed if
      an option COMPARE_POLYMORPHIC is true. For special cases, one can
@@ -138,12 +137,13 @@ public:
      Similarly, IGNORE_SOURCE_DECLS and IGNORE_TARGET_DECLS are sets
      of declarations that can be skipped.  */
   func_checker (tree source_func_decl, tree target_func_decl,
+		bool compare_polymorphic,
 		bool ignore_labels = false,
 		hash_set<symtab_node *> *ignored_source_nodes = NULL,
 		hash_set<symtab_node *> *ignored_target_nodes = NULL);
 
   /* Memory release routine.  */
-  virtual ~func_checker ();
+  ~func_checker();
 
   /* Function visits all gimple labels and creates corresponding
      mapping between basic blocks and labels.  */
@@ -154,7 +154,7 @@ public:
   bool compare_bb (sem_bb *bb1, sem_bb *bb2);
 
   /* Verifies that trees T1 and T2 are equivalent from perspective of ICF.  */
-  bool compare_ssa_name (const_tree t1, const_tree t2);
+  bool compare_ssa_name (tree t1, tree t2);
 
   /* Verification function for edges E1 and E2.  */
   bool compare_edge (edge e1, edge e2);
@@ -165,11 +165,11 @@ public:
 
   /* Verifies for given GIMPLEs S1 and S2 that
      assignment statements are semantically equivalent.  */
-  bool compare_gimple_assign (gimple *s1, gimple *s2);
+  bool compare_gimple_assign (gimple s1, gimple s2);
 
   /* Verifies for given GIMPLEs S1 and S2 that
      condition statements are semantically equivalent.  */
-  bool compare_gimple_cond (gimple *s1, gimple *s2);
+  bool compare_gimple_cond (gimple s1, gimple s2);
 
   /* Verifies for given GIMPLE_LABEL stmts S1 and S2 that
      label statements are semantically equivalent.  */
@@ -185,7 +185,7 @@ public:
 
   /* Verifies for given GIMPLEs S1 and S2 that
      goto statements are semantically equivalent.  */
-  bool compare_gimple_goto (gimple *s1, gimple *s2);
+  bool compare_gimple_goto (gimple s1, gimple s2);
 
   /* Verifies for given GIMPLE_RESX stmts S1 and S2 that
      resx statements are semantically equivalent.  */
@@ -198,29 +198,36 @@ public:
   bool compare_gimple_asm (const gasm *s1, const gasm *s2);
 
   /* Verification function for declaration trees T1 and T2.  */
-  bool compare_decl (const_tree t1, const_tree t2);
+  bool compare_decl (tree t1, tree t2);
+
+  /* Verifies that tree labels T1 and T2 correspond.  */
+  bool compare_tree_ssa_label (tree t1, tree t2);
+
+  /* Function compare for equality given memory operands T1 and T2.  */
+  bool compare_memory_operand (tree t1, tree t2);
+
+  /* Function compare for equality given trees T1 and T2 which
+     can be either a constant or a declaration type.  */
+  bool compare_cst_or_decl (tree t1, tree t2);
 
   /* Function responsible for comparison of various operands T1 and T2.
      If these components, from functions FUNC1 and FUNC2, are equal, true
      is returned.  */
   bool compare_operand (tree t1, tree t2);
 
-  /* Compares GIMPLE ASM inputs (or outputs) where we iterate tree chain
-     and compare both TREE_PURPOSEs and TREE_VALUEs.  */
-  bool compare_asm_inputs_outputs (tree t1, tree t2);
+  /* Compares two tree list operands T1 and T2 and returns true if these
+     two trees are semantically equivalent.  */
+  bool compare_tree_list_operand (tree t1, tree t2);
 
   /* Verifies that trees T1 and T2, representing function declarations
      are equivalent from perspective of ICF.  */
   bool compare_function_decl (tree t1, tree t2);
 
   /* Verifies that trees T1 and T2 do correspond.  */
-  bool compare_variable_decl (const_tree t1, const_tree t2);
-
-  /* Compare loop information for basic blocks BB1 and BB2.  */
-  bool compare_loops (basic_block bb1, basic_block bb2);
+  bool compare_variable_decl (tree t1, tree t2);
 
   /* Return true if types are compatible for polymorphic call analysis.
-     COMPARE_PTR indicates if polymorphic type comparison should be
+     COMPARE_PTR indicates if polymorphic type comparsion should be
      done for pointers, too.  */
   static bool compatible_polymorphic_types_p (tree t1, tree t2,
 					      bool compare_ptr);
@@ -256,22 +263,16 @@ private:
   hash_map <edge, edge> m_edge_map;
 
   /* Source to target declaration map.  */
-  hash_map <const_tree, const_tree> m_decl_map;
+  hash_map <tree, tree> m_decl_map;
 
   /* Label to basic block index mapping.  */
-  hash_map <const_tree, int> m_label_bb_map;
+  hash_map <tree, int> m_label_bb_map;
+
+  /* Flag if polymorphic comparison should be executed.  */
+  bool m_compare_polymorphic;
 
   /* Flag if ignore labels in comparison.  */
   bool m_ignore_labels;
-
-public:
-  /* Return true if two operands are equal.  The flags fields can be used
-     to specify OEP flags described above.  */
-  virtual bool operand_equal_p (const_tree, const_tree, unsigned int flags);
-
-  /* Generate a hash value for an expression.  This can be used iteratively
-     by passing a previous result as the HSTATE argument.  */
-  virtual void hash_operand (const_tree, inchash::hash &, unsigned flags);
 };
 
 } // ipa_icf_gimple namespace

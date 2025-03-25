@@ -1,5 +1,5 @@
 /* HSAIL IL Register allocation and out-of-SSA.
-   Copyright (C) 2013-2020 Free Software Foundation, Inc.
+   Copyright (C) 2013-2016 Free Software Foundation, Inc.
    Contributed by Michael Matz <matz@suse.de>
 
 This file is part of GCC.
@@ -26,24 +26,22 @@ along with GCC; see the file COPYING3.  If not see
 #include "vec.h"
 #include "tree.h"
 #include "dominance.h"
-#include "basic-block.h"
-#include "function.h"
-#include "cfganal.h"
 #include "cfg.h"
+#include "cfganal.h"
+#include "function.h"
 #include "bitmap.h"
 #include "dumpfile.h"
 #include "cgraph.h"
 #include "print-tree.h"
 #include "cfghooks.h"
-#include "alloc-pool.h"
 #include "symbol-summary.h"
-#include "hsa-common.h"
+#include "hsa.h"
 
 
 /* Process a PHI node PHI of basic block BB as a part of naive out-f-ssa.  */
 
 static void
-naive_process_phi (hsa_insn_phi *phi, const vec<edge> &predecessors)
+naive_process_phi (hsa_insn_phi *phi)
 {
   unsigned count = phi->operand_count ();
   for (unsigned i = 0; i < count; i++)
@@ -56,7 +54,7 @@ naive_process_phi (hsa_insn_phi *phi, const vec<edge> &predecessors)
       if (!op)
 	break;
 
-      e = predecessors[i];
+      e = EDGE_PRED (phi->m_bb, i);
       if (single_succ_p (e->src))
 	hbb = hsa_bb_for_bb (e->src);
       else
@@ -90,18 +88,10 @@ naive_outof_ssa (void)
     hsa_bb *hbb = hsa_bb_for_bb (bb);
     hsa_insn_phi *phi;
 
-    /* naive_process_phi can call split_edge on an incoming edge which order if
-       the incoming edges to the basic block and thus make it inconsistent with
-       the ordering of PHI arguments, so we collect them in advance.  */
-    auto_vec<edge, 8> predecessors;
-    unsigned pred_count = EDGE_COUNT (bb->preds);
-    for (unsigned i = 0; i < pred_count; i++)
-      predecessors.safe_push (EDGE_PRED (bb, i));
-
     for (phi = hbb->m_first_phi;
 	 phi;
 	 phi = phi->m_next ? as_a <hsa_insn_phi *> (phi->m_next) : NULL)
-      naive_process_phi (phi, predecessors);
+      naive_process_phi (phi);
 
     /* Zap PHI nodes, they will be deallocated when everything else will.  */
     hbb->m_first_phi = NULL;
@@ -257,7 +247,7 @@ dump_hsa_cfun_regalloc (FILE *f)
 
   FOR_ALL_BB_FN (bb, cfun)
   {
-    hsa_bb *hbb = (class hsa_bb *) bb->aux;
+    hsa_bb *hbb = (struct hsa_bb *) bb->aux;
     bitmap_print (dump_file, hbb->m_livein, "m_livein  ", "\n");
     dump_hsa_bb (f, hbb);
     bitmap_print (dump_file, hbb->m_liveout, "m_liveout ", "\n");

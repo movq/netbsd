@@ -1,5 +1,5 @@
 /* gfortran backend interface
-   Copyright (C) 2000-2020 Free Software Foundation, Inc.
+   Copyright (C) 2000-2019 Free Software Foundation, Inc.
    Contributed by Paul Brook.
 
 This file is part of GCC.
@@ -91,7 +91,7 @@ static const struct attribute_spec gfc_attribute_table[] =
 {
   /* { name, min_len, max_len, decl_req, type_req, fn_type_req,
        affects_type_identity, handler, exclude } */
-  { "omp declare target", 0, -1, true,  false, false, false,
+  { "omp declare target", 0, 0, true,  false, false, false,
     gfc_handle_omp_declare_target_attribute, NULL },
   { "omp declare target link", 0, 0, true,  false, false, false,
     gfc_handle_omp_declare_target_attribute, NULL },
@@ -113,9 +113,6 @@ static const struct attribute_spec gfc_attribute_table[] =
 #undef LANG_HOOKS_TYPE_FOR_MODE
 #undef LANG_HOOKS_TYPE_FOR_SIZE
 #undef LANG_HOOKS_INIT_TS
-#undef LANG_HOOKS_OMP_ARRAY_DATA
-#undef LANG_HOOKS_OMP_IS_ALLOCATABLE_OR_PTR
-#undef LANG_HOOKS_OMP_CHECK_OPTIONAL_ARGUMENT
 #undef LANG_HOOKS_OMP_PRIVATIZE_BY_REFERENCE
 #undef LANG_HOOKS_OMP_PREDETERMINED_SHARING
 #undef LANG_HOOKS_OMP_REPORT_DECL
@@ -148,9 +145,6 @@ static const struct attribute_spec gfc_attribute_table[] =
 #define LANG_HOOKS_TYPE_FOR_MODE	gfc_type_for_mode
 #define LANG_HOOKS_TYPE_FOR_SIZE	gfc_type_for_size
 #define LANG_HOOKS_INIT_TS		gfc_init_ts
-#define LANG_HOOKS_OMP_ARRAY_DATA		gfc_omp_array_data
-#define LANG_HOOKS_OMP_IS_ALLOCATABLE_OR_PTR	gfc_omp_is_allocatable_or_ptr
-#define LANG_HOOKS_OMP_CHECK_OPTIONAL_ARGUMENT	gfc_omp_check_optional_argument
 #define LANG_HOOKS_OMP_PRIVATIZE_BY_REFERENCE	gfc_omp_privatize_by_reference
 #define LANG_HOOKS_OMP_PREDETERMINED_SHARING	gfc_omp_predetermined_sharing
 #define LANG_HOOKS_OMP_REPORT_DECL		gfc_omp_report_decl
@@ -692,34 +686,31 @@ gfc_init_builtin_functions (void)
                                                 float_type_node, NULL_TREE);
 
   func_cdouble_double = build_function_type_list (double_type_node,
-						  complex_double_type_node,
-						  NULL_TREE);
+                                                  complex_double_type_node,
+                                                  NULL_TREE);
 
   func_double_cdouble = build_function_type_list (complex_double_type_node,
-						  double_type_node, NULL_TREE);
+                                                  double_type_node, NULL_TREE);
 
-  func_clongdouble_longdouble
-    = build_function_type_list (long_double_type_node,
-				complex_long_double_type_node, NULL_TREE);
+  func_clongdouble_longdouble =
+    build_function_type_list (long_double_type_node,
+                              complex_long_double_type_node, NULL_TREE);
 
-  func_longdouble_clongdouble
-    = build_function_type_list (complex_long_double_type_node,
-				long_double_type_node, NULL_TREE);
+  func_longdouble_clongdouble =
+    build_function_type_list (complex_long_double_type_node,
+                              long_double_type_node, NULL_TREE);
 
   ptype = build_pointer_type (float_type_node);
-  func_float_floatp_floatp
-    = build_function_type_list (void_type_node, float_type_node, ptype, ptype,
-				NULL_TREE);
+  func_float_floatp_floatp =
+    build_function_type_list (void_type_node, ptype, ptype, NULL_TREE);
 
   ptype = build_pointer_type (double_type_node);
-  func_double_doublep_doublep
-    = build_function_type_list (void_type_node, double_type_node, ptype,
-				ptype, NULL_TREE);
+  func_double_doublep_doublep =
+    build_function_type_list (void_type_node, ptype, ptype, NULL_TREE);
 
   ptype = build_pointer_type (long_double_type_node);
-  func_longdouble_longdoublep_longdoublep
-    = build_function_type_list (void_type_node, long_double_type_node, ptype,
-				ptype, NULL_TREE);
+  func_longdouble_longdoublep_longdoublep =
+    build_function_type_list (void_type_node, ptype, ptype, NULL_TREE);
 
 /* Non-math builtins are defined manually, so they're not included here.  */
 #define OTHER_BUILTIN(ID,NAME,TYPE,CONST)
@@ -973,8 +964,9 @@ gfc_init_builtin_functions (void)
 		      "calloc", ATTR_NOTHROW_LEAF_MALLOC_LIST);
   DECL_IS_MALLOC (builtin_decl_explicit (BUILT_IN_CALLOC)) = 1;
 
-  ftype = build_function_type_list (pvoid_type_node, pvoid_type_node,
-				    size_type_node, NULL_TREE);
+  ftype = build_function_type_list (pvoid_type_node,
+                                    size_type_node, pvoid_type_node,
+                                    NULL_TREE);
   gfc_define_builtin ("__builtin_realloc", ftype, BUILT_IN_REALLOC,
 		      "realloc", ATTR_NOTHROW_LEAF_LIST);
 

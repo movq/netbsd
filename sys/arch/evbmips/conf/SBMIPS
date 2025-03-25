@@ -1,10 +1,10 @@
-# $NetBSD: SBMIPS,v 1.14 2024/01/29 18:27:11 christos Exp $
+# $NetBSD: SBMIPS,v 1.1 2017/07/24 08:56:29 mrg Exp $
 
-include 	"arch/evbmips/conf/std.sbmips"
+include 	"arch/sbmips/conf/std.sbmips"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.14 $"
+#ident 		"GENERIC-$Revision: 1.1 $"
 
 #options 	LOCKDEBUG	# XXX XXX XXX XXX
 #options 	DEBUG		# extra kernel debugging support
@@ -34,11 +34,24 @@ options 	DDB_HISTORY_SIZE=100 # enable history editing in DDB
 makeoptions	COPY_SYMTAB=1	# size for embedded symbol table
 
 # Compatibility options
-
-include         "conf/compat_netbsd16.config"
-
+options 	COMPAT_43	# compatibility with 4.3BSD binaries
+#options 	COMPAT_09	# NetBSD 0.9,
+#options 	COMPAT_10	# NetBSD 1.0,
+#options 	COMPAT_11	# NetBSD 1.1,
+#options 	COMPAT_12	# NetBSD 1.2,
+#options 	COMPAT_13	# NetBSD 1.3,
+#options 	COMPAT_14	# NetBSD 1.4,
+#options 	COMPAT_15	# NetBSD 1.5,
+options 	COMPAT_16	# NetBSD 1.6,
+options 	COMPAT_20	# NetBSD 2.0,
+options 	COMPAT_30	# NetBSD 3.0,
+options 	COMPAT_40	# NetBSD 4.0,
+options 	COMPAT_50	# NetBSD 5.0,
+options 	COMPAT_60	# NetBSD 6.0, and
+options 	COMPAT_70	# NetBSD 7.0 binary compatibility
 #options 	EXEC_ECOFF	# exec ECOFF binaries
 #options 	COMPAT_ULTRIX	# binary compatibility with Ultrix
+options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # File systems
 file-system	FFS		# Berkeley Fast Filesystem
@@ -60,20 +73,16 @@ file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 # File system options
-#options 	FFS_EI		# FFS Endian Independent support
-#options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
+options 	NFSSERVER	# Sun NFS-compatible filesystem server
 options 	QUOTA		# legacy UFS quotas
 options 	QUOTA2		# new, in-filesystem UFS quotas
-options 	UFS_DIRHASH	# UFS Large Directory Hashing
-#options 	UFS_EXTATTR	# Extended attribute support for UFS1
+#options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
+options 	UFS_EXTATTR	# Extended attribute support for UFS1
+#options 	FFS_EI		# FFS Endian Independent support
 options 	WAPBL		# File system journaling support
-options 	LFS_DIRHASH	# LFS version of UFS_DIRHASH - experimental
-options 	NFSSERVER	# Network File System server
-
-# Alternate buffer queue strategies for better responsiveness under high
-# disk I/O load.
-#options 	BUFQ_READPRIO
-options 	BUFQ_PRIOCSCAN
+#options	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
+#options 	EXT2FS_SYSTEM_FLAGS # makes ext2fs file flags (append and
+				# immutable) behave as system flags.
 
 # Networking options
 #options 	GATEWAY		# IP packet forwarding
@@ -87,6 +96,10 @@ options 	INET6		# IPV6
 #options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 #options 	PPP_DEFLATE	# Deflate compression support for PPP
 options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
+options 	IPFILTER_LOG	# ipmon(8) log support
+options 	IPFILTER_LOOKUP	# ippool(8) support
+options 	IPFILTER_COMPAT # Compat for IP-Filter
+#options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 
 #options 	ALTQ		# Manipulate network interfaces' output queues
 #options 	ALTQ_BLUE	# Stochastic Fair Blue
@@ -100,6 +113,9 @@ options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 #options 	ALTQ_RED	# Random Early Detection
 #options 	ALTQ_RIO	# RED with IN/OUT
 #options 	ALTQ_WFQ	# Weighted Fair Queueing
+
+# Compatibility with 4.2BSD implementation of TCP/IP.  Not recommended.
+#options 	TCP_COMPAT_42
 
 # JIT compiler for bpfilter
 #options	SLJIT
@@ -154,6 +170,7 @@ usb*		at ohci?
 uhub*		at usb?
 uhub*		at uhub? port ?
 umass*		at uhub? port ? configuration ? interface ?
+wd*		at umass?
 scsibus*	at umass? channel ?
 sd*		at scsibus? target ? lun ?
 uplcom* 	at uhub? port ? 	# I/O DATA USB-RSAQ2 serial adapter
@@ -172,12 +189,13 @@ pseudo-device	vnd			# disk-like interface to files
 
 # Network pseudo-devices
 pseudo-device	bpfilter		# Berkeley packet filter
-pseudo-device	carp			# Common Address Redundancy Protocol
-pseudo-device	npf			# NPF packet filter
+#pseudo-device	carp			# Common Address Redundancy Protocol
+pseudo-device	ipfilter		# IP filter (firewall) and NAT
 pseudo-device	loop			# network loopback
 #pseudo-device	ppp			# Point-to-Point Protocol
 #pseudo-device	pppoe			# PPP over Ethernet (RFC 2516)
 #pseudo-device	sl			# Serial Line IP
+#pseudo-device	strip			# Starmode Radio IP (Metricom)
 #pseudo-device	irframetty		# IrDA frame line discipline
 #pseudo-device	tun			# network tunneling over tty
 #pseudo-device	tap			# virtual Ethernet
@@ -188,7 +206,7 @@ pseudo-device	loop			# network loopback
 #pseudo-device	stf			# 6to4 IPv6 over IPv4 encapsulation
 pseudo-device	vlan			# IEEE 802.1q encapsulation
 pseudo-device	bridge			# simple inter-network bridging
-pseudo-device	vether			# Virtual Ethernet for bridge
+#options	BRIDGE_IPF		# bridge uses IP/IPv6 pfil hooks too
 pseudo-device	agr			# IEEE 802.3ad link aggregation
 
 #
@@ -201,8 +219,24 @@ pseudo-device	pty			# pseudo-terminals
 #pseudo-device	sequencer		# MIDI sequencer
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
+#pseudo-device	pf			# PF packet filter
+#pseudo-device	pflog			# PF log if
 
 # A pseudo device needed for Coda	# also needs CODA (above)
 #pseudo-device	vcoda			# coda minicache <-> venus comm.
 
-include "dev/veriexec.config"
+# Veriexec
+#
+# a pseudo device needed for veriexec
+#pseudo-device	veriexec
+#
+# Uncomment the fingerprint methods below that are desired. Note that
+# removing fingerprint methods will have almost no impact on the kernel
+# code size.
+#
+#options VERIFIED_EXEC_FP_RMD160
+#options VERIFIED_EXEC_FP_SHA256
+#options VERIFIED_EXEC_FP_SHA384
+#options VERIFIED_EXEC_FP_SHA512
+#options VERIFIED_EXEC_FP_SHA1
+#options VERIFIED_EXEC_FP_MD5

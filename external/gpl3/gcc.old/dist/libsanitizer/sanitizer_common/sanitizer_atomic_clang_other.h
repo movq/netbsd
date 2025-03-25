@@ -15,7 +15,6 @@
 
 namespace __sanitizer {
 
-
 INLINE void proc_yield(int cnt) {
   __asm__ __volatile__("" ::: "memory");
 }
@@ -84,7 +83,7 @@ INLINE void atomic_store(volatile T *a, typename T::Type v, memory_order mo) {
     typename T::Type cur;
     for (;;) {
       cur = __sync_val_compare_and_swap(&a->val_dont_use, cmp, v);
-      if (cur == cmp || cur == v)
+      if (cmp == v)
         break;
       cmp = cur;
     }

@@ -1494,16 +1494,13 @@ Expression *castTo(Expression *e, Scope *sc, Type *t)
                     // cast(U[])sa; // ==> cast(U[])sa[];
                     d_uns64 fsize = t1b->nextOf()->size();
                     d_uns64 tsize = tob->nextOf()->size();
-                    if (fsize != tsize)
+                    if ((((TypeSArray *)t1b)->dim->toInteger() * fsize) % tsize != 0)
                     {
-                        dinteger_t dim = ((TypeSArray *)t1b)->dim->toInteger();
-                        if (tsize == 0 || (dim * fsize) % tsize != 0)
-                        {
-                            e->error("cannot cast expression `%s` of type `%s` to `%s` since sizes don't line up",
-                                     e->toChars(), e->type->toChars(), t->toChars());
-                            result = new ErrorExp();
-                            return;
-                        }
+                        // copied from sarray_toDarray() in e2ir.c
+                        e->error("cannot cast expression %s of type %s to %s since sizes don't line up",
+                            e->toChars(), e->type->toChars(), t->toChars());
+                        result = new ErrorExp();
+                        return;
                     }
                     goto Lok;
                 }

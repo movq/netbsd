@@ -1,7 +1,7 @@
 /* Streamer hooks.  Support for adding streamer-specific callbacks to
    generic streaming routines.
 
-   Copyright (C) 2011-2020 Free Software Foundation, Inc.
+   Copyright (C) 2011-2013 Free Software Foundation, Inc.
    Contributed by Diego Novillo <dnovillo@google.com>
 
 This file is part of GCC.
@@ -23,10 +23,12 @@ along with GCC; see the file COPYING3.  If not see
 #ifndef GCC_STREAMER_HOOKS_H
 #define GCC_STREAMER_HOOKS_H
 
+#include "tree.h"
+
 /* Forward declarations to avoid including unnecessary headers.  */
 struct output_block;
-class lto_input_block;
-class data_in;
+struct lto_input_block;
+struct data_in;
 
 /* Streamer hooks.  These functions do additional processing as
    needed by the module.  There are two types of callbacks, those that
@@ -49,39 +51,29 @@ struct streamer_hooks {
      to the buffer where to read from and a data_in instance with tables
      and descriptors needed by the unpickling routines.  It returns the
      tree instantiated from the stream.  */
-  tree (*read_tree) (class lto_input_block *, class data_in *);
+  tree (*read_tree) (struct lto_input_block *, struct data_in *);
 
   /* [REQ] Called by every streaming routine that needs to read a location.  */
-  void (*input_location) (location_t *, struct bitpack_d *, class data_in *);
+  location_t (*input_location) (struct bitpack_d *, struct data_in *);
 
-  /* [REQ] Called by every streaming routine that needs to write a
-     location.  */
-  void (*output_location) (struct output_block *, struct bitpack_d *,
-			   location_t);
-
-  /* [REQ] Called by every streaming routine that needs to write a
-     location, both LOCATION_LOCUS and LOCATION_BLOCK.  */
-  void (*output_location_and_block) (struct output_block *, struct bitpack_d *,
-				     location_t);
+  /* [REQ] Called by every streaming routine that needs to write a location.  */
+  void (*output_location) (struct output_block *, struct bitpack_d *, location_t);
 };
 
 #define stream_write_tree(OB, EXPR, REF_P) \
-    streamer_hooks.write_tree (OB, EXPR, REF_P, REF_P)
+    streamer_hooks.write_tree(OB, EXPR, REF_P, REF_P)
 
 #define stream_write_tree_shallow_non_ref(OB, EXPR, REF_P) \
-    streamer_hooks.write_tree (OB, EXPR, REF_P, false)
+    streamer_hooks.write_tree(OB, EXPR, REF_P, false)
 
 #define stream_read_tree(IB, DATA_IN) \
-    streamer_hooks.read_tree (IB, DATA_IN)
+    streamer_hooks.read_tree(IB, DATA_IN)
 
-#define stream_input_location(LOCPTR, BP, DATA_IN) \
-    streamer_hooks.input_location (LOCPTR, BP, DATA_IN)
+#define stream_input_location(BP, DATA_IN) \
+    streamer_hooks.input_location(BP, DATA_IN)
 
 #define stream_output_location(OB, BP, LOC) \
-    streamer_hooks.output_location (OB, BP, LOC)
-
-#define stream_output_location_and_block(OB, BP, LOC) \
-    streamer_hooks.output_location_and_block (OB, BP, LOC)
+    streamer_hooks.output_location(OB, BP, LOC)
 
 /* Streamer hooks.  */
 extern struct streamer_hooks streamer_hooks;

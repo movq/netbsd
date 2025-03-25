@@ -1,5 +1,5 @@
 /* Internals of libgccjit: classes for playing back recorded API calls.
-   Copyright (C) 2013-2020 Free Software Foundation, Inc.
+   Copyright (C) 2013-2015 Free Software Foundation, Inc.
    Contributed by David Malcolm <dmalcolm@redhat.com>.
 
 This file is part of GCC.
@@ -26,9 +26,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "timevar.h"
 
 #include "jit-recording.h"
-
-struct diagnostic_context;
-struct diagnostic_info;
 
 namespace gcc {
 
@@ -75,12 +72,6 @@ public:
 	     type *type,
 	     const char *name);
 
-  field *
-  new_bitfield (location *loc,
-		type *type,
-		int width,
-		const char *name);
-
   compound_type *
   new_compound_type (location *loc,
 		     const char *name,
@@ -120,11 +111,6 @@ public:
   new_string_literal (const char *value);
 
   rvalue *
-  new_rvalue_from_vector (location *loc,
-			  type *type,
-			  const auto_vec<rvalue *> &elements);
-
-  rvalue *
   new_unary_op (location *loc,
 		enum gcc_jit_unary_op op,
 		type *result_type,
@@ -144,14 +130,12 @@ public:
   rvalue *
   new_call (location *loc,
 	    function *func,
-	    const auto_vec<rvalue *> *args,
-	    bool require_tail_call);
+	    const auto_vec<rvalue *> *args);
 
   rvalue *
   new_call_through_ptr (location *loc,
 			rvalue *fn_ptr,
-			const auto_vec<rvalue *> *args,
-			bool require_tail_call);
+			const auto_vec<rvalue *> *args);
 
   rvalue *
   new_cast (location *loc,
@@ -193,12 +177,6 @@ public:
     return m_recording_ctxt->get_bool_option (opt);
   }
 
-  int
-  get_inner_bool_option (enum inner_bool_option opt) const
-  {
-    return m_recording_ctxt->get_inner_bool_option (opt);
-  }
-
   builtins_manager *get_builtins_manager () const
   {
     return m_recording_ctxt->get_builtins_manager ();
@@ -219,10 +197,6 @@ public:
   get_first_error () const;
 
   void
-  add_diagnostic (struct diagnostic_context *context,
-		  struct diagnostic_info *diagnostic);
-
-  void
   set_tree_location (tree t, location *loc);
 
   tree
@@ -241,7 +215,9 @@ public:
     return m_recording_ctxt->errors_occurred ();
   }
 
-  timer *get_timer () const { return m_recording_ctxt->get_timer (); }
+  /* For use by jit_langhook_write_globals.  */
+  void write_global_decls_1 ();
+  void write_global_decls_2 ();
 
 private:
   void dump_generated_code ();
@@ -249,8 +225,7 @@ private:
   rvalue *
   build_call (location *loc,
 	      tree fn_ptr,
-	      const auto_vec<rvalue *> *args,
-	      bool require_tail_call);
+	      const auto_vec<rvalue *> *args);
 
   tree
   build_cast (location *loc,
@@ -307,14 +282,6 @@ protected:
   result *
   dlopen_built_dso ();
 
- private:
-  void
-  invoke_embedded_driver (const vec <char *> *argvec);
-
-  void
-  invoke_external_driver (const char *ctxt_progname,
-			  vec <char *> *argvec);
-
 private:
   ::gcc::jit::recording::context *m_recording_ctxt;
 
@@ -322,6 +289,7 @@ private:
 
   auto_vec<function *> m_functions;
   auto_vec<tree> m_globals;
+  tree m_char_array_type_node;
   tree m_const_char_ptr;
 
   /* Source location handling.  */
@@ -334,7 +302,7 @@ class compile_to_memory : public context
 {
  public:
   compile_to_memory (recording::context *ctxt);
-  void postprocess (const char *ctxt_progname) FINAL OVERRIDE;
+  void postprocess (const char *ctxt_progname);
 
   result *get_result_obj () const { return m_result; }
 
@@ -348,7 +316,7 @@ class compile_to_file : public context
   compile_to_file (recording::context *ctxt,
 		   enum gcc_jit_output_kind output_kind,
 		   const char *output_path);
-  void postprocess (const char *ctxt_progname) FINAL OVERRIDE;
+  void postprocess (const char *ctxt_progname);
 
  private:
   void
@@ -401,9 +369,6 @@ public:
     return new type (build_qualified_type (m_inner, TYPE_QUAL_VOLATILE));
   }
 
-  type *get_aligned (size_t alignment_in_bytes) const;
-  type *get_vector (size_t num_units) const;
-
 private:
   tree m_inner;
 };
@@ -431,15 +396,13 @@ private:
   tree m_inner;
 };
 
-class bitfield : public field {};
-
 class function : public wrapper
 {
 public:
   function(context *ctxt, tree fndecl, enum gcc_jit_function_kind kind);
 
   void gt_ggc_mx ();
-  void finalizer () FINAL OVERRIDE;
+  void finalizer ();
 
   tree get_return_type_as_tree () const;
 
@@ -454,9 +417,6 @@ public:
 
   block*
   new_block (const char *name);
-
-  rvalue *
-  get_address (location *loc);
 
   void
   build_stmt_list ();
@@ -503,7 +463,7 @@ public:
   block (function *func,
 	 const char *name);
 
-  void finalizer () FINAL OVERRIDE;
+  void finalizer ();
 
   tree as_label_decl () const { return m_label_decl; }
 
@@ -621,8 +581,6 @@ public:
   rvalue *
   get_address (location *loc);
 
-private:
-  bool mark_addressable (location *loc);
 };
 
 class param : public lvalue
@@ -649,7 +607,7 @@ class source_file : public wrapper
 {
 public:
   source_file (tree filename);
-  void finalizer () FINAL OVERRIDE;
+  void finalizer ();
 
   source_line *
   get_source_line (int line_num);
@@ -670,7 +628,7 @@ class source_line : public wrapper
 {
 public:
   source_line (source_file *file, int line_num);
-  void finalizer () FINAL OVERRIDE;
+  void finalizer ();
 
   location *
   get_location (recording::location *rloc, int column_num);
@@ -695,7 +653,7 @@ public:
 
   recording::location *get_recording_loc () const { return m_recording_loc; }
 
-  location_t m_srcloc;
+  source_location m_srcloc;
 
 private:
   recording::location *m_recording_loc;
@@ -712,3 +670,4 @@ extern playback::context *active_playback_ctxt;
 } // namespace gcc
 
 #endif /* JIT_PLAYBACK_H */
+

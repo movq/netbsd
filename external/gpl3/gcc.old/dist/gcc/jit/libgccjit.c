@@ -1,5 +1,5 @@
 /* Implementation of the C API; all wrappers into the internal C++ API
-   Copyright (C) 2013-2020 Free Software Foundation, Inc.
+   Copyright (C) 2013-2015 Free Software Foundation, Inc.
    Contributed by David Malcolm <dmalcolm@redhat.com>.
 
 This file is part of GCC.
@@ -21,12 +21,13 @@ along with GCC; see the file COPYING3.  If not see
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "timevar.h"
+#include "opts.h"
+#include "safe-ctype.h"
 #include "typed-splay-tree.h"
-#include "cppbuiltin.h"
-#include <pthread.h>
 
 #include "libgccjit.h"
+#include "jit-common.h"
+#include "jit-logging.h"
 #include "jit-recording.h"
 #include "jit-result.h"
 
@@ -64,10 +65,6 @@ struct gcc_jit_field : public gcc::jit::recording::field
 {
 };
 
-struct gcc_jit_bitfield : public gcc::jit::recording::bitfield
-{
-};
-
 struct gcc_jit_function : public gcc::jit::recording::function
 {
 };
@@ -89,10 +86,6 @@ struct gcc_jit_param : public gcc::jit::recording::param
 };
 
 struct gcc_jit_case : public gcc::jit::recording::case_
-{
-};
-
-struct gcc_jit_timer : public timer
 {
 };
 
@@ -550,50 +543,8 @@ gcc_jit_context_new_field (gcc_jit_context *ctxt,
   /* LOC can be NULL.  */
   RETURN_NULL_IF_FAIL (type, ctxt, loc, "NULL type");
   RETURN_NULL_IF_FAIL (name, ctxt, loc, "NULL name");
-  RETURN_NULL_IF_FAIL_PRINTF2 (
-    type->has_known_size (),
-    ctxt, loc,
-    "unknown size for field \"%s\" (type: %s)",
-    name,
-    type->get_debug_string ());
 
   return (gcc_jit_field *)ctxt->new_field (loc, type, name);
-}
-
-/* Public entrypoint.  See description in libgccjit.h.
-
-   After error-checking, the real work is done by the
-   gcc::jit::recording::context::new_bitfield method, in
-   jit-recording.c.  */
-
-gcc_jit_field *
-gcc_jit_context_new_bitfield (gcc_jit_context *ctxt,
-			      gcc_jit_location *loc,
-			      gcc_jit_type *type,
-			      int width,
-			      const char *name)
-{
-  RETURN_NULL_IF_FAIL (ctxt, NULL, NULL, "NULL context");
-  JIT_LOG_FUNC (ctxt->get_logger ());
-  /* LOC can be NULL.  */
-  RETURN_NULL_IF_FAIL (name, ctxt, loc, "NULL name");
-  RETURN_NULL_IF_FAIL (type, ctxt, loc, "NULL type");
-  RETURN_NULL_IF_FAIL_PRINTF2 (type->is_int () || type->is_bool (),
-			       ctxt, loc,
-			       "bit-field %s has non integral type %s",
-			       name, type->get_debug_string ());
-  RETURN_NULL_IF_FAIL_PRINTF2 (
-    width > 0, ctxt, loc,
-    "invalid width %d for bitfield \"%s\" (must be > 0)",
-    width, name);
-  RETURN_NULL_IF_FAIL_PRINTF2 (
-    type->has_known_size (),
-    ctxt, loc,
-    "unknown size for field \"%s\" (type: %s)",
-    name,
-    type->get_debug_string ());
-
-  return (gcc_jit_field *)ctxt->new_bitfield (loc, type, width, name);
 }
 
 /* Public entrypoint.  See description in libgccjit.h.
@@ -634,7 +585,7 @@ gcc_jit_context_new_struct_type (gcc_jit_context *ctxt,
     {
       RETURN_NULL_IF_FAIL (fields[i], ctxt, loc, "NULL field ptr");
       RETURN_NULL_IF_FAIL_PRINTF2 (
-	fields[i]->get_container () == NULL,
+	NULL == fields[i]->get_container (),
 	ctxt, loc,
 	"%s is already a field of %s",
 	fields[i]->get_debug_string (),
@@ -699,21 +650,16 @@ gcc_jit_struct_set_fields (gcc_jit_struct *struct_type,
   JIT_LOG_FUNC (ctxt->get_logger ());
   /* LOC can be NULL.  */
   RETURN_IF_FAIL_PRINTF1 (
-    struct_type->get_fields () == NULL, ctxt, loc,
+    NULL == struct_type->get_fields (), ctxt, loc,
     "%s already has had fields set",
     struct_type->get_debug_string ());
   if (num_fields)
     RETURN_IF_FAIL (fields, ctxt, loc, "NULL fields ptr");
   for (int i = 0; i < num_fields; i++)
     {
+      RETURN_IF_FAIL (fields[i], ctxt, loc, "NULL field ptr");
       RETURN_IF_FAIL_PRINTF2 (
-	fields[i],
-	ctxt, loc,
-	"%s: NULL field ptr at index %i",
-	struct_type->get_debug_string (),
-	i);
-      RETURN_IF_FAIL_PRINTF2 (
-	fields[i]->get_container () == NULL,
+	NULL == fields[i]->get_container (),
 	ctxt, loc,
 	"%s is already a field of %s",
 	fields[i]->get_debug_string (),
@@ -748,7 +694,7 @@ gcc_jit_context_new_union_type (gcc_jit_context *ctxt,
     {
       RETURN_NULL_IF_FAIL (fields[i], ctxt, loc, "NULL field ptr");
       RETURN_NULL_IF_FAIL_PRINTF2 (
-	fields[i]->get_container () == NULL,
+	NULL == fields[i]->get_container (),
 	ctxt, loc,
 	"%s is already a field of %s",
 	fields[i]->get_debug_string (),
@@ -922,7 +868,7 @@ gcc_jit_context_new_function (gcc_jit_context *ctxt,
 	ctxt, loc,
 	"NULL parameter %i creating function %s", i, name);
       RETURN_NULL_IF_FAIL_PRINTF5 (
-	params[i]->get_scope () == NULL,
+	(NULL == params[i]->get_scope ()),
 	ctxt, loc,
 	"parameter %i \"%s\""
 	" (type: %s)"
@@ -1087,12 +1033,6 @@ gcc_jit_context_new_global (gcc_jit_context *ctxt,
     kind);
   RETURN_NULL_IF_FAIL (type, ctxt, loc, "NULL type");
   RETURN_NULL_IF_FAIL (name, ctxt, loc, "NULL name");
-  RETURN_NULL_IF_FAIL_PRINTF2 (
-    type->has_known_size (),
-    ctxt, loc,
-    "unknown size for global \"%s\" (type: %s)",
-    name,
-    type->get_debug_string ());
 
   return (gcc_jit_lvalue *)ctxt->new_global (loc, kind, type, name);
 }
@@ -1157,13 +1097,11 @@ gcc_jit_rvalue_get_type (gcc_jit_rvalue *rvalue)
    result of gcc_jit_context_get_type (GCC_JIT_TYPE_INT).  */
 
 #define RETURN_NULL_IF_FAIL_NONNULL_NUMERIC_TYPE(CTXT, NUMERIC_TYPE) \
-  JIT_BEGIN_STMT						     \
   RETURN_NULL_IF_FAIL (NUMERIC_TYPE, CTXT, NULL, "NULL type"); \
   RETURN_NULL_IF_FAIL_PRINTF1 (                                \
     NUMERIC_TYPE->is_numeric (), ctxt, NULL,                   \
     "not a numeric type: %s",                                  \
-    NUMERIC_TYPE->get_debug_string ()); \
-  JIT_END_STMT
+    NUMERIC_TYPE->get_debug_string ());
 
 /* Public entrypoint.  See description in libgccjit.h.
 
@@ -1338,13 +1276,6 @@ gcc_jit_context_new_unary_op (gcc_jit_context *ctxt,
     "unrecognized value for enum gcc_jit_unary_op: %i",
     op);
   RETURN_NULL_IF_FAIL (result_type, ctxt, loc, "NULL result_type");
-  RETURN_NULL_IF_FAIL_PRINTF3 (
-    result_type->is_numeric (), ctxt, loc,
-    "gcc_jit_unary_op %s with operand %s "
-    "has non-numeric result_type: %s",
-    gcc::jit::unary_op_reproducer_strings[op],
-    rvalue->get_debug_string (),
-    result_type->get_debug_string ());
   RETURN_NULL_IF_FAIL (rvalue, ctxt, loc, "NULL rvalue");
 
   return (gcc_jit_rvalue *)ctxt->new_unary_op (loc, op, result_type, rvalue);
@@ -1386,7 +1317,7 @@ gcc_jit_context_new_binary_op (gcc_jit_context *ctxt,
   RETURN_NULL_IF_FAIL (a, ctxt, loc, "NULL a");
   RETURN_NULL_IF_FAIL (b, ctxt, loc, "NULL b");
   RETURN_NULL_IF_FAIL_PRINTF4 (
-    a->get_type ()->unqualified () == b->get_type ()->unqualified (),
+    a->get_type () == b->get_type (),
     ctxt, loc,
     "mismatching types for binary op:"
     " a: %s (type: %s) b: %s (type: %s)",
@@ -1394,13 +1325,6 @@ gcc_jit_context_new_binary_op (gcc_jit_context *ctxt,
     a->get_type ()->get_debug_string (),
     b->get_debug_string (),
     b->get_type ()->get_debug_string ());
-  RETURN_NULL_IF_FAIL_PRINTF4 (
-    result_type->is_numeric (), ctxt, loc,
-    "gcc_jit_binary_op %s with operands a: %s b: %s "
-    "has non-numeric result_type: %s",
-    gcc::jit::binary_op_reproducer_strings[op],
-    a->get_debug_string (), b->get_debug_string (),
-    result_type->get_debug_string ());
 
   return (gcc_jit_rvalue *)ctxt->new_binary_op (loc, op, result_type, a, b);
 }
@@ -1905,12 +1829,6 @@ gcc_jit_function_new_local (gcc_jit_function *func,
 		       "Cannot add locals to an imported function");
   RETURN_NULL_IF_FAIL (type, ctxt, loc, "NULL type");
   RETURN_NULL_IF_FAIL (name, ctxt, loc, "NULL name");
-  RETURN_NULL_IF_FAIL_PRINTF2 (
-    type->has_known_size (),
-    ctxt, loc,
-    "unknown size for local \"%s\" (type: %s)",
-    name,
-    type->get_debug_string ());
 
   return (gcc_jit_lvalue *)func->new_local (loc, type, name);
 }
@@ -2665,23 +2583,6 @@ gcc_jit_context_set_bool_allow_unreachable_blocks (gcc_jit_context *ctxt,
 /* Public entrypoint.  See description in libgccjit.h.
 
    After error-checking, the real work is done by the
-   gcc::jit::recording::context::set_inner_bool_option method in
-   jit-recording.c.  */
-
-extern void
-gcc_jit_context_set_bool_use_external_driver (gcc_jit_context *ctxt,
-					      int bool_value)
-{
-  RETURN_IF_FAIL (ctxt, NULL, NULL, "NULL context");
-  JIT_LOG_FUNC (ctxt->get_logger ());
-  ctxt->set_inner_bool_option (
-    gcc::jit::INNER_BOOL_OPTION_USE_EXTERNAL_DRIVER,
-    bool_value);
-}
-
-/* Public entrypoint.  See description in libgccjit.h.
-
-   After error-checking, the real work is done by the
    gcc::jit::recording::context::add_command_line_option method in
    jit-recording.c.  */
 
@@ -2696,25 +2597,6 @@ gcc_jit_context_add_command_line_option (gcc_jit_context *ctxt,
     ctxt->get_logger ()->log ("optname: %s", optname);
 
   ctxt->add_command_line_option (optname);
-}
-
-/* Public entrypoint.  See description in libgccjit.h.
-
-   The real work is done by the
-   gcc::jit::recording::context::add_driver_option method in
-   jit-recording.c.  */
-
-void
-gcc_jit_context_add_driver_option (gcc_jit_context *ctxt,
-				   const char *optname)
-{
-  RETURN_IF_FAIL (ctxt, NULL, NULL, "NULL context");
-  JIT_LOG_FUNC (ctxt->get_logger ());
-  RETURN_IF_FAIL (optname, ctxt, NULL, "NULL optname");
-  if (ctxt->get_logger ())
-    ctxt->get_logger ()->log ("optname: %s", optname);
-
-  ctxt->add_driver_option (optname);
 }
 
 /* Public entrypoint.  See description in libgccjit.h.
@@ -2922,302 +2804,4 @@ gcc_jit_result_release (gcc_jit_result *result)
   JIT_LOG_FUNC (result->get_logger ());
   result->log ("deleting result: %p", (void *)result);
   delete result;
-}
-
-/**********************************************************************
- Timing support.
- **********************************************************************/
-
-/* Create a gcc_jit_timer instance, and start timing.  */
-
-gcc_jit_timer *
-gcc_jit_timer_new (void)
-{
-  gcc_jit_timer *timer = new gcc_jit_timer ();
-  timer->start (TV_TOTAL);
-  timer->push (TV_JIT_CLIENT_CODE);
-  return timer;
-}
-
-/* Release a gcc_jit_timer instance.  */
-
-void
-gcc_jit_timer_release (gcc_jit_timer *timer)
-{
-  RETURN_IF_FAIL (timer, NULL, NULL, "NULL timer");
-
-  delete timer;
-}
-
-/* Associate a gcc_jit_timer instance with a context.  */
-
-void
-gcc_jit_context_set_timer (gcc_jit_context *ctxt,
-			   gcc_jit_timer *timer)
-{
-  RETURN_IF_FAIL (ctxt, NULL, NULL, "NULL ctxt");
-  RETURN_IF_FAIL (timer, ctxt, NULL, "NULL timer");
-
-  ctxt->set_timer (timer);
-}
-
-/* Get the timer associated with a context (if any).  */
-
-gcc_jit_timer *
-gcc_jit_context_get_timer (gcc_jit_context *ctxt)
-{
-  RETURN_NULL_IF_FAIL (ctxt, NULL, NULL, "NULL ctxt");
-
-  return (gcc_jit_timer *)ctxt->get_timer ();
-}
-
-/* Push the given item onto the timing stack.  */
-
-void
-gcc_jit_timer_push (gcc_jit_timer *timer,
-		    const char *item_name)
-{
-  RETURN_IF_FAIL (timer, NULL, NULL, "NULL timer");
-  RETURN_IF_FAIL (item_name, NULL, NULL, "NULL item_name");
-  timer->push_client_item (item_name);
-}
-
-/* Pop the top item from the timing stack.  */
-
-void
-gcc_jit_timer_pop (gcc_jit_timer *timer,
-		   const char *item_name)
-{
-  RETURN_IF_FAIL (timer, NULL, NULL, "NULL timer");
-
-  if (item_name)
-    {
-      const char *top_item_name = timer->get_topmost_item_name ();
-
-      RETURN_IF_FAIL_PRINTF1
-	(top_item_name, NULL, NULL,
-	 "pop of empty timing stack (attempting to pop: \"%s\")",
-	 item_name);
-
-      RETURN_IF_FAIL_PRINTF2
-	(strcmp (item_name, top_item_name) == 0, NULL, NULL,
-	 "mismatching item_name:"
-	 " top of timing stack: \"%s\","
-	 " attempting to pop: \"%s\"",
-	 top_item_name,
-	 item_name);
-    }
-
-  timer->pop_client_item ();
-}
-
-/* Print timing information to the given stream about activity since
-   the timer was started.  */
-
-void
-gcc_jit_timer_print (gcc_jit_timer *timer,
-		     FILE *f_out)
-{
-  RETURN_IF_FAIL (timer, NULL, NULL, "NULL timer");
-  RETURN_IF_FAIL (f_out, NULL, NULL, "NULL f_out");
-
-  timer->pop (TV_JIT_CLIENT_CODE);
-  timer->stop (TV_TOTAL);
-  timer->print (f_out);
-  timer->start (TV_TOTAL);
-  timer->push (TV_JIT_CLIENT_CODE);
-}
-
-/* Public entrypoint.  See description in libgccjit.h.
-
-   After error-checking, the real work is effectively done by the
-   gcc::jit::base_call::set_require_tail_call setter in jit-recording.h.  */
-
-void
-gcc_jit_rvalue_set_bool_require_tail_call (gcc_jit_rvalue *rvalue,
-					   int require_tail_call)
-{
-  RETURN_IF_FAIL (rvalue, NULL, NULL, "NULL call");
-  JIT_LOG_FUNC (rvalue->get_context ()->get_logger ());
-
-  /* Verify that it's a call.  */
-  gcc::jit::recording::base_call *call = rvalue->dyn_cast_base_call ();
-  RETURN_IF_FAIL_PRINTF1 (call, NULL, NULL, "not a call: %s",
-			  rvalue->get_debug_string ());
-
-  call->set_require_tail_call (require_tail_call);
-}
-
-/* Public entrypoint.  See description in libgccjit.h.
-
-   After error-checking, the real work is done by the
-   gcc::jit::recording::type::get_aligned method, in
-   jit-recording.c.  */
-
-gcc_jit_type *
-gcc_jit_type_get_aligned (gcc_jit_type *type,
-			  size_t alignment_in_bytes)
-{
-  RETURN_NULL_IF_FAIL (type, NULL, NULL, "NULL type");
-
-  gcc::jit::recording::context *ctxt = type->m_ctxt;
-
-  JIT_LOG_FUNC (ctxt->get_logger ());
-
-  RETURN_NULL_IF_FAIL_PRINTF1
-    (pow2_or_zerop (alignment_in_bytes), ctxt, NULL,
-     "alignment not a power of two: %zi",
-     alignment_in_bytes);
-
-  return (gcc_jit_type *)type->get_aligned (alignment_in_bytes);
-}
-
-/* Public entrypoint.  See description in libgccjit.h.
-
-   After error-checking, the real work is done by the
-   gcc::jit::recording::type::get_vector method, in
-   jit-recording.c.  */
-
-gcc_jit_type *
-gcc_jit_type_get_vector (gcc_jit_type *type, size_t num_units)
-{
-  RETURN_NULL_IF_FAIL (type, NULL, NULL, "NULL type");
-
-  gcc::jit::recording::context *ctxt = type->m_ctxt;
-
-  JIT_LOG_FUNC (ctxt->get_logger ());
-
-  RETURN_NULL_IF_FAIL_PRINTF1
-    (type->is_int () || type->is_float (), ctxt, NULL,
-     "type is not integral or floating point: %s",
-     type->get_debug_string ());
-
-  RETURN_NULL_IF_FAIL_PRINTF1
-    (pow2_or_zerop (num_units), ctxt, NULL,
-     "num_units not a power of two: %zi",
-     num_units);
-
-  return (gcc_jit_type *)type->get_vector (num_units);
-}
-
-/* Public entrypoint.  See description in libgccjit.h.
-
-   After error-checking, the real work is done by the
-   gcc::jit::recording::function::get_address method, in
-   jit-recording.c.  */
-
-gcc_jit_rvalue *
-gcc_jit_function_get_address (gcc_jit_function *fn,
-			      gcc_jit_location *loc)
-{
-  RETURN_NULL_IF_FAIL (fn, NULL, NULL, "NULL function");
-
-  gcc::jit::recording::context *ctxt = fn->m_ctxt;
-
-  JIT_LOG_FUNC (ctxt->get_logger ());
-  /* LOC can be NULL.  */
-
-  return (gcc_jit_rvalue *)fn->get_address (loc);
-}
-
-/* Public entrypoint.  See description in libgccjit.h.
-
-   After error-checking, the real work is done by the
-   gcc::jit::recording::context::new_rvalue_from_vector method, in
-   jit-recording.c.  */
-
-extern gcc_jit_rvalue *
-gcc_jit_context_new_rvalue_from_vector (gcc_jit_context *ctxt,
-					gcc_jit_location *loc,
-					gcc_jit_type *vec_type,
-					size_t num_elements,
-					gcc_jit_rvalue **elements)
-{
-  RETURN_NULL_IF_FAIL (ctxt, NULL, loc, "NULL ctxt");
-  JIT_LOG_FUNC (ctxt->get_logger ());
-
-  /* LOC can be NULL.  */
-  RETURN_NULL_IF_FAIL (vec_type, ctxt, loc, "NULL vec_type");
-
-  /* "vec_type" must be a vector type.  */
-  gcc::jit::recording::vector_type *as_vec_type
-    = vec_type->dyn_cast_vector_type ();
-  RETURN_NULL_IF_FAIL_PRINTF1 (as_vec_type, ctxt, loc,
-			       "%s is not a vector type",
-			       vec_type->get_debug_string ());
-
-  /* "num_elements" must match.  */
-  RETURN_NULL_IF_FAIL_PRINTF1 (
-    num_elements == as_vec_type->get_num_units (), ctxt, loc,
-    "num_elements != %zi", as_vec_type->get_num_units ());
-
-  /* "elements must be non-NULL.  */
-  RETURN_NULL_IF_FAIL (elements, ctxt, loc, "NULL elements");
-
-  /* Each of "elements" must be non-NULL and of the correct type.  */
-  gcc::jit::recording::type *element_type
-    = as_vec_type->get_element_type ();
-  for (size_t i = 0; i < num_elements; i++)
-    {
-      RETURN_NULL_IF_FAIL_PRINTF1 (
-	elements[i], ctxt, loc, "NULL elements[%zi]", i);
-      RETURN_NULL_IF_FAIL_PRINTF4 (
-	compatible_types (element_type,
-			  elements[i]->get_type ()),
-	ctxt, loc,
-	"mismatching type for element[%zi] (expected type: %s): %s (type: %s)",
-	i,
-	element_type->get_debug_string (),
-	elements[i]->get_debug_string (),
-	elements[i]->get_type ()->get_debug_string ());
-    }
-
-  return (gcc_jit_rvalue *)ctxt->new_rvalue_from_vector
-    (loc,
-     as_vec_type,
-     (gcc::jit::recording::rvalue **)elements);
-}
-
-/* A mutex around the cached state in parse_basever.
-   Ideally this would be within parse_basever, but the mutex is only needed
-   by libgccjit.  */
-
-static pthread_mutex_t version_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-struct version_info
-{
-  /* Default constructor.  Populate via parse_basever,
-     guarded by version_mutex.  */
-  version_info ()
-  {
-    pthread_mutex_lock (&version_mutex);
-    parse_basever (&major, &minor, &patchlevel);
-    pthread_mutex_unlock (&version_mutex);
-  }
-
-  int major;
-  int minor;
-  int patchlevel;
-};
-
-
-extern int
-gcc_jit_version_major (void)
-{
-  version_info vi;
-  return vi.major;
-}
-
-extern int
-gcc_jit_version_minor (void)
-{
-  version_info vi;
-  return vi.minor;
-}
-
-extern int
-gcc_jit_version_patchlevel (void)
-{
-  version_info vi;
-  return vi.patchlevel;
 }

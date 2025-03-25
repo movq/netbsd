@@ -7,15 +7,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef _PSTL_PARALLEL_BACKEND_H
-#define _PSTL_PARALLEL_BACKEND_H
+#ifndef __PSTL_parallel_backend_H
+#define __PSTL_parallel_backend_H
 
-#if defined(_PSTL_PAR_BACKEND_SERIAL)
-#    include "parallel_backend_serial.h"
-#elif defined(_PSTL_PAR_BACKEND_TBB)
-#    include "parallel_backend_tbb.h"
+#if __PSTL_PAR_BACKEND_TBB
+#include "parallel_backend_tbb.h"
 #else
-_PSTL_PRAGMA_MESSAGE("Parallel backend was not specified");
+__PSTL_PRAGMA_MESSAGE("Parallel backend was not specified");
 #endif
 
-#endif /* _PSTL_PARALLEL_BACKEND_H */
+#endif /* __PSTL_parallel_backend_H */

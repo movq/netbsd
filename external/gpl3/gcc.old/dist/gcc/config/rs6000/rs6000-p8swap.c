@@ -1,6 +1,6 @@
 /* Subroutines used to remove unnecessary doubleword swaps
    for p8 little-endian VSX code.
-   Copyright (C) 1991-2020 Free Software Foundation, Inc.
+   Copyright (C) 1991-2018 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -259,11 +259,11 @@ insn_is_load_p (rtx insn)
 
   if (GET_CODE (body) == SET)
     {
-      if (MEM_P (SET_SRC (body)))
+      if (GET_CODE (SET_SRC (body)) == MEM)
 	return 1;
 
       if (GET_CODE (SET_SRC (body)) == VEC_SELECT
-	  && MEM_P (XEXP (SET_SRC (body), 0)))
+	  && GET_CODE (XEXP (SET_SRC (body), 0)) == MEM)
 	return 1;
 
       return 0;
@@ -274,7 +274,7 @@ insn_is_load_p (rtx insn)
 
   rtx set = XVECEXP (body, 0, 0);
 
-  if (GET_CODE (set) == SET && MEM_P (SET_SRC (set)))
+  if (GET_CODE (set) == SET && GET_CODE (SET_SRC (set)) == MEM)
     return 1;
 
   return 0;
@@ -286,12 +286,12 @@ static unsigned int
 insn_is_store_p (rtx insn)
 {
   rtx body = PATTERN (insn);
-  if (GET_CODE (body) == SET && MEM_P (SET_DEST (body)))
+  if (GET_CODE (body) == SET && GET_CODE (SET_DEST (body)) == MEM)
     return 1;
   if (GET_CODE (body) != PARALLEL)
     return 0;
   rtx set = XVECEXP (body, 0, 0);
-  if (GET_CODE (set) == SET && MEM_P (SET_DEST (set)))
+  if (GET_CODE (set) == SET && GET_CODE (SET_DEST (set)) == MEM)
     return 1;
   return 0;
 }
@@ -316,13 +316,13 @@ insn_is_swap_p (rtx insn)
   for (unsigned int i = 0; i < len / 2; ++i)
     {
       rtx op = XVECEXP (parallel, 0, i);
-      if (!CONST_INT_P (op) || INTVAL (op) != len / 2 + i)
+      if (GET_CODE (op) != CONST_INT || INTVAL (op) != len / 2 + i)
 	return 0;
     }
   for (unsigned int i = len / 2; i < len; ++i)
     {
       rtx op = XVECEXP (parallel, 0, i);
-      if (!CONST_INT_P (op) || INTVAL (op) != i - len / 2)
+      if (GET_CODE (op) != CONST_INT || INTVAL (op) != i - len / 2)
 	return 0;
     }
   return 1;
@@ -393,7 +393,7 @@ quad_aligned_load_p (swap_web_entry *insn_entry, rtx_insn *insn)
   rtx body = PATTERN (def_insn);
   if (GET_CODE (body) != SET
       || GET_CODE (SET_SRC (body)) != VEC_SELECT
-      || !MEM_P (XEXP (SET_SRC (body), 0)))
+      || GET_CODE (XEXP (SET_SRC (body), 0)) != MEM)
     return false;
 
   rtx mem = XEXP (SET_SRC (body), 0);
@@ -532,7 +532,7 @@ const_load_sequence_p (swap_web_entry *insn_entry, rtx insn)
       rtx body = PATTERN (def_insn);
       if (GET_CODE (body) != SET
 	  || GET_CODE (SET_SRC (body)) != VEC_SELECT
-	  || !MEM_P (XEXP (SET_SRC (body), 0)))
+	  || GET_CODE (XEXP (SET_SRC (body), 0)) != MEM)
 	return false;
 
       rtx mem = XEXP (SET_SRC (body), 0);
@@ -571,19 +571,19 @@ const_load_sequence_p (swap_web_entry *insn_entry, rtx insn)
 	  /* There is an extra level of indirection for small/large
 	     code models.  */
 	  rtx tocrel_expr = SET_SRC (tocrel_body);
-	  if (MEM_P (tocrel_expr))
+	  if (GET_CODE (tocrel_expr) == MEM)
 	    tocrel_expr = XEXP (tocrel_expr, 0);
 	  if (!toc_relative_expr_p (tocrel_expr, false, &tocrel_base, NULL))
 	    return false;
 	  split_const (XVECEXP (tocrel_base, 0, 0), &base, &offset);
 
-	  if (!SYMBOL_REF_P (base) || !CONSTANT_POOL_ADDRESS_P (base))
+	  if (GET_CODE (base) != SYMBOL_REF || !CONSTANT_POOL_ADDRESS_P (base))
 	    return false;
 	  else
 	    {
 	      /* FIXME: The conditions under which
-	          (SYMBOL_REF_P (const_vector)
-	           && !CONSTANT_POOL_ADDRESS_P (const_vector))
+	          ((GET_CODE (const_vector) == SYMBOL_REF) &&
+	           !CONSTANT_POOL_ADDRESS_P (const_vector))
 	         are not well understood.  This code prevents
 	         an internal compiler error which will occur in
 	         replace_swapped_load_constant () if we were to return
@@ -592,7 +592,7 @@ const_load_sequence_p (swap_web_entry *insn_entry, rtx insn)
 	         replace_swapped_load_constant () and then we can
 	         remove this special test.  */
 	      rtx const_vector = get_pool_constant (base);
-	      if (SYMBOL_REF_P (const_vector)
+	      if (GET_CODE (const_vector) == SYMBOL_REF
 		  && CONSTANT_POOL_ADDRESS_P (const_vector))
 		const_vector = get_pool_constant (const_vector);
 	      if (GET_CODE (const_vector) != CONST_VECTOR)
@@ -674,7 +674,7 @@ rtx_is_swappable_p (rtx op, unsigned int *special)
 	 and XEXP (op, 1) is a PARALLEL with a single QImode const int,
 	 it represents a vector splat for which we can do special
 	 handling.  */
-      if (CONST_INT_P (XEXP (op, 0)))
+      if (GET_CODE (XEXP (op, 0)) == CONST_INT)
 	return 1;
       else if (REG_P (XEXP (op, 0))
 	       && GET_MODE_INNER (GET_MODE (op)) == GET_MODE (XEXP (op, 0)))
@@ -694,11 +694,11 @@ rtx_is_swappable_p (rtx op, unsigned int *special)
 
     case VEC_SELECT:
       /* A vec_extract operation is ok if we change the lane.  */
-      if (REG_P (XEXP (op, 0))
+      if (GET_CODE (XEXP (op, 0)) == REG
 	  && GET_MODE_INNER (GET_MODE (XEXP (op, 0))) == GET_MODE (op)
 	  && GET_CODE ((parallel = XEXP (op, 1))) == PARALLEL
 	  && XVECLEN (parallel, 0) == 1
-	  && CONST_INT_P (XVECEXP (parallel, 0, 0)))
+	  && GET_CODE (XVECEXP (parallel, 0, 0)) == CONST_INT)
 	{
 	  *special = SH_EXTRACT;
 	  return 1;
@@ -711,8 +711,8 @@ rtx_is_swappable_p (rtx op, unsigned int *special)
 		   || GET_MODE (XEXP (op, 0)) == V4DImode)
 	       && GET_CODE ((parallel = XEXP (op, 1))) == PARALLEL
 	       && XVECLEN (parallel, 0) == 2
-	       && CONST_INT_P (XVECEXP (parallel, 0, 0))
-	       && CONST_INT_P (XVECEXP (parallel, 0, 1)))
+	       && GET_CODE (XVECEXP (parallel, 0, 0)) == CONST_INT
+	       && GET_CODE (XVECEXP (parallel, 0, 1)) == CONST_INT)
 	{
 	  *special = SH_XXPERMDI;
 	  return 1;
@@ -772,6 +772,7 @@ rtx_is_swappable_p (rtx op, unsigned int *special)
 	  case UNSPEC_VSX_EXTRACT:
 	  case UNSPEC_VSX_SET:
 	  case UNSPEC_VSX_SLDWI:
+	  case UNSPEC_VSX_VEC_INIT:
 	  case UNSPEC_VSX_VSLO:
 	  case UNSPEC_VUNPACK_HI_SIGN:
 	  case UNSPEC_VUNPACK_HI_SIGN_DIRECT:
@@ -866,7 +867,7 @@ insn_is_swappable_p (swap_web_entry *insn_entry, rtx insn,
 	  rtx rhs = SET_SRC (body);
 	  /* Even without a swap, the RHS might be a vec_select for, say,
 	     a byte-reversing load.  */
-	  if (!MEM_P (rhs))
+	  if (GET_CODE (rhs) != MEM)
 	    return 0;
 	  if (GET_CODE (XEXP (rhs, 0)) == AND)
 	    return 0;
@@ -887,7 +888,7 @@ insn_is_swappable_p (swap_web_entry *insn_entry, rtx insn,
 	  rtx lhs = SET_DEST (body);
 	  /* Even without a swap, the RHS might be a vec_select for, say,
 	     a byte-reversing store.  */
-	  if (!MEM_P (lhs))
+	  if (GET_CODE (lhs) != MEM)
 	    return 0;
 	  if (GET_CODE (XEXP (lhs, 0)) == AND)
 	    return 0;
@@ -955,7 +956,7 @@ insn_is_swappable_p (swap_web_entry *insn_entry, rtx insn,
       && GET_CODE (SET_SRC (body)) == UNSPEC
       && XINT (SET_SRC (body), 1) == UNSPEC_VPERM
       && XVECLEN (SET_SRC (body), 0) == 3
-      && REG_P (XVECEXP (SET_SRC (body), 0, 2)))
+      && GET_CODE (XVECEXP (SET_SRC (body), 0, 2)) == REG)
     {
       rtx mask_reg = XVECEXP (SET_SRC (body), 0, 2);
       struct df_insn_info *insn_info = DF_INSN_INFO_GET (insn);
@@ -1365,7 +1366,7 @@ adjust_vperm (rtx_insn *insn)
   const_rtx tocrel_base;
   rtx tocrel_expr = SET_SRC (PATTERN (tocrel_insn));
   /* There is an extra level of indirection for small/large code models.  */
-  if (MEM_P (tocrel_expr))
+  if (GET_CODE (tocrel_expr) == MEM)
     tocrel_expr = XEXP (tocrel_expr, 0);
   if (!toc_relative_expr_p (tocrel_expr, false, &tocrel_base, NULL))
     gcc_unreachable ();
@@ -1374,7 +1375,7 @@ adjust_vperm (rtx_insn *insn)
   /* With the extra indirection, get_pool_constant will produce the
      real constant from the reg_equal expression, so get the real
      constant.  */
-  if (SYMBOL_REF_P (const_vector))
+  if (GET_CODE (const_vector) == SYMBOL_REF)
     const_vector = get_pool_constant (const_vector);
   gcc_assert (GET_CODE (const_vector) == CONST_VECTOR);
 
@@ -1499,22 +1500,6 @@ replace_swap_with_copy (swap_web_entry *insn_entry, unsigned i)
   df_insn_delete (insn);
   remove_insn (insn);
   insn->set_deleted ();
-}
-
-/* INSN is known to contain a SUBREG, which we can normally handle,
-   but if the SUBREG itself contains a MULT then we need to leave it alone
-   to avoid turning a mult_hipart into a mult_lopart, for example.  */
-static bool
-has_part_mult (rtx_insn *insn)
-{
-  rtx body = PATTERN (insn);
-  if (GET_CODE (body) != SET)
-    return false;
-  rtx src = SET_SRC (body);
-  if (GET_CODE (src) != SUBREG)
-    return false;
-  rtx inner = XEXP (src, 0);
-  return (GET_CODE (inner) == MULT);
 }
 
 /* Make NEW_MEM_EXP's attributes and flags resemble those of
@@ -1666,17 +1651,9 @@ replace_swapped_aligned_store (swap_web_entry *insn_entry,
   rtx new_body = PATTERN (new_insn);
 
   gcc_assert ((GET_CODE (new_body) == SET)
-	      && MEM_P (SET_DEST (new_body)));
+	      && (GET_CODE (SET_DEST (new_body)) == MEM));
 
-  basic_block bb = BLOCK_FOR_INSN (store_insn);
-  set_block_for_insn (new_insn, bb);
-  /* Handle REG_EH_REGION note.  */
-  if (cfun->can_throw_non_call_exceptions && BB_END (bb) == store_insn)
-    {
-      rtx note = find_reg_note (store_insn, REG_EH_REGION, NULL_RTX);
-      if (note)
-	add_reg_note (new_insn, REG_EH_REGION, XEXP (note, 0));
-    }
+  set_block_for_insn (new_insn, BLOCK_FOR_INSN (store_insn));
   df_insn_rescan (new_insn);
 
   df_insn_delete (store_insn);
@@ -1757,7 +1734,7 @@ replace_swapped_aligned_load (swap_web_entry *insn_entry, rtx swap_insn)
   rtx body = PATTERN (def_insn);
   gcc_assert ((GET_CODE (body) == SET)
 	      && (GET_CODE (SET_SRC (body)) == VEC_SELECT)
-	      && MEM_P (XEXP (SET_SRC (body), 0)));
+	      && (GET_CODE (XEXP (SET_SRC (body), 0)) == MEM));
 
   rtx src_exp = XEXP (SET_SRC (body), 0);
   enum machine_mode mode = GET_MODE (src_exp);
@@ -1767,17 +1744,9 @@ replace_swapped_aligned_load (swap_web_entry *insn_entry, rtx swap_insn)
   rtx new_body = PATTERN (new_insn);
 
   gcc_assert ((GET_CODE (new_body) == SET)
-	      && MEM_P (SET_SRC (new_body)));
+	      && (GET_CODE (SET_SRC (new_body)) == MEM));
 
-  basic_block bb = BLOCK_FOR_INSN (def_insn);
-  set_block_for_insn (new_insn, bb);
-  /* Handle REG_EH_REGION note.  */
-  if (cfun->can_throw_non_call_exceptions && BB_END (bb) == def_insn)
-    {
-      rtx note = find_reg_note (def_insn, REG_EH_REGION, NULL_RTX);
-      if (note)
-	add_reg_note (new_insn, REG_EH_REGION, XEXP (note, 0));
-    }
+  set_block_for_insn (new_insn, BLOCK_FOR_INSN (def_insn));
   df_insn_rescan (new_insn);
 
   df_insn_delete (def_insn);
@@ -1874,7 +1843,7 @@ replace_swapped_load_constant (swap_web_entry *insn_entry, rtx swap_insn)
   const_rtx tocrel_base;
 
   /* There is an extra level of indirection for small/large code models.  */
-  if (MEM_P (tocrel_expr))
+  if (GET_CODE (tocrel_expr) == MEM)
     tocrel_expr = XEXP (tocrel_expr, 0);
 
   if (!toc_relative_expr_p (tocrel_expr, false, &tocrel_base, NULL))
@@ -1886,7 +1855,7 @@ replace_swapped_load_constant (swap_web_entry *insn_entry, rtx swap_insn)
   /* With the extra indirection, get_pool_constant will produce the
      real constant from the reg_equal expression, so get the real
      constant.  */
-  if (SYMBOL_REF_P (const_vector))
+  if (GET_CODE (const_vector) == SYMBOL_REF)
     const_vector = get_pool_constant (const_vector);
   gcc_assert (GET_CODE (const_vector) == CONST_VECTOR);
 
@@ -1954,7 +1923,7 @@ replace_swapped_load_constant (swap_web_entry *insn_entry, rtx swap_insn)
     XEXP (new_mem, 0) = base_reg;
 
     /* Move the newly created insn ahead of the load insn.  */
-    /* The last insn is the insn that forced new_mem into a register.  */
+    /* The last insn is the the insn that forced new_mem into a register.  */
     rtx_insn *force_insn = get_last_insn ();
     /* Remove this insn from the end of the instruction sequence.  */
     remove_insn (force_insn);
@@ -2085,7 +2054,7 @@ alignment_mask (rtx_insn *insn)
 
   rtx mask = XEXP (SET_SRC (body), 1);
 
-  if (CONST_INT_P (mask))
+  if (GET_CODE (mask) == CONST_INT)
     {
       if (INTVAL (mask) == -16)
 	return alignment_with_canonical_addr (SET_SRC (body));
@@ -2116,7 +2085,7 @@ alignment_mask (rtx_insn *insn)
 
       real_mask = SET_SRC (const_body);
 
-      if (!CONST_INT_P (real_mask)
+      if (GET_CODE (real_mask) != CONST_INT
 	  || INTVAL (real_mask) != -16)
 	return 0;
     }
@@ -2170,7 +2139,7 @@ recombine_lvx_pattern (rtx_insn *insn, del_info *to_delete)
   rtx body = PATTERN (insn);
   gcc_assert (GET_CODE (body) == SET
 	      && GET_CODE (SET_SRC (body)) == VEC_SELECT
-	      && MEM_P (XEXP (SET_SRC (body), 0)));
+	      && GET_CODE (XEXP (SET_SRC (body), 0)) == MEM);
 
   rtx mem = XEXP (SET_SRC (body), 0);
   rtx base_reg = XEXP (mem, 0);
@@ -2232,7 +2201,7 @@ recombine_stvx_pattern (rtx_insn *insn, del_info *to_delete)
 {
   rtx body = PATTERN (insn);
   gcc_assert (GET_CODE (body) == SET
-	      && MEM_P (SET_DEST (body))
+	      && GET_CODE (SET_DEST (body)) == MEM
 	      && GET_CODE (SET_SRC (body)) == VEC_SELECT);
   rtx mem = SET_DEST (body);
   rtx base_reg = XEXP (mem, 0);
@@ -2469,9 +2438,6 @@ rs6000_analyze_swaps (function *fun)
 		    insn_entry[uid].is_swappable = 0;
 		  else if (special != SH_NONE)
 		    insn_entry[uid].special_handling = special;
-		  else if (insn_entry[uid].contains_subreg
-			   && has_part_mult (insn))
-		    insn_entry[uid].is_swappable = 0;
 		  else if (insn_entry[uid].contains_subreg)
 		    insn_entry[uid].special_handling = SH_SUBREG;
 		}

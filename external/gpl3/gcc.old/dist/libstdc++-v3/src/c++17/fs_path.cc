@@ -1,6 +1,6 @@
 // Class filesystem::path -*- C++ -*-
 
-// Copyright (C) 2014-2020 Free Software Foundation, Inc.
+// Copyright (C) 2014-2019 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -47,13 +47,6 @@ static inline bool is_dir_sep(path::value_type ch)
 #endif
 }
 
-#ifdef _GLIBCXX_FILESYSTEM_IS_WINDOWS
-static inline bool is_disk_designator(std::wstring_view s)
-{
-  return s.length() == 2 && s[1] == L':';
-}
-#endif
-
 struct path::_Parser
 {
   using string_view_type = std::basic_string_view<value_type>;
@@ -81,7 +74,7 @@ struct path::_Parser
     const size_t len = input.size();
 
     // look for root name or root directory
-    if (len && is_dir_sep(input[0]))
+    if (is_dir_sep(input[0]))
       {
 #if SLASHSLASH_IS_ROOTNAME
 	// look for root name, such as "//foo"
@@ -124,7 +117,7 @@ struct path::_Parser
 	  ++pos;
       }
 #ifdef _GLIBCXX_FILESYSTEM_IS_WINDOWS
-    else if (is_disk_designator(input.substr(0, 2)))
+    else if (len > 1 && input[1] == L':')
       {
 	// got disk designator
 	root.first.str = input.substr(0, 2);
@@ -185,19 +178,6 @@ struct path::_Parser
   offset(const cmpt& c) const noexcept
   { return origin + c.str.data() - input.data(); }
 };
-
-inline
-path::path(basic_string_view<value_type> __str, _Type __type)
-: _M_pathname(__str)
-{
-  __glibcxx_assert(__type != _Type::_Multi);
-  _M_cmpts.type(__type);
-}
-
-inline
-path::_Cmpt::_Cmpt(basic_string_view<value_type> __s, _Type __t, size_t __pos)
-: path(__s, __t), _M_pos(__pos)
-{ }
 
 struct path::_List::_Impl
 {
@@ -865,26 +845,6 @@ path::operator+=(const path& p)
       return *this;
     }
 
-#if _GLIBCXX_FILESYSTEM_IS_WINDOWS
-  if (_M_type() == _Type::_Root_name
-      || (_M_type() == _Type::_Filename && _M_pathname.size() == 1))
-    {
-      // Handle path("C") += path(":") and path("C:") += path("/x")
-      // FIXME: do this more efficiently
-      *this = path(_M_pathname + p._M_pathname);
-      return *this;
-    }
-#endif
-#if SLASHSLASH_IS_ROOTNAME
-  if (_M_type() == _Type::_Root_dir)
-    {
-      // Handle path("/") += path("/x") and path("//") += path("x")
-      // FIXME: do this more efficiently
-      *this = path(_M_pathname + p._M_pathname);
-      return *this;
-    }
-#endif
-
   const auto orig_pathlen = _M_pathname.length();
   const auto orig_type = _M_type();
   const auto orig_size = _M_cmpts.size();
@@ -1070,26 +1030,6 @@ path::_M_concat(basic_string_view<value_type> s)
       operator=(s);
       return;
     }
-
-#if _GLIBCXX_FILESYSTEM_IS_WINDOWS
-  if (_M_type() == _Type::_Root_name
-      || (_M_type() == _Type::_Filename && _M_pathname.size() == 1))
-    {
-      // Handle path("C") += ":" and path("C:") += "/x"
-      // FIXME: do this more efficiently
-      *this = path(_M_pathname + string_type(s));
-      return;
-    }
-#endif
-#if SLASHSLASH_IS_ROOTNAME
-  if (_M_type() == _Type::_Root_dir)
-    {
-      // Handle path("/") += "/x" and path("//") += "x"
-      // FIXME: do this more efficiently
-      *this = path(_M_pathname + string_type(s));
-      return;
-    }
-#endif
 
   const auto orig_pathlen = _M_pathname.length();
   const auto orig_type = _M_type();
@@ -1798,19 +1738,6 @@ path::lexically_relative(const path& base) const
   if (!has_root_directory() && base.has_root_directory())
     return ret;
   auto [a, b] = std::mismatch(begin(), end(), base.begin(), base.end());
-#ifdef _GLIBCXX_FILESYSTEM_IS_WINDOWS
-  // _GLIBCXX_RESOLVE_LIB_DEFECTS
-  // 3070. path::lexically_relative causes surprising results if a filename
-  // can also be a root-name
-  if (!empty())
-    for (auto& p : _M_cmpts)
-      if (p._M_type() == _Type::_Filename && is_disk_designator(p.native()))
-	return ret;
-  if (!base.empty())
-    for (auto i = b, end = base.end(); i != end; ++i)
-      if (i->_M_type() == _Type::_Filename && is_disk_designator(i->native()))
-	return ret;
-#endif
   if (a == end() && b == base.end())
     ret = ".";
   else
@@ -1920,9 +1847,10 @@ path::_M_split_cmpts()
 	  _M_cmpts.type(_Type::_Multi);
 	  _M_cmpts.reserve(_M_cmpts.size() + buf.size());
 	  auto output = _M_cmpts._M_impl->end();
-	  for (const auto& c : buf)
+	  for (auto& c : buf)
 	    {
-	      ::new(output++) _Cmpt(c.str, c.type, parser.offset(c));
+	      auto pos = c.str.data() - _M_pathname.data();
+	      ::new(output++) _Cmpt(c.str, c.type, pos);
 	      ++_M_cmpts._M_impl->_M_size;
 	    }
 	  next = buf.begin();
@@ -1942,8 +1870,9 @@ path::_M_split_cmpts()
       auto output = _M_cmpts._M_impl->end();
       for (int i = 0; i < n; ++i)
 	{
-	  const auto& c = buf[i];
-	  ::new(output++) _Cmpt(c.str, c.type, parser.offset(c));
+	  auto c = buf[i];
+	  auto pos = c.str.data() - _M_pathname.data();
+	  ::new(output++) _Cmpt(c.str, c.type, pos);
 	  ++_M_cmpts._M_impl->_M_size;
 	}
     }

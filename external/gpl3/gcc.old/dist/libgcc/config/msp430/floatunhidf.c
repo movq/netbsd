@@ -5,8 +5,6 @@ typedef float DFtype __attribute__ ((mode (DF)));
 
 extern DFtype __floatunsidf (unsigned long);
 
-DFtype __floatunhidf (UHItype);
-
 DFtype
 __floatunhidf (UHItype u)
 {

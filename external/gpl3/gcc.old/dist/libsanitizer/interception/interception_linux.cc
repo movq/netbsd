@@ -10,44 +10,34 @@
 // Linux-specific interception methods.
 //===----------------------------------------------------------------------===//
 
+#if defined(__linux__) || defined(__NetBSD__)
 #include "interception.h"
 
-#if SANITIZER_LINUX || SANITIZER_FREEBSD || SANITIZER_NETBSD || \
-    SANITIZER_OPENBSD || SANITIZER_SOLARIS
+#include <stddef.h>  // for NULL
+#include <dlfcn.h>   // for dlsym
 
-#include <dlfcn.h>   // for dlsym() and dlvsym()
-
-#if SANITIZER_NETBSD
-#include "sanitizer_common/sanitizer_libc.h"
+#ifdef __NetBSD__
+static int mystrcmp(const char *s1, const char *s2) {
+  while (*s1 == *s2++)
+    if (*s1++ == 0)
+      return (0);
+  return (*(const unsigned char *)s1 - *(const unsigned char *)--s2);
+}
 #endif
+
 
 namespace __interception {
 bool GetRealFunctionAddress(const char *func_name, uptr *func_addr,
     uptr real, uptr wrapper) {
-#if SANITIZER_NETBSD
-  // XXX: Find a better way to handle renames
-  if (internal_strcmp(func_name, "sigaction") == 0) func_name = "__sigaction_siginfo";
+#ifdef __NetBSD__
+  // XXX: Until I come up with something better to deal with renames.
+  if (mystrcmp(func_name, "sigaction") == 0)
+    func_name = "__sigaction14";
 #endif
   *func_addr = (uptr)dlsym(RTLD_NEXT, func_name);
-  if (!*func_addr) {
-    // If the lookup using RTLD_NEXT failed, the sanitizer runtime library is
-    // later in the library search order than the DSO that we are trying to
-    // intercept, which means that we cannot intercept this function. We still
-    // want the address of the real definition, though, so look it up using
-    // RTLD_DEFAULT.
-    *func_addr = (uptr)dlsym(RTLD_DEFAULT, func_name);
-  }
   return real == wrapper;
 }
-
-// Android and Solaris do not have dlvsym
-#if !SANITIZER_ANDROID && !SANITIZER_SOLARIS && !SANITIZER_OPENBSD
-void *GetFuncAddrVer(const char *func_name, const char *ver) {
-  return dlvsym(RTLD_NEXT, func_name, ver);
-}
-#endif  // !SANITIZER_ANDROID
-
 }  // namespace __interception
 
-#endif  // SANITIZER_LINUX || SANITIZER_FREEBSD || SANITIZER_NETBSD ||
-        // SANITIZER_OPENBSD || SANITIZER_SOLARIS
+
+#endif  // __linux__ || __NetBSD__

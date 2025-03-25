@@ -1,6 +1,6 @@
 // <experimental/timer> -*- C++ -*-
 
-// Copyright (C) 2015-2020 Free Software Foundation, Inc.
+// Copyright (C) 2015-2019 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -24,7 +24,6 @@
 
 /** @file experimental/timer
  *  This is a TS C++ Library header.
- *  @ingroup networking-ts
  */
 
 #ifndef _GLIBCXX_EXPERIMENTAL_TIMER
@@ -51,8 +50,9 @@ namespace net
 inline namespace v1
 {
 
-  /** @addtogroup networking-ts
-   *  @{
+  /**
+   * @ingroup networking
+   * @{
    */
 
   template<typename _Clock>

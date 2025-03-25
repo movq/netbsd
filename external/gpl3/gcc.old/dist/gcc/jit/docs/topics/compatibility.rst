@@ -1,4 +1,4 @@
-.. Copyright (C) 2015-2020 Free Software Foundation, Inc.
+.. Copyright (C) 2015 Free Software Foundation, Inc.
    Originally contributed by David Malcolm <dmalcolm@redhat.com>
 
    This is free software: you can redistribute it and/or modify it
@@ -61,28 +61,6 @@ You can see the symbol tags provided by libgccjit.so using ``objdump``:
            LIBGCCJIT_ABI_0
    [...snip...]
 
-Programmatically checking version
-***************
-
-Client code can programmatically check libgccjit version using:
-
-.. function::  int gcc_jit_version_major (void)
-
-   Return libgccjit major version.  This is analogous to __GNUC__ in C code.
-
-.. function::  int gcc_jit_version_minor (void)
-
-   Return libgccjit minor version.  This is analogous to
-   __GNUC_MINOR__ in C code.
-
-.. function::  int gcc_jit_version_patchlevel (void)
-
-   Return libgccjit patchlevel version.  This is analogous to
-   __GNUC_PATCHLEVEL__ in C code.
-
-.. note:: These entry points has been added with ``LIBGCCJIT_ABI_13``
-          (see below).
-
 ABI symbol tags
 ***************
 
@@ -129,89 +107,3 @@ entrypoints:
   * :func:`gcc_jit_case_as_object`
 
   * :func:`gcc_jit_context_new_case`
-
-.. _LIBGCCJIT_ABI_4:
-
-``LIBGCCJIT_ABI_4``
--------------------
-``LIBGCCJIT_ABI_4`` covers the addition of timers via API
-entrypoints:
-
-  * :func:`gcc_jit_context_get_timer`
-
-  * :func:`gcc_jit_context_set_timer`
-
-  * :func:`gcc_jit_timer_new`
-
-  * :func:`gcc_jit_timer_release`
-
-  * :func:`gcc_jit_timer_push`
-
-  * :func:`gcc_jit_timer_pop`
-
-  * :func:`gcc_jit_timer_print`
-
-.. _LIBGCCJIT_ABI_5:
-
-``LIBGCCJIT_ABI_5``
--------------------
-``LIBGCCJIT_ABI_5`` covers the addition of
-:func:`gcc_jit_context_set_bool_use_external_driver`
-
-.. _LIBGCCJIT_ABI_6:
-
-``LIBGCCJIT_ABI_6``
--------------------
-``LIBGCCJIT_ABI_6`` covers the addition of
-:func:`gcc_jit_rvalue_set_bool_require_tail_call`
-
-.. _LIBGCCJIT_ABI_7:
-
-``LIBGCCJIT_ABI_7``
--------------------
-``LIBGCCJIT_ABI_7`` covers the addition of
-:func:`gcc_jit_type_get_aligned`
-
-.. _LIBGCCJIT_ABI_8:
-
-``LIBGCCJIT_ABI_8``
--------------------
-``LIBGCCJIT_ABI_8`` covers the addition of
-:func:`gcc_jit_type_get_vector`
-
-.. _LIBGCCJIT_ABI_9:
-
-``LIBGCCJIT_ABI_9``
--------------------
-``LIBGCCJIT_ABI_9`` covers the addition of
-:func:`gcc_jit_function_get_address`
-
-.. _LIBGCCJIT_ABI_10:
-
-``LIBGCCJIT_ABI_10``
---------------------
-``LIBGCCJIT_ABI_10`` covers the addition of
-:func:`gcc_jit_context_new_rvalue_from_vector`
-
-.. _LIBGCCJIT_ABI_11:
-
-``LIBGCCJIT_ABI_11``
---------------------
-``LIBGCCJIT_ABI_11`` covers the addition of
-:func:`gcc_jit_context_add_driver_option`
-
-``LIBGCCJIT_ABI_12``
---------------------
-``LIBGCCJIT_ABI_12`` covers the addition of
-:func:`gcc_jit_context_new_bitfield`
-
-``LIBGCCJIT_ABI_13``
---------------------
-``LIBGCCJIT_ABI_13`` covers the addition of version functions via API
-entrypoints:
-
-  * :func:`gcc_jit_version_major`
-
-  * :func:`gcc_jit_version_minor`
-
-  * :func:`gcc_jit_version_patchlevel`

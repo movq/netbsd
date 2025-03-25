@@ -1,5 +1,5 @@
 /* Subroutines used for code generation on the Tilera TILEPro.
-   Copyright (C) 2011-2020 Free Software Foundation, Inc.
+   Copyright (C) 2011-2013 Free Software Foundation, Inc.
    Contributed by Walter Lee (walt@tilera.com)
 
    This file is part of GCC.
@@ -18,50 +18,41 @@
    along with GCC; see the file COPYING3.  If not see
    <http://www.gnu.org/licenses/>.  */
 
-#define IN_TARGET_CODE 1
-
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "backend.h"
-#include "target.h"
+#include "tm.h"
 #include "rtl.h"
-#include "tree.h"
-#include "gimple.h"
-#include "df.h"
-#include "memmodel.h"
-#include "tm_p.h"
-#include "stringpool.h"
-#include "attribs.h"
-#include "expmed.h"
-#include "optabs.h"
 #include "regs.h"
-#include "emit-rtl.h"
-#include "recog.h"
-#include "diagnostic.h"
+#include "insn-config.h"
 #include "output.h"
 #include "insn-attr.h"
-#include "alias.h"
-#include "explow.h"
-#include "calls.h"
-#include "varasm.h"
+#include "recog.h"
 #include "expr.h"
 #include "langhooks.h"
-#include "cfgrtl.h"
+#include "optabs.h"
+#include "sched-int.h"
+#include "sel-sched.h"
+#include "tm_p.h"
 #include "tm-constrs.h"
+#include "target.h"
+#include "target-def.h"
+#include "function.h"
 #include "dwarf2.h"
-#include "fold-const.h"
-#include "stor-layout.h"
-#include "gimplify.h"
+#include "timevar.h"
+#include "gimple.h"
+#include "cfgloop.h"
 #include "tilepro-builtins.h"
 #include "tilepro-multiply.h"
-#include "builtins.h"
-
-/* This file should be included last.  */
-#include "target-def.h"
+#include "diagnostic.h"
 
 /* SYMBOL_REF for GOT */
 static GTY(()) rtx g_got_symbol = NULL;
+
+/* In case of a POST_INC or POST_DEC memory reference, we must report
+   the mode of the memory reference from TARGET_PRINT_OPERAND to
+   TARGET_PRINT_OPERAND_ADDRESS.  */
+static enum machine_mode output_memory_reference_mode;
 
 /* Report whether we're printing out the first address fragment of a
    POST_INC or POST_DEC memory reference, from TARGET_PRINT_OPERAND to
@@ -86,18 +77,18 @@ tilepro_option_override (void)
 
 /* Implement TARGET_SCALAR_MODE_SUPPORTED_P.  */
 static bool
-tilepro_scalar_mode_supported_p (scalar_mode mode)
+tilepro_scalar_mode_supported_p (enum machine_mode mode)
 {
   switch (mode)
     {
-    case E_QImode:
-    case E_HImode:
-    case E_SImode:
-    case E_DImode:
+    case QImode:
+    case HImode:
+    case SImode:
+    case DImode:
       return true;
 
-    case E_SFmode:
-    case E_DFmode:
+    case SFmode:
+    case DFmode:
       return true;
 
     default:
@@ -108,7 +99,7 @@ tilepro_scalar_mode_supported_p (scalar_mode mode)
 
 /* Implement TARGET_VECTOR_MODE_SUPPORTED_P.  */
 static bool
-tile_vector_mode_supported_p (machine_mode mode)
+tile_vector_mode_supported_p (enum machine_mode mode)
 {
   return mode == V4QImode || mode == V2HImode;
 }
@@ -116,7 +107,7 @@ tile_vector_mode_supported_p (machine_mode mode)
 
 /* Implement TARGET_CANNOT_FORCE_CONST_MEM.  */
 static bool
-tilepro_cannot_force_const_mem (machine_mode mode ATTRIBUTE_UNUSED,
+tilepro_cannot_force_const_mem (enum machine_mode mode ATTRIBUTE_UNUSED,
 				rtx x ATTRIBUTE_UNUSED)
 {
   return true;
@@ -134,11 +125,12 @@ tilepro_function_ok_for_sibcall (tree decl, tree exp ATTRIBUTE_UNUSED)
 /* Implement TARGET_PASS_BY_REFERENCE.  Variable sized types are
    passed by reference.  */
 static bool
-tilepro_pass_by_reference (cumulative_args_t, const function_arg_info &arg)
+tilepro_pass_by_reference (cumulative_args_t cum ATTRIBUTE_UNUSED,
+			   enum machine_mode mode ATTRIBUTE_UNUSED,
+			   const_tree type, bool named ATTRIBUTE_UNUSED)
 {
-  return (arg.type
-	  && TYPE_SIZE (arg.type)
-	  && TREE_CODE (TYPE_SIZE (arg.type)) != INTEGER_CST);
+  return (type && TYPE_SIZE (type)
+	  && TREE_CODE (TYPE_SIZE (type)) != INTEGER_CST);
 }
 
 
@@ -153,7 +145,7 @@ tilepro_return_in_memory (const_tree type, const_tree fndecl ATTRIBUTE_UNUSED)
 
 /* Implement TARGET_FUNCTION_ARG_BOUNDARY.  */
 static unsigned int
-tilepro_function_arg_boundary (machine_mode mode, const_tree type)
+tilepro_function_arg_boundary (enum machine_mode mode, const_tree type)
 {
   unsigned int alignment;
 
@@ -168,10 +160,13 @@ tilepro_function_arg_boundary (machine_mode mode, const_tree type)
 
 /* Implement TARGET_FUNCTION_ARG.  */
 static rtx
-tilepro_function_arg (cumulative_args_t cum_v, const function_arg_info &arg)
+tilepro_function_arg (cumulative_args_t cum_v,
+		      enum machine_mode mode,
+		      const_tree type, bool named ATTRIBUTE_UNUSED)
 {
   CUMULATIVE_ARGS cum = *get_cumulative_args (cum_v);
-  int byte_size = arg.promoted_size_in_bytes ();
+  int byte_size = ((mode == BLKmode)
+		   ? int_size_in_bytes (type) : GET_MODE_SIZE (mode));
   bool doubleword_aligned_p;
 
   if (cum >= TILEPRO_NUM_ARG_REGS)
@@ -179,7 +174,7 @@ tilepro_function_arg (cumulative_args_t cum_v, const function_arg_info &arg)
 
   /* See whether the argument has doubleword alignment.  */
   doubleword_aligned_p =
-    tilepro_function_arg_boundary (arg.mode, arg.type) > BITS_PER_WORD;
+    tilepro_function_arg_boundary (mode, type) > BITS_PER_WORD;
 
   if (doubleword_aligned_p)
     cum += cum & 1;
@@ -190,24 +185,26 @@ tilepro_function_arg (cumulative_args_t cum_v, const function_arg_info &arg)
       > TILEPRO_NUM_ARG_REGS)
     return NULL_RTX;
 
-  return gen_rtx_REG (arg.mode, cum);
+  return gen_rtx_REG (mode, cum);
 }
 
 
 /* Implement TARGET_FUNCTION_ARG_ADVANCE.  */
 static void
 tilepro_function_arg_advance (cumulative_args_t cum_v,
-			      const function_arg_info &arg)
+			      enum machine_mode mode,
+			      const_tree type, bool named ATTRIBUTE_UNUSED)
 {
   CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v);
 
-  int byte_size = arg.promoted_size_in_bytes ();
+  int byte_size = ((mode == BLKmode)
+		   ? int_size_in_bytes (type) : GET_MODE_SIZE (mode));
   int word_size = (byte_size + UNITS_PER_WORD - 1) / UNITS_PER_WORD;
   bool doubleword_aligned_p;
 
   /* See whether the argument has doubleword alignment.  */
   doubleword_aligned_p =
-    tilepro_function_arg_boundary (arg.mode, arg.type) > BITS_PER_WORD;
+    tilepro_function_arg_boundary (mode, type) > BITS_PER_WORD;
 
   if (doubleword_aligned_p)
     *cum += *cum & 1;
@@ -227,7 +224,7 @@ static rtx
 tilepro_function_value (const_tree valtype, const_tree fn_decl_or_type,
 			bool outgoing ATTRIBUTE_UNUSED)
 {
-  machine_mode mode;
+  enum machine_mode mode;
   int unsigned_p;
 
   mode = TYPE_MODE (valtype);
@@ -242,7 +239,7 @@ tilepro_function_value (const_tree valtype, const_tree fn_decl_or_type,
 
 /* Implement TARGET_LIBCALL_VALUE.  */
 static rtx
-tilepro_libcall_value (machine_mode mode,
+tilepro_libcall_value (enum machine_mode mode,
 		       const_rtx fun ATTRIBUTE_UNUSED)
 {
   return gen_rtx_REG (mode, 0);
@@ -337,8 +334,8 @@ tilepro_va_start (tree valist, rtx nextarg ATTRIBUTE_UNUSED)
 /* Implement TARGET_SETUP_INCOMING_VARARGS.  */
 static void
 tilepro_setup_incoming_varargs (cumulative_args_t cum,
-				const function_arg_info &arg,
-				int *pretend_args, int no_rtl)
+				enum machine_mode mode,
+				tree type, int *pretend_args, int no_rtl)
 {
   CUMULATIVE_ARGS local_cum = *get_cumulative_args (cum);
   int first_reg;
@@ -346,7 +343,8 @@ tilepro_setup_incoming_varargs (cumulative_args_t cum,
   /* The caller has advanced CUM up to, but not beyond, the last named
      argument.  Advance a local copy of CUM past the last "real" named
      argument, to find out how many registers are left over.  */
-  targetm.calls.function_arg_advance (pack_cumulative_args (&local_cum), arg);
+  targetm.calls.function_arg_advance (pack_cumulative_args (&local_cum),
+				      mode, type, true);
   first_reg = local_cum;
 
   if (local_cum < TILEPRO_NUM_ARG_REGS)
@@ -412,7 +410,8 @@ tilepro_gimplify_va_arg_expr (tree valist, tree type, gimple_seq * pre_p,
 
   /* if an object is dynamically sized, a pointer to it is passed
      instead of the object itself.  */
-  pass_by_reference_p = pass_va_arg_by_reference (type);
+  pass_by_reference_p = pass_by_reference (NULL, TYPE_MODE (type), type,
+					   false);
 
   if (pass_by_reference_p)
     type = build_pointer_type (type);
@@ -468,11 +467,9 @@ tilepro_gimplify_va_arg_expr (tree valist, tree type, gimple_seq * pre_p,
 
 /* Implement TARGET_RTX_COSTS.  */
 static bool
-tilepro_rtx_costs (rtx x, machine_mode mode, int outer_code, int opno,
-		   int *total, bool speed)
+tilepro_rtx_costs (rtx x, int code, int outer_code, int opno, int *total,
+		   bool speed)
 {
-  int code = GET_CODE (x);
-
   switch (code)
     {
     case CONST_INT:
@@ -539,9 +536,9 @@ tilepro_rtx_costs (rtx x, machine_mode mode, int outer_code, int opno,
       if (GET_CODE (XEXP (x, 0)) == MULT
 	  && cint_248_operand (XEXP (XEXP (x, 0), 1), VOIDmode))
 	{
-	  *total = (rtx_cost (XEXP (XEXP (x, 0), 0), mode,
+	  *total = (rtx_cost (XEXP (XEXP (x, 0), 0),
 			      (enum rtx_code) outer_code, opno, speed)
-		    + rtx_cost (XEXP (x, 1), mode,
+		    + rtx_cost (XEXP (x, 1),
 				(enum rtx_code) outer_code, opno, speed)
 		    + COSTS_N_INSNS (1));
 	  return true;
@@ -650,7 +647,7 @@ gen_int_si (HOST_WIDE_INT val)
 /* Create a temporary variable to hold a partial result, to enable
    CSE.  */
 static rtx
-create_temp_reg_if_possible (machine_mode mode, rtx default_reg)
+create_temp_reg_if_possible (enum machine_mode mode, rtx default_reg)
 {
   return can_create_pseudo_p ()? gen_reg_rtx (mode) : default_reg;
 }
@@ -660,7 +657,7 @@ create_temp_reg_if_possible (machine_mode mode, rtx default_reg)
 static struct machine_function *
 tilepro_init_machine_status (void)
 {
-  return ggc_cleared_alloc<machine_function> ();
+  return ggc_alloc_cleared_machine_function ();
 }
 
 
@@ -732,7 +729,7 @@ tilepro_pic_address_needs_scratch (rtx x)
    pattern.  TLS cannot be treated as a constant because it can
    include a function call.  */
 static bool
-tilepro_legitimate_constant_p (machine_mode mode ATTRIBUTE_UNUSED, rtx x)
+tilepro_legitimate_constant_p (enum machine_mode mode ATTRIBUTE_UNUSED, rtx x)
 {
   switch (GET_CODE (x))
     {
@@ -764,7 +761,7 @@ tilepro_legitimate_pic_operand_p (rtx x)
 
 /* Return true if the rtx X can be used as an address operand.  */
 static bool
-tilepro_legitimate_address_p (machine_mode ARG_UNUSED (mode), rtx x,
+tilepro_legitimate_address_p (enum machine_mode ARG_UNUSED (mode), rtx x,
 			      bool strict)
 {
   if (GET_CODE (x) == SUBREG)
@@ -883,8 +880,7 @@ tilepro_legitimize_tls_address (rtx addr)
       case TLS_MODEL_GLOBAL_DYNAMIC:
       case TLS_MODEL_LOCAL_DYNAMIC:
 	{
-	  rtx r0, temp1, temp2, temp3, got;
-	  rtx_insn *last;
+	  rtx r0, temp1, temp2, temp3, got, last;
 
 	  ret = gen_reg_rtx (Pmode);
 	  r0 = gen_rtx_REG (Pmode, 0);
@@ -904,8 +900,7 @@ tilepro_legitimize_tls_address (rtx addr)
 	}
       case TLS_MODEL_INITIAL_EXEC:
 	{
-	  rtx temp1, temp2, temp3, got;
-	  rtx_insn *last;
+	  rtx temp1, temp2, temp3, got, last;
 
 	  ret = gen_reg_rtx (Pmode);
 	  temp1 = gen_reg_rtx (Pmode);
@@ -927,8 +922,7 @@ tilepro_legitimize_tls_address (rtx addr)
 	}
       case TLS_MODEL_LOCAL_EXEC:
 	{
-	  rtx temp1;
-	  rtx_insn *last;
+	  rtx temp1, last;
 
 	  ret = gen_reg_rtx (Pmode);
 	  temp1 = gen_reg_rtx (Pmode);
@@ -969,7 +963,7 @@ tilepro_legitimize_tls_address (rtx addr)
    nonzero, otherwise we allocate register(s) as necessary.  */
 static rtx
 tilepro_legitimize_pic_address (rtx orig,
-				machine_mode mode ATTRIBUTE_UNUSED,
+				enum machine_mode mode ATTRIBUTE_UNUSED,
 				rtx reg)
 {
   if (GET_CODE (orig) == SYMBOL_REF)
@@ -1118,7 +1112,7 @@ tilepro_legitimize_pic_address (rtx orig,
 /* Implement TARGET_LEGITIMIZE_ADDRESS.  */
 static rtx
 tilepro_legitimize_address (rtx x, rtx oldx ATTRIBUTE_UNUSED,
-			    machine_mode mode)
+			    enum machine_mode mode)
 {
   if (GET_MODE_SIZE (mode) <= UNITS_PER_WORD
       && symbolic_operand (x, Pmode) && tilepro_tls_referenced_p (x))
@@ -1192,7 +1186,7 @@ load_pic_register (bool delay_pic_helper ATTRIBUTE_UNUSED)
    replicating it to fill an interger of mode SImode.  NUM is first
    truncated to fit in MODE.  */
 rtx
-tilepro_simd_int (rtx num, machine_mode mode)
+tilepro_simd_int (rtx num, enum machine_mode mode)
 {
   HOST_WIDE_INT n = 0;
 
@@ -1202,15 +1196,15 @@ tilepro_simd_int (rtx num, machine_mode mode)
 
   switch (mode)
     {
-    case E_QImode:
+    case QImode:
       n = 0x01010101 * (n & 0x000000FF);
       break;
-    case E_HImode:
+    case HImode:
       n = 0x00010001 * (n & 0x0000FFFF);
       break;
-    case E_SImode:
+    case SImode:
       break;
-    case E_DImode:
+    case DImode:
       break;
     default:
       gcc_unreachable ();
@@ -1432,7 +1426,7 @@ expand_set_cint32 (rtx dest_reg, rtx src_val)
 void
 tilepro_expand_set_const32 (rtx op0, rtx op1)
 {
-  machine_mode mode = GET_MODE (op0);
+  enum machine_mode mode = GET_MODE (op0);
   rtx temp;
 
   if (CONST_INT_P (op1))
@@ -1457,7 +1451,7 @@ tilepro_expand_set_const32 (rtx op0, rtx op1)
 
 /* Expand a move instruction.  Return true if all work is done.  */
 bool
-tilepro_expand_mov (machine_mode mode, rtx *operands)
+tilepro_expand_mov (enum machine_mode mode, rtx *operands)
 {
   /* Handle sets of MEM first.  */
   if (MEM_P (operands[0]))
@@ -1590,7 +1584,7 @@ void
 tilepro_expand_unaligned_load (rtx dest_reg, rtx mem, HOST_WIDE_INT bitsize,
 			       HOST_WIDE_INT bit_offset, bool sign)
 {
-  machine_mode mode;
+  enum machine_mode mode;
   rtx addr_lo, addr_hi;
   rtx mem_lo, mem_hi, hi;
   rtx mema, wide_result;
@@ -1682,8 +1676,8 @@ tilepro_expand_unaligned_load (rtx dest_reg, rtx mem, HOST_WIDE_INT bitsize,
       rtx extracted =
 	extract_bit_field (gen_lowpart (SImode, wide_result),
 			   bitsize, bit_offset % BITS_PER_UNIT,
-			   !sign, gen_lowpart (SImode, dest_reg),
-			   SImode, SImode, false, NULL);
+			   !sign, false, gen_lowpart (SImode, dest_reg),
+			   SImode, SImode);
 
       if (extracted != dest_reg)
 	emit_move_insn (dest_reg, gen_lowpart (SImode, extracted));
@@ -1729,7 +1723,7 @@ tilepro_expand_unaligned_store (rtx mem, rtx src, HOST_WIDE_INT bitsize,
    memory that is not naturally aligned.  Emit instructions to load
    it.  */
 void
-tilepro_expand_movmisalign (machine_mode mode, rtx *operands)
+tilepro_expand_movmisalign (enum machine_mode mode, rtx *operands)
 {
   if (MEM_P (operands[1]))
     {
@@ -2133,11 +2127,13 @@ tilepro_emit_setcc_internal_di (rtx res, enum rtx_code code, rtx op0, rtx op1)
       emit_insn (gen_insn_seq (tmp1, hi_half[0], hi_half[1]));
       emit_insn (gen_andsi3 (res, tmp0, tmp1));
       return true;
+      break;
     case NE:
       emit_insn (gen_insn_sne (tmp0, lo_half[0], lo_half[1]));
       emit_insn (gen_insn_sne (tmp1, hi_half[0], hi_half[1]));
       emit_insn (gen_iorsi3 (res, tmp0, tmp1));
       return true;
+      break;
     case LE:
       emit_insn (gen_insn_slte (tmp0, hi_half[0], hi_half[1]));
       emit_insn (gen_insn_seq (tmp1, hi_half[0], hi_half[1]));
@@ -2183,7 +2179,7 @@ tilepro_emit_setcc_internal_di (rtx res, enum rtx_code code, rtx op0, rtx op1)
    work.  */
 static bool
 tilepro_emit_setcc_internal (rtx res, enum rtx_code code, rtx op0, rtx op1,
-			     machine_mode cmp_mode)
+			     enum machine_mode cmp_mode)
 {
   rtx tmp;
   bool swap = false;
@@ -2234,7 +2230,8 @@ tilepro_emit_setcc_internal (rtx res, enum rtx_code code, rtx op0, rtx op1,
     op1 = force_reg (SImode, op1);
 
   /* Return the setcc comparison.  */
-  emit_insn (gen_rtx_SET (res, gen_rtx_fmt_ee (code, SImode, op0, op1)));
+  emit_insn (gen_rtx_SET (VOIDmode, res,
+			  gen_rtx_fmt_ee (code, SImode, op0, op1)));
 
   return true;
 }
@@ -2242,7 +2239,7 @@ tilepro_emit_setcc_internal (rtx res, enum rtx_code code, rtx op0, rtx op1,
 
 /* Implement cstore patterns.  */
 bool
-tilepro_emit_setcc (rtx operands[], machine_mode cmp_mode)
+tilepro_emit_setcc (rtx operands[], enum machine_mode cmp_mode)
 {
   return
     tilepro_emit_setcc_internal (operands[0], GET_CODE (operands[1]),
@@ -2262,7 +2259,7 @@ signed_compare_p (enum rtx_code code)
 /* Generate the comparison for an SImode conditional branch.  */
 static rtx
 tilepro_emit_cc_test (enum rtx_code code, rtx op0, rtx op1,
-		      machine_mode cmp_mode, bool eq_ne_only)
+		      enum machine_mode cmp_mode, bool eq_ne_only)
 {
   enum rtx_code branch_code;
   rtx temp;
@@ -2380,12 +2377,12 @@ tilepro_emit_cc_test (enum rtx_code code, rtx op0, rtx op1,
 
 /* Generate the comparison for a conditional branch.  */
 void
-tilepro_emit_conditional_branch (rtx operands[], machine_mode cmp_mode)
+tilepro_emit_conditional_branch (rtx operands[], enum machine_mode cmp_mode)
 {
   rtx cmp_rtx =
     tilepro_emit_cc_test (GET_CODE (operands[0]), operands[1], operands[2],
 			  cmp_mode, false);
-  rtx branch_rtx = gen_rtx_SET (pc_rtx,
+  rtx branch_rtx = gen_rtx_SET (VOIDmode, pc_rtx,
 				gen_rtx_IF_THEN_ELSE (VOIDmode, cmp_rtx,
 						      gen_rtx_LABEL_REF
 						      (VOIDmode,
@@ -2408,14 +2405,15 @@ tilepro_emit_conditional_move (rtx cmp)
 /* Return true if INSN is annotated with a REG_BR_PROB note that
    indicates it's a branch that's predicted taken.  */
 static bool
-cbranch_predicted_p (rtx_insn *insn)
+cbranch_predicted_p (rtx insn)
 {
   rtx x = find_reg_note (insn, REG_BR_PROB, 0);
 
   if (x)
     {
-      return profile_probability::from_reg_br_prob_note (XINT (x, 0))
-	     >= profile_probability::even ();
+      int pred_val = INTVAL (XEXP (x, 0));
+
+      return pred_val >= REG_BR_PROB_BASE / 2;
     }
 
   return false;
@@ -2425,7 +2423,7 @@ cbranch_predicted_p (rtx_insn *insn)
 /* Output assembly code for a specific branch instruction, appending
    the branch prediction flag to the opcode if appropriate.  */
 static const char *
-tilepro_output_simple_cbranch_with_opcode (rtx_insn *insn, const char *opcode,
+tilepro_output_simple_cbranch_with_opcode (rtx insn, const char *opcode,
 					   int regop, bool netreg_p,
 					   bool reverse_predicted)
 {
@@ -2440,7 +2438,7 @@ tilepro_output_simple_cbranch_with_opcode (rtx_insn *insn, const char *opcode,
 /* Output assembly code for a specific branch instruction, appending
    the branch prediction flag to the opcode if appropriate.  */
 const char *
-tilepro_output_cbranch_with_opcode (rtx_insn *insn, rtx *operands,
+tilepro_output_cbranch_with_opcode (rtx insn, rtx *operands,
 				    const char *opcode,
 				    const char *rev_opcode,
 				    int regop, bool netreg_p)
@@ -2491,7 +2489,7 @@ tilepro_output_cbranch_with_opcode (rtx_insn *insn, rtx *operands,
 
 /* Output assembly code for a conditional branch instruction.  */
 const char *
-tilepro_output_cbranch (rtx_insn *insn, rtx *operands, bool reversed)
+tilepro_output_cbranch (rtx insn, rtx *operands, bool reversed)
 {
   enum rtx_code code = GET_CODE (operands[1]);
   const char *opcode;
@@ -2566,9 +2564,9 @@ tilepro_expand_tablejump (rtx op0, rtx op1)
    src0 and src1 (if DO_SRC1 is true) is converted to SRC_MODE.  */
 void
 tilepro_expand_builtin_vector_binop (rtx (*gen) (rtx, rtx, rtx),
-				     machine_mode dest_mode,
+				     enum machine_mode dest_mode,
 				     rtx dest,
-				     machine_mode src_mode,
+				     enum machine_mode src_mode,
 				     rtx src0, rtx src1, bool do_src1)
 {
   dest = gen_lowpart (dest_mode, dest);
@@ -3081,13 +3079,13 @@ static rtx
 tilepro_expand_builtin (tree exp,
 			rtx target,
 			rtx subtarget ATTRIBUTE_UNUSED,
-			machine_mode mode ATTRIBUTE_UNUSED,
+			enum machine_mode mode ATTRIBUTE_UNUSED,
 			int ignore ATTRIBUTE_UNUSED)
 {
 #define MAX_BUILTIN_ARGS 4
 
   tree fndecl = TREE_OPERAND (CALL_EXPR_FN (exp), 0);
-  unsigned int fcode = DECL_MD_FUNCTION_CODE (fndecl);
+  unsigned int fcode = DECL_FUNCTION_CODE (fndecl);
   tree arg;
   call_expr_arg_iterator iter;
   enum insn_code icode;
@@ -3135,7 +3133,7 @@ tilepro_expand_builtin (tree exp,
 
   if (nonvoid)
     {
-      machine_mode tmode = insn_data[icode].operand[0].mode;
+      enum machine_mode tmode = insn_data[icode].operand[0].mode;
       if (!target
 	  || GET_MODE (target) != tmode
 	  || !(*insn_data[icode].operand[0].predicate) (target, tmode))
@@ -3202,7 +3200,7 @@ tilepro_builtin_decl (unsigned code, bool initialize_p ATTRIBUTE_UNUSED)
 static bool
 need_to_save_reg (unsigned int regno)
 {
-  if (!call_used_or_fixed_reg_p (regno)
+  if (!fixed_regs[regno] && !call_used_regs[regno]
       && df_regs_ever_live_p (regno))
     return true;
 
@@ -3277,7 +3275,7 @@ frame_emit_store (int regno, int regno_note, rtx addr, rtx cfa,
   rtx reg_note = gen_rtx_REG (Pmode, regno_note);
   rtx cfa_relative_addr = gen_rtx_PLUS (Pmode, cfa, gen_int_si (cfa_offset));
   rtx cfa_relative_mem = gen_frame_mem (Pmode, cfa_relative_addr);
-  rtx real = gen_rtx_SET (cfa_relative_mem, reg_note);
+  rtx real = gen_rtx_SET (VOIDmode, cfa_relative_mem, reg_note);
   add_reg_note (mov, REG_CFA_OFFSET, real);
 
   return emit_insn (mov);
@@ -3287,7 +3285,7 @@ frame_emit_store (int regno, int regno_note, rtx addr, rtx cfa,
 /* Emit a load in the stack frame to load REGNO from address ADDR.
    Add a REG_CFA_RESTORE note to CFA_RESTORES if CFA_RESTORES is
    non-null.  Return the emitted insn.  */
-static rtx_insn *
+static rtx
 frame_emit_load (int regno, rtx addr, rtx *cfa_restores)
 {
   rtx reg = gen_rtx_REG (Pmode, regno);
@@ -3300,16 +3298,16 @@ frame_emit_load (int regno, rtx addr, rtx *cfa_restores)
 
 /* Helper function to set RTX_FRAME_RELATED_P on instructions,
    including sequences.  */
-static rtx_insn *
+static rtx
 set_frame_related_p (void)
 {
-  rtx_insn *seq = get_insns ();
-  rtx_insn *insn;
+  rtx seq = get_insns ();
+  rtx insn;
 
   end_sequence ();
 
   if (!seq)
-    return NULL;
+    return NULL_RTX;
 
   if (INSN_P (seq))
     {
@@ -3340,14 +3338,14 @@ set_frame_related_p (void)
    large register and using 'add'.
 
    This happens after reload, so we need to expand it ourselves.  */
-static rtx_insn *
+static rtx
 emit_sp_adjust (int offset, int *next_scratch_regno, bool frame_related,
 		rtx reg_notes)
 {
   rtx to_add;
   rtx imm_rtx = gen_int_si (offset);
 
-  rtx_insn *insn;
+  rtx insn;
   if (satisfies_constraint_J (imm_rtx))
     {
       /* We can add this using a single addi or addli.  */
@@ -3368,7 +3366,7 @@ emit_sp_adjust (int offset, int *next_scratch_regno, bool frame_related,
   /* Describe what just happened in a way that dwarf understands.  */
   if (frame_related)
     {
-      rtx real = gen_rtx_SET (stack_pointer_rtx,
+      rtx real = gen_rtx_SET (VOIDmode, stack_pointer_rtx,
 			      gen_rtx_PLUS (Pmode, stack_pointer_rtx,
 					    imm_rtx));
       RTX_FRAME_RELATED_P (insn) = 1;
@@ -3450,7 +3448,7 @@ compute_frame_addr (int offset_from_fp, int *next_scratch_regno)
 
   if (!tilepro_expand_addsi (tmp_reg_rtx, base_reg_rtx, offset_rtx))
     {
-      emit_insn (gen_rtx_SET (tmp_reg_rtx,
+      emit_insn (gen_rtx_SET (VOIDmode, tmp_reg_rtx,
 			      gen_rtx_PLUS (Pmode, base_reg_rtx,
 					    offset_rtx)));
     }
@@ -3527,11 +3525,8 @@ tilepro_expand_prologue (void)
   /* Save lr first in its special location because code after this
      might use the link register as a scratch register.  */
   if (df_regs_ever_live_p (TILEPRO_LINK_REGNUM) || crtl->calls_eh_return)
-    {
-      FRP (frame_emit_store (TILEPRO_LINK_REGNUM, TILEPRO_LINK_REGNUM,
-			     stack_pointer_rtx, stack_pointer_rtx, 0));
-      emit_insn (gen_blockage ());
-    }
+    FRP (frame_emit_store (TILEPRO_LINK_REGNUM, TILEPRO_LINK_REGNUM,
+			   stack_pointer_rtx, stack_pointer_rtx, 0));
 
   if (total_size == 0)
     {
@@ -3591,7 +3586,7 @@ tilepro_expand_prologue (void)
 	     original stack pointer, not the one after we have pushed
 	     the frame.  */
 	  rtx p = gen_rtx_PLUS (Pmode, stack_pointer_rtx, size_rtx);
-	  emit_insn (gen_rtx_SET (chain_addr, p));
+	  emit_insn (gen_rtx_SET (VOIDmode, chain_addr, p));
 	  emit_sp_adjust (-total_size, &next_scratch_regno,
 			  !frame_pointer_needed, NULL_RTX);
 	}
@@ -3604,7 +3599,7 @@ tilepro_expand_prologue (void)
 			  !frame_pointer_needed, NULL_RTX);
 	  p = gen_rtx_PLUS (Pmode, stack_pointer_rtx,
 			    GEN_INT (UNITS_PER_WORD));
-	  emit_insn (gen_rtx_SET (chain_addr, p));
+	  emit_insn (gen_rtx_SET (VOIDmode, chain_addr, p));
 	}
 
       /* Save our frame pointer for backtrace chaining.  */
@@ -3631,14 +3626,14 @@ tilepro_expand_prologue (void)
 	    r = gen_rtx_REG (word_mode, next_scratch_regno--);
 	    reg_save_addr[which_scratch] = r;
 
-	    emit_insn (gen_rtx_SET (r, p));
+	    emit_insn (gen_rtx_SET (VOIDmode, r, p));
 	  }
 	else
 	  {
 	    /* Advance to the next stack slot to store this register.  */
 	    int stride = ROUND_ROBIN_SIZE * -UNITS_PER_WORD;
 	    rtx p = gen_rtx_PLUS (Pmode, r, GEN_INT (stride));
-	    emit_insn (gen_rtx_SET (r, p));
+	    emit_insn (gen_rtx_SET (VOIDmode, r, p));
 	  }
 
 	/* Save this register to the stack (but use the old fp value
@@ -3674,7 +3669,7 @@ tilepro_expand_epilogue (bool sibcall_p)
   rtx reg_save_addr[ROUND_ROBIN_SIZE] = {
     NULL_RTX, NULL_RTX, NULL_RTX, NULL_RTX
   };
-  rtx_insn *last_insn, *insn;
+  rtx last_insn, insn;
   unsigned int which_scratch;
   int offset, start_offset, regno;
   rtx cfa_restores = NULL_RTX;
@@ -3732,7 +3727,7 @@ tilepro_expand_epilogue (bool sibcall_p)
 	       register.  */
 	    int stride = ROUND_ROBIN_SIZE * -UNITS_PER_WORD;
 	    rtx p = gen_rtx_PLUS (Pmode, r, GEN_INT (stride));
-	    emit_insn (gen_rtx_SET (r, p));
+	    emit_insn (gen_rtx_SET (VOIDmode, r, p));
 	  }
 
 	if (fp_copy_regno >= 0 && regno == HARD_FRAME_POINTER_REGNUM)
@@ -3864,11 +3859,20 @@ static void
 tilepro_conditional_register_usage (void)
 {
   global_regs[TILEPRO_NETORDER_REGNUM] = 1;
-  /* TILEPRO_PIC_TEXT_LABEL_REGNUM is conditionally used.  */
+  /* TILEPRO_PIC_TEXT_LABEL_REGNUM is conditionally used.  It is a
+     member of fixed_regs, and therefore must be member of
+     call_used_regs, but it is not a member of call_really_used_regs[]
+     because it is not clobbered by a call.  */
   if (TILEPRO_PIC_TEXT_LABEL_REGNUM != INVALID_REGNUM)
-    fixed_regs[TILEPRO_PIC_TEXT_LABEL_REGNUM] = 1;
+    {
+      fixed_regs[TILEPRO_PIC_TEXT_LABEL_REGNUM] = 1;
+      call_used_regs[TILEPRO_PIC_TEXT_LABEL_REGNUM] = 1;
+    }
   if (PIC_OFFSET_TABLE_REGNUM != INVALID_REGNUM)
-    fixed_regs[PIC_OFFSET_TABLE_REGNUM] = 1;
+    {
+      fixed_regs[PIC_OFFSET_TABLE_REGNUM] = 1;
+      call_used_regs[PIC_OFFSET_TABLE_REGNUM] = 1;
+    }
 }
 
 
@@ -3887,9 +3891,9 @@ tilepro_frame_pointer_required (void)
    by attributes in the machine-description file.  This is where we
    account for bundles.  */
 int
-tilepro_adjust_insn_length (rtx_insn *insn, int length)
+tilepro_adjust_insn_length (rtx insn, int length)
 {
-  machine_mode mode = GET_MODE (insn);
+  enum machine_mode mode = GET_MODE (insn);
 
   /* A non-termininating instruction in a bundle has length 0.  */
   if (mode == SImode)
@@ -3931,15 +3935,14 @@ get_jump_target (rtx branch)
 
 /* Implement TARGET_SCHED_ADJUST_COST.  */
 static int
-tilepro_sched_adjust_cost (rtx_insn *insn, int dep_type, rtx_insn *dep_insn,
-			   int cost, unsigned int)
+tilepro_sched_adjust_cost (rtx insn, rtx link, rtx dep_insn, int cost)
 {
   /* If we have a true dependence, INSN is a call, and DEP_INSN
      defines a register that is needed by the call (argument or stack
      pointer), set its latency to 0 so that it can be bundled with
      the call.  Explicitly check for and exclude the case when
      DEP_INSN defines the target of the jump.  */
-  if (CALL_P (insn) && dep_type == REG_DEP_TRUE)
+  if (CALL_P (insn) && REG_NOTE_KIND (link) == REG_DEP_TRUE)
     {
       rtx target = get_jump_target (insn);
       if (!REG_P (target) || !set_of (target, dep_insn))
@@ -3952,8 +3955,8 @@ tilepro_sched_adjust_cost (rtx_insn *insn, int dep_type, rtx_insn *dep_insn,
 
 /* Skip over irrelevant NOTEs and such and look for the next insn we
    would consider bundling.  */
-static rtx_insn *
-next_insn_to_bundle (rtx_insn *r, rtx_insn *end)
+static rtx
+next_insn_to_bundle (rtx r, rtx end)
 {
   for (; r != end; r = NEXT_INSN (r))
     {
@@ -3963,7 +3966,7 @@ next_insn_to_bundle (rtx_insn *r, rtx_insn *end)
 	return r;
     }
 
-  return NULL;
+  return NULL_RTX;
 }
 
 
@@ -3974,10 +3977,10 @@ static void
 tilepro_gen_bundles (void)
 {
   basic_block bb;
-  FOR_EACH_BB_FN (bb, cfun)
+  FOR_EACH_BB (bb)
   {
-    rtx_insn *insn, *next;
-    rtx_insn *end = NEXT_INSN (BB_END (bb));
+    rtx insn, next;
+    rtx end = NEXT_INSN (BB_END (bb));
 
     for (insn = next_insn_to_bundle (BB_HEAD (bb), end); insn; insn = next)
       {
@@ -4011,9 +4014,9 @@ tilepro_gen_bundles (void)
 
 /* Helper function for tilepro_fixup_pcrel_references.  */
 static void
-replace_pc_relative_symbol_ref (rtx_insn *insn, rtx opnds[4], bool first_insn_p)
+replace_pc_relative_symbol_ref (rtx insn, rtx opnds[4], bool first_insn_p)
 {
-  rtx_insn *new_insns;
+  rtx new_insns;
 
   start_sequence ();
 
@@ -4052,7 +4055,7 @@ replace_pc_relative_symbol_ref (rtx_insn *insn, rtx opnds[4], bool first_insn_p)
 
 /* Returns whether INSN is a pc-relative addli insn.   */
 static bool
-match_addli_pcrel (rtx_insn *insn)
+match_addli_pcrel (rtx insn)
 {
   rtx pattern = PATTERN (insn);
   rtx unspec;
@@ -4075,7 +4078,7 @@ match_addli_pcrel (rtx_insn *insn)
 
 /* Helper function for tilepro_fixup_pcrel_references.  */
 static void
-replace_addli_pcrel (rtx_insn *insn)
+replace_addli_pcrel (rtx insn)
 {
   rtx pattern = PATTERN (insn);
   rtx set_src;
@@ -4109,7 +4112,7 @@ replace_addli_pcrel (rtx_insn *insn)
 
 /* Returns whether INSN is a pc-relative auli insn.   */
 static bool
-match_auli_pcrel (rtx_insn *insn)
+match_auli_pcrel (rtx insn)
 {
   rtx pattern = PATTERN (insn);
   rtx high;
@@ -4136,7 +4139,7 @@ match_auli_pcrel (rtx_insn *insn)
 
 /* Helper function for tilepro_fixup_pcrel_references.  */
 static void
-replace_auli_pcrel (rtx_insn *insn)
+replace_auli_pcrel (rtx insn)
 {
   rtx pattern = PATTERN (insn);
   rtx set_src;
@@ -4210,7 +4213,7 @@ replace_auli_pcrel (rtx_insn *insn)
 static void
 tilepro_fixup_pcrel_references (void)
 {
-  rtx_insn *insn, *next_insn;
+  rtx insn, next_insn;
   bool same_section_as_entry = true;
 
   for (insn = get_insns (); insn; insn = next_insn)
@@ -4245,10 +4248,10 @@ static void
 reorder_var_tracking_notes (void)
 {
   basic_block bb;
-  FOR_EACH_BB_FN (bb, cfun)
+  FOR_EACH_BB (bb)
   {
-    rtx_insn *insn, *next;
-    rtx_insn *queue = NULL;
+    rtx insn, next;
+    rtx queue = NULL_RTX;
     bool in_bundle = false;
 
     for (insn = BB_HEAD (bb); insn != BB_END (bb); insn = next)
@@ -4262,11 +4265,11 @@ reorder_var_tracking_notes (void)
 	      {
 		while (queue)
 		  {
-		    rtx_insn *next_queue = PREV_INSN (queue);
-		    SET_PREV_INSN (NEXT_INSN (insn)) = queue;
-		    SET_NEXT_INSN (queue) = NEXT_INSN (insn);
-		    SET_NEXT_INSN (insn) = queue;
-		    SET_PREV_INSN (queue) = insn;
+		    rtx next_queue = PREV_INSN (queue);
+		    PREV_INSN (NEXT_INSN (insn)) = queue;
+		    NEXT_INSN (queue) = NEXT_INSN (insn);
+		    NEXT_INSN (insn) = queue;
+		    PREV_INSN (queue) = insn;
 		    queue = next_queue;
 		  }
 		in_bundle = false;
@@ -4278,11 +4281,11 @@ reorder_var_tracking_notes (void)
 	  {
 	    if (in_bundle)
 	      {
-		rtx_insn *prev = PREV_INSN (insn);
-		SET_PREV_INSN (next) = prev;
-		SET_NEXT_INSN (prev) = next;
+		rtx prev = PREV_INSN (insn);
+		PREV_INSN (next) = prev;
+		NEXT_INSN (prev) = next;
 
-		SET_PREV_INSN (insn) = queue;
+		PREV_INSN (insn) = queue;
 		queue = insn;
 	      }
 	  }
@@ -4351,9 +4354,7 @@ tilepro_asm_output_mi_thunk (FILE *file, tree thunk_fndecl ATTRIBUTE_UNUSED,
 			     HOST_WIDE_INT delta, HOST_WIDE_INT vcall_offset,
 			     tree function)
 {
-  const char *fnname = IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (thunk_fndecl));
-  rtx this_rtx, funexp;
-  rtx_insn *insn;
+  rtx this_rtx, insn, funexp;
 
   /* Pretend to be a post-reload pass while generating rtl.  */
   reload_completed = 1;
@@ -4399,18 +4400,17 @@ tilepro_asm_output_mi_thunk (FILE *file, tree thunk_fndecl ATTRIBUTE_UNUSED,
 
   /* Run just enough of rest_of_compilation to get the insns emitted.
      There's not really enough bulk here to make other passes such as
-     instruction scheduling worth while.
+     instruction scheduling worth while.  Note that use_thunk calls
+     assemble_start_function and assemble_end_function.
 
      We don't currently bundle, but the instruciton sequence is all
      serial except for the tail call, so we're only wasting one cycle.
    */
   insn = get_insns ();
   shorten_branches (insn);
-  assemble_start_function (thunk_fndecl, fnname);
   final_start_function (insn, file, 1);
   final (insn, file, 1);
   final_end_function ();
-  assemble_end_function (thunk_fndecl, fnname);
 
   /* Stop pretending to be a post-reload pass.  */
   reload_completed = 0;
@@ -4459,7 +4459,7 @@ tilepro_trampoline_init (rtx m_tramp, tree fndecl, rtx static_chain)
 					      TRAMPOLINE_SIZE));
 
   emit_library_call (gen_rtx_SYMBOL_REF (Pmode, "__clear_cache"),
-		     LCT_NORMAL, VOIDmode, begin_addr, Pmode,
+		     LCT_NORMAL, VOIDmode, 2, begin_addr, Pmode,
 		     end_addr, Pmode);
 }
 
@@ -4578,8 +4578,10 @@ tilepro_print_operand (FILE *file, rtx x, int code)
 	  return;
 	}
 
+      output_memory_reference_mode = GET_MODE (x);
       output_memory_autoinc_first = true;
-      output_address (GET_MODE (x), XEXP (x, 0));
+      output_address (XEXP (x, 0));
+      output_memory_reference_mode = VOIDmode;
       return;
 
     case 'i':
@@ -4590,8 +4592,10 @@ tilepro_print_operand (FILE *file, rtx x, int code)
 	  return;
 	}
 
+      output_memory_reference_mode = GET_MODE (x);
       output_memory_autoinc_first = false;
-      output_address (GET_MODE (x), XEXP (x, 0));
+      output_address (XEXP (x, 0));
+      output_memory_reference_mode = VOIDmode;
       return;
 
     case 'j':
@@ -4756,7 +4760,8 @@ tilepro_print_operand (FILE *file, rtx x, int code)
 	i = exact_log2 (n);
 	if (i < 0)
 	  {
-	    output_operand_lossage ("invalid %%t operand");
+	    output_operand_lossage ("invalid %%t operand '"
+				    HOST_WIDE_INT_PRINT_DEC "'", n);
 	    return;
 	  }
 
@@ -4789,7 +4794,8 @@ tilepro_print_operand (FILE *file, rtx x, int code)
 	}
       else if (MEM_P (x))
 	{
-	  output_address (VOIDmode, XEXP (x, 0));
+	  output_memory_reference_mode = VOIDmode;
+	  output_address (XEXP (x, 0));
 	  return;
 	}
       else
@@ -4808,14 +4814,14 @@ tilepro_print_operand (FILE *file, rtx x, int code)
 
 /* Implement TARGET_PRINT_OPERAND_ADDRESS.  */
 static void
-tilepro_print_operand_address (FILE *file, machine_mode mode, rtx addr)
+tilepro_print_operand_address (FILE *file, rtx addr)
 {
   if (GET_CODE (addr) == POST_DEC
       || GET_CODE (addr) == POST_INC)
     {
-      int offset = GET_MODE_SIZE (mode);
+      int offset = GET_MODE_SIZE (output_memory_reference_mode);
 
-      gcc_assert (mode != VOIDmode);
+      gcc_assert (output_memory_reference_mode != VOIDmode);
 
       if (output_memory_autoinc_first)
 	fprintf (file, "%s", reg_names[REGNO (XEXP (addr, 0))]);
@@ -4825,7 +4831,7 @@ tilepro_print_operand_address (FILE *file, machine_mode mode, rtx addr)
     }
   else if (GET_CODE (addr) == POST_MODIFY)
     {
-      gcc_assert (mode != VOIDmode);
+      gcc_assert (output_memory_reference_mode != VOIDmode);
 
       gcc_assert (GET_CODE (XEXP (addr, 1)) == PLUS);
 
@@ -4842,12 +4848,12 @@ tilepro_print_operand_address (FILE *file, machine_mode mode, rtx addr)
 
 /* Machine mode of current insn, for determining curly brace
    placement.  */
-static machine_mode insn_mode;
+static enum machine_mode insn_mode;
 
 
 /* Implement FINAL_PRESCAN_INSN.  This is used to emit bundles.  */
 void
-tilepro_final_prescan_insn (rtx_insn *insn)
+tilepro_final_prescan_insn (rtx insn)
 {
   /* Record this for tilepro_asm_output_opcode to examine.  */
   insn_mode = GET_MODE (insn);
@@ -4938,11 +4944,6 @@ tilepro_file_end (void)
 #undef  TARGET_OPTION_OVERRIDE
 #define TARGET_OPTION_OVERRIDE tilepro_option_override
 
-#ifdef TARGET_THREAD_SSP_OFFSET
-#undef TARGET_STACK_PROTECT_GUARD
-#define TARGET_STACK_PROTECT_GUARD hook_tree_void_null
-#endif
-
 #undef  TARGET_SCALAR_MODE_SUPPORTED_P
 #define TARGET_SCALAR_MODE_SUPPORTED_P tilepro_scalar_mode_supported_p
 
@@ -5010,9 +5011,6 @@ tilepro_file_end (void)
 #undef  TARGET_LEGITIMATE_CONSTANT_P
 #define TARGET_LEGITIMATE_CONSTANT_P tilepro_legitimate_constant_p
 
-#undef TARGET_LRA_P
-#define TARGET_LRA_P hook_bool_void_false
-
 #undef  TARGET_LEGITIMATE_ADDRESS_P
 #define TARGET_LEGITIMATE_ADDRESS_P tilepro_legitimate_address_p
 
@@ -5074,11 +5072,6 @@ tilepro_file_end (void)
 #undef  TARGET_ASM_FILE_END
 #define TARGET_ASM_FILE_END tilepro_file_end
 
-#undef  TARGET_CAN_USE_DOLOOP_P
-#define TARGET_CAN_USE_DOLOOP_P can_use_doloop_if_innermost
-
-#undef  TARGET_CONSTANT_ALIGNMENT
-#define TARGET_CONSTANT_ALIGNMENT constant_alignment_word_strings
 
 struct gcc_target targetm = TARGET_INITIALIZER;
 

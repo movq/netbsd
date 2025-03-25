@@ -1,5 +1,5 @@
 /* TLS emulation.
-   Copyright (C) 2006-2020 Free Software Foundation, Inc.
+   Copyright (C) 2006-2013 Free Software Foundation, Inc.
    Contributed by Jakub Jelinek <jakub@redhat.com>.
 
 This file is part of GCC.
@@ -50,17 +50,8 @@ struct __emutls_array
   void **data[];
 };
 
-/* EMUTLS_ATTR is provided to allow targets to build the emulated tls
-   routines as weak definitions, for example.
-   If there is no definition, fall back to the default.  */
-#ifndef EMUTLS_ATTR
-#  define EMUTLS_ATTR
-#endif
-
-EMUTLS_ATTR
-void *__emutls_get_address (void *);
-EMUTLS_ATTR
-void __emutls_register_common (void *, word, word, void *);
+void *__emutls_get_address (struct __emutls_object *);
+void __emutls_register_common (struct __emutls_object *, word, word, void *);
 
 #ifdef __GTHREADS
 #ifdef __GTHREAD_MUTEX_INIT
@@ -132,15 +123,9 @@ emutls_alloc (struct __emutls_object *obj)
   return ret;
 }
 
-/* Despite applying the attribute to the declaration, in this case the mis-
-   match between the builtin's declaration [void * (*)(void *)] and the
-   implementation here, causes the decl. attributes to be discarded.  */
-
-EMUTLS_ATTR void *
-__emutls_get_address (void *vobj)
+void *
+__emutls_get_address (struct __emutls_object *obj)
 {
-  struct __emutls_object *obj = vobj;
-
   if (! __gthread_active_p ())
     {
       if (__builtin_expect (obj->loc.ptr == NULL, 0))
@@ -202,12 +187,10 @@ __emutls_get_address (void *vobj)
 #endif
 }
 
-EMUTLS_ATTR void
-__emutls_register_common (void *vobj,
+void
+__emutls_register_common (struct __emutls_object *obj,
 			  word size, word align, void *templ)
 {
-  struct __emutls_object *obj = vobj;
-
   if (obj->size < size)
     {
       obj->size = size;
