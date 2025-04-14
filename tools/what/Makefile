@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2025/04/12 10:09:15 rin Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2025/04/14 09:58:17 martin Exp $
 
 HOSTPROGNAME=	${_TOOL_PREFIX}what
 HOST_SRCDIR=	usr.bin/what
