@@ -1,4 +1,4 @@
-/*	$NetBSD: umcpmio_subr.h,v 1.2 2025/03/17 18:24:08 riastradh Exp $	*/
+/*	$NetBSD: umcpmio_subr.h,v 1.2.4.2 2025/08/02 05:57:06 perseant Exp $	*/
 
 /*
  * Copyright (c) 2024 Brad Spencer <brad@anduin.eldar.org>

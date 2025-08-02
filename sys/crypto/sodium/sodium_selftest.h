@@ -1,4 +1,4 @@
-/*	$NetBSD: sodium_selftest.h,v 1.2 2024/07/26 18:32:15 riastradh Exp $	*/
+/*	$NetBSD: sodium_selftest.h,v 1.2.6.2 2025/08/02 05:56:30 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.

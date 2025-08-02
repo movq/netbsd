@@ -1,4 +1,4 @@
-/*	$NetBSD: proxy2.c,v 1.3 2025/07/17 19:01:46 christos Exp $	*/
+/*	$NetBSD: proxy2.c,v 1.3.4.2 2025/08/02 05:53:54 perseant Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

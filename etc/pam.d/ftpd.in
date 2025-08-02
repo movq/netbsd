@@ -1,4 +1,4 @@
-# $NetBSD: ftpd.in,v 1.1 2024/12/30 21:59:08 jmmv Exp $
+# $NetBSD: ftpd.in,v 1.1.4.2 2025/08/02 05:20:44 perseant Exp $
 #
 # PAM configuration for the "ftpd" service
 #

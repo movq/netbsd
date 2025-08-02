@@ -1,4 +1,4 @@
-/* $NetBSD: acpi_gpio.h,v 1.4 2024/12/17 22:04:47 riastradh Exp $ */
+/* $NetBSD: acpi_gpio.h,v 1.4.4.2 2025/08/02 05:56:31 perseant Exp $ */
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.

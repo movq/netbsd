@@ -1,4 +1,4 @@
-/*	$NetBSD: dns_name_fromwire.c,v 1.2 2025/01/26 16:25:20 christos Exp $	*/
+/*	$NetBSD: dns_name_fromwire.c,v 1.2.4.2 2025/08/02 05:53:21 perseant Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

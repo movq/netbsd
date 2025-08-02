@@ -1,4 +1,4 @@
-/*	$NetBSD: kexmlkem768x25519.c,v 1.4 2025/04/09 15:49:32 christos Exp $	*/
+/*	$NetBSD: kexmlkem768x25519.c,v 1.4.4.2 2025/08/02 05:18:46 perseant Exp $	*/
 /* $OpenBSD: kexmlkem768x25519.c,v 1.2 2024/10/27 02:06:59 djm Exp $ */
 
 /*
@@ -25,7 +25,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "includes.h"
-__RCSID("$NetBSD: kexmlkem768x25519.c,v 1.4 2025/04/09 15:49:32 christos Exp $");
+__RCSID("$NetBSD: kexmlkem768x25519.c,v 1.4.4.2 2025/08/02 05:18:46 perseant Exp $");
 
 #include <sys/types.h>
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: parse_utf8_char.h,v 1.2 2025/02/25 19:15:52 christos Exp $	*/
+/*	$NetBSD: parse_utf8_char.h,v 1.2.4.2 2025/08/02 05:50:19 perseant Exp $	*/
 
 /*++
 /* NAME

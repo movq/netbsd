@@ -1,4 +1,4 @@
-# $NetBSD: suff.mk,v 1.3 2025/01/14 21:39:25 rillig Exp $
+# $NetBSD: suff.mk,v 1.3.4.2 2025/08/02 05:58:37 perseant Exp $
 #
 # Demonstrate suffix rules and dependency resolution.
 

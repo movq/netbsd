@@ -1,4 +1,4 @@
-/*	$NetBSD: timespec_getres.c,v 1.1 2025/04/21 13:21:33 nia Exp $	*/
+/*	$NetBSD: timespec_getres.c,v 1.1.4.2 2025/08/02 05:54:37 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2025 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: timespec_getres.c,v 1.1 2025/04/21 13:21:33 nia Exp $");
+__RCSID("$NetBSD: timespec_getres.c,v 1.1.4.2 2025/08/02 05:54:37 perseant Exp $");
 #endif /* !defined lint */
 
 #include <assert.h>

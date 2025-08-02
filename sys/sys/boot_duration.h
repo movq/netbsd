@@ -1,4 +1,4 @@
-/* $NetBSD: boot_duration.h,v 1.1 2025/05/08 05:31:17 imil Exp $ */
+/* $NetBSD: boot_duration.h,v 1.1.4.2 2025/08/02 05:57:54 perseant Exp $ */
 
 /*-
  * Copyright (c) 2025 The NetBSD Foundation, Inc.

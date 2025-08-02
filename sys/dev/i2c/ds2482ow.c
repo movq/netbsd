@@ -1,4 +1,4 @@
-/*	$NetBSD: ds2482ow.c,v 1.2 2024/11/06 15:49:36 riastradh Exp $	*/
+/*	$NetBSD: ds2482ow.c,v 1.2.4.2 2025/08/02 05:56:39 perseant Exp $	*/
 
 /*
  * Copyright (c) 2024 Brad Spencer <brad@anduin.eldar.org>
@@ -17,7 +17,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ds2482ow.c,v 1.2 2024/11/06 15:49:36 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ds2482ow.c,v 1.2.4.2 2025/08/02 05:56:39 perseant Exp $");
 
 /*
  * Driver for the DS2482-100 and DS2482-800 I2C to Onewire bridge

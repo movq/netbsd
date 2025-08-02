@@ -1,4 +1,4 @@
-/*	$NetBSD: qpcache.c,v 1.4 2025/07/17 19:01:45 christos Exp $	*/
+/*	$NetBSD: qpcache.c,v 1.4.4.2 2025/08/02 05:53:29 perseant Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

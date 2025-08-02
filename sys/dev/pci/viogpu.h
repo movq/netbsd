@@ -1,4 +1,4 @@
-/* $NetBSD: viogpu.h,v 1.1 2025/07/26 14:18:13 martin Exp $ */
+/* $NetBSD: viogpu.h,v 1.1.4.2 2025/08/02 05:57:00 perseant Exp $ */
 /*
  * Virtio GPU Device
  *

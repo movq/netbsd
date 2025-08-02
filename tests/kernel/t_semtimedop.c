@@ -1,4 +1,4 @@
-/*	$NetBSD: t_semtimedop.c,v 1.2 2024/10/10 07:45:02 martin Exp $	*/
+/*	$NetBSD: t_semtimedop.c,v 1.2.4.2 2025/08/02 05:58:01 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -26,7 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_semtimedop.c,v 1.2 2024/10/10 07:45:02 martin Exp $");
+__RCSID("$NetBSD: t_semtimedop.c,v 1.2.4.2 2025/08/02 05:58:01 perseant Exp $");
 
 #include <sys/types.h>
 #include <sys/ipc.h>

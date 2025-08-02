@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.common,v 1.1 2024/07/03 09:30:22 mrg Exp $
+#	$NetBSD: Makefile.common,v 1.1.4.2 2025/08/02 05:50:37 perseant Exp $
 
 # common makefile fragment for bitmap components
 

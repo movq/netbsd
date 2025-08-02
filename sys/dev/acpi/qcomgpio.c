@@ -1,4 +1,4 @@
-/* $NetBSD: qcomgpio.c,v 1.8 2024/12/17 22:05:21 riastradh Exp $ */
+/* $NetBSD: qcomgpio.c,v 1.8.4.2 2025/08/02 05:56:32 perseant Exp $ */
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: qcomgpio.c,v 1.8 2024/12/17 22:05:21 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: qcomgpio.c,v 1.8.4.2 2025/08/02 05:56:32 perseant Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

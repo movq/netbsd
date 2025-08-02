@@ -1,4 +1,4 @@
-/*	$NetBSD: sti_machdep.c,v 1.7 2025/05/31 03:05:25 tsutsui Exp $	*/
+/*	$NetBSD: sti_machdep.c,v 1.7.4.2 2025/08/02 05:55:38 perseant Exp $	*/
 /*	$OpenBSD: sti_sgc.c,v 1.14 2007/05/26 00:36:03 krw Exp $	*/
 
 /*
@@ -51,7 +51,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sti_machdep.c,v 1.7 2025/05/31 03:05:25 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sti_machdep.c,v 1.7.4.2 2025/08/02 05:55:38 perseant Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

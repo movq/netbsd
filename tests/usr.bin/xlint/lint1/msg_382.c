@@ -1,4 +1,4 @@
-/*	$NetBSD: msg_382.c,v 1.2 2025/04/12 17:22:50 rillig Exp $	*/
+/*	$NetBSD: msg_382.c,v 1.2.4.2 2025/08/02 05:58:19 perseant Exp $	*/
 # 3 "msg_382.c"
 
 // Test for message: constant assignment of type '%s' in operand of '%s' always evaluates to '%s' [382]

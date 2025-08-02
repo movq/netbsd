@@ -1,4 +1,4 @@
-/*	$NetBSD: t_arc4random.c,v 1.5 2025/03/09 18:11:55 riastradh Exp $	*/
+/*	$NetBSD: t_arc4random.c,v 1.5.4.2 2025/08/02 05:58:04 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
 #define	_REENTRANT
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_arc4random.c,v 1.5 2025/03/09 18:11:55 riastradh Exp $");
+__RCSID("$NetBSD: t_arc4random.c,v 1.5.4.2 2025/08/02 05:58:04 perseant Exp $");
 
 #include <sys/resource.h>
 #include <sys/stat.h>

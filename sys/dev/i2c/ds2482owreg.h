@@ -1,4 +1,4 @@
-/*	$NetBSD: ds2482owreg.h,v 1.1 2024/11/04 20:43:38 brad Exp $	*/
+/*	$NetBSD: ds2482owreg.h,v 1.1.4.2 2025/08/02 05:56:39 perseant Exp $	*/
 
 /*
  * Copyright (c) 2024 Brad Spencer <brad@anduin.eldar.org>

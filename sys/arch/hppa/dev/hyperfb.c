@@ -1,4 +1,4 @@
-/*	$NetBSD: hyperfb.c,v 1.24 2025/04/06 03:31:52 riastradh Exp $	*/
+/*	$NetBSD: hyperfb.c,v 1.24.4.2 2025/08/02 05:55:42 perseant Exp $	*/
 
 /*
  * Copyright (c) 2024 Michael Lorenz
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hyperfb.c,v 1.24 2025/04/06 03:31:52 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hyperfb.c,v 1.24.4.2 2025/08/02 05:55:42 perseant Exp $");
 
 #include "opt_cputype.h"
 #include "opt_hyperfb.h"

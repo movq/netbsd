@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_time_arith.c,v 1.3 2025/04/01 23:14:23 riastradh Exp $	*/
+/*	$NetBSD: subr_time_arith.c,v 1.3.4.2 2025/08/02 05:57:42 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2004, 2005, 2007, 2008, 2009, 2020
@@ -63,7 +63,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_time_arith.c,v 1.3 2025/04/01 23:14:23 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_time_arith.c,v 1.3.4.2 2025/08/02 05:57:42 perseant Exp $");
 
 #include <sys/types.h>
 

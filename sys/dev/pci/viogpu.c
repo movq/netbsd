@@ -1,4 +1,4 @@
-/*	$NetBSD: viogpu.c,v 1.1 2025/07/26 14:18:13 martin Exp $ */
+/*	$NetBSD: viogpu.c,v 1.1.4.2 2025/08/02 05:57:00 perseant Exp $ */
 /*	$OpenBSD: viogpu.c,v 1.3 2023/05/29 08:13:35 sf Exp $ */
 
 /*

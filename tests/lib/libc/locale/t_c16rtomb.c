@@ -1,4 +1,4 @@
-/*	$NetBSD: t_c16rtomb.c,v 1.6 2024/08/19 16:22:10 riastradh Exp $	*/
+/*	$NetBSD: t_c16rtomb.c,v 1.6.6.2 2025/08/02 05:58:05 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2002 Tim J. Robbins
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_c16rtomb.c,v 1.6 2024/08/19 16:22:10 riastradh Exp $");
+__RCSID("$NetBSD: t_c16rtomb.c,v 1.6.6.2 2025/08/02 05:58:05 perseant Exp $");
 
 #include <errno.h>
 #include <limits.h>

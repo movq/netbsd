@@ -1,4 +1,4 @@
-/*	$NetBSD: check.h,v 1.2 2025/01/26 16:25:45 christos Exp $	*/
+/*	$NetBSD: check.h,v 1.2.4.2 2025/08/02 05:54:07 perseant Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-# $NetBSD: posix-expansion.mk,v 1.2 2025/04/13 09:34:43 rillig Exp $
+# $NetBSD: posix-expansion.mk,v 1.2.4.2 2025/08/02 05:58:36 perseant Exp $
 #
 # https://pubs.opengroup.org/onlinepubs/9799919799/utilities/make.html#tag_20_76_13_05
 #

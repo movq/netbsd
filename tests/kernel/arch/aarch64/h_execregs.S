@@ -1,4 +1,4 @@
-/*	$NetBSD: h_execregs.S,v 1.2 2025/04/25 12:58:40 riastradh Exp $	*/
+/*	$NetBSD: h_execregs.S,v 1.2.4.2 2025/08/02 05:58:02 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2025 The NetBSD Foundation, Inc.

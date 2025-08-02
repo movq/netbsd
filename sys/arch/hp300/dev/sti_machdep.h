@@ -1,4 +1,4 @@
-/*	$NetBSD: sti_machdep.h,v 1.1 2025/05/01 06:11:21 tsutsui Exp $	*/
+/*	$NetBSD: sti_machdep.h,v 1.1.4.2 2025/08/02 05:55:38 perseant Exp $	*/
 /*-
  * Copyright (c) 2025 Izumi Tsutsui.  All rights reserved.
  *

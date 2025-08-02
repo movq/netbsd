@@ -1,4 +1,4 @@
-/*	$NetBSD: if_gscanreg.h,v 1.1 2025/04/03 16:33:48 bouyer Exp $	*/
+/*	$NetBSD: if_gscanreg.h,v 1.1.4.2 2025/08/02 05:57:05 perseant Exp $	*/
 
 /*
  * Copyright (c) 2025 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: ds28e17iicvar.h,v 1.1 2025/01/23 19:02:42 brad Exp $	*/
+/*	$NetBSD: ds28e17iicvar.h,v 1.1.4.2 2025/08/02 05:56:44 perseant Exp $	*/
 
 /*
  * Copyright (c) 2025 Brad Spencer <brad@anduin.eldar.org>

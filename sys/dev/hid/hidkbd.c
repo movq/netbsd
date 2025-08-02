@@ -1,5 +1,5 @@
 /*	$OpenBSD: hidkbd.c,v 1.15 2024/10/21 19:05:31 miod Exp $	*/
-/*      $NetBSD: hidkbd.c,v 1.1 2024/12/09 22:04:18 jmcneill Exp $        */
+/*      $NetBSD: hidkbd.c,v 1.1.4.2 2025/08/02 05:56:38 perseant Exp $        */
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

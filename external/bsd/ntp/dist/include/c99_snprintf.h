@@ -1,4 +1,4 @@
-/*	$NetBSD: c99_snprintf.h,v 1.2 2024/08/18 20:46:50 christos Exp $	*/
+/*	$NetBSD: c99_snprintf.h,v 1.2.4.2 2025/08/02 05:22:20 perseant Exp $	*/
 
 /*
  * ntp_c99_snprintf.h

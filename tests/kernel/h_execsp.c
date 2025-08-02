@@ -1,4 +1,4 @@
-/*	$NetBSD: h_execsp.c,v 1.2 2025/04/20 22:31:25 riastradh Exp $	*/
+/*	$NetBSD: h_execsp.c,v 1.2.4.2 2025/08/02 05:58:01 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2025 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: h_execsp.c,v 1.2 2025/04/20 22:31:25 riastradh Exp $");
+__RCSID("$NetBSD: h_execsp.c,v 1.2.4.2 2025/08/02 05:58:01 perseant Exp $");
 
 #include <err.h>
 #include <string.h>

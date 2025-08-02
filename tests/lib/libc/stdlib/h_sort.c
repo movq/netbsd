@@ -1,4 +1,4 @@
-/*	$NetBSD: h_sort.c,v 1.3 2025/03/02 23:11:19 riastradh Exp $	*/
+/*	$NetBSD: h_sort.c,v 1.3.4.2 2025/08/02 05:58:06 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2025 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: h_sort.c,v 1.3 2025/03/02 23:11:19 riastradh Exp $");
+__RCSID("$NetBSD: h_sort.c,v 1.3.4.2 2025/08/02 05:58:06 perseant Exp $");
 
 #include <assert.h>
 #include <err.h>

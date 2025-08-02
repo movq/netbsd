@@ -1,4 +1,4 @@
-/*	$NetBSD: sti_diovar.h,v 1.2 2025/05/26 12:25:12 tsutsui Exp $	*/
+/*	$NetBSD: sti_diovar.h,v 1.2.4.2 2025/08/02 05:55:38 perseant Exp $	*/
 /*-
  * Copyright (c) 2025 Izumi Tsutsui.  All rights reserved.
  *

@@ -1,4 +1,4 @@
-#	$NetBSD: t_ctype_abuse.sh,v 1.1 2024/12/18 02:47:00 riastradh Exp $
+#	$NetBSD: t_ctype_abuse.sh,v 1.1.4.2 2025/08/02 05:58:12 perseant Exp $
 #
 # Copyright (c) 2024 The NetBSD Foundation, Inc.
 # All rights reserved.

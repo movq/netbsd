@@ -1,4 +1,4 @@
-/*	$NetBSD: summitfb.c,v 1.34 2025/04/28 04:46:58 macallan Exp $	*/
+/*	$NetBSD: summitfb.c,v 1.34.4.2 2025/08/02 05:55:42 perseant Exp $	*/
 
 /*	$OpenBSD: sti_pci.c,v 1.7 2009/02/06 22:51:04 miod Exp $	*/
 
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: summitfb.c,v 1.34 2025/04/28 04:46:58 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: summitfb.c,v 1.34.4.2 2025/08/02 05:55:42 perseant Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

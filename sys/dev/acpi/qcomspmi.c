@@ -1,4 +1,4 @@
-/* $NetBSD: qcomspmi.c,v 1.1 2024/12/30 12:31:10 jmcneill Exp $ */
+/* $NetBSD: qcomspmi.c,v 1.1.4.2 2025/08/02 05:56:34 perseant Exp $ */
 /*	$OpenBSD: qcspmi.c,v 1.6 2024/08/14 10:54:58 mglocker Exp $	*/
 /*
  * Copyright (c) 2022 Patrick Wildt <patrick@blueri.se>

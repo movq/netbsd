@@ -1,4 +1,4 @@
-/*	$NetBSD: ds28e17iic.c,v 1.1 2025/01/23 19:02:42 brad Exp $	*/
+/*	$NetBSD: ds28e17iic.c,v 1.1.4.2 2025/08/02 05:56:44 perseant Exp $	*/
 
 /*
  * Copyright (c) 2025 Brad Spencer <brad@anduin.eldar.org>
@@ -22,7 +22,7 @@
 /* https://www.analog.com/en/products/DS28E17.html */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ds28e17iic.c,v 1.1 2025/01/23 19:02:42 brad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ds28e17iic.c,v 1.1.4.2 2025/08/02 05:56:44 perseant Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

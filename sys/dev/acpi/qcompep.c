@@ -1,4 +1,4 @@
-/* $NetBSD: qcompep.c,v 1.2 2025/01/08 22:58:05 jmcneill Exp $ */
+/* $NetBSD: qcompep.c,v 1.2.4.2 2025/08/02 05:56:33 perseant Exp $ */
 /*	$OpenBSD: qcaoss.c,v 1.1 2023/05/23 14:10:27 patrick Exp $	*/
 /*      $OpenBSD: qccpucp.c,v 1.1 2024/11/16 21:17:54 tobhe Exp $       */
 /*

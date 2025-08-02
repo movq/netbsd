@@ -1,4 +1,4 @@
-/* $NetBSD: jh71x0_clkc.c,v 1.4 2024/09/18 08:31:50 skrll Exp $ */
+/* $NetBSD: jh71x0_clkc.c,v 1.4.4.2 2025/08/02 05:56:05 perseant Exp $ */
 
 /*-
  * Copyright (c) 2023 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: jh71x0_clkc.c,v 1.4 2024/09/18 08:31:50 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: jh71x0_clkc.c,v 1.4.4.2 2025/08/02 05:56:05 perseant Exp $");
 
 #include <sys/param.h>
 

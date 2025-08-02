@@ -1,4 +1,4 @@
-/*	$NetBSD: sendopts_test.c,v 1.2 2025/02/25 19:15:46 christos Exp $	*/
+/*	$NetBSD: sendopts_test.c,v 1.2.4.2 2025/08/02 05:50:08 perseant Exp $	*/
 
  /*
   * System library.

@@ -1,4 +1,4 @@
-/* $NetBSD: qcomsmem.h,v 1.1 2024/12/30 12:31:10 jmcneill Exp $ */
+/* $NetBSD: qcomsmem.h,v 1.1.4.2 2025/08/02 05:56:33 perseant Exp $ */
 /*
  * Copyright (c) 2023 Patrick Wildt <patrick@blueri.se>
  *

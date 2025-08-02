@@ -1,4 +1,4 @@
-/* $NetBSD: jh7110_syscon.c,v 1.1 2024/11/11 20:30:08 skrll Exp $ */
+/* $NetBSD: jh7110_syscon.c,v 1.1.4.2 2025/08/02 05:56:05 perseant Exp $ */
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: jh7110_syscon.c,v 1.1 2024/11/11 20:30:08 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: jh7110_syscon.c,v 1.1.4.2 2025/08/02 05:56:05 perseant Exp $");
 
 #include <sys/param.h>
 

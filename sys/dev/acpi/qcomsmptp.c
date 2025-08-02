@@ -1,4 +1,4 @@
-/* $NetBSD: qcomsmptp.c,v 1.1 2024/12/30 12:31:10 jmcneill Exp $ */
+/* $NetBSD: qcomsmptp.c,v 1.1.4.2 2025/08/02 05:56:34 perseant Exp $ */
 /*	$OpenBSD: qcsmptp.c,v 1.2 2023/07/04 14:32:21 patrick Exp $	*/
 /*
  * Copyright (c) 2023 Patrick Wildt <patrick@blueri.se>

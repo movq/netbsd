@@ -1,4 +1,4 @@
-/* $NetBSD: amdgpioreg.h,v 1.1 2025/02/26 15:18:46 ryoon Exp $ */
+/* $NetBSD: amdgpioreg.h,v 1.1.4.2 2025/08/02 05:56:32 perseant Exp $ */
 
 /*      $OpenBSD: amdgpio.c,v 1.10 2022/10/20 20:40:57 kettenis Exp $   */
 /*

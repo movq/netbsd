@@ -1,4 +1,4 @@
-/* $NetBSD: if_bwi_sdio.c,v 1.1 2025/01/19 00:29:29 jmcneill Exp $ */
+/* $NetBSD: if_bwi_sdio.c,v 1.1.6.2 2025/08/02 05:57:03 perseant Exp $ */
 
 /*-
  * Copyright (c) 2025 Jared McNeill <jmcneill@invisible.ca>
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: if_bwi_sdio.c,v 1.1 2025/01/19 00:29:29 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_bwi_sdio.c,v 1.1.6.2 2025/08/02 05:57:03 perseant Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

@@ -1,4 +1,4 @@
-# $NetBSD: varmod-to-title.mk,v 1.1 2024/07/01 21:02:26 sjg Exp $
+# $NetBSD: varmod-to-title.mk,v 1.1.4.2 2025/08/02 05:58:40 perseant Exp $
 #
 # Tests for the :tc variable modifier, which converts the expression value
 # to lowercase.

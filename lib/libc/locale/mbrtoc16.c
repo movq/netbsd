@@ -1,4 +1,4 @@
-/*	$NetBSD: mbrtoc16.c,v 1.7 2024/08/18 20:06:05 rillig Exp $	*/
+/*	$NetBSD: mbrtoc16.c,v 1.7.6.2 2025/08/02 05:54:38 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: mbrtoc16.c,v 1.7 2024/08/18 20:06:05 rillig Exp $");
+__RCSID("$NetBSD: mbrtoc16.c,v 1.7.6.2 2025/08/02 05:54:38 perseant Exp $");
 
 #include "namespace.h"
 

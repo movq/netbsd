@@ -1,4 +1,4 @@
-/*	$NetBSD: if_gscan.c,v 1.3 2025/04/26 07:09:13 skrll Exp $	*/
+/*	$NetBSD: if_gscan.c,v 1.3.4.2 2025/08/02 05:57:05 perseant Exp $	*/
 
 /*
  * Copyright (c) 2025 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_gscan.c,v 1.3 2025/04/26 07:09:13 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_gscan.c,v 1.3.4.2 2025/08/02 05:57:05 perseant Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_usb.h"

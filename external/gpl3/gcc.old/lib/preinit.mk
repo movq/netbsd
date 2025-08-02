@@ -1,4 +1,4 @@
-# $NetBSD: preinit.mk,v 1.1 2025/03/25 18:03:32 christos Exp $
+# $NetBSD: preinit.mk,v 1.1.2.2 2025/08/02 05:26:15 perseant Exp $
 
 FILE=lib${LIB}_preinit.o
 FILES+=${FILE}

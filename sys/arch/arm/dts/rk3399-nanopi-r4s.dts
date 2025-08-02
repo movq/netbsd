@@ -1,4 +1,4 @@
-/* $NetBSD: rk3399-nanopi-r4s.dts,v 1.1 2025/05/24 04:00:52 gutteridge Exp $ */
+/* $NetBSD: rk3399-nanopi-r4s.dts,v 1.1.4.2 2025/08/02 05:55:27 perseant Exp $ */
 
 /*-
  * Copyright (c) 2025 David H. Gutteridge

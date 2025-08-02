@@ -1,4 +1,4 @@
-/*	$NetBSD: ede.c,v 1.2 2025/05/21 14:48:02 christos Exp $	*/
+/*	$NetBSD: ede.c,v 1.2.4.2 2025/08/02 05:53:25 perseant Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

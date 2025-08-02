@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ncm.c,v 1.1 2025/01/20 13:54:55 maya Exp $	*/
+/*	$NetBSD: if_ncm.c,v 1.1.4.2 2025/08/02 05:57:05 perseant Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998, 1999, 2000-2003 Bill Paul <wpaul@windriver.com>
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ncm.c,v 1.1 2025/01/20 13:54:55 maya Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ncm.c,v 1.1.4.2 2025/08/02 05:57:05 perseant Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

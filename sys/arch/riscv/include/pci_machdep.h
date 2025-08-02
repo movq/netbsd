@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.h,v 1.1 2025/01/01 17:53:08 skrll Exp $	*/
+/*	$NetBSD: pci_machdep.h,v 1.1.4.2 2025/08/02 05:56:03 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2023 The NetBSD Foundation, Inc.

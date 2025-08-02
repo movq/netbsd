@@ -1,4 +1,4 @@
-/* $NetBSD: jh71x0_eth.h,v 1.1 2024/10/26 15:49:43 skrll Exp $ */
+/* $NetBSD: jh71x0_eth.h,v 1.1.4.2 2025/08/02 05:56:05 perseant Exp $ */
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.

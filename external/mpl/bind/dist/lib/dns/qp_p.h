@@ -1,4 +1,4 @@
-/*	$NetBSD: qp_p.h,v 1.2 2025/01/26 16:25:24 christos Exp $	*/
+/*	$NetBSD: qp_p.h,v 1.2.4.2 2025/08/02 05:53:28 perseant Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

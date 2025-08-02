@@ -1,4 +1,4 @@
-/*	$NetBSD: ffsl.c,v 1.2 2024/11/07 18:12:09 christos Exp $	*/
+/*	$NetBSD: ffsl.c,v 1.2.4.2 2025/08/02 05:18:34 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: ffsl.c,v 1.2 2024/11/07 18:12:09 christos Exp $");
+__RCSID("$NetBSD: ffsl.c,v 1.2.4.2 2025/08/02 05:18:34 perseant Exp $");
 
 #include <sys/bitops.h>
 

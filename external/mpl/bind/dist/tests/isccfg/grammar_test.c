@@ -1,4 +1,4 @@
-/*	$NetBSD: grammar_test.c,v 1.2 2025/05/21 14:48:09 christos Exp $	*/
+/*	$NetBSD: grammar_test.c,v 1.2.4.2 2025/08/02 05:54:18 perseant Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

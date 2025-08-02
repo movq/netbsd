@@ -1,4 +1,4 @@
-/*	$NetBSD: db_p.h,v 1.3 2025/05/21 14:48:02 christos Exp $	*/
+/*	$NetBSD: db_p.h,v 1.3.4.2 2025/08/02 05:53:24 perseant Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

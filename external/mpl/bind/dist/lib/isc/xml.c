@@ -1,4 +1,4 @@
-/*	$NetBSD: xml.c,v 1.3 2025/05/21 14:48:05 christos Exp $	*/
+/*	$NetBSD: xml.c,v 1.3.4.2 2025/08/02 05:53:57 perseant Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

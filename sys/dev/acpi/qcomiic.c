@@ -1,4 +1,4 @@
-/* $NetBSD: qcomiic.c,v 1.3 2024/12/18 21:23:27 jmcneill Exp $ */
+/* $NetBSD: qcomiic.c,v 1.3.4.2 2025/08/02 05:56:33 perseant Exp $ */
 
 /*	$OpenBSD: qciic.c,v 1.7 2024/10/02 21:21:32 kettenis Exp $	*/
 /*

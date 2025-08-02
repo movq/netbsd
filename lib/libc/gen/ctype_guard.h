@@ -1,4 +1,4 @@
-/*	$NetBSD: ctype_guard.h,v 1.7 2025/03/31 23:48:06 riastradh Exp $	*/
+/*	$NetBSD: ctype_guard.h,v 1.7.4.2 2025/08/02 05:54:36 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2025 The NetBSD Foundation, Inc.

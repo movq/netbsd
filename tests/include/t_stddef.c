@@ -1,4 +1,4 @@
-/*	$NetBSD: t_stddef.c,v 1.1 2025/04/01 00:33:55 riastradh Exp $	*/
+/*	$NetBSD: t_stddef.c,v 1.1.4.2 2025/08/02 05:58:00 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2025 The NetBSD Foundation, Inc.
@@ -48,7 +48,7 @@ typedef nullptr_t nbtest_nullptr_t;
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_stddef.c,v 1.1 2025/04/01 00:33:55 riastradh Exp $");
+__RCSID("$NetBSD: t_stddef.c,v 1.1.4.2 2025/08/02 05:58:00 perseant Exp $");
 
 #include <atf-c.h>
 #include <stdalign.h>

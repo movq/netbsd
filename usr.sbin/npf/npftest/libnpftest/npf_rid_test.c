@@ -7,7 +7,7 @@
 #ifdef _KERNEL
 #include <sys/types.h>
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_rid_test.c,v 1.3 2025/07/01 20:19:30 joe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_rid_test.c,v 1.3.4.2 2025/08/02 05:58:53 perseant Exp $");
 #endif
 
 #include "npf_impl.h"

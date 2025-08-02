@@ -1,4 +1,4 @@
-/*	$NetBSD: h_hello.c,v 1.1 2025/04/27 04:09:35 riastradh Exp $	*/
+/*	$NetBSD: h_hello.c,v 1.1.4.2 2025/08/02 05:58:03 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2025 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: h_hello.c,v 1.1 2025/04/27 04:09:35 riastradh Exp $");
+__RCSID("$NetBSD: h_hello.c,v 1.1.4.2 2025/08/02 05:58:03 perseant Exp $");
 
 #include <stdio.h>
 #include <stdlib.h>

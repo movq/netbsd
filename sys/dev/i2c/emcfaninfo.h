@@ -1,4 +1,4 @@
-/*	$NetBSD: emcfaninfo.h,v 1.1 2025/03/11 13:56:46 brad Exp $	*/
+/*	$NetBSD: emcfaninfo.h,v 1.1.4.2 2025/08/02 05:56:39 perseant Exp $	*/
 
 /*
  * Copyright (c) 2025 Brad Spencer <brad@anduin.eldar.org>

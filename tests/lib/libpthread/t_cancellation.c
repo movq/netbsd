@@ -1,4 +1,4 @@
-/*	$NetBSD: t_cancellation.c,v 1.4 2025/04/05 11:22:32 riastradh Exp $	*/
+/*	$NetBSD: t_cancellation.c,v 1.4.4.2 2025/08/02 05:58:09 perseant Exp $	*/
 
 /*
  * Copyright (c) 2025 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_cancellation.c,v 1.4 2025/04/05 11:22:32 riastradh Exp $");
+__RCSID("$NetBSD: t_cancellation.c,v 1.4.4.2 2025/08/02 05:58:09 perseant Exp $");
 
 #include <sys/event.h>
 #include <sys/mman.h>

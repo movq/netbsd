@@ -1,4 +1,4 @@
-/*	$NetBSD: async.c,v 1.2 2025/01/26 16:25:36 christos Exp $	*/
+/*	$NetBSD: async.c,v 1.2.4.2 2025/08/02 05:53:51 perseant Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

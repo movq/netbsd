@@ -1,4 +1,4 @@
-# $NetBSD: job-output.mk,v 1.2 2025/06/13 06:13:20 rillig Exp $
+# $NetBSD: job-output.mk,v 1.2.4.2 2025/08/02 05:58:35 perseant Exp $
 #
 # Tests for handling the output in parallel mode.
 
