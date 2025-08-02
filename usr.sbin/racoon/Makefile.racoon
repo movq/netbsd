@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.racoon,v 1.4 2025/03/08 16:40:44 christos Exp $
+# $NetBSD: Makefile.racoon,v 1.4.4.2 2025/08/02 05:58:55 perseant Exp $
 
 DIST=   ${NETBSDSRCDIR}/crypto/dist/ipsec-tools
 CPPFLAGS+= -I${DIST}/src/racoon -I${DIST}/src/racoon/missing

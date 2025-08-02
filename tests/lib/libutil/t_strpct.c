@@ -1,4 +1,4 @@
-/* $NetBSD: t_strpct.c,v 1.2 2025/05/03 07:22:52 rillig Exp $ */
+/* $NetBSD: t_strpct.c,v 1.2.4.2 2025/08/02 05:58:09 perseant Exp $ */
 
 /*
  * Copyright (c) 2025 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 #include <sys/cdefs.h>
 __COPYRIGHT("@(#) Copyright (c) 2025\
  The NetBSD Foundation, inc. All rights reserved.");
-__RCSID("$NetBSD: t_strpct.c,v 1.2 2025/05/03 07:22:52 rillig Exp $");
+__RCSID("$NetBSD: t_strpct.c,v 1.2.4.2 2025/08/02 05:58:09 perseant Exp $");
 
 #include <stdbool.h>
 #include <stdint.h>

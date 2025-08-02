@@ -1,4 +1,4 @@
-/* $NetBSD: userret.h,v 1.1 2024/11/22 20:01:04 skrll Exp $ */
+/* $NetBSD: userret.h,v 1.1.4.2 2025/08/02 05:56:04 perseant Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

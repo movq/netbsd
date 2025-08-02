@@ -1,4 +1,4 @@
-/*	$NetBSD: sane_sockaddr_to_hostaddr.c,v 1.2 2025/02/25 19:15:52 christos Exp $	*/
+/*	$NetBSD: sane_sockaddr_to_hostaddr.c,v 1.2.4.2 2025/08/02 05:50:19 perseant Exp $	*/
 
 /*++
 /* NAME

@@ -1,4 +1,4 @@
-/*	$NetBSD: digests.c,v 1.2 2024/08/18 20:47:26 christos Exp $	*/
+/*	$NetBSD: digests.c,v 1.2.4.2 2025/08/02 05:23:03 perseant Exp $	*/
 
 #include "config.h"
 

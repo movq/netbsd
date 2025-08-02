@@ -1,4 +1,4 @@
-/*	$NetBSD: clean_ascii_cntrl_space.h,v 1.2 2025/02/25 19:15:51 christos Exp $	*/
+/*	$NetBSD: clean_ascii_cntrl_space.h,v 1.2.4.2 2025/08/02 05:50:18 perseant Exp $	*/
 
 #ifndef _UNCNTRL_H_INCLUDED_
 #define _UNCNTRL_H_INCLUDED_

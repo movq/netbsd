@@ -1,4 +1,4 @@
-#	$NetBSD: t_setjmp.sh,v 1.5 2025/04/29 10:57:17 martin Exp $
+#	$NetBSD: t_setjmp.sh,v 1.5.4.2 2025/08/02 05:58:01 perseant Exp $
 #
 # Copyright (c) 2025 The NetBSD Foundation, Inc.
 # All rights reserved.

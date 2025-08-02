@@ -1,4 +1,4 @@
-/*	$NetBSD: h_execsig.c,v 1.1 2025/03/13 01:27:27 riastradh Exp $	*/
+/*	$NetBSD: h_execsig.c,v 1.1.4.2 2025/08/02 05:58:04 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2025 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: h_execsig.c,v 1.1 2025/03/13 01:27:27 riastradh Exp $");
+__RCSID("$NetBSD: h_execsig.c,v 1.1.4.2 2025/08/02 05:58:04 perseant Exp $");
 
 /*
  * Helper program for testing signal delivery during execve(2) and

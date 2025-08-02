@@ -1,4 +1,4 @@
-/*	$NetBSD: lsf-times.c,v 1.2 2024/08/18 20:47:27 christos Exp $	*/
+/*	$NetBSD: lsf-times.c,v 1.2.4.2 2025/08/02 05:23:05 perseant Exp $	*/
 
 #include "config.h"
 #include "ntp_calendar.h"

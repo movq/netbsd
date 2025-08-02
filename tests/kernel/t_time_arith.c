@@ -1,4 +1,4 @@
-/*	$NetBSD: t_time_arith.c,v 1.3 2025/04/01 23:14:23 riastradh Exp $	*/
+/*	$NetBSD: t_time_arith.c,v 1.3.4.2 2025/08/02 05:58:01 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2024-2025 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_time_arith.c,v 1.3 2025/04/01 23:14:23 riastradh Exp $");
+__RCSID("$NetBSD: t_time_arith.c,v 1.3.4.2 2025/08/02 05:58:01 perseant Exp $");
 
 #include <sys/timearith.h>
 

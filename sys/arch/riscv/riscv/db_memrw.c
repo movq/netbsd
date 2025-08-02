@@ -1,4 +1,4 @@
-/*	$NetBSD: db_memrw.c,v 1.1 2024/11/23 12:03:55 skrll Exp $	*/
+/*	$NetBSD: db_memrw.c,v 1.1.4.2 2025/08/02 05:56:04 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 
-__RCSID("$NetBSD: db_memrw.c,v 1.1 2024/11/23 12:03:55 skrll Exp $");
+__RCSID("$NetBSD: db_memrw.c,v 1.1.4.2 2025/08/02 05:56:04 perseant Exp $");
 
 #include <sys/param.h>
 

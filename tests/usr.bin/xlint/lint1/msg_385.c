@@ -1,4 +1,4 @@
-/*	$NetBSD: msg_385.c,v 1.2 2025/03/10 22:08:36 rillig Exp $	*/
+/*	$NetBSD: msg_385.c,v 1.2.4.2 2025/08/02 05:58:19 perseant Exp $	*/
 # 3 "msg_385.c"
 
 // Test for message: do-while macro '%.*s' ends with semicolon [385]

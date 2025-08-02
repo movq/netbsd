@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_vmgenid.c,v 1.3 2024/08/27 00:56:46 riastradh Exp $	*/
+/*	$NetBSD: acpi_vmgenid.c,v 1.3.6.2 2025/08/02 05:56:32 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_vmgenid.c,v 1.3 2024/08/27 00:56:46 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_vmgenid.c,v 1.3.6.2 2025/08/02 05:56:32 perseant Exp $");
 
 #include <sys/device.h>
 #include <sys/entropy.h>

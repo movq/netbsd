@@ -1,4 +1,4 @@
-/*	$NetBSD: t_clofork.c,v 1.1 2025/07/17 19:50:40 kre Exp $	*/
+/*	$NetBSD: t_clofork.c,v 1.1.4.2 2025/08/02 05:58:01 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.

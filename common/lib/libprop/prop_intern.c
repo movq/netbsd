@@ -1,4 +1,4 @@
-/*	$NetBSD: prop_intern.c,v 1.2 2025/05/14 03:25:46 thorpej Exp $	*/
+/*	$NetBSD: prop_intern.c,v 1.2.4.2 2025/08/02 05:18:35 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007, 2025 The NetBSD Foundation, Inc.

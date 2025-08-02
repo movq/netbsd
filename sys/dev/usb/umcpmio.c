@@ -1,4 +1,4 @@
-/*	$NetBSD: umcpmio.c,v 1.6 2025/04/02 01:22:20 riastradh Exp $	*/
+/*	$NetBSD: umcpmio.c,v 1.6.4.2 2025/08/02 05:57:06 perseant Exp $	*/
 
 /*
  * Copyright (c) 2024 Brad Spencer <brad@anduin.eldar.org>
@@ -17,7 +17,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umcpmio.c,v 1.6 2025/04/02 01:22:20 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umcpmio.c,v 1.6.4.2 2025/08/02 05:57:06 perseant Exp $");
 
 /*
  * Driver for the Microchip MCP2221 / MCP2221A USB multi-io chip

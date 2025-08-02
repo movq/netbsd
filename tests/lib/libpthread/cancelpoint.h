@@ -1,4 +1,4 @@
-/*	$NetBSD: cancelpoint.h,v 1.1 2025/04/05 11:22:32 riastradh Exp $	*/
+/*	$NetBSD: cancelpoint.h,v 1.1.4.2 2025/08/02 05:58:09 perseant Exp $	*/
 
 /*
  * Copyright (c) 2025 The NetBSD Foundation, Inc.

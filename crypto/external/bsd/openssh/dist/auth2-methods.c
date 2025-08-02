@@ -1,4 +1,4 @@
-/*	$NetBSD: auth2-methods.c,v 1.2 2024/07/08 22:33:43 christos Exp $	*/
+/*	$NetBSD: auth2-methods.c,v 1.2.4.2 2025/08/02 05:18:45 perseant Exp $	*/
 
 /*
  * Copyright (c) 2012,2023 Damien Miller <djm@mindrot.org>
@@ -17,7 +17,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: auth2-methods.c,v 1.2 2024/07/08 22:33:43 christos Exp $");
+__RCSID("$NetBSD: auth2-methods.c,v 1.2.4.2 2025/08/02 05:18:45 perseant Exp $");
 
 #include <sys/types.h>
 

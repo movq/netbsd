@@ -1,4 +1,4 @@
-/*	$NetBSD: getopt_long.c,v 1.2 2024/08/18 20:47:22 christos Exp $	*/
+/*	$NetBSD: getopt_long.c,v 1.2.4.2 2025/08/02 05:22:54 perseant Exp $	*/
 
 
 /*

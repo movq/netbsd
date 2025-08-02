@@ -1,4 +1,4 @@
-/*	$NetBSD: sophgo,sg2042-rpgate.h,v 1.1 2024/10/31 07:07:45 skrll Exp $	*/
+/*	$NetBSD: sophgo,sg2042-rpgate.h,v 1.1.4.2 2025/08/02 05:57:37 perseant Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
 /*

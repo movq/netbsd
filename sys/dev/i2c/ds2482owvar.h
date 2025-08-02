@@ -1,4 +1,4 @@
-/*	$NetBSD: ds2482owvar.h,v 1.3 2024/11/06 19:42:25 riastradh Exp $	*/
+/*	$NetBSD: ds2482owvar.h,v 1.3.4.2 2025/08/02 05:56:39 perseant Exp $	*/
 
 /*
  * Copyright (c) 2024 Brad Spencer <brad@anduin.eldar.org>

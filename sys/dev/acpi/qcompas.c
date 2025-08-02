@@ -1,4 +1,4 @@
-/* $NetBSD: qcompas.c,v 1.1 2024/12/30 12:31:10 jmcneill Exp $ */
+/* $NetBSD: qcompas.c,v 1.1.4.2 2025/08/02 05:56:33 perseant Exp $ */
 /*	$OpenBSD: qcpas.c,v 1.8 2024/11/08 21:13:34 landry Exp $	*/
 /*
  * Copyright (c) 2023 Patrick Wildt <patrick@blueri.se>

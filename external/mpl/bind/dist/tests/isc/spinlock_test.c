@@ -1,4 +1,4 @@
-/*	$NetBSD: spinlock_test.c,v 1.2 2025/01/26 16:25:50 christos Exp $	*/
+/*	$NetBSD: spinlock_test.c,v 1.2.4.2 2025/08/02 05:54:17 perseant Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

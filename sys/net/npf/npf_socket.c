@@ -25,7 +25,7 @@
 
 #ifdef _KERNEL
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_socket.c,v 1.3 2025/06/02 13:19:27 joe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_socket.c,v 1.3.4.2 2025/08/02 05:57:48 perseant Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

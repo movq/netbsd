@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.1 2025/02/06 19:35:28 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.1.4.2 2025/08/02 05:58:27 perseant Exp $
 
 SYS_SOCKET_H?=	${NETBSDSRCDIR}/sys/sys/socket.h
 

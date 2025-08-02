@@ -1,4 +1,4 @@
-/* $NetBSD: t_remquo.c,v 1.2 2024/09/20 22:24:51 rin Exp $ */
+/* $NetBSD: t_remquo.c,v 1.2.6.2 2025/08/02 05:58:08 perseant Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.

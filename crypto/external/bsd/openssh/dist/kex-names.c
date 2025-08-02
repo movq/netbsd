@@ -1,4 +1,4 @@
-/*	$NetBSD: kex-names.c,v 1.3 2024/09/24 21:32:18 christos Exp $	*/
+/*	$NetBSD: kex-names.c,v 1.3.4.2 2025/08/02 05:18:46 perseant Exp $	*/
 /* $OpenBSD: kex-names.c,v 1.4 2024/09/09 02:39:57 djm Exp $ */
 
 /*
@@ -26,7 +26,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: kex-names.c,v 1.3 2024/09/24 21:32:18 christos Exp $");
+__RCSID("$NetBSD: kex-names.c,v 1.3.4.2 2025/08/02 05:18:46 perseant Exp $");
 
 #include <stdio.h>
 #include <stdlib.h>

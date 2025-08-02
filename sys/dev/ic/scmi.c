@@ -1,4 +1,4 @@
-/* $NetBSD: scmi.c,v 1.1 2025/01/08 22:55:35 jmcneill Exp $ */
+/* $NetBSD: scmi.c,v 1.1.4.2 2025/08/02 05:56:42 perseant Exp $ */
 /*	$OpenBSD: scmi.c,v 1.2 2024/11/25 22:12:18 tobhe Exp $	*/
 
 /*

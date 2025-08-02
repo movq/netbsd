@@ -1,4 +1,4 @@
-/*	$NetBSD: msg_383.c,v 1.4 2025/05/04 09:40:03 rillig Exp $	*/
+/*	$NetBSD: msg_383.c,v 1.4.4.2 2025/08/02 05:58:19 perseant Exp $	*/
 # 3 "msg_383.c"
 
 // Test for message: passing '%s' as argument %d to '%s' discards '%s' [383]

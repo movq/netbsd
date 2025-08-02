@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_sigprocmask.S,v 1.1 2025/04/07 20:21:10 riastradh Exp $	*/
+/*	$NetBSD: compat_sigprocmask.S,v 1.1.4.2 2025/08/02 05:54:34 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2025 The NetBSD Foundation, Inc.

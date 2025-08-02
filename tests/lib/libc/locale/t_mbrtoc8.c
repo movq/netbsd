@@ -1,4 +1,4 @@
-/*	$NetBSD: t_mbrtoc8.c,v 1.3 2024/08/20 17:43:09 riastradh Exp $	*/
+/*	$NetBSD: t_mbrtoc8.c,v 1.3.6.2 2025/08/02 05:58:05 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2002 Tim J. Robbins
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_mbrtoc8.c,v 1.3 2024/08/20 17:43:09 riastradh Exp $");
+__RCSID("$NetBSD: t_mbrtoc8.c,v 1.3.6.2 2025/08/02 05:58:05 perseant Exp $");
 
 #include <errno.h>
 #include <inttypes.h>

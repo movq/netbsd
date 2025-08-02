@@ -1,4 +1,4 @@
-/* $NetBSD: qcomgpioreg.h,v 1.3 2024/12/17 22:05:11 riastradh Exp $ */
+/* $NetBSD: qcomgpioreg.h,v 1.3.4.2 2025/08/02 05:56:32 perseant Exp $ */
 /*
  * Copyright (c) 2022 Mark Kettenis <kettenis@openbsd.org>
  *

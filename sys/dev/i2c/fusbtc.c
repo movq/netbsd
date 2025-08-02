@@ -1,4 +1,4 @@
-/* $NetBSD: fusbtc.c,v 1.1 2025/06/03 19:22:22 rjs Exp $ */
+/* $NetBSD: fusbtc.c,v 1.1.4.2 2025/08/02 05:56:39 perseant Exp $ */
 /* $OpenBSD: fusbtc.c,v 1.1 2019/05/11 14:43:27 patrick Exp $ */
 /*
  * Copyright (c) 2019 Patrick Wildt <patrick@blueri.se>
@@ -27,7 +27,7 @@
 #include <dev/fdt/fdtvar.h>
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fusbtc.c,v 1.1 2025/06/03 19:22:22 rjs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fusbtc.c,v 1.1.4.2 2025/08/02 05:56:39 perseant Exp $");
 
 /* #define FUSB_DEBUG */
 

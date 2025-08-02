@@ -1,4 +1,4 @@
-/*	$NetBSD: signal.c,v 1.2 2025/01/26 16:25:38 christos Exp $	*/
+/*	$NetBSD: signal.c,v 1.2.4.2 2025/08/02 05:53:55 perseant Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

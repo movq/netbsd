@@ -1,4 +1,4 @@
-/*	$NetBSD: lwp_private.h,v 1.1 2024/11/30 01:04:07 christos Exp $	*/
+/*	$NetBSD: lwp_private.h,v 1.1.4.2 2025/08/02 05:55:28 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.

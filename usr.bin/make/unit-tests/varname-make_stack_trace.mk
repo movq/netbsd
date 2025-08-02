@@ -1,4 +1,4 @@
-# $NetBSD: varname-make_stack_trace.mk,v 1.1 2025/06/13 03:51:18 rillig Exp $
+# $NetBSD: varname-make_stack_trace.mk,v 1.1.4.2 2025/08/02 05:58:40 perseant Exp $
 #
 # Tests for the MAKE_STACK_TRACE environment variable, which controls whether
 # to print inter-process stack traces that are useful to narrow down where an

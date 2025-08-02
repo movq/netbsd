@@ -1,4 +1,4 @@
-/*	$NetBSD: lwp_private.h,v 1.1 2024/11/30 01:04:09 christos Exp $	*/
+/*	$NetBSD: lwp_private.h,v 1.1.4.2 2025/08/02 05:55:42 perseant Exp $	*/
 
 #ifndef _HPPA_LWP_PRIVATE_H_
 #define	_HPPA_LWP_PRIVATE_H_

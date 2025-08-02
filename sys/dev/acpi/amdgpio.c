@@ -1,4 +1,4 @@
-/*	$NetBSD: amdgpio.c,v 1.3 2025/03/02 13:47:35 riastradh Exp $	*/
+/*	$NetBSD: amdgpio.c,v 1.3.4.2 2025/08/02 05:56:32 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdgpio.c,v 1.3 2025/03/02 13:47:35 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdgpio.c,v 1.3.4.2 2025/08/02 05:56:32 perseant Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

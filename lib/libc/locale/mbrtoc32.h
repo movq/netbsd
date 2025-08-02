@@ -1,4 +1,4 @@
-/*	$NetBSD: mbrtoc32.h,v 1.2 2024/08/20 17:43:09 riastradh Exp $	*/
+/*	$NetBSD: mbrtoc32.h,v 1.2.6.2 2025/08/02 05:54:38 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.

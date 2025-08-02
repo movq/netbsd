@@ -1,4 +1,4 @@
-# $NetBSD: md.evbarm.earmv5eb,v 1.1 2024/10/07 09:14:22 skrll Exp $
+# $NetBSD: md.evbarm.earmv5eb,v 1.1.4.2 2025/08/02 05:20:31 perseant Exp $
 #
 ./usr/libdata/debug/netbsd-ADI_BRH.debug		comp-sysutil-debug	debug		
 ./usr/libdata/debug/netbsd-ADI_BRH_INSTALL.debug	comp-sysutil-debug	debug

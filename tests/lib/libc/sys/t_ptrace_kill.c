@@ -1,4 +1,4 @@
-/*	$NetBSD: t_ptrace_kill.c,v 1.2 2025/05/02 02:24:32 riastradh Exp $	*/
+/*	$NetBSD: t_ptrace_kill.c,v 1.2.4.2 2025/08/02 05:58:07 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_ptrace_kill.c,v 1.2 2025/05/02 02:24:32 riastradh Exp $");
+__RCSID("$NetBSD: t_ptrace_kill.c,v 1.2.4.2 2025/08/02 05:58:07 perseant Exp $");
 
 #include <sys/types.h>
 #include <sys/ptrace.h>

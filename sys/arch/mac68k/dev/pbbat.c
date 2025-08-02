@@ -1,4 +1,4 @@
-/* $NetBSD: pbbat.c,v 1.2 2025/04/09 00:10:02 nat Exp $ */
+/* $NetBSD: pbbat.c,v 1.2.4.2 2025/08/02 05:55:50 perseant Exp $ */
 
 /*-
  * Copyright (c) 2025 Nathanial Sloss <nathanialsloss@yahoo.com.au>
@@ -120,7 +120,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pbbat.c,v 1.2 2025/04/09 00:10:02 nat Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pbbat.c,v 1.2.4.2 2025/08/02 05:55:50 perseant Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

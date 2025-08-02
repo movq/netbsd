@@ -1,4 +1,4 @@
-/*	$NetBSD: msg_384.c,v 1.2 2025/01/03 03:14:47 rillig Exp $	*/
+/*	$NetBSD: msg_384.c,v 1.2.4.2 2025/08/02 05:58:19 perseant Exp $	*/
 # 3 "msg_384.c"
 
 // Test for message: function definition for '%s' with identifier list is obsolete in C23 [384]

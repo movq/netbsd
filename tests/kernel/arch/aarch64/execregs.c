@@ -1,4 +1,4 @@
-/*	$NetBSD: execregs.c,v 1.1 2025/02/27 00:55:31 riastradh Exp $	*/
+/*	$NetBSD: execregs.c,v 1.1.4.2 2025/08/02 05:58:02 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2025 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: execregs.c,v 1.1 2025/02/27 00:55:31 riastradh Exp $");
+__RCSID("$NetBSD: execregs.c,v 1.1.4.2 2025/08/02 05:58:02 perseant Exp $");
 
 #include "execregs.h"
 

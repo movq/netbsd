@@ -1,4 +1,4 @@
-/*	$NetBSD: t_regex_binary.c,v 1.1 2025/01/01 18:13:48 christos Exp $	*/
+/*	$NetBSD: t_regex_binary.c,v 1.1.4.2 2025/08/02 05:58:05 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_regex_binary.c,v 1.1 2025/01/01 18:13:48 christos Exp $");
+__RCSID("$NetBSD: t_regex_binary.c,v 1.1.4.2 2025/08/02 05:58:05 perseant Exp $");
 
 #include <atf-c.h>
 #include <regex.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: t_nanosleep.c,v 1.1 2024/10/09 13:02:53 kre Exp $ */
+/* $NetBSD: t_nanosleep.c,v 1.1.4.2 2025/08/02 05:58:01 perseant Exp $ */
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
 #include <sys/cdefs.h>
 __COPYRIGHT("@(#) Copyright (c) 2024\
  The NetBSD Foundation, inc. All rights reserved.");
-__RCSID("$NetBSD: t_nanosleep.c,v 1.1 2024/10/09 13:02:53 kre Exp $");
+__RCSID("$NetBSD: t_nanosleep.c,v 1.1.4.2 2025/08/02 05:58:01 perseant Exp $");
 
 #include <sys/types.h>
 #include <sys/wait.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: tc_bootdev.c,v 1.1 2025/03/09 01:06:42 thorpej Exp $ */
+/* $NetBSD: tc_bootdev.c,v 1.1.4.2 2025/08/02 05:55:23 perseant Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: tc_bootdev.c,v 1.1 2025/03/09 01:06:42 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tc_bootdev.c,v 1.1.4.2 2025/08/02 05:55:23 perseant Exp $");
 
 #include <sys/systm.h>
 #include <sys/device.h>

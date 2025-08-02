@@ -1,4 +1,4 @@
-/*	$NetBSD: execsp.S,v 1.3 2025/06/04 19:25:45 christos Exp $	*/
+/*	$NetBSD: execsp.S,v 1.3.4.2 2025/08/02 05:58:02 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2025 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
 
 #include <machine/asm.h>
 
-RCSID("$NetBSD: execsp.S,v 1.3 2025/06/04 19:25:45 christos Exp $")
+RCSID("$NetBSD: execsp.S,v 1.3.4.2 2025/08/02 05:58:02 perseant Exp $")
 
 /*
  * void execsp_start(void (*cleanup@x0)(void), void *obj_main@x1,

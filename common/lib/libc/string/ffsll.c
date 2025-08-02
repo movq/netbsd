@@ -1,4 +1,4 @@
-/*	$NetBSD: ffsll.c,v 1.1 2024/11/01 18:35:12 riastradh Exp $	*/
+/*	$NetBSD: ffsll.c,v 1.1.4.2 2025/08/02 05:18:34 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: ffsll.c,v 1.1 2024/11/01 18:35:12 riastradh Exp $");
+__RCSID("$NetBSD: ffsll.c,v 1.1.4.2 2025/08/02 05:18:34 perseant Exp $");
 
 #include <sys/bitops.h>
 

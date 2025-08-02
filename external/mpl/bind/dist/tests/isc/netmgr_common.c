@@ -1,4 +1,4 @@
-/*	$NetBSD: netmgr_common.c,v 1.4 2025/07/17 19:01:47 christos Exp $	*/
+/*	$NetBSD: netmgr_common.c,v 1.4.4.2 2025/08/02 05:54:16 perseant Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

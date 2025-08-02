@@ -1,4 +1,4 @@
-#	$NetBSD: t_r_rel.sh,v 1.2 2025/05/02 23:03:16 riastradh Exp $
+#	$NetBSD: t_r_rel.sh,v 1.2.4.2 2025/08/02 05:58:10 perseant Exp $
 #
 # Copyright (c) 2025 The NetBSD Foundation, Inc.
 # All rights reserved.

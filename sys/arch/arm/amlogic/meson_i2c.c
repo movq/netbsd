@@ -1,4 +1,4 @@
-/* $NetBSD: meson_i2c.c,v 1.2 2025/07/10 08:13:12 skrll Exp $ */
+/* $NetBSD: meson_i2c.c,v 1.2.4.2 2025/08/02 05:55:26 perseant Exp $ */
 
 /*-
  * Copyright (c) 2025 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: meson_i2c.c,v 1.2 2025/07/10 08:13:12 skrll Exp $");
+__KERNEL_RCSID(1, "$NetBSD: meson_i2c.c,v 1.2.4.2 2025/08/02 05:55:26 perseant Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

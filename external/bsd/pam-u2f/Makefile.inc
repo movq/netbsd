@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.1 2025/01/15 15:30:47 christos Exp $
+# $NetBSD: Makefile.inc,v 1.1.4.2 2025/08/02 05:23:08 perseant Exp $
 
 CPPFLAGS+= \
 -DPACKAGE_VERSION=\"1.3.1\" \

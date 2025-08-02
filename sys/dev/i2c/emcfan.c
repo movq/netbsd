@@ -1,4 +1,4 @@
-/*	$NetBSD: emcfan.c,v 1.2 2025/07/08 18:15:03 gutteridge Exp $	*/
+/*	$NetBSD: emcfan.c,v 1.2.4.2 2025/08/02 05:56:39 perseant Exp $	*/
 
 /*
  * Copyright (c) 2025 Brad Spencer <brad@anduin.eldar.org>
@@ -17,7 +17,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: emcfan.c,v 1.2 2025/07/08 18:15:03 gutteridge Exp $");
+__KERNEL_RCSID(0, "$NetBSD: emcfan.c,v 1.2.4.2 2025/08/02 05:56:39 perseant Exp $");
 
 /*
  * Driver for the EMC-210x and EMC-230x fan controllers on a

@@ -1,4 +1,4 @@
-/* $NetBSD: ikbd.c,v 1.1 2024/12/09 22:05:17 jmcneill Exp $ */
+/* $NetBSD: ikbd.c,v 1.1.4.2 2025/08/02 05:56:39 perseant Exp $ */
 
 /*	$OpenBSD: ikbd.c,v 1.2 2022/09/03 15:48:16 kettenis Exp $	*/
 /*

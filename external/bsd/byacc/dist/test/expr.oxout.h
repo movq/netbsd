@@ -1,4 +1,4 @@
-/*	$NetBSD: expr.oxout.h,v 1.2 2024/09/14 21:29:03 christos Exp $	*/
+/*	$NetBSD: expr.oxout.h,v 1.2.4.2 2025/08/02 05:20:55 perseant Exp $	*/
 
 /* testing only */
 

@@ -1,4 +1,4 @@
-/* $NetBSD: pcihost_fdt.c,v 1.1 2025/01/01 17:53:07 skrll Exp $ */
+/* $NetBSD: pcihost_fdt.c,v 1.1.4.2 2025/08/02 05:56:03 perseant Exp $ */
 
 /*-
  * Copyright (c) 2018 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcihost_fdt.c,v 1.1 2025/01/01 17:53:07 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcihost_fdt.c,v 1.1.4.2 2025/08/02 05:56:03 perseant Exp $");
 
 #include <sys/param.h>
 

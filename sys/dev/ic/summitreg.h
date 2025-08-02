@@ -1,4 +1,4 @@
-/*	$NetBSD: summitreg.h,v 1.16 2025/01/29 15:35:22 macallan Exp $	*/
+/*	$NetBSD: summitreg.h,v 1.16.4.2 2025/08/02 05:56:42 perseant Exp $	*/
 
 /*
  * Copyright (c) 2024 Michael Lorenz

@@ -1,4 +1,4 @@
-/*	$NetBSD: signalsphandler.S,v 1.2 2025/06/08 18:55:35 christos Exp $	*/
+/*	$NetBSD: signalsphandler.S,v 1.2.4.2 2025/08/02 05:58:02 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2025 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
 
 #include <machine/asm.h>
 
-RCSID("$NetBSD: signalsphandler.S,v 1.2 2025/06/08 18:55:35 christos Exp $")
+RCSID("$NetBSD: signalsphandler.S,v 1.2.4.2 2025/08/02 05:58:02 perseant Exp $")
 
 /*
  * signalsphandler(signo@x0)

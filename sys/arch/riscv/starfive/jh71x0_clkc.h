@@ -1,4 +1,4 @@
-/* $NetBSD: jh71x0_clkc.h,v 1.5 2024/10/12 18:07:24 skrll Exp $ */
+/* $NetBSD: jh71x0_clkc.h,v 1.5.4.2 2025/08/02 05:56:05 perseant Exp $ */
 
 /*-
  * Copyright (c) 2023 The NetBSD Foundation, Inc.

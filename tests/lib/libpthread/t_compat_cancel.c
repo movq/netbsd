@@ -1,4 +1,4 @@
-/*	$NetBSD: t_compat_cancel.c,v 1.3 2025/04/25 13:09:44 riastradh Exp $	*/
+/*	$NetBSD: t_compat_cancel.c,v 1.3.4.2 2025/08/02 05:58:09 perseant Exp $	*/
 
 /*
  * Copyright (c) 2025 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
 #define	__LIBC12_SOURCE__	/* expose compat declarations */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_compat_cancel.c,v 1.3 2025/04/25 13:09:44 riastradh Exp $");
+__RCSID("$NetBSD: t_compat_cancel.c,v 1.3.4.2 2025/08/02 05:58:09 perseant Exp $");
 
 #include <sys/event.h>
 #include <sys/mman.h>

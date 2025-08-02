@@ -1,4 +1,4 @@
-/*	$NetBSD: threadspfunc.S,v 1.1 2025/04/21 02:33:44 riastradh Exp $	*/
+/*	$NetBSD: threadspfunc.S,v 1.1.4.2 2025/08/02 05:58:02 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2025 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
 
 #include <machine/asm.h>
 
-RCSID("$NetBSD: threadspfunc.S,v 1.1 2025/04/21 02:33:44 riastradh Exp $")
+RCSID("$NetBSD: threadspfunc.S,v 1.1.4.2 2025/08/02 05:58:02 perseant Exp $")
 
 /*
  * void *threadspfunc(void *cookie@x0)

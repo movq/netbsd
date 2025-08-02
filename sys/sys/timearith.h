@@ -1,4 +1,4 @@
-/*	$NetBSD: timearith.h,v 1.1 2024/12/22 23:24:20 riastradh Exp $	*/
+/*	$NetBSD: timearith.h,v 1.1.4.2 2025/08/02 05:57:55 perseant Exp $	*/
 
 /*
  *  Copyright (c) 2005, 2008, 2020 The NetBSD Foundation, Inc.

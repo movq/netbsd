@@ -1,4 +1,4 @@
-/*	$NetBSD: t_ctype.c,v 1.11 2025/03/30 15:38:38 riastradh Exp $	*/
+/*	$NetBSD: t_ctype.c,v 1.11.4.2 2025/08/02 05:58:04 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2025 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_ctype.c,v 1.11 2025/03/30 15:38:38 riastradh Exp $");
+__RCSID("$NetBSD: t_ctype.c,v 1.11.4.2 2025/08/02 05:58:04 perseant Exp $");
 
 #include <atf-c.h>
 #include <ctype.h>

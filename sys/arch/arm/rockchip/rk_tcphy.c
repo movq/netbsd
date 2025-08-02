@@ -1,4 +1,4 @@
-/* $NetBSD: rk_tcphy.c,v 1.1 2025/06/03 19:10:26 rjs Exp $ */
+/* $NetBSD: rk_tcphy.c,v 1.1.4.2 2025/08/02 05:55:29 perseant Exp $ */
 /* $OpenBSD: rktcphy.c,v 1.2 2022/04/06 18:59:28 naddy Exp $ */
 /*-
  * SPDX-License-Identifier: BSD-2-Clause-FreeBSD

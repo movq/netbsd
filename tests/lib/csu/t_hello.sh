@@ -1,4 +1,4 @@
-#	$NetBSD: t_hello.sh,v 1.3 2025/05/02 23:04:06 riastradh Exp $
+#	$NetBSD: t_hello.sh,v 1.3.4.2 2025/08/02 05:58:03 perseant Exp $
 #
 # Copyright (c) 2025 The NetBSD Foundation, Inc.
 # All rights reserved.

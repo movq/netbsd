@@ -1,4 +1,4 @@
-# $NetBSD: char-005c-reverse-solidus.mk,v 1.2 2025/06/29 11:27:21 rillig Exp $
+# $NetBSD: char-005c-reverse-solidus.mk,v 1.2.4.2 2025/08/02 05:58:30 perseant Exp $
 #
 # Tests for the character U+005C "REVERSE SOLIDUS".
 #

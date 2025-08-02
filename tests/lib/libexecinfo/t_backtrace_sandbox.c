@@ -1,4 +1,4 @@
-/*	$NetBSD: t_backtrace_sandbox.c,v 1.3 2025/01/30 16:13:51 christos Exp $	*/
+/*	$NetBSD: t_backtrace_sandbox.c,v 1.3.4.2 2025/08/02 05:58:08 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2025 Kyle Evans <kevans@FreeBSD.org>
@@ -6,7 +6,7 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_backtrace_sandbox.c,v 1.3 2025/01/30 16:13:51 christos Exp $");
+__RCSID("$NetBSD: t_backtrace_sandbox.c,v 1.3.4.2 2025/08/02 05:58:08 perseant Exp $");
 
 #include <sys/param.h>
 #include <sys/wait.h>

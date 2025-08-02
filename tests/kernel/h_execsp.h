@@ -1,4 +1,4 @@
-/*	$NetBSD: h_execsp.h,v 1.2 2025/04/20 22:31:25 riastradh Exp $	*/
+/*	$NetBSD: h_execsp.h,v 1.2.4.2 2025/08/02 05:58:01 perseant Exp $	*/
 
 /*
  * Copyright (c) 2024 The NetBSD Foundation, Inc.

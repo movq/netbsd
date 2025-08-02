@@ -1,4 +1,4 @@
-/* $NetBSD: acpi_gpio.c,v 1.5 2024/12/15 10:15:55 hannken Exp $ */
+/* $NetBSD: acpi_gpio.c,v 1.5.4.2 2025/08/02 05:56:31 perseant Exp $ */
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
 #include "gpio.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_gpio.c,v 1.5 2024/12/15 10:15:55 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_gpio.c,v 1.5.4.2 2025/08/02 05:56:31 perseant Exp $");
 
 #include <sys/param.h>
 #include <sys/kmem.h>

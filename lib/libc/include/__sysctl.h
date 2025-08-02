@@ -1,4 +1,4 @@
-/*	$NetBSD: __sysctl.h,v 1.1 2025/05/02 23:04:56 riastradh Exp $	*/
+/*	$NetBSD: __sysctl.h,v 1.1.4.2 2025/08/02 05:54:37 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2025 The NetBSD Foundation, Inc.

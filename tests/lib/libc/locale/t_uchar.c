@@ -1,4 +1,4 @@
-/*	$NetBSD: t_uchar.c,v 1.3 2024/10/14 06:02:14 rillig Exp $	*/
+/*	$NetBSD: t_uchar.c,v 1.3.6.2 2025/08/02 05:58:05 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.
@@ -49,7 +49,7 @@ static size_t (*nbtest_c32rtomb)(char *restrict, char32_t,
     mbstate_t *restrict) __unused = &c32rtomb;
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_uchar.c,v 1.3 2024/10/14 06:02:14 rillig Exp $");
+__RCSID("$NetBSD: t_uchar.c,v 1.3.6.2 2025/08/02 05:58:05 perseant Exp $");
 
 #include <atf-c.h>
 #include <stdint.h>

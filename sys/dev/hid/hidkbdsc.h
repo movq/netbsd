@@ -1,5 +1,5 @@
 /*	$OpenBSD: hidkbdsc.h,v 1.3 2022/11/09 10:05:18 robert Exp $	*/
-/*      $NetBSD: hidkbdsc.h,v 1.1 2024/12/09 22:04:18 jmcneill Exp $        */
+/*      $NetBSD: hidkbdsc.h,v 1.1.4.2 2025/08/02 05:56:38 perseant Exp $        */
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

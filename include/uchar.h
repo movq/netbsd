@@ -1,4 +1,4 @@
-/*	$NetBSD: uchar.h,v 1.6 2024/10/13 22:00:38 riastradh Exp $	*/
+/*	$NetBSD: uchar.h,v 1.6.6.2 2025/08/02 05:54:28 perseant Exp $	*/
 
 /*-
  * Copyright (c) 2024 The NetBSD Foundation, Inc.

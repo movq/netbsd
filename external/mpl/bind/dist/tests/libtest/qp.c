@@ -1,4 +1,4 @@
-/*	$NetBSD: qp.c,v 1.2 2025/01/26 16:25:51 christos Exp $	*/
+/*	$NetBSD: qp.c,v 1.2.4.2 2025/08/02 05:54:18 perseant Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")

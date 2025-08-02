@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ncmreg.h,v 1.1 2025/01/20 13:54:55 maya Exp $ */
+/*	$NetBSD: if_ncmreg.h,v 1.1.4.2 2025/08/02 05:57:05 perseant Exp $ */
 
 /*-
  * Copyright (c) 2025 The NetBSD Foundation, Inc.
