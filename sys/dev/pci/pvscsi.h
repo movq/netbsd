@@ -3,7 +3,7 @@
  *
  * SPDX-License-Identifier: (BSD-2-Clause OR GPL-2.0)
  *
- * $NetBSD: pvscsi.h,v 1.1 2025/08/04 20:03:12 skrll Exp $
+ * $NetBSD: pvscsi.h,v 1.1.2.2 2025/08/08 14:19:54 martin Exp $
  */
 
 /*

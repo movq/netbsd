@@ -59,7 +59,7 @@ in the file called LICENSE.GPL.
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pvscsi.c,v 1.2 2025/08/05 08:30:23 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pvscsi.c,v 1.2.2.2 2025/08/08 14:19:54 martin Exp $");
 
 #include <sys/param.h>
 
