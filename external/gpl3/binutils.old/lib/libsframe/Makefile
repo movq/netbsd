@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2025/08/24 17:07:38 christos Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2025/08/24 17:07:38 christos Exp $
 
 NOLINT=		# defined
 NOPROFILE=	# defined

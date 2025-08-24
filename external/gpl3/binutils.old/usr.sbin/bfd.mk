@@ -1,4 +1,4 @@
-# $NetBSD: bfd.mk,v 1.1 2025/08/24 17:07:39 christos Exp $
+# $NetBSD: bfd.mk,v 1.1.1.1 2025/08/24 17:07:39 christos Exp $
 
 BFDSUBDIR=      lib
 
