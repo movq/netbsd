@@ -1,4 +1,4 @@
-/*	$NetBSD: now.c,v 1.1 2025/09/05 21:09:44 christos Exp $	*/
+/*	$NetBSD: now.c,v 1.1.1.1 2025/09/05 21:09:44 christos Exp $	*/
 
 /* $OpenLDAP$ */
 /*
