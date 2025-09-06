@@ -1,4 +1,4 @@
-/* $NetBSD: vnode.c,v 1.16.8.1 2024/06/29 19:43:25 perseant Exp $ */
+/* $NetBSD: vnode.c,v 1.16.8.2 2025/09/06 21:51:10 perseant Exp $ */
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -55,7 +55,7 @@
 #include "extern.h"
 #include "kernelops.h"
 
-struct uvnodetq vnodetq;
+struct uvnodelst vnodelist;
 struct uvnodelst getvnodelist[VNODE_HASH_MAX];
 struct vgrlst    vgrlist;
 
@@ -74,10 +74,8 @@ int
 raw_vop_strategy(struct ubuf * bp)
 {
 	if (bp->b_flags & B_READ) {
-		if (kops.ko_pread(bp->b_vp->v_fd, bp->b_data, bp->b_bcount,
-				  bp->b_blkno * dev_bsize) < bp->b_bcount)
-			return errno;
-		return 0;
+		return kops.ko_pread(bp->b_vp->v_fd, bp->b_data, bp->b_bcount,
+		    bp->b_blkno * dev_bsize);
 	} else {
 		return kops.ko_pwrite(bp->b_vp->v_fd, bp->b_data, bp->b_bcount,
 		    bp->b_blkno * dev_bsize);
@@ -100,36 +98,26 @@ raw_vop_bmap(struct uvnode * vp, daddr_t lbn, daddr_t * daddrp)
 	return 0;
 }
 
-/* Register fs-specific vnode create and destroy functions */
+/* Register a fs-specific vget function */
 void
-register_vget(void *fs, struct uvnode *getfunc(void *, ino_t, void *),
-	      int freefunc(struct uvnode *))
+register_vget(void *fs, struct uvnode *func(void *, ino_t))
 {
 	struct vget_reg *vgr;
 
 	vgr = emalloc(sizeof(*vgr));
 	vgr->vgr_fs = fs;
-	vgr->vgr_getfunc = getfunc;
-	vgr->vgr_freefunc = freefunc;
+	vgr->vgr_func = func;
 	LIST_INSERT_HEAD(&vgrlist, vgr, vgr_list);
 }
 
 static struct uvnode *
-VFS_VGET(void *fs, ino_t ino, void *arg)
+VFS_VGET(void *fs, ino_t ino)
 {
 	struct vget_reg *vgr;
-	struct uvnode *vp;
-	int hash;
 
 	LIST_FOREACH(vgr, &vgrlist, vgr_list) {
-		if (vgr->vgr_fs == fs) {
-			vp = vgr->vgr_getfunc(fs, ino, arg);
-			++nvnodes;
-			hash = ((int)(intptr_t)fs + ino) & (VNODE_HASH_MAX - 1);
-			LIST_INSERT_HEAD(&getvnodelist[hash], vp, v_getvnodes);
-			TAILQ_INSERT_HEAD(&vnodetq, vp, v_mntvnodes);
-			return vp;
-		}
+		if (vgr->vgr_fs == fs)
+			return vgr->vgr_func(fs, ino);
 	}
 	return NULL;
 }
@@ -137,12 +125,11 @@ VFS_VGET(void *fs, ino_t ino, void *arg)
 void
 vnode_destroy(struct uvnode *tossvp)
 {
-	struct vget_reg *vgr;
 	struct ubuf *bp;
 
 	--nvnodes;
 	LIST_REMOVE(tossvp, v_getvnodes);
-	TAILQ_REMOVE(&vnodetq, tossvp, v_mntvnodes);
+	LIST_REMOVE(tossvp, v_mntvnodes);
 	while ((bp = LIST_FIRST(&tossvp->v_dirtyblkhd)) != NULL) {
 		LIST_REMOVE(bp, b_vnbufs);
 		bremfree(bp);
@@ -153,15 +140,10 @@ vnode_destroy(struct uvnode *tossvp)
 		bremfree(bp);
 		buf_destroy(bp);
 	}
-	LIST_FOREACH(vgr, &vgrlist, vgr_list) {
-		if (vgr->vgr_fs == tossvp->v_fs) {
-			if (vgr->vgr_freefunc == NULL
-			    || vgr->vgr_freefunc(tossvp) == 0) {
-				free(tossvp->v_data);
-			}
-			break;
-		}
-	}
+	free(VTOI(tossvp)->inode_ext.lfs);
+	free(VTOI(tossvp)->i_din);
+	memset(VTOI(tossvp), 0, sizeof(struct inode));
+	free(tossvp->v_data);
 	memset(tossvp, 0, sizeof(*tossvp));
 	free(tossvp);
 }
@@ -175,62 +157,36 @@ int hits, misses;
 struct uvnode *
 vget(void *fs, ino_t ino)
 {
-	return vget3(fs, ino, NULL);
-}
-
-struct uvnode *
-vget3(void *fs, ino_t ino, void *arg)
-{
 	struct uvnode *vp, *tossvp;
 	int hash;
 
 	/* Look in the uvnode cache */
+	tossvp = NULL;
 	hash = ((unsigned long)fs + ino) & (VNODE_HASH_MAX - 1);
 	LIST_FOREACH(vp, &getvnodelist[hash], v_getvnodes) {
 		if (vp->v_fs != fs)
 			continue;
 		if (VTOI(vp)->i_number == ino) {
-			/* Move to the front of both lists */
+			/* Move to the front of the list */
 			LIST_REMOVE(vp, v_getvnodes);
 			LIST_INSERT_HEAD(&getvnodelist[hash], vp, v_getvnodes);
-			TAILQ_REMOVE(&vnodetq, vp, v_mntvnodes);
-			TAILQ_INSERT_HEAD(&vnodetq, vp, v_mntvnodes);
 			++hits;
 			break;
 		}
+		if (LIST_EMPTY(&vp->v_dirtyblkhd) &&
+		    vp->v_usecount == 0 &&
+		    !(vp->v_uflag & VU_DIROP))
+			tossvp = vp;
 	}
-
 	/* Don't let vnode list grow arbitrarily */
-	while (nvnodes > VNODE_CACHE_SIZE) {
-		TAILQ_FOREACH_REVERSE(tossvp, &vnodetq, uvnodetq, v_mntvnodes) {
-			if (LIST_EMPTY(&tossvp->v_dirtyblkhd) &&
-			    tossvp->v_usecount == 0 &&
-			    !(tossvp->v_uflag & VU_DIROP)) {
-				vnode_destroy(tossvp);
-				break;
-			}
-		}
-		if (tossvp == NULL)
-			break;
+	if (nvnodes > VNODE_CACHE_SIZE && tossvp) {
+		vnode_destroy(tossvp);
 	}
-	
 	if (vp)
 		return vp;
 
 	++misses;
-	return VFS_VGET(fs, ino, arg);
-}
-
-void
-vref(struct uvnode *vp)
-{
-	++vp->v_usecount;
-}
-
-void
-vrele(struct uvnode *vp)
-{
-	--vp->v_usecount;
+	return VFS_VGET(fs, ino);
 }
 
 void
@@ -239,7 +195,7 @@ vfs_init(void)
 	int i;
 
 	nvnodes = 0;
-	TAILQ_INIT(&vnodetq);
+	LIST_INIT(&vnodelist);
 	for (i = 0; i < VNODE_HASH_MAX; i++)
 		LIST_INIT(&getvnodelist[i]);
 	LIST_INIT(&vgrlist);
