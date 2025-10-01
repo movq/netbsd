@@ -1,4 +1,4 @@
-/*	$NetBSD: h_ctype_abuse.c,v 1.2 2025/09/15 17:32:01 riastradh Exp $	*/
+/*	$NetBSD: h_ctype_abuse.c,v 1.2.2.2 2025/10/01 17:41:14 martin Exp $	*/
 
 /*-
  * Copyright (c) 2025 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: h_ctype_abuse.c,v 1.2 2025/09/15 17:32:01 riastradh Exp $");
+__RCSID("$NetBSD: h_ctype_abuse.c,v 1.2.2.2 2025/10/01 17:41:14 martin Exp $");
 
 #include <ctype.h>
 #include <err.h>
