@@ -1,4 +1,4 @@
-/* $Id: imx23var.h,v 1.2 2013/10/07 17:36:40 matt Exp $ */
+/* $Id: imx23var.h,v 1.3 2025/10/09 06:15:17 skrll Exp $ */
 
 /*
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -44,6 +44,7 @@
 
 #ifndef _LOCORE
 #include <machine/bus_defs.h>
+#include <sys/device.h>
 
 extern struct bus_space imx23_bus_space;
 extern struct arm32_bus_dma_tag imx23_bus_dma_tag;
