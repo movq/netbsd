@@ -1,4 +1,4 @@
-/*	$NetBSD: paravirt_membar.h,v 1.1 2025/09/06 02:53:23 riastradh Exp $	*/
+/*	$NetBSD: paravirt_membar.h,v 1.1.2.2 2025/10/19 10:29:21 martin Exp $	*/
 
 /*-
  * Copyright (c) 2025 The NetBSD Foundation, Inc.
