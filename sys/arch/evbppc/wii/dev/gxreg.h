@@ -1,4 +1,4 @@
-/* $NetBSD: gxreg.h,v 1.1 2025/10/25 15:02:56 jmcneill Exp $ */
+/* $NetBSD: gxreg.h,v 1.1.2.2 2025/10/26 13:10:04 martin Exp $ */
 
 /*-
  * Copyright (c) 2025 Jared McNeill <jmcneill@invisible.ca>
