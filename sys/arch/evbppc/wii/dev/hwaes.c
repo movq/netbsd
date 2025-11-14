@@ -1,4 +1,4 @@
-/* $NetBSD: hwaes.c,v 1.1 2025/11/11 21:34:48 jmcneill Exp $ */
+/* $NetBSD: hwaes.c,v 1.1.2.2 2025/11/14 13:16:33 martin Exp $ */
 
 /*-
  * Copyright (c) 2025 Jared McNeill <jmcneill@invisible.ca>
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hwaes.c,v 1.1 2025/11/11 21:34:48 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hwaes.c,v 1.1.2.2 2025/11/14 13:16:33 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
