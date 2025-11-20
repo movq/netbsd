@@ -1,4 +1,4 @@
-/* $NetBSD: exi.h,v 1.1.2.2 2024/02/03 11:47:05 martin Exp $ */
+/* $NetBSD: exi.h,v 1.1.2.3 2025/11/20 18:26:50 martin Exp $ */
 
 /*-
  * Copyright (c) 2024 Jared McNeill <jmcneill@invisible.ca>
@@ -39,6 +39,7 @@ void exi_select(uint8_t, uint8_t);
 void exi_unselect(uint8_t);
 void exi_send_imm(uint8_t, uint8_t, const void *, size_t);
 void exi_recv_imm(uint8_t, uint8_t, void *, size_t);
+void exi_sendrecv_imm(uint8_t, uint8_t, const void *, void *, size_t);
 void exi_recv_dma(uint8_t, uint8_t, void *, size_t);
 
 #endif /* _WII_DEV_EXI_H_ */

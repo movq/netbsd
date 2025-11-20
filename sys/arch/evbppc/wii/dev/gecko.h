@@ -1,4 +1,4 @@
-/* $NetBSD: gecko.h,v 1.1 2025/11/15 17:59:24 jmcneill Exp $ */
+/* $NetBSD: gecko.h,v 1.1.4.2 2025/11/20 18:26:50 martin Exp $ */
 
 /*-
  * Copyright (c) 2025 Jared McNeill <jmcneill@invisible.ca>
