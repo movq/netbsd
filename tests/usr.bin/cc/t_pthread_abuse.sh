@@ -1,4 +1,4 @@
-#	$NetBSD: t_pthread_abuse.sh,v 1.1 2025/10/06 13:11:56 riastradh Exp $
+#	$NetBSD: t_pthread_abuse.sh,v 1.1.2.2 2025/11/20 18:46:43 martin Exp $
 #
 # Copyright (c) 2025 The NetBSD Foundation, Inc.
 # All rights reserved.

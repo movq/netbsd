@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2025/10/18 20:27:23 riastradh Exp $
+#	$NetBSD: Makefile,v 1.2.2.2 2025/11/20 18:46:41 martin Exp $
 #
 
 TESTSDIR=	${TESTSBASE}/lib/libpthread/weak
