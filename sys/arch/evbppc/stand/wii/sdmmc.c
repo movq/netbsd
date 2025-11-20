@@ -1,4 +1,4 @@
-/* $NetBSD: sdmmc.c,v 1.1 2025/11/16 20:11:47 jmcneill Exp $ */
+/* $NetBSD: sdmmc.c,v 1.1.2.2 2025/11/20 19:14:49 martin Exp $ */
 
 /*-
  * Copyright (c) 2025 Jared McNeill <jmcneill@invisible.ca>

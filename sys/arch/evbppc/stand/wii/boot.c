@@ -1,4 +1,4 @@
-/* $NetBSD: boot.c,v 1.2 2025/11/16 22:37:49 jmcneill Exp $ */
+/* $NetBSD: boot.c,v 1.2.2.2 2025/11/20 19:14:49 martin Exp $ */
 
 /*-
  * Copyright (c) 2025 Jared McNeill <jmcneill@invisible.ca>
