@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2025/11/16 20:11:47 jmcneill Exp $
+# $NetBSD: Makefile,v 1.1.4.2 2025/11/20 19:17:39 martin Exp $
 
 S=		${.CURDIR}/../../../..
 POWERPC=	${S}/arch/powerpc
