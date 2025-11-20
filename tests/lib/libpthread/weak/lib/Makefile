@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2025/10/06 13:16:44 riastradh Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2025/11/20 18:46:47 martin Exp $
 #
 
 MKPROFILE=	no		# XXX hack -- should be NOPROFILE

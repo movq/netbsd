@@ -1,4 +1,4 @@
-/*	$NetBSD: h_pthread_weak.c,v 1.1 2025/10/06 13:16:44 riastradh Exp $	*/
+/*	$NetBSD: h_pthread_weak.c,v 1.1.2.2 2025/11/20 18:46:47 martin Exp $	*/
 
 /*-
  * Copyright (c) 2025 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: h_pthread_weak.c,v 1.1 2025/10/06 13:16:44 riastradh Exp $");
+__RCSID("$NetBSD: h_pthread_weak.c,v 1.1.2.2 2025/11/20 18:46:47 martin Exp $");
 
 #define	_NETBSD_PTHREAD_CREATE_WEAK
 
