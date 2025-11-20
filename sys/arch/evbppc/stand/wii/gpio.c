@@ -1,4 +1,4 @@
-/* $NetBSD: gpio.c,v 1.2 2025/11/16 22:37:49 jmcneill Exp $ */
+/* $NetBSD: gpio.c,v 1.2.4.2 2025/11/20 19:17:40 martin Exp $ */
 
 /*-
  * Copyright (c) 2025 Jared McNeill <jmcneill@invisible.ca>

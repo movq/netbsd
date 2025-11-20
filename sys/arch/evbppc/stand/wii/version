@@ -1,4 +1,4 @@
-$NetBSD: version,v 1.2 2025/11/16 22:37:49 jmcneill Exp $
+$NetBSD: version,v 1.2.4.2 2025/11/20 19:17:40 martin Exp $
 
 NOTE ANY CHANGES YOU MAKE TO THE WII BOOTLOADER HERE.  The format of this
 file is important - make sure the entries are appended on end, last item
