@@ -1,4 +1,4 @@
-/* $NetBSD: gcpad_rdesc.h,v 1.1 2025/12/08 23:00:22 jmcneill Exp $ */
+/* $NetBSD: gcpad_rdesc.h,v 1.1.2.2 2025/12/12 18:38:56 martin Exp $ */
 
 /*-
  * Copyright (c) 2025 Jared McNeill <jmcneill@invisible.ca>
