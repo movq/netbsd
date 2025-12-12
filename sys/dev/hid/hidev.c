@@ -1,4 +1,4 @@
-/* $NetBSD: hidev.c,v 1.2 2025/12/07 19:59:51 jmcneill Exp $ */
+/* $NetBSD: hidev.c,v 1.2.2.2 2025/12/12 18:35:58 martin Exp $ */
 
 /*-
  * Copyright (c) 2025 Jared McNeill <jmcneill@invisible.ca>
