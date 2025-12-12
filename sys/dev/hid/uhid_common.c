@@ -1,4 +1,4 @@
-/*	$NetBSD: uhid_common.c,v 1.1 2025/12/07 10:05:10 jmcneill Exp $	*/
+/*	$NetBSD: uhid_common.c,v 1.1.2.2 2025/12/12 18:35:58 martin Exp $	*/
 
 /*
  * Copyright (c) 1998, 2004, 2008, 2012 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uhid_common.c,v 1.1 2025/12/07 10:05:10 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uhid_common.c,v 1.1.2.2 2025/12/12 18:35:58 martin Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_hid.h"
