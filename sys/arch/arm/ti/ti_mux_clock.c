@@ -1,4 +1,4 @@
-/* $NetBSD: ti_mux_clock.c,v 1.3 2025/11/22 14:37:22 skrll Exp $ */
+/* $NetBSD: ti_mux_clock.c,v 1.4 2025/12/16 12:20:22 skrll Exp $ */
 
 /*-
  * Copyright (c) 2019 Jared McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ti_mux_clock.c,v 1.3 2025/11/22 14:37:22 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ti_mux_clock.c,v 1.4 2025/12/16 12:20:22 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -85,6 +85,7 @@ CFATTACH_DECL_NEW(ti_mux_clock, sizeof(struct ti_mux_clock_softc),
     ti_mux_clock_match, ti_mux_clock_attach, NULL, NULL);
 
 static const struct device_compatible_entry compat_data[] = {
+	{ .compat = "ti,composite-mux-clock" },
 	{ .compat = "ti,mux-clock" },
 	DEVICE_COMPAT_EOL
 };
