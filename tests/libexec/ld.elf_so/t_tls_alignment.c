@@ -1,4 +1,4 @@
-/*	$NetBSD: t_tls_alignment.c,v 1.1 2025/12/06 10:35:20 skrll Exp $	*/
+/*	$NetBSD: t_tls_alignment.c,v 1.1.2.2 2025/12/18 18:14:22 martin Exp $	*/
 
 /*
  * Copyright (c) 2025 The NetBSD Foundation, Inc.
