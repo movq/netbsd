@@ -1,4 +1,4 @@
-/*	$NetBSD: t_dlclose_thread.c,v 1.1 2025/11/23 22:01:13 riastradh Exp $	*/
+/*	$NetBSD: t_dlclose_thread.c,v 1.1.2.2 2025/12/18 18:03:33 martin Exp $	*/
 
 /*-
  * Copyright (c) 2025 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_dlclose_thread.c,v 1.1 2025/11/23 22:01:13 riastradh Exp $");
+__RCSID("$NetBSD: t_dlclose_thread.c,v 1.1.2.2 2025/12/18 18:03:33 martin Exp $");
 
 #include <atf-c.h>
 #include <dlfcn.h>
