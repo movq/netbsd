@@ -1,4 +1,4 @@
-/*	$NetBSD: k3-pinctrl.h,v 1.1 2026/01/18 05:26:29 skrll Exp $	*/
+/*	$NetBSD: k3-pinctrl.h,v 1.1.1.1 2026/01/18 05:26:29 skrll Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0-only OR MIT */
 /*

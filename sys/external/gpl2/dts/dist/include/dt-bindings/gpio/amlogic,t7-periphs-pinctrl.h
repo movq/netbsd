@@ -1,4 +1,4 @@
-/*	$NetBSD: amlogic,t7-periphs-pinctrl.h,v 1.1 2026/01/18 05:21:44 skrll Exp $	*/
+/*	$NetBSD: amlogic,t7-periphs-pinctrl.h,v 1.1.1.1 2026/01/18 05:21:44 skrll Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0-only OR MIT) */
 /*

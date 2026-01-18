@@ -1,4 +1,4 @@
-/*	$NetBSD: mt2712-resets.h,v 1.1 2026/01/18 05:21:54 skrll Exp $	*/
+/*	$NetBSD: mt2712-resets.h,v 1.1.1.1 2026/01/18 05:21:54 skrll Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 /*

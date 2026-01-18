@@ -1,4 +1,4 @@
-/*	$NetBSD: imx7ulp-pinfunc.h,v 1.1 2026/01/18 05:23:10 skrll Exp $	*/
+/*	$NetBSD: imx7ulp-pinfunc.h,v 1.1.1.1 2026/01/18 05:23:10 skrll Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*

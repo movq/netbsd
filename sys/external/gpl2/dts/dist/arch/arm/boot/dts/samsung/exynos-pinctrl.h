@@ -1,4 +1,4 @@
-/*	$NetBSD: exynos-pinctrl.h,v 1.1 2026/01/18 05:23:41 skrll Exp $	*/
+/*	$NetBSD: exynos-pinctrl.h,v 1.1.1.1 2026/01/18 05:23:41 skrll Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 /*

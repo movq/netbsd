@@ -1,4 +1,4 @@
-/*	$NetBSD: mxs-pinfunc.h,v 1.1 2026/01/18 05:23:15 skrll Exp $	*/
+/*	$NetBSD: mxs-pinfunc.h,v 1.1.1.1 2026/01/18 05:23:15 skrll Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*

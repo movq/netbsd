@@ -1,4 +1,4 @@
-/*	$NetBSD: sama5d2-pinfunc.h,v 1.1 2026/01/18 05:22:37 skrll Exp $	*/
+/*	$NetBSD: sama5d2-pinfunc.h,v 1.1.1.1 2026/01/18 05:22:37 skrll Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 #define PINMUX_PIN(no, func, ioset) \

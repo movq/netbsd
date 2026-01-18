@@ -1,4 +1,4 @@
-/*	$NetBSD: thead,th1520-clk-ap.h,v 1.1 2026/01/18 05:21:43 skrll Exp $	*/
+/*	$NetBSD: thead,th1520-clk-ap.h,v 1.1.1.1 2026/01/18 05:21:43 skrll Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
 /*

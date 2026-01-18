@@ -1,4 +1,4 @@
-/*	$NetBSD: qcom,sm8450.h,v 1.1 2026/01/18 05:21:46 skrll Exp $	*/
+/*	$NetBSD: qcom,sm8450.h,v 1.1.1.1 2026/01/18 05:21:46 skrll Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
 /*

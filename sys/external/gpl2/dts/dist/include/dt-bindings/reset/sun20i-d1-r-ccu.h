@@ -1,4 +1,4 @@
-/*	$NetBSD: sun20i-d1-r-ccu.h,v 1.1 2024/08/12 10:55:56 skrll Exp $	*/
+/*	$NetBSD: sun20i-d1-r-ccu.h,v 1.1.1.1 2026/01/18 05:21:56 skrll Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0+ OR MIT) */
 /*

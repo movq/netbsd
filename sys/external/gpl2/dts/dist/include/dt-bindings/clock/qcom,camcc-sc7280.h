@@ -1,4 +1,4 @@
-/*	$NetBSD: qcom,camcc-sc7280.h,v 1.1 2026/01/18 05:21:34 skrll Exp $	*/
+/*	$NetBSD: qcom,camcc-sc7280.h,v 1.1.1.1 2026/01/18 05:21:34 skrll Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
 /*

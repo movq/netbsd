@@ -1,4 +1,4 @@
-/*	$NetBSD: nuvoton,npcm845-clk.h,v 1.1 2026/01/18 05:21:33 skrll Exp $	*/
+/*	$NetBSD: nuvoton,npcm845-clk.h,v 1.1.1.1 2026/01/18 05:21:33 skrll Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
 /*

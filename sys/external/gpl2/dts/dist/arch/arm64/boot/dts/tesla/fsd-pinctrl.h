@@ -1,4 +1,4 @@
-/*	$NetBSD: fsd-pinctrl.h,v 1.1 2026/01/18 05:26:18 skrll Exp $	*/
+/*	$NetBSD: fsd-pinctrl.h,v 1.1.1.1 2026/01/18 05:26:18 skrll Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 /*

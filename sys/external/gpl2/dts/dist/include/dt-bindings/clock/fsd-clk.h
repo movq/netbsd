@@ -1,4 +1,4 @@
-/*	$NetBSD: fsd-clk.h,v 1.1 2026/01/18 05:21:29 skrll Exp $	*/
+/*	$NetBSD: fsd-clk.h,v 1.1.1.1 2026/01/18 05:21:29 skrll Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 /*

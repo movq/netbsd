@@ -1,4 +1,4 @@
-/*	$NetBSD: imx95-power.h,v 1.1 2026/01/18 05:24:48 skrll Exp $	*/
+/*	$NetBSD: imx95-power.h,v 1.1.1.1 2026/01/18 05:24:48 skrll Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0-only OR MIT) */
 /*

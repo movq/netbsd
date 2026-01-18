@@ -1,4 +1,4 @@
-/*	$NetBSD: ste-db8500-clkout.h,v 1.1 2026/01/18 05:21:41 skrll Exp $	*/
+/*	$NetBSD: ste-db8500-clkout.h,v 1.1.1.1 2026/01/18 05:21:41 skrll Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 #ifndef __STE_CLK_DB8500_CLKOUT_H__
