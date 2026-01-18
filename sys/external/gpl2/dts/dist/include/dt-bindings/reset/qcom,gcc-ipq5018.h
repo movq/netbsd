@@ -1,4 +1,4 @@
-/*	$NetBSD: qcom,gcc-ipq5018.h,v 1.1 2026/01/18 05:21:55 skrll Exp $	*/
+/*	$NetBSD: qcom,gcc-ipq5018.h,v 1.1.1.1 2026/01/18 05:21:55 skrll Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
 /*

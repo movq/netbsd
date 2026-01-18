@@ -1,4 +1,4 @@
-/*	$NetBSD: cirrus,ep9301-syscon.h,v 1.1 2026/01/18 05:21:28 skrll Exp $	*/
+/*	$NetBSD: cirrus,ep9301-syscon.h,v 1.1.1.1 2026/01/18 05:21:28 skrll Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0 OR MIT) */
 #ifndef DT_BINDINGS_CIRRUS_EP93XX_CLOCK_H

@@ -1,4 +1,4 @@
-/*	$NetBSD: r8a779f0-cpg-mssr.h,v 1.1 2026/01/18 05:21:38 skrll Exp $	*/
+/*	$NetBSD: r8a779f0-cpg-mssr.h,v 1.1.1.1 2026/01/18 05:21:38 skrll Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0 OR MIT) */
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: tegra241-gpio.h,v 1.1 2026/01/18 05:21:44 skrll Exp $	*/
+/*	$NetBSD: tegra241-gpio.h,v 1.1.1.1 2026/01/18 05:21:44 skrll Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 /* Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved. */

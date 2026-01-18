@@ -1,4 +1,4 @@
-/*	$NetBSD: microchip,sama7g5-otpc.h,v 1.1 2026/01/18 05:21:50 skrll Exp $	*/
+/*	$NetBSD: microchip,sama7g5-otpc.h,v 1.1.1.1 2026/01/18 05:21:50 skrll Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
 

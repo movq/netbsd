@@ -1,4 +1,4 @@
-/*	$NetBSD: sunplus,sp7021-clkc.h,v 1.1 2026/01/18 05:21:42 skrll Exp $	*/
+/*	$NetBSD: sunplus,sp7021-clkc.h,v 1.1.1.1 2026/01/18 05:21:42 skrll Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
 /*

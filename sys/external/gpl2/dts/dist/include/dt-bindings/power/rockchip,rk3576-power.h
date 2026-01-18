@@ -1,4 +1,4 @@
-/*	$NetBSD: rockchip,rk3576-power.h,v 1.1 2026/01/18 05:21:54 skrll Exp $	*/
+/*	$NetBSD: rockchip,rk3576-power.h,v 1.1.1.1 2026/01/18 05:21:54 skrll Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0 OR MIT) */
 #ifndef __DT_BINDINGS_POWER_RK3576_POWER_H__

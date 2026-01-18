@@ -1,4 +1,4 @@
-/*	$NetBSD: mt8186-memory-port.h,v 1.1 2026/01/18 05:21:48 skrll Exp $	*/
+/*	$NetBSD: mt8186-memory-port.h,v 1.1.1.1 2026/01/18 05:21:48 skrll Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*

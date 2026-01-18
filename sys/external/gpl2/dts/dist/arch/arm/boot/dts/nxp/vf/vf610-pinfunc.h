@@ -1,4 +1,4 @@
-/*	$NetBSD: vf610-pinfunc.h,v 1.1 2026/01/18 05:23:16 skrll Exp $	*/
+/*	$NetBSD: vf610-pinfunc.h,v 1.1.1.1 2026/01/18 05:23:16 skrll Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*

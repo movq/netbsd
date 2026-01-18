@@ -1,4 +1,4 @@
-/*	$NetBSD: tegra234-bpmp-thermal.h,v 1.1 2026/01/18 05:21:57 skrll Exp $	*/
+/*	$NetBSD: tegra234-bpmp-thermal.h,v 1.1.1.1 2026/01/18 05:21:57 skrll Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 /*

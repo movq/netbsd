@@ -1,4 +1,4 @@
-/*	$NetBSD: multi-die-cpp.h,v 1.1 2026/01/18 05:24:21 skrll Exp $	*/
+/*	$NetBSD: multi-die-cpp.h,v 1.1.1.1 2026/01/18 05:24:21 skrll Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0+ OR MIT
  *

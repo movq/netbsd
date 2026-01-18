@@ -1,4 +1,4 @@
-/*	$NetBSD: st-pincfg.h,v 1.1 2026/01/18 05:23:50 skrll Exp $	*/
+/*	$NetBSD: st-pincfg.h,v 1.1.1.1 2026/01/18 05:23:50 skrll Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 #ifndef _ST_PINCFG_H_

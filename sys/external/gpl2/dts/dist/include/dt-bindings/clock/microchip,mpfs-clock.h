@@ -1,4 +1,4 @@
-/*	$NetBSD: microchip,mpfs-clock.h,v 1.1 2024/08/12 10:55:56 skrll Exp $	*/
+/*	$NetBSD: microchip,mpfs-clock.h,v 1.1.1.1 2026/01/18 05:21:32 skrll Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
 /*

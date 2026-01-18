@@ -1,4 +1,4 @@
-/*	$NetBSD: qcom,ipq9574.h,v 1.1 2026/01/18 05:21:45 skrll Exp $	*/
+/*	$NetBSD: qcom,ipq9574.h,v 1.1.1.1 2026/01/18 05:21:45 skrll Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
 #ifndef INTERCONNECT_QCOM_IPQ9574_H
