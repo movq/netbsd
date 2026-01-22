@@ -1,4 +1,4 @@
-#	$NetBSD: diskproto2sunlabel.awk,v 1.1 2026/01/13 14:09:02 tsutsui Exp $
+#	$NetBSD: diskproto2sunlabel.awk,v 1.1.2.2 2026/01/22 20:24:45 martin Exp $
 #
 # Copyright (c) 2026 Izumi Tsutsui.  All rights reserved.
 #
