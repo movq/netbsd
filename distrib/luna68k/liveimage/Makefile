@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2026/01/18 14:56:16 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.2.2.2 2026/01/25 16:31:06 martin Exp $
 
 LIVEIMGBASE=	NetBSD-${DISTRIBVER}-luna68k-live	# gives ${IMGBASE}.img
 

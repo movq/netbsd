@@ -1,4 +1,4 @@
-# $NetBSD: diskproto.in,v 1.1 2026/01/18 00:12:11 tsutsui Exp $
+# $NetBSD: diskproto.in,v 1.1.2.2 2026/01/25 16:31:06 martin Exp $
 type: SCSI
 disk: liveimage
 label:
