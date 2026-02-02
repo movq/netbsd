@@ -1,4 +1,4 @@
-#	$NetBSD: t_libm_cabs.sh,v 1.1 2026/01/27 20:01:47 mrg Exp $
+#	$NetBSD: t_libm_cabs.sh,v 1.1.2.2 2026/02/02 20:20:21 martin Exp $
 #
 # Copyright (c) 2026 Matthew R. Green
 # All rights reserved.
