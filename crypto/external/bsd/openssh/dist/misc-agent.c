@@ -1,4 +1,4 @@
-/*	$NetBSD: misc-agent.c,v 1.2 2025/10/11 15:45:06 christos Exp $	*/
+/*	$NetBSD: misc-agent.c,v 1.2.2.2 2026/02/02 18:08:00 martin Exp $	*/
 /* $OpenBSD: misc-agent.c,v 1.6 2025/06/17 01:19:27 djm Exp $ */
 
 /*
@@ -18,7 +18,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: misc-agent.c,v 1.2 2025/10/11 15:45:06 christos Exp $");
+__RCSID("$NetBSD: misc-agent.c,v 1.2.2.2 2026/02/02 18:08:00 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/socket.h>
