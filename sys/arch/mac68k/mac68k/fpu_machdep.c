@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu_machdep.c,v 1.1 2011/11/15 12:23:22 tsutsui Exp $	*/
+/*	$NetBSD: fpu_machdep.c,v 1.2 2026/03/21 20:14:56 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fpu_machdep.c,v 1.1 2011/11/15 12:23:22 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fpu_machdep.c,v 1.2 2026/03/21 20:14:56 thorpej Exp $");
 
 #include "opt_fpu_emulate.h"
 
@@ -51,14 +51,14 @@ extern label_t *nofault;
 
 static const char *fpu_descr[] = {
 #ifdef	FPU_EMULATE
-	[FPU_NONE] = "emulator",
+	[FPU_NONE]    = "emulator",
 #else
-	[FPU_NONE] = "no math support",
+	[FPU_NONE]    = "no math support",
 #endif
-	[FPU_68881] = "mc68881",
-	[FPU_68882] = "mc68882",
-	[FPU_68040] = "mc68040",
-	[FPU_68060] = "mc68060",
+	[FPU_68881]   = "mc68881",
+	[FPU_68882]   = "mc68882",
+	[FPU_68040]   = "mc68040",
+	[FPU_68060]   = "mc68060",
 	[FPU_UNKNOWN] = "unknown"
 };
 
@@ -67,16 +67,10 @@ initfpu(void)
 {
 	const char *descr;
 
-	fputype = fpu_probe();
+	fpu_init();
+	KASSERT(fputype >= 0 && fputype < __arraycount(fpu_descr));
 
-	/* Generate a reference FPU idle frame. */
-	if (fputype != FPU_NONE)
-		m68k_make_fpu_idle_frame();
-
-	if ((0 <= fputype) && (fputype <= 3))
-		descr = fpu_descr[fputype];
-	else
-		descr = "unknown type";
+	descr = fpu_descr[fputype];
 
 	printf("fpu: %s\n", descr);
 }
