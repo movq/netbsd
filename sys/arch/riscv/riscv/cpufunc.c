@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufunc.c,v 1.3 2026/03/28 07:17:21 skrll Exp $	*/
+/*	$NetBSD: cpufunc.c,v 1.3.2.2 2026/04/02 18:13:21 martin Exp $	*/
 
 /*-
  * Copyright (c) 2026 The NetBSD Foundation, Inc.
@@ -59,7 +59,7 @@
 #include "opt_riscv_debug.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpufunc.c,v 1.3 2026/03/28 07:17:21 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpufunc.c,v 1.3.2.2 2026/04/02 18:13:21 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -116,7 +116,7 @@ thead_dcache_wbinv_range(vaddr_t va, vsize_t sz)
 		    : "a0","memory");
 	}
 
-	asm volatile(".long 0x0190000b" ::: "memory");  /* sync.s */
+	asm volatile("fence rw, rw" ::: "memory");
 }
 
 static void
@@ -139,7 +139,7 @@ thead_dcache_inv_range(vaddr_t va, vsize_t sz)
 		    : "a0", "memory");
 	}
 
-	asm volatile(".long 0x0190000b" ::: "memory");  /* sync.s */
+	asm volatile("fence rw, rw" ::: "memory");
 }
 
 static void
@@ -162,7 +162,7 @@ thead_dcache_wb_range(vaddr_t va, vsize_t sz)
 		    : "a0", "memory");
 	}
 
-	asm volatile(".long 0x0190000b" ::: "memory");  /* sync.s */
+	asm volatile("fence rw, rw" ::: "memory");
 }
 
 
