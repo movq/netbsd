@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.58 2025/11/16 16:25:30 thorpej Exp $	*/
+/*	$NetBSD: cpu.h,v 1.59 2026/04/23 02:54:39 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -68,7 +68,6 @@
 
 #ifdef _KERNEL
 extern	int machineid;
-extern	int cpuspeed;
 extern	char *intiobase;
 extern	u_int intiobase_phys;
 extern	u_int intiosize;
