@@ -1,4 +1,4 @@
-/*	$NetBSD: lafe_getline.c,v 1.1 2026/05/03 14:37:18 christos Exp $	*/
+/*	$NetBSD: lafe_getline.c,v 1.1.1.1 2026/05/03 14:37:18 christos Exp $	*/
 
 /*-
  * SPDX-License-Identifier: BSD-2-Clause
