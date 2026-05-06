@@ -1,4 +1,4 @@
-/* $NetBSD: fixup.c,v 1.3 2026/01/18 19:19:09 jmcneill Exp $ */
+/* $NetBSD: fixup.c,v 1.3.2.2 2026/05/06 17:18:04 martin Exp $ */
 
 /*-
  * Copyright (c) 2026 Jared McNeill <jmcneill@invisible.ca>
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: fixup.c,v 1.3 2026/01/18 19:19:09 jmcneill Exp $");
+__RCSID("$NetBSD: fixup.c,v 1.3.2.2 2026/05/06 17:18:04 martin Exp $");
 #endif
 
 #include <sys/types.h>
