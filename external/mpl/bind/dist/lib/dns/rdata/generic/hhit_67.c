@@ -1,4 +1,4 @@
-/*	$NetBSD: hhit_67.c,v 1.3 2026/04/08 00:16:15 christos Exp $	*/
+/*	$NetBSD: hhit_67.c,v 1.3.2.2 2026/05/07 16:18:44 martin Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
