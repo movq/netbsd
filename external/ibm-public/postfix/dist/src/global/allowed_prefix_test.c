@@ -1,4 +1,4 @@
-/*	$NetBSD: allowed_prefix_test.c,v 1.1 2026/05/09 18:39:17 christos Exp $	*/
+/*	$NetBSD: allowed_prefix_test.c,v 1.1.1.1 2026/05/09 18:39:17 christos Exp $	*/
 
 /*++
 /* NAME
