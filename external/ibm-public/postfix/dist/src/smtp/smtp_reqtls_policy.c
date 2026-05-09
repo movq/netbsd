@@ -1,4 +1,4 @@
-/*	$NetBSD: smtp_reqtls_policy.c,v 1.1 2026/05/09 18:39:21 christos Exp $	*/
+/*	$NetBSD: smtp_reqtls_policy.c,v 1.1.1.1 2026/05/09 18:39:21 christos Exp $	*/
 
 /*++
 /* NAME
