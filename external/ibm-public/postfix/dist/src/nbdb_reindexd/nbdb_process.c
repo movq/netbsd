@@ -1,4 +1,4 @@
-/*	$NetBSD: nbdb_process.c,v 1.2 2026/05/09 18:49:17 christos Exp $	*/
+/*	$NetBSD: nbdb_process.c,v 1.2.2.2 2026/05/11 17:13:51 martin Exp $	*/
 
 /*++
 /* NAME

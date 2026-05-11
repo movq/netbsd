@@ -1,4 +1,4 @@
-/*	$NetBSD: nbdb_safe_test.c,v 1.2 2026/05/09 18:49:17 christos Exp $	*/
+/*	$NetBSD: nbdb_safe_test.c,v 1.2.2.2 2026/05/11 17:13:51 martin Exp $	*/
 
 /*++
 /*	nbdb_safe_test 1t

@@ -1,4 +1,4 @@
-/*	$NetBSD: allowed_prefix.h,v 1.2 2026/05/09 18:49:15 christos Exp $	*/
+/*	$NetBSD: allowed_prefix.h,v 1.2.2.2 2026/05/11 17:13:47 martin Exp $	*/
 
 #ifndef _ALLOWED_PARENT_H_INCLUDED_
 #define _ALLOWED_PARENT_H_INCLUDED_

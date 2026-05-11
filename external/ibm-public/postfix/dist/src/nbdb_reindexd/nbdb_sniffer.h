@@ -1,4 +1,4 @@
-/*	$NetBSD: nbdb_sniffer.h,v 1.2 2026/05/09 18:49:17 christos Exp $	*/
+/*	$NetBSD: nbdb_sniffer.h,v 1.2.2.2 2026/05/11 17:13:52 martin Exp $	*/
 
 #ifndef _NBDB_SNIFFER_H_INCLUDED_
 #define _NBDB_SNIFFER_H_INCLUDED_

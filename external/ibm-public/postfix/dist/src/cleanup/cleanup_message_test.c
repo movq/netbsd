@@ -1,4 +1,4 @@
-/*	$NetBSD: cleanup_message_test.c,v 1.2 2026/05/09 18:49:15 christos Exp $	*/
+/*	$NetBSD: cleanup_message_test.c,v 1.2.2.2 2026/05/11 17:13:46 martin Exp $	*/
 
 /*++
 /* NAME

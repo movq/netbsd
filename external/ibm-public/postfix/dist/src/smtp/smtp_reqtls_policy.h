@@ -1,4 +1,4 @@
-/*	$NetBSD: smtp_reqtls_policy.h,v 1.2 2026/05/09 18:49:20 christos Exp $	*/
+/*	$NetBSD: smtp_reqtls_policy.h,v 1.2.2.2 2026/05/11 17:13:58 martin Exp $	*/
 
 #ifndef _SMTP_REQTLS_POLICY_INCLUDED_
 #define _SMTP_REQTLS_POLICY_INCLUDED_

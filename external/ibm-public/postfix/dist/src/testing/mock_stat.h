@@ -1,4 +1,4 @@
-/*	$NetBSD: mock_stat.h,v 1.2 2026/05/09 18:49:21 christos Exp $	*/
+/*	$NetBSD: mock_stat.h,v 1.2.2.2 2026/05/11 17:13:59 martin Exp $	*/
 
 #ifndef _MOCK_STAT_H_INCLUDED_
 #define _MOCK_STAT_H_INCLUDED_
