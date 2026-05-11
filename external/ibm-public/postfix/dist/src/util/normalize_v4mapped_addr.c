@@ -1,4 +1,4 @@
-/*	$NetBSD: normalize_v4mapped_addr.c,v 1.2 2026/05/09 18:49:23 christos Exp $	*/
+/*	$NetBSD: normalize_v4mapped_addr.c,v 1.2.2.2 2026/05/11 17:14:04 martin Exp $	*/
 
 /*++
 /* NAME

@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_sqlite_test.c,v 1.2 2026/05/09 18:49:16 christos Exp $	*/
+/*	$NetBSD: dict_sqlite_test.c,v 1.2.2.2 2026/05/11 17:13:47 martin Exp $	*/
 
 /*++
 /* NAME

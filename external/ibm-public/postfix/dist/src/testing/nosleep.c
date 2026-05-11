@@ -1,4 +1,4 @@
-/*	$NetBSD: nosleep.c,v 1.2 2026/05/09 18:49:21 christos Exp $	*/
+/*	$NetBSD: nosleep.c,v 1.2.2.2 2026/05/11 17:14:00 martin Exp $	*/
 
 /*++
 /* NAME

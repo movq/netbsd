@@ -1,4 +1,4 @@
-/*	$NetBSD: wrap_stat.h,v 1.2 2026/05/09 18:49:23 christos Exp $	*/
+/*	$NetBSD: wrap_stat.h,v 1.2.2.2 2026/05/11 17:14:05 martin Exp $	*/
 
 #ifndef _WRAP_STAT_H_INCLUDED_
 #define _WRAP_STAT_H_INCLUDED_

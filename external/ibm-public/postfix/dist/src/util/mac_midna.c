@@ -1,4 +1,4 @@
-/*	$NetBSD: mac_midna.c,v 1.2 2026/05/09 18:49:22 christos Exp $	*/
+/*	$NetBSD: mac_midna.c,v 1.2.2.2 2026/05/11 17:14:03 martin Exp $	*/
 
 /*++
 /* NAME

@@ -1,4 +1,4 @@
-/*	$NetBSD: msg_capture.h,v 1.2 2026/05/09 18:49:21 christos Exp $	*/
+/*	$NetBSD: msg_capture.h,v 1.2.2.2 2026/05/11 17:13:59 martin Exp $	*/
 
 #ifndef _MSB_CAPTURE_H_INCLUDED_
 #define _MSB_CAPTURE_H_INCLUDED_
