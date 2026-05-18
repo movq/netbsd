@@ -1,4 +1,4 @@
-#	$NetBSD: t_accept_max.sh,v 1.2 2026/05/17 01:31:55 riastradh Exp $
+#	$NetBSD: t_accept_max.sh,v 1.2.2.2 2026/05/18 16:58:49 martin Exp $
 #
 # Copyright (c) 2026 The NetBSD Foundation, Inc.
 # All rights reserved.
