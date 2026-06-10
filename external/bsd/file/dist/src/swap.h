@@ -1,4 +1,4 @@
-/*	$NetBSD: swap.h,v 1.1 2026/06/10 15:59:13 christos Exp $	*/
+/*	$NetBSD: swap.h,v 1.1.1.1 2026/06/10 15:59:13 christos Exp $	*/
 
 /*
  * Copyright (c) Ian F. Darwin 1986-1995.

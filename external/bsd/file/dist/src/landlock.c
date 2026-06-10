@@ -1,4 +1,4 @@
-/*	$NetBSD: landlock.c,v 1.1 2026/06/10 15:59:13 christos Exp $	*/
+/*	$NetBSD: landlock.c,v 1.1.1.1 2026/06/10 15:59:13 christos Exp $	*/
 
 /*
  * Redistribution and use in source and binary forms, with or without
