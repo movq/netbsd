@@ -1,4 +1,4 @@
-/*	$NetBSD: swap.c,v 1.1 2026/06/10 15:59:13 christos Exp $	*/
+/*	$NetBSD: swap.c,v 1.1.1.1 2026/06/10 15:59:13 christos Exp $	*/
 
 /*
  * Copyright (c) Ian F. Darwin 1986-1995.
@@ -37,7 +37,7 @@
 #if 0
 FILE_RCSID("@(#)$File: swap.c,v 1.1 2026/04/19 19:56:49 christos Exp $")
 #else
-__RCSID("$NetBSD: swap.c,v 1.1 2026/06/10 15:59:13 christos Exp $");
+__RCSID("$NetBSD: swap.c,v 1.1.1.1 2026/06/10 15:59:13 christos Exp $");
 #endif
 #endif	/* lint */
 
