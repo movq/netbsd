@@ -1,4 +1,4 @@
-/* $NetBSD: h_thread.c,v 1.2 2026/05/19 15:57:51 riastradh Exp $ */
+/* $NetBSD: h_thread.c,v 1.2.4.2 2026/06/27 15:25:56 martin Exp $ */
 
 /*-
  * Copyright (c) 2026 The NetBSD Foundation, Inc.
