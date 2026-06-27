@@ -1,4 +1,4 @@
-/*	$NetBSD: t_dladdr.c,v 1.2 2025/12/15 02:36:47 riastradh Exp $	*/
+/*	$NetBSD: t_dladdr.c,v 1.2.6.2 2026/06/27 20:01:08 martin Exp $	*/
 
 /*-
  * Copyright (c) 2025 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_dladdr.c,v 1.2 2025/12/15 02:36:47 riastradh Exp $");
+__RCSID("$NetBSD: t_dladdr.c,v 1.2.6.2 2026/06/27 20:01:08 martin Exp $");
 
 #include <sys/mman.h>
 
