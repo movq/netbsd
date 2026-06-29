@@ -1,4 +1,4 @@
-/*	$NetBSD: t_lua.c,v 1.1 2026/06/27 20:05:06 riastradh Exp $	*/
+/*	$NetBSD: t_lua.c,v 1.1.6.2 2026/06/29 20:00:05 martin Exp $	*/
 
 /*-
  * Copyright (c) 2026 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_lua.c,v 1.1 2026/06/27 20:05:06 riastradh Exp $");
+__RCSID("$NetBSD: t_lua.c,v 1.1.6.2 2026/06/29 20:00:05 martin Exp $");
 
 /*
  * Test lua(4)
