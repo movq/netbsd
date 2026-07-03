@@ -1,4 +1,4 @@
-/*	$NetBSD: t_iconv.c,v 1.8 2026/06/30 23:17:31 riastradh Exp $	*/
+/*	$NetBSD: t_iconv.c,v 1.8.6.2 2026/07/03 18:13:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 2025 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_iconv.c,v 1.8 2026/06/30 23:17:31 riastradh Exp $");
+__RCSID("$NetBSD: t_iconv.c,v 1.8.6.2 2026/07/03 18:13:19 martin Exp $");
 
 #include <atf-c.h>
 #include <errno.h>
@@ -148,7 +148,8 @@ test_sample_bounded(const char *title, const struct sample *S,
 	char inbuf[4096], inguard = arc4random();
 	char outbuf[4096], outguard = arc4random();
 	iconv_t C;
-	char *src0, *src, *dst0, *dst;
+	const char *src0, *src;
+	char *dst0, *dst;
 	size_t srcleft0, srcleft, dstleft0, dstleft;
 	size_t ninval;
 	int error;
@@ -159,7 +160,7 @@ test_sample_bounded(const char *title, const struct sample *S,
 	memset(inbuf, inguard, sizeof(inbuf));
 	memset(outbuf, outguard, sizeof(outbuf));
 	src = src0 = inbuf + 1;
-	memcpy(src, S->src, nsrc);
+	memcpy(inbuf + 1, S->src, nsrc);
 	dst = dst0 = outbuf + 1;
 	srcleft = srcleft0 = nsrc;
 	dstleft = dstleft0 = ndst;
@@ -319,7 +320,8 @@ ATF_TC_BODY(iconv_pr59019_hz8, tc)
 	const char title[] = "iconv_pr59019_hz8";
 	char in[4] = "\x7e\x7b\x7e\x7e";	/* ~{~~ */
 	char out[4096], guard = arc4random();
-	char *src0, *src, *dst0, *dst;
+	const char *src0, *src;
+	char *dst0, *dst;
 	size_t srcleft0, srcleft, dstleft0, dstleft;
 	iconv_t C;
 	size_t ninval;
