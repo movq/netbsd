@@ -1,4 +1,4 @@
-/*	$NetBSD: t_iconv.c,v 1.8 2026/06/30 23:17:31 riastradh Exp $	*/
+/*	$NetBSD: t_iconv.c,v 1.8.4.2 2026/07/03 18:06:57 martin Exp $	*/
 
 /*-
  * Copyright (c) 2025 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_iconv.c,v 1.8 2026/06/30 23:17:31 riastradh Exp $");
+__RCSID("$NetBSD: t_iconv.c,v 1.8.4.2 2026/07/03 18:06:57 martin Exp $");
 
 #include <atf-c.h>
 #include <errno.h>
