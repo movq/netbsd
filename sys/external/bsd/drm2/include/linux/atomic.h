@@ -73,6 +73,13 @@ atomic_read(const atomic_t *atomic)
 	return atomic->a_u.au_int;
 }
 
+static inline int
+atomic_read_acquire(const atomic_t *atomic)
+{
+
+	return atomic_load_acquire(&atomic->a_u.au_int);
+}
+
 static inline void
 atomic_set(atomic_t *atomic, int value)
 {
@@ -452,6 +459,20 @@ atomic_long_set(struct atomic_long *a, long v)
 {
 	/* no membar */
 	a->al_v = v;
+}
+
+static inline void
+atomic_long_add(long addend, struct atomic_long *a)
+{
+	/* no membar */
+	atomic_add_long(&a->al_v, addend);
+}
+
+static inline void
+atomic_long_sub(long subtrahend, struct atomic_long *a)
+{
+	/* no membar */
+	atomic_add_long(&a->al_v, -subtrahend);
 }
 
 static inline long

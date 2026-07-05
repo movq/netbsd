@@ -41,6 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include <drm/drm_atomic_state_helper.h>
 #include <drm/drm_modeset_helper_vtables.h>
 
+#ifndef __NetBSD__		/* XXX drm writeback connectors */
 static const u32 amdgpu_dm_wb_formats[] = {
 	DRM_FORMAT_XRGB2101010,
 };
@@ -187,11 +188,15 @@ static const struct drm_connector_helper_funcs amdgpu_dm_wb_conn_helper_funcs = 
 	.prepare_writeback_job = amdgpu_dm_wb_prepare_job,
 	.cleanup_writeback_job = amdgpu_dm_wb_cleanup_job,
 };
+#endif
 
 int amdgpu_dm_wb_connector_init(struct amdgpu_display_manager *dm,
 				struct amdgpu_dm_wb_connector *wbcon,
 				uint32_t link_index)
 {
+#ifdef __NetBSD__		/* XXX drm writeback connectors */
+	return -ENOSYS;
+#else
 	struct dc *dc = dm->dc;
 	struct dc_link *link = dc_get_link_at_index(dc, link_index);
 	int res = 0;
@@ -217,4 +222,5 @@ int amdgpu_dm_wb_connector_init(struct amdgpu_display_manager *dm,
 		wbcon->base.base.funcs->reset(&wbcon->base.base);
 
 	return 0;
+#endif
 }

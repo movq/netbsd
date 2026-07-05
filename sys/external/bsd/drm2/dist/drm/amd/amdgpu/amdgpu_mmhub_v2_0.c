@@ -571,7 +571,7 @@ static void mmhub_v2_0_init(struct amdgpu_device *adev)
 static void mmhub_v2_0_update_medium_grain_clock_gating(struct amdgpu_device *adev,
 							bool enable)
 {
-	uint32_t def, data, def1, data1;
+	uint32_t def = 0, data = 0, def1, data1;
 
 	if (!(adev->cg_flags & AMD_CG_SUPPORT_MC_MGCG))
 		return;

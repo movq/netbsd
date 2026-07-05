@@ -334,7 +334,7 @@ static int compat_drm_mode_addfb2(struct file *file, unsigned int cmd,
 
 static struct {
 	drm_ioctl_compat_t *fn;
-	char *name;
+	const char *name;
 } drm_compat_ioctls[] = {
 #define DRM_IOCTL32_DEF(n, f) [DRM_IOCTL_NR(n##32)] = {.fn = f, .name = #n}
 	DRM_IOCTL32_DEF(DRM_IOCTL_VERSION, compat_drm_version),
@@ -368,7 +368,11 @@ static struct {
 long drm_compat_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	unsigned int nr = DRM_IOCTL_NR(cmd);
+#ifdef __NetBSD__
+	struct drm_file *file_priv = filp->f_data;
+#else
 	struct drm_file *file_priv = filp->private_data;
+#endif
 	struct drm_device *dev = file_priv->minor->dev;
 	drm_ioctl_compat_t *fn;
 	int ret;
@@ -378,18 +382,33 @@ long drm_compat_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	 * than always failing.
 	 */
 	if (nr >= ARRAY_SIZE(drm_compat_ioctls))
+#ifdef __NetBSD__
+		return -drm_ioctl(filp, cmd, (void *)arg);
+#else
 		return drm_ioctl(filp, cmd, arg);
+#endif
 
 	nr = array_index_nospec(nr, ARRAY_SIZE(drm_compat_ioctls));
 	fn = drm_compat_ioctls[nr].fn;
 	if (!fn)
+#ifdef __NetBSD__
+		return -drm_ioctl(filp, cmd, (void *)arg);
+#else
 		return drm_ioctl(filp, cmd, arg);
+#endif
 
+#ifdef __NetBSD__
+	drm_dbg_core(dev, "comm=\"%s\", pid=%d, minor=%d, auth=%d, %s\n",
+		     current->p_comm, task_pid_nr(current),
+		     file_priv->minor->index, file_priv->authenticated,
+		     drm_compat_ioctls[nr].name);
+#else
 	drm_dbg_core(dev, "comm=\"%s\", pid=%d, dev=0x%lx, auth=%d, %s\n",
 		     current->comm, task_pid_nr(current),
 		     (long)old_encode_dev(file_priv->minor->kdev->devt),
 		     file_priv->authenticated,
 		     drm_compat_ioctls[nr].name);
+#endif
 	ret = (*fn)(filp, cmd, arg);
 	if (ret)
 		drm_dbg_core(dev, "ret = %d\n", ret);

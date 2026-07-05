@@ -278,11 +278,7 @@ struct amdgpu_vm_update_params {
 	 *
 	 * DMA addresses to use for mapping
 	 */
-#ifdef __NetBSD__
-	bus_dma_segment_t *pages_addr;
-#else
 	dma_addr_t *pages_addr;
-#endif
 
 	/**
 	 * @job: job to used for hw submission
@@ -554,11 +550,7 @@ void amdgpu_vm_update_stats(struct amdgpu_vm_bo_base *base,
 void amdgpu_vm_bo_update_shared(struct amdgpu_bo *bo);
 void amdgpu_vm_bo_move(struct amdgpu_bo *bo, struct ttm_resource *new_mem,
 		       bool evicted);
-#ifdef __NetBSD__
-uint64_t amdgpu_vm_map_gart(const bus_dma_segment_t *pages_addr, uint64_t addr);
-#else
 uint64_t amdgpu_vm_map_gart(const dma_addr_t *pages_addr, uint64_t addr);
-#endif
 struct amdgpu_bo_va *amdgpu_vm_bo_find(struct amdgpu_vm *vm,
 				       struct amdgpu_bo *bo);
 struct amdgpu_bo_va *amdgpu_vm_bo_add(struct amdgpu_device *adev,

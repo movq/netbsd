@@ -124,6 +124,7 @@ drm_gem_init(struct drm_device *dev)
 	return drmm_add_action(dev, drm_gem_init_release, NULL);
 }
 
+#ifndef __NetBSD__
 /**
  * drm_gem_object_init_with_mnt - initialize an allocated shmem-backed GEM
  * object in a given shmfs mountpoint
@@ -159,6 +160,7 @@ int drm_gem_object_init_with_mnt(struct drm_device *dev,
 	return 0;
 }
 EXPORT_SYMBOL(drm_gem_object_init_with_mnt);
+#endif
 
 /**
  * drm_gem_object_init - initialize an allocated shmem-backed GEM object
@@ -172,7 +174,26 @@ EXPORT_SYMBOL(drm_gem_object_init_with_mnt);
 int drm_gem_object_init(struct drm_device *dev, struct drm_gem_object *obj,
 			size_t size)
 {
+#ifdef __NetBSD__
+	drm_gem_private_object_init(dev, obj, size);
+
+	/*
+	 * A uao may not have size 0, but a gem object may.  Allocate a
+	 * spurious page so we needn't teach uao how to have size 0.
+	 */
+	obj->filp = uao_create(MAX(size, PAGE_SIZE), 0);
+	/*
+	 * XXX This is gross.  We ought to do it the other way around:
+	 * set the uao to have the main uvm object's lock.  However,
+	 * uvm_obj_setlock is not safe on uvm_aobjs.
+	 */
+	rw_obj_hold(obj->filp->vmobjlock);
+	uvm_obj_setlock(&obj->gemo_uvmobj, obj->filp->vmobjlock);
+
+	return 0;
+#else
 	return drm_gem_object_init_with_mnt(dev, obj, size, NULL);
+#endif
 }
 EXPORT_SYMBOL(drm_gem_object_init);
 
@@ -195,8 +216,7 @@ void drm_gem_private_object_init(struct drm_device *dev,
 #ifdef __NetBSD__
 	obj->filp = NULL;
 	KASSERT(drm_core_check_feature(dev, DRIVER_GEM));
-	KASSERT(dev->driver->gem_uvm_ops != NULL);
-	uvm_obj_init(&obj->gemo_uvmobj, dev->driver->gem_uvm_ops,
+	uvm_obj_init(&obj->gemo_uvmobj, NULL,
 	    /*allocate lock*/true, /*nrefs*/1);
 #else
 	obj->filp = NULL;
@@ -610,6 +630,7 @@ int drm_gem_create_mmap_offset(struct drm_gem_object *obj)
 }
 EXPORT_SYMBOL(drm_gem_create_mmap_offset);
 
+#ifndef __NetBSD__
 /*
  * Move folios to appropriate lru and release the folios, decrementing the
  * ref count of those folios.

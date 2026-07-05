@@ -59,6 +59,7 @@
 #define	queue_delayed_work		linux_queue_delayed_work
 #define	queue_rcu_work			linux_queue_rcu_work
 #define	queue_work			linux_queue_work
+#define	queue_work_node			linux_queue_work_node
 #define	schedule_delayed_work		linux_schedule_delayed_work
 #define	schedule_work			linux_schedule_work
 #define	system_highpri_wq		linux_system_highpri_wq
@@ -132,6 +133,16 @@ void	flush_scheduled_work(void);
 void	INIT_WORK(struct work_struct *, void (*)(struct work_struct *));
 bool	schedule_work(struct work_struct *);
 bool	queue_work(struct workqueue_struct *, struct work_struct *);
+
+static inline bool
+queue_work_node(int node, struct workqueue_struct *wq,
+    struct work_struct *work)
+{
+
+	(void)node;
+	return queue_work(wq, work);
+}
+
 bool	cancel_work(struct work_struct *);
 bool	cancel_work_sync(struct work_struct *);
 bool	flush_work(struct work_struct *);

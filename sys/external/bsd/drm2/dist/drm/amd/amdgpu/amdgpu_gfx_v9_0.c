@@ -5189,7 +5189,8 @@ static void gfx_v9_0_update_spm_vmid(struct amdgpu_device *adev, struct amdgpu_r
 
 static bool gfx_v9_0_check_rlcg_range(struct amdgpu_device *adev,
 					uint32_t offset,
-					struct soc15_reg_rlcg *entries, int arr_size)
+					const struct soc15_reg_rlcg *entries,
+					int arr_size)
 {
 	int i;
 	uint32_t reg;
@@ -5212,7 +5213,7 @@ static bool gfx_v9_0_check_rlcg_range(struct amdgpu_device *adev,
 static bool gfx_v9_0_is_rlcg_access_range(struct amdgpu_device *adev, u32 offset)
 {
 	return gfx_v9_0_check_rlcg_range(adev, offset,
-					(void *)rlcg_access_gc_9_0,
+					rlcg_access_gc_9_0,
 					ARRAY_SIZE(rlcg_access_gc_9_0));
 }
 

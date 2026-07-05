@@ -33,5 +33,6 @@
 #define _LINUX_UACCESS_H_
 
 #include <asm/uaccess.h>
+#include <linux/string.h>
 
 #endif  /* _LINUX_UACCESS_H_ */

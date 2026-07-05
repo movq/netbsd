@@ -40,6 +40,8 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_xgmi.c,v 1.3 2021/12/19 10:59:01 riastradh Ex
 
 #include "amdgpu_reset.h"
 
+#include <linux/nbsd-namespace.h>
+
 #define smnPCS_XGMI3X16_PCS_ERROR_STATUS 0x11a0020c
 #define smnPCS_XGMI3X16_PCS_ERROR_NONCORRECTABLE_MASK   0x11a00218
 #define smnPCS_GOPX1_PCS_ERROR_STATUS    0x12200210
@@ -392,6 +394,7 @@ int amdgpu_get_xgmi_link_status(struct amdgpu_device *adev, int global_link_num)
  *
  */
 
+#ifndef __NetBSD__
 static struct attribute amdgpu_xgmi_hive_id = {
 	.name = "xgmi_hive_id",
 	.mode = S_IRUGO
@@ -427,9 +430,6 @@ static void amdgpu_xgmi_hive_release(struct kobject *kobj)
 	kfree(hive);
 }
 
-	kobject_put(hive->kobj);
-	hive->kobj = NULL;
-}
 static const struct sysfs_ops amdgpu_xgmi_hive_ops = {
 	.show = amdgpu_xgmi_show_attrs,
 };
@@ -670,19 +670,49 @@ static void amdgpu_xgmi_sysfs_rem_dev_info(struct amdgpu_device *adev,
 	sysfs_remove_link(&hive->kobj, node);
 #endif
 }
+#else
+static int
+amdgpu_xgmi_sysfs_add_dev_info(struct amdgpu_device *adev,
+    struct amdgpu_hive_info *hive)
+{
+	return 0;
+}
+
+static void
+amdgpu_xgmi_sysfs_rem_dev_info(struct amdgpu_device *adev,
+    struct amdgpu_hive_info *hive)
+{
+}
+
+static void
+amdgpu_xgmi_hive_release_netbsd(struct kref *ref)
+{
+	struct amdgpu_hive_info *hive = container_of(ref,
+	    struct amdgpu_hive_info, ref);
+
+	amdgpu_reset_put_reset_domain(hive->reset_domain);
+	hive->reset_domain = NULL;
+	mutex_destroy(&hive->hive_lock);
+	kfree(hive);
+}
+#endif
 
 
 
 struct amdgpu_hive_info *amdgpu_get_xgmi_hive(struct amdgpu_device *adev)
 {
 	struct amdgpu_hive_info *hive = NULL;
-	int ret;
+	int ret __maybe_unused;
 
 	if (!adev->gmc.xgmi.hive_id)
 		return NULL;
 
 	if (adev->hive) {
+#ifdef __NetBSD__
+		kref_get(&adev->hive->ref);
+#else
 		kobject_get(&adev->hive->kobj);
+#endif
 		return adev->hive;
 	}
 
@@ -700,8 +730,12 @@ struct amdgpu_hive_info *amdgpu_get_xgmi_hive(struct amdgpu_device *adev)
 		hive = NULL;
 		goto pro_end;
 	}
+	mutex_init(&hive->hive_lock);
 
 	/* initialize new hive if not exist */
+#ifdef __NetBSD__
+	kref_init(&hive->ref);
+#else
 	ret = kobject_init_and_add(&hive->kobj,
 			&amdgpu_xgmi_hive_type,
 			&adev->dev->kobj,
@@ -712,6 +746,7 @@ struct amdgpu_hive_info *amdgpu_get_xgmi_hive(struct amdgpu_device *adev)
 		hive = NULL;
 		goto pro_end;
 	}
+#endif
 
 	/**
 	 * Only init hive->reset_domain for none SRIOV configuration. For SRIOV,
@@ -731,7 +766,12 @@ struct amdgpu_hive_info *amdgpu_get_xgmi_hive(struct amdgpu_device *adev)
 			if (!hive->reset_domain) {
 				dev_err(adev->dev, "XGMI: failed initializing reset domain for xgmi hive\n");
 				ret = -ENOMEM;
+#ifdef __NetBSD__
+				kref_put(&hive->ref,
+				    amdgpu_xgmi_hive_release_netbsd);
+#else
 				kobject_put(&hive->kobj);
+#endif
 				hive = NULL;
 				goto pro_end;
 			}
@@ -744,7 +784,6 @@ struct amdgpu_hive_info *amdgpu_get_xgmi_hive(struct amdgpu_device *adev)
 	hive->hive_id = adev->gmc.xgmi.hive_id;
 	INIT_LIST_HEAD(&hive->device_list);
 	INIT_LIST_HEAD(&hive->node);
-	mutex_init(&hive->hive_lock);
 	atomic_set(&hive->number_devices, 0);
 	task_barrier_init(&hive->tb);
 	hive->pstate = AMDGPU_XGMI_PSTATE_UNKNOWN;
@@ -759,16 +798,26 @@ struct amdgpu_hive_info *amdgpu_get_xgmi_hive(struct amdgpu_device *adev)
 	list_add_tail(&hive->node, &xgmi_hive_list);
 
 pro_end:
-	if (hive)
+	if (hive) {
+#ifdef __NetBSD__
+		kref_get(&hive->ref);
+#else
 		kobject_get(&hive->kobj);
+#endif
+	}
 	mutex_unlock(&xgmi_mutex);
 	return hive;
 }
 
 void amdgpu_put_xgmi_hive(struct amdgpu_hive_info *hive)
 {
-	if (hive)
+	if (hive) {
+#ifdef __NetBSD__
+		kref_put(&hive->ref, amdgpu_xgmi_hive_release_netbsd);
+#else
 		kobject_put(&hive->kobj);
+#endif
+	}
 }
 
 int amdgpu_xgmi_set_pstate(struct amdgpu_device *adev, int pstate)
@@ -812,7 +861,7 @@ int amdgpu_xgmi_set_pstate(struct amdgpu_device *adev, int pstate)
 	ret = amdgpu_dpm_set_xgmi_pstate(request_adev, pstate);
 	if (ret) {
 		dev_err(request_adev->dev,
-			"XGMI: Set pstate failure on device %llx, hive %llx, ret %d",
+			"XGMI: Set pstate failure on device %"PRIx64", hive %"PRIx64", ret %d",
 			request_adev->gmc.xgmi.node_id,
 			request_adev->gmc.xgmi.hive_id, ret);
 		goto out;
@@ -844,7 +893,7 @@ int amdgpu_xgmi_update_topology(struct amdgpu_hive_info *hive, struct amdgpu_dev
 					 &adev->psp.xgmi_context.top_info);
 	if (ret)
 		dev_err(adev->dev,
-			"XGMI: Set topology failure on device %llx, hive %llx, ret %d",
+			"XGMI: Set topology failure on device %"PRIx64", hive %"PRIx64", ret %d",
 			adev->gmc.xgmi.node_id,
 			adev->gmc.xgmi.hive_id, ret);
 
@@ -1033,7 +1082,7 @@ int amdgpu_xgmi_add_device(struct amdgpu_device *adev)
 	if (!hive) {
 		ret = -EINVAL;
 		dev_err(adev->dev,
-			"XGMI: node 0x%llx, can not match hive 0x%llx in the hive list.\n",
+			"XGMI: node 0x%"PRIx64", can not match hive 0x%"PRIx64" in the hive list.\n",
 			adev->gmc.xgmi.node_id, adev->gmc.xgmi.hive_id);
 		goto exit;
 	}
@@ -1070,7 +1119,7 @@ int amdgpu_xgmi_add_device(struct amdgpu_device *adev)
 						&adev->psp.xgmi_context.top_info, false);
 			if (ret) {
 				dev_err(adev->dev,
-					"XGMI: Get topology failure on device %llx, hive %llx, ret %d",
+					"XGMI: Get topology failure on device %"PRIx64", hive %"PRIx64", ret %d",
 					adev->gmc.xgmi.node_id,
 					adev->gmc.xgmi.hive_id, ret);
 				/* To do: continue with some node failed or disable the whole hive*/
@@ -1088,7 +1137,7 @@ int amdgpu_xgmi_add_device(struct amdgpu_device *adev)
 					&tmp_adev->psp.xgmi_context.top_info, false);
 				if (ret) {
 					dev_err(tmp_adev->dev,
-						"XGMI: Get topology failure on device %llx, hive %llx, ret %d",
+						"XGMI: Get topology failure on device %"PRIx64", hive %"PRIx64", ret %d",
 						tmp_adev->gmc.xgmi.node_id,
 						tmp_adev->gmc.xgmi.hive_id, ret);
 					/* To do : continue with some node failed or disable the whole hive */
@@ -1111,7 +1160,7 @@ int amdgpu_xgmi_add_device(struct amdgpu_device *adev)
 						&tmp_adev->psp.xgmi_context.top_info, true);
 				if (ret) {
 					dev_err(tmp_adev->dev,
-						"XGMI: Get topology for extended data failure on device %llx, hive %llx, ret %d",
+						"XGMI: Get topology for extended data failure on device %"PRIx64", hive %"PRIx64", ret %d",
 						tmp_adev->gmc.xgmi.node_id,
 						tmp_adev->gmc.xgmi.hive_id, ret);
 					goto exit_unlock;
@@ -1134,11 +1183,11 @@ exit_unlock:
 exit:
 	if (!ret) {
 		adev->hive = hive;
-		dev_info(adev->dev, "XGMI: Add node %d, hive 0x%llx.\n",
+		dev_info(adev->dev, "XGMI: Add node %d, hive 0x%"PRIx64".\n",
 			 adev->gmc.xgmi.physical_node_id, adev->gmc.xgmi.hive_id);
 	} else {
 		amdgpu_put_xgmi_hive(hive);
-		dev_err(adev->dev, "XGMI: Failed to add node %d, hive 0x%llx ret: %d\n",
+		dev_err(adev->dev, "XGMI: Failed to add node %d, hive 0x%"PRIx64" ret: %d\n",
 			adev->gmc.xgmi.physical_node_id, adev->gmc.xgmi.hive_id,
 			ret);
 	}

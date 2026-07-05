@@ -306,11 +306,11 @@ void drm_prime_remove_buf_handle(struct drm_prime_file_private *prime_fpriv,
 #ifdef __NetBSD__
 	struct drm_prime_member *member;
 
-	member = rb_tree_find_node(&prime_fpriv->dmabufs.rbr_tree, &dma_buf);
+	member = rb_tree_find_node(&prime_fpriv->handles.rbr_tree, &handle);
 	if (member != NULL) {
 		rb_tree_remove_node(&prime_fpriv->handles.rbr_tree, member);
 		rb_tree_remove_node(&prime_fpriv->dmabufs.rbr_tree, member);
-		dma_buf_put(dma_buf);
+		dma_buf_put(member->dma_buf);
 		kfree(member);
 	}
 #else
@@ -648,18 +648,32 @@ int drm_gem_prime_handle_to_fd(struct drm_device *dev,
 			       int *prime_fd)
 {
 	struct dma_buf *dmabuf;
+#ifdef __NetBSD__
+	int fd;
+#else
 	int fd = get_unused_fd_flags(flags);
 
 	if (fd < 0)
 		return fd;
+#endif
 
 	dmabuf = drm_gem_prime_handle_to_dmabuf(dev, file_priv, handle, flags);
 	if (IS_ERR(dmabuf)) {
+#ifndef __NetBSD__
 		put_unused_fd(fd);
+#endif
 		return PTR_ERR(dmabuf);
 	}
 
+#ifdef __NetBSD__
+	fd = dma_buf_fd(dmabuf, flags);
+	if (fd < 0) {
+		dma_buf_put(dmabuf);
+		return fd;
+	}
+#else
 	fd_install(fd, dmabuf->file);
+#endif
 	*prime_fd = fd;
 	return 0;
 }
@@ -815,8 +829,17 @@ struct sg_table *drm_gem_map_dma_buf(struct dma_buf_attachment *attach,
 	if (IS_ERR(sgt))
 		return sgt;
 
+#ifdef __NetBSD__
+	ret = dma_map_sg_attrs(attach->dev, sgt->sgl, sgt->nents, dir,
+	    DMA_ATTR_SKIP_CPU_SYNC);
+	if (ret == 0)
+		ret = -ENOMEM;
+	else
+		ret = 0;
+#else
 	ret = dma_map_sgtable(attach->dev, sgt, dir,
-			      DMA_ATTR_SKIP_CPU_SYNC);
+	    DMA_ATTR_SKIP_CPU_SYNC);
+#endif
 	if (ret) {
 		sg_free_table(sgt);
 		kfree(sgt);
@@ -842,7 +865,12 @@ void drm_gem_unmap_dma_buf(struct dma_buf_attachment *attach,
 	if (!sgt)
 		return;
 
+#ifdef __NetBSD__
+	dma_unmap_sg_attrs(attach->dev, sgt->sgl, sgt->nents, dir,
+	    DMA_ATTR_SKIP_CPU_SYNC);
+#else
 	dma_unmap_sgtable(attach->dev, sgt, dir, DMA_ATTR_SKIP_CPU_SYNC);
+#endif
 	sg_free_table(sgt);
 	kfree(sgt);
 }
@@ -913,7 +941,9 @@ int drm_gem_prime_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
 #endif
 
 	if (obj->funcs && obj->funcs->mmap) {
+#ifndef __NetBSD__
 		vma->vm_ops = obj->funcs->vm_ops;
+#endif
 
 		drm_gem_object_get(obj);
 #ifdef __NetBSD__
@@ -990,8 +1020,7 @@ int drm_gem_dmabuf_mmap(struct dma_buf *dma_buf, struct vm_area_struct *vma)
 	struct drm_gem_object *obj = dma_buf->priv;
 #ifdef __NetBSD__
 	KASSERT(size > 0);
-    /* XXX drm618 */
-	return dev->driver->gem_prime_mmap(obj, offp, size, prot, flagsp,
+	return drm_gem_prime_mmap(obj, offp, size, prot, flagsp,
 	    advicep, uobjp, maxprotp);
 #else
 	return drm_gem_prime_mmap(obj, vma);
@@ -1026,13 +1055,19 @@ struct sg_table *drm_prime_pages_to_sg(struct drm_device *dev,
 				       struct page **pages, unsigned int nr_pages)
 {
 	struct sg_table *sg;
+#ifndef __NetBSD__
 	size_t max_segment = 0;
+#endif
 	int err;
 
 	sg = kmalloc(sizeof(struct sg_table), GFP_KERNEL);
 	if (!sg)
 		return ERR_PTR(-ENOMEM);
 
+#ifdef __NetBSD__
+	err = sg_alloc_table_from_pages(sg, pages, nr_pages, 0,
+	    (unsigned long)nr_pages << PAGE_SHIFT, GFP_KERNEL);
+#else
 	if (dev)
 		max_segment = dma_max_mapping_size(dev->dev);
 	if (max_segment == 0)
@@ -1040,6 +1075,7 @@ struct sg_table *drm_prime_pages_to_sg(struct drm_device *dev,
 	err = sg_alloc_table_from_pages_segment(sg, pages, nr_pages, 0,
 						(unsigned long)nr_pages << PAGE_SHIFT,
 						max_segment, GFP_KERNEL);
+#endif
 	if (err) {
 		kfree(sg);
 		sg = ERR_PTR(err);
@@ -1060,6 +1096,24 @@ EXPORT_SYMBOL(drm_prime_pages_to_sg);
  */
 unsigned long drm_prime_get_contiguous_size(struct sg_table *sgt)
 {
+#ifdef __NetBSD__
+	bus_dmamap_t map = sgt->sgl->sg_dmamap;
+	dma_addr_t expected;
+	unsigned long size = 0;
+	int i;
+
+	KASSERT(map != NULL);
+	KASSERT(map->dm_nsegs > 0);
+
+	expected = map->dm_segs[0].ds_addr;
+	for (i = 0; i < map->dm_nsegs; i++) {
+		if (map->dm_segs[i].ds_addr != expected)
+			break;
+		expected += map->dm_segs[i].ds_len;
+		size += map->dm_segs[i].ds_len;
+	}
+	return size;
+#else
 	dma_addr_t expected = sg_dma_address(sgt->sgl);
 	struct scatterlist *sg;
 	unsigned long size = 0;
@@ -1076,6 +1130,7 @@ unsigned long drm_prime_get_contiguous_size(struct sg_table *sgt)
 		size += len;
 	}
 	return size;
+#endif
 }
 EXPORT_SYMBOL(drm_prime_get_contiguous_size);
 
@@ -1219,7 +1274,11 @@ EXPORT_SYMBOL(drm_gem_prime_import_dev);
 struct drm_gem_object *drm_gem_prime_import(struct drm_device *dev,
 					    struct dma_buf *dma_buf)
 {
+#ifdef __NetBSD__
+	return drm_gem_prime_import_dev(dev, dma_buf, dev->dmat);
+#else
 	return drm_gem_prime_import_dev(dev, dma_buf, drm_dev_dma_dev(dev));
+#endif
 }
 EXPORT_SYMBOL(drm_gem_prime_import);
 
@@ -1303,6 +1362,34 @@ drm_prime_bus_dmamap_load_sgt(bus_dma_tag_t dmat, bus_dmamap_t map,
 out1:	kfree(segs);
 out0:	return ret;
 }
+
+int
+drm_prime_sg_to_dma_addr_array(struct sg_table *sgt, dma_addr_t *addrs,
+    int max_entries)
+{
+	bus_dmamap_t map = sgt->sgl->sg_dmamap;
+	int page = 0;
+	int seg;
+
+	if (map == NULL)
+		return -EINVAL;
+
+	for (seg = 0; seg < map->dm_nsegs; seg++) {
+		bus_addr_t addr = map->dm_segs[seg].ds_addr;
+		bus_size_t len = map->dm_segs[seg].ds_len;
+
+		while (len != 0) {
+			if (WARN_ON(len < PAGE_SIZE || page >= max_entries))
+				return -1;
+			addrs[page++] = addr;
+			addr += PAGE_SIZE;
+			len -= PAGE_SIZE;
+		}
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_prime_sg_to_dma_addr_array);
 
 bool
 drm_prime_sg_importable(bus_dma_tag_t dmat, struct sg_table *sgt)

@@ -63,12 +63,13 @@ void drm_handle_vblank_works(struct drm_vblank_crtc *vblank)
 			continue;
 
 		list_del_init(&work->node);
-		drm_vblank_put(vblank->dev, vblank->pipe);
+		drm_vblank_put_locked(vblank->dev, vblank->pipe);
 		kthread_queue_work(vblank->worker, &work->base);
 		wake = true;
 	}
 	if (wake)
-		wake_up_all(&vblank->work_wait_queue);
+		DRM_SPIN_WAKEUP_ALL(&vblank->work_wait_queue,
+		    &vblank->dev->event_lock);
 }
 
 /* Handle cancelling any pending vblank work items and drop respective vblank
@@ -85,10 +86,11 @@ void drm_vblank_cancel_pending_works(struct drm_vblank_crtc *vblank)
 
 	list_for_each_entry_safe(work, next, &vblank->pending_work, node) {
 		list_del_init(&work->node);
-		drm_vblank_put(vblank->dev, vblank->pipe);
+		drm_vblank_put_locked(vblank->dev, vblank->pipe);
 	}
 
-	wake_up_all(&vblank->work_wait_queue);
+	DRM_SPIN_WAKEUP_ALL(&vblank->work_wait_queue,
+	    &vblank->dev->event_lock);
 }
 
 /**
@@ -127,14 +129,12 @@ int drm_vblank_work_schedule(struct drm_vblank_work *work,
 	if (work->cancelling)
 		goto out;
 
-	spin_lock(&dev->vbl_lock);
 	inmodeset = vblank->inmodeset;
-	spin_unlock(&dev->vbl_lock);
 	if (inmodeset)
 		goto out;
 
 	if (list_empty(&work->node)) {
-		ret = drm_vblank_get(dev, vblank->pipe);
+		ret = drm_vblank_get_locked(dev, vblank->pipe);
 		if (ret < 0)
 			goto out;
 	} else if (work->count == count) {
@@ -149,11 +149,12 @@ int drm_vblank_work_schedule(struct drm_vblank_work *work,
 	passed = drm_vblank_passed(cur_vbl, count);
 	if (passed)
 		drm_dbg_core(dev,
-			     "crtc %d vblank %llu already passed (current %llu)\n",
+			     "crtc %d vblank %"PRIu64
+			     " already passed (current %"PRIu64")\n",
 			     vblank->pipe, count, cur_vbl);
 
 	if (!nextonmiss && passed) {
-		drm_vblank_put(dev, vblank->pipe);
+		drm_vblank_put_locked(dev, vblank->pipe);
 		ret = kthread_queue_work(vblank->worker, &work->base);
 
 		if (rescheduling) {
@@ -167,9 +168,10 @@ int drm_vblank_work_schedule(struct drm_vblank_work *work,
 	}
 
 out:
-	spin_unlock_irqrestore(&dev->event_lock, irqflags);
 	if (wake)
-		wake_up_all(&vblank->work_wait_queue);
+		DRM_SPIN_WAKEUP_ALL(&vblank->work_wait_queue,
+		    &dev->event_lock);
+	spin_unlock_irqrestore(&dev->event_lock, irqflags);
 	return ret;
 }
 EXPORT_SYMBOL(drm_vblank_work_schedule);
@@ -198,14 +200,13 @@ bool drm_vblank_work_cancel_sync(struct drm_vblank_work *work)
 	spin_lock_irq(&dev->event_lock);
 	if (!list_empty(&work->node)) {
 		list_del_init(&work->node);
-		drm_vblank_put(vblank->dev, vblank->pipe);
+		drm_vblank_put_locked(vblank->dev, vblank->pipe);
 		ret = true;
 	}
 
 	work->cancelling++;
+	DRM_SPIN_WAKEUP_ALL(&vblank->work_wait_queue, &dev->event_lock);
 	spin_unlock_irq(&dev->event_lock);
-
-	wake_up_all(&vblank->work_wait_queue);
 
 	if (kthread_cancel_work_sync(&work->base))
 		ret = true;
@@ -229,10 +230,11 @@ void drm_vblank_work_flush(struct drm_vblank_work *work)
 {
 	struct drm_vblank_crtc *vblank = work->vblank;
 	struct drm_device *dev = vblank->dev;
+	int ret __diagused;
 
 	spin_lock_irq(&dev->event_lock);
-	wait_event_lock_irq(vblank->work_wait_queue, list_empty(&work->node),
-			    dev->event_lock);
+	DRM_SPIN_WAIT_NOINTR_UNTIL(ret, &vblank->work_wait_queue,
+	    &dev->event_lock, list_empty(&work->node));
 	spin_unlock_irq(&dev->event_lock);
 
 	kthread_flush_work(&work->base);
@@ -250,11 +252,11 @@ void drm_vblank_work_flush_all(struct drm_crtc *crtc)
 {
 	struct drm_device *dev = crtc->dev;
 	struct drm_vblank_crtc *vblank = &dev->vblank[drm_crtc_index(crtc)];
+	int ret __diagused;
 
 	spin_lock_irq(&dev->event_lock);
-	wait_event_lock_irq(vblank->work_wait_queue,
-			    list_empty(&vblank->pending_work),
-			    dev->event_lock);
+	DRM_SPIN_WAIT_NOINTR_UNTIL(ret, &vblank->work_wait_queue,
+	    &dev->event_lock, list_empty(&vblank->pending_work));
 	spin_unlock_irq(&dev->event_lock);
 
 	kthread_flush_worker(vblank->worker);
@@ -283,7 +285,7 @@ int drm_vblank_worker_init(struct drm_vblank_crtc *vblank)
 	struct kthread_worker *worker;
 
 	INIT_LIST_HEAD(&vblank->pending_work);
-	init_waitqueue_head(&vblank->work_wait_queue);
+	DRM_INIT_WAITQUEUE(&vblank->work_wait_queue, "drmvblwk");
 	worker = kthread_run_worker(0, "card%d-crtc%d",
 				       vblank->dev->primary->index,
 				       vblank->pipe);

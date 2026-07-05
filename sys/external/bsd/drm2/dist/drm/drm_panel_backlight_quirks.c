@@ -7,6 +7,7 @@ __KERNEL_RCSID(0, "$NetBSD$");
 
 #include <linux/array_size.h>
 #include <linux/dmi.h>
+#include <linux/err.h>
 #include <linux/export.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>

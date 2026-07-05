@@ -37,12 +37,25 @@
 
 struct pci_dev;
 
+#define	VGA_RSRC_NONE		0x00
+#define	VGA_RSRC_LEGACY_IO	0x01
+#define	VGA_RSRC_LEGACY_MEM	0x02
+#define	VGA_RSRC_LEGACY_MASK	(VGA_RSRC_LEGACY_IO | VGA_RSRC_LEGACY_MEM)
+#define	VGA_RSRC_NORMAL_IO	0x04
+#define	VGA_RSRC_NORMAL_MEM	0x08
+
 static inline int
-vga_client_register(struct pci_dev *pdev __unused, void *cookie __unused,
-    void (*irq_set_state)(void *, bool) __unused,
-    unsigned int (*set_vga_decode)(void *, bool) __unused)
+vga_client_register(struct pci_dev *pdev __unused,
+    unsigned int (*set_vga_decode)(struct pci_dev *, bool) __unused)
 {
 	return -ENOSYS;
+}
+
+static inline void
+vga_client_unregister(struct pci_dev *pdev)
+{
+
+	(void)vga_client_register(pdev, NULL);
 }
 
 static inline int

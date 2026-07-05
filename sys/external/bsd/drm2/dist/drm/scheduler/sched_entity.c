@@ -75,7 +75,11 @@ int drm_sched_entity_init(struct drm_sched_entity *entity,
 	entity->guilty = guilty;
 	entity->num_sched_list = num_sched_list;
 	entity->priority = priority;
+#ifdef __NetBSD__
+	entity->last_user = curproc;
+#else
 	entity->last_user = current->group_leader;
+#endif
 	/*
 	 * It's perfectly valid to initialize an entity without having a valid
 	 * scheduler attached. It's just not valid to use the scheduler before it
@@ -358,7 +362,7 @@ void drm_sched_entity_fini(struct drm_sched_entity *entity)
 	 */
 	drm_sched_entity_kill(entity);
 
-	spin_lock_destroy(&entity->rq_lock);
+	spin_lock_destroy(&entity->lock);
 
 	if (entity->dependency) {
 		dma_fence_remove_callback(entity->dependency, &entity->cb);

@@ -63,6 +63,7 @@ struct acpi_devnode;
 struct pci_driver;
 struct pci_dev;
 struct pci_bus;
+struct pci_saved_state;
 
 struct pci_device_id {
 	uint32_t	vendor;
@@ -76,7 +77,9 @@ struct pci_device_id {
 
 #define	PCI_DEVICE(VENDOR, DEVICE)					      \
 	.vendor = (VENDOR),						      \
-	.device = (DEVICE)
+	.device = (DEVICE),						      \
+	.subvendor = PCI_ANY_ID,						      \
+	.subdevice = PCI_ANY_ID
 
 #define	PCI_ANY_ID		(~0)
 
@@ -94,12 +97,15 @@ CTASSERT(PCI_CLASS_DISPLAY_OTHER == 0x0380);
 	((PCI_CLASS_DISPLAY << 8) | PCI_SUBCLASS_DISPLAY_3D)
 CTASSERT(PCI_CLASS_DISPLAY_3D == 0x0302);
 
+#define	PCI_CLASS_ACCELERATOR_PROCESSING	(PCI_CLASS_ACCEL << 8)
+
 #define	PCI_CLASS_BRIDGE_ISA						\
 	((PCI_CLASS_BRIDGE << 8) | PCI_SUBCLASS_BRIDGE_ISA)
 CTASSERT(PCI_CLASS_BRIDGE_ISA == 0x0601);
 
 /* XXX This is getting silly...  */
 #define	PCI_VENDOR_ID_APPLE	PCI_VENDOR_APPLE
+#define	PCI_VENDOR_ID_AMD	PCI_VENDOR_AMD
 #define	PCI_VENDOR_ID_ASUSTEK	PCI_VENDOR_ASUSTEK
 #define	PCI_VENDOR_ID_ATI	PCI_VENDOR_ATI
 #define	PCI_VENDOR_ID_DELL	PCI_VENDOR_DELL
@@ -133,6 +139,7 @@ CTASSERT(PCI_CLASS_BRIDGE_ISA == 0x0601);
 
 #define PCI_EXP_LNKCTL			PCIE_LCSR
 #define  PCI_EXP_LNKCTL_HAWD		PCIE_LCSR_HAWD
+#define PCI_EXP_LNKSTA			(PCIE_LCSR + 2)
 #define PCI_EXP_DEVSTA			(PCIE_DCSR + 2)
 #define  PCI_EXP_DEVSTA_TRPND		(PCIE_DCSR_TRANSACTION_PND >> 16)
 #define PCI_EXP_LNKCTL2			PCIE_LCAP2
@@ -146,7 +153,21 @@ CTASSERT(PCI_CLASS_BRIDGE_ISA == 0x0601);
 #define  PCI_EXP_LNKCAP_CLKPM		PCIE_LCAP_CLOCK_PM
 #define PCI_EXP_DEVCAP2_ATOMIC_COMP32	PCIE_DCAP2_32ATOM
 #define PCI_EXP_DEVCAP2_ATOMIC_COMP64	PCIE_DCAP2_64ATOM
+#define	PCI_EXP_TYPE_UPSTREAM		PCIE_XCAP_TYPE_UP
+#define	PCI_EXP_TYPE_DOWNSTREAM		PCIE_XCAP_TYPE_DOWN
 
+#define	PCI_COMMAND			PCI_COMMAND_STATUS_REG
+#define	PCI_VENDOR_ID			PCI_ID_REG
+#define	PCI_COMMAND_MEMORY		PCI_COMMAND_MEM_ENABLE
+#define	PCI_PRIMARY_BUS			PCI_BRIDGE_BUS_REG
+#define	PCI_POSSIBLE_ERROR(value)	((value) == UINT32_MAX)
+
+#define	PCI_EXT_CAP_ID_ERR		PCI_EXTCAP_AER
+#define	PCI_EXT_CAP_ID_VNDR		PCI_EXTCAP_VENDOR
+#define	PCI_EXT_CAP_ID_LTR		PCI_EXTCAP_LTR
+
+#define	PCI_ERR_UNCOR_STATUS		PCI_AER_UC_STATUS
+#define	PCI_ERR_COR_STATUS		PCI_AER_COR_STATUS
 
 typedef int pci_power_t;
 
@@ -155,6 +176,36 @@ typedef int pci_power_t;
 #define	PCI_D2		2
 #define	PCI_D3hot	3
 #define	PCI_D3cold	4
+
+typedef unsigned int pci_channel_state_t;
+
+enum {
+	pci_channel_io_normal = 1,
+	pci_channel_io_frozen = 2,
+	pci_channel_io_perm_failure = 3,
+};
+
+typedef unsigned int pci_ers_result_t;
+
+enum pci_ers_result {
+	PCI_ERS_RESULT_NONE = 1,
+	PCI_ERS_RESULT_CAN_RECOVER = 2,
+	PCI_ERS_RESULT_NEED_RESET = 3,
+	PCI_ERS_RESULT_DISCONNECT = 4,
+	PCI_ERS_RESULT_RECOVERED = 5,
+	PCI_ERS_RESULT_NO_AER_DRIVER = 6,
+};
+
+struct pci_error_handlers {
+	pci_ers_result_t (*error_detected)(struct pci_dev *,
+	    pci_channel_state_t);
+	pci_ers_result_t (*mmio_enabled)(struct pci_dev *);
+	pci_ers_result_t (*slot_reset)(struct pci_dev *);
+	void (*reset_prepare)(struct pci_dev *);
+	void (*reset_done)(struct pci_dev *);
+	void (*resume)(struct pci_dev *);
+	void (*cor_error_detected)(struct pci_dev *);
+};
 
 #define	__pci_iomem
 
@@ -197,7 +248,11 @@ struct pci_dev {
 	uint32_t		class;
 	bool			msi_enabled;
 	bool			no_64bit_msi;
+	uint8_t			msix_cap;
 };
+
+#define	PCI_MSIX_FLAGS		(PCI_MSIX_CTL + 2)
+#define	PCI_MSIX_FLAGS_ENABLE	(PCI_MSIX_CTL_ENABLE >> 16)
 
 enum pci_bus_speed {
 	PCI_SPEED_UNKNOWN,
@@ -241,6 +296,23 @@ struct pci_bus {
 	struct pci_dev		*self;
 };
 
+static inline uint16_t
+pci_dev_id(struct pci_dev *pdev)
+{
+
+	return PCI_DEVID(pdev->bus->number, pdev->devfn);
+}
+
+static inline struct pci_dev *
+pci_upstream_bridge(struct pci_dev *pdev)
+{
+
+	if (pdev == NULL || pdev->bus == NULL)
+		return NULL;
+
+	return pdev->bus->self;
+}
+
 /* Namespace.  */
 #define	pci_bus_alloc_resource		linux_pci_bus_alloc_resource
 #define	pci_bus_read_config_byte	linux_pci_bus_read_config_byte
@@ -260,6 +332,8 @@ struct pci_bus {
 #define	pci_enable_msi			linux_pci_enable_msi
 #define	pci_enable_rom			linux_pci_enable_rom
 #define	pci_find_capability		linux_pci_find_capability
+#define	pci_find_ext_capability		linux_pci_find_ext_capability
+#define	pci_get_base_class		linux_pci_get_base_class
 #define	pci_get_class			linux_pci_get_class
 #define	pci_get_domain_bus_and_slot	linux_pci_get_domain_bus_and_slot
 #define	pci_get_drvdata			linux_pci_get_drvdata
@@ -287,12 +361,16 @@ struct pci_bus {
 #define	pci_set_drvdata			linux_pci_set_drvdata
 #define	pci_set_master			linux_pci_set_master
 #define	pci_unmap_rom			linux_pci_unmap_rom
+#define	pci_wait_for_pending_transaction	\
+					linux_pci_wait_for_pending_transaction
 #define	pci_write_config_byte		linux_pci_write_config_byte
 #define	pci_write_config_dword		linux_pci_write_config_dword
 #define	pci_write_config_word		linux_pci_write_config_word
 #define	pcibios_align_resource		linux_pcibios_align_resource
 #define	pcie_get_speed_cap		linux_pcie_get_speed_cap
+#define	pcie_get_width_cap		linux_pcie_get_width_cap
 #define	pcie_bandwidth_available	linux_pcie_bandwidth_available
+#define	pcie_aspm_enabled		linux_pcie_aspm_enabled
 #define	pcie_read_config_dword		linux_pcie_capability_read_dword
 #define	pcie_read_config_word		linux_pcie_capability_read_word
 #define	pcie_write_config_dword		linux_pcie_capability_write_dword
@@ -317,6 +395,7 @@ void *		pci_get_drvdata(struct pci_dev *);
 const char *	pci_name(struct pci_dev *);
 
 int		pci_find_capability(struct pci_dev *, int);
+int		pci_find_ext_capability(struct pci_dev *, int);
 bool		pci_is_pcie(struct pci_dev *);
 bool		pci_dma_supported(struct pci_dev *, uintmax_t);
 bool		pci_is_thunderbolt_attached(struct pci_dev *);
@@ -332,6 +411,70 @@ int		pcie_capability_read_dword(struct pci_dev *, int, uint32_t *);
 int		pcie_capability_read_word(struct pci_dev *, int, uint16_t *);
 int		pcie_capability_write_dword(struct pci_dev *, int, uint32_t);
 int		pcie_capability_write_word(struct pci_dev *, int, uint16_t);
+bool		pcie_aspm_enabled(struct pci_dev *);
+
+static inline int
+pci_pcie_type(struct pci_dev *pdev)
+{
+	uint32_t xcap;
+
+	if (pcie_capability_read_dword(pdev, PCIE_XCAP, &xcap) != 0)
+		return PCIE_XCAP_TYPE_PCIE_DEV;
+
+	return PCIE_XCAP_TYPE(xcap);
+}
+
+static inline struct pci_dev *
+pcie_find_root_port(struct pci_dev *pdev)
+{
+	uint32_t xcap;
+
+	while (pdev != NULL) {
+		if (pcie_capability_read_dword(pdev, PCIE_XCAP, &xcap) == 0 &&
+		    PCIE_XCAP_TYPE(xcap) == PCIE_XCAP_TYPE_RP)
+			return pdev;
+		pdev = pci_upstream_bridge(pdev);
+	}
+
+	return NULL;
+}
+
+static inline bool
+pci_pr3_present(struct pci_dev *pdev __unused)
+{
+
+	/* XXX Teach the NetBSD PCI/ACPI glue how to query _PR3. */
+	return false;
+}
+
+static inline int
+pcie_capability_clear_and_set_word(struct pci_dev *pdev, int reg,
+    uint16_t clear, uint16_t set)
+{
+	uint16_t value;
+	int error;
+
+	error = pcie_capability_read_word(pdev, reg, &value);
+	if (error)
+		return error;
+	value &= ~clear;
+	value |= set;
+	return pcie_capability_write_word(pdev, reg, value);
+}
+
+static inline int
+pcie_capability_clear_word(struct pci_dev *pdev, int reg, uint16_t clear)
+{
+
+	return pcie_capability_clear_and_set_word(pdev, reg, clear, 0);
+}
+
+static inline int
+pcie_capability_set_word(struct pci_dev *pdev, int reg, uint16_t set)
+{
+
+	return pcie_capability_clear_and_set_word(pdev, reg, 0, set);
+}
 
 int		pci_bus_read_config_dword(struct pci_bus *, unsigned, int,
 		    uint32_t *);
@@ -363,6 +506,7 @@ int		pci_bus_alloc_resource(struct pci_bus *, struct resource *,
 
 /* XXX Kludges only -- do not use without checking the implementation!  */
 struct pci_dev *pci_get_domain_bus_and_slot(int, int, int);
+struct pci_dev *pci_get_base_class(uint32_t, struct pci_dev *);
 struct pci_dev *pci_get_class(uint32_t, struct pci_dev *); /* i915 kludge */
 int		pci_dev_present(const struct pci_device_id *);
 void		pci_dev_put(struct pci_dev *);
@@ -385,14 +529,33 @@ bus_size_t	pci_resource_len(struct pci_dev *, unsigned);
 bus_addr_t	pci_resource_end(struct pci_dev *, unsigned);
 int		pci_resource_flags(struct pci_dev *, unsigned);
 
+static inline int
+pci_rebar_bytes_to_size(uint64_t bytes)
+{
+
+	if (bytes <= (UINT64_C(1) << 20))
+		return 0;
+
+	/* Return the size encoding from the PCI Resizable BAR capability. */
+	return fls64(bytes - 1) - 20;
+}
+
 void __pci_iomem *
 		pci_iomap(struct pci_dev *, unsigned, bus_size_t);
 void		pci_iounmap(struct pci_dev *, void __pci_iomem *);
 
-void		pci_save_state(struct pci_dev *);
+int		pci_save_state(struct pci_dev *);
 void		pci_restore_state(struct pci_dev *);
+struct pci_saved_state *
+		pci_store_saved_state(struct pci_dev *);
+int		pci_load_saved_state(struct pci_dev *,
+		    struct pci_saved_state *);
+void		linux_pci_restore_state_force(struct pci_dev *,
+		    struct pci_saved_state *);
+int		pci_wait_for_pending_transaction(struct pci_dev *);
 
 enum pci_bus_speed pcie_get_speed_cap(struct pci_dev *dev);
+enum pcie_link_width pcie_get_width_cap(struct pci_dev *dev);
 unsigned	pcie_bandwidth_available(struct pci_dev *dev,
 					 struct pci_dev **limiting_dev,
 					 enum pci_bus_speed *speed,
@@ -411,6 +574,13 @@ pci_enable_atomic_ops_to_root(struct pci_dev *dev, uint32_t cap_mask)
 {
 
 	return -EINVAL;
+}
+
+static inline bool
+pci_dev_is_disconnected(const struct pci_dev *pdev)
+{
+
+	return false;
 }
 
 #endif  /* _LINUX_PCI_H_ */

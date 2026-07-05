@@ -13775,7 +13775,9 @@ typedef enum CovToShaderSel {
 INPUT_COVERAGE                           = 0x00000000,
 INPUT_INNER_COVERAGE                     = 0x00000001,
 INPUT_DEPTH_COVERAGE                     = 0x00000002,
+#ifndef __NetBSD__		/* XXX conflicts with <sys/ioctl_compat.h> */
 RAW                                      = 0x00000003,
+#endif
 } CovToShaderSel;
 
 /*

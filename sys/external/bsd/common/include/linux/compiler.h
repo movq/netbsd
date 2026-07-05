@@ -35,6 +35,7 @@
 #include <sys/atomic.h>
 #include <sys/cdefs.h>
 
+#include <linux/build_bug.h>
 #include <linux/stddef.h>
 
 #include <asm/barrier.h>
@@ -49,11 +50,19 @@
 #define	__always_unused	__unused
 #define	__maybe_unused	__unused
 #define	noinline	__noinline
+#define	noinline_for_stack	noinline
+#define	__malloc	__attribute__((__malloc__))
 #define	__deprecated	/* nothing */
 #define	__acquire(X)	/* nothing */
 #define	__release(X)	/* nothing */
+#define	__nonstring	/* nothing */
+
+#define	___PASTE(a, b)	a ## b
+#define	__PASTE(a, b)	___PASTE(a, b)
 
 #define	barrier()	__insn_barrier()
+#define	OPTIMIZER_HIDE_VAR(var)					      \
+	__asm__("" : "=r" (var) : "0" (var))
 #define	likely(X)	__predict_true(X)
 #define	unlikely(X)	__predict_false(X)
 #define	__same_type(X,Y)						      \
@@ -81,10 +90,19 @@
 	smp_mb();							      \
 } while (0)
 
-#define	smp_store_release(X, V)	do {					      \
-	typeof(X) __smp_store_release_tmp = (V);			      \
+#define	smp_store_release(P, V)	do {					      \
+	typeof(*(P)) __smp_store_release_tmp = (V);			      \
 	membar_release();						      \
-	(X) = __write_once_tmp;						      \
+	*(P) = __smp_store_release_tmp;					      \
 } while (0)
+
+#define	smp_load_acquire(P)	({					      \
+	typeof(*(P)) __smp_load_acquire_tmp = READ_ONCE(*(P));		      \
+	membar_acquire();						      \
+	__smp_load_acquire_tmp;						      \
+})
+
+#define	__cleanup(fn)	__attribute__((__cleanup__(fn)))
+#define	fallthrough	__attribute__((__fallthrough__))
 
 #endif	/* _LINUX_COMPILER_H_ */

@@ -46,6 +46,11 @@ pm_runtime_disable(struct device *dev __unused)
 {
 }
 
+static inline void
+pm_runtime_enable(struct device *dev __unused)
+{
+}
+
 static inline int
 pm_runtime_get(struct device *dev __unused)
 {
@@ -62,6 +67,20 @@ static inline int
 pm_runtime_get_sync(struct device *dev __unused)
 {
 	return 0;
+}
+
+static inline int
+pm_runtime_resume_and_get(struct device *dev __unused)
+{
+
+	return 0;
+}
+
+static inline int
+pm_runtime_get_if_active(struct device *dev __unused)
+{
+
+	return 1;
 }
 
 static inline void
@@ -108,6 +127,48 @@ pm_runtime_use_autosuspend(struct device *dev __unused)
 static inline void
 pm_runtime_dont_use_autosuspend(struct device *dev __unused)
 {
+}
+
+static inline uint64_t
+pm_runtime_autosuspend_expiration(struct device *dev __unused)
+{
+
+	return 0;
+}
+
+static inline int
+pm_runtime_autosuspend(struct device *dev __unused)
+{
+
+	return 0;
+}
+
+static inline int
+pm_runtime_resume(struct device *dev __unused)
+{
+
+	return 0;
+}
+
+static inline int
+pm_runtime_suspend(struct device *dev __unused)
+{
+
+	return 0;
+}
+
+static inline bool
+pm_runtime_suspended(struct device *dev __unused)
+{
+
+	return false;
+}
+
+static inline bool
+pm_runtime_status_suspended(struct device *dev __unused)
+{
+
+	return false;
 }
 
 static inline void

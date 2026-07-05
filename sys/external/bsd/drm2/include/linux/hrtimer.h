@@ -67,6 +67,7 @@ enum hrtimer_restart {
 #define	hrtimer_set_expires	linux_hrtimer_set_expiresp
 #define	hrtimer_start		linux_hrtimer_start
 #define	hrtimer_start_range_ns	linux_hrtimer_start_range_ns
+#define	hrtimer_try_to_cancel	linux_hrtimer_try_to_cancel
 
 void hrtimer_init(struct hrtimer *, clockid_t, enum hrtimer_mode);
 void hrtimer_set_expires(struct hrtimer *, ktime_t);
@@ -75,8 +76,26 @@ void hrtimer_start(struct hrtimer *, ktime_t, enum hrtimer_mode);
 void hrtimer_start_range_ns(struct hrtimer *, ktime_t, uint64_t,
     enum hrtimer_mode);
 int hrtimer_cancel(struct hrtimer *);
+int hrtimer_try_to_cancel(struct hrtimer *);
 bool hrtimer_active(struct hrtimer *);
 uint64_t hrtimer_forward(struct hrtimer *, ktime_t, ktime_t);
 uint64_t hrtimer_forward_now(struct hrtimer *, ktime_t);
+
+static inline void
+hrtimer_setup(struct hrtimer *timer,
+    enum hrtimer_restart (*function)(struct hrtimer *),
+    clockid_t clock_id, enum hrtimer_mode mode)
+{
+
+	hrtimer_init(timer, clock_id, mode);
+	timer->function = function;
+}
+
+static inline ktime_t
+hrtimer_get_expires(const struct hrtimer *timer)
+{
+
+	return timer->hrt_expires;
+}
 
 #endif  /* _LINUX_HRTIMER_H_ */

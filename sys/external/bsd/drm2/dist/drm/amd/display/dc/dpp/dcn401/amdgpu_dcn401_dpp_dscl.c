@@ -1098,7 +1098,7 @@ void dpp401_dscl_set_scaler_manual_scale(struct dpp *dpp_base,
 
 	if ((dpp->base.ctx->dc->config.use_spl) && (!dpp->base.ctx->dc->debug.disable_spl)) {
 		dscl_mode = (enum dcn401_dscl_mode_sel) scl_data->dscl_prog_data.dscl_mode;
-		rect = (struct rect *)&scl_data->dscl_prog_data.recout;
+		rect = (const struct rect *)&scl_data->dscl_prog_data.recout;
 		mpc_width = scl_data->dscl_prog_data.mpc_size.width;
 		mpc_height = scl_data->dscl_prog_data.mpc_size.height;
 		v_num_taps = scl_data->dscl_prog_data.taps.v_taps;

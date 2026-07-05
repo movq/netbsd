@@ -74,12 +74,10 @@ vzalloc(unsigned long size)
 }
 
 static inline void
-vfree(void *ptr)
+vfree(const void *ptr)
 {
 	kfree(ptr);
 }
-
-#define	PAGE_KERNEL	UVM_PROT_RW
 
 /*
  * vmap(pages, npages, flags, prot)

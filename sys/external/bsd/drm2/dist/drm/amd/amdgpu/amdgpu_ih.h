@@ -26,6 +26,10 @@
 #ifndef __AMDGPU_IH_H__
 #define __AMDGPU_IH_H__
 
+#ifdef __NetBSD__
+#include <drm/drm_wait_netbsd.h>
+#endif
+
 /* Maximum number of IVs processed at once */
 #define AMDGPU_IH_MAX_NUM_IVS	32
 
@@ -76,7 +80,12 @@ struct amdgpu_ih_ring {
 	struct amdgpu_ih_regs	ih_regs;
 
 	/* For waiting on IH processing at checkpoint. */
+#ifdef __NetBSD__
+	drm_waitqueue_t wait_process;
+	spinlock_t wait_process_lock;
+#else
 	wait_queue_head_t wait_process;
+#endif
 	uint64_t		processed_timestamp;
 	bool overflow;
 };

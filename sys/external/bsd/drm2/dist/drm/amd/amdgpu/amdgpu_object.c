@@ -1086,11 +1086,16 @@ int amdgpu_bo_init(struct amdgpu_device *adev)
 		/* Add an MTRR for the VRAM */
 		adev->gmc.vram_mtrr = arch_phys_wc_add(adev->gmc.aper_base,
 				adev->gmc.aper_size);
+#ifdef __NetBSD__
+		if (adev->gmc.aper_base)
+			pmap_pv_track(adev->gmc.aper_base,
+			    adev->gmc.aper_size);
+#endif
 	}
 
 	DRM_INFO("Detected VRAM RAM=%"PRIu64"M, BAR=%"PRIu64"M\n",
 		 adev->gmc.mc_vram_size >> 20,
-		 (unsigned long long)adev->gmc.aper_size >> 20);
+		 (uint64_t)adev->gmc.aper_size >> 20);
 	DRM_INFO("RAM width %dbits %s\n",
 		 adev->gmc.vram_width, amdgpu_vram_names[adev->gmc.vram_type]);
 	return amdgpu_ttm_init(adev);
@@ -1107,20 +1112,20 @@ void amdgpu_bo_fini(struct amdgpu_device *adev)
 	int idx;
 
 	amdgpu_ttm_fini(adev);
-#ifdef __NetBSD__
-	if (adev->gmc.aper_base)
-		pmap_pv_untrack(adev->gmc.aper_base, adev->gmc.aper_size);
-#endif
 
 	if (drm_dev_enter(adev_to_drm(adev), &idx)) {
 		if (!adev->gmc.xgmi.connected_to_cpu && !adev->gmc.is_app_apu) {
+#ifdef __NetBSD__
+			if (adev->gmc.aper_base)
+				pmap_pv_untrack(adev->gmc.aper_base,
+				    adev->gmc.aper_size);
+#endif
 			arch_phys_wc_del(adev->gmc.vram_mtrr);
 			arch_io_free_memtype_wc(adev->gmc.aper_base, adev->gmc.aper_size);
 		}
 		drm_dev_exit(idx);
 	}
 }
-#endif
 
 /**
  * amdgpu_bo_set_tiling_flags - set tiling flags

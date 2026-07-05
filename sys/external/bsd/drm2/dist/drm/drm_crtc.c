@@ -465,7 +465,7 @@ void *__drmm_crtc_alloc_with_planes(struct drm_device *dev,
 	if (!container)
 		return ERR_PTR(-ENOMEM);
 
-	crtc = container + offset;
+	crtc = (struct drm_crtc *)((char *)container + offset);
 
 	va_start(ap, name);
 	ret = __drmm_crtc_init_with_planes(dev, crtc, primary, cursor, funcs,

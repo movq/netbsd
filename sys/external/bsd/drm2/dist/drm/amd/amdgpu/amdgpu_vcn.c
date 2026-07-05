@@ -41,6 +41,8 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_vcn.c,v 1.2 2021/12/18 23:44:58 riastradh Exp
 #include "amdgpu_vcn.h"
 #include "soc15d.h"
 
+#include <linux/nbsd-namespace.h>
+
 /* Firmware Names */
 #define FIRMWARE_RAVEN			"amdgpu/raven_vcn.bin"
 #define FIRMWARE_PICASSO		"amdgpu/picasso_vcn.bin"
@@ -802,7 +804,7 @@ static int amdgpu_vcn_dec_sw_send_msg(struct amdgpu_ring *ring,
 	struct amdgpu_job *job;
 	struct amdgpu_ib *ib;
 	uint64_t addr = AMDGPU_GPU_PAGE_ALIGN(ib_msg->gpu_addr);
-	uint32_t *ib_checksum;
+	uint32_t *ib_checksum = NULL;
 	uint32_t ib_pack_in_dw;
 	int i, r;
 
@@ -1386,10 +1388,12 @@ int amdgpu_vcn_sysfs_reset_mask_init(struct amdgpu_device *adev)
 
 void amdgpu_vcn_sysfs_reset_mask_fini(struct amdgpu_device *adev)
 {
+#ifdef notyet
 	if (adev->dev->kobj.sd) {
 		if (adev->vcn.num_vcn_inst)
 			device_remove_file(adev->dev, &dev_attr_vcn_reset_mask);
 	}
+#endif
 }
 
 /*

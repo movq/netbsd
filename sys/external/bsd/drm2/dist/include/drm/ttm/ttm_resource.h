@@ -362,6 +362,9 @@ struct ttm_kmap_iter_iomap {
 	resource_size_t start;
 	struct {
 		struct scatterlist *sg;
+#ifdef __NetBSD__
+		unsigned int seg;
+#endif
 		pgoff_t i;
 		pgoff_t end;
 		pgoff_t offs;

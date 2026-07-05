@@ -38,6 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_module.c,v 1.14 2022/09/01 01:54:38 riastradh 
 #endif
 
 #include <linux/atomic.h>
+#include <linux/device.h>
 #include <linux/dma-fence.h>
 #include <linux/highmem.h>
 #include <linux/idr.h>
@@ -112,6 +113,7 @@ linux_init(void)
 		goto fail8;
 	}
 
+	linux_device_init();
 	linux_irq_work_init();
 	linux_dma_fences_init();
 
@@ -149,6 +151,7 @@ linux_fini(void)
 
 	linux_dma_fences_fini();
 	linux_irq_work_fini();
+	linux_device_fini();
 	linux_kthread_fini();
 	linux_wait_bit_fini();
 	linux_tasklets_fini();

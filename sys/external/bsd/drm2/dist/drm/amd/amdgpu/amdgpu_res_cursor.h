@@ -61,12 +61,11 @@ static inline void amdgpu_res_first(struct ttm_resource *res,
 	struct list_head *head, *next;
 	struct drm_mm_node *node;
 
+	cur->mem_type = res ? res->mem_type : TTM_PL_SYSTEM;
 	if (!res)
 		goto fallback;
 
 	BUG_ON(start + size > res->size);
-
-	cur->mem_type = res->mem_type;
 
 	switch (cur->mem_type) {
 	case TTM_PL_VRAM:

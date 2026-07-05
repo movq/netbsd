@@ -656,7 +656,8 @@ static ssize_t srm_data_write(struct file *filp, struct kobject *kobj,
 	struct hdcp_workqueue *work;
 	u32 srm_version = 0;
 
-	work = container_of(bin_attr, struct hdcp_workqueue, attr);
+	work = __UNCONST(const_container_of(bin_attr, struct hdcp_workqueue,
+	    attr));
 	link_lock(work, true);
 
 	memcpy(work->srm_temp + pos, buffer, count);
@@ -683,7 +684,8 @@ static ssize_t srm_data_read(struct file *filp, struct kobject *kobj,
 	u32 srm_size;
 	size_t ret = count;
 
-	work = container_of(bin_attr, struct hdcp_workqueue, attr);
+	work = __UNCONST(const_container_of(bin_attr, struct hdcp_workqueue,
+	    attr));
 
 	link_lock(work, true);
 
@@ -832,4 +834,3 @@ fail_alloc_context:
 
 	return NULL;
 }
-

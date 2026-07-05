@@ -809,7 +809,7 @@ glob (pattern, flags, errfunc, pglob)
 	      && S_ISDIR (st.st_mode)))
 	{
 	  pglob->gl_pathv
-	    = (char **) realloc (pglob->gl_pathv,
+	    = (char **) realloc ((char*)(pglob->gl_pathv),
 				 (pglob->gl_pathc +
 				  ((flags & GLOB_DOOFFS) ?
 				   pglob->gl_offs : 0) +
@@ -928,7 +928,7 @@ glob (pattern, flags, errfunc, pglob)
 
 	      /* This is an pessimistic guess about the size.  */
 	      pglob->gl_pathv
-		= (char **) realloc (pglob->gl_pathv,
+		= (char **) realloc ((char*)(pglob->gl_pathv),
 				     (pglob->gl_pathc +
 				      ((flags & GLOB_DOOFFS) ?
 				       pglob->gl_offs : 0) +
@@ -983,7 +983,7 @@ glob (pattern, flags, errfunc, pglob)
 	      pglob->gl_flags = flags;
 
 	      /* Now we know how large the gl_pathv vector must be.  */
-	      new_pathv = (char **) realloc (pglob->gl_pathv,
+	      new_pathv = (char **) realloc ((char*)(pglob->gl_pathv),
 					     ((pglob->gl_pathc + 1)
 					      * sizeof (char *)));
 	      if (new_pathv != NULL)
@@ -1374,7 +1374,7 @@ glob_in_dir (pattern, directory, flags, errfunc, pglob)
   if (nfound != 0)
     {
       pglob->gl_pathv
-	= (char **) realloc (pglob->gl_pathv,
+	= (char **) realloc ((char*)(pglob->gl_pathv),
 			     (pglob->gl_pathc +
 			      ((flags & GLOB_DOOFFS) ? pglob->gl_offs : 0) +
 			      nfound + 1) *

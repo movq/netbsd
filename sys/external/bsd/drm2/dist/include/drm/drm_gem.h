@@ -247,7 +247,11 @@ struct drm_gem_object_funcs {
 	 *
 	 * This is optional but necessary for mmap support.
 	 */
+#ifdef __NetBSD__
+	const struct uvm_pagerops *vm_ops;
+#else
 	const struct vm_operations_struct *vm_ops;
+#endif
 };
 
 /**
@@ -519,9 +523,11 @@ void drm_gem_object_release(struct drm_gem_object *obj);
 void drm_gem_object_free(struct kref *kref);
 int drm_gem_object_init(struct drm_device *dev,
 			struct drm_gem_object *obj, size_t size);
+#ifndef __NetBSD__
 int drm_gem_object_init_with_mnt(struct drm_device *dev,
 				 struct drm_gem_object *obj, size_t size,
 				 struct vfsmount *gemfs);
+#endif
 void drm_gem_private_object_init(struct drm_device *dev,
 				 struct drm_gem_object *obj, size_t size);
 void drm_gem_private_object_fini(struct drm_gem_object *obj);
@@ -529,8 +535,6 @@ void drm_gem_private_object_fini(struct drm_gem_object *obj);
 void drm_gem_pager_reference(struct uvm_object *);
 void drm_gem_pager_detach(struct uvm_object *);
 int drm_gem_mmap_object(struct drm_device *, off_t, size_t, int,
-    struct uvm_object **, voff_t *, struct file *);
-int drm_gem_or_legacy_mmap_object(struct drm_device *, off_t, size_t, int,
     struct uvm_object **, voff_t *, struct file *);
 #else
 void drm_gem_vm_open(struct vm_area_struct *vma);

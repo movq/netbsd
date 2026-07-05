@@ -28,6 +28,7 @@ __KERNEL_RCSID(0, "$NetBSD: drm_bridge.c,v 1.5 2021/12/18 23:44:57 riastradh Exp
 
 #include <linux/debugfs.h>
 #include <linux/err.h>
+#include <linux/errno.h>
 #include <linux/export.h>
 #include <linux/media-bus-format.h>
 #include <linux/module.h>
@@ -262,6 +263,7 @@ void drm_bridge_put(struct drm_bridge *bridge)
 }
 EXPORT_SYMBOL(drm_bridge_put);
 
+#ifndef __NetBSD__
 /**
  * drm_bridge_put_void - wrapper to drm_bridge_put() taking a void pointer
  *
@@ -276,10 +278,15 @@ static void drm_bridge_put_void(void *data)
 
 	drm_bridge_put(bridge);
 }
+#endif
 
 void *__devm_drm_bridge_alloc(struct device *dev, size_t size, size_t offset,
 			      const struct drm_bridge_funcs *funcs)
 {
+
+	STUB();
+	return ERR_PTR(-ENOSYS);
+#ifndef __NetBSD__
 	void *container;
 	struct drm_bridge *bridge;
 	int err;
@@ -293,7 +300,7 @@ void *__devm_drm_bridge_alloc(struct device *dev, size_t size, size_t offset,
 	if (!container)
 		return ERR_PTR(-ENOMEM);
 
-	bridge = container + offset;
+	bridge = (struct drm_bridge *)((char *)container + offset);
 	bridge->container = container;
 	bridge->funcs = funcs;
 	kref_init(&bridge->refcount);
@@ -303,6 +310,7 @@ void *__devm_drm_bridge_alloc(struct device *dev, size_t size, size_t offset,
 		return ERR_PTR(err);
 
 	return container;
+#endif
 }
 EXPORT_SYMBOL(__devm_drm_bridge_alloc);
 
@@ -321,7 +329,7 @@ void drm_bridge_add(struct drm_bridge *bridge)
 
 	drm_bridge_get(bridge);
 
-	mutex_init(&bridge->hpd_mutex);
+	linux_mutex_init(&bridge->hpd_mutex);
 
 	if (bridge->ops & DRM_BRIDGE_OP_HDMI)
 		bridge->ycbcr_420_allowed = !!(bridge->supported_formats &
@@ -333,10 +341,12 @@ void drm_bridge_add(struct drm_bridge *bridge)
 }
 EXPORT_SYMBOL(drm_bridge_add);
 
+#ifndef __NetBSD__
 static void drm_bridge_remove_void(void *bridge)
 {
 	drm_bridge_remove(bridge);
 }
+#endif
 
 /**
  * devm_drm_bridge_add - devm managed version of drm_bridge_add()
@@ -352,7 +362,11 @@ static void drm_bridge_remove_void(void *bridge)
 int devm_drm_bridge_add(struct device *dev, struct drm_bridge *bridge)
 {
 	drm_bridge_add(bridge);
+#ifndef __NetBSD__
 	return devm_add_action_or_reset(dev, drm_bridge_remove_void, bridge);
+#else
+	return 0;
+#endif
 }
 EXPORT_SYMBOL(devm_drm_bridge_add);
 
@@ -367,7 +381,7 @@ void drm_bridge_remove(struct drm_bridge *bridge)
 	list_del_init(&bridge->list);
 	mutex_unlock(&bridge_lock);
 
-	mutex_destroy(&bridge->hpd_mutex);
+	linux_mutex_destroy(&bridge->hpd_mutex);
 
 	drm_bridge_put(bridge);
 }
@@ -845,7 +859,7 @@ void drm_atomic_bridge_chain_pre_enable(struct drm_bridge *bridge,
 					struct drm_atomic_state *state)
 {
 	struct drm_encoder *encoder;
-	struct drm_bridge *iter, *next, *limit;
+	struct drm_bridge *iter, *next, *limit = NULL;
 
 	if (!bridge)
 		return;
@@ -1221,8 +1235,6 @@ int drm_atomic_bridge_chain_check(struct drm_bridge *bridge,
 
 	encoder = bridge->encoder;
 	list_for_each_entry_reverse(iter, &encoder->bridge_chain, chain_node) {
-		int ret;
-
 		/*
 		 * Bus flags are propagated by default. If a bridge needs to
 		 * tweak the input bus flags for any reason, it should happen
@@ -1447,10 +1459,13 @@ EXPORT_SYMBOL(of_drm_find_bridge);
  */
 void devm_drm_put_bridge(struct device *dev, struct drm_bridge *bridge)
 {
+#ifndef __NetBSD__
 	devm_release_action(dev, drm_bridge_put_void, bridge);
+#endif
 }
 EXPORT_SYMBOL(devm_drm_put_bridge);
 
+#ifndef __NetBSD__
 static void drm_bridge_debugfs_show_bridge(struct drm_printer *p,
 					   struct drm_bridge *bridge,
 					   unsigned int idx)
@@ -1522,6 +1537,7 @@ void drm_bridge_debugfs_encoder_params(struct dentry *root,
 	/* bridges list */
 	debugfs_create_file("bridges", 0444, root, encoder, &encoder_bridges_fops);
 }
+#endif /* !__NetBSD__ */
 
 MODULE_AUTHOR("Ajay Kumar <ajaykumar.rs@samsung.com>");
 MODULE_DESCRIPTION("DRM bridge infrastructure");

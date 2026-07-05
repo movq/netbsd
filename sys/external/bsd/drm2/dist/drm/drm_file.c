@@ -42,6 +42,7 @@ __KERNEL_RCSID(0, "$NetBSD: drm_file.c,v 1.5 2021/12/19 11:21:03 riastradh Exp $
 #include <linux/file.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/pid.h>
 #include <linux/poll.h>
 #include <linux/slab.h>
 #include <linux/vga_switcheroo.h>
@@ -59,6 +60,7 @@ __KERNEL_RCSID(0, "$NetBSD: drm_file.c,v 1.5 2021/12/19 11:21:03 riastradh Exp $
 #ifdef __NetBSD__
 #include <sys/poll.h>
 #include <sys/select.h>
+#include <linux/wait.h>
 #endif
 
 #include <linux/nbsd-namespace.h>
@@ -265,7 +267,7 @@ void drm_file_free(struct drm_file *file)
 	dev = file->minor->dev;
 
 	drm_dbg_core(dev, "comm=\"%s\", pid=%d, dev=0x%lx, open_count=%d\n",
-		     current->comm, task_pid_nr(current),
+		     current->p_comm, task_pid_nr(current),
 #ifdef __NetBSD__
 		  (unsigned long)device_unit(file->minor->dev->dev),
 #else
@@ -307,7 +309,7 @@ void drm_file_free(struct drm_file *file)
 #endif
 
 	mutex_destroy(&file->client_name_lock);
-	kfree(file->client_name);
+	kfree(__UNCONST(file->client_name));
 
 	kfree(file);
 }
@@ -340,6 +342,7 @@ static int drm_cpu_valid(void)
 	return 1;
 }
 
+#ifndef __NetBSD__
 /*
  * Called whenever a process opens a drm node
  *
@@ -367,7 +370,7 @@ int drm_open_helper(struct file *filp, struct drm_minor *minor)
 		return -EINVAL;
 
 	drm_dbg_core(dev, "comm=\"%s\", pid=%d, minor=%d\n",
-		     current->comm, task_pid_nr(current), minor->index);
+		     current->p_comm, task_pid_nr(current), minor->index);
 
 	priv = drm_file_alloc(minor);
 	if (IS_ERR(priv))
@@ -443,7 +446,7 @@ err_undo:
 EXPORT_SYMBOL(drm_open);
 #endif
 
-static void drm_lastclose(struct drm_device *dev)
+void drm_lastclose(struct drm_device *dev)
 {
 	drm_client_dev_restore(dev);
 
@@ -493,8 +496,10 @@ EXPORT_SYMBOL(drm_release);
 
 void drm_file_update_pid(struct drm_file *filp)
 {
+#ifndef __NetBSD__
 	struct drm_device *dev;
 	struct pid *pid, *old;
+#endif
 
 	/*
 	 * Master nodes need to keep the original ownership in order for
@@ -504,6 +509,7 @@ void drm_file_update_pid(struct drm_file *filp)
 	if (filp->was_master)
 		return;
 
+#ifndef __NetBSD__
 	pid = task_tgid(current);
 
 	/*
@@ -521,6 +527,7 @@ void drm_file_update_pid(struct drm_file *filp)
 
 	synchronize_rcu();
 	put_pid(old);
+#endif
 }
 
 /**
@@ -536,6 +543,7 @@ void drm_file_update_pid(struct drm_file *filp)
  * RETURNS:
  * Always succeeds and returns 0.
  */
+#ifndef __NetBSD__
 int drm_release_noglobal(struct inode *inode, struct file *filp)
 {
 	struct drm_file *file_priv = filp->private_data;
@@ -554,6 +562,7 @@ int drm_release_noglobal(struct inode *inode, struct file *filp)
 	return 0;
 }
 EXPORT_SYMBOL(drm_release_noglobal);
+#endif
 
 /**
  * drm_read - read method for DRM file
@@ -1019,6 +1028,10 @@ EXPORT_SYMBOL(drm_show_memory_stats);
  */
 void drm_show_fdinfo(struct seq_file *m, struct file *f)
 {
+#ifdef __NetBSD__
+	(void)m;
+	(void)f;
+#else
 	struct drm_file *file = f->private_data;
 	struct drm_device *dev = file->minor->dev;
 	struct drm_printer p = drm_seq_file_printer(m);
@@ -1047,6 +1060,7 @@ void drm_show_fdinfo(struct seq_file *m, struct file *f)
 		dev->driver->show_fdinfo(&p, file);
 
 	drm_dev_exit(idx);
+#endif
 }
 EXPORT_SYMBOL(drm_show_fdinfo);
 
@@ -1062,8 +1076,10 @@ void drm_file_err(struct drm_file *file_priv, const char *fmt, ...)
 {
 	va_list args;
 	struct va_format vaf;
+#ifndef __NetBSD__
 	struct pid *pid;
 	struct task_struct *task;
+#endif
 	struct drm_device *dev = file_priv->minor->dev;
 
 	va_start(args, fmt);
@@ -1071,6 +1087,12 @@ void drm_file_err(struct drm_file *file_priv, const char *fmt, ...)
 	vaf.va = &args;
 
 	mutex_lock(&file_priv->client_name_lock);
+#ifdef __NetBSD__
+	drm_err(dev, "comm: Unset pid: 0 client-id:%"PRIu64
+	    " client: %s ... %pV",
+		file_priv->client_id,
+		file_priv->client_name ?: "Unset", &vaf);
+#else
 	rcu_read_lock();
 	pid = rcu_dereference(file_priv->pid);
 	task = pid_task(pid, PIDTYPE_TGID);
@@ -1080,8 +1102,9 @@ void drm_file_err(struct drm_file *file_priv, const char *fmt, ...)
 		task ? task->pid : 0, file_priv->client_id,
 		file_priv->client_name ?: "Unset", &vaf);
 
-	va_end(args);
 	rcu_read_unlock();
+#endif
+	va_end(args);
 	mutex_unlock(&file_priv->client_name_lock);
 }
 EXPORT_SYMBOL(drm_file_err);

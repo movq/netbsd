@@ -32,6 +32,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "amdgpu.h"
 #include "amdgpu_rap.h"
 
+#if defined(CONFIG_DEBUG_FS)
+
 /**
  * DOC: AMDGPU RAP debugfs test interface
  *
@@ -129,3 +131,5 @@ void amdgpu_rap_debugfs_init(struct amdgpu_device *adev)
 	debugfs_create_file("rap_test", S_IWUSR, minor->debugfs_root,
 				adev, &amdgpu_rap_debugfs_ops);
 }
+
+#endif

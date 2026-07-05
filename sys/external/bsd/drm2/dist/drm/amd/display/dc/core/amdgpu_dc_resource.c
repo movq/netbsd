@@ -2054,7 +2054,7 @@ struct pipe_ctx *resource_get_otg_master(const struct pipe_ctx *pipe_ctx)
 
 struct pipe_ctx *resource_get_opp_head(const struct pipe_ctx *pipe_ctx)
 {
-	struct pipe_ctx *opp_head = (struct pipe_ctx *) pipe_ctx;
+	struct pipe_ctx *opp_head = __UNCONST(pipe_ctx);
 
 	ASSERT(!resource_is_pipe_type(opp_head, FREE_PIPE));
 	while (opp_head->top_pipe)
@@ -2064,7 +2064,7 @@ struct pipe_ctx *resource_get_opp_head(const struct pipe_ctx *pipe_ctx)
 
 struct pipe_ctx *resource_get_primary_dpp_pipe(const struct pipe_ctx *dpp_pipe)
 {
-	struct pipe_ctx *pri_dpp_pipe = (struct pipe_ctx *) dpp_pipe;
+	struct pipe_ctx *pri_dpp_pipe = __UNCONST(dpp_pipe);
 
 	ASSERT(resource_is_pipe_type(dpp_pipe, DPP_PIPE));
 	while (pri_dpp_pipe->prev_odm_pipe)

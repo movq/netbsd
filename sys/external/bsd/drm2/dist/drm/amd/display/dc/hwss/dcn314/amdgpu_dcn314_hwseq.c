@@ -366,7 +366,7 @@ unsigned int dcn314_calculate_dccg_k1_k2_values(struct pipe_ctx *pipe_ctx, unsig
 }
 
 void dcn314_calculate_pix_rate_divider(
-		struct dc *dc,
+		const struct dc *dc,
 		struct dc_state *context,
 		const struct dc_stream_state *stream)
 {

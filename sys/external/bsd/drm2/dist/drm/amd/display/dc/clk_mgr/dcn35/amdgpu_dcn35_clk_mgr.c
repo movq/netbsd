@@ -627,7 +627,7 @@ static void dcn35_save_clk_registers(struct clk_state_registers_and_bypass *regs
 		struct clk_mgr_dcn35 *clk_mgr)
 {
 	struct dcn35_clk_internal internal = {0};
-	char *bypass_clks[5] = {"0x0 DFS", "0x1 REFCLK", "0x2 ERROR", "0x3 400 FCH", "0x4 600 FCH"};
+	const char *bypass_clks[5] = {"0x0 DFS", "0x1 REFCLK", "0x2 ERROR", "0x3 400 FCH", "0x4 600 FCH"};
 
 	dcn35_save_clk_registers_internal(&internal, &clk_mgr->base.base);
 

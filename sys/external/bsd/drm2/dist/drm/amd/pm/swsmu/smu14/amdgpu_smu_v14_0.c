@@ -48,6 +48,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "asic_reg/mp/mp_14_0_2_offset.h"
 #include "asic_reg/mp/mp_14_0_2_sh_mask.h"
 
+#include <linux/nbsd-namespace.h>
+
 #define regMP1_SMN_IH_SW_INT_mp1_14_0_0			0x0341
 #define regMP1_SMN_IH_SW_INT_mp1_14_0_0_BASE_IDX        0
 #define regMP1_SMN_IH_SW_INT_CTRL_mp1_14_0_0            0x0342
@@ -304,7 +306,7 @@ static int smu_v14_0_set_pptable_v2_0(struct smu_context *smu, void **table, uin
 
 	ppt_offset_bytes = le32_to_cpu(v2->ppt_offset_bytes);
 	*size = le32_to_cpu(v2->ppt_size_bytes);
-	*table = (uint8_t *)v2 + ppt_offset_bytes;
+	*table = __UNCONST((const uint8_t *)v2 + ppt_offset_bytes);
 
 	return 0;
 }
@@ -314,17 +316,19 @@ static int smu_v14_0_set_pptable_v2_1(struct smu_context *smu, void **table,
 {
 	struct amdgpu_device *adev = smu->adev;
 	const struct smc_firmware_header_v2_1 *v2_1;
-	struct smc_soft_pptable_entry *entries;
+	const struct smc_soft_pptable_entry *entries;
 	uint32_t pptable_count = 0;
 	int i = 0;
 
 	v2_1 = (const struct smc_firmware_header_v2_1 *) adev->pm.fw->data;
-	entries = (struct smc_soft_pptable_entry *)
-		((uint8_t *)v2_1 + le32_to_cpu(v2_1->pptable_entry_offset));
+	entries = (const struct smc_soft_pptable_entry *)
+		((const uint8_t *)v2_1 +
+		    le32_to_cpu(v2_1->pptable_entry_offset));
 	pptable_count = le32_to_cpu(v2_1->pptable_count);
 	for (i = 0; i < pptable_count; i++) {
 		if (le32_to_cpu(entries[i].id) == pptable_id) {
-			*table = ((uint8_t *)v2_1 + le32_to_cpu(entries[i].ppt_offset_bytes));
+			*table = __UNCONST((const uint8_t *)v2_1 +
+			    le32_to_cpu(entries[i].ppt_offset_bytes));
 			*size = le32_to_cpu(entries[i].ppt_size_bytes);
 			break;
 		}

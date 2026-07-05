@@ -64,6 +64,13 @@ task_pid_nr(struct proc *p)
 	return p->p_pid;
 }
 
+static inline void
+get_task_comm(char *comm, struct proc *p)
+{
+
+	strlcpy(comm, p->p_comm, TASK_COMM_LEN);
+}
+
 static inline long
 schedule_timeout_uninterruptible(long timeout)
 {
@@ -103,6 +110,13 @@ need_resched(void)
 }
 
 static inline void
+schedule(void)
+{
+
+	yield();
+}
+
+static inline void
 cond_resched(void)
 {
 
@@ -133,5 +147,11 @@ sched_setscheduler(struct proc *p, int class, struct sched_param *param)
 	lwp_changepri(curlwp, PRI_KERNEL_RT);
 	lwp_unlock(curlwp);
 }
+
+/*
+ * sched_set_fifo(p): Set the scheduling policy of a task to SCHED_FIFO.
+ * Currently a no-op for NetBSD compatibility.
+ */
+#define	sched_set_fifo(p)	((void)0)
 
 #endif  /* _LINUX_SCHED_H_ */

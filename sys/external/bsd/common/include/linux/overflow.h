@@ -38,16 +38,50 @@
 
 #define	check_mul_overflow(a, b, res)	__builtin_mul_overflow(a, b, res)
 #define	check_add_overflow(a, b, res)	__builtin_add_overflow(a, b, res)
+#define	check_sub_overflow(a, b, res)	__builtin_sub_overflow(a, b, res)
+
+#define	range_overflows(start, size, max)				      \
+({									      \
+	__typeof__(start) start__ = (start);				      \
+	__typeof__(size) size__ = (size);				      \
+	__typeof__(max) max__ = (max);					      \
+	(void)(&start__ == &size__);					      \
+	(void)(&start__ == &max__);					      \
+	start__ >= max__ || size__ > max__ - start__;			      \
+})
+
+#define	range_overflows_t(type, start, size, max)			      \
+	range_overflows((type)(start), (type)(size), (type)(max))
+
+#define	range_end_overflows(start, size, max)				      \
+({									      \
+	__typeof__(start) start__ = (start);				      \
+	__typeof__(size) size__ = (size);				      \
+	__typeof__(max) max__ = (max);					      \
+	(void)(&start__ == &size__);					      \
+	(void)(&start__ == &max__);					      \
+	start__ > max__ || size__ > max__ - start__;			      \
+})
+
+#define	range_end_overflows_t(type, start, size, max)			      \
+	range_end_overflows((type)(start), (type)(size), (type)(max))
 
 /* return x*y saturated at SIZE_MAX */
 static inline size_t
-array_size(size_t x, size_t y)
+size_mul(size_t x, size_t y)
 {
 	size_t xy;
 
 	if (check_mul_overflow(x, y, &xy))
 		return SIZE_MAX;
 	return xy;
+}
+
+/* return x*y saturated at SIZE_MAX */
+static inline size_t
+array_size(size_t x, size_t y)
+{
+	return size_mul(x, y);
 }
 
 /* return x*y*z saturated at SIZE_MAX */

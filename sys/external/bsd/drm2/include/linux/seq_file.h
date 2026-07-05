@@ -37,4 +37,6 @@
 
 struct seq_file;
 
+#define DEFINE_SHOW_ATTRIBUTE(a)
+
 #endif  /* _LINUX_SEQ_FILE_H_ */

@@ -282,7 +282,7 @@ static int vpe_v_6_1_ring_stop(struct amdgpu_vpe *vpe)
 {
 	struct amdgpu_device *adev = vpe->ring.adev;
 	uint32_t queue_reset, i;
-	int ret;
+	int ret = 0;
 
 	for (i = 0; i < vpe->num_instances; i++) {
 		if (amdgpu_ip_version(adev, VPE_HWIP, 0) == IP_VERSION(6, 1, 1))

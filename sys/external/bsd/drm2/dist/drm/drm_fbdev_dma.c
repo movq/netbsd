@@ -122,7 +122,7 @@ static void drm_fbdev_dma_damage_blit_real(struct drm_fb_helper *fb_helper,
 	size_t offset = clip->y1 * fb->pitches[0];
 	size_t len = clip->x2 - clip->x1;
 	unsigned int y;
-	void *src;
+	u8 *src;
 
 	switch (drm_format_info_bpp(fb->format, 0)) {
 	case 1:
@@ -143,7 +143,7 @@ static void drm_fbdev_dma_damage_blit_real(struct drm_fb_helper *fb_helper,
 		break;
 	}
 
-	src = fb_helper->info->screen_buffer + offset;
+	src = fb_helper->fbdev->screen_buffer + offset;
 	iosys_map_incr(dst, offset); /* go to first pixel within clip rect */
 
 	for (y = clip->y1; y < clip->y2; y++) {
@@ -211,7 +211,7 @@ static int drm_fbdev_dma_driver_fbdev_probe_tail(struct drm_fb_helper *fb_helper
 	struct drm_client_buffer *buffer = fb_helper->buffer;
 	struct drm_gem_dma_object *dma_obj = to_drm_gem_dma_obj(buffer->gem);
 	struct drm_framebuffer *fb = fb_helper->fb;
-	struct fb_info *info = fb_helper->info;
+	struct fb_info *info = fb_helper->fbdev;
 	struct iosys_map map = buffer->map;
 
 	info->fbops = &drm_fbdev_dma_fb_ops;
@@ -235,7 +235,7 @@ static int drm_fbdev_dma_driver_fbdev_probe_tail_shadowed(struct drm_fb_helper *
 							  struct drm_fb_helper_surface_size *sizes)
 {
 	struct drm_client_buffer *buffer = fb_helper->buffer;
-	struct fb_info *info = fb_helper->info;
+	struct fb_info *info = fb_helper->fbdev;
 	size_t screen_size = buffer->gem->size;
 	void *screen_buffer;
 	int ret;

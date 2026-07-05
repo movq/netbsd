@@ -122,12 +122,7 @@ void amdgpu_gmc_get_pde_for_bo(struct amdgpu_bo *bo, int level,
 
 	switch (bo->tbo.resource->mem_type) {
 	case TTM_PL_TT:
-#ifdef __NetBSD__
-		*addr = bo->tbo.ttm->dma_address->dm_segs[0].ds_addr;
-#else
-
 		*addr = bo->tbo.ttm->dma_address[0];
-#endif
 		break;
 	case TTM_PL_VRAM:
 		*addr = amdgpu_bo_gpu_offset(bo);
@@ -213,11 +208,7 @@ uint64_t amdgpu_gmc_agp_addr(struct ttm_buffer_object *bo)
 	if (bo->ttm->num_pages != 1 || bo->ttm->caching == ttm_cached)
 		return AMDGPU_BO_INVALID_OFFSET;
 
-#ifdef __NetBSD__
-	addr = bo->ttm->dma_address->dm_segs[0].ds_addr;
-#else
 	addr = bo->ttm->dma_address[0];
-#endif
 
 	if (addr + PAGE_SIZE >= adev->gmc.agp_size)
 		return AMDGPU_BO_INVALID_OFFSET;
@@ -297,11 +288,13 @@ void amdgpu_gmc_sysvm_location(struct amdgpu_device *adev, struct amdgpu_gmc *mc
 		mc->fb_start = hive_vram_start;
 		mc->fb_end = hive_vram_end;
 	}
-	dev_info(adev->dev, "VRAM: %lluM 0x%016llX - 0x%016llX (%lluM used)\n",
-			mc->mc_vram_size >> 20, mc->vram_start,
-			mc->vram_end, mc->real_vram_size >> 20);
-	dev_info(adev->dev, "GART: %lluM 0x%016llX - 0x%016llX\n",
-			mc->gart_size >> 20, mc->gart_start, mc->gart_end);
+	dev_info(adev->dev, "VRAM: %"PRIu64"M 0x%016"PRIX64
+	    " - 0x%016"PRIX64" (%"PRIu64"M used)\n",
+	    mc->mc_vram_size >> 20, mc->vram_start,
+	    mc->vram_end, mc->real_vram_size >> 20);
+	dev_info(adev->dev, "GART: %"PRIu64"M 0x%016"PRIX64
+	    " - 0x%016"PRIX64"\n",
+	    mc->gart_size >> 20, mc->gart_start, mc->gart_end);
 }
 
 /**
@@ -1237,7 +1230,7 @@ static ssize_t available_memory_partition_show(struct device *dev,
 	struct drm_device *ddev = dev_get_drvdata(dev);
 	struct amdgpu_device *adev = drm_to_adev(ddev);
 	int size = 0, mode;
-	char *sep = "";
+	const char *sep = "";
 
 	for_each_inst(mode, adev->gmc.supported_nps_modes) {
 		size += sysfs_emit_at(buf, size, "%s%s", sep, nps_desc[mode]);
@@ -1385,7 +1378,8 @@ int amdgpu_gmc_get_nps_memranges(struct amdgpu_device *adev,
 		if (ranges[i].base_address >= ranges[i].limit_address) {
 			dev_warn(
 				adev->dev,
-				"Invalid NPS range - nps mode: %d, range[%d]: base: %llx limit: %llx",
+				"Invalid NPS range - nps mode: %d, range[%d]: "
+				"base: %"PRIx64" limit: %"PRIx64,
 				nps_type, i, ranges[i].base_address,
 				ranges[i].limit_address);
 			ret = -EINVAL;
@@ -1400,7 +1394,9 @@ int amdgpu_gmc_get_nps_memranges(struct amdgpu_device *adev,
 				ranges[i].limit_address)) {
 				dev_warn(
 					adev->dev,
-					"overlapping ranges detected [ %llx - %llx ] | [%llx - %llx]",
+					"overlapping ranges detected [ %"PRIx64
+					" - %"PRIx64" ] | [%"PRIx64
+					" - %"PRIx64"]",
 					ranges[j].base_address,
 					ranges[j].limit_address,
 					ranges[i].base_address,

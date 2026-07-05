@@ -586,7 +586,7 @@ void *__drmm_universal_plane_alloc(struct drm_device *dev, size_t size,
 	if (!container)
 		return ERR_PTR(-ENOMEM);
 
-	plane = container + offset;
+	plane = (struct drm_plane *)((char *)container + offset);
 
 	va_start(ap, name);
 	ret = __drm_universal_plane_init(dev, plane, possible_crtcs, funcs,
@@ -625,7 +625,7 @@ void *__drm_universal_plane_alloc(struct drm_device *dev, size_t size,
 	if (!container)
 		return ERR_PTR(-ENOMEM);
 
-	plane = container + offset;
+	plane = (struct drm_plane *)((char *)container + offset);
 
 	va_start(ap, name);
 	ret = __drm_universal_plane_init(dev, plane, possible_crtcs, funcs,

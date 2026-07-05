@@ -501,8 +501,9 @@ void amdgpu_amdkfd_get_local_mem_info(struct amdgpu_device *adev,
 	}
 	mem_info->vram_width = adev->gmc.vram_width;
 
-	pr_debug("Address base: %pap public 0x%"PRIx64" private 0x%"PRIx64\n",
-			&adev->gmc.aper_base,
+	pr_debug("Address base: 0x%"PRIx64" public 0x%"PRIx64
+			" private 0x%"PRIx64"\n",
+			(uint64_t)adev->gmc.aper_base,
 			mem_info->local_mem_size_public,
 			mem_info->local_mem_size_private);
 

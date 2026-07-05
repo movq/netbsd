@@ -32,6 +32,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "umc/umc_6_7_0_offset.h"
 #include "umc/umc_6_7_0_sh_mask.h"
 
+#include <linux/nbsd-namespace.h>
+
 static bool amdgpu_mca_is_deferred_error(struct amdgpu_device *adev,
 					uint64_t mc_status)
 {
@@ -282,15 +284,15 @@ static void amdgpu_mca_smu_mca_bank_dump(struct amdgpu_device *adev, int idx, st
 	u64 event_id = qctx ? qctx->evid.event_id : RAS_EVENT_INVALID_ID;
 
 	RAS_EVENT_LOG(adev, event_id, HW_ERR "Accelerator Check Architecture events logged\n");
-	RAS_EVENT_LOG(adev, event_id, HW_ERR "aca entry[%02d].STATUS=0x%016llx\n",
+	RAS_EVENT_LOG(adev, event_id, HW_ERR "aca entry[%02d].STATUS=0x%016"PRIx64"\n",
 		      idx, entry->regs[MCA_REG_IDX_STATUS]);
-	RAS_EVENT_LOG(adev, event_id, HW_ERR "aca entry[%02d].ADDR=0x%016llx\n",
+	RAS_EVENT_LOG(adev, event_id, HW_ERR "aca entry[%02d].ADDR=0x%016"PRIx64"\n",
 		      idx, entry->regs[MCA_REG_IDX_ADDR]);
-	RAS_EVENT_LOG(adev, event_id, HW_ERR "aca entry[%02d].MISC0=0x%016llx\n",
+	RAS_EVENT_LOG(adev, event_id, HW_ERR "aca entry[%02d].MISC0=0x%016"PRIx64"\n",
 		      idx, entry->regs[MCA_REG_IDX_MISC0]);
-	RAS_EVENT_LOG(adev, event_id, HW_ERR "aca entry[%02d].IPID=0x%016llx\n",
+	RAS_EVENT_LOG(adev, event_id, HW_ERR "aca entry[%02d].IPID=0x%016"PRIx64"\n",
 		      idx, entry->regs[MCA_REG_IDX_IPID]);
-	RAS_EVENT_LOG(adev, event_id, HW_ERR "aca entry[%02d].SYND=0x%016llx\n",
+	RAS_EVENT_LOG(adev, event_id, HW_ERR "aca entry[%02d].SYND=0x%016"PRIx64"\n",
 		      idx, entry->regs[MCA_REG_IDX_SYND]);
 }
 
@@ -546,7 +548,8 @@ static void mca_dump_entry(struct seq_file *m, struct mca_bank_entry *entry)
 		   idx, entry->info.socket_id, entry->info.aid, entry->info.hwid, entry->info.mcatype);
 
 	for (i = 0; i < ARRAY_SIZE(reg_idx_array); i++)
-		seq_printf(m, "mca entry[%d].regs[%d]: 0x%016llx\n", idx, reg_idx_array[i], entry->regs[reg_idx_array[i]]);
+		seq_printf(m, "mca entry[%d].regs[%d]: 0x%016"PRIx64"\n",
+		    idx, reg_idx_array[i], entry->regs[reg_idx_array[i]]);
 }
 
 static int mca_dump_show(struct seq_file *m, enum amdgpu_mca_error_type type)
@@ -618,7 +621,8 @@ static const struct file_operations mca_ue_dump_debug_fops = {
 	.release = single_release,
 };
 
-DEFINE_DEBUGFS_ATTRIBUTE(mca_debug_mode_fops, NULL, amdgpu_mca_smu_debug_mode_set, "%llu\n");
+DEFINE_DEBUGFS_ATTRIBUTE(mca_debug_mode_fops, NULL,
+    amdgpu_mca_smu_debug_mode_set, "%"PRIu64"\n");
 #endif
 
 void amdgpu_mca_smu_debugfs_init(struct amdgpu_device *adev, struct dentry *root)

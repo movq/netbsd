@@ -39,6 +39,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "kfd_migrate.h"
 #include "kfd_smi_events.h"
 
+#include <linux/nbsd-namespace.h>
+
 #ifdef dev_fmt
 #undef dev_fmt
 #endif

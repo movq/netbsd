@@ -34,69 +34,67 @@ __KERNEL_RCSID(0, "$NetBSD: linux_dmi.c,v 1.2 2018/08/27 06:45:44 riastradh Exp 
 
 #include <linux/dmi.h>
 
-bool
-dmi_match(enum dmi_field slot, const char *text)
+const char *
+dmi_get_system_info(enum dmi_field slot)
 {
-	const char *p = NULL;
-
 	switch (slot) {
 	case DMI_NONE:
-		aprint_error("%s: dmi_match on none makes no sense", __func__);
-		return false;
+		return NULL;
 	case DMI_BIOS_VENDOR:
-		p = pmf_get_platform("bios-vendor");
-		break;
+		return pmf_get_platform("bios-vendor");
 	case DMI_BIOS_VERSION:
-		p = pmf_get_platform("bios-version");
-		break;
+		return pmf_get_platform("bios-version");
 	case DMI_BIOS_DATE:
-		p = pmf_get_platform("bios-date");
-		break;
+		return pmf_get_platform("bios-date");
 	case DMI_SYS_VENDOR:
-		p = pmf_get_platform("system-vendor");
-		break;
+		return pmf_get_platform("system-vendor");
 	case DMI_PRODUCT_NAME:
-		p = pmf_get_platform("system-product");
-		break;
+		return pmf_get_platform("system-product");
 	case DMI_PRODUCT_VERSION:
-		p = pmf_get_platform("system-version");
-		break;
+		return pmf_get_platform("system-version");
 	case DMI_PRODUCT_SERIAL:
-		p = pmf_get_platform("system-serial");
-		break;
+		return pmf_get_platform("system-serial");
 	case DMI_PRODUCT_UUID:
-		p = pmf_get_platform("system-uuid");
-		break;
+		return pmf_get_platform("system-uuid");
 	case DMI_BOARD_VENDOR:
-		p = pmf_get_platform("board-vendor");
-		break;
+		return pmf_get_platform("board-vendor");
 	case DMI_BOARD_NAME:
-		p = pmf_get_platform("board-product");
-		break;
+		return pmf_get_platform("board-product");
 	case DMI_BOARD_VERSION:
-		p = pmf_get_platform("board-version");
-		break;
+		return pmf_get_platform("board-version");
 	case DMI_BOARD_SERIAL:
-		p = pmf_get_platform("board-serial");
-		break;
+		return pmf_get_platform("board-serial");
 	case DMI_BOARD_ASSET_TAG:
-		p = pmf_get_platform("board-asset-tag");
-		break;
+		return pmf_get_platform("board-asset-tag");
 	case DMI_CHASSIS_VENDOR:
+		return pmf_get_platform("chassis-vendor");
 	case DMI_CHASSIS_TYPE:
+		return pmf_get_platform("chassis-type");
 	case DMI_CHASSIS_VERSION:
+		return pmf_get_platform("chassis-version");
 	case DMI_CHASSIS_SERIAL:
+		return pmf_get_platform("chassis-serial");
 	case DMI_CHASSIS_ASSET_TAG:
-		return false;
+		return pmf_get_platform("chassis-asset-tag");
 	case DMI_STRING_MAX:
 	default:
 		aprint_error("%s: unknown DMI field(%d)\n", __func__, slot);
+		return NULL;
+	}
+}
+
+bool
+dmi_match(enum dmi_field slot, const char *text)
+{
+	const char *p;
+
+	if (slot == DMI_NONE) {
+		aprint_error("%s: dmi_match on none makes no sense", __func__);
 		return false;
 	}
-	if (p == NULL || strcmp(p, text))
-		return false;
 
-	return true;
+	p = dmi_get_system_info(slot);
+	return p != NULL && strcmp(p, text) == 0;
 }
 
 static bool
@@ -111,6 +109,18 @@ dmi_found(const struct dmi_system_id *dsi)
 			return false;
 	}
 	return true;
+}
+
+const struct dmi_system_id *
+dmi_first_match(const struct dmi_system_id *sysid)
+{
+	const struct dmi_system_id *dsi;
+
+	for (dsi = sysid; dsi->matches[0].slot != DMI_NONE; dsi++) {
+		if (dmi_found(dsi))
+			return dsi;
+	}
+	return NULL;
 }
 
 int

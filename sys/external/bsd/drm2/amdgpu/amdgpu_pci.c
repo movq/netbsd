@@ -34,6 +34,7 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_pci.c,v 1.12 2023/08/07 16:34:47 riastradh Ex
 
 #include <sys/types.h>
 #include <sys/atomic.h>
+#include <sys/device.h>
 #include <sys/queue.h>
 #include <sys/systm.h>
 #include <sys/workqueue.h>
@@ -42,15 +43,26 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_pci.c,v 1.12 2023/08/07 16:34:47 riastradh Ex
 
 #include <linux/pci.h>
 
+#include <drm/drm.h>
+#include <drm/clients/drm_client_setup.h>
+#include <drm/drm_client.h>
 #include <drm/drm_device.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_fb_helper.h>
+#include <drm/drm_fourcc.h>
+#include <drm/drm_framebuffer.h>
 #include <drm/drm_ioctl.h>
+#include <drm/amdgpu_pci.h>
 #include <drm/drm_pci.h>
 
 #include <amdgpu.h>
+#include <amdgpu_amdkfd.h>
+#include <amdgpu_xcp.h>
+#include <amdgpufb.h>
 #include "amdgpu_drv.h"
 #include "amdgpu_task.h"
+
+#include <linux/nbsd-namespace.h>
 
 struct drm_device;
 
@@ -62,14 +74,17 @@ struct amdgpu_softc {
 	struct lwp			*sc_task_thread;
 	struct amdgpu_task_head		sc_tasks;
 	struct workqueue		*sc_task_wq;
+	struct amdgpu_device		*sc_adev;
 	struct drm_device		*sc_drm_dev;
 	struct pci_dev			sc_pci_dev;
+	struct drm_pci_irq		*sc_irq;
 	bool				sc_pci_attached;
+	bool				sc_kms_loaded;
 	bool				sc_dev_registered;
 };
 
 static bool	amdgpu_pci_lookup(const struct pci_attach_args *,
-		    unsigned long *);
+		    unsigned long *, const struct pci_device_id **);
 
 static int	amdgpu_match(device_t, cfdata_t, void *);
 static void	amdgpu_attach(device_t, device_t, void *);
@@ -79,6 +94,7 @@ static bool	amdgpu_do_suspend(device_t, const pmf_qual_t *);
 static bool	amdgpu_do_resume(device_t, const pmf_qual_t *);
 
 static void	amdgpu_task_work(struct work *, void *);
+static void	amdgpu_attach_framebuffer(struct amdgpu_softc *);
 
 CFATTACH_DECL_NEW(amdgpu, sizeof(struct amdgpu_softc),
     amdgpu_match, amdgpu_attach, amdgpu_detach, NULL);
@@ -89,13 +105,27 @@ extern const struct pci_device_id *const amdgpu_device_ids;
 extern const size_t amdgpu_n_device_ids;
 
 static bool
-amdgpu_pci_lookup(const struct pci_attach_args *pa, unsigned long *flags)
+amdgpu_pci_lookup(const struct pci_attach_args *pa, unsigned long *flags,
+    const struct pci_device_id **entp)
 {
+	const pcireg_t subsystem_id =
+	    pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_SUBSYS_ID_REG);
+	const uint32_t class =
+	    __SHIFTOUT(pa->pa_class, 0xffffff00UL);
 	size_t i;
 
 	for (i = 0; i < amdgpu_n_device_ids; i++) {
-		if ((PCI_VENDOR(pa->pa_id) == amdgpu_device_ids[i].vendor) &&
-		    (PCI_PRODUCT(pa->pa_id) == amdgpu_device_ids[i].device))
+		const struct pci_device_id *id = &amdgpu_device_ids[i];
+
+		if ((id->vendor == PCI_ANY_ID ||
+		     id->vendor == PCI_VENDOR(pa->pa_id)) &&
+		    (id->device == PCI_ANY_ID ||
+		     id->device == PCI_PRODUCT(pa->pa_id)) &&
+		    (id->subvendor == PCI_ANY_ID ||
+		     id->subvendor == PCI_SUBSYS_VENDOR(subsystem_id)) &&
+		    (id->subdevice == PCI_ANY_ID ||
+		     id->subdevice == PCI_SUBSYS_ID(subsystem_id)) &&
+		    (((id->class ^ class) & id->class_mask) == 0))
 			break;
 	}
 
@@ -105,6 +135,8 @@ amdgpu_pci_lookup(const struct pci_attach_args *pa, unsigned long *flags)
 
 	if (flags)
 		*flags = amdgpu_device_ids[i].driver_data;
+	if (entp)
+		*entp = &amdgpu_device_ids[i];
 	return true;
 }
 
@@ -121,7 +153,7 @@ amdgpu_match(device_t parent, cfdata_t match, void *aux)
 		return 0;
 	}
 
-	if (!amdgpu_pci_lookup(pa, NULL))
+	if (!amdgpu_pci_lookup(pa, NULL, NULL))
 		return 0;
 
 	return 7;		/* beat genfb_pci and radeon  */
@@ -142,6 +174,12 @@ amdgpu_attach(device_t parent, device_t self, void *aux)
 	sc->sc_dev = self;
 	sc->sc_pa = *pa;
 	sc->sc_task_thread = NULL;
+	sc->sc_irq = NULL;
+	sc->sc_adev = NULL;
+	sc->sc_drm_dev = NULL;
+	sc->sc_pci_attached = false;
+	sc->sc_kms_loaded = false;
+	sc->sc_dev_registered = false;
 	SIMPLEQ_INIT(&sc->sc_tasks);
 	error = workqueue_create(&sc->sc_task_wq, "amdgpufb",
 	    &amdgpu_task_work, NULL, PRI_NONE, IPL_NONE, WQ_MPSAFE);
@@ -164,11 +202,12 @@ amdgpu_attach_real(device_t self)
 {
 	struct amdgpu_softc *const sc = device_private(self);
 	const struct pci_attach_args *const pa = &sc->sc_pa;
+	const struct pci_device_id *ent = NULL;
 	bool ok __diagused;
 	unsigned long flags = 0; /* XXXGCC */
 	int error;
 
-	ok = amdgpu_pci_lookup(pa, &flags);
+	ok = amdgpu_pci_lookup(pa, &flags, &ent);
 	KASSERT(ok);
 
 	/*
@@ -177,13 +216,18 @@ amdgpu_attach_real(device_t self)
 	 */
 	sc->sc_task_thread = curlwp;
 
-	sc->sc_drm_dev = drm_dev_alloc(amdgpu_drm_driver, self);
-	if (IS_ERR(sc->sc_drm_dev)) {
+	sc->sc_adev = __drm_dev_alloc(self, amdgpu_drm_driver,
+	    sizeof(*sc->sc_adev), offsetof(struct amdgpu_device, ddev));
+	if (IS_ERR(sc->sc_adev)) {
 		aprint_error_dev(self, "unable to create drm device: %ld\n",
-		    PTR_ERR(sc->sc_drm_dev));
+		    PTR_ERR(sc->sc_adev));
+		sc->sc_adev = NULL;
 		sc->sc_drm_dev = NULL;
 		goto out;
 	}
+	sc->sc_adev->dev = self;
+	sc->sc_adev->pdev = &sc->sc_pci_dev;
+	sc->sc_drm_dev = adev_to_drm(sc->sc_adev);
 
 	/* XXX errno Linux->NetBSD */
 	error = -drm_pci_attach(sc->sc_drm_dev, &sc->sc_pci_dev);
@@ -193,6 +237,17 @@ amdgpu_attach_real(device_t self)
 	}
 	sc->sc_pci_attached = true;
 
+	pci_set_drvdata(&sc->sc_pci_dev, sc->sc_drm_dev);
+	amdgpu_init_debug_options(sc->sc_adev);
+
+	/* XXX errno Linux->NetBSD */
+	error = -amdgpu_driver_load_kms(sc->sc_adev, flags);
+	if (error) {
+		aprint_error_dev(self, "unable to initialize GPU: %d\n", error);
+		goto out;
+	}
+	sc->sc_kms_loaded = true;
+
 	/* XXX errno Linux->NetBSD */
 	error = -drm_dev_register(sc->sc_drm_dev, flags);
 	if (error) {
@@ -200,6 +255,39 @@ amdgpu_attach_real(device_t self)
 		goto out;
 	}
 	sc->sc_dev_registered = true;
+
+	/* XXX errno Linux->NetBSD */
+	error = -amdgpu_xcp_dev_register(sc->sc_adev, ent);
+	if (error) {
+		aprint_error_dev(self,
+		    "unable to register GPU partitions: %d\n", error);
+		goto out;
+	}
+
+	/* XXX errno Linux->NetBSD */
+	error = -amdgpu_amdkfd_drm_client_create(sc->sc_adev);
+	if (error) {
+		aprint_error_dev(self,
+		    "unable to register KFD client: %d\n", error);
+		goto out;
+	}
+
+	/*
+	 * Set up the generic 6.18 DRM client and TTM framebuffer.  The
+	 * amdgpufb child pins and maps the resulting buffer for wsdisplay.
+	 */
+	if (sc->sc_adev->mode_info.mode_config_initialized &&
+	    !list_empty(&sc->sc_drm_dev->mode_config.connector_list)) {
+		const struct drm_format_info *format;
+
+		if (sc->sc_adev->gmc.real_vram_size <= (32 * 1024 * 1024))
+			format = drm_format_info(DRM_FORMAT_C8);
+		else
+			format = NULL;
+
+		drm_client_setup(sc->sc_drm_dev, format);
+		amdgpu_attach_framebuffer(sc);
+	}
 
 	if (!pmf_device_register(self, &amdgpu_do_suspend, &amdgpu_do_resume))
 		aprint_error_dev(self, "unable to establish power handler\n");
@@ -237,13 +325,24 @@ amdgpu_detach(device_t self, int flags)
 	KASSERT(SIMPLEQ_EMPTY(&sc->sc_tasks));
 
 	pmf_device_deregister(self);
-	if (sc->sc_dev_registered)
+	if (sc->sc_dev_registered) {
+		amdgpu_xcp_dev_unplug(sc->sc_adev);
 		drm_dev_unregister(sc->sc_drm_dev);
+	}
+	if (sc->sc_kms_loaded) {
+		amdgpu_driver_unload_kms(sc->sc_drm_dev);
+		sc->sc_kms_loaded = false;
+	}
+	if (sc->sc_irq != NULL) {
+		drm_pci_irq_uninstall(sc->sc_irq);
+		sc->sc_irq = NULL;
+	}
 	if (sc->sc_pci_attached)
 		drm_pci_detach(sc->sc_drm_dev);
 	if (sc->sc_drm_dev) {
 		drm_dev_put(sc->sc_drm_dev);
 		sc->sc_drm_dev = NULL;
+		sc->sc_adev = NULL;
 	}
 	if (sc->sc_task_wq) {
 		workqueue_destroy(sc->sc_task_wq);
@@ -252,6 +351,37 @@ amdgpu_detach(device_t self, int flags)
 	linux_pci_dev_destroy(&sc->sc_pci_dev);
 
 	return 0;
+}
+
+static void
+amdgpu_attach_framebuffer(struct amdgpu_softc *sc)
+{
+	struct drm_device *const dev = sc->sc_drm_dev;
+	struct drm_fb_helper *const helper = dev->fb_helper;
+	struct amdgpufb_attach_args afa = { };
+	device_t child;
+
+	if (helper == NULL || helper->buffer == NULL || helper->fb == NULL ||
+	    helper->info == NULL)
+		return;
+
+	afa.afa_drm_dev = dev;
+	afa.afa_fb_helper = helper;
+	afa.afa_fb_sizes.fb_width = helper->fb->width;
+	afa.afa_fb_sizes.fb_height = helper->fb->height;
+	afa.afa_fb_sizes.surface_width = helper->fb->width;
+	afa.afa_fb_sizes.surface_height = helper->fb->height;
+	afa.afa_fb_sizes.surface_bpp =
+	    drm_format_info_bpp(helper->fb->format, 0);
+	afa.afa_fb_sizes.surface_depth = helper->fb->format->depth;
+	afa.afa_fb_linebytes = helper->fb->pitches[0];
+
+	KERNEL_LOCK(1, NULL);
+	child = config_found(sc->sc_dev, &afa, NULL,
+	    CFARGS(.iattr = "amdgpufbbus"));
+	KERNEL_UNLOCK_ONE(NULL);
+	if (child == NULL)
+		aprint_error_dev(sc->sc_dev, "unable to attach amdgpufb\n");
 }
 
 static bool
@@ -283,6 +413,45 @@ amdgpu_do_resume(device_t self, const pmf_qual_t *qual)
 
 out:	drm_resume_ioctl(dev);
 	return ret == 0;
+}
+
+int
+amdgpu_pci_irq_install(struct drm_device *dev, bool allow_msi,
+    int (*handler)(void *), bool *msip)
+{
+	struct amdgpu_softc *const sc = device_private(dev->pdev->pd_dev);
+
+	KASSERT(sc->sc_drm_dev == dev);
+	return drm_pci_irq_install(dev, allow_msi, handler, dev, &sc->sc_irq,
+	    msip);
+}
+
+void
+amdgpu_pci_irq_uninstall(struct drm_device *dev)
+{
+	struct amdgpu_softc *const sc = device_private(dev->pdev->pd_dev);
+
+	KASSERT(sc->sc_irq != NULL);
+	drm_pci_irq_uninstall(sc->sc_irq);
+	sc->sc_irq = NULL;
+}
+
+void
+amdgpu_pci_irq_disable(struct drm_device *dev)
+{
+	struct amdgpu_softc *const sc = device_private(dev->pdev->pd_dev);
+
+	KASSERT(sc->sc_irq != NULL);
+	drm_pci_irq_disable(sc->sc_irq);
+}
+
+void
+amdgpu_pci_irq_enable(struct drm_device *dev)
+{
+	struct amdgpu_softc *const sc = device_private(dev->pdev->pd_dev);
+
+	KASSERT(sc->sc_irq != NULL);
+	drm_pci_irq_enable(sc->sc_irq);
 }
 
 static void

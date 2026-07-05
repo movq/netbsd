@@ -31,6 +31,9 @@
 
 #include <lib/libkern/libkern.h>
 
+#define	DECLARE_FLEX_ARRAY(T, N)					      \
+	struct { struct {} N ## __unused; T N[]; }
+
 #define	sizeof_field(T, F)	sizeof(((T *)0)->F)
 #define	offsetofend(T, F)	(offsetof(T, F) + sizeof_field(T, F))
 

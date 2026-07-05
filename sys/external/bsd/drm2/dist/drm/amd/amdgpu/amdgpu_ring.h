@@ -27,6 +27,7 @@
 #define __AMDGPU_RING_H__
 
 #include <linux/idr.h>
+#include <linux/string.h>
 
 #include <drm/amdgpu_drm.h>
 #include <drm/gpu_scheduler.h>

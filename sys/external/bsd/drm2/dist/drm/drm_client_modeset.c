@@ -279,7 +279,7 @@ static void mode_replace(struct drm_device *dev,
 			 const struct drm_display_mode **dst,
 			 const struct drm_display_mode *src)
 {
-	drm_mode_destroy(dev, (struct drm_display_mode *)*dst);
+	drm_mode_destroy(dev, __UNCONST(*dst));
 
 	*dst = src ? drm_mode_duplicate(dev, src) : NULL;
 }

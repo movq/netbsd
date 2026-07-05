@@ -38,6 +38,7 @@ struct list_head;
 #define	list_sort	linux_list_sort
 
 void	list_sort(void *, struct list_head *,
-	    int (*)(void *, struct list_head *, struct list_head *));
+		    int (*)(void *, const struct list_head *,
+			const struct list_head *));
 
 #endif  /* _LINUX_LIST_SORT_H_ */

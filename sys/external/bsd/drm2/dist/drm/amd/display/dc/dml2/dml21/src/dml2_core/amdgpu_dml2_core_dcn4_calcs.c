@@ -8,6 +8,8 @@
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, "$NetBSD$");
 
+#include <linux/compiler.h>
+
 #include "dml2_internal_shared_types.h"
 #include "dml2_core_dcn4_calcs.h"
 #include "dml2_debug.h"

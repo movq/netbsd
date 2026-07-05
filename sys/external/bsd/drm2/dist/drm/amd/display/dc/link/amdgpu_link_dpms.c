@@ -1105,15 +1105,15 @@ static void log_vcp_x_y(const struct dc_link *link, struct fixed31_32 avg_time_s
 
 	if (link->type == dc_connection_mst_branch)
 		DC_LOG_DP2("MST Update Payload: set_throttled_vcp_size slot X.Y for MST stream "
-				"X: %llu "
-				"Y: %llu/%d",
+				"X: %"PRIu64" "
+				"Y: %"PRIu64"/%d",
 				vcp_x,
 				vcp_y,
 				VCP_Y_PRECISION);
 	else
 		DC_LOG_DP2("SST Update Payload: set_throttled_vcp_size slot X.Y for SST stream "
-				"X: %llu "
-				"Y: %llu/%d",
+				"X: %"PRIu64" "
+				"Y: %"PRIu64"/%d",
 				vcp_x,
 				vcp_y,
 				VCP_Y_PRECISION);
@@ -1397,9 +1397,9 @@ static enum dc_status deallocate_mst_payload(struct pipe_ctx *pipe_ctx)
 		"stream[%d].vcp_id: %d      "
 		"stream[%d].slot_count: %d\n",
 		i,
-		(void *) link->mst_stream_alloc_table.stream_allocations[i].stream_enc,
+		(const void *) link->mst_stream_alloc_table.stream_allocations[i].stream_enc,
 		i,
-		(void *) link->mst_stream_alloc_table.stream_allocations[i].hpo_dp_stream_enc,
+		(const void *) link->mst_stream_alloc_table.stream_allocations[i].hpo_dp_stream_enc,
 		i,
 		link->mst_stream_alloc_table.stream_allocations[i].vcp_id,
 		i,
@@ -1477,9 +1477,9 @@ static enum dc_status allocate_mst_payload(struct pipe_ctx *pipe_ctx)
 		"stream[%d].vcp_id: %d      "
 		"stream[%d].slot_count: %d\n",
 		i,
-		(void *) link->mst_stream_alloc_table.stream_allocations[i].stream_enc,
+		(const void *) link->mst_stream_alloc_table.stream_allocations[i].stream_enc,
 		i,
-		(void *) link->mst_stream_alloc_table.stream_allocations[i].hpo_dp_stream_enc,
+		(const void *) link->mst_stream_alloc_table.stream_allocations[i].hpo_dp_stream_enc,
 		i,
 		link->mst_stream_alloc_table.stream_allocations[i].vcp_id,
 		i,
@@ -1705,7 +1705,7 @@ static enum dc_status update_sst_payload(struct pipe_ctx *pipe_ctx,
 	DC_LOG_DP2("SST Update Payload: hpo_dp_stream_enc: %p      "
 		"vcp_id: %d      "
 		"slot_count: %d\n",
-		(void *) proposed_table.stream_allocations[0].hpo_dp_stream_enc,
+		(const void *) proposed_table.stream_allocations[0].hpo_dp_stream_enc,
 		proposed_table.stream_allocations[0].vcp_id,
 		proposed_table.stream_allocations[0].slot_count);
 
@@ -1800,9 +1800,9 @@ enum dc_status link_reduce_mst_payload(struct pipe_ctx *pipe_ctx, uint32_t bw_in
 		"stream[%d].vcp_id: %d      "
 		"stream[%d].slot_count: %d\n",
 		i,
-		(void *) link->mst_stream_alloc_table.stream_allocations[i].stream_enc,
+		(const void *) link->mst_stream_alloc_table.stream_allocations[i].stream_enc,
 		i,
-		(void *) link->mst_stream_alloc_table.stream_allocations[i].hpo_dp_stream_enc,
+		(const void *) link->mst_stream_alloc_table.stream_allocations[i].hpo_dp_stream_enc,
 		i,
 		link->mst_stream_alloc_table.stream_allocations[i].vcp_id,
 		i,
@@ -1867,9 +1867,9 @@ enum dc_status link_increase_mst_payload(struct pipe_ctx *pipe_ctx, uint32_t bw_
 		"stream[%d].vcp_id: %d      "
 		"stream[%d].slot_count: %d\n",
 		i,
-		(void *) link->mst_stream_alloc_table.stream_allocations[i].stream_enc,
+		(const void *) link->mst_stream_alloc_table.stream_allocations[i].stream_enc,
 		i,
-		(void *) link->mst_stream_alloc_table.stream_allocations[i].hpo_dp_stream_enc,
+		(const void *) link->mst_stream_alloc_table.stream_allocations[i].hpo_dp_stream_enc,
 		i,
 		link->mst_stream_alloc_table.stream_allocations[i].vcp_id,
 		i,

@@ -60,6 +60,7 @@
 #include <linux/wait.h>
 #include <linux/list.h>
 #include <linux/kref.h>
+#include <linux/suspend.h>
 #include <linux/rbtree.h>
 #include <linux/hashtable.h>
 #include <linux/dma-fence.h>
@@ -1398,7 +1399,8 @@ size_t amdgpu_device_aper_access(struct amdgpu_device *adev, loff_t pos,
 void amdgpu_device_vram_access(struct amdgpu_device *adev, loff_t pos,
 			       void *buf, size_t size, bool write);
 uint32_t amdgpu_device_wait_on_rreg(struct amdgpu_device *adev,
-			    uint32_t inst, uint32_t reg_addr, char reg_name[],
+			    uint32_t inst, uint32_t reg_addr,
+			    const char reg_name[],
 			    uint32_t expected_value, uint32_t mask);
 uint32_t amdgpu_device_rreg(struct amdgpu_device *adev,
 			    uint32_t reg, uint32_t acc_flags);
@@ -1662,6 +1664,9 @@ extern const int amdgpu_max_kms_ioctl;
 
 int amdgpu_driver_load_kms(struct amdgpu_device *adev, unsigned long flags);
 void amdgpu_driver_unload_kms(struct drm_device *dev);
+#ifdef __NetBSD__
+void amdgpu_init_debug_options(struct amdgpu_device *adev);
+#endif
 int amdgpu_driver_open_kms(struct drm_device *dev, struct drm_file *file_priv);
 void amdgpu_driver_postclose_kms(struct drm_device *dev,
 				 struct drm_file *file_priv);

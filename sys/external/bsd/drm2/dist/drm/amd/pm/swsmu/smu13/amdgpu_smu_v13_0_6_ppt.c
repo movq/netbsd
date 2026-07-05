@@ -56,6 +56,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "mp/mp_13_0_6_sh_mask.h"
 #include "umc_v12_0.h"
 
+#include <linux/nbsd-namespace.h>
+
 #undef MP1_Public
 #undef smnMP1_FIRMWARE_FLAGS
 
@@ -488,7 +490,7 @@ static int smu_v13_0_6_init_microcode(struct smu_context *smu)
 	const struct smc_firmware_header_v2_1 *v2_1;
 	const struct common_firmware_header *hdr;
 	struct amdgpu_firmware_info *ucode = NULL;
-	struct smc_soft_pptable_entry *entries;
+	const struct smc_soft_pptable_entry *entries;
 	struct amdgpu_device *adev = smu->adev;
 	uint32_t p2s_table_id = P2S_TABLE_ID_A;
 	int ret = 0, i, p2stable_count;
@@ -520,15 +522,15 @@ static int smu_v13_0_6_init_microcode(struct smu_context *smu)
 	 * are used to carry p2s tables.
 	 */
 	v2_1 = (const struct smc_firmware_header_v2_1 *)adev->pm.fw->data;
-	entries = (struct smc_soft_pptable_entry
-			   *)((uint8_t *)v2_1 +
-			      le32_to_cpu(v2_1->pptable_entry_offset));
+	entries = (const struct smc_soft_pptable_entry *)
+	    ((const uint8_t *)v2_1 +
+		le32_to_cpu(v2_1->pptable_entry_offset));
 	p2stable_count = le32_to_cpu(v2_1->pptable_count);
 	for (i = 0; i < p2stable_count; i++) {
 		if (le32_to_cpu(entries[i].id) == p2s_table_id) {
-			smu->pptable_firmware.data =
-				((uint8_t *)v2_1 +
-				 le32_to_cpu(entries[i].ppt_offset_bytes));
+			smu->pptable_firmware.data = __UNCONST(
+			    (const uint8_t *)v2_1 +
+				le32_to_cpu(entries[i].ppt_offset_bytes));
 			smu->pptable_firmware.size =
 				le32_to_cpu(entries[i].ppt_size_bytes);
 			break;
@@ -1416,7 +1418,8 @@ static int smu_v13_0_6_print_clks(struct smu_context *smu, char *buf, int size,
 
 			if (curr_clk == clk1) {
 				level = i;
-			} else if (curr_clk >= clk1 && curr_clk < clk2) {
+			} else if (i < (clocks.num_levels - 1) &&
+				   curr_clk >= clk1 && curr_clk < clk2) {
 				level = (curr_clk - clk1) <= (clk2 - curr_clk) ?
 						i :
 						i + 1;
@@ -2508,7 +2511,7 @@ static int smu_v13_0_6_i2c_control_init(struct smu_context *smu)
 		smu_i2c->port = i;
 		mutex_init(&smu_i2c->mutex);
 		control->owner = THIS_MODULE;
-		control->dev.parent = &adev->pdev->dev;
+		control->dev.parent = pci_dev_dev(adev->pdev);
 		control->algo = &smu_v13_0_6_i2c_algo;
 		snprintf(control->name, sizeof(control->name), "AMDGPU SMU %d", i);
 		control->quirks = &smu_v13_0_6_i2c_control_quirks;
@@ -2960,12 +2963,16 @@ static ssize_t smu_v13_0_6_get_gpu_metrics(struct smu_context *smu, void **table
 static void smu_v13_0_6_restore_pci_config(struct smu_context *smu)
 {
 	struct amdgpu_device *adev = smu->adev;
+#ifdef __NetBSD__
+	linux_pci_restore_state_force(adev->pdev, adev->pci_state);
+#else
 	int i;
 
 	for (i = 0; i < 16; i++)
 		pci_write_config_dword(adev->pdev, i * 4,
 				       adev->pdev->saved_config_space[i]);
 	pci_restore_msi_state(adev->pdev);
+#endif
 }
 
 static int smu_v13_0_6_mode2_reset(struct smu_context *smu)
@@ -3365,7 +3372,7 @@ static int mca_bank_read_reg(struct amdgpu_device *adev, enum amdgpu_mca_error_t
 
 	*val = (uint64_t)data[1] << 32 | data[0];
 
-	dev_dbg(adev->dev, "mca read bank reg: type:%s, index: %d, reg_idx: %d, val: 0x%016llx\n",
+	dev_dbg(adev->dev, "mca read bank reg: type:%s, index: %d, reg_idx: %d, val: 0x%016"PRIx64"\n",
 		type == AMDGPU_MCA_ERROR_TYPE_UE ? "UE" : "CE", idx, reg_idx, *val);
 
 	return 0;
@@ -3819,7 +3826,7 @@ static int aca_bank_read_reg(struct amdgpu_device *adev, enum aca_smu_type type,
 
 	*val = (u64)data[1] << 32 | data[0];
 
-	dev_dbg(adev->dev, "mca read bank reg: type:%s, index: %d, reg_idx: %d, val: 0x%016llx\n",
+	dev_dbg(adev->dev, "mca read bank reg: type:%s, index: %d, reg_idx: %d, val: 0x%016"PRIx64"\n",
 		type == ACA_SMU_TYPE_UE ? "UE" : "CE", idx, reg_idx, *val);
 
 	return 0;

@@ -117,7 +117,7 @@ int	ww_mutex_lock_interruptible(struct ww_mutex *,
 void	ww_mutex_lock_slow(struct ww_mutex *, struct ww_acquire_ctx *);
 int	ww_mutex_lock_slow_interruptible(struct ww_mutex *,
 	    struct ww_acquire_ctx *);
-int	ww_mutex_trylock(struct ww_mutex *);
+int	ww_mutex_trylock(struct ww_mutex *, struct ww_acquire_ctx *);
 void	ww_mutex_unlock(struct ww_mutex *);
 
 struct ww_acquire_ctx *

@@ -8574,7 +8574,7 @@ static void gfx_v10_0_ring_set_wptr_gfx(struct amdgpu_ring *ring)
 
 	if (ring->use_doorbell) {
 		/* XXX check if swapping is necessary on BE */
-		atomic_store_relaxed((atomic64_t *)ring->wptr_cpu_addr,
+		atomic64_set((atomic64_t *)ring->wptr_cpu_addr,
 			     ring->wptr);
 		WDOORBELL64(ring->doorbell_index, ring->wptr);
 	} else {

@@ -149,11 +149,7 @@ struct drm_fb_helper {
 	struct drm_framebuffer *fb;
 	struct drm_device *dev;
 	const struct drm_fb_helper_funcs *funcs;
-#ifdef __NetBSD__		/* XXX fb info */
-	device_t fbdev;
-#else
 	struct fb_info *info;
-#endif
 	u32 pseudo_palette[17];
 	struct drm_clip_rect damage_clip;
 	spinlock_t damage_lock;
@@ -236,6 +232,7 @@ drm_fb_helper_from_client(struct drm_client_dev *client)
  * Helper define to register default implementations of drm_fb_helper
  * functions. To be used in struct fb_ops of drm drivers.
  */
+#ifndef __NetBSD__		/* XXX fb ops */
 #define DRM_FB_HELPER_DEFAULT_OPS \
 	.fb_check_var	= drm_fb_helper_check_var, \
 	.fb_set_par	= drm_fb_helper_set_par, \
@@ -245,6 +242,11 @@ drm_fb_helper_from_client(struct drm_client_dev *client)
 	.fb_debug_enter = drm_fb_helper_debug_enter, \
 	.fb_debug_leave = drm_fb_helper_debug_leave, \
 	.fb_ioctl	= drm_fb_helper_ioctl
+#else
+#define DRM_FB_HELPER_DEFAULT_OPS \
+	.fb_set_par	= drm_fb_helper_set_par, \
+	.fb_blank	= drm_fb_helper_blank
+#endif
 
 #ifdef CONFIG_DRM_FBDEV_EMULATION
 void drm_fb_helper_prepare(struct drm_device *dev, struct drm_fb_helper *helper,
@@ -253,27 +255,21 @@ void drm_fb_helper_prepare(struct drm_device *dev, struct drm_fb_helper *helper,
 void drm_fb_helper_unprepare(struct drm_fb_helper *fb_helper);
 int drm_fb_helper_init(struct drm_device *dev, struct drm_fb_helper *helper);
 void drm_fb_helper_fini(struct drm_fb_helper *helper);
-#ifndef __NetBSD__		/* XXX fb info */
 int drm_fb_helper_blank(int blank, struct fb_info *info);
 int drm_fb_helper_pan_display(struct fb_var_screeninfo *var,
 			      struct fb_info *info);
 int drm_fb_helper_set_par(struct fb_info *info);
 int drm_fb_helper_check_var(struct fb_var_screeninfo *var,
 			    struct fb_info *info);
-#endif
 
 int drm_fb_helper_restore_fbdev_mode_unlocked(struct drm_fb_helper *fb_helper);
 
-#ifndef __NetBSD__		/* XXX fb info */
 struct fb_info *drm_fb_helper_alloc_info(struct drm_fb_helper *fb_helper);
-#endif
 void drm_fb_helper_release_info(struct drm_fb_helper *fb_helper);
 void drm_fb_helper_unregister_info(struct drm_fb_helper *fb_helper);
-#ifndef __NetBSD__		/* XXX fb info */
 void drm_fb_helper_fill_info(struct fb_info *info,
 			     struct drm_fb_helper *fb_helper,
 			     struct drm_fb_helper_surface_size *sizes);
-#endif
 
 void drm_fb_helper_damage_range(struct fb_info *info, off_t off, size_t len);
 void drm_fb_helper_damage_area(struct fb_info *info, u32 x, u32 y, u32 width, u32 height);
@@ -286,12 +282,10 @@ void drm_fb_helper_set_suspend(struct drm_fb_helper *fb_helper, bool suspend);
 void drm_fb_helper_set_suspend_unlocked(struct drm_fb_helper *fb_helper,
 					bool suspend);
 
-#ifndef __NetBSD__		/* XXX fb cmap */
 int drm_fb_helper_setcmap(struct fb_cmap *cmap, struct fb_info *info);
 
 int drm_fb_helper_ioctl(struct fb_info *info, unsigned int cmd,
 			unsigned long arg);
-#endif
 
 int drm_fb_helper_hotplug_event(struct drm_fb_helper *fb_helper);
 int drm_fb_helper_initial_config(struct drm_fb_helper *fb_helper);

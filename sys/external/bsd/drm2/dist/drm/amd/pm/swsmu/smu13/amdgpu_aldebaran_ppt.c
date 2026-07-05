@@ -52,6 +52,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "smu_cmn.h"
 #include "mp/mp_13_0_2_offset.h"
 
+#include <linux/nbsd-namespace.h>
+
 /*
  * DO NOT use these for err/warn/info/debug messages.
  * Use dev_err, dev_warn, dev_info and dev_dbg instead.
@@ -1640,7 +1642,7 @@ static int aldebaran_i2c_control_init(struct smu_context *smu)
 	smu_i2c->port = 0;
 	mutex_init(&smu_i2c->mutex);
 	control->owner = THIS_MODULE;
-	control->dev.parent = &adev->pdev->dev;
+	control->dev.parent = pci_dev_dev(adev->pdev);
 	control->algo = &aldebaran_i2c_algo;
 	snprintf(control->name, sizeof(control->name), "AMDGPU SMU 0");
 	control->quirks = &aldebaran_i2c_control_quirks;

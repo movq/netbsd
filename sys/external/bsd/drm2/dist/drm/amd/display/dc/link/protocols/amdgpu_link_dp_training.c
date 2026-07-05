@@ -65,9 +65,9 @@ void dp_log_training_result(
 	const struct link_training_settings *lt_settings,
 	enum link_training_result status)
 {
-	char *link_rate = "Unknown";
-	char *lt_result = "Unknown";
-	char *lt_spread = "Disabled";
+	const char *link_rate = "Unknown";
+	const char *lt_result = "Unknown";
+	const char *lt_spread = "Disabled";
 
 	switch (lt_settings->link_settings.link_rate) {
 	case LINK_RATE_LOW:
@@ -1200,7 +1200,7 @@ enum dc_status dpcd_set_lane_settings(
 
 	status = core_link_write_dpcd(link,
 		lane0_set_address,
-		(uint8_t *)(link_training_setting->dpcd_lane_settings),
+		(const uint8_t *)(link_training_setting->dpcd_lane_settings),
 		link_training_setting->link_settings.lane_count);
 
 	if (is_repeater(link_training_setting, offset)) {
@@ -1336,7 +1336,7 @@ void dpcd_set_lt_pattern_and_lane_settings(
 		core_link_write_dpcd(
 			link,
 			DP_TRAINING_LANE0_SET,
-			(uint8_t *)(lt_settings->dpcd_lane_settings),
+			(const uint8_t *)(lt_settings->dpcd_lane_settings),
 			size_in_bytes);
 
 	} else if (link_dp_get_encoding_format(&lt_settings->link_settings) ==
@@ -1371,7 +1371,7 @@ void dp_set_hw_test_pattern(
 	struct dc_link *link,
 	const struct link_resource *link_res,
 	enum dp_test_pattern test_pattern,
-	uint8_t *custom_pattern,
+	const uint8_t *custom_pattern,
 	uint32_t custom_pattern_size)
 {
 	const struct link_hwss *link_hwss = get_link_hwss(link, link_res);

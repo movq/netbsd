@@ -49,6 +49,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "smu_cmn.h"
 #include "amdgpu_ras.h"
 
+#include <linux/nbsd-namespace.h>
+
 /*
  * DO NOT use these for err/warn/info/debug messages.
  * Use dev_err, dev_warn, dev_info and dev_dbg instead.
@@ -2087,7 +2089,7 @@ static int smu_v14_0_2_i2c_control_init(struct smu_context *smu)
 		smu_i2c->port = i;
 		mutex_init(&smu_i2c->mutex);
 		control->owner = THIS_MODULE;
-		control->dev.parent = &adev->pdev->dev;
+		control->dev.parent = pci_dev_dev(adev->pdev);
 		control->algo = &smu_v14_0_2_i2c_algo;
 		snprintf(control->name, sizeof(control->name), "AMDGPU SMU %d", i);
 		control->quirks = &smu_v14_0_2_i2c_control_quirks;

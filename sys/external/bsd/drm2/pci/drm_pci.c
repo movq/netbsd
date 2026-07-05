@@ -39,17 +39,32 @@ __KERNEL_RCSID(0, "$NetBSD: drm_pci.c,v 1.48 2022/10/28 21:58:48 riastradh Exp $
 #include <dev/pci/pcivar.h>
 
 #include <linux/err.h>
-#include <drm/drm_agpsupport.h>
 #include <drm/drm_device.h>
 #include <drm/drm_drv.h>
-#include <drm/drm_legacy.h>
 #include <drm/drm_pci.h>
 
 #include "../dist/drm/drm_internal.h"
 
-struct drm_bus_irq_cookie {
+/*
+ * NetBSD records PCI BARs here so Linux bus-space accessors can map them
+ * lazily.
+ */
+struct drm_bus_map {
+	bus_addr_t bm_base;
+	bus_size_t bm_size;
+	bus_space_handle_t bm_bsh;
+	int bm_flags;
+};
+
+struct drm_pci_irq {
+	struct drm_device *dev;
 	pci_intr_handle_t *intr_handles;
 	void *ih_cookie;
+	int (*handler)(void *);
+	void *arg;
+	kmutex_t lock;
+	unsigned int disable_depth;
+	bool msi;
 };
 
 static const struct pci_attach_args *
@@ -122,15 +137,6 @@ drm_pci_attach(struct drm_device *dev, struct pci_dev *pdev)
 		bm->bm_flags |= BUS_SPACE_MAP_LINEAR;
 	}
 
-	/* Set up AGP stuff if requested.  */
-	if (drm_core_check_feature(dev, DRIVER_USE_AGP)) {
-		if (pci_find_capability(dev->pdev, PCI_CAP_ID_AGP))
-			dev->agp = drm_agp_init(dev);
-		if (dev->agp)
-			dev->agp->agp_mtrr = arch_phys_wc_add(dev->agp->base,
-				dev->agp->agp_info.aki_info.ai_aperture_size);
-	}
-
 	/* Success!  */
 	return 0;
 }
@@ -138,13 +144,6 @@ drm_pci_attach(struct drm_device *dev, struct pci_dev *pdev)
 void
 drm_pci_detach(struct drm_device *dev)
 {
-
-	/* Tear down AGP stuff if necessary.  */
-	if (dev->agp) {
-		arch_phys_wc_del(dev->agp->agp_mtrr);
-		drm_agp_fini(dev);
-		KASSERT(dev->agp == NULL);
-	}
 
 	/* Free the record of available bus space mappings.  */
 	dev->bus_nmaps = 0;
@@ -156,68 +155,112 @@ drm_pci_detach(struct drm_device *dev)
 	}
 }
 
+static void *
+drm_pci_irq_establish(struct drm_pci_irq *irq)
+{
+	struct drm_device *const dev = irq->dev;
+	const char *const name = device_xname(dev->dev);
+	const struct pci_attach_args *const pa = drm_pci_attach_args(dev);
+
+	return pci_intr_establish_xname(pa->pa_pc, irq->intr_handles[0],
+	    IPL_DRM, irq->handler, irq->arg, name);
+}
+
 int
-drm_pci_request_irq(struct drm_device *dev, int flags)
+drm_pci_irq_install(struct drm_device *dev, bool allow_msi,
+    int (*handler)(void *), void *arg, struct drm_pci_irq **irqp, bool *msip)
 {
 	const char *const name = device_xname(dev->dev);
-	int (*const handler)(void *) = dev->driver->irq_handler;
 	const struct pci_attach_args *const pa = drm_pci_attach_args(dev);
+	struct drm_pci_irq *irq;
 	const char *intrstr;
 	char intrbuf[PCI_INTRSTR_LEN];
-	struct drm_bus_irq_cookie *irq_cookie;
+	int error;
 
-	irq_cookie = kmem_alloc(sizeof(*irq_cookie), KM_SLEEP);
+	KASSERT(*irqp == NULL);
 
-	if (dev->pdev->msi_enabled) {
-		if (dev->pdev->pd_intr_handles == NULL) {
-			if (pci_msi_alloc_exact(pa, &irq_cookie->intr_handles,
-			    1)) {
-				aprint_error_dev(dev->dev,
-				    "couldn't allocate MSI (%s)\n", name);
-				goto error;
-			}
-		} else {
-			irq_cookie->intr_handles = dev->pdev->pd_intr_handles;
-			dev->pdev->pd_intr_handles = NULL;
-		}
-	} else {
-		if (pci_intx_alloc(pa, &irq_cookie->intr_handles)) {
-			aprint_error_dev(dev->dev,
-			    "couldn't allocate INTx interrupt (%s)\n", name);
-			goto error;
-		}
+	irq = kmem_zalloc(sizeof(*irq), KM_SLEEP);
+	irq->dev = dev;
+	irq->handler = handler;
+	irq->arg = arg;
+	mutex_init(&irq->lock, MUTEX_DEFAULT, IPL_NONE);
+
+	if (allow_msi &&
+	    pci_msi_alloc_exact(pa, &irq->intr_handles, 1) == 0) {
+		irq->msi = true;
+	} else if (pci_intx_alloc(pa, &irq->intr_handles) != 0) {
+		aprint_error_dev(dev->dev,
+		    "couldn't allocate PCI interrupt (%s)\n", name);
+		error = -ENOENT;
+		goto fail;
 	}
 
-	pci_intr_setattr(pa->pa_pc, &irq_cookie->intr_handles[0],
+	pci_intr_setattr(pa->pa_pc, &irq->intr_handles[0],
 	    PCI_INTR_MPSAFE, true);
-	intrstr = pci_intr_string(pa->pa_pc, irq_cookie->intr_handles[0],
+	intrstr = pci_intr_string(pa->pa_pc, irq->intr_handles[0],
 	    intrbuf, sizeof(intrbuf));
-	irq_cookie->ih_cookie = pci_intr_establish_xname(pa->pa_pc,
-	    irq_cookie->intr_handles[0], IPL_DRM, handler, dev, name);
-	if (irq_cookie->ih_cookie == NULL) {
+	irq->ih_cookie = drm_pci_irq_establish(irq);
+	if (irq->ih_cookie == NULL) {
 		aprint_error_dev(dev->dev,
 		    "couldn't establish interrupt at %s (%s)\n", intrstr, name);
-		pci_intr_release(pa->pa_pc, irq_cookie->intr_handles, 1);
-		goto error;
+		error = -ENOENT;
+		goto fail;
 	}
 
+	dev->pdev->msi_enabled = irq->msi;
 	aprint_normal_dev(dev->dev, "interrupting at %s (%s)\n", intrstr, name);
-	dev->irq_cookie = irq_cookie;
+	*irqp = irq;
+	*msip = irq->msi;
 	return 0;
 
-error:
-	kmem_free(irq_cookie, sizeof(*irq_cookie));
-	return -ENOENT;
+fail:
+	if (irq->intr_handles != NULL)
+		pci_intr_release(pa->pa_pc, irq->intr_handles, 1);
+	mutex_destroy(&irq->lock);
+	kmem_free(irq, sizeof(*irq));
+	return error;
 }
 
 void
-drm_pci_free_irq(struct drm_device *dev)
+drm_pci_irq_uninstall(struct drm_pci_irq *irq)
 {
-	struct drm_bus_irq_cookie *const cookie = dev->irq_cookie;
+	struct drm_device *const dev = irq->dev;
 	const struct pci_attach_args *pa = drm_pci_attach_args(dev);
 
-	pci_intr_disestablish(pa->pa_pc, cookie->ih_cookie);
-	pci_intr_release(pa->pa_pc, cookie->intr_handles, 1);
-	kmem_free(cookie, sizeof(*cookie));
-	dev->irq_cookie = NULL;
+	if (irq->ih_cookie != NULL)
+		pci_intr_disestablish(pa->pa_pc, irq->ih_cookie);
+	pci_intr_release(pa->pa_pc, irq->intr_handles, 1);
+	dev->pdev->msi_enabled = false;
+	mutex_destroy(&irq->lock);
+	kmem_free(irq, sizeof(*irq));
+}
+
+void
+drm_pci_irq_disable(struct drm_pci_irq *irq)
+{
+	const struct pci_attach_args *const pa = drm_pci_attach_args(irq->dev);
+
+	mutex_enter(&irq->lock);
+	if (irq->disable_depth++ == 0) {
+		KASSERT(irq->ih_cookie != NULL);
+		pci_intr_disestablish(pa->pa_pc, irq->ih_cookie);
+		irq->ih_cookie = NULL;
+	}
+	mutex_exit(&irq->lock);
+}
+
+void
+drm_pci_irq_enable(struct drm_pci_irq *irq)
+{
+
+	mutex_enter(&irq->lock);
+	KASSERT(irq->disable_depth != 0);
+	if (--irq->disable_depth == 0) {
+		KASSERT(irq->ih_cookie == NULL);
+		irq->ih_cookie = drm_pci_irq_establish(irq);
+		if (irq->ih_cookie == NULL)
+			aprint_error_dev(irq->dev->dev,
+			    "couldn't re-establish interrupt\n");
+	}
+	mutex_exit(&irq->lock);
 }

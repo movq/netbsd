@@ -239,7 +239,7 @@ static void umc_v8_10_convert_error_address(struct amdgpu_device *adev,
 			dev_err(adev->dev, "Failed to map pa from umc na.\n");
 			break;
 		}
-		dev_info(adev->dev, "Error Address(PA): 0x%llx\n",
+		dev_info(adev->dev, "Error Address(PA): 0x%"PRIx64"\n",
 			retired_page_addr);
 		amdgpu_umc_fill_error_record(err_data, na_err_addr,
 				retired_page_addr, channel_index, umc_inst);

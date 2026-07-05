@@ -78,7 +78,9 @@ static void umc_v12_0_reset_error_count(struct amdgpu_device *adev)
 bool umc_v12_0_is_deferred_error(struct amdgpu_device *adev, uint64_t mc_umc_status)
 {
 	dev_dbg(adev->dev,
-		"MCA_UMC_STATUS(0x%llx): Val:%llu, Poison:%llu, Deferred:%llu, PCC:%llu, UC:%llu, TCC:%llu\n",
+		"MCA_UMC_STATUS(0x%"PRIx64"): Val:%"PRIu64
+		", Poison:%"PRIu64", Deferred:%"PRIu64", PCC:%"PRIu64
+		", UC:%"PRIu64", TCC:%"PRIu64"\n",
 		mc_umc_status,
 		REG_GET_FIELD(mc_umc_status, MCA_UMC_UMC0_MCUMC_STATUST0, Val),
 		REG_GET_FIELD(mc_umc_status, MCA_UMC_UMC0_MCUMC_STATUST0, Poison),
@@ -262,8 +264,9 @@ static int umc_v12_0_convert_error_address(struct amdgpu_device *adev,
 		addr_in->addr_type = TA_RAS_MCA_TO_PA;
 		ret = psp_ras_query_address(&adev->psp, addr_in, paddr_out);
 		if (ret) {
-			dev_warn(adev->dev, "Failed to query RAS physical address for 0x%llx",
-				err_addr);
+			dev_warn(adev->dev,
+			    "Failed to query RAS physical address for 0x%"PRIx64,
+			    err_addr);
 
 			goto out;
 		}
@@ -298,6 +301,7 @@ static int umc_v12_0_convert_error_address(struct amdgpu_device *adev,
 		 */
 		row_lower |= (row_high << 13);
 	}
+	row = row_lower;
 
 	if (!err_data && !dump_addr)
 		goto out;
@@ -316,7 +320,7 @@ static int umc_v12_0_convert_error_address(struct amdgpu_device *adev,
 
 		if (dump_addr)
 			dev_info(adev->dev,
-				"Error Address(PA):0x%-10llx Row:0x%-4x Col:0x%-2x Bank:0x%x Channel:0x%x\n",
+				"Error Address(PA):0x%-10"PRIx64" Row:0x%-4x Col:0x%-2x Bank:0x%x Channel:0x%x\n",
 				soc_pa, row, col, bank, channel_index);
 
 		if (err_data)
@@ -557,7 +561,9 @@ static int umc_v12_0_update_ecc_status(struct amdgpu_device *adev,
 				MCA_UMC_UMC0_MCUMC_ADDRT0, ErrorAddr);
 
 	dev_dbg(adev->dev,
-		"UMC:IPID:0x%llx, socket:%llu, aid:%llu, inst:%llu, ch:%llu, err_addr:0x%llx\n",
+		"UMC:IPID:0x%"PRIx64", socket:%"PRIu64
+		", aid:%"PRIu64", inst:%"PRIu64", ch:%"PRIu64
+		", err_addr:0x%"PRIx64"\n",
 		ipid,
 		MCA_IPID_2_SOCKET_ID(ipid),
 		MCA_IPID_2_DIE_ID(ipid),

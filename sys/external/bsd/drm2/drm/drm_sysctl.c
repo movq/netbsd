@@ -69,6 +69,10 @@ drm_sysctl_get_value(const struct linux_module_param_info *p)
 		return *(int *)p->ptr;
 	case MTYPE_uint:
 		return *(unsigned *)p->ptr;
+	case MTYPE_ulong:
+		return *(unsigned long *)p->ptr;
+	case MTYPE_ullong:
+		return *(unsigned long long *)p->ptr;
 	default:
 		aprint_error("unhandled module param type %d for %s\n",
 		    p->type, p->name);
@@ -86,6 +90,10 @@ drm_sysctl_get_size(const struct linux_module_param_info *p)
 		return sizeof(int);
 	case MTYPE_uint:
 		return sizeof(unsigned);
+	case MTYPE_ulong:
+		return sizeof(unsigned long);
+	case MTYPE_ullong:
+		return sizeof(unsigned long long);
 	default:
 		aprint_error("unhandled module param type %d for %s\n",
 		    p->type, p->name);
@@ -106,6 +114,10 @@ drm_sysctl_get_type(const struct linux_module_param_info *p)
 		return CTLTYPE_STRING;
 	case MTYPE_uint:
 		return CTLTYPE_INT; /* XXX */
+	case MTYPE_ulong:
+		return CTLTYPE_LONG;
+	case MTYPE_ullong:
+		return CTLTYPE_QUAD;
 	default:
 		aprint_error("unhandled module param type %d for %s\n",
 		    p->type, p->name);

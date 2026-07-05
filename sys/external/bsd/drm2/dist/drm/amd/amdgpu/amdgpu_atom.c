@@ -1407,7 +1407,8 @@ static void atom_get_vbios_date(struct atom_context *ctx)
 	ctx->date[16] = '\0';
 }
 
-static unsigned char *atom_find_str_in_rom(struct atom_context *ctx, char *str, int start,
+static unsigned char *atom_find_str_in_rom(struct atom_context *ctx,
+					   const char *str, int start,
 					   int end, int maxlen)
 {
 	unsigned long str_off;
@@ -1658,4 +1659,3 @@ bool amdgpu_atom_parse_cmd_header(struct atom_context *ctx, int index, uint8_t *
 		*crev = CU8(idx + 3);
 	return true;
 }
-

@@ -40,6 +40,8 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_gfx.c,v 1.6 2021/12/19 12:31:45 riastradh Exp
 #include "amdgpu_xgmi.h"
 #include "nvd.h"
 
+#include <linux/nbsd-namespace.h>
+
 /* delay 0.1 second to enable gfx off feature */
 #define GFX_OFF_DELAY_ENABLE         msecs_to_jiffies(100)
 
@@ -344,7 +346,7 @@ int amdgpu_gfx_kiq_init_ring(struct amdgpu_device *adev, int xcc_id)
 void amdgpu_gfx_kiq_free_ring(struct amdgpu_ring *ring)
 {
 	amdgpu_ring_fini(ring);
-	spin_lock_destroy(&ring->adev->gfx.kiq.ring_lock);
+	spin_lock_destroy(&ring->adev->gfx.kiq[ring->xcc_id].ring_lock);
 }
 
 void amdgpu_gfx_kiq_fini(struct amdgpu_device *adev, int xcc_id)
@@ -1357,6 +1359,7 @@ bool amdgpu_gfx_is_master_xcc(struct amdgpu_device *adev, int xcc_id)
 			adev->gfx.num_xcc_per_xcp : 1));
 }
 
+#ifndef __NetBSD__		/* XXX sysfs */
 static ssize_t amdgpu_gfx_get_current_compute_partition(struct device *dev,
 						struct device_attribute *addr,
 						char *buf)
@@ -1909,6 +1912,18 @@ void amdgpu_gfx_sysfs_fini(struct amdgpu_device *adev)
 		amdgpu_gfx_sysfs_reset_mask_fini(adev);
 	}
 }
+#else
+int
+amdgpu_gfx_sysfs_init(struct amdgpu_device *adev)
+{
+	return 0;
+}
+
+void
+amdgpu_gfx_sysfs_fini(struct amdgpu_device *adev)
+{
+}
+#endif
 
 int amdgpu_gfx_cleaner_shader_sw_init(struct amdgpu_device *adev,
 				      unsigned int cleaner_shader_size)

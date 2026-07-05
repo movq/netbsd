@@ -7,7 +7,6 @@ SRCS    = \
 	ati_pcigart.c \
 	drm_agpsupport.c \
 	drm_auth.c \
-	drm_bufs.c \
 	drm_context.c \
 	drm_dma.c \
 	drm_drawable.c \
@@ -21,6 +20,7 @@ SRCS    = \
 	drm_scatter.c \
 	drm_sysctl.c \
 	drm_vm.c
+	#drm_bufs.c \
 
 SRCS   += device_if.h bus_if.h pci_if.h opt_drm.h
 CFLAGS += ${DEBUG_FLAGS} -I. -I..

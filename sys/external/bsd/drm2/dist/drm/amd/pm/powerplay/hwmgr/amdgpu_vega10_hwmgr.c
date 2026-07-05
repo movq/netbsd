@@ -58,6 +58,8 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_vega10_hwmgr.c,v 1.4 2021/12/19 12:37:54 rias
 #include "smuio/smuio_9_0_offset.h"
 #include "smuio/smuio_9_0_sh_mask.h"
 
+#include <linux/nbsd-namespace.h>
+
 #define smnPCIE_LC_SPEED_CNTL			0x11140290
 #define smnPCIE_LC_LINK_WIDTH_CNTL		0x11140288
 

@@ -64,6 +64,7 @@ __KERNEL_RCSID(0, "$NetBSD: drmfb_pci.c,v 1.5 2021/12/19 10:37:32 riastradh Exp 
 
 #include <linux/pci.h>
 
+#include <drm/drm.h>
 #include <drm/drm_device.h>
 #include <drm/drm_fb_helper.h>
 

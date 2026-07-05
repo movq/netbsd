@@ -27,12 +27,12 @@ static inline unsigned long long abs_i64(
  * result = dividend / divisor
  * *remainder = dividend % divisor
  */
-static inline unsigned long long spl_complete_integer_division_u64(
-	unsigned long long dividend,
-	unsigned long long divisor,
-	unsigned long long *remainder)
+static inline uint64_t spl_complete_integer_division_u64(
+	uint64_t dividend,
+	uint64_t divisor,
+	uint64_t *remainder)
 {
-	unsigned long long result;
+	uint64_t result;
 
 	result = spl_div64_u64_rem(dividend, divisor, remainder);
 
@@ -59,11 +59,11 @@ struct spl_fixed31_32 spl_fixpt_from_fraction(long long numerator, long long den
 	unsigned long long arg1_value = arg1_negative ? -numerator : numerator;
 	unsigned long long arg2_value = arg2_negative ? -denominator : denominator;
 
-	unsigned long long remainder;
+	uint64_t remainder;
 
 	/* determine integer part */
 
-	unsigned long long res_value = spl_complete_integer_division_u64(
+	uint64_t res_value = spl_complete_integer_division_u64(
 		arg1_value, arg2_value, &remainder);
 
 	SPL_ASSERT(res_value <= (unsigned long long)LONG_MAX);

@@ -365,12 +365,13 @@ static int __write_table_ras_info(struct amdgpu_ras_eeprom_control *control)
 static u8 __calc_hdr_byte_sum(const struct amdgpu_ras_eeprom_control *control)
 {
 	int ii;
-	u8  *pp, csum;
+	const u8 *pp;
+	u8 csum;
 	size_t sz;
 
 	/* Header checksum, skip checksum field in the calculation */
 	sz = sizeof(control->tbl_hdr) - sizeof(control->tbl_hdr.checksum);
-	pp = (u8 *) &control->tbl_hdr;
+	pp = (const u8 *)&control->tbl_hdr;
 	csum = 0;
 	for (ii = 0; ii < sz; ii++, pp++)
 		csum += *pp;
@@ -381,11 +382,12 @@ static u8 __calc_hdr_byte_sum(const struct amdgpu_ras_eeprom_control *control)
 static u8 __calc_ras_info_byte_sum(const struct amdgpu_ras_eeprom_control *control)
 {
 	int ii;
-	u8  *pp, csum;
+	const u8 *pp;
+	u8 csum;
 	size_t sz;
 
 	sz = sizeof(control->tbl_rai);
-	pp = (u8 *) &control->tbl_rai;
+	pp = (const u8 *)&control->tbl_rai;
 	csum = 0;
 	for (ii = 0; ii < sz; ii++, pp++)
 		csum += *pp;
@@ -436,7 +438,6 @@ static void amdgpu_ras_set_eeprom_table_version(struct amdgpu_ras_eeprom_control
 		return;
 	}
 
-	mutex_destroy(&control->tbl_mutex);
 }
 
 /**
@@ -1069,6 +1070,7 @@ uint32_t amdgpu_ras_eeprom_max_record_count(struct amdgpu_ras_eeprom_control *co
 		return RAS_MAX_RECORD_COUNT;
 }
 
+#ifndef __NetBSD__		/* XXX amdgpu debugfs */
 static ssize_t
 amdgpu_ras_debugfs_eeprom_size_read(struct file *f, char __user *buf,
 				    size_t size, loff_t *pos)
@@ -1291,6 +1293,12 @@ const struct file_operations amdgpu_ras_debugfs_eeprom_table_ops = {
 	.write = NULL,
 	.llseek = default_llseek,
 };
+#else
+void
+amdgpu_ras_debugfs_set_ret_size(struct amdgpu_ras_eeprom_control *control)
+{
+}
+#endif
 
 /**
  * __verify_ras_table_checksum -- verify the RAS EEPROM table checksum

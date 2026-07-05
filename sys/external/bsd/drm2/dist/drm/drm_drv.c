@@ -36,6 +36,7 @@ __KERNEL_RCSID(0, "$NetBSD: drm_drv.c,v 1.24 2022/10/15 15:19:28 riastradh Exp $
 #include <linux/debugfs.h>
 #include <linux/export.h>
 #include <linux/fs.h>
+#include <linux/kobject.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/mount.h>
@@ -77,7 +78,11 @@ DEFINE_XARRAY_ALLOC(drm_minors_xa);
  * prefer to embed struct drm_device into their own device
  * structure and call drm_dev_init() themselves.
  */
+#ifdef __NetBSD__
+bool drm_core_init_complete;
+#else
 static bool drm_core_init_complete;
+#endif
 
 #ifdef __NetBSD__
 struct srcu_struct drm_unplug_srcu;
@@ -188,9 +193,7 @@ static int drm_minor_register(struct drm_device *dev, enum drm_minor_type type)
 {
 	struct drm_minor *minor;
 	void *entry;
-#ifndef __NetBSD__
 	int ret;
-#endif
 
 	DRM_DEBUG("\n");
 
@@ -216,7 +219,11 @@ static int drm_minor_register(struct drm_device *dev, enum drm_minor_type type)
 	entry = xa_store(drm_minor_get_xa(type), minor->index, minor, GFP_KERNEL);
 	if (xa_is_err(entry)) {
 		ret = xa_err(entry);
+#ifdef __NetBSD__
+		return ret;
+#else
 		goto err_debugfs;
+#endif
 	}
 	WARN_ON(entry);
 
@@ -521,7 +528,9 @@ void drm_dev_unplug(struct drm_device *dev)
 	drm_dev_unregister(dev);
 
 	/* Clear all CPU mappings pointing to this device */
+#ifndef __NetBSD__
 	unmap_mapping_range(dev->anon_inode->i_mapping, 0, 0, 1);
+#endif
 }
 EXPORT_SYMBOL(drm_dev_unplug);
 
@@ -589,7 +598,7 @@ int drm_dev_wedged_event(struct drm_device *dev, unsigned long method,
 			 struct drm_wedge_task_info *info)
 {
 	char event_string[WEDGE_STR_LEN], pid_string[PID_STR_LEN], comm_string[COMM_STR_LEN];
-	char *envp[] = { event_string, NULL, NULL, NULL };
+	char *envp[] __unused = { event_string, NULL, NULL, NULL };
 	const char *recovery = NULL;
 	unsigned int len, opt;
 
@@ -624,6 +633,14 @@ int drm_dev_wedged_event(struct drm_device *dev, unsigned long method,
 }
 EXPORT_SYMBOL(drm_dev_wedged_event);
 
+#ifdef __NetBSD__
+static struct inode *
+drm_fs_inode_new(void)
+{
+	return NULL;
+}
+
+#else
 /*
  * DRM internal mount
  * We want to be able to allocate our own "struct address_space" to control
@@ -712,7 +729,16 @@ static void drm_fs_inode_free(struct inode *inode)
 
 static void drm_dev_init_release(struct drm_device *dev, void *res)
 {
+#ifndef __NetBSD__
 	drm_fs_inode_free(dev->anon_inode);
+#else
+	if (dev->sc_monitor_registered)
+		sysmon_pswitch_unregister(&dev->sc_monitor_hotplug);
+	KASSERT(dev->suspender == NULL);
+	KASSERT(dev->active_ioctls == 0);
+	DRM_DESTROY_WAITQUEUE(&dev->suspend_cv);
+	mutex_destroy(&dev->suspend_lock);
+#endif
 
 	put_device(dev->dma_dev);
 	dev->dma_dev = NULL;
@@ -767,11 +793,31 @@ static int drm_dev_init(struct drm_device *dev,
 	mutex_init(&dev->filelist_mutex);
 	mutex_init(&dev->clientlist_mutex);
 	mutex_init(&dev->master_mutex);
+
+#ifdef __NetBSD__
+	mutex_init(&dev->suspend_lock);
+	DRM_INIT_WAITQUEUE(&dev->suspend_cv, "drmsusp");
+	dev->active_ioctls = 0;
+	dev->suspender = NULL;
+	dev->sc_monitor_registered = false;
+#endif
+
+#ifdef CONFIG_DRM_PANIC
 	raw_spin_lock_init(&dev->mode_config.panic_lock);
+#endif
 
 	ret = drmm_add_action_or_reset(dev, drm_dev_init_release, NULL);
 	if (ret)
 		return ret;
+
+#ifdef __NetBSD__
+	dev->sc_monitor_hotplug.smpsw_name = PSWITCH_HK_DISPLAY_CYCLE;
+	dev->sc_monitor_hotplug.smpsw_type = PSWITCH_TYPE_HOTKEY;
+	ret = sysmon_pswitch_register(&dev->sc_monitor_hotplug);
+	if (ret)
+		goto err;
+	dev->sc_monitor_registered = true;
+#endif
 
 	inode = drm_fs_inode_new();
 	if (IS_ERR(inode)) {
@@ -855,7 +901,7 @@ void *__devm_drm_dev_alloc(struct device *parent,
 	if (!container)
 		return ERR_PTR(-ENOMEM);
 
-	drm = container + offset;
+	drm = (struct drm_device *)((char *)container + offset);
 	ret = devm_drm_dev_init(parent, drm, driver);
 	if (ret) {
 		kfree(container);
@@ -899,7 +945,7 @@ void *__drm_dev_alloc(struct device *parent,
 	if (!container)
 		return ERR_PTR(-ENOMEM);
 
-	drm = container + offset;
+	drm = (struct drm_device *)((char *)container + offset);
 	ret = drm_dev_init(drm, driver, parent);
 	if (ret) {
 		kfree(container);
@@ -1202,6 +1248,7 @@ void drm_dev_unregister(struct drm_device *dev)
 }
 EXPORT_SYMBOL(drm_dev_unregister);
 
+#ifndef __NetBSD__
 /*
  * DRM Core
  * The DRM core module initializes all global DRM objects and makes them
@@ -1258,6 +1305,7 @@ static const struct file_operations drm_stub_fops = {
 	.llseek = noop_llseek,
 };
 
+
 static void drm_core_exit(void)
 {
 	drm_privacy_screen_lookup_exit();
@@ -1276,6 +1324,7 @@ static int __init drm_core_init(void)
 
 	drm_connector_ida_init();
 	drm_memcpy_init_early();
+	xa_init_flags(&drm_minors_xa, XA_FLAGS_ALLOC);
 
 	ret = drm_sysfs_init();
 	if (ret < 0) {

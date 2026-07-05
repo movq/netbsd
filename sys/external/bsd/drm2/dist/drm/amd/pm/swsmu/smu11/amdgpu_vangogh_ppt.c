@@ -26,6 +26,10 @@
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, "$NetBSD$");
 
+#ifdef __NetBSD__
+#include <sys/cpu.h>
+#endif
+
 #define SWSMU_CODE_LAYER_L2
 
 #include "amdgpu.h"
@@ -456,7 +460,11 @@ static int vangogh_init_smc_tables(struct smu_context *smu)
 	if (ret)
 		return ret;
 
-#ifdef CONFIG_X86
+#ifdef __NetBSD__
+	smu->cpu_core_num =
+	    curcpu()->ci_nsibling[CPUREL_PACKAGE] /
+	    curcpu()->ci_nsibling[CPUREL_CORE];
+#elif defined(CONFIG_X86)
 	/* AMD x86 APU only */
 	smu->cpu_core_num = topology_num_cores_per_package();
 #else

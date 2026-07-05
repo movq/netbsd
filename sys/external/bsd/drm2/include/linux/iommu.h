@@ -32,4 +32,30 @@
 #ifndef	_LINUX_IOMMU_H_
 #define	_LINUX_IOMMU_H_
 
+#include <linux/types.h>
+
+struct device;
+
+#define	IOMMU_DOMAIN_IDENTITY	1
+#define	IOMMU_DOMAIN_DMA	2
+#define	IOMMU_DOMAIN_DMA_FQ	3
+
+struct iommu_domain {
+	unsigned int type;
+};
+
+static inline struct iommu_domain *
+iommu_get_domain_for_dev(struct device *dev)
+{
+
+	return NULL;
+}
+
+static inline phys_addr_t
+iommu_iova_to_phys(struct iommu_domain *domain, dma_addr_t iova)
+{
+
+	return 0;
+}
+
 #endif	/* _LINUX_IOMMU_H_ */

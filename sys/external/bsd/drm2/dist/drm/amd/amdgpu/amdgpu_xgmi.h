@@ -25,10 +25,15 @@
 #define __AMDGPU_XGMI_H__
 
 #include <drm/task_barrier.h>
+#include <linux/kref.h>
 #include "amdgpu_ras.h"
 
 struct amdgpu_hive_info {
+#ifdef __NetBSD__
+	struct kref ref;
+#else
 	struct kobject kobj;
+#endif
 	uint64_t hive_id;
 	struct list_head device_list;
 	struct list_head node;

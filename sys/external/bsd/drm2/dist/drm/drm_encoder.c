@@ -259,7 +259,7 @@ void *__drmm_encoder_alloc(struct drm_device *dev, size_t size, size_t offset,
 	if (!container)
 		return ERR_PTR(-ENOMEM);
 
-	encoder = container + offset;
+	encoder = (struct drm_encoder *)((char *)container + offset);
 
 	va_start(ap, name);
 	ret = __drmm_encoder_init(dev, encoder, funcs, encoder_type, name, ap);

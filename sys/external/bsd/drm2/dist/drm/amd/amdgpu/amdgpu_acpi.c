@@ -36,7 +36,9 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_acpi.c,v 1.6 2024/04/16 14:34:01 riastradh Ex
 #include <linux/pm_runtime.h>
 #include <linux/suspend.h>
 #include <acpi/video.h>
+#ifndef __NetBSD__
 #include <acpi/actbl.h>
+#endif
 
 #include "amdgpu.h"
 #include "amdgpu_pm.h"
@@ -53,9 +55,11 @@ ACPI_MODULE_NAME("radeon_acpi")
 #endif
 
 /* Declare GUID for AMD _DSM method for XCCs */
+#ifndef __NetBSD__		/* XXX amdgpu ACPI XCC enumeration */
 static const guid_t amd_xcc_dsm_guid = GUID_INIT(0x8267f5d5, 0xa556, 0x44f2,
 						 0xb8, 0xb4, 0x45, 0x56, 0x2e,
 						 0x8c, 0x5b, 0xec);
+#endif
 
 #define AMD_XCC_HID_START 3000
 #define AMD_XCC_DSM_GET_NUM_FUNCS 0
@@ -875,6 +879,7 @@ int amdgpu_acpi_smart_shift_update(struct amdgpu_device *adev,
 	return r;
 }
 
+#ifndef __NetBSD__		/* XXX amdgpu ACPI XCC enumeration */
 #ifdef CONFIG_ACPI_NUMA
 static inline uint64_t amdgpu_acpi_get_numa_size(int nid)
 {
@@ -960,6 +965,7 @@ static acpi_status amdgpu_acpi_get_node_id(acpi_handle handle,
 	return_ACPI_STATUS(AE_NOT_EXIST);
 #endif
 }
+#endif
 
 static struct amdgpu_acpi_dev_info *amdgpu_acpi_get_dev(u32 sbdf)
 {
@@ -975,6 +981,7 @@ static struct amdgpu_acpi_dev_info *amdgpu_acpi_get_dev(u32 sbdf)
 	return NULL;
 }
 
+#ifndef __NetBSD__		/* XXX amdgpu ACPI XCC enumeration */
 static int amdgpu_acpi_dev_init(struct amdgpu_acpi_dev_info **dev_info,
 				struct amdgpu_acpi_xcc_info *xcc_info, u32 sbdf)
 {
@@ -1040,7 +1047,7 @@ static int amdgpu_acpi_dev_init(struct amdgpu_acpi_dev_info **dev_info,
 	ACPI_FREE(obj);
 
 	DRM_DEBUG_DRIVER(
-		"New dev(%x): Supported xcp mode: %x curr xcp_mode : %x mem mode : %x, tmr base: %llx tmr size: %llx  ",
+		"New dev(%x): Supported xcp mode: %x curr xcp_mode : %x mem mode : %x, tmr base: %"PRIx64" tmr size: %"PRIx64"  ",
 		tmp->sbdf, tmp->supp_xcp_mode, tmp->xcp_mode, tmp->mem_mode,
 		tmp->tmr_base, tmp->tmr_size);
 	list_add_tail(&tmp->list, &amdgpu_acpi_dev_list);
@@ -1107,21 +1114,26 @@ out:
 
 	return ret;
 }
+#endif
 
 static int amdgpu_acpi_enumerate_xcc(void)
 {
+#ifndef __NetBSD__		/* XXX amdgpu ACPI XCC enumeration */
 	struct amdgpu_acpi_dev_info *dev_info = NULL;
 	struct amdgpu_acpi_xcc_info *xcc_info;
 	struct acpi_device *acpi_dev;
 	char hid[ACPI_ID_LEN];
 	int ret, id;
 	u32 sbdf;
+#endif
 
 	INIT_LIST_HEAD(&amdgpu_acpi_dev_list);
 	xa_init(&numa_info_xa);
 
+#ifndef __NetBSD__		/* XXX amdgpu ACPI XCC enumeration */
 	for (id = 0; id < AMD_XCC_MAX_HID; id++) {
-		sprintf(hid, "%s%d", "AMD", AMD_XCC_HID_START + id);
+		snprintf(hid, sizeof(hid), "%s%d", "AMD",
+		    AMD_XCC_HID_START + id);
 		acpi_dev = acpi_dev_get_first_match_dev(hid, NULL, -1);
 		/* These ACPI objects are expected to be in sequential order. If
 		 * one is not found, no need to check the rest.
@@ -1166,6 +1178,7 @@ static int amdgpu_acpi_enumerate_xcc(void)
 
 		list_add_tail(&xcc_info->list, &dev_info->xcc_list);
 	}
+#endif
 
 	return 0;
 }
@@ -1293,8 +1306,10 @@ int amdgpu_acpi_init(struct amdgpu_device *adev)
 			}
 		}
 	}
+#ifndef __NetBSD__		/* XXX amdgpu acpi */
 	adev->acpi_nb.notifier_call = amdgpu_acpi_event;
 	register_acpi_notifier(&adev->acpi_nb);
+#endif
 
 	return 0;
 }
@@ -1315,7 +1330,9 @@ void amdgpu_acpi_get_backlight_caps(struct amdgpu_dm_backlight_caps *caps)
  */
 void amdgpu_acpi_fini(struct amdgpu_device *adev)
 {
+#ifndef __NetBSD__		/* XXX amdgpu acpi */
 	unregister_acpi_notifier(&adev->acpi_nb);
+#endif
 }
 
 /**
@@ -1326,6 +1343,20 @@ void amdgpu_acpi_fini(struct amdgpu_device *adev)
  * Look up the ATIF handles (all asics).
  * Returns true if the handle is found, false if not.
  */
+#ifdef __NetBSD__
+static acpi_handle
+amdgpu_acpi_pci_handle(struct pci_dev *pdev)
+{
+	const struct pci_attach_args *pa = &pdev->pd_pa;
+	struct acpi_devnode *d;
+
+	d = acpi_pcidev_find(pci_get_segment(pa->pa_pc), pa->pa_bus,
+	    pa->pa_device, pa->pa_function);
+
+	return d ? d->ad_handle : NULL;
+}
+#endif
+
 static bool amdgpu_atif_pci_probe_handle(struct pci_dev *pdev)
 {
 	char acpi_method_name[255] = { 0 };
@@ -1334,7 +1365,11 @@ static bool amdgpu_atif_pci_probe_handle(struct pci_dev *pdev)
 	acpi_status status;
 	int ret;
 
+#ifdef __NetBSD__
+	dhandle = amdgpu_acpi_pci_handle(pdev);
+#else
 	dhandle = ACPI_HANDLE(&pdev->dev);
+#endif
 	if (!dhandle)
 		return false;
 
@@ -1369,7 +1404,11 @@ static bool amdgpu_atcs_pci_probe_handle(struct pci_dev *pdev)
 	acpi_status status;
 	int ret;
 
+#ifdef __NetBSD__
+	dhandle = amdgpu_acpi_pci_handle(pdev);
+#else
 	dhandle = ACPI_HANDLE(&pdev->dev);
+#endif
 	if (!dhandle)
 		return false;
 

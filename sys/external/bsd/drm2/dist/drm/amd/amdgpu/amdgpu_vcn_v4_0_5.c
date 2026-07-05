@@ -44,6 +44,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 
 #include <drm/drm_drv.h>
 
+#include <linux/nbsd-namespace.h>
+
 #define mmUVD_DPG_LMA_CTL							regUVD_DPG_LMA_CTL
 #define mmUVD_DPG_LMA_CTL_BASE_IDX					regUVD_DPG_LMA_CTL_BASE_IDX
 #define mmUVD_DPG_LMA_DATA							regUVD_DPG_LMA_DATA

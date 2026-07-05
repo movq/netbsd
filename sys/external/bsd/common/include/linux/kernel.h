@@ -44,6 +44,7 @@
 
 #include <linux/bitops.h>
 #include <linux/compiler.h>
+#include <linux/kconfig.h>
 #include <linux/log2.h>
 #include <linux/printk.h>
 #include <linux/slab.h>
@@ -61,16 +62,13 @@
 
 #define	oops_in_progress	(panicstr != NULL)
 
-#define	IS_BUILTIN(option)	(1) /* Probably... */
-#define	IS_ENABLED(option)	(option)
-#define	IS_REACHABLE(option)	(option)
-
 #define	might_sleep	ASSERT_SLEEPABLE
 #define	might_sleep_if(C) do						      \
 {									      \
 	if (C)								      \
 		might_sleep();						      \
 } while (0)
+#define	might_fault()		do {} while (0)
 
 #define	DEFINE_STATIC_KEY_FALSE(N)	bool N __unused = false
 
@@ -85,9 +83,21 @@
 /* XXX These will multiply evaluate their arguments.  */
 #define	min(X, Y)	MIN(X, Y)
 #define	max(X, Y)	MAX(X, Y)
+#define	umin(X, Y)	MIN((X) + 0u + 0ul + 0ull,			\
+			    (Y) + 0u + 0ul + 0ull)
+#define	umax(X, Y)	MAX((X) + 0u + 0ul + 0ull,			\
+			    (Y) + 0u + 0ul + 0ull)
 
 #define	max_t(T, X, Y)	MAX((T)(X), (T)(Y))
 #define	min_t(T, X, Y)	MIN((T)(X), (T)(Y))
+#define	MAX_T(t, a, b)	max_t(t, a, b)
+#define	MIN_T(t, a, b)	min_t(t, a, b)
+
+#define	min_not_zero(X, Y)	({					\
+	typeof(X) __x = (X);						\
+	typeof(Y) __y = (Y);						\
+	__x == 0 ? __y : (__y == 0 ? __x : min(__x, __y));		\
+})
 
 #define	clamp_t(T, X, MIN, MAX)	min_t(T, max_t(T, X, MIN), MAX)
 #define	clamp(X, MN, MX)	MIN(MAX(X, MN), MX)
@@ -130,8 +140,12 @@
  * the wrong thing on most machines: return the input unshifted by
  * ignoring the upper bits of the shift count).
  */
+#ifndef upper_32_bits
 #define	upper_32_bits(X)	((uint32_t) (((X) >> 16) >> 16))
+#endif
+#ifndef lower_32_bits
 #define	lower_32_bits(X)	((uint32_t) ((X) & 0xffffffffUL))
+#endif
 
 #define	ARRAY_SIZE(ARRAY)	__arraycount(ARRAY)
 
@@ -259,8 +273,11 @@ u64_to_user_ptr(uint64_t addr)
 	return (void __user *)(uintptr_t)addr;
 }
 
-#define	TAINT_MACHINE_CHECK	0
-#define	TAINT_WARN		1
+#define	TAINT_CPU_OUT_OF_SPEC	2
+#define	TAINT_MACHINE_CHECK	4
+#define	TAINT_USER		6
+#define	TAINT_WARN		9
+#define	TAINT_SOFTLOCKUP	14
 
 #define	LOCKDEP_STILL_OK	0
 
@@ -278,10 +295,20 @@ static_branch_likely(const bool *flagp)
 	return __predict_true(*flagp);
 }
 
+static inline void
+static_branch_enable(bool *flagp)
+{
+	*flagp = true;
+}
+
 static inline int
 sscanf(const char *fmt, ...)
 {
 	return 0;		/* XXX */
 }
+
+#define _THIS_IP_ 0
+
+#define STUB() do { printf("%s: stub\n", __func__); } while(0)
 
 #endif  /* _LINUX_KERNEL_H_ */

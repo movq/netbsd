@@ -32,4 +32,19 @@
 #ifndef _LINUX_WAIT_H_
 #define _LINUX_WAIT_H_
 
+#include <sys/types.h>
+#include <sys/condvar.h>
+
+static inline void
+wake_up_interruptible(kcondvar_t *wqh)
+{
+	cv_broadcast(wqh);
+}
+
+static inline void
+wake_up_interruptible_poll(kcondvar_t *wqh, unsigned int flags)
+{
+	cv_broadcast(wqh);
+}
+
 #endif  /* _LINUX_WAIT_H_ */

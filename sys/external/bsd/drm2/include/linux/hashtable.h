@@ -39,6 +39,7 @@
 
 #define DECLARE_HASHTABLE(name, bits)					      \
 	struct hlist_head name[1u << (bits)]
+#define	HASH_SIZE(h)		__arraycount(h)
 
 static inline void
 __hash_init(struct hlist_head *hash, unsigned n)

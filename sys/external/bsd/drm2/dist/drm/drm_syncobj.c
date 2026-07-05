@@ -820,17 +820,28 @@ static int drm_syncobj_fd_to_handle(struct drm_file *file_private,
 				    int fd, u32 *handle)
 {
 	struct drm_syncobj *syncobj;
+#ifdef __NetBSD__
+	struct fd f = fdget(fd);
+#else
 	CLASS(fd, f)(fd);
+#endif
 	int ret;
 
-	if (fd_empty(f))
-		return -EINVAL;
 #ifdef __NetBSD__
-	if (f.file->f_ops != &drm_syncobj_file_ops)
+	if (!f.file)
 #else
-	if (fd_file(f)->f_op != &drm_syncobj_file_fops)
+	if (fd_empty(f))
 #endif
 		return -EINVAL;
+#ifdef __NetBSD__
+	if (f.file->f_ops != &drm_syncobj_file_ops) {
+		fdput(f);
+		return -EINVAL;
+	}
+#else
+	if (fd_file(f)->f_op != &drm_syncobj_file_fops)
+		return -EINVAL;
+#endif
 
 	/* take a reference to put in the idr */
 #ifdef __NetBSD__
@@ -852,6 +863,9 @@ static int drm_syncobj_fd_to_handle(struct drm_file *file_private,
 	} else
 		drm_syncobj_put(syncobj);
 
+#ifdef __NetBSD__
+	fdput(f);
+#endif
 	return ret;
 }
 

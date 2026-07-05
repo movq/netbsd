@@ -69,7 +69,9 @@
 #define drm_for_each_lessee(lessee, lessor) \
 	list_for_each_entry((lessee), &(lessor)->lessees, lessee_list)
 
+#ifndef __NetBSD__
 static uint64_t drm_lease_idr_object;
+#endif
 
 struct drm_master *drm_lease_owner(struct drm_master *master)
 {
@@ -94,6 +96,7 @@ static int _drm_lease_held_master(struct drm_master *master, int id)
 }
 
 /* Checks if the given object has been leased to some lessee of drm_master */
+#ifndef __NetBSD__
 static bool _drm_has_leased(struct drm_master *master, int id)
 {
 	struct drm_master *lessee;
@@ -104,6 +107,7 @@ static bool _drm_has_leased(struct drm_master *master, int id)
 			return true;
 	return false;
 }
+#endif
 
 /* Called with idr_mutex held */
 bool _drm_lease_held(struct drm_file *file_priv, int id)
@@ -204,6 +208,7 @@ out:
  *	ERR_PTR(-EEXIST)	same object specified more than once in the provided list
  *	ERR_PTR(-ENOMEM)	allocation failed
  */
+#ifndef __NetBSD__
 static struct drm_master *drm_lease_create(struct drm_master *lessor, struct idr *leases)
 {
 	struct drm_device *dev = lessor->dev;
@@ -262,6 +267,7 @@ out_lessee:
 
 	return ERR_PTR(error);
 }
+#endif
 
 void drm_lease_destroy(struct drm_master *master)
 {
@@ -343,6 +349,7 @@ void drm_lease_revoke(struct drm_master *top)
 	mutex_unlock(&top->dev->mode_config.idr_mutex);
 }
 
+#ifndef __NetBSD__
 static int validate_lease(struct drm_device *dev,
 			  int object_count,
 			  struct drm_mode_object **objects,
@@ -466,6 +473,7 @@ out_free_objects:
 	kfree(objects);
 	return ret;
 }
+#endif
 
 /*
  * The master associated with the specified file will have a lease
@@ -476,6 +484,14 @@ out_free_objects:
 int drm_mode_create_lease_ioctl(struct drm_device *dev,
 				void *data, struct drm_file *lessor_priv)
 {
+#ifdef __NetBSD__
+	/*
+	 * NetBSD has no equivalent of file_clone_open.  Cloning a DRM file
+	 * also requires balancing its descriptor, minor, and open-count
+	 * references, so this cannot use the generic Linux fd helpers.
+	 */
+	return -EOPNOTSUPP;
+#else
 	struct drm_mode_create_lease *cl = data;
 	size_t object_count;
 	int ret = 0;
@@ -584,6 +600,7 @@ out_lessor:
 	drm_master_put(&lessor);
 	drm_dbg_lease(dev, "drm_mode_create_lease_ioctl failed: %d\n", ret);
 	return ret;
+#endif
 }
 
 int drm_mode_list_lessees_ioctl(struct drm_device *dev,

@@ -40,17 +40,19 @@ __KERNEL_RCSID(0, "$NetBSD: linux_list_sort.c,v 1.2 2014/03/18 18:20:43 riastrad
 #include <linux/list_sort.h>
 
 static struct list_head *
-		list_sort_merge(struct list_head *, struct list_head *,
-		    int (*)(void *, struct list_head *, struct list_head *),
-		    void *);
+			list_sort_merge(struct list_head *, struct list_head *,
+			    int (*)(void *, const struct list_head *,
+				const struct list_head *),
+			    void *);
 static void	list_sort_merge_into(struct list_head *,
-		    struct list_head *, struct list_head *,
-		    int (*)(void *, struct list_head *, struct list_head *),
-		    void *);
+			    struct list_head *, struct list_head *,
+			    int (*)(void *, const struct list_head *,
+				const struct list_head *),
+			    void *);
 
 void
 list_sort(void *arg, struct list_head *list,
-    int (*compare)(void *, struct list_head *, struct list_head *))
+    int (*compare)(void *, const struct list_head *, const struct list_head *))
 {
 	/*
 	 * Array of sorted sublists, counting in binary: accumulator[i]
@@ -123,7 +125,8 @@ list_sort(void *arg, struct list_head *list,
  */
 static struct list_head *
 list_sort_merge(struct list_head *a, struct list_head *b,
-    int (*compare)(void *, struct list_head *, struct list_head *), void *arg)
+    int (*compare)(void *, const struct list_head *, const struct list_head *),
+    void *arg)
 {
 	struct list_head head, *tail = &head;
 
@@ -153,7 +156,8 @@ list_sort_merge(struct list_head *a, struct list_head *b,
 static void
 list_sort_merge_into(struct list_head *list,
     struct list_head *a, struct list_head *b,
-    int (*compare)(void *, struct list_head *, struct list_head *), void *arg)
+    int (*compare)(void *, const struct list_head *, const struct list_head *),
+    void *arg)
 {
 	struct list_head *prev = list;
 

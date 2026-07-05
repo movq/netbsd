@@ -228,8 +228,6 @@ static void drm_mm_interval_tree_add_node(struct drm_mm_node *hole_node,
 }
 #endif
 
-#ifdef __NetBSD__
-
 static int
 compare_hole_addrs(void *cookie, const void *va, const void *vb)
 {
@@ -270,8 +268,6 @@ static const rb_tree_ops_t holes_addr_rb_ops = {
 	.rbto_compare_key = compare_hole_addr_key,
 	.rbto_node_offset = offsetof(struct drm_mm_node, rb_hole_addr),
 };
-
-#else
 
 #define HOLE_SIZE(NODE) ((NODE)->hole_size)
 #define HOLE_ADDR(NODE) (__drm_mm_hole_node_start(NODE))
@@ -339,12 +335,20 @@ static void insert_hole_size(struct rb_root_cached *root,
 #endif
 }
 
+#ifndef __NetBSD__
 RB_DECLARE_CALLBACKS_MAX(static, augment_callbacks,
 			 struct drm_mm_node, rb_hole_addr,
 			 u64, subtree_max_hole, HOLE_SIZE)
+#endif
 
 static void insert_hole_addr(struct rb_root *root, struct drm_mm_node *node)
 {
+#ifdef __NetBSD__
+	struct drm_mm_node *collision __diagused;
+
+	collision = rb_tree_insert_node(&root->rbr_tree, node);
+	KASSERT(collision == node);
+#else
 	struct rb_node **link = &root->rb_node, *rb_parent = NULL;
 	u64 start = HOLE_ADDR(node), subtree_max_hole = node->subtree_max_hole;
 	struct drm_mm_node *parent;
@@ -362,6 +366,7 @@ static void insert_hole_addr(struct rb_root *root, struct drm_mm_node *node)
 
 	rb_link_node(&node->rb_hole_addr, rb_parent, link);
 	rb_insert_augmented(&node->rb_hole_addr, root, &augment_callbacks);
+#endif
 }
 
 static void add_hole(struct drm_mm_node *node)
@@ -385,8 +390,12 @@ static void rm_hole(struct drm_mm_node *node)
 
 	list_del(&node->hole_stack);
 	rb_erase_cached(&node->rb_hole_size, &node->mm->holes_size);
+#ifdef __NetBSD__
+	rb_tree_remove_node(&node->mm->holes_addr.rbr_tree, node);
+#else
 	rb_erase_augmented(&node->rb_hole_addr, &node->mm->holes_addr,
 			   &augment_callbacks);
+#endif
 	node->hole_size = 0;
 	node->subtree_max_hole = 0;
 
@@ -432,15 +441,19 @@ static struct drm_mm_node *best_hole(struct drm_mm *mm, u64 size)
 #endif
 }
 
+#ifndef __NetBSD__
 static bool usable_hole_addr(struct rb_node *rb, u64 size)
 {
 	return rb && rb_hole_addr_to_node(rb)->subtree_max_hole >= size;
 }
+#endif
 
 static struct drm_mm_node *find_hole_addr(struct drm_mm *mm, u64 addr, u64 size)
 {
 #ifdef __NetBSD__
 	struct rb_node *rb = mm->holes_addr.rbr_tree.rbt_root;
+
+	(void)size;
 #else
 	struct rb_node *rb = mm->holes_addr.rb_node;
 #endif
@@ -449,8 +462,10 @@ static struct drm_mm_node *find_hole_addr(struct drm_mm *mm, u64 addr, u64 size)
 	while (rb) {
 		u64 hole_start;
 
+#ifndef __NetBSD__
 		if (!usable_hole_addr(rb, size))
 			break;
+#endif
 
 		node = rb_hole_addr_to_node(rb);
 		hole_start = __drm_mm_hole_node_start(node);
@@ -500,6 +515,7 @@ first_hole(struct drm_mm *mm,
  * visit branches with potential big enough holes.
  */
 
+#ifndef __NetBSD__
 #define DECLARE_NEXT_HOLE_ADDR(name, first, last)			\
 static struct drm_mm_node *name(struct drm_mm_node *entry, u64 size)	\
 {									\
@@ -523,6 +539,7 @@ static struct drm_mm_node *name(struct drm_mm_node *entry, u64 size)	\
 
 DECLARE_NEXT_HOLE_ADDR(next_hole_high_addr, rb_left, rb_right)
 DECLARE_NEXT_HOLE_ADDR(next_hole_low_addr, rb_right, rb_left)
+#endif
 
 static struct drm_mm_node *
 next_hole(struct drm_mm *mm,

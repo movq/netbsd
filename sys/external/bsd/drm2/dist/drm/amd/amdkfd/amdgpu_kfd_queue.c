@@ -32,6 +32,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "kfd_topology.h"
 #include "kfd_svm.h"
 
+#include <linux/nbsd-namespace.h>
+
 void print_queue_properties(struct queue_properties *q)
 {
 	if (!q)

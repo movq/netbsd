@@ -29,6 +29,7 @@
 #include <linux/ctype.h>
 #include <linux/list.h>
 #include <linux/mutex.h>
+#include <linux/err.h>
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_encoder.h>
@@ -1430,7 +1431,9 @@ static inline struct drm_bridge *drmm_of_get_bridge(struct drm_device *drm,
 
 void devm_drm_put_bridge(struct device *dev, struct drm_bridge *bridge);
 
+#ifndef __NetBSD__
 void drm_bridge_debugfs_params(struct dentry *root);
 void drm_bridge_debugfs_encoder_params(struct dentry *root, struct drm_encoder *encoder);
+#endif
 
 #endif

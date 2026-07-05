@@ -33,6 +33,7 @@
 
 #include <linux/dma-fence.h>
 #include <linux/irq_work.h>
+#include <linux/slab.h>
 
 struct dma_fence_chain {
 	/* Linux API */
@@ -57,7 +58,27 @@ int	dma_fence_chain_find_seqno(struct dma_fence **, uint64_t);
 struct dma_fence_chain *
 	to_dma_fence_chain(struct dma_fence *);
 struct dma_fence *
-	dma_fence_chain_walk(struct dma_fence *);
+		dma_fence_chain_walk(struct dma_fence *);
+
+static inline struct dma_fence_chain *
+dma_fence_chain_alloc(void)
+{
+	return kmalloc(sizeof(struct dma_fence_chain), GFP_KERNEL);
+}
+
+static inline void
+dma_fence_chain_free(struct dma_fence_chain *chain)
+{
+	kfree(chain);
+}
+
+static inline struct dma_fence *
+dma_fence_chain_contained(struct dma_fence *fence)
+{
+	struct dma_fence_chain *chain = to_dma_fence_chain(fence);
+
+	return chain != NULL ? chain->dfc_fence : fence;
+}
 
 #define	dma_fence_chain_for_each(VAR, FENCE)				      \
 	for ((VAR) = dma_fence_get(FENCE);				      \

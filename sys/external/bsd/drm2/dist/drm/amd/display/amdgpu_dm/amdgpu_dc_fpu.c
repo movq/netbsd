@@ -31,7 +31,19 @@ __KERNEL_RCSID(0, "$NetBSD$");
 
 #include "dc_trace.h"
 
+#ifdef __NetBSD__
+#include <sys/cpu.h>
+
+#if defined(__i386__) || defined(__x86_64__)
+#include <x86/fpu.h>
+#elif defined(__arm__) || defined(__aarch64__)
+#include <arm/fpu.h>
+#else
+#error "unsupported architecture for AMD DC floating point"
+#endif
+#else
 #include <linux/fpu.h>
+#endif
 
 /**
  * DOC: DC FPU manipulation overview
@@ -44,7 +56,19 @@ __KERNEL_RCSID(0, "$NetBSD$");
  * management.
  */
 
+#ifdef __NetBSD__
+static int fpu_recursion_depth[MAXCPUS];
+
+static inline int *
+dc_fpu_recursion_depth(void)
+{
+
+	KASSERT(kpreempt_disabled());
+	return &fpu_recursion_depth[cpu_index(curcpu())];
+}
+#else
 static DEFINE_PER_CPU(int, fpu_recursion_depth);
+#endif
 
 /**
  * dc_assert_fp_enabled - Check if FPU protection is enabled
@@ -58,7 +82,11 @@ inline void dc_assert_fp_enabled(void)
 {
 	int depth;
 
+#ifdef __NetBSD__
+	depth = *dc_fpu_recursion_depth();
+#else
 	depth = __this_cpu_read(fpu_recursion_depth);
+#endif
 
 	ASSERT(depth >= 1);
 }
@@ -82,11 +110,17 @@ void dc_fpu_begin(const char *function_name, const int line)
 
 	WARN_ON_ONCE(!in_task());
 	preempt_disable();
+#ifdef __NetBSD__
+	depth = ++*dc_fpu_recursion_depth();
+	if (depth == 1)
+		fpu_kern_enter();
+#else
 	depth = __this_cpu_inc_return(fpu_recursion_depth);
 	if (depth == 1) {
 		BUG_ON(!kernel_fpu_available());
 		kernel_fpu_begin();
 	}
+#endif
 
 	TRACE_DCN_FPU(true, function_name, line, depth);
 }
@@ -105,12 +139,21 @@ void dc_fpu_end(const char *function_name, const int line)
 {
 	int depth;
 
+#ifdef __NetBSD__
+	depth = --*dc_fpu_recursion_depth();
+	if (depth == 0) {
+		fpu_kern_leave();
+	} else {
+		WARN_ON_ONCE(depth < 0);
+	}
+#else
 	depth = __this_cpu_dec_return(fpu_recursion_depth);
 	if (depth == 0) {
 		kernel_fpu_end();
 	} else {
 		WARN_ON_ONCE(depth < 0);
 	}
+#endif
 
 	TRACE_DCN_FPU(false, function_name, line, depth);
 	preempt_enable();

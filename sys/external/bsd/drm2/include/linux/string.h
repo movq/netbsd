@@ -36,7 +36,10 @@
 #include <sys/cdefs.h>
 #include <sys/errno.h>
 #include <sys/null.h>
+#include <sys/systm.h>
 
+#include <linux/compiler.h>
+#include <linux/err.h>
 #include <linux/slab.h>
 
 static inline void *
@@ -52,6 +55,12 @@ memchr_inv(const void *buffer, int c, size_t len)
 	return NULL;
 }
 
+static inline bool
+mem_is_zero(const void *b, size_t len)
+{
+	return (memchr_inv(b, 0, len) == NULL);
+}
+
 static inline void *
 kmemdup(const void *src, size_t len, gfp_t gfp)
 {
@@ -62,6 +71,65 @@ kmemdup(const void *src, size_t len, gfp_t gfp)
 		return NULL;
 
 	(void)memcpy(dst, src, len);
+	return dst;
+}
+
+static inline void *
+memdup_user(const void __user *src, size_t len)
+{
+	void *dst;
+
+	dst = kmalloc(len, GFP_KERNEL);
+	if (dst == NULL)
+		return ERR_PTR(-ENOMEM);
+
+	if (copyin(src, dst, len) != 0) {
+		kfree(dst);
+		return ERR_PTR(-EFAULT);
+	}
+
+	return dst;
+}
+
+static inline void *
+memdup_array_user(const void __user *src, size_t n, size_t size)
+{
+
+	if (n != 0 && size > SIZE_MAX/n)
+		return ERR_PTR(-EOVERFLOW);
+
+	return memdup_user(src, n * size);
+}
+
+static inline void *
+vmemdup_array_user(const void __user *src, size_t n, size_t size)
+{
+
+	/*
+	 * NetBSD's kvmalloc and kmalloc compatibility implementations use
+	 * the same allocator, and kvfree accepts allocations from it.
+	 */
+	return memdup_array_user(src, n, size);
+}
+
+static inline void *
+memdup_user_nul(const void __user *src, size_t len)
+{
+	char *dst;
+
+	if (len == SIZE_MAX)
+		return ERR_PTR(-ENOMEM);
+
+	dst = kmalloc(len + 1, GFP_KERNEL);
+	if (dst == NULL)
+		return ERR_PTR(-ENOMEM);
+
+	if (copyin(src, dst, len) != 0) {
+		kfree(dst);
+		return ERR_PTR(-EFAULT);
+	}
+	dst[len] = '\0';
+
 	return dst;
 }
 
@@ -94,8 +162,22 @@ kstrdup(const char *src, gfp_t gfp)
 	return kstrndup(src, strlen(src), gfp);
 }
 
+static inline const char *
+kstrdup_const(const char *src, gfp_t gfp)
+{
+
+	return kstrdup(src, gfp);
+}
+
+static inline void
+kfree_const(const void *ptr)
+{
+
+	kfree(__UNCONST(ptr));
+}
+
 static inline ssize_t
-strscpy(char *dst, const char *src, size_t dstsize)
+linux_sized_strscpy(char *dst, const char *src, size_t dstsize)
 {
 	size_t n = dstsize;
 
@@ -113,6 +195,56 @@ strscpy(char *dst, const char *src, size_t dstsize)
 
 	/* Return the number of bytes copied, excluding NUL.  */
 	return dstsize - n;
+}
+
+#define	__linux_strscpy2(dst, src)	\
+	linux_sized_strscpy((dst), (src), sizeof(dst))
+#define	__linux_strscpy3(dst, src, size)	\
+	linux_sized_strscpy((dst), (src), (size))
+#define	__linux_strscpy_pick(_1, _2, _3, fn, ...)	fn
+#define	strscpy(...)							\
+	__linux_strscpy_pick(__VA_ARGS__, __linux_strscpy3,		\
+	    __linux_strscpy2)(__VA_ARGS__)
+
+static inline ssize_t
+strscpy_pad(char *dst, const char *src, size_t dstsize)
+{
+	ssize_t wrote;
+
+	wrote = strscpy(dst, src, dstsize);
+	if (wrote >= 0 && (size_t)wrote < dstsize)
+		memset(dst + wrote + 1, 0, dstsize - wrote - 1);
+	return wrote;
+}
+
+static inline char *
+strnchr(const char *s, size_t count, int c)
+{
+
+	while (count--) {
+		if (*s == (char)c)
+			return __UNCONST(s);
+		if (*s++ == '\0')
+			break;
+	}
+	return NULL;
+}
+
+static inline char *
+strnstr(const char *s, const char *find, size_t len)
+{
+	size_t findlen;
+
+	findlen = strlen(find);
+	if (findlen == 0)
+		return __UNCONST(s);
+	while (len >= findlen) {
+		if (memcmp(s, find, findlen) == 0)
+			return __UNCONST(s);
+		s++;
+		len--;
+	}
+	return NULL;
 }
 
 static inline void *
@@ -148,7 +280,13 @@ memset_p(void **buf, void *v, size_t n)
 	return buf;
 }
 
-#define str_has_prefix(str, prefix) strncmp(str, prefix, strlen(prefix))
+static inline size_t
+str_has_prefix(const char *str, const char *prefix)
+{
+	size_t len = strlen(prefix);
+
+	return strncmp(str, prefix, len) == 0 ? len : 0;
+}
 
 static inline int
 match_string(const char *const *haystack, size_t n, const char *needle)

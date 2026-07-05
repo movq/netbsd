@@ -47,7 +47,7 @@ sg_alloc_table(struct sg_table *sgt, unsigned npgs, gfp_t gfp)
 	sgt->sgl->sg_pgs = kcalloc(npgs, sizeof(sgt->sgl->sg_pgs[0]), gfp);
 	if (sgt->sgl->sg_pgs == NULL)
 		return -ENOMEM;
-	sgt->sgl->sg_npgs = sgt->nents = npgs;
+	sgt->sgl->sg_npgs = sgt->nents = sgt->orig_nents = npgs;
 	sgt->sgl->sg_dmamap = NULL;
 
 	return 0;
@@ -145,6 +145,20 @@ dma_map_sg(bus_dma_tag_t dmat, struct scatterlist *sg, int nents, int dir)
 }
 
 int
+dma_map_sgtable(bus_dma_tag_t dmat, struct sg_table *sgt, int dir,
+    unsigned long attrs)
+{
+	int nents;
+
+	nents = dma_map_sg_attrs(dmat, sgt->sgl, sgt->orig_nents, dir, attrs);
+	if (nents == 0)
+		return -EIO;
+
+	sgt->nents = nents;
+	return 0;
+}
+
+int
 dma_map_sg_attrs(bus_dma_tag_t dmat, struct scatterlist *sg, int nents,
     int dir, int attrs)
 {
@@ -207,6 +221,14 @@ dma_unmap_sg(bus_dma_tag_t dmat, struct scatterlist *sg, int nents, int dir)
 {
 
 	dma_unmap_sg_attrs(dmat, sg, nents, dir, 0);
+}
+
+void
+dma_unmap_sgtable(bus_dma_tag_t dmat, struct sg_table *sgt, int dir,
+    unsigned long attrs)
+{
+
+	dma_unmap_sg_attrs(dmat, sgt->sgl, sgt->orig_nents, dir, attrs);
 }
 
 void

@@ -35,8 +35,8 @@
 #define	BUILD_BUG_ON(EXPR)						      \
 	CTASSERT(__builtin_choose_expr(__builtin_constant_p(EXPR), !(EXPR), 1))
 
-/* Required to be constant _and_ true.  XXX Should take optional message.  */
-#define	static_assert(EXPR)		CTASSERT(EXPR)
+/* Required to be constant _and_ true.  */
+#define	static_assert(EXPR, ...)		CTASSERT(EXPR)
 
 #define	BUILD_BUG()			do {} while (0)
 #define	BUILD_BUG_ON_MSG(EXPR,MSG)	BUILD_BUG_ON(EXPR)

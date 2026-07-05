@@ -59,7 +59,7 @@ dma_fence_chain_init(struct dma_fence_chain *chain, struct dma_fence *prev,
 	init_irq_work(&chain->dfc_irq_work, &dma_fence_chain_irq_work);
 
 	if (prev_chain == NULL ||
-	    !__dma_fence_is_later(seqno, prev->seqno, prev->ops)) {
+	    !__dma_fence_is_later(prev, seqno, prev->seqno)) {
 		context = dma_fence_context_alloc(1);
 		if (prev_chain)
 			seqno = MAX(prev->seqno, seqno);
@@ -69,7 +69,7 @@ dma_fence_chain_init(struct dma_fence_chain *chain, struct dma_fence *prev,
 		chain->prev_seqno = prev->seqno;
 	}
 
-	dma_fence_init(&chain->base, &dma_fence_chain_ops, &chain->dfc_lock,
+	dma_fence_init64(&chain->base, &dma_fence_chain_ops, &chain->dfc_lock,
 	    context, seqno);
 }
 
@@ -193,7 +193,6 @@ dma_fence_chain_release(struct dma_fence *fence)
 }
 
 static const struct dma_fence_ops dma_fence_chain_ops = {
-	.use_64bit_seqno = true,
 	.get_driver_name = dma_fence_chain_driver_name,
 	.get_timeline_name = dma_fence_chain_timeline_name,
 	.enable_signaling = dma_fence_chain_enable_signaling,

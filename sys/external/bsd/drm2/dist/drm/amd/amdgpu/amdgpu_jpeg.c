@@ -35,6 +35,8 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_jpeg.c,v 1.2 2021/12/18 23:44:58 riastradh Ex
 #include "soc15d.h"
 #include "soc15_common.h"
 
+#include <linux/nbsd-namespace.h>
+
 #define JPEG_IDLE_TIMEOUT	msecs_to_jiffies(1000)
 
 static void amdgpu_jpeg_idle_work_handler(struct work_struct *work);
@@ -459,10 +461,12 @@ int amdgpu_jpeg_sysfs_reset_mask_init(struct amdgpu_device *adev)
 
 void amdgpu_jpeg_sysfs_reset_mask_fini(struct amdgpu_device *adev)
 {
+#ifdef notyet
 	if (adev->dev->kobj.sd) {
 		if (adev->jpeg.num_jpeg_inst)
 			device_remove_file(adev->dev, &dev_attr_jpeg_reset_mask);
 	}
+#endif
 }
 
 int amdgpu_jpeg_reg_dump_init(struct amdgpu_device *adev,

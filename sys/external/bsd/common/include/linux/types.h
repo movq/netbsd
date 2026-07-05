@@ -64,6 +64,8 @@ typedef uint16_t __be16;
 typedef uint32_t __be32;
 typedef uint64_t __be64;
 
+typedef unsigned int umode_t;
+
 #define	S8_C	INT8_C
 #define	S16_C	INT16_C
 #define	S32_C	INT32_C
@@ -96,6 +98,8 @@ typedef off_t loff_t;
 
 /* Definition copied in <linux/kernel.h> for convenience.  */
 #define	__user
+#define	__iomem
+#define	__counted_by(member)
 
 struct list_head {
 	struct list_head *prev;

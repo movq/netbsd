@@ -138,6 +138,19 @@ hrtimer_cancel(struct hrtimer *hrt)
 	return active;
 }
 
+int
+hrtimer_try_to_cancel(struct hrtimer *hrt)
+{
+
+	if (callout_invoking(&hrt->hrt_ch))
+		return -1;
+	if (!callout_pending(&hrt->hrt_ch))
+		return 0;
+	if (callout_stop(&hrt->hrt_ch))
+		return -1;
+	return 1;
+}
+
 bool
 hrtimer_active(struct hrtimer *hrt)
 {

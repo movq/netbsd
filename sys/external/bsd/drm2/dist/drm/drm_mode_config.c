@@ -470,21 +470,21 @@ int drmm_mode_config_init(struct drm_device *dev)
 		struct drm_modeset_acquire_ctx modeset_ctx;
 		struct ww_acquire_ctx resv_ctx;
 		struct dma_resv resv;
-		int ret;
+		int lockdep_ret;
 
 		dma_resv_init(&resv);
 
 		drm_modeset_acquire_init(&modeset_ctx, 0);
-		ret = drm_modeset_lock(&dev->mode_config.connection_mutex,
-				       &modeset_ctx);
-		if (ret == -EDEADLK)
-			ret = drm_modeset_backoff(&modeset_ctx);
+		lockdep_ret = drm_modeset_lock(&dev->mode_config.connection_mutex,
+		    &modeset_ctx);
+		if (lockdep_ret == -EDEADLK)
+			lockdep_ret = drm_modeset_backoff(&modeset_ctx);
 
 		might_fault();
 
 		ww_acquire_init(&resv_ctx, &reservation_ww_class);
-		ret = dma_resv_lock(&resv, &resv_ctx);
-		if (ret == -EDEADLK)
+		lockdep_ret = dma_resv_lock(&resv, &resv_ctx);
+		if (lockdep_ret == -EDEADLK)
 			dma_resv_lock_slow(&resv, &resv_ctx);
 
 		dma_resv_unlock(&resv);

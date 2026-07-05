@@ -32,4 +32,22 @@
 #ifndef _LINUX_COMPAT_H_
 #define _LINUX_COMPAT_H_
 
+#include <linux/types.h>
+
+typedef u32 compat_uptr_t;
+
+static inline void __user *
+compat_ptr(compat_uptr_t uptr)
+{
+
+	return (void __user *)(unsigned long)uptr;
+}
+
+static inline compat_uptr_t
+ptr_to_compat(void __user *uptr)
+{
+
+	return (compat_uptr_t)(unsigned long)uptr;
+}
+
 #endif  /* _LINUX_COMPAT_H_ */

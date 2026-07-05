@@ -57,15 +57,11 @@ __KERNEL_RCSID(0, "$NetBSD: drm_cdevsw.c,v 1.31 2024/04/21 03:02:39 riastradh Ex
 
 #include <linux/pm.h>
 
-#include <drm/drm_agpsupport.h>
 #include <drm/drm_device.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_file.h>
-#include <drm/drm_irq.h>
-#include <drm/drm_legacy.h>
 
 #include "../dist/drm/drm_internal.h"
-#include "../dist/drm/drm_legacy.h"
 
 static dev_type_open(drm_open);
 
@@ -82,8 +78,6 @@ static int	drm_fop_mmap(struct file *, off_t *, size_t, int, int *, int *,
 			     struct uvm_object **, int *);
 static void	drm_requeue_event(struct drm_file *, struct drm_pending_event *);
 
-static paddr_t	drm_legacy_mmap(dev_t, off_t, int);
-
 const struct cdevsw drm_cdevsw = {
 	.d_open = drm_open,
 	.d_close = noclose,
@@ -93,7 +87,7 @@ const struct cdevsw drm_cdevsw = {
 	.d_stop = nostop,
 	.d_tty = notty,
 	.d_poll = nopoll,
-	.d_mmap = drm_legacy_mmap,
+	.d_mmap = nommap,
 	.d_kqfilter = nokqfilter,
 	.d_discard = nodiscard,
 	/* XXX was D_TTY | D_NEGOFFSAFE */
@@ -124,7 +118,6 @@ drm_open(dev_t d, int flags, int fmt, struct lwp *l)
 	int fd;
 	struct file *fp;
 	struct drm_file *priv;
-	int need_setup = 0;
 	int error;
 
 	error = drm_guarantee_initialized();
@@ -138,7 +131,7 @@ drm_open(dev_t d, int flags, int fmt, struct lwp *l)
 		goto fail0;
 	}
 
-	dminor = drm_minor_acquire(minor(d));
+	dminor = drm_minor_acquire(&drm_minors_xa, minor(d));
 	if (IS_ERR(dminor)) {
 		/* XXX errno Linux->NetBSD */
 		error = -PTR_ERR(dminor);
@@ -151,13 +144,12 @@ drm_open(dev_t d, int flags, int fmt, struct lwp *l)
 	}
 
 	mutex_lock(&drm_global_mutex);
-	if (dev->open_count == INT_MAX) {
+	if (atomic_read(&dev->open_count) == INT_MAX) {
 		mutex_unlock(&drm_global_mutex);
 		error = EBUSY;
 		goto fail1;
 	}
-	if (dev->open_count++ == 0)
-		need_setup = 1;
+	atomic_inc(&dev->open_count);
 	mutex_unlock(&drm_global_mutex);
 
 	error = fd_allocfile(&fp, &fd);
@@ -184,28 +176,17 @@ drm_open(dev_t d, int flags, int fmt, struct lwp *l)
 	mutex_unlock(&dev->filelist_mutex);
 	/* XXX Alpha hose?  */
 
-	if (need_setup) {
-		/* XXX errno Linux->NetBSD */
-		error = -drm_legacy_setup(dev);
-		if (error)
-			goto fail5;
-	}
-
 	error = fd_clone(fp, fd, flags, &drm_fileops, priv);
 	KASSERT(error == EMOVEFD); /* XXX */
 
 	/* Success!  (But error has to be EMOVEFD, not 0.)  */
 	return error;
 
-fail5:	mutex_lock(&dev->filelist_mutex);
-	list_del(&priv->lhead);
-	mutex_unlock(&dev->filelist_mutex);
 fail4:	drm_file_free(priv);
 fail3:	fd_abort(curproc, fp, fd);
 fail2:	mutex_lock(&drm_global_mutex);
-	KASSERT(0 < dev->open_count);
-	--dev->open_count;
-	lastclose = (dev->open_count == 0);
+	KASSERT(0 < atomic_read(&dev->open_count));
+	lastclose = atomic_dec_and_test(&dev->open_count);
 	mutex_unlock(&drm_global_mutex);
 	if (lastclose)
 		drm_lastclose(dev);
@@ -233,9 +214,8 @@ drm_close(struct file *fp)
 	drm_file_free(priv);
 
 	mutex_lock(&drm_global_mutex);
-	KASSERT(0 < dev->open_count);
-	--dev->open_count;
-	lastclose = (dev->open_count == 0);
+	KASSERT(0 < atomic_read(&dev->open_count));
+	lastclose = atomic_dec_and_test(&dev->open_count);
 	mutex_unlock(&drm_global_mutex);
 
 	if (lastclose)
@@ -383,14 +363,9 @@ drm_requeue_event(struct drm_file *file, struct drm_pending_event *event)
 static int
 drm_ioctl_shim(struct file *fp, unsigned long cmd, void *data)
 {
-	struct drm_file *file = fp->f_data;
-	struct drm_driver *driver = file->minor->dev->driver;
 	int error;
 
-	if (driver->ioctl_override)
-		error = driver->ioctl_override(fp, cmd, data);
-	else
-		error = drm_ioctl(fp, cmd, data);
+	error = drm_ioctl(fp, cmd, data);
 	if (error == ERESTARTSYS)
 		error = ERESTART;
 
@@ -530,20 +505,4 @@ drm_fop_mmap(struct file *fp, off_t *offp, size_t len, int prot, int *flagsp,
 	if (error == ERESTARTSYS)
 		error = ERESTART;
 	return error;
-}
-
-static paddr_t
-drm_legacy_mmap(dev_t d, off_t offset, int prot)
-{
-	struct drm_minor *dminor;
-	paddr_t paddr;
-
-	dminor = drm_minor_acquire(minor(d));
-	if (IS_ERR(dminor))
-		return (paddr_t)-1;
-
-	paddr = drm_legacy_mmap_paddr(dminor->dev, offset, prot);
-
-	drm_minor_release(dminor);
-	return paddr;
 }

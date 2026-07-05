@@ -225,16 +225,31 @@ enum hdmi_metadata_type {
 	HDMI_STATIC_METADATA_TYPE1		= 1,
 };
 
-struct hdmi_type1 {
-	enum hdmi_eotf			eotf;
-	enum hdmi_metadata_type		metadata_type;
-	uint16_t			min_cll;
-	uint16_t			max_cll;
-	uint16_t			max_fall;
+/* HDR Metadata as per 861.G spec */
+struct hdr_static_metadata {
+	uint8_t eotf;
+	uint8_t metadata_type;
+	uint16_t max_cll;
+	uint16_t max_fall;
+	uint16_t min_cll;
 };
 
+/**
+ * struct hdr_sink_metadata - HDR sink metadata
+ *
+ * Metadata Information read from Sink's EDID
+ */
 struct hdr_sink_metadata {
-	struct hdmi_type1		hdmi_type1;
+	/**
+	 * @metadata_type: Static_Metadata_Descriptor_ID.
+	 */
+	uint32_t metadata_type;
+	/**
+	 * @hdmi_type1: HDR Metadata Infoframe.
+	 */
+	union {
+		struct hdr_static_metadata hdmi_type1;
+	};
 };
 
 #define	HDMI_INFOFRAME_SIZE(TYPE)					      \

@@ -32,6 +32,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include <drm/drm_drv.h>
 #include "../amdxcp/amdgpu_xcp_drv.h"
 
+#include <linux/nbsd-namespace.h>
+
 static void amdgpu_xcp_sysfs_entries_init(struct amdgpu_xcp_mgr *xcp_mgr);
 static void amdgpu_xcp_sysfs_entries_update(struct amdgpu_xcp_mgr *xcp_mgr);
 
@@ -312,7 +314,7 @@ static int amdgpu_xcp_dev_alloc(struct amdgpu_device *adev)
 		/* Redirect all IOCTLs to the primary device */
 		adev->xcp_mgr->xcp[i].rdev = p_ddev->render->dev;
 		adev->xcp_mgr->xcp[i].pdev = p_ddev->primary->dev;
-		adev->xcp_mgr->xcp[i].driver = (struct drm_driver *)p_ddev->driver;
+		adev->xcp_mgr->xcp[i].driver = p_ddev->driver;
 		adev->xcp_mgr->xcp[i].vma_offset_manager = p_ddev->vma_offset_manager;
 		p_ddev->render->dev = ddev;
 		p_ddev->primary->dev = ddev;
@@ -700,6 +702,7 @@ int amdgpu_xcp_post_partition_switch(struct amdgpu_xcp_mgr *xcp_mgr, u32 flags)
 }
 
 /*====================== xcp sysfs - configuration ======================*/
+#ifndef __NetBSD__
 #define XCP_CFG_SYSFS_RES_ATTR_SHOW(_name)                         \
 	static ssize_t amdgpu_xcp_res_sysfs_##_name##_show(        \
 		struct amdgpu_xcp_res_details *xcp_res, char *buf) \
@@ -1110,3 +1113,24 @@ void amdgpu_xcp_sysfs_fini(struct amdgpu_device *adev)
 	amdgpu_xcp_sysfs_entries_fini(adev->xcp_mgr, MAX_XCP);
 	amdgpu_xcp_cfg_sysfs_fini(adev);
 }
+#else
+static void
+amdgpu_xcp_sysfs_entries_init(struct amdgpu_xcp_mgr *xcp_mgr)
+{
+}
+
+static void
+amdgpu_xcp_sysfs_entries_update(struct amdgpu_xcp_mgr *xcp_mgr)
+{
+}
+
+void
+amdgpu_xcp_sysfs_init(struct amdgpu_device *adev)
+{
+}
+
+void
+amdgpu_xcp_sysfs_fini(struct amdgpu_device *adev)
+{
+}
+#endif

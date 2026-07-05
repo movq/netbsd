@@ -1100,6 +1100,15 @@ int smu_cmn_set_mp1_state(struct smu_context *smu,
 
 bool smu_cmn_is_audio_func_enabled(struct amdgpu_device *adev)
 {
+#ifdef __NetBSD__
+	/*
+	 * XXX NetBSD's pci_get_domain_bus_and_slot constructs a temporary
+	 * pci_dev whose enable count does not reflect whether a native
+	 * driver is attached.  Use the legacy driver-managed BACO sequence
+	 * until there is a native way to query the audio function.
+	 */
+	return false;
+#else
 	struct pci_dev *p = NULL;
 	bool snd_driver_loaded;
 
@@ -1117,9 +1126,11 @@ bool smu_cmn_is_audio_func_enabled(struct amdgpu_device *adev)
 	pci_dev_put(p);
 
 	return snd_driver_loaded;
+#endif
 }
 
-static char *smu_soc_policy_get_desc(struct smu_dpm_policy *policy, int level)
+static const char *
+smu_soc_policy_get_desc(struct smu_dpm_policy *policy, int level)
 {
 	if (level < 0 || !(policy->level_mask & BIT(level)))
 		return "Invalid";
@@ -1148,8 +1159,8 @@ void smu_cmn_generic_soc_policy_desc(struct smu_dpm_policy *policy)
 	policy->desc = &pstate_policy_desc;
 }
 
-static char *smu_xgmi_plpd_policy_get_desc(struct smu_dpm_policy *policy,
-					   int level)
+static const char *
+smu_xgmi_plpd_policy_get_desc(struct smu_dpm_policy *policy, int level)
 {
 	if (level < 0 || !(policy->level_mask & BIT(level)))
 		return "Invalid";

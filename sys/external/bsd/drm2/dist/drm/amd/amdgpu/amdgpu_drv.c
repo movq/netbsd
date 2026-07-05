@@ -37,7 +37,9 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_drv.c,v 1.8 2021/12/19 12:23:42 riastradh Exp
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_vblank.h>
 
+#ifndef __NetBSD__
 #include <linux/cc_platform.h>
+#endif
 #include <linux/dynamic_debug.h>
 #include <linux/module.h>
 #include <linux/mmu_notifier.h>
@@ -1149,6 +1151,7 @@ module_param_named(hdmi_hpd_debounce_delay_ms, amdgpu_hdmi_hpd_debounce_delay_ms
 /* These devices are not supported by amdgpu.
  * They are supported by the mach64, r128, radeon drivers
  */
+#ifndef __NetBSD__
 static const u16 amdgpu_unsupported_pciidlist[] = {
 	/* mach64 */
 	0x4354,
@@ -1857,6 +1860,7 @@ static const u16 amdgpu_unsupported_pciidlist[] = {
 	0x72b3,
 	0x793f,
 };
+#endif
 
 static const struct pci_device_id pciidlist[] = {
 	{0x1002, 0x6780, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CHIP_TAHITI},
@@ -2227,6 +2231,7 @@ static const struct pci_device_id pciidlist[] = {
 
 MODULE_DEVICE_TABLE(pci, pciidlist);
 
+#ifndef __NetBSD__
 static const struct amdgpu_asic_type_quirk asic_type_quirks[] = {
 	/* differentiate between P10 and P11 asics with the same DID */
 	{0x67FF, 0xE3, CHIP_POLARIS10},
@@ -2234,8 +2239,15 @@ static const struct amdgpu_asic_type_quirk asic_type_quirks[] = {
 	{0x67FF, 0xF3, CHIP_POLARIS10},
 	{0x67FF, 0xF7, CHIP_POLARIS10},
 };
+#endif
 
+#ifdef __NetBSD__
+static struct drm_driver amdgpu_kms_driver;
+#else
 static const struct drm_driver amdgpu_kms_driver;
+#endif
+
+#ifndef __NetBSD__
 
 static void amdgpu_get_secondary_funcs(struct amdgpu_device *adev)
 {
@@ -2251,15 +2263,22 @@ static void amdgpu_get_secondary_funcs(struct amdgpu_device *adev)
 		p = pci_get_domain_bus_and_slot(pci_domain_nr(adev->pdev->bus),
 						adev->pdev->bus->number, i);
 		if (p) {
-			pm_runtime_get_sync(&p->dev);
-			pm_runtime_mark_last_busy(&p->dev);
-			pm_runtime_put_autosuspend(&p->dev);
+			pm_runtime_get_sync(pci_dev_dev(p));
+			pm_runtime_mark_last_busy(pci_dev_dev(p));
+			pm_runtime_put_autosuspend(pci_dev_dev(p));
 			pci_dev_put(p);
 		}
 	}
 }
 
-static void amdgpu_init_debug_options(struct amdgpu_device *adev)
+#endif
+
+#ifdef __NetBSD__
+void
+#else
+static void
+#endif
+amdgpu_init_debug_options(struct amdgpu_device *adev)
 {
 	if (amdgpu_debug_mask & AMDGPU_DEBUG_VM) {
 		pr_info("debug: VM handling debug enabled\n");
@@ -2315,6 +2334,7 @@ static void amdgpu_init_debug_options(struct amdgpu_device *adev)
 	}
 }
 
+#ifndef __NetBSD__
 static unsigned long amdgpu_fix_asic_type(struct pci_dev *pdev, unsigned long flags)
 {
 	int i;
@@ -2331,7 +2351,6 @@ static unsigned long amdgpu_fix_asic_type(struct pci_dev *pdev, unsigned long fl
 	return flags;
 }
 
-#ifndef __NetBSD__
 static int amdgpu_pci_probe(struct pci_dev *pdev,
 			    const struct pci_device_id *ent)
 {
@@ -3052,11 +3071,6 @@ static const struct file_operations amdgpu_driver_kms_fops = {
 };
 #endif	/* __NetBSD__ */
 
-#ifdef __NetBSD__
-/* XXX Kludge for the non-GEM GEM that amdgpu uses.  */
-static const struct uvm_pagerops amdgpu_gem_uvm_ops;
-#endif
-
 int amdgpu_file_to_fpriv(struct file *filp, struct amdgpu_fpriv **fpriv)
 {
 	struct drm_file *file;
@@ -3067,7 +3081,7 @@ int amdgpu_file_to_fpriv(struct file *filp, struct amdgpu_fpriv **fpriv)
 	if (filp->f_ops != &drm_fileops)
 		return -EINVAL;
 	file = filp->f_data;
-	if (file->minor->dev->driver != &kms_driver)
+	if (file->minor->dev->driver != &amdgpu_kms_driver)
 		return -EINVAL;
 #else
 	if (filp->f_op != &amdgpu_driver_kms_fops)
@@ -3103,7 +3117,11 @@ const struct drm_ioctl_desc amdgpu_ioctls_kms[] = {
 	DRM_IOCTL_DEF_DRV(AMDGPU_GEM_LIST_HANDLES, amdgpu_gem_list_handles_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
 };
 
+#ifdef __NetBSD__
+static struct drm_driver amdgpu_kms_driver = {
+#else
 static const struct drm_driver amdgpu_kms_driver = {
+#endif
 	.driver_features =
 	    DRIVER_ATOMIC |
 	    DRIVER_GEM |
@@ -3116,7 +3134,11 @@ static const struct drm_driver amdgpu_kms_driver = {
 	.dumb_create = amdgpu_mode_dumb_create,
 	.dumb_map_offset = amdgpu_mode_dumb_mmap,
 	DRM_FBDEV_TTM_DRIVER_OPS,
+#ifdef __NetBSD__
+	.fops = NULL,
+#else
 	.fops = &amdgpu_driver_kms_fops,
+#endif
 	.release = &amdgpu_driver_release_kms,
 #ifdef CONFIG_PROC_FS
 	.show_fdinfo = amdgpu_show_fdinfo,
@@ -3142,7 +3164,11 @@ const struct drm_driver amdgpu_partition_driver = {
 	.dumb_create = amdgpu_mode_dumb_create,
 	.dumb_map_offset = amdgpu_mode_dumb_mmap,
 	DRM_FBDEV_TTM_DRIVER_OPS,
+#ifdef __NetBSD__
+	.fops = NULL,
+#else
 	.fops = &amdgpu_driver_kms_fops,
+#endif
 	.release = &amdgpu_driver_release_kms,
 
 	.gem_prime_import = amdgpu_gem_prime_import,
@@ -3153,6 +3179,8 @@ const struct drm_driver amdgpu_partition_driver = {
 	.minor = KMS_DRIVER_MINOR,
 	.patchlevel = KMS_DRIVER_PATCHLEVEL,
 };
+
+#ifndef __NetBSD__
 
 static struct pci_error_handlers amdgpu_pci_err_handler = {
 	.error_detected	= amdgpu_pci_error_detected,
@@ -3168,9 +3196,11 @@ static const struct attribute_group *amdgpu_sysfs_groups[] = {
 	NULL,
 };
 
+#endif
+
 #ifdef __NetBSD__
 
-struct drm_driver *const amdgpu_drm_driver = &kms_driver;
+struct drm_driver *const amdgpu_drm_driver = &amdgpu_kms_driver;
 const struct pci_device_id *const amdgpu_device_ids = pciidlist;
 const size_t amdgpu_n_device_ids = __arraycount(pciidlist);
 

@@ -43,6 +43,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 
 #include <drm/drm_drv.h>
 
+#include <linux/nbsd-namespace.h>
+
 #define VCN_VID_SOC_ADDRESS_2_0					0x1fa00
 #define VCN1_VID_SOC_ADDRESS_3_0				0x48200
 #define VCN1_AON_SOC_ADDRESS_3_0				0x48000
@@ -1924,7 +1926,7 @@ static int vcn_v3_0_dec_msg(struct amdgpu_cs_parser *p, struct amdgpu_job *job,
 	addr &= AMDGPU_GMC_HOLE_MASK;
 	r = amdgpu_cs_find_mapping(p, addr, &bo, &map);
 	if (r) {
-		DRM_ERROR("Can't find BO for addr 0x%08Lx\n", addr);
+		DRM_ERROR("Can't find BO for addr 0x%08"PRIx64"\n", addr);
 		return r;
 	}
 

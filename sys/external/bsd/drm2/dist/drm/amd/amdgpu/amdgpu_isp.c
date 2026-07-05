@@ -38,6 +38,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "isp_v4_1_0.h"
 #include "isp_v4_1_1.h"
 
+#include <linux/nbsd-namespace.h>
+
 #define ISP_MC_ADDR_ALIGN (1024 * 32)
 
 /**

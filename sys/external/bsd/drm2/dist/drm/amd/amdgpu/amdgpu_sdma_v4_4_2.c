@@ -49,6 +49,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 
 #include "amdgpu_ras.h"
 
+#include <linux/nbsd-namespace.h>
+
 MODULE_FIRMWARE("amdgpu/sdma_4_4_2.bin");
 MODULE_FIRMWARE("amdgpu/sdma_4_4_4.bin");
 MODULE_FIRMWARE("amdgpu/sdma_4_4_5.bin");
@@ -229,7 +231,7 @@ static uint64_t sdma_v4_4_2_ring_get_rptr(struct amdgpu_ring *ring)
 	/* XXX check if swapping is necessary on BE */
 	rptr = READ_ONCE(*((u64 *)&ring->adev->wb.wb[ring->rptr_offs]));
 
-	DRM_DEBUG("rptr before shift == 0x%016llx\n", rptr);
+	DRM_DEBUG("rptr before shift == 0x%016"PRIx64"\n", rptr);
 	return rptr >> 2;
 }
 
@@ -248,12 +250,12 @@ static uint64_t sdma_v4_4_2_ring_get_wptr(struct amdgpu_ring *ring)
 	if (ring->use_doorbell) {
 		/* XXX check if swapping is necessary on BE */
 		wptr = READ_ONCE(*((u64 *)&adev->wb.wb[ring->wptr_offs]));
-		DRM_DEBUG("wptr/doorbell before shift == 0x%016llx\n", wptr);
+		DRM_DEBUG("wptr/doorbell before shift == 0x%016"PRIx64"\n", wptr);
 	} else {
 		wptr = RREG32_SDMA(ring->me, regSDMA_GFX_RB_WPTR_HI);
 		wptr = wptr << 32;
 		wptr |= RREG32_SDMA(ring->me, regSDMA_GFX_RB_WPTR);
-		DRM_DEBUG("wptr before shift [%i] wptr == 0x%016llx\n",
+		DRM_DEBUG("wptr before shift [%i] wptr == 0x%016"PRIx64"\n",
 				ring->me, wptr);
 	}
 
@@ -284,7 +286,7 @@ static void sdma_v4_4_2_ring_set_wptr(struct amdgpu_ring *ring)
 				upper_32_bits(ring->wptr << 2));
 		/* XXX check if swapping is necessary on BE */
 		WRITE_ONCE(*wb, (ring->wptr << 2));
-		DRM_DEBUG("calling WDOORBELL64(0x%08x, 0x%016llx)\n",
+		DRM_DEBUG("calling WDOORBELL64(0x%08x, 0x%016"PRIx64")\n",
 				ring->doorbell_index, ring->wptr << 2);
 		WDOORBELL64(ring->doorbell_index, ring->wptr << 2);
 	} else {
@@ -1879,7 +1881,7 @@ static int sdma_v4_4_2_print_iv_entry(struct amdgpu_device *adev,
 	addr |= ((u64)entry->src_data[1] & 0xf) << 44;
 
 	dev_dbg_ratelimited(adev->dev,
-			    "[sdma%d] address:0x%016llx src_id:%u ring:%u vmid:%u pasid:%u\n",
+			    "[sdma%d] address:0x%016"PRIx64" src_id:%u ring:%u vmid:%u pasid:%u\n",
 			    instance, addr, entry->src_id, entry->ring_id, entry->vmid,
 			    entry->pasid);
 

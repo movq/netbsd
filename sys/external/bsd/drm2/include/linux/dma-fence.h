@@ -62,19 +62,20 @@ struct dma_fence {
 	uint64_t			f_magic;
 };
 
-#define	DMA_FENCE_FLAG_ENABLE_SIGNAL_BIT	0
+#define	DMA_FENCE_FLAG_SEQNO64_BIT		0
 #define	DMA_FENCE_FLAG_SIGNALED_BIT		1
 #define	DMA_FENCE_FLAG_TIMESTAMP_BIT		2
-#define	DMA_FENCE_FLAG_USER_BITS		3
+#define	DMA_FENCE_FLAG_ENABLE_SIGNAL_BIT	3
+#define	DMA_FENCE_FLAG_USER_BITS		4
 
 struct dma_fence_ops {
-	bool		use_64bit_seqno;
 	const char	*(*get_driver_name)(struct dma_fence *);
 	const char	*(*get_timeline_name)(struct dma_fence *);
 	bool		(*enable_signaling)(struct dma_fence *);
 	bool		(*signaled)(struct dma_fence *);
 	long		(*wait)(struct dma_fence *, bool, long);
 	void		(*release)(struct dma_fence *);
+	void		(*set_deadline)(struct dma_fence *, ktime_t);
 };
 
 typedef void (*dma_fence_func_t)(struct dma_fence *, struct dma_fence_cb *);
@@ -89,6 +90,7 @@ struct dma_fence_cb {
 #define	__dma_fence_signal		linux___dma_fence_signal
 #define	__dma_fence_signal_wake		linux___dma_fence_signal_wake
 #define	dma_fence_add_callback		linux_dma_fence_add_callback
+#define	dma_fence_allocate_private_stub	linux_dma_fence_allocate_private_stub
 #define	dma_fence_context_alloc		linux_dma_fence_context_alloc
 #define	dma_fence_default_wait		linux_dma_fence_default_wait
 #define	dma_fence_destroy		linux_dma_fence_destroy
@@ -100,15 +102,19 @@ struct dma_fence_cb {
 #define	dma_fence_get_status		linux_dma_fence_get_status
 #define	dma_fence_get_stub		linux_dma_fence_get_stub
 #define	dma_fence_init			linux_dma_fence_init
+#define	dma_fence_init64		linux_dma_fence_init64
 #define	dma_fence_is_later		linux_dma_fence_is_later
 #define	dma_fence_is_signaled		linux_dma_fence_is_signaled
 #define	dma_fence_is_signaled_locked	linux_dma_fence_is_signaled_locked
 #define	dma_fence_put			linux_dma_fence_put
 #define	dma_fence_remove_callback	linux_dma_fence_remove_callback
 #define	dma_fence_reset			linux_dma_fence_reset
+#define	dma_fence_set_deadline		linux_dma_fence_set_deadline
 #define	dma_fence_set_error		linux_dma_fence_set_error
 #define	dma_fence_signal		linux_dma_fence_signal
 #define	dma_fence_signal_locked		linux_dma_fence_signal_locked
+#define	dma_fence_signal_timestamp	linux_dma_fence_signal_timestamp
+#define	dma_fence_signal_timestamp_locked linux_dma_fence_signal_timestamp_locked
 #define	dma_fence_wait			linux_dma_fence_wait
 #define	dma_fence_wait_any_timeout	linux_dma_fence_wait_any_timeout
 #define	dma_fence_wait_timeout		linux_dma_fence_wait_timeout
@@ -120,6 +126,8 @@ void	linux_dma_fences_fini(void);
 
 void	dma_fence_init(struct dma_fence *, const struct dma_fence_ops *,
 	    spinlock_t *, uint64_t, uint64_t);
+void	dma_fence_init64(struct dma_fence *, const struct dma_fence_ops *,
+	    spinlock_t *, uint64_t, uint64_t);
 void	dma_fence_reset(struct dma_fence *, const struct dma_fence_ops *,
 	    spinlock_t *, uint64_t, uint64_t); /* XXX extension */
 void	dma_fence_destroy(struct dma_fence *);
@@ -127,11 +135,13 @@ void	dma_fence_free(struct dma_fence *);
 
 uint64_t
 	dma_fence_context_alloc(unsigned);
-bool	__dma_fence_is_later(uint64_t, uint64_t, const struct dma_fence_ops *);
+bool	__dma_fence_is_later(struct dma_fence *, uint64_t, uint64_t);
 bool	dma_fence_is_later(struct dma_fence *, struct dma_fence *);
 
 struct dma_fence *
 	dma_fence_get_stub(void);
+struct dma_fence *
+	dma_fence_allocate_private_stub(ktime_t);
 
 struct dma_fence *
 	dma_fence_get(struct dma_fence *);
@@ -148,10 +158,25 @@ void	dma_fence_enable_sw_signaling(struct dma_fence *);
 
 bool	dma_fence_is_signaled(struct dma_fence *);
 bool	dma_fence_is_signaled_locked(struct dma_fence *);
+
+static inline ktime_t
+dma_fence_timestamp(struct dma_fence *fence)
+{
+	if (WARN_ON(!test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->flags)))
+		return ktime_get();
+
+	while (!test_bit(DMA_FENCE_FLAG_TIMESTAMP_BIT, &fence->flags))
+		cpu_relax();
+
+	return fence->timestamp;
+}
+void	dma_fence_set_deadline(struct dma_fence *, ktime_t);
 void	dma_fence_set_error(struct dma_fence *, int);
 int	dma_fence_get_status(struct dma_fence *);
 int	dma_fence_signal(struct dma_fence *);
 int	dma_fence_signal_locked(struct dma_fence *);
+int	dma_fence_signal_timestamp(struct dma_fence *, ktime_t);
+int	dma_fence_signal_timestamp_locked(struct dma_fence *, ktime_t);
 long	dma_fence_default_wait(struct dma_fence *, bool, long);
 long	dma_fence_wait(struct dma_fence *, bool);
 long	dma_fence_wait_any_timeout(struct dma_fence **, uint32_t, bool, long,

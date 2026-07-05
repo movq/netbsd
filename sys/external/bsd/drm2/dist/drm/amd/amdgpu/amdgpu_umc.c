@@ -258,7 +258,14 @@ int amdgpu_umc_pasid_poison_handler(struct amdgpu_device *adev,
 			if (!ret) {
 				atomic_inc(&con->page_retirement_req_cnt);
 				atomic_inc(&con->poison_consumption_count);
+#ifdef __NetBSD__
+				spin_lock(&con->page_retirement_wq_lock);
+				DRM_SPIN_WAKEUP_ALL(&con->page_retirement_wq,
+				    &con->page_retirement_wq_lock);
+				spin_unlock(&con->page_retirement_wq_lock);
+#else
 				wake_up(&con->page_retirement_wq);
+#endif
 			}
 		}
 	} else {
@@ -581,8 +588,8 @@ int amdgpu_umc_pa2mca(struct amdgpu_device *adev,
 	addr_in.addr_type = TA_RAS_PA_TO_MCA;
 	ret = psp_ras_query_address(&adev->psp, &addr_in, &addr_out);
 	if (ret) {
-		dev_warn(adev->dev, "Failed to query RAS MCA address for 0x%llx",
-			pa);
+		dev_warn(adev->dev,
+		    "Failed to query RAS MCA address for 0x%"PRIx64, pa);
 
 		return ret;
 	}

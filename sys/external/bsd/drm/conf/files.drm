@@ -10,7 +10,7 @@ makeoptions	drmbase		CPPFLAGS+="-I$S/external/bsd/drm/dist/bsd-core -I$S/externa
 
 file	external/bsd/drm/dist/bsd-core/drm_agpsupport.c		drmbase & agp
 file	external/bsd/drm/dist/bsd-core/drm_auth.c		drmbase
-file	external/bsd/drm/dist/bsd-core/drm_bufs.c		drmbase
+#file	external/bsd/drm/dist/bsd-core/drm_bufs.c		drmbase
 file	external/bsd/drm/dist/bsd-core/drm_context.c		drmbase
 file	external/bsd/drm/dist/bsd-core/drm_dma.c		drmbase
 file	external/bsd/drm/dist/bsd-core/drm_drawable.c		drmbase

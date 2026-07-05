@@ -143,7 +143,7 @@ int amdgpu_ib_schedule(struct amdgpu_ring *ring, unsigned int num_ibs,
 	u64 shadow_va, csa_va, gds_va;
 	int vmid = AMDGPU_JOB_GET_VMID(job);
 	bool need_pipe_sync = false;
-	unsigned int cond_exec;
+	unsigned int cond_exec = 0;
 	unsigned int i;
 	int r = 0;
 

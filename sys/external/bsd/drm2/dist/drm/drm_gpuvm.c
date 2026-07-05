@@ -35,6 +35,7 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include <linux/export.h>
 #include <linux/interval_tree_generic.h>
 #include <linux/mm.h>
+#include <linux/module.h>
 
 /**
  * DOC: Overview

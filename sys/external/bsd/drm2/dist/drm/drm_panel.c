@@ -36,6 +36,8 @@ __KERNEL_RCSID(0, "$NetBSD: drm_panel.c,v 1.5 2021/12/18 23:44:57 riastradh Exp 
 #include <drm/drm_panel.h>
 #include <drm/drm_print.h>
 
+#include <linux/nbsd-namespace.h>
+
 #ifdef __NetBSD__
 static struct mutex panel_lock;
 static struct list_head panel_list = LIST_HEAD_INIT(panel_list);
@@ -412,17 +414,22 @@ EXPORT_SYMBOL(drm_panel_put);
  * Wrapper of drm_panel_put() to be used when a function taking a void
  * pointer is needed, for example as a devm action.
  */
+#ifndef __NetBSD__
 static void drm_panel_put_void(void *data)
 {
 	struct drm_panel *panel = (struct drm_panel *)data;
 
 	drm_panel_put(panel);
 }
+#endif
 
 void *__devm_drm_panel_alloc(struct device *dev, size_t size, size_t offset,
 			     const struct drm_panel_funcs *funcs,
 			     int connector_type)
 {
+#ifdef __NetBSD__
+	return ERR_PTR(-ENOSYS);
+#else
 	void *container;
 	struct drm_panel *panel;
 	int err;
@@ -436,7 +443,7 @@ void *__devm_drm_panel_alloc(struct device *dev, size_t size, size_t offset,
 	if (!container)
 		return ERR_PTR(-ENOMEM);
 
-	panel = container + offset;
+	panel = (struct drm_panel *)((char *)container + offset);
 	panel->container = container;
 	panel->funcs = funcs;
 	kref_init(&panel->refcount);
@@ -448,6 +455,7 @@ void *__devm_drm_panel_alloc(struct device *dev, size_t size, size_t offset,
 	drm_panel_init(panel, dev, funcs, connector_type);
 
 	return container;
+#endif
 }
 EXPORT_SYMBOL(__devm_drm_panel_alloc);
 
@@ -684,10 +692,12 @@ void drm_panel_remove_follower(struct drm_panel_follower *follower)
 }
 EXPORT_SYMBOL(drm_panel_remove_follower);
 
+#ifndef __NetBSD__
 static void drm_panel_remove_follower_void(void *follower)
 {
 	drm_panel_remove_follower(follower);
 }
+#endif
 
 /**
  * devm_drm_panel_add_follower() - devm version of drm_panel_add_follower()
@@ -701,6 +711,9 @@ static void drm_panel_remove_follower_void(void *follower)
 int devm_drm_panel_add_follower(struct device *follower_dev,
 				struct drm_panel_follower *follower)
 {
+#ifdef __NetBSD__
+	return -ENOSYS;
+#else
 	int ret;
 
 	ret = drm_panel_add_follower(follower_dev, follower);
@@ -709,6 +722,7 @@ int devm_drm_panel_add_follower(struct device *follower_dev,
 
 	return devm_add_action_or_reset(follower_dev,
 					drm_panel_remove_follower_void, follower);
+#endif
 }
 EXPORT_SYMBOL(devm_drm_panel_add_follower);
 

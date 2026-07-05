@@ -63,4 +63,11 @@
 #define	le32_to_cpup	le32dec
 #define	le64_to_cpup	le64dec
 
+static inline void
+le16_add_cpu(uint16_t *p, uint16_t value)
+{
+
+	le16enc(p, le16dec(p) + value);
+}
+
 #endif	/* _ASM_BYTEORDER_H_ */

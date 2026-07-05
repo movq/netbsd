@@ -130,7 +130,7 @@ void mod_hdcp_log_ddc_trace(struct mod_hdcp *hdcp)
 	}
 }
 
-char *mod_hdcp_status_to_str(int32_t status)
+const char *mod_hdcp_status_to_str(int32_t status)
 {
 	switch (status) {
 	case MOD_HDCP_STATUS_SUCCESS:
@@ -363,4 +363,3 @@ const char *mod_hdcp_state_id_to_str(int32_t id)
 		return "UNKNOWN_STATE_ID";
 	}
 }
-

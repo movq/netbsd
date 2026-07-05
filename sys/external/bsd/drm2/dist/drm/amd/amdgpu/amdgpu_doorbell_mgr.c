@@ -29,6 +29,10 @@ __KERNEL_RCSID(0, "$NetBSD$");
 
 #include "amdgpu.h"
 
+#ifdef __NetBSD__
+#include <linux/nbsd-namespace.h>
+#endif
+
 /**
  * amdgpu_mm_rdoorbell - read a doorbell dword
  *
@@ -43,8 +47,15 @@ u32 amdgpu_mm_rdoorbell(struct amdgpu_device *adev, u32 index)
 	if (amdgpu_device_skip_hw_access(adev))
 		return 0;
 
-	if (index < adev->doorbell.num_kernel_doorbells)
+	if (index < adev->doorbell.num_kernel_doorbells) {
+#ifdef __NetBSD__
+		return bus_space_read_4(adev->mman.bdev.memt,
+		    adev->doorbell.kernel_doorbells->kmap.u.io.memh,
+		    sizeof(u32) * index);
+#else
 		return readl(adev->doorbell.cpu_addr + index);
+#endif
+	}
 
 	dev_err(adev->dev, "reading beyond doorbell aperture: 0x%08x!\n",
 		index);
@@ -66,9 +77,15 @@ void amdgpu_mm_wdoorbell(struct amdgpu_device *adev, u32 index, u32 v)
 	if (amdgpu_device_skip_hw_access(adev))
 		return;
 
-	if (index < adev->doorbell.num_kernel_doorbells)
+	if (index < adev->doorbell.num_kernel_doorbells) {
+#ifdef __NetBSD__
+		bus_space_write_4(adev->mman.bdev.memt,
+		    adev->doorbell.kernel_doorbells->kmap.u.io.memh,
+		    sizeof(u32) * index, v);
+#else
 		writel(v, adev->doorbell.cpu_addr + index);
-	else
+#endif
+	} else
 		dev_err(adev->dev,
 			"writing beyond doorbell aperture: 0x%08x!\n", index);
 }
@@ -87,8 +104,36 @@ u64 amdgpu_mm_rdoorbell64(struct amdgpu_device *adev, u32 index)
 	if (amdgpu_device_skip_hw_access(adev))
 		return 0;
 
-	if (index < adev->doorbell.num_kernel_doorbells)
+	if (index < adev->doorbell.num_kernel_doorbells) {
+#ifdef __NetBSD__
+#ifdef _LP64
+		return bus_space_read_8(adev->mman.bdev.memt,
+		    adev->doorbell.kernel_doorbells->kmap.u.io.memh,
+		    sizeof(u32) * index);
+#else
+		uint64_t lo, hi;
+
+#if _BYTE_ORDER == _LITTLE_ENDIAN
+		lo = bus_space_read_4(adev->mman.bdev.memt,
+		    adev->doorbell.kernel_doorbells->kmap.u.io.memh,
+		    sizeof(u32) * index);
+		hi = bus_space_read_4(adev->mman.bdev.memt,
+		    adev->doorbell.kernel_doorbells->kmap.u.io.memh,
+		    sizeof(u32) * index + sizeof(u32));
+#else
+		hi = bus_space_read_4(adev->mman.bdev.memt,
+		    adev->doorbell.kernel_doorbells->kmap.u.io.memh,
+		    sizeof(u32) * index);
+		lo = bus_space_read_4(adev->mman.bdev.memt,
+		    adev->doorbell.kernel_doorbells->kmap.u.io.memh,
+		    sizeof(u32) * index + sizeof(u32));
+#endif
+		return lo | (hi << 32);
+#endif
+#else
 		return atomic64_read((atomic64_t *)(adev->doorbell.cpu_addr + index));
+#endif
+	}
 
 	dev_err(adev->dev, "reading beyond doorbell aperture: 0x%08x!\n",
 		index);
@@ -110,9 +155,33 @@ void amdgpu_mm_wdoorbell64(struct amdgpu_device *adev, u32 index, u64 v)
 	if (amdgpu_device_skip_hw_access(adev))
 		return;
 
-	if (index < adev->doorbell.num_kernel_doorbells)
+	if (index < adev->doorbell.num_kernel_doorbells) {
+#ifdef __NetBSD__
+#ifdef _LP64
+		bus_space_write_8(adev->mman.bdev.memt,
+		    adev->doorbell.kernel_doorbells->kmap.u.io.memh,
+		    sizeof(u32) * index, v);
+#else
+#if _BYTE_ORDER == _LITTLE_ENDIAN
+		bus_space_write_4(adev->mman.bdev.memt,
+		    adev->doorbell.kernel_doorbells->kmap.u.io.memh,
+		    sizeof(u32) * index, v & 0xffffffffU);
+		bus_space_write_4(adev->mman.bdev.memt,
+		    adev->doorbell.kernel_doorbells->kmap.u.io.memh,
+		    sizeof(u32) * index + sizeof(u32), v >> 32);
+#else
+		bus_space_write_4(adev->mman.bdev.memt,
+		    adev->doorbell.kernel_doorbells->kmap.u.io.memh,
+		    sizeof(u32) * index, v >> 32);
+		bus_space_write_4(adev->mman.bdev.memt,
+		    adev->doorbell.kernel_doorbells->kmap.u.io.memh,
+		    sizeof(u32) * index + sizeof(u32), v & 0xffffffffU);
+#endif
+#endif
+#else
 		atomic64_set((atomic64_t *)(adev->doorbell.cpu_addr + index), v);
-	else
+#endif
+	} else
 		dev_err(adev->dev,
 			"writing beyond doorbell aperture: 0x%08x!\n", index);
 }

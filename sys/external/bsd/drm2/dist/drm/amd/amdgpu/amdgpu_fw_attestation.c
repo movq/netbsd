@@ -36,6 +36,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "amdgpu_ucode.h"
 #include "soc15_common.h"
 
+#ifdef notyet
+
 #define FW_ATTESTATION_DB_COOKIE        0x143b6a37
 #define FW_ATTESTATION_RECORD_VALID	1
 #define FW_ATTESTATION_MAX_SIZE		4096
@@ -137,8 +139,11 @@ static int amdgpu_is_fw_attestation_supported(struct amdgpu_device *adev)
 	return 0;
 }
 
+#endif
+
 void amdgpu_fw_attestation_debugfs_init(struct amdgpu_device *adev)
 {
+#ifdef notyet
 	if (!amdgpu_is_fw_attestation_supported(adev))
 		return;
 
@@ -147,4 +152,5 @@ void amdgpu_fw_attestation_debugfs_init(struct amdgpu_device *adev)
 			    adev_to_drm(adev)->primary->debugfs_root,
 			    adev,
 			    &amdgpu_fw_attestation_debugfs_ops);
+#endif
 }

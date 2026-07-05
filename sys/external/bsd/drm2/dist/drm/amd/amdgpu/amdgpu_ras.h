@@ -30,6 +30,10 @@
 #include <linux/list.h>
 #include <linux/kfifo.h>
 #include <linux/radix-tree.h>
+#include <linux/workqueue.h>
+#ifdef __NetBSD__
+#include <drm/drm_wait_netbsd.h>
+#endif
 #include "ta_ras_if.h"
 #include "amdgpu_ras_eeprom.h"
 #include "amdgpu_smuio.h"
@@ -565,7 +569,12 @@ struct amdgpu_ras {
 	uint32_t  gpu_reset_flags;
 
 	struct task_struct *page_retirement_thread;
+#ifdef __NetBSD__
+	drm_waitqueue_t page_retirement_wq;
+	spinlock_t page_retirement_wq_lock;
+#else
 	wait_queue_head_t page_retirement_wq;
+#endif
 	struct mutex page_retirement_lock;
 	atomic_t page_retirement_req_cnt;
 	atomic_t poison_creation_count;
@@ -984,8 +993,12 @@ int amdgpu_ras_bind_aca(struct amdgpu_device *adev, enum amdgpu_ras_block blk,
 			       const struct aca_info *aca_info, void *data);
 int amdgpu_ras_unbind_aca(struct amdgpu_device *adev, enum amdgpu_ras_block blk);
 
-ssize_t amdgpu_ras_aca_sysfs_read(struct device *dev, struct device_attribute *attr,
-				  struct aca_handle *handle, char *buf, void *data);
+#ifndef __NetBSD__
+ssize_t amdgpu_ras_aca_sysfs_read(struct device *dev,
+				  struct device_attribute *attr,
+				  struct aca_handle *handle, char *buf,
+				  void *data);
+#endif
 
 void amdgpu_ras_set_fed(struct amdgpu_device *adev, bool status);
 bool amdgpu_ras_get_fed_status(struct amdgpu_device *adev);

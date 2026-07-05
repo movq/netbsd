@@ -42,6 +42,7 @@ struct timer_list {
 };
 
 #define	from_timer(V, T, F)	container_of(T, __typeof__(*(V)), F)
+#define	timer_container_of(V, T, F)	container_of(T, __typeof__(*(V)), F)
 
 #define	TIMER_IRQSAFE		__BIT(0)
 
@@ -111,6 +112,9 @@ del_timer_sync(struct timer_list *timer)
 		return 0;	/* too late, already expired */
 	return 1;		/* we stopped it while active */
 }
+
+#define	timer_delete_sync	del_timer_sync
+#define	timer_delete		del_timer
 
 static inline bool
 timer_pending(struct timer_list *timer)

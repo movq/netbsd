@@ -32,4 +32,6 @@
 #ifndef _LINUX_KOBJECT_H_
 #define _LINUX_KOBJECT_H_
 
+#define kobject_uevent_env(obj, act, envp)	0
+
 #endif  /* _LINUX_KOBJECT_H_ */

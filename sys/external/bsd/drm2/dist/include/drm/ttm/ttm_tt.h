@@ -29,6 +29,11 @@
 #ifndef _TTM_TT_H_
 #define _TTM_TT_H_
 
+#ifdef __NetBSD__
+#include <sys/bus.h>
+#include <uvm/uvm_object.h>
+#endif
+
 #include <linux/pagemap.h>
 #include <linux/types.h>
 #include <drm/ttm/ttm_caching.h>
@@ -114,6 +119,8 @@ struct ttm_tt {
 	dma_addr_t *dma_address;
 #ifdef __NetBSD__
 	struct uvm_object *swap_storage;
+	bus_dma_tag_t dmat;
+	bus_dmamap_t dma_map;
 #else
 	/** @swap_storage: Pointer to shmem struct file for swap storage. */
 	struct file *swap_storage;
@@ -140,26 +147,10 @@ struct ttm_tt {
  * @tt: Cached struct ttm_tt.
  * @prot: Cached page protection for mapping.
  */
-<<<<<<< HEAD
-struct ttm_dma_tt {
-	struct ttm_tt ttm;
-#ifdef __NetBSD__
-	bus_dmamap_t dma_address;
-#else
-	dma_addr_t *dma_address;
-#endif
-	struct list_head pages_list;
-||||||| b9b52a82a927
-struct ttm_dma_tt {
-	struct ttm_tt ttm;
-	dma_addr_t *dma_address;
-	struct list_head pages_list;
-=======
 struct ttm_kmap_iter_tt {
 	struct ttm_kmap_iter base;
 	struct ttm_tt *tt;
 	pgprot_t prot;
->>>>>>> vendor/linux-drm-v6.18
 };
 
 static inline bool ttm_tt_is_populated(struct ttm_tt *tt)
@@ -251,25 +242,6 @@ void ttm_tt_fini(struct ttm_tt *ttm);
  */
 void ttm_tt_destroy(struct ttm_device *bdev, struct ttm_tt *ttm);
 
-#ifdef __NetBSD__
-/**
- * ttm_tt_wire
- *
- * @ttm The struct ttm_tt.
- *
- * Wire the pages of a ttm_tt, allocating pages for it if necessary.
- */
-extern int ttm_tt_wire(struct ttm_tt *ttm);
-
-/**
- * ttm_tt_unwire
- *
- * @ttm The struct ttm_tt.
- *
- * Unwire the pages of a ttm_tt.
- */
-extern void ttm_tt_unwire(struct ttm_tt *ttm);
-#else
 /**
  * ttm_tt_swapin:
  *
@@ -278,45 +250,8 @@ extern void ttm_tt_unwire(struct ttm_tt *ttm);
  * Swap in a previously swap out ttm_tt.
  */
 int ttm_tt_swapin(struct ttm_tt *ttm);
-<<<<<<< HEAD
-#endif
-
-/**
- * ttm_tt_set_placement_caching:
- *
- * @ttm A struct ttm_tt the backing pages of which will change caching policy.
- * @placement: Flag indicating the desired caching policy.
- *
- * This function will change caching policy of any default kernel mappings of
- * the pages backing @ttm. If changing from cached to uncached or
- * write-combined,
- * all CPU caches will first be flushed to make sure the data of the pages
- * hit RAM. This function may be very costly as it involves global TLB
- * and cache flushes and potential page splitting / combining.
- */
-int ttm_tt_set_placement_caching(struct ttm_tt *ttm, uint32_t placement);
-int ttm_tt_swapout(struct ttm_tt *ttm, struct file *persistent_swap_storage);
-||||||| b9b52a82a927
-
-/**
- * ttm_tt_set_placement_caching:
- *
- * @ttm A struct ttm_tt the backing pages of which will change caching policy.
- * @placement: Flag indicating the desired caching policy.
- *
- * This function will change caching policy of any default kernel mappings of
- * the pages backing @ttm. If changing from cached to uncached or
- * write-combined,
- * all CPU caches will first be flushed to make sure the data of the pages
- * hit RAM. This function may be very costly as it involves global TLB
- * and cache flushes and potential page splitting / combining.
- */
-int ttm_tt_set_placement_caching(struct ttm_tt *ttm, uint32_t placement);
-int ttm_tt_swapout(struct ttm_tt *ttm, struct file *persistent_swap_storage);
-=======
 int ttm_tt_swapout(struct ttm_device *bdev, struct ttm_tt *ttm,
 		   gfp_t gfp_flags);
->>>>>>> vendor/linux-drm-v6.18
 
 /**
  * ttm_tt_populate - allocate pages for a ttm

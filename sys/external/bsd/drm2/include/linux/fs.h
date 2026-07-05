@@ -39,6 +39,8 @@
 #include <linux/err.h>
 #include <linux/wait_bit.h>
 
+#define MINORBITS	8
+
 static inline struct uvm_object *
 file_inode(struct uvm_object *uobj)
 {

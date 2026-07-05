@@ -56,17 +56,6 @@
 #define dm_error(fmt, ...) DRM_ERROR(fmt, ##__VA_ARGS__)
 
 #if defined(CONFIG_DRM_AMD_DC_FP)
-#ifdef __NetBSD__
-#if defined(__i386__) || defined(__x86_64__)
-#include <x86/fpu.h>
-#define	DC_FP_START()	fpu_kern_enter()
-#define	DC_FP_END()	fpu_kern_leave()
-#elif defined(__arm__) || defined(__aarch64__)
-#include <arm/fpu.h>
-#define	DC_FP_START()	fpu_kern_enter()
-#define	DC_FP_END()	fpu_kern_leave()
-#endif
-#else	/* !__NetBSD__ */
 #include "amdgpu_dm/dc_fpu.h"
 #define DC_FP_START() dc_fpu_begin(__func__, __LINE__)
 #define DC_FP_END() dc_fpu_end(__func__, __LINE__)

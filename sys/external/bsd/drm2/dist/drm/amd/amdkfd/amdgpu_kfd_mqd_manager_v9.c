@@ -39,6 +39,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "amdgpu_amdkfd.h"
 #include "kfd_device_queue_manager.h"
 
+#include <linux/nbsd-namespace.h>
+
 static void update_mqd(struct mqd_manager *mm, void *mqd,
 		       struct queue_properties *q,
 		       struct mqd_update_info *minfo);

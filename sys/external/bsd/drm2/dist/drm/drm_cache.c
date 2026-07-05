@@ -35,6 +35,7 @@ __KERNEL_RCSID(0, "$NetBSD: drm_cache.c,v 1.4 2021/12/19 01:24:25 riastradh Exp 
 #include <linux/cc_platform.h>
 #include <linux/export.h>
 #include <linux/highmem.h>
+#include <linux/interrupt.h>
 #include <linux/ioport.h>
 #include <linux/iosys-map.h>
 #include <xen/xen.h>
@@ -45,6 +46,8 @@ __KERNEL_RCSID(0, "$NetBSD: drm_cache.c,v 1.4 2021/12/19 01:24:25 riastradh Exp 
 #define MEMCPY_BOUNCE_SIZE 128
 
 #if defined(CONFIG_X86)
+#include <asm/cpufeature.h>
+#include <asm/fpu/api.h>
 #include <asm/smp.h>
 
 /*
@@ -57,7 +60,11 @@ drm_clflush_page(struct page *page)
 {
 	uint8_t *page_virtual;
 	unsigned int i;
+#ifdef __NetBSD__
+	const int size = cpu_info_primary.ci_cflush_lsize;
+#else
 	const int size = boot_cpu_data.x86_clflush_size;
+#endif
 
 	if (unlikely(page == NULL))
 		return;
@@ -168,12 +175,13 @@ drm_clflush_virt_range(void *addr, unsigned long length)
 #else
 		const int size = boot_cpu_data.x86_clflush_size;
 #endif
-		void *end = addr + length;
+		char *end = (char *)addr + length;
+		char *p;
 
-		addr = (void *)(((unsigned long)addr) & -size);
+		p = (char *)(((unsigned long)addr) & -size);
 		mb(); /*CLFLUSH is only ordered with a full memory barrier*/
-		for (; addr < end; addr += size)
-			clflushopt(addr);
+		for (; p < end; p += size)
+			clflushopt(p);
 		clflushopt(end - 1); /* force serialisation */
 		mb(); /*Ensure that every data cache line entry is flushed*/
 		return;
@@ -188,6 +196,9 @@ EXPORT_SYMBOL(drm_clflush_virt_range);
 
 bool drm_need_swiotlb(int dma_bits)
 {
+#ifdef __NetBSD__
+	return false;
+#else
 	struct resource *tmp;
 	resource_size_t max_iomem = 0;
 
@@ -214,6 +225,7 @@ bool drm_need_swiotlb(int dma_bits)
 		max_iomem = max(max_iomem,  tmp->end);
 
 	return max_iomem > ((u64)1 << dma_bits);
+#endif
 }
 EXPORT_SYMBOL(drm_need_swiotlb);
 
@@ -234,8 +246,8 @@ static void memcpy_fallback(struct iosys_map *dst,
 		 * resorting to ioreadxx() + iowritexx().
 		 */
 		char bounce[MEMCPY_BOUNCE_SIZE];
-		void __iomem *_src = src->vaddr_iomem;
-		void __iomem *_dst = dst->vaddr_iomem;
+		char __iomem *_src = src->vaddr_iomem;
+		char __iomem *_dst = dst->vaddr_iomem;
 
 		while (len >= MEMCPY_BOUNCE_SIZE) {
 			memcpy_fromio(bounce, _src, MEMCPY_BOUNCE_SIZE);
@@ -269,16 +281,16 @@ static void __memcpy_ntdqa(void *dst, const void *src, unsigned long len)
 		    "movaps %%xmm2, 32(%1)\n"
 		    "movaps %%xmm3, 48(%1)\n"
 		    :: "r" (src), "r" (dst) : "memory");
-		src += 64;
-		dst += 64;
+		src = (const char *)src + 64;
+		dst = (char *)dst + 64;
 		len -= 4;
 	}
 	while (len--) {
 		asm("movntdqa (%0), %%xmm0\n"
 		    "movaps %%xmm0, (%1)\n"
 		    :: "r" (src), "r" (dst) : "memory");
-		src += 16;
-		dst += 16;
+		src = (const char *)src + 16;
+		dst = (char *)dst + 16;
 	}
 
 	kernel_fpu_end();

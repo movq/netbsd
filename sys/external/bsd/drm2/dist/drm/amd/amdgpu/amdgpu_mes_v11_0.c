@@ -38,6 +38,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "v11_structs.h"
 #include "mes_v11_api_def.h"
 
+#include <linux/nbsd-namespace.h>
+
 MODULE_FIRMWARE("amdgpu/gc_11_0_0_mes.bin");
 MODULE_FIRMWARE("amdgpu/gc_11_0_0_mes_2.bin");
 MODULE_FIRMWARE("amdgpu/gc_11_0_0_mes1.bin");

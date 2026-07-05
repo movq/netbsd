@@ -349,7 +349,7 @@ struct hw_sequencer_funcs {
 			struct dc_state *context);
 	void (*exit_optimized_pwr_state)(const struct dc *dc,
 			struct dc_state *context);
-	void (*calculate_pix_rate_divider)(struct dc *dc,
+	void (*calculate_pix_rate_divider)(const struct dc *dc,
 			struct dc_state *context,
 			const struct dc_stream_state *stream);
 

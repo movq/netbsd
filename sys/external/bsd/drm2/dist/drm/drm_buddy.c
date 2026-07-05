@@ -10,12 +10,16 @@ __KERNEL_RCSID(0, "$NetBSD$");
 
 #include <kunit/test-bug.h>
 
+#include <linux/err.h>
 #include <linux/export.h>
 #include <linux/kmemleak.h>
 #include <linux/module.h>
+#include <linux/overflow.h>
 #include <linux/sizes.h>
 
 #include <drm/drm_buddy.h>
+
+#include <linux/nbsd-namespace.h>
 
 enum drm_buddy_free_tree {
 	DRM_BUDDY_CLEAR_TREE = 0,
@@ -242,14 +246,15 @@ static int __force_merge(struct drm_buddy *mm,
 
 	for_each_free_tree(tree) {
 		for (i = min_order - 1; i >= 0; i--) {
-			struct rb_node *iter = rb_last(&mm->free_trees[tree][i]);
+			struct rb_root *root = &mm->free_trees[tree][i];
+			struct rb_node *iter = rb_last(root);
 
 			while (iter) {
 				struct drm_buddy_block *block, *buddy;
 				u64 block_start, block_end;
 
 				block = rbtree_get_free_block(iter);
-				iter = rb_prev(iter);
+				iter = rb_prev2(root, iter);
 
 				if (!block || !block->parent)
 					continue;
@@ -272,7 +277,7 @@ static int __force_merge(struct drm_buddy *mm,
 				 * as freeing the block will also remove its buddy from the tree.
 				 */
 				if (iter == &buddy->rb)
-					iter = rb_prev(iter);
+					iter = rb_prev2(root, iter);
 
 				rbtree_remove(mm, block);
 				if (drm_buddy_block_is_clear(block))
@@ -971,7 +976,7 @@ static int __alloc_contig_try_harder(struct drm_buddy *mm,
 			/* Free blocks for the next iteration */
 			drm_buddy_free_list_internal(mm, blocks);
 
-			iter = rb_prev(iter);
+			iter = rb_prev2(root, iter);
 		}
 	}
 
@@ -1274,7 +1279,8 @@ void drm_buddy_block_print(struct drm_buddy *mm,
 	u64 start = drm_buddy_block_offset(block);
 	u64 size = drm_buddy_block_size(mm, block);
 
-	drm_printf(p, "%#018llx-%#018llx: %llu\n", start, start + size, size);
+	drm_printf(p, "%#018"PRIx64"-%#018"PRIx64": %"PRIu64"\n",
+	    start, start + size, size);
 }
 EXPORT_SYMBOL(drm_buddy_block_print);
 
@@ -1288,8 +1294,10 @@ void drm_buddy_print(struct drm_buddy *mm, struct drm_printer *p)
 {
 	int order;
 
-	drm_printf(p, "chunk_size: %lluKiB, total: %lluMiB, free: %lluMiB, clear_free: %lluMiB\n",
-		   mm->chunk_size >> 10, mm->size >> 20, mm->avail >> 20, mm->clear_avail >> 20);
+	drm_printf(p, "chunk_size: %"PRIu64"KiB, total: %"PRIu64
+	    "MiB, free: %"PRIu64"MiB, clear_free: %"PRIu64"MiB\n",
+	    mm->chunk_size >> 10, mm->size >> 20, mm->avail >> 20,
+	    mm->clear_avail >> 20);
 
 	for (order = mm->max_order; order >= 0; order--) {
 		struct drm_buddy_block *block, *tmp;
@@ -1310,21 +1318,21 @@ void drm_buddy_print(struct drm_buddy *mm, struct drm_printer *p)
 
 		free = count * (mm->chunk_size << order);
 		if (free < SZ_1M)
-			drm_printf(p, "free: %8llu KiB", free >> 10);
+			drm_printf(p, "free: %8"PRIu64" KiB", free >> 10);
 		else
-			drm_printf(p, "free: %8llu MiB", free >> 20);
+			drm_printf(p, "free: %8"PRIu64" MiB", free >> 20);
 
-		drm_printf(p, ", blocks: %llu\n", count);
+		drm_printf(p, ", blocks: %"PRIu64"\n", count);
 	}
 }
 EXPORT_SYMBOL(drm_buddy_print);
 
-static void drm_buddy_module_exit(void)
+void drm_buddy_module_exit(void)
 {
 	kmem_cache_destroy(slab_blocks);
 }
 
-static int __init drm_buddy_module_init(void)
+int __init drm_buddy_module_init(void)
 {
 	slab_blocks = KMEM_CACHE(drm_buddy_block, 0);
 	if (!slab_blocks)

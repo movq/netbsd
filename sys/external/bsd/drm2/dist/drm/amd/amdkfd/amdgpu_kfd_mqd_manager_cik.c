@@ -37,6 +37,8 @@ __KERNEL_RCSID(0, "$NetBSD: kfd_mqd_manager_cik.c,v 1.3 2021/12/18 23:44:59 rias
 #include "cik_structs.h"
 #include "oss/oss_2_4_sh_mask.h"
 
+#include <linux/nbsd-namespace.h>
+
 static inline struct cik_mqd *get_mqd(void *mqd)
 {
 	return (struct cik_mqd *)mqd;

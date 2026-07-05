@@ -37,6 +37,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "gc/gc_12_0_0_sh_mask.h"
 #include "mmhub/mmhub_4_1_0_offset.h"
 
+#include <linux/nbsd-namespace.h>
+
 MODULE_FIRMWARE("amdgpu/gc_12_0_0_imu.bin");
 MODULE_FIRMWARE("amdgpu/gc_12_0_1_imu.bin");
 MODULE_FIRMWARE("amdgpu/gc_12_0_1_imu_kicker.bin");

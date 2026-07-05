@@ -39,6 +39,8 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_smu_v11_0_i2c.c,v 1.3 2021/12/19 12:21:29 ria
 #include <linux/i2c.h>
 #include <linux/pci.h>
 
+#include <linux/nbsd-namespace.h>
+
 /* error codes */
 #define I2C_OK                0
 #define I2C_NAK_7B_ADDR_NOACK 1

@@ -214,18 +214,10 @@ static void ttm_transfered_destroy(struct ttm_buffer_object *bo)
 	fbo = container_of(bo, struct ttm_transfer_obj, base);
 	dma_resv_fini(&fbo->base.base._resv);
 	ttm_bo_put(fbo->bo);
-	dma_resv_fini(&fbo->base.base._resv);
-	if (ttm_bo_uses_embedded_gem_object(bo)) {
-		/*
-		 * Initialization is unconditional, but we don't go
-		 * through drm_gem_object_release, and destruction in
-		 * ttm_bo_release is conditional, so do this
-		 * conditionally with the reverse sense.
-		 *
-		 * Yes, this is a kludge.
-		 */
-		drm_vma_node_destroy(&fbo->base.base.vma_node);
-	}
+#ifdef __NetBSD__
+	uvm_obj_destroy(&fbo->base.base.gemo_uvmobj, /*free lock*/true);
+	drm_vma_node_destroy(&fbo->base.base.vma_node);
+#endif
 	kfree(fbo);
 }
 
@@ -264,9 +256,11 @@ static int ttm_buffer_object_transfer(struct ttm_buffer_object *bo,
 	atomic_inc(&ttm_glob.bo_count);
 #ifdef __NetBSD__
 	drm_vma_node_init(&fbo->base.base.vma_node);
-	uvm_obj_init(&fbo->base.uvmobj, bo->bdev->driver->ttm_uvm_ops, true, 1);
-	rw_obj_hold(bo->uvmobj.vmobjlock);
-	uvm_obj_setlock(&fbo->base.uvmobj, bo->uvmobj.vmobjlock);
+	uvm_obj_init(&fbo->base.base.gemo_uvmobj,
+	    bo->base.gemo_uvmobj.pgops, true, 1);
+	rw_obj_hold(bo->base.gemo_uvmobj.vmobjlock);
+	uvm_obj_setlock(&fbo->base.base.gemo_uvmobj,
+	    bo->base.gemo_uvmobj.vmobjlock);
 #else
 	drm_vma_node_reset(&fbo->base.base.vma_node);
 #endif
@@ -355,9 +349,13 @@ static int ttm_bo_ioremap(struct ttm_buffer_object *bo,
 		int flags = BUS_SPACE_MAP_LINEAR;
 		int ret;
 
-		addr = (bo->mem.bus.base + bo->mem.bus.offset + offset);
-		if (ISSET(mem->placement, TTM_PL_FLAG_WC))
+		addr = res;
+		if (mem->bus.caching == ttm_write_combined)
 			flags |= BUS_SPACE_MAP_PREFETCHABLE;
+#ifdef CONFIG_X86
+		else if (mem->bus.caching == ttm_cached)
+			flags |= BUS_SPACE_MAP_CACHEABLE;
+#endif
 		/* XXX errno NetBSD->Linux */
 		ret = -bus_space_map(bo->bdev->memt, addr, size, flags,
 		    &map->u.io.memh);
@@ -516,7 +514,7 @@ void ttm_bo_kunmap(struct ttm_bo_kmap_obj *map)
 	switch (map->bo_kmap_type) {
 	case ttm_bo_map_iomap:
 #ifdef __NetBSD__
-		bus_space_unmap(bo->bdev->memt, map->u.io.memh,
+		bus_space_unmap(map->bo->bdev->memt, map->u.io.memh,
 		    map->u.io.size);
 #else
 		iounmap(map->virtual);
@@ -579,6 +577,25 @@ int ttm_bo_vmap(struct ttm_buffer_object *bo, struct iosys_map *map)
 
 		if (mem->bus.addr)
 			vaddr_iomem = (void __iomem *)mem->bus.addr;
+#ifdef __NetBSD__
+		else {
+			int flags = BUS_SPACE_MAP_LINEAR;
+
+			if (mem->bus.caching == ttm_write_combined)
+				flags |= BUS_SPACE_MAP_PREFETCHABLE;
+#ifdef CONFIG_X86
+			else if (mem->bus.caching == ttm_cached)
+				flags |= BUS_SPACE_MAP_CACHEABLE;
+#endif
+			ret = -bus_space_map(bo->bdev->memt, mem->bus.offset,
+			    bo->base.size, flags, &map->bsh);
+			if (ret)
+				return ret;
+			map->size = bo->base.size;
+			vaddr_iomem = bus_space_vaddr(bo->bdev->memt,
+			    map->bsh);
+		}
+#else
 		else if (mem->bus.caching == ttm_write_combined)
 			vaddr_iomem = ioremap_wc(mem->bus.offset,
 						 bo->base.size);
@@ -589,9 +606,16 @@ int ttm_bo_vmap(struct ttm_buffer_object *bo, struct iosys_map *map)
 #endif
 		else
 			vaddr_iomem = ioremap(mem->bus.offset, bo->base.size);
+#endif
 
-		if (!vaddr_iomem)
+		if (!vaddr_iomem) {
+#ifdef __NetBSD__
+			if (!mem->bus.addr)
+				bus_space_unmap(bo->bdev->memt, map->bsh,
+				    map->size);
+#endif
 			return -ENOMEM;
+		}
 
 		iosys_map_set_vaddr_iomem(map, vaddr_iomem);
 
@@ -641,10 +665,19 @@ void ttm_bo_vunmap(struct ttm_buffer_object *bo, struct iosys_map *map)
 	if (iosys_map_is_null(map))
 		return;
 
-	if (!map->is_iomem)
+	if (!map->is_iomem) {
+#ifdef __NetBSD__
+		vunmap(map->vaddr, bo->ttm->num_pages);
+#else
 		vunmap(map->vaddr);
-	else if (!mem->bus.addr)
+#endif
+	} else if (!mem->bus.addr) {
+#ifdef __NetBSD__
+		bus_space_unmap(bo->bdev->memt, map->bsh, map->size);
+#else
 		iounmap(map->vaddr_iomem);
+#endif
+	}
 	iosys_map_clear(map);
 
 	ttm_mem_io_free(bo->bdev, bo->resource);

@@ -51,6 +51,7 @@ enum TLB_FLUSH_TYPE {
 struct amdgpu_device;
 struct kfd_process_device;
 struct amdgpu_reset_context;
+struct mmu_interval_notifier;
 
 enum kfd_mem_attachment_type {
 	KFD_MEM_ATT_SHARED,	/* Share kgd_mem->bo or another attachment's */

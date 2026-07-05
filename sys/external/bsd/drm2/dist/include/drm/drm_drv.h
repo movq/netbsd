@@ -50,6 +50,10 @@ struct drm_display_mode;
 struct drm_mode_create_dumb;
 struct drm_printer;
 struct sg_table;
+#ifdef __NetBSD__
+struct file;
+struct uvm_object;
+#endif
 
 /**
  * enum drm_driver_feature - feature flags
@@ -434,6 +438,14 @@ struct drm_driver {
 	 * some examples.
 	 */
 	const struct file_operations *fops;
+
+#ifdef __NetBSD__
+	/*
+	 * NetBSD UVM entry point for mappings on the DRM device node.
+	 */
+	int (*mmap_object)(struct drm_device *, off_t, size_t, int,
+	    struct uvm_object **, voff_t *, struct file *);
+#endif
 };
 
 void *__devm_drm_dev_alloc(struct device *parent,

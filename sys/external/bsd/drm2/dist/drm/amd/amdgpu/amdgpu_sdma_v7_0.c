@@ -50,6 +50,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "mes_userqueue.h"
 #include "amdgpu_userq_fence.h"
 
+#include <linux/nbsd-namespace.h>
+
 MODULE_FIRMWARE("amdgpu/sdma_7_0_0.bin");
 MODULE_FIRMWARE("amdgpu/sdma_7_0_1.bin");
 
@@ -177,7 +179,7 @@ static uint64_t sdma_v7_0_ring_get_rptr(struct amdgpu_ring *ring)
 	/* XXX check if swapping is necessary on BE */
 	rptr = (u64 *)ring->rptr_cpu_addr;
 
-	DRM_DEBUG("rptr before shift == 0x%016llx\n", *rptr);
+	DRM_DEBUG("rptr before shift == 0x%016"PRIx64"\n", *rptr);
 	return ((*rptr) >> 2);
 }
 
@@ -195,7 +197,8 @@ static uint64_t sdma_v7_0_ring_get_wptr(struct amdgpu_ring *ring)
 	if (ring->use_doorbell) {
 		/* XXX check if swapping is necessary on BE */
 		wptr = READ_ONCE(*((u64 *)ring->wptr_cpu_addr));
-		DRM_DEBUG("wptr/doorbell before shift == 0x%016llx\n", wptr);
+		DRM_DEBUG("wptr/doorbell before shift == 0x%016"PRIx64"\n",
+		    wptr);
 	}
 
 	return wptr >> 2;
@@ -225,7 +228,7 @@ static void sdma_v7_0_ring_set_wptr(struct amdgpu_ring *ring)
 		/* XXX check if swapping is necessary on BE */
 		atomic64_set((atomic64_t *)ring->wptr_cpu_addr,
 			     ring->wptr << 2);
-		DRM_DEBUG("calling WDOORBELL64(0x%08x, 0x%016llx)\n",
+		DRM_DEBUG("calling WDOORBELL64(0x%08x, 0x%016"PRIx64")\n",
 			  ring->doorbell_index, ring->wptr << 2);
 		WDOORBELL64(ring->doorbell_index, ring->wptr << 2);
 	} else {

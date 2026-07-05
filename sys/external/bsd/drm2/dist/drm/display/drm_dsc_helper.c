@@ -17,6 +17,7 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include <linux/init.h>
 #include <linux/errno.h>
 #include <linux/byteorder/generic.h>
+#include <linux/string_choices.h>
 
 #include <drm/display/drm_dp_helper.h>
 #include <drm/display/drm_dsc_helper.h>

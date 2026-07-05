@@ -787,7 +787,7 @@ int drm_property_replace_blob_from_id(struct drm_device *dev,
 		new_blob = drm_property_lookup_blob(dev, blob_id);
 		if (new_blob == NULL) {
 			drm_dbg_atomic(dev,
-				       "cannot find blob ID %llu\n", blob_id);
+				       "cannot find blob ID %"PRIu64"\n", blob_id);
 			return -EINVAL;
 		}
 

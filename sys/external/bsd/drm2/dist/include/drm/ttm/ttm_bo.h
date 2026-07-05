@@ -157,6 +157,20 @@ struct ttm_buffer_object {
 struct ttm_bo_kmap_obj {
 	void *virtual;
 	struct page *page;
+#ifdef __NetBSD__
+	union {
+		struct {
+			bus_space_handle_t memh;
+			bus_size_t size;
+		} io;
+		struct {
+			struct page *page;
+		} kmapped;
+		struct {
+			vsize_t vsize;
+		} vmapped;
+	} u;
+#endif
 	enum {
 		ttm_bo_map_iomap        = 1 | TTM_BO_MAP_IOMEM_MASK,
 		ttm_bo_map_vmap         = 2,
@@ -414,7 +428,9 @@ void ttm_bo_kunmap(struct ttm_bo_kmap_obj *map);
 void *ttm_bo_kmap_try_from_panic(struct ttm_buffer_object *bo, unsigned long page);
 int ttm_bo_vmap(struct ttm_buffer_object *bo, struct iosys_map *map);
 void ttm_bo_vunmap(struct ttm_buffer_object *bo, struct iosys_map *map);
+#ifndef __NetBSD__
 int ttm_bo_mmap_obj(struct vm_area_struct *vma, struct ttm_buffer_object *bo);
+#endif
 s64 ttm_bo_swapout(struct ttm_device *bdev, struct ttm_operation_ctx *ctx,
 		   struct ttm_resource_manager *man, gfp_t gfp_flags,
 		   s64 target);
@@ -425,6 +441,16 @@ int ttm_bo_evict_first(struct ttm_device *bdev,
 		       struct ttm_operation_ctx *ctx);
 int ttm_bo_access(struct ttm_buffer_object *bo, unsigned long offset,
 		  void *buf, int len, int write);
+#ifdef __NetBSD__
+void ttm_bo_uvm_reference(struct uvm_object *);
+void ttm_bo_uvm_detach(struct uvm_object *);
+int ttm_bo_uvm_reserve(struct ttm_buffer_object *, struct uvm_faultinfo *);
+int ttm_bo_uvm_fault_reserved(struct uvm_faultinfo *, vaddr_t,
+			      struct vm_page **, int, int, vm_prot_t, int);
+int ttm_bo_uvm_fault(struct uvm_faultinfo *, vaddr_t, struct vm_page **,
+		     int, int, vm_prot_t, int);
+extern const struct uvm_pagerops ttm_bo_uvm_ops;
+#else
 vm_fault_t ttm_bo_vm_reserve(struct ttm_buffer_object *bo,
 			     struct vm_fault *vmf);
 vm_fault_t ttm_bo_vm_fault_reserved(struct vm_fault *vmf,
@@ -436,6 +462,7 @@ void ttm_bo_vm_close(struct vm_area_struct *vma);
 int ttm_bo_vm_access(struct vm_area_struct *vma, unsigned long addr,
 		     void *buf, int len, int write);
 vm_fault_t ttm_bo_vm_dummy_page(struct vm_fault *vmf, pgprot_t prot);
+#endif
 
 int ttm_bo_mem_space(struct ttm_buffer_object *bo,
 		     struct ttm_placement *placement,

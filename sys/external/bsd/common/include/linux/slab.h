@@ -39,9 +39,11 @@
 #include <uvm/uvm_extern.h>	/* For PAGE_SIZE.  */
 
 #include <linux/gfp.h>
+#include <linux/cleanup.h>
 #include <linux/overflow.h>
 #include <linux/rcupdate.h>
 
+#define	ARCH_DMA_MINALIGN	__alignof__(unsigned long long)
 #define	ARCH_KMALLOC_MINALIGN	4 /* XXX ??? */
 
 struct linux_malloc {
@@ -109,6 +111,9 @@ kmalloc(size_t size, gfp_t gfp)
 	return lm + 1;
 }
 
+#define	kmalloc_node_track_caller(size, gfp, nid)	kmalloc((size), (gfp))
+#define	kmalloc_track_caller(size, gfp)			kmalloc((size), (gfp))
+
 static inline void *
 kzalloc(size_t size, gfp_t gfp)
 {
@@ -151,17 +156,42 @@ krealloc(void *ptr, size_t size, gfp_t gfp)
 	return nlm + 1;
 }
 
+static inline void *
+krealloc_array(void *ptr, size_t n, size_t size, gfp_t gfp)
+{
+	if ((size != 0) && (n > (SIZE_MAX / size)))
+		return NULL;
+	return krealloc(ptr, n * size, gfp);
+}
+
 static inline void
-kfree(void *ptr)
+kfree(const void *ptr)
 {
 	struct linux_malloc *lm;
 
 	if (ptr == NULL)
 		return;
 
-	lm = (struct linux_malloc *)ptr - 1;
+	lm = (struct linux_malloc *)(uintptr_t)ptr - 1;
 	kmem_intr_free(lm, sizeof(*lm) + lm->lm_size);
 }
+
+DEFINE_FREE(kfree, void *, if (_T) kfree(_T))
+
+static inline size_t
+ksize(const void *ptr)
+{
+	const struct linux_malloc *lm;
+
+	if (ptr == NULL)
+		return 0;
+
+	lm = (const struct linux_malloc *)ptr - 1;
+	return lm->lm_size;
+}
+
+#define	ZERO_SIZE_PTR		NULL
+#define	ZERO_OR_NULL_PTR(ptr)	((ptr) == NULL || ksize(ptr) == 0)
 
 #define	SLAB_HWCACHE_ALIGN	__BIT(0)
 #define	SLAB_RECLAIM_ACCOUNT	__BIT(1)

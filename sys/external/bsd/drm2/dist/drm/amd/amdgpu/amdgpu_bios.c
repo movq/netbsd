@@ -169,13 +169,13 @@ static bool amdgpu_read_bios_from_vram(struct amdgpu_device *adev)
 	return true;
 }
 
-#ifdef __NetBSD__
-#  define	__iomem	__pci_rom_iomem
-#endif
-
 bool amdgpu_read_bios(struct amdgpu_device *adev)
 {
+#ifdef __NetBSD__
+	uint8_t __pci_rom_iomem *bios;
+#else
 	uint8_t __iomem *bios;
+#endif
 	size_t size;
 
 	adev->bios = NULL;
@@ -499,9 +499,14 @@ success:
 
 static bool amdgpu_prefer_rom_resource(struct amdgpu_device *adev)
 {
+#ifdef __NetBSD__
+	__USE(adev);
+	return false;
+#else
 	struct resource *res = &adev->pdev->resource[PCI_ROM_RESOURCE];
 
 	return (res->flags & IORESOURCE_ROM_SHADOW);
+#endif
 }
 
 static bool amdgpu_get_bios_dgpu(struct amdgpu_device *adev)

@@ -436,7 +436,7 @@ static int dm_dp_mst_get_modes(struct drm_connector *connector)
 		edid = drm_edid_raw(aconnector->drm_edid); // FIXME: Get rid of drm_edid_raw()
 		dc_sink = dc_link_add_remote_sink(
 			aconnector->dc_link,
-			(uint8_t *)edid,
+			(const uint8_t *)edid,
 			(edid->extensions + 1) * EDID_LENGTH,
 			&init_params);
 

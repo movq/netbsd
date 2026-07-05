@@ -32,6 +32,9 @@
 #ifndef _LINUX_KTHREAD_H_
 #define _LINUX_KTHREAD_H_
 
+#include <sys/stdbool.h>
+#include <sys/queue.h>
+
 #include <linux/spinlock.h>
 
 #include <drm/drm_wait_netbsd.h>
@@ -61,5 +64,36 @@ void kthread_parkme(void);
 
 int linux_kthread_init(void);
 void linux_kthread_fini(void);
+
+/*
+ * kthread worker API
+ */
+
+struct kthread_worker;
+struct kthread_work {
+	void			(*func)(struct kthread_work *);
+	struct kthread_worker	*worker;
+	TAILQ_ENTRY(kthread_work) entry;
+	int			canceling;
+};
+
+#define	kthread_cancel_work_sync	linux_kthread_cancel_work_sync
+#define	kthread_destroy_worker		linux_kthread_destroy_worker
+#define	kthread_flush_work		linux_kthread_flush_work
+#define	kthread_flush_worker		linux_kthread_flush_worker
+#define	kthread_init_work		linux_kthread_init_work
+#define	kthread_queue_work		linux_kthread_queue_work
+#define	kthread_run_worker		linux_kthread_run_worker
+
+struct kthread_worker *
+	kthread_run_worker(unsigned int, const char *, ...)
+	    __attribute__((__format__(__printf__, 2, 3)));
+void	kthread_destroy_worker(struct kthread_worker *);
+void	kthread_flush_worker(struct kthread_worker *);
+void	kthread_init_work(struct kthread_work *,
+	    void (*)(struct kthread_work *));
+bool	kthread_queue_work(struct kthread_worker *, struct kthread_work *);
+void	kthread_flush_work(struct kthread_work *);
+bool	kthread_cancel_work_sync(struct kthread_work *);
 
 #endif  /* _LINUX_KTHREAD_H_ */

@@ -1103,7 +1103,7 @@ struct idle_workqueue *idle_create_workqueue(struct amdgpu_device *adev);
 void *dm_allocate_gpu_mem(struct amdgpu_device *adev,
 						  enum dc_gpu_mem_alloc_type type,
 						  size_t size,
-						  long long *addr);
+						  int64_t *addr);
 void dm_free_gpu_mem(struct amdgpu_device *adev,
 						  enum dc_gpu_mem_alloc_type type,
 						  void *addr);

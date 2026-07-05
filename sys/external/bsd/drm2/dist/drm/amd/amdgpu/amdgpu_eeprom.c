@@ -26,6 +26,8 @@
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, "$NetBSD$");
 
+#include <linux/string_choices.h>
+
 #include "amdgpu_eeprom.h"
 #include "amdgpu.h"
 
@@ -202,7 +204,11 @@ static int amdgpu_eeprom_xfer(struct i2c_adapter *i2c_adap, u32 eeprom_addr,
 		return __amdgpu_eeprom_xfer(i2c_adap, eeprom_addr,
 					    eeprom_buf, buf_size, read);
 	} else if (limit <= EEPROM_OFFSET_SIZE) {
+#ifdef __NetBSD__
+		dev_err_ratelimited(i2c_adap->dev.parent,
+#else
 		dev_err_ratelimited(&i2c_adap->dev,
+#endif
 				    "maddr:0x%04X size:0x%02X:quirk max_%s_len must be > %d",
 				    eeprom_addr, buf_size,
 				    str_read_write(read), EEPROM_OFFSET_SIZE);

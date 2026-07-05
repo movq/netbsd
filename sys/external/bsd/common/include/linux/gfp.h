@@ -44,6 +44,7 @@ typedef int gfp_t;
 #define	GFP_HIGHUSER	(__GFP_FS | __GFP_HARDWALL | __GFP_HIGHMEM | \
 			    __GFP_IO | __GFP_WAIT)
 #define	GFP_KERNEL	(__GFP_FS | __GFP_IO | __GFP_WAIT)
+#define	GFP_KERNEL_ACCOUNT	GFP_KERNEL
 #define	GFP_TEMPORARY	(__GFP_FS | __GFP_IO | __GFP_RECLAIMABLE | __GFP_WAIT)
 #define	GFP_USER	(__GFP_FS | __GFP_HARDWALL | __GFP_IO | __GFP_WAIT)
 

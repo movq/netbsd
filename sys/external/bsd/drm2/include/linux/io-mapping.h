@@ -44,6 +44,8 @@
 #define	io_mapping_unmap		linux_io_mapping_unmap
 #define	io_mapping_map_atomic_wc	linux_io_mapping_map_atomic_wc
 #define	io_mapping_unmap_atomic		linux_io_mapping_unmap_atomic
+#define	io_mapping_map_local_wc		linux_io_mapping_map_local_wc
+#define	io_mapping_unmap_local		linux_io_mapping_unmap_local
 
 struct io_mapping {
 	bus_space_tag_t		diom_bst;
@@ -66,5 +68,8 @@ void io_mapping_unmap(struct io_mapping *, void *, bus_size_t);
 
 void *io_mapping_map_atomic_wc(struct io_mapping *, bus_addr_t);
 void io_mapping_unmap_atomic(struct io_mapping *, void *);
+
+void *io_mapping_map_local_wc(struct io_mapping *, bus_addr_t);
+void io_mapping_unmap_local(void *);
 
 #endif  /* _LINUX_IO_MAPPING_H_ */

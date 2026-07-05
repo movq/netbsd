@@ -32,6 +32,10 @@
 #ifndef _LINUX_UUID_H_
 #define _LINUX_UUID_H_
 
+#include <sys/cprng.h>
+
+#include <linux/string.h>
+
 typedef struct {
 	unsigned char guid_bytes[16];
 } guid_t;
@@ -59,6 +63,48 @@ typedef struct {
 })
 
 #define	UUID_STRING_LEN		36
+#define	UUID_SIZE		16
+
+static inline void
+import_guid(guid_t *dst, const uint8_t *src)
+{
+	memcpy(dst->guid_bytes, src, sizeof(dst->guid_bytes));
+}
+
+static inline void
+export_guid(uint8_t *dst, const guid_t *src)
+{
+	memcpy(dst, src->guid_bytes, sizeof(src->guid_bytes));
+}
+
+static inline void
+guid_copy(guid_t *dst, const guid_t *src)
+{
+	memcpy(dst->guid_bytes, src->guid_bytes, sizeof(dst->guid_bytes));
+}
+
+static inline bool
+guid_equal(const guid_t *a, const guid_t *b)
+{
+	return memcmp(a->guid_bytes, b->guid_bytes,
+	    sizeof(a->guid_bytes)) == 0;
+}
+
+static inline bool
+guid_is_null(const guid_t *guid)
+{
+	static const guid_t zero;
+
+	return guid_equal(guid, &zero);
+}
+
+static inline void
+guid_gen(guid_t *guid)
+{
+	cprng_fast(guid->guid_bytes, sizeof(guid->guid_bytes));
+	guid->guid_bytes[6] = (guid->guid_bytes[6] & 0x0f) | 0x40;
+	guid->guid_bytes[8] = (guid->guid_bytes[8] & 0x3f) | 0x80;
+}
 
 static inline int
 uuid_is_valid(const char uuid[static 36])

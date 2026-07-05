@@ -1294,11 +1294,20 @@ static int drm_dp_mst_wait_tx_reply(struct drm_dp_mst_branch *mstb,
 		 * after the sink has cleared it (after a 110msec timeout
 		 * since it raised the interrupt).
 		 */
+#ifdef __NetBSD__
+		mutex_lock(&mgr->qlock);
+		DRM_TIMED_WAIT_NOINTR_UNTIL(ret, &mgr->tx_waitq,
+		    &mgr->qlock,
+		    mgr->cbs->poll_hpd_irq ? msecs_to_jiffies(50) :
+		    wait_timeout, check_txmsg_state(mgr, txmsg));
+		mutex_unlock(&mgr->qlock);
+#else
 		ret = wait_event_timeout(mgr->tx_waitq,
 					 check_txmsg_state(mgr, txmsg),
 					 mgr->cbs->poll_hpd_irq ?
 						msecs_to_jiffies(50) :
 						wait_timeout);
+#endif
 
 		if (ret || !mgr->cbs->poll_hpd_irq ||
 		    time_after(jiffies, wait_expires))
@@ -4030,9 +4039,13 @@ static int drm_dp_mst_handle_down_rep(struct drm_dp_mst_topology_mgr *mgr)
 	txmsg->state = DRM_DP_SIDEBAND_TX_RX;
 	list_del(&txmsg->next);
 
+#ifdef __NetBSD__
+	DRM_WAKEUP_ALL(&mgr->tx_waitq, &mgr->qlock);
 	mutex_unlock(&mgr->qlock);
-
+#else
+	mutex_unlock(&mgr->qlock);
 	wake_up_all(&mgr->tx_waitq);
+#endif
 
 out_clear_reply:
 	reset_msg_rx_state(msg);
@@ -4832,6 +4845,7 @@ static void drm_dp_mst_kick_tx(struct drm_dp_mst_topology_mgr *mgr)
  * Helper function for parsing DP device types into convenient strings
  * for use with dp_mst_topology
  */
+#if IS_ENABLED(CONFIG_DEBUG_FS)
 static const char *pdt_to_string(u8 pdt)
 {
 	switch (pdt) {
@@ -4850,7 +4864,6 @@ static const char *pdt_to_string(u8 pdt)
 	}
 }
 
-#if IS_ENABLED(CONFIG_DEBUG_FS)
 static void drm_dp_mst_dump_mstb(struct seq_file *m,
 				 struct drm_dp_mst_branch *mstb)
 {

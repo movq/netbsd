@@ -35,6 +35,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "soc15_common.h"
 #include "vpe_v6_1.h"
 
+#include <linux/nbsd-namespace.h>
+
 #define AMDGPU_CSA_VPE_SIZE 	64
 /* VPE CSA resides in the 4th page of CSA */
 #define AMDGPU_CSA_VPE_OFFSET 	(4096 * 3)
@@ -717,12 +719,12 @@ static uint64_t vpe_ring_get_rptr(struct amdgpu_ring *ring)
 
 	if (ring->use_doorbell) {
 		rptr = atomic64_read((atomic64_t *)ring->rptr_cpu_addr);
-		dev_dbg(adev->dev, "rptr/doorbell before shift == 0x%016llx\n", rptr);
+		dev_dbg(adev->dev, "rptr/doorbell before shift == 0x%016"PRIx64"\n", rptr);
 	} else {
 		rptr = RREG32(vpe_get_reg_offset(vpe, ring->me, vpe->regs.queue0_rb_rptr_hi));
 		rptr = rptr << 32;
 		rptr |= RREG32(vpe_get_reg_offset(vpe, ring->me, vpe->regs.queue0_rb_rptr_lo));
-		dev_dbg(adev->dev, "rptr before shift [%i] == 0x%016llx\n", ring->me, rptr);
+		dev_dbg(adev->dev, "rptr before shift [%i] == 0x%016"PRIx64"\n", ring->me, rptr);
 	}
 
 	return (rptr >> 2);
@@ -736,12 +738,12 @@ static uint64_t vpe_ring_get_wptr(struct amdgpu_ring *ring)
 
 	if (ring->use_doorbell) {
 		wptr = atomic64_read((atomic64_t *)ring->wptr_cpu_addr);
-		dev_dbg(adev->dev, "wptr/doorbell before shift == 0x%016llx\n", wptr);
+		dev_dbg(adev->dev, "wptr/doorbell before shift == 0x%016"PRIx64"\n", wptr);
 	} else {
 		wptr = RREG32(vpe_get_reg_offset(vpe, ring->me, vpe->regs.queue0_rb_wptr_hi));
 		wptr = wptr << 32;
 		wptr |= RREG32(vpe_get_reg_offset(vpe, ring->me, vpe->regs.queue0_rb_wptr_lo));
-		dev_dbg(adev->dev, "wptr before shift [%i] == 0x%016llx\n", ring->me, wptr);
+		dev_dbg(adev->dev, "wptr before shift [%i] == 0x%016"PRIx64"\n", ring->me, wptr);
 	}
 
 	return (wptr >> 2);
@@ -961,10 +963,12 @@ int amdgpu_vpe_sysfs_reset_mask_init(struct amdgpu_device *adev)
 
 void amdgpu_vpe_sysfs_reset_mask_fini(struct amdgpu_device *adev)
 {
+#ifdef notyet
 	if (adev->dev->kobj.sd) {
 		if (adev->vpe.num_instances)
 			device_remove_file(adev->dev, &dev_attr_vpe_reset_mask);
 	}
+#endif
 }
 
 static const struct amdgpu_ring_funcs vpe_ring_funcs = {

@@ -50,6 +50,10 @@ __KERNEL_RCSID(0, "$NetBSD: ttm_tt.c,v 1.19 2022/06/26 17:53:06 riastradh Exp $"
 #include <drm/ttm/ttm_bo.h>
 #include <drm/ttm/ttm_tt.h>
 
+#ifdef __NetBSD__
+#include <drm/bus_dma_hacks.h>
+#endif
+
 #include "ttm_module.h"
 
 static unsigned long ttm_pages_limit;
@@ -128,25 +132,6 @@ static int ttm_tt_alloc_page_directory(struct ttm_tt *ttm)
 
 static int ttm_dma_tt_alloc_page_directory(struct ttm_tt *ttm)
 {
-#ifdef __NetBSD__
-	int r;
-
-	/* Create array of pages at ttm->ttm.pages.  */
-	r = ttm_tt_alloc_page_directory(&ttm->ttm);
-	if (r)
-		return r;
-
-	/* Create bus DMA map at ttm->dma_address.  */
-	r = ttm_sg_tt_alloc_page_directory(ttm);
-	if (r) {
-		kvfree(ttm->ttm.pages);
-		ttm->ttm.pages = NULL;
-		return r;
-	}
-
-	/* Success!  */
-	return 0;
-#else
 	ttm->pages = kvcalloc(ttm->num_pages, sizeof(*ttm->pages) +
 			      sizeof(*ttm->dma_address), GFP_KERNEL);
 	if (!ttm->pages)
@@ -154,18 +139,10 @@ static int ttm_dma_tt_alloc_page_directory(struct ttm_tt *ttm)
 
 	ttm->dma_address = (void *)(ttm->pages + ttm->num_pages);
 	return 0;
-#endif
 }
 
 static int ttm_sg_tt_alloc_page_directory(struct ttm_tt *ttm)
 {
-#ifdef __NetBSD__
-	ttm->dma_address = NULL;
-	/* XXX errno NetBSD->Linux */
-	return -bus_dmamap_create(ttm->ttm.bdev->dmat,
-	    ttm->ttm.num_pages << PAGE_SHIFT, ttm->ttm.num_pages, PAGE_SIZE, 0,
-	    BUS_DMA_WAITOK, &ttm->dma_address);
-#else
 	ttm->dma_address = kvcalloc(ttm->num_pages, sizeof(*ttm->dma_address),
 				    GFP_KERNEL);
 	if (!ttm->dma_address)
@@ -190,11 +167,16 @@ static void ttm_tt_init_fields(struct ttm_tt *ttm,
 	ttm->page_flags = page_flags;
 	ttm->dma_address = NULL;
 #ifdef __NetBSD__
-	WARN(bo->num_pages == 0,
+	WARN(ttm->num_pages == 0,
 	    "zero-size allocation in %s, please file a NetBSD PR",
 	    __func__);	/* paranoia -- can't prove in five minutes */
-	ttm->swap_storage = uao_create(PAGE_SIZE * MAX(1, bo->num_pages), 0);
-	uao_set_pgfl(ttm->swap_storage, bus_dmamem_pgfl(ttm->bdev->dmat));
+	ttm->swap_storage =
+	    uao_create(PAGE_SIZE * MAX(1, ttm->num_pages), 0);
+	ttm->dmat = bo->bdev->dmat;
+	ttm->dma_map = NULL;
+	if (ttm->swap_storage != NULL)
+		uao_set_pgfl(ttm->swap_storage,
+		    bus_dmamem_pgfl(bo->bdev->dmat));
 #else
 	ttm->swap_storage = NULL;
 #endif
@@ -222,8 +204,14 @@ void ttm_tt_fini(struct ttm_tt *ttm)
 {
 	WARN_ON(ttm->page_flags & TTM_TT_FLAG_PRIV_POPULATED);
 
+#ifdef __NetBSD__
+	KASSERT(ttm->dma_map == NULL);
+	if (ttm->swap_storage)
+		uao_detach(ttm->swap_storage);
+#else
 	if (ttm->swap_storage)
 		fput(ttm->swap_storage);
+#endif
 	ttm->swap_storage = NULL;
 
 	if (ttm_tt_is_backed_up(ttm))
@@ -239,10 +227,6 @@ void ttm_tt_fini(struct ttm_tt *ttm)
 		kvfree(ttm->dma_address);
 	ttm->pages = NULL;
 	ttm->dma_address = NULL;
-#ifdef __NetBSD__
-	uao_detach(ttm->swap_storage);
-	ttm->swap_storage = NULL;
-#endif
 }
 EXPORT_SYMBOL(ttm_tt_fini);
 
@@ -267,6 +251,14 @@ EXPORT_SYMBOL(ttm_sg_tt_init);
 
 int ttm_tt_swapin(struct ttm_tt *ttm)
 {
+#ifdef __NetBSD__
+	/*
+	 * The native pool wires the same UAO that backed the object before
+	 * swapout, so UVM has already restored the contents for us.
+	 */
+	ttm->page_flags &= ~TTM_TT_FLAG_SWAPPED;
+	return 0;
+#else
 	struct address_space *swap_space;
 	struct file *swap_storage;
 	struct page *from_page;
@@ -305,6 +297,7 @@ int ttm_tt_swapin(struct ttm_tt *ttm)
 
 out_err:
 	return ret;
+#endif
 }
 EXPORT_SYMBOL_FOR_TESTS_ONLY(ttm_tt_swapin);
 
@@ -364,6 +357,15 @@ EXPORT_SYMBOL(ttm_tt_restore);
 int ttm_tt_swapout(struct ttm_device *bdev, struct ttm_tt *ttm,
 		   gfp_t gfp_flags)
 {
+#ifdef __NetBSD__
+	/*
+	 * The UAO remains attached while its pages are unwired.  UVM can
+	 * deactivate and page them to swap without a separate copy object.
+	 */
+	ttm_tt_unpopulate(bdev, ttm);
+	ttm->page_flags |= TTM_TT_FLAG_SWAPPED;
+	return ttm->num_pages;
+#else
 	loff_t size = (loff_t)ttm->num_pages << PAGE_SHIFT;
 	struct address_space *swap_space;
 	struct file *swap_storage;

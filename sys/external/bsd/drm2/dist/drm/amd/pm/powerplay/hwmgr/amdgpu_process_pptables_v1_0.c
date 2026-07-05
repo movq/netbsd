@@ -664,7 +664,7 @@ static int get_cac_tdp_table(
 		tdp_table->ucPlx_I2C_Line = fijitable->ucPlx_I2C_Line;
 	} else {
 		const ATOM_Polaris_PowerTune_Table *polaristable =
-			(ATOM_Polaris_PowerTune_Table *)table;
+			(const ATOM_Polaris_PowerTune_Table *)table;
 		tdp_table->usTDP = le16_to_cpu(polaristable->usTDP);
 		tdp_table->usConfigurableTDP = le16_to_cpu(polaristable->usConfigurableTDP);
 		tdp_table->usTDC = le16_to_cpu(polaristable->usTDC);
@@ -1052,7 +1052,7 @@ static int init_thermal_controller(
 			= le16_to_cpu(fiji_fan_table->usFanGainHbm);
 	} else if (fan_table->ucRevId >= 9) {
 		const ATOM_Polaris_Fan_Table *polaris_fan_table =
-			(ATOM_Polaris_Fan_Table *)fan_table;
+			(const ATOM_Polaris_Fan_Table *)fan_table;
 		hwmgr->thermal_controller.advanceFanControlParameters.ucTHyst
 			= polaris_fan_table->ucTHyst;
 		hwmgr->thermal_controller.advanceFanControlParameters.usTMin

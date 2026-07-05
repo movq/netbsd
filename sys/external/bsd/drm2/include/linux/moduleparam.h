@@ -34,6 +34,8 @@
 
 #include <sys/types.h>
 
+#include <linux/stringify.h>
+
 struct linux_module_param_info {
 	const char *dname;	// Name used for description
 	const char *name;	// Name for sysctl
@@ -46,6 +48,10 @@ struct linux_module_param_info {
 #define MTYPE_bool	1
 #define MTYPE_charp	2
 #define MTYPE_uint	3
+#define MTYPE_ulong	4
+#define MTYPE_ullong	5
+#define MTYPE_hexint	MTYPE_uint
+#define MTYPE_bint	MTYPE_int
 
 /*
  * In case of accidental cpp expansion, break glass to raise alarm and

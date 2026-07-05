@@ -28,6 +28,7 @@
 #ifndef _TTM_PAGE_POOL_H_
 #define _TTM_PAGE_POOL_H_
 
+#include <linux/list.h>
 #include <linux/mmzone.h>
 #include <linux/llist.h>
 #include <linux/spinlock.h>

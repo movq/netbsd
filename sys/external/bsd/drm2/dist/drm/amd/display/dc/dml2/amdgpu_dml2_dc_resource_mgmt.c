@@ -1068,11 +1068,11 @@ bool dml2_map_dc_pipes(struct dml2_context *ctx, struct dc_state *state, const s
 			dpp_per_surface_array[i] = ctx->v21.mode_programming.programming->plane_programming[i].num_dpps_required;
 		}
 
-		ODMMode = (const unsigned int *)odm_mode_array;
-		DPPPerSurface = (const unsigned int *)dpp_per_surface_array;
+		ODMMode = odm_mode_array;
+		DPPPerSurface = dpp_per_surface_array;
 		disp_cfg_index_max = __DML2_WRAPPER_MAX_STREAMS_PLANES__;
 	} else {
-		ODMMode = (unsigned int *)disp_cfg->hw.ODMMode;
+		ODMMode = disp_cfg->hw.ODMMode;
 		DPPPerSurface = disp_cfg->hw.DPPPerSurface;
 		disp_cfg_index_max = __DML_NUM_PLANES__;
 	}

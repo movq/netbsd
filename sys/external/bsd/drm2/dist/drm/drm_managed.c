@@ -12,6 +12,7 @@
 #include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/string.h>
 
 #include <drm/drm_device.h>
 #include <drm/drm_print.h>
@@ -131,7 +132,8 @@ void drmm_add_final_kfree(struct drm_device *dev, void *container)
 {
 	WARN_ON(dev->managed.final_kfree);
 	WARN_ON(dev < (struct drm_device *) container);
-	WARN_ON(dev + 1 > (struct drm_device *) (container + ksize(container)));
+	WARN_ON(dev + 1 >
+	    (struct drm_device *)((char *)container + ksize(container)));
 	dev->managed.final_kfree = container;
 }
 
@@ -308,7 +310,7 @@ void __drmm_mutex_release(struct drm_device *dev, void *res)
 {
 	struct mutex *lock = res;
 
-	mutex_destroy(lock);
+	linux_mutex_destroy(lock);
 }
 EXPORT_SYMBOL(__drmm_mutex_release);
 

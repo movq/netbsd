@@ -52,6 +52,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "mes_userqueue.h"
 #include "amdgpu_userq_fence.h"
 
+#include <linux/nbsd-namespace.h>
+
 #define GFX12_NUM_GFX_RINGS	1
 #define GFX12_MEC_HPD_SIZE	2048
 
@@ -581,7 +583,7 @@ static int gfx_v12_0_init_toc_microcode(struct amdgpu_device *adev, const char *
 	adev->psp.toc.fw_version = le32_to_cpu(toc_hdr->header.ucode_version);
 	adev->psp.toc.feature_version = le32_to_cpu(toc_hdr->sos.fw_version);
 	adev->psp.toc.size_bytes = le32_to_cpu(toc_hdr->header.ucode_size_bytes);
-	adev->psp.toc.start_addr = (uint8_t *)toc_hdr +
+	adev->psp.toc.start_addr = (uint8_t *)__UNCONST(toc_hdr) +
 			le32_to_cpu(toc_hdr->header.ucode_array_offset_bytes);
 	return 0;
 out:

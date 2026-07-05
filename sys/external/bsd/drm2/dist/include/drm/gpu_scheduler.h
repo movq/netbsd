@@ -30,6 +30,7 @@
 #include <drm/drm_wait_netbsd.h>
 #include <linux/dma-fence.h>
 #include <linux/completion.h>
+#include <linux/rbtree.h>
 #include <linux/xarray.h>
 #include <linux/workqueue.h>
 
@@ -190,7 +191,6 @@ struct drm_sched_entity {
 	 * Points to entities' guilty.
 	 */
 	atomic_t			*guilty;
-	struct dma_fence                *last_scheduled;
 
 	/**
 	 * @last_scheduled:
@@ -586,7 +586,11 @@ struct drm_gpu_scheduler {
 	const char			*name;
 	u32                             num_rqs;
 	struct drm_sched_rq             **sched_rq;
+#ifdef __NetBSD__
+	drm_waitqueue_t			job_scheduled;
+#else
 	wait_queue_head_t		job_scheduled;
+#endif
 	atomic64_t			job_id_count;
 	struct workqueue_struct		*submit_wq;
 	struct workqueue_struct		*timeout_wq;

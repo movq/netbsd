@@ -249,7 +249,12 @@ static int hw_id_map[MAX_HWIP] = {
 static int amdgpu_discovery_read_binary_from_sysmem(struct amdgpu_device *adev, uint8_t *binary)
 {
 	u64 tmr_offset, tmr_size, pos;
+#ifdef __NetBSD__
+	bus_space_handle_t bsh;
+	bus_space_tag_t bst = adev->pdev->pd_pa.pa_memt;
+#else
 	void *discv_regn;
+#endif
 	int ret;
 
 	ret = amdgpu_acpi_get_tmr_info(adev, &tmr_offset, &tmr_size);
@@ -259,6 +264,15 @@ static int amdgpu_discovery_read_binary_from_sysmem(struct amdgpu_device *adev, 
 	pos = tmr_offset + tmr_size - DISCOVERY_TMR_OFFSET;
 
 	/* This region is read-only and reserved from system use */
+#ifdef __NetBSD__
+	if (bus_space_map(bst, pos, adev->mman.discovery_tmr_size,
+		BUS_SPACE_MAP_PREFETCHABLE, &bsh))
+		return -ENOENT;
+	bus_space_read_region_1(bst, bsh, 0, binary,
+	    adev->mman.discovery_tmr_size);
+	bus_space_unmap(bst, bsh, adev->mman.discovery_tmr_size);
+	return 0;
+#else
 	discv_regn = memremap(pos, adev->mman.discovery_tmr_size, MEMREMAP_WC);
 	if (discv_regn) {
 		memcpy(binary, discv_regn, adev->mman.discovery_tmr_size);
@@ -267,6 +281,7 @@ static int amdgpu_discovery_read_binary_from_sysmem(struct amdgpu_device *adev, 
 	}
 
 	return -ENOENT;
+#endif
 }
 
 #define IP_DISCOVERY_V2		2
@@ -313,7 +328,7 @@ static int amdgpu_discovery_read_binary_from_mem(struct amdgpu_device *adev,
 
 	if (ret)
 		dev_err(adev->dev,
-			"failed to read discovery info from memory, vram size read: %llx",
+			"failed to read discovery info from memory, vram size read: %"PRIx64,
 			vram_size);
 
 	return ret;
@@ -781,6 +796,8 @@ static void amdgpu_discovery_read_from_harvest_table(struct amdgpu_device *adev,
 }
 
 /* ================================================== */
+
+#ifndef __NetBSD__
 
 struct ip_hw_instance {
 	struct kobject kobj; /* ip_discovery/die/#die/#hw_id/#instance/<attrs...> */
@@ -1321,6 +1338,21 @@ static void amdgpu_discovery_sysfs_fini(struct amdgpu_device *adev)
 	kobject_put(&adev->ip_top->die_kset.kobj);
 	kobject_put(&adev->ip_top->kobj);
 }
+
+#else
+
+static int
+amdgpu_discovery_sysfs_init(struct amdgpu_device *adev)
+{
+	return 0;
+}
+
+static void
+amdgpu_discovery_sysfs_fini(struct amdgpu_device *adev)
+{
+}
+
+#endif
 
 /* ================================================== */
 

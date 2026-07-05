@@ -49,6 +49,8 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_module.c,v 1.11 2022/07/23 12:52:09 riastradh
 #include "amdgpu.h"
 #include "amdgpu_amdkfd.h"
 #include "amdgpu_drv.h"
+#include "amdgpu_ids.h"
+#include "amdgpu_userq_fence.h"
 
 MODULE(MODULE_CLASS_DRIVER, amdgpu, "drmkms,drmkms_pci,drmkms_sched,drmkms_ttm"); /* XXX drmkms_i2c */
 
@@ -59,9 +61,6 @@ MODULE(MODULE_CLASS_DRIVER, amdgpu, "drmkms,drmkms_pci,drmkms_sched,drmkms_ttm")
 /* XXX Kludge to get these from amdgpu_drv.c.  */
 extern struct drm_driver *const amdgpu_drm_driver;
 extern struct amdgpu_mgpu_info mgpu_info;
-
-/* XXX Kludge to replace DEFINE_IDA in amdgpu_ids.c.  */
-extern struct ida amdgpu_pasid_ida;
 
 struct drm_sysctl_def amdgpu_def = DRM_SYSCTL_INIT();
 
@@ -74,15 +73,14 @@ amdgpu_init(void)
 	if (error)
 		return error;
 
-	amdgpu_drm_driver->num_ioctls = amdgpu_max_kms_ioctl;
 	amdgpu_drm_driver->driver_features &= ~DRIVER_ATOMIC;
 
 	linux_mutex_init(&mgpu_info.mutex);
-	ida_init(&amdgpu_pasid_ida);
+	amdgpu_pasid_mgr_init();
 
 	error = amdgpu_sync_init();
 	KASSERT(error == 0);
-	error = amdgpu_fence_slab_init();
+	error = amdgpu_userq_fence_slab_init();
 	KASSERT(error == 0);
 
 #if notyet			/* XXX amdgpu acpi */
@@ -117,10 +115,10 @@ amdgpu_fini(void)
 #if notyet			/* XXX amdgpu acpi */
 	amdgpu_unregister_atpx_handler();
 #endif
-	amdgpu_fence_slab_fini();
 	amdgpu_sync_fini();
+	amdgpu_userq_fence_slab_fini();
 
-	ida_destroy(&amdgpu_pasid_ida);
+	amdgpu_pasid_mgr_cleanup();
 	linux_mutex_destroy(&mgpu_info.mutex);
 }
 

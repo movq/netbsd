@@ -37,6 +37,7 @@ __KERNEL_RCSID(0, "$NetBSD: drm_edid.c,v 1.15 2021/12/19 12:44:04 riastradh Exp 
 #include <linux/byteorder/generic.h>
 #include <linux/cec.h>
 #include <linux/export.h>
+#include <linux/fb.h>
 #include <linux/hdmi.h>
 #include <linux/i2c.h>
 #include <linux/kernel.h>
@@ -44,6 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: drm_edid.c,v 1.15 2021/12/19 12:44:04 riastradh Exp 
 #include <linux/pci.h>
 #include <linux/seq_buf.h>
 #include <linux/slab.h>
+#include <linux/string_choices.h>
 #include <linux/vga_switcheroo.h>
 
 #include <drm/drm_drv.h>
@@ -1973,11 +1975,11 @@ static void edid_block_dump(const char *level, const void *block, int block_num)
 
 	status = edid_block_check(block, block_num == 0);
 	if (status == EDID_BLOCK_ZERO)
-		sprintf(prefix, "\t[%02x] ZERO ", block_num);
+		snprintf(prefix, sizeof prefix, "\t[%02x] ZERO ", block_num);
 	else if (!edid_block_status_valid(status, edid_block_tag(block)))
-		sprintf(prefix, "\t[%02x] BAD  ", block_num);
+		snprintf(prefix, sizeof prefix, "\t[%02x] BAD  ", block_num);
 	else
-		sprintf(prefix, "\t[%02x] GOOD ", block_num);
+		snprintf(prefix, sizeof prefix, "\t[%02x] GOOD ", block_num);
 
 	print_hex_dump(level, prefix, DUMP_PREFIX_NONE, 16, 1,
 		       block, EDID_LENGTH, false);
@@ -2050,7 +2052,7 @@ bool drm_edid_is_valid(struct edid *edid)
 		return false;
 
 	for (i = 0; i < edid_block_count(edid); i++) {
-		void *block = (void *)edid_block_data(edid, i);
+		void *block = (void *)__UNCONST(edid_block_data(edid, i));
 
 		if (!drm_edid_block_valid(block, i, true, NULL))
 			return false;
@@ -2105,7 +2107,7 @@ static struct edid *edid_filter_invalid_blocks(struct edid *edid,
 		const void *src_block = edid_block_data(edid, i);
 
 		if (edid_block_valid(src_block, i == 0)) {
-			void *dst_block = (void *)edid_block_data(edid, valid_blocks);
+			void *dst_block = (void *)__UNCONST(edid_block_data(edid, valid_blocks));
 
 			memmove(dst_block, src_block, EDID_LENGTH);
 			valid_blocks++;
@@ -2240,6 +2242,7 @@ static const struct drm_edid *drm_edid_override_get(struct drm_connector *connec
 	return IS_ERR(override) ? NULL : override;
 }
 
+#ifndef __NetBSD__ /* xxx debugfs */
 /* For debugfs edid_override implementation */
 int drm_edid_override_show(struct drm_connector *connector, struct seq_file *m)
 {
@@ -2298,6 +2301,7 @@ int drm_edid_override_reset(struct drm_connector *connector)
 
 	return 0;
 }
+#endif
 
 /**
  * drm_edid_override_connector_update - add modes from override/firmware EDID
@@ -2422,7 +2426,7 @@ static struct edid *_drm_do_get_edid(struct drm_connector *connector,
 
 	num_blocks = edid_block_count(edid);
 	for (i = 1; i < num_blocks; i++) {
-		void *block = (void *)edid_block_data(edid, i);
+		void *block = (void *)__UNCONST(edid_block_data(edid, i));
 
 		status = edid_block_read(block, i, read_block, context);
 
@@ -2542,7 +2546,7 @@ const struct drm_edid *drm_edid_alloc(const void *edid, size_t size)
 
 	drm_edid = _drm_edid_alloc(edid, size);
 	if (!drm_edid)
-		kfree(edid);
+		kfree(__UNCONST(edid));
 
 	return drm_edid;
 }
@@ -2574,8 +2578,8 @@ void drm_edid_free(const struct drm_edid *drm_edid)
 	if (!drm_edid)
 		return;
 
-	kfree(drm_edid->edid);
-	kfree(drm_edid);
+	kfree(__UNCONST(drm_edid->edid));
+	kfree(__UNCONST(drm_edid));
 }
 EXPORT_SYMBOL(drm_edid_free);
 
@@ -2921,15 +2925,21 @@ const struct drm_edid *drm_edid_read_switcheroo(struct drm_connector *connector,
 						struct i2c_adapter *adapter)
 {
 	struct drm_device *dev = connector->dev;
+#ifndef __NetBSD__		/* XXX vga switcheroo */
 	struct pci_dev *pdev = to_pci_dev(dev->dev);
+#endif
 	const struct drm_edid *drm_edid;
 
 	if (drm_WARN_ON_ONCE(dev, !dev_is_pci(dev->dev)))
 		return NULL;
 
+#ifndef __NetBSD__		/* XXX vga switcheroo */
 	vga_switcheroo_lock_ddc(pdev);
+#endif
 	drm_edid = drm_edid_read_ddc(connector, adapter);
+#ifndef __NetBSD__		/* XXX vga switcheroo */
 	vga_switcheroo_unlock_ddc(pdev);
+#endif
 
 	return drm_edid;
 }
@@ -4512,7 +4522,7 @@ static int add_alternate_cea_modes(struct drm_connector *connector,
 {
 	struct drm_device *dev = connector->dev;
 	struct drm_display_mode *mode, *tmp;
-	LIST_HEAD(list);
+	LINUX_LIST_HEAD(list);
 	int modes = 0;
 
 	/* Don't add CTA modes if the CTA extension block is missing */
@@ -5296,7 +5306,7 @@ static void parse_cta_y420cmdb(struct drm_connector *connector,
 {
 	struct drm_display_info *info = &connector->display_info;
 	int i, map_len = cea_db_payload_len(db) - 1;
-	const u8 *data = cea_db_data(db) + 1;
+	const u8 *data = (const u8 *)cea_db_data(db) + 1;
 	u64 map = 0;
 
 	if (map_len == 0) {
@@ -5346,7 +5356,7 @@ static int add_cea_modes(struct drm_connector *connector,
 			modes += do_hdmi_vsdb_modes(connector, (const u8 *)db,
 						    cea_db_payload_len(db));
 		} else if (cea_db_is_y420vdb(db)) {
-			const u8 *vdb420 = cea_db_data(db) + 1;
+			const u8 *vdb420 = (const u8 *)cea_db_data(db) + 1;
 
 			/* Add 4:2:0(only) modes present in EDID */
 			modes += do_y420vdb_modes(connector, vdb420,
@@ -6094,7 +6104,7 @@ static void parse_cta_y420vdb(struct drm_connector *connector,
 {
 	struct drm_display_info *info = &connector->display_info;
 	struct drm_hdmi_info *hdmi = &info->hdmi;
-	const u8 *svds = cea_db_data(db) + 1;
+	const u8 *svds = (const u8 *)cea_db_data(db) + 1;
 	int i;
 
 	for (i = 0; i < cea_db_payload_len(db) - 1; i++) {
@@ -6543,7 +6553,7 @@ static void drm_parse_vesa_mso_data(struct drm_connector *connector,
 				    const struct displayid_block *block)
 {
 	struct displayid_vesa_vendor_specific_block *vesa =
-		(struct displayid_vesa_vendor_specific_block *)block;
+		(struct displayid_vesa_vendor_specific_block *)__UNCONST(block);
 	struct drm_display_info *info = &connector->display_info;
 
 	if (block->num_bytes < 3) {
@@ -6903,7 +6913,7 @@ static struct drm_display_mode *drm_mode_displayid_formula(struct drm_device *de
 static int add_displayid_formula_modes(struct drm_connector *connector,
 				       const struct displayid_block *block)
 {
-	const struct displayid_formula_timing_block *formula_block = (struct displayid_formula_timing_block *)block;
+	const struct displayid_formula_timing_block *formula_block = (struct displayid_formula_timing_block *)__UNCONST(block);
 	int num_timings;
 	struct drm_display_mode *newmode;
 	int num_modes = 0;
@@ -7006,7 +7016,7 @@ static int _drm_edid_connector_property_update(struct drm_connector *connector,
 
 		if (old_edid && !drm_edid_eq(drm_edid, old_edid, old_edid_size)) {
 			connector->epoch_counter++;
-			drm_dbg_kms(dev, "[CONNECTOR:%d:%s] EDID changed, epoch counter %llu\n",
+			drm_dbg_kms(dev, "[CONNECTOR:%d:%s] EDID changed, epoch counter %"PRIu64"\n",
 				    connector->base.id, connector->name,
 				    connector->epoch_counter);
 		}
@@ -7068,7 +7078,7 @@ ssize_t drm_edid_connector_property_show(struct drm_connector *connector,
 	if (off + count > size)
 		count = size - off;
 
-	memcpy(buf, edid + off, count);
+	memcpy(buf, (const char*)edid + off, count);
 
 	ret = count;
 unlock:

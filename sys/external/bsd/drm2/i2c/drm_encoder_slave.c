@@ -157,7 +157,7 @@ drm_i2c_encoder_init(struct drm_device *dev, struct drm_encoder_slave *slave,
 	    != refcnt);
 	bus_priv->i2c_driver = driver;
 
-	client = i2c_new_device(adapter, info);
+	client = i2c_new_client_device(adapter, info);
 	KASSERT(client != NULL);
 	bus_priv->i2c_client = client;
 

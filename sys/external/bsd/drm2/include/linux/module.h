@@ -38,6 +38,7 @@
 #include <sys/cdefs.h>
 
 #include <linux/export.h>
+#include <linux/init.h>
 #include <linux/moduleparam.h>
 #include <linux/rbtree.h>
 #include <linux/stringify.h>
@@ -49,6 +50,7 @@
 #define	MODULE_DESCRIPTION(DESCRIPTION)
 #define	MODULE_DEVICE_TABLE(DESCRIPTION, IDLIST)
 #define	MODULE_FIRMWARE(FIRMWARE)
+#define	MODULE_IMPORT_NS(NAMESPACE)
 #define	MODULE_LICENSE(LICENSE)
 #define	MODULE_VERSION(VERSION)
 

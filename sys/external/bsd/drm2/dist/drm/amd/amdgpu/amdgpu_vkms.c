@@ -98,7 +98,7 @@ static bool amdgpu_vkms_get_vblank_timestamp(struct drm_crtc *crtc,
 		return true;
 	}
 
-	*vblank_time = READ_ONCE(amdgpu_crtc->vblank_timer.node.expires);
+	*vblank_time = READ_ONCE(hrtimer_get_expires(&amdgpu_crtc->vblank_timer));
 
 	if (WARN_ON(*vblank_time == vblank->time))
 		return true;

@@ -42,6 +42,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 
 #include <drm/drm_drv.h>
 
+#include <linux/nbsd-namespace.h>
+
 static const struct amdgpu_hwip_reg_entry vcn_reg_list_5_0[] = {
 	SOC15_REG_ENTRY_STR(VCN, 0, regUVD_POWER_STATUS),
 	SOC15_REG_ENTRY_STR(VCN, 0, regUVD_STATUS),

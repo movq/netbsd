@@ -56,6 +56,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "mes_userqueue.h"
 #include "amdgpu_userq_fence.h"
 
+#include <linux/nbsd-namespace.h>
+
 #define GFX11_NUM_GFX_RINGS		1
 #define GFX11_MEC_HPD_SIZE	2048
 
@@ -693,7 +695,7 @@ static int gfx_v11_0_init_toc_microcode(struct amdgpu_device *adev, const char *
 	adev->psp.toc.fw_version = le32_to_cpu(toc_hdr->header.ucode_version);
 	adev->psp.toc.feature_version = le32_to_cpu(toc_hdr->sos.fw_version);
 	adev->psp.toc.size_bytes = le32_to_cpu(toc_hdr->header.ucode_size_bytes);
-	adev->psp.toc.start_addr = (uint8_t *)toc_hdr +
+	adev->psp.toc.start_addr = (uint8_t *)__UNCONST(toc_hdr) +
 				le32_to_cpu(toc_hdr->header.ucode_array_offset_bytes);
 	return 0;
 out:
@@ -1302,7 +1304,8 @@ static void gfx_v11_0_rlc_backdoor_autoload_copy_toc_ucode(struct amdgpu_device 
 
 	*(uint64_t *)fw_autoload_mask |= 0x1;
 
-	DRM_DEBUG("rlc autoload enabled fw: 0x%llx\n", *(uint64_t *)fw_autoload_mask);
+	DRM_DEBUG("rlc autoload enabled fw: 0x%"PRIx64"\n",
+	    *(uint64_t *)fw_autoload_mask);
 
 	data = adev->psp.toc.start_addr;
 	size = rlc_autoload_info[SOC21_FIRMWARE_ID_RLC_TOC].size;
@@ -6095,6 +6098,7 @@ static void gfx_v11_0_ring_emit_gfx_shadow(struct amdgpu_ring *ring,
 					   int vmid)
 {
 	struct amdgpu_device *adev = ring->adev;
+	const unsigned int set_q_mode_offs = ring->set_q_mode_offs;
 	unsigned int offs, end;
 
 	if (!adev->gfx.cp_gfx_shadow || !ring->ring_obj)
@@ -6123,11 +6127,11 @@ static void gfx_v11_0_ring_emit_gfx_shadow(struct amdgpu_ring *ring,
 	amdgpu_ring_write(ring, shadow_va ? 1 : 0);
 	amdgpu_ring_write(ring, 0);
 
-	if (ring->set_q_mode_offs) {
+	if (set_q_mode_offs) {
 		uint64_t addr;
 
 		addr = amdgpu_bo_gpu_offset(ring->ring_obj);
-		addr += ring->set_q_mode_offs << 2;
+		addr += set_q_mode_offs << 2;
 		end = gfx_v11_0_ring_emit_init_cond_exec(ring, addr);
 	}
 
@@ -6159,7 +6163,7 @@ static void gfx_v11_0_ring_emit_gfx_shadow(struct amdgpu_ring *ring,
 	amdgpu_ring_write(ring, init_shadow ?
 			  PACKET3_SET_Q_PREEMPTION_MODE_INIT_SHADOW_MEM : 0);
 
-	if (ring->set_q_mode_offs)
+	if (set_q_mode_offs)
 		amdgpu_ring_patch_cond_exec(ring, end);
 
 	if (shadow_va) {
@@ -6174,7 +6178,7 @@ static void gfx_v11_0_ring_emit_gfx_shadow(struct amdgpu_ring *ring,
 
 		ring->set_q_mode_token = token;
 	} else {
-		ring->set_q_mode_ptr = &ring->ring[ring->set_q_mode_offs];
+		ring->set_q_mode_ptr = &ring->ring[set_q_mode_offs];
 	}
 
 	ring->set_q_mode_offs = offs;
