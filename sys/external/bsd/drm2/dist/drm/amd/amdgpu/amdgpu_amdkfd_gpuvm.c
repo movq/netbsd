@@ -45,6 +45,8 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_amdkfd_gpuvm.c,v 1.2 2021/12/18 23:44:58 rias
 #include "kfd_priv.h"
 #include "kfd_smi_events.h"
 
+#include <linux/nbsd-namespace.h>
+
 /* Userptr restore delay, just long enough to allow consecutive VM
  * changes to accumulate
  */

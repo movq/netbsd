@@ -31,6 +31,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "amdgpu_aca.h"
 #include "amdgpu_ras.h"
 
+#include <linux/nbsd-namespace.h>
+
 #define ACA_BANK_HWID(type, hwid, mcatype) [ACA_HWIP_TYPE_##type] = {hwid, mcatype}
 
 typedef int bank_handler_t(struct aca_handle *handle, struct aca_bank *bank, enum aca_smu_type type, void *data);
@@ -129,7 +131,7 @@ static void aca_smu_bank_dump(struct amdgpu_device *adev, int idx, int total, st
 	RAS_EVENT_LOG(adev, event_id, HW_ERR "Accelerator Check Architecture events logged\n");
 	/* plus 1 for output format, e.g: ACA[08/08]: xxxx */
 	for (i = 0; i < ARRAY_SIZE(aca_regs); i++)
-		RAS_EVENT_LOG(adev, event_id, HW_ERR "ACA[%02d/%02d].%s=0x%016llx\n",
+		RAS_EVENT_LOG(adev, event_id, HW_ERR "ACA[%02d/%02d].%s=0x%016"PRIx64"\n",
 			      idx + 1, total, aca_regs[i].name, bank->regs[aca_regs[i].reg_idx]);
 
 	if (ACA_REG__STATUS__SCRUB(bank->regs[ACA_REG_IDX_STATUS]))
@@ -680,6 +682,7 @@ static int add_aca_handle(struct amdgpu_device *adev, struct aca_handle_manager 
 	return 0;
 }
 
+#ifndef __NetBSD__
 static ssize_t aca_sysfs_read(struct device *dev,
 			      struct device_attribute *attr, char *buf)
 {
@@ -704,6 +707,7 @@ static int add_aca_sysfs(struct amdgpu_device *adev, struct aca_handle *handle)
 				       &aca_attr->attr,
 				       "ras");
 }
+#endif
 
 int amdgpu_aca_add_handle(struct amdgpu_device *adev, struct aca_handle *handle,
 			  const char *name, const struct aca_info *ras_info, void *data)
@@ -718,7 +722,11 @@ int amdgpu_aca_add_handle(struct amdgpu_device *adev, struct aca_handle *handle,
 	if (ret)
 		return ret;
 
+#ifdef __NetBSD__
+	return 0;
+#else
 	return add_aca_sysfs(adev, handle);
+#endif
 }
 
 static void remove_aca_handle(struct aca_handle *handle)
@@ -732,6 +740,9 @@ static void remove_aca_handle(struct aca_handle *handle)
 
 static void remove_aca_sysfs(struct aca_handle *handle)
 {
+#ifdef __NetBSD__
+	return;
+#else
 	struct amdgpu_device *adev = handle->adev;
 	struct device_attribute *aca_attr = &handle->aca_attr;
 
@@ -739,6 +750,7 @@ static void remove_aca_sysfs(struct aca_handle *handle)
 		sysfs_remove_file_from_group(&adev->dev->kobj,
 					     &aca_attr->attr,
 					     "ras");
+#endif
 }
 
 void amdgpu_aca_remove_handle(struct aca_handle *handle)

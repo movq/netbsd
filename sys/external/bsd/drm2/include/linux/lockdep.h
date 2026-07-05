@@ -58,8 +58,11 @@ struct spinlock;
 #define	might_lock(m)							      \
 	KDASSERT(mutex_ownable(__lockdep_kmutex(m)))
 #else
+#define	lockdep_assert(m)		do {} while (0)
+#define	lockdep_assert_once(m)		do {} while (0)
 #define	lockdep_assert_held(m)		do {} while (0)
 #define	lockdep_assert_held_once(m)	do {} while (0)
+#define	lockdep_assert_none_held_once()	do {} while (0)
 #define	lockdep_is_held(m)		1
 #define	might_lock(m)			do {} while (0)
 #define	might_lock_nested(m,n)		do {} while (0)

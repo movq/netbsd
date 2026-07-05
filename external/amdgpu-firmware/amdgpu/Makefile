@@ -37,6 +37,7 @@ FILES=	dist/LICENSE.amdgpu \
 	dist/carrizo_sdma1.bin \
 	dist/carrizo_uvd.bin \
 	dist/carrizo_vce.bin \
+	dist/dcn_3_1_4_dmcub.bin \
 	dist/fiji_me.bin \
 	dist/fiji_mec.bin \
 	dist/fiji_mec2.bin \
@@ -47,6 +48,13 @@ FILES=	dist/LICENSE.amdgpu \
 	dist/fiji_smc.bin \
 	dist/fiji_uvd.bin \
 	dist/fiji_vce.bin \
+	dist/gc_11_0_1_imu.bin \
+	dist/gc_11_0_1_me.bin \
+	dist/gc_11_0_1_mec.bin \
+	dist/gc_11_0_1_mes1.bin \
+	dist/gc_11_0_1_mes_2.bin \
+	dist/gc_11_0_1_pfp.bin \
+	dist/gc_11_0_1_rlc.bin \
 	dist/hainan_ce.bin \
 	dist/hainan_k_smc.bin \
 	dist/hainan_mc.bin \
@@ -229,6 +237,8 @@ FILES=	dist/LICENSE.amdgpu \
 	dist/polaris12_smc.bin \
 	dist/polaris12_uvd.bin \
 	dist/polaris12_vce.bin \
+	dist/psp_13_0_4_ta.bin \
+	dist/psp_13_0_4_toc.bin \
 	dist/raven2_asd.bin \
 	dist/raven2_ce.bin \
 	dist/raven2_gpu_info.bin \
@@ -264,6 +274,7 @@ FILES=	dist/LICENSE.amdgpu \
 	dist/renoir_rlc.bin \
 	dist/renoir_sdma.bin \
 	dist/renoir_vcn.bin \
+	dist/sdma_6_0_1.bin \
 	dist/stoney_ce.bin \
 	dist/stoney_me.bin \
 	dist/stoney_mec.bin \
@@ -301,6 +312,7 @@ FILES=	dist/LICENSE.amdgpu \
 	dist/topaz_sdma.bin \
 	dist/topaz_sdma1.bin \
 	dist/topaz_smc.bin \
+	dist/vcn_4_0_2.bin \
 	dist/vega10_acg_smc.bin \
 	dist/vega10_asd.bin \
 	dist/vega10_ce.bin \

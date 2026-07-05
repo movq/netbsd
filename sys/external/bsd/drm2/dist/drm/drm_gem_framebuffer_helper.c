@@ -19,6 +19,8 @@
 
 #include "drm_internal.h"
 
+#include <linux/nbsd-namespace.h>
+
 MODULE_IMPORT_NS("DMA_BUF");
 
 #define AFBC_HEADER_SIZE		16
@@ -165,7 +167,7 @@ int drm_gem_fb_init_with_funcs(struct drm_device *dev,
 	if (drm_drv_uses_atomic_modeset(dev) &&
 	    !drm_any_plane_has_format(dev, mode_cmd->pixel_format,
 				      mode_cmd->modifier[0])) {
-		drm_dbg_kms(dev, "Unsupported pixel format %p4cc / modifier 0x%llx\n",
+		drm_dbg_kms(dev, "Unsupported pixel format %p4cc / modifier 0x%"PRIx64"\n",
 			    &mode_cmd->pixel_format, mode_cmd->modifier[0]);
 		return -EINVAL;
 	}
@@ -541,7 +543,7 @@ static int drm_gem_afbc_min_size(struct drm_device *dev,
 	case AFBC_FORMAT_MOD_BLOCK_SIZE_64x4:
 	case AFBC_FORMAT_MOD_BLOCK_SIZE_32x8_64x4:
 	default:
-		drm_dbg_kms(dev, "Invalid AFBC_FORMAT_MOD_BLOCK_SIZE: %lld.\n",
+		drm_dbg_kms(dev, "Invalid AFBC_FORMAT_MOD_BLOCK_SIZE: %"PRId64".\n",
 			    mode_cmd->modifier[0]
 			    & AFBC_FORMAT_MOD_BLOCK_SIZE_MASK);
 		return -EINVAL;

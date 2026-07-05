@@ -32,4 +32,6 @@
 #ifndef _LINUX_STAT_H_
 #define _LINUX_STAT_H_
 
+#include <sys/stat.h>
+
 #endif  /* _LINUX_STAT_H_ */

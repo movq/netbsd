@@ -54,7 +54,7 @@ void dp_set_hw_test_pattern(
 		struct dc_link *link,
 		const struct link_resource *link_res,
 		enum dp_test_pattern test_pattern,
-		uint8_t *custom_pattern,
+		const uint8_t *custom_pattern,
 		uint32_t custom_pattern_size);
 
 enum dc_status dpcd_set_training_pattern(

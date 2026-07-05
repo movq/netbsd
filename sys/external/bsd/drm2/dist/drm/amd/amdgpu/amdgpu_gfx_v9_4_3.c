@@ -46,6 +46,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "amdgpu_xcp.h"
 #include "amdgpu_aca.h"
 
+#include <linux/nbsd-namespace.h>
+
 MODULE_FIRMWARE("amdgpu/gc_9_4_3_mec.bin");
 MODULE_FIRMWARE("amdgpu/gc_9_4_4_mec.bin");
 MODULE_FIRMWARE("amdgpu/gc_9_5_0_mec.bin");
@@ -1700,7 +1702,8 @@ static const struct soc15_reg_rlcg rlcg_access_gc_9_4_3[] = {
 
 static bool gfx_v9_4_3_check_rlcg_range(struct amdgpu_device *adev,
 					uint32_t offset,
-					struct soc15_reg_rlcg *entries, int arr_size)
+					const struct soc15_reg_rlcg *entries,
+					int arr_size)
 {
 	int i, inst;
 	uint32_t reg;
@@ -1728,7 +1731,7 @@ static bool gfx_v9_4_3_check_rlcg_range(struct amdgpu_device *adev,
 static bool gfx_v9_4_3_is_rlcg_access_range(struct amdgpu_device *adev, u32 offset)
 {
 	return gfx_v9_4_3_check_rlcg_range(adev, offset,
-					(void *)rlcg_access_gc_9_4_3,
+					rlcg_access_gc_9_4_3,
 					ARRAY_SIZE(rlcg_access_gc_9_4_3));
 }
 

@@ -381,7 +381,7 @@ struct smu_dpm_policy;
 
 struct smu_dpm_policy_desc {
 	const char *name;
-	char *(*get_desc)(struct smu_dpm_policy *dpm_policy, int level);
+	const char *(*get_desc)(struct smu_dpm_policy *dpm_policy, int level);
 };
 
 struct smu_dpm_policy {

@@ -191,3 +191,21 @@ io_mapping_unmap_atomic(struct io_mapping *mapping, void *ptr __diagused)
 
 	mapping->diom_atomic = false;
 }
+
+void *
+io_mapping_map_local_wc(struct io_mapping *mapping, bus_addr_t offset)
+{
+
+	return io_mapping_map_wc(mapping, offset, PAGE_SIZE);
+}
+
+void
+io_mapping_unmap_local(void *ptr)
+{
+	vaddr_t va = (vaddr_t)ptr;
+
+	pmap_kremove(va, PAGE_SIZE);
+	pmap_update(pmap_kernel());
+
+	uvm_km_free(kernel_map, va, PAGE_SIZE, UVM_KMF_VAONLY);
+}

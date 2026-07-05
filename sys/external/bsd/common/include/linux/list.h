@@ -117,6 +117,12 @@ list_is_last(const struct list_head *entry, const struct list_head *head)
 	return head == entry->next;
 }
 
+static inline bool
+list_is_head(const struct list_head *entry, const struct list_head *head)
+{
+	return entry == head;
+}
+
 static inline void
 __list_add_between(struct list_head *prev, struct list_head *node,
     struct list_head *next)
@@ -231,6 +237,13 @@ list_move_tail(struct list_head *node, struct list_head *head)
 }
 
 static inline void
+list_rotate_to_front(struct list_head *list, struct list_head *head)
+{
+
+	list_move_tail(head, list);
+}
+
+static inline void
 list_bulk_move_tail(struct list_head *head, struct list_head *first,
     struct list_head *last)
 {
@@ -275,6 +288,8 @@ list_del_init(struct list_head *node)
 	(list_empty((PTR)) ? NULL : list_entry(list_first((PTR)), TYPE, FIELD))
 #define	list_last_entry(PTR, TYPE, FIELD)				\
 	list_entry(list_last((PTR)), TYPE, FIELD)
+#define list_last_entry_or_null(ptr, type, member) \
+	(list_empty(ptr) ? NULL : list_last_entry(ptr, type, member))
 #define	list_next_entry(ENTRY, FIELD)					\
 	list_entry(list_next(&(ENTRY)->FIELD), typeof(*(ENTRY)), FIELD)
 #define	list_prev_entry(ENTRY, FIELD)					\
@@ -369,6 +384,17 @@ hlist_add_head(struct hlist_node *node, struct hlist_head *head)
 
 	pslist_entry_init(node);
 	pslist_writer_insert_head(head, node);
+}
+
+static inline void
+hlist_move_list(struct hlist_head *old, struct hlist_head *new)
+{
+
+	/* XXX abstraction violation */
+	new->plh_first = old->plh_first;
+	if (new->plh_first != NULL)
+		new->plh_first->ple_prevp = &new->plh_first;
+	old->plh_first = NULL;
 }
 
 static inline void

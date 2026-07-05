@@ -51,7 +51,7 @@ void *dm_helpers_allocate_gpu_mem(
 		struct dc_context *ctx,
 		enum dc_gpu_mem_alloc_type type,
 		size_t size,
-		long long *addr);
+		int64_t *addr);
 
 /*
  * Free the GPU-accessible memory at the virtual address pvMem

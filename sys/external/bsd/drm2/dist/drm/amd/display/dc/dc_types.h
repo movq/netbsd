@@ -818,9 +818,9 @@ struct dc_context {
 	uint64_t fbc_gpu_addr;
 	struct dc_dmub_srv *dmub_srv;
 	struct cp_psp cp_psp;
-	uint32_t *dcn_reg_offsets;
-	uint32_t *nbio_reg_offsets;
-	uint32_t *clk_reg_offsets;
+	const uint32_t *dcn_reg_offsets;
+	const uint32_t *nbio_reg_offsets;
+	const uint32_t *clk_reg_offsets;
 };
 
 /* DSC DPCD capabilities */

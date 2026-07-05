@@ -53,6 +53,9 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_irq.c,v 1.9 2021/12/19 12:38:49 riastradh Exp
 #include <drm/drm_vblank.h>
 #include <drm/amdgpu_drm.h>
 #include <drm/drm_drv.h>
+#ifdef __NetBSD__
+#include <drm/amdgpu_pci.h>
+#endif
 #include "amdgpu.h"
 #include "amdgpu_ih.h"
 #include "atom.h"
@@ -276,7 +279,9 @@ void amdgpu_restore_msix(struct amdgpu_device *adev)
  */
 int amdgpu_irq_init(struct amdgpu_device *adev)
 {
+#ifndef __NetBSD__
 	unsigned int irq, flags;
+#endif
 	int r;
 
 	spin_lock_init(&adev->irq.lock);
@@ -284,9 +289,8 @@ int amdgpu_irq_init(struct amdgpu_device *adev)
 	/* Enable MSI if not disabled by module parameter */
 	adev->irq.msi_enabled = false;
 
-    /* XXX drm618 */
+#ifndef __NetBSD__
 	if (!amdgpu_msi_ok(adev))
-
 		flags = PCI_IRQ_INTX;
 	else
 		flags = PCI_IRQ_ALL_TYPES;
@@ -302,11 +306,19 @@ int amdgpu_irq_init(struct amdgpu_device *adev)
 		adev->irq.msi_enabled = true;
 		dev_dbg(adev->dev, "using MSI/MSI-X.\n");
 	}
+#endif
 
 	INIT_WORK(&adev->irq.ih1_work, amdgpu_irq_handle_ih1);
 	INIT_WORK(&adev->irq.ih2_work, amdgpu_irq_handle_ih2);
 	INIT_WORK(&adev->irq.ih_soft_work, amdgpu_irq_handle_ih_soft);
 
+#ifdef __NetBSD__
+	r = amdgpu_pci_irq_install(adev_to_drm(adev), amdgpu_msi_ok(adev),
+	    amdgpu_irq_handler, &adev->irq.msi_enabled);
+	if (r)
+		goto free_vectors;
+	adev->irq.irq = 0;
+#else
 	/* Use vector 0 for MSI-X. */
 	r = pci_irq_vector(adev->pdev, 0);
 	if (r < 0)
@@ -319,17 +331,19 @@ int amdgpu_irq_init(struct amdgpu_device *adev)
 	if (r)
 		goto free_vectors;
 
-    /* XXX drm618 */
-	adev->irq.installed = true;
 	adev->irq.irq = irq;
+#endif
+	adev->irq.installed = true;
 	adev_to_drm(adev)->max_vblank_count = 0x00ffffff;
 
 	dev_dbg(adev->dev, "amdgpu: irq initialized.\n");
 	return 0;
 
 free_vectors:
+#ifndef __NetBSD__
 	if (adev->irq.msi_enabled)
 		pci_free_irq_vectors(adev->pdev);
+#endif
 
 	adev->irq.msi_enabled = false;
 	return r;
@@ -338,10 +352,15 @@ free_vectors:
 void amdgpu_irq_fini_hw(struct amdgpu_device *adev)
 {
 	if (adev->irq.installed) {
+#ifdef __NetBSD__
+		amdgpu_pci_irq_uninstall(adev_to_drm(adev));
+#else
 		free_irq(adev->irq.irq, adev_to_drm(adev));
-		adev->irq.installed = false;
 		if (adev->irq.msi_enabled)
 			pci_free_irq_vectors(adev->pdev);
+#endif
+		adev->irq.installed = false;
+		adev->irq.msi_enabled = false;
 	}
 
 	amdgpu_ih_ring_fini(adev, &adev->irq.ih_soft);

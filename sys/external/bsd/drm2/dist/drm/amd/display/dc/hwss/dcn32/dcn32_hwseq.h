@@ -93,7 +93,7 @@ void dcn32_unblank_stream(struct pipe_ctx *pipe_ctx,
 
 bool dcn32_is_dp_dig_pixel_rate_div_policy(struct pipe_ctx *pipe_ctx);
 
-void dcn32_calculate_pix_rate_divider(struct dc *dc, struct dc_state *context, const struct dc_stream_state *stream);
+void dcn32_calculate_pix_rate_divider(const struct dc *dc, struct dc_state *context, const struct dc_stream_state *stream);
 
 void dcn32_disable_link_output(struct dc_link *link,
 		const struct link_resource *link_res,

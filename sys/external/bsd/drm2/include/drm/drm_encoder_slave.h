@@ -35,6 +35,8 @@
 #include <sys/types.h>
 #include <sys/rbtree.h>
 
+#include <linux/i2c.h>
+
 #include <drm/drm_connector.h>
 #include <drm/drm_encoder.h>
 

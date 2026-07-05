@@ -163,8 +163,8 @@ static int gmc_v12_0_process_interrupt(struct amdgpu_device *adev,
 			amdgpu_vm_put_task_info(task_info);
 		}
 
-		dev_err(adev->dev, "  in page starting at address 0x%016llx from client %d\n",
-				addr, entry->client_id);
+		dev_err(adev->dev, "  in page starting at address 0x%016"PRIx64
+		    " from client %d\n", addr, entry->client_id);
 
 		/* Only print L2 fault status if the status register could be read and
 		 * contains useful information
@@ -834,7 +834,11 @@ static int gmc_v12_0_sw_init(struct amdgpu_ip_block *ip_block)
 	 */
 	adev->gmc.mc_mask = 0xffffffffffffULL; /* 48 bit MC */
 
+#ifdef __NetBSD__
+	r = drm_limit_dma_space(adev_to_drm(adev), 0, DMA_BIT_MASK(44));
+#else
 	r = dma_set_mask_and_coherent(adev->dev, DMA_BIT_MASK(44));
+#endif
 	if (r) {
 		printk(KERN_WARNING "amdgpu: No suitable DMA available.\n");
 		return r;
@@ -931,9 +935,10 @@ static int gmc_v12_0_gart_enable(struct amdgpu_device *adev)
 	adev->mmhub.funcs->set_fault_enable_default(adev, value);
 	gmc_v12_0_flush_gpu_tlb(adev, 0, AMDGPU_MMHUB0(0), 0);
 
-	dev_info(adev->dev, "PCIE GART of %uM enabled (table at 0x%016llX).\n",
-		 (unsigned)(adev->gmc.gart_size >> 20),
-		 (unsigned long long)amdgpu_bo_gpu_offset(adev->gart.bo));
+	dev_info(adev->dev,
+	    "PCIE GART of %uM enabled (table at 0x%016"PRIX64").\n",
+	    (unsigned)(adev->gmc.gart_size >> 20),
+	    amdgpu_bo_gpu_offset(adev->gart.bo));
 
 	return 0;
 }

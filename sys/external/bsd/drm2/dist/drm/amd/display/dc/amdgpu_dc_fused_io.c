@@ -10,7 +10,7 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "dc_fused_io.h"
 
 #include "dm_helpers.h"
-#include "gpio.h"
+#include "inc/hw/gpio.h"
 
 static bool op_i2c_convert(
 		union dmub_rb_cmd *cmd,

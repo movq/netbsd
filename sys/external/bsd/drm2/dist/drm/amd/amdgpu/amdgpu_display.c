@@ -53,6 +53,8 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_display.c,v 1.8 2021/12/18 23:44:58 riastradh
 #include <drm/drm_modeset_helper.h>
 #include <drm/drm_vblank.h>
 
+#include <linux/nbsd-namespace.h>
+
 /**
  * amdgpu_display_hotplug_work_func - work handler for display hotplug event
  *
@@ -962,7 +964,7 @@ static int check_tiling_flags_gfx6(struct amdgpu_framebuffer *afb)
 		return 0;
 	default:
 		drm_dbg_kms(afb->base.dev,
-			    "Micro tile mode %llu not supported for scanout\n",
+			    "Micro tile mode %"PRIu64" not supported for scanout\n",
 			    micro_tile_mode);
 		return -EINVAL;
 	}
@@ -1052,7 +1054,7 @@ static int amdgpu_display_verify_plane(struct amdgpu_framebuffer *rfb, int plane
 
 	if (rfb->base.obj[0]->size < size) {
 		drm_dbg_kms(rfb->base.dev,
-			    "BO size 0x%zx is less than 0x%llx required for plane %d\n",
+			    "BO size 0x%zx is less than 0x%"PRIx64" required for plane %d\n",
 			    rfb->base.obj[0]->size, size, plane);
 		return -EINVAL;
 	}
@@ -1213,7 +1215,7 @@ static int amdgpu_display_gem_fb_verify_and_init(struct drm_device *dev,
 	if (!drm_any_plane_has_format(dev, mode_cmd->pixel_format,
 				      mode_cmd->modifier[0])) {
 		drm_dbg_kms(dev,
-			    "unsupported pixel format %p4cc / modifier 0x%llx\n",
+			    "unsupported pixel format %p4cc / modifier 0x%"PRIx64"\n",
 			    &mode_cmd->pixel_format, mode_cmd->modifier[0]);
 
 		ret = -EINVAL;
@@ -1282,7 +1284,7 @@ static int amdgpu_display_framebuffer_init(struct drm_device *dev,
 			ret = convert_tiling_flags_to_modifier(rfb);
 
 		if (ret) {
-			drm_dbg_kms(dev, "Failed to convert tiling flags 0x%llX to a modifier",
+			drm_dbg_kms(dev, "Failed to convert tiling flags 0x%"PRIX64" to a modifier",
 				    rfb->tiling_flags);
 			return ret;
 		}
@@ -1693,11 +1695,19 @@ amdgpu_display_robj_is_fb(struct amdgpu_device *adev, struct amdgpu_bo *robj)
 	struct drm_device *dev = adev_to_drm(adev);
 	struct drm_fb_helper *fb_helper = dev->fb_helper;
 
+#ifdef __NetBSD__
+	if (!fb_helper || !fb_helper->fb)
+		return false;
+
+	if (gem_to_amdgpu_bo(fb_helper->fb->obj[0]) != robj)
+		return false;
+#else
 	if (!fb_helper || !fb_helper->buffer)
 		return false;
 
 	if (gem_to_amdgpu_bo(fb_helper->buffer->gem) != robj)
 		return false;
+#endif
 
 	return true;
 }

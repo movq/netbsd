@@ -134,8 +134,8 @@ extern bool drm_prime_sg_importable(bus_dma_tag_t, struct sg_table *);
 #else
 int drm_prime_sg_to_page_array(struct sg_table *sgt, struct page **pages,
 			       int max_pages);
+#endif
 int drm_prime_sg_to_dma_addr_array(struct sg_table *sgt, dma_addr_t *addrs,
 				   int max_pages);
-#endif
 
 #endif /* __DRM_PRIME_H__ */

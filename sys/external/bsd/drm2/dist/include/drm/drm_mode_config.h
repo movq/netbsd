@@ -492,6 +492,7 @@ struct drm_mode_config {
 	 */
 	struct list_head plane_list;
 
+#ifdef CONFIG_DRM_PANIC
 	/**
 	 * @panic_lock:
 	 *
@@ -501,6 +502,7 @@ struct drm_mode_config {
 	 * drm_panic_lock() and drm_panic_unlock().
 	 */
 	struct raw_spinlock panic_lock;
+#endif
 
 	/**
 	 * @num_crtc:

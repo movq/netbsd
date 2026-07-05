@@ -82,7 +82,6 @@ static DEVICE_ATTR(mem_info_gtt_total, S_IRUGO,
 	           amdgpu_mem_info_gtt_total_show, NULL);
 static DEVICE_ATTR(mem_info_gtt_used, S_IRUGO,
 	           amdgpu_mem_info_gtt_used_show, NULL);
-#endif
 
 static struct attribute *amdgpu_gtt_mgr_attributes[] = {
 	&dev_attr_mem_info_gtt_total.attr,
@@ -93,6 +92,8 @@ static struct attribute *amdgpu_gtt_mgr_attributes[] = {
 const struct attribute_group amdgpu_gtt_mgr_attr_group = {
 	.attrs = amdgpu_gtt_mgr_attributes
 };
+
+#endif	/* __NetBSD__ */
 
 /**
  * amdgpu_gtt_mgr_has_gart_addr - Check if mem has address space

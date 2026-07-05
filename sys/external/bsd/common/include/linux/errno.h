@@ -50,6 +50,8 @@
 #define	ENOTSUPP	ENOTSUP	/* XXX ???  */
 #define	EREMOTEIO	EIO	/* XXX Urk...  */
 #define	ECHRNG		ERANGE	/* XXX ??? */
+#define	EBADSLT		EINVAL	/* XXX No direct equivalent.  */
 #define	EHWPOISON	EIO
+#define	EPROBE_DEFER	EAGAIN
 
 #endif  /* _LINUX_ERRNO_H_ */

@@ -277,7 +277,7 @@ void amdgpu_reset_destroy_reset_domain(struct kref *ref)
 }
 
 struct amdgpu_reset_domain *amdgpu_reset_create_reset_domain(enum amdgpu_reset_domain_type type,
-							     char *wq_name)
+							     const char *wq_name)
 {
 	struct amdgpu_reset_domain *reset_domain;
 

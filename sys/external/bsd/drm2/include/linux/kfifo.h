@@ -88,15 +88,22 @@ _fini_kfifo(struct kfifo_meta *meta)
 	mutex_destroy(&meta->kfm_lock);
 }
 
-_KFIFO_PTR_TYPE(kfifo, void);
+_KFIFO_PTR_TYPE(kfifo, unsigned char);
 
 #define	kfifo_alloc(FIFO, SIZE, GFP)					      \
-	_kfifo_alloc(&(FIFO)->kf_meta, &(FIFO)->kf_buf, (SIZE), (GFP))
+	_kfifo_alloc(&(FIFO)->kf_meta, &(FIFO)->kf_buf, (SIZE),		      \
+	    sizeof(*(FIFO)->kf_buf), (GFP))
 
 static inline int
-_kfifo_alloc(struct kfifo_meta *meta, void *bufp, size_t nbytes, gfp_t gfp)
+_kfifo_alloc(struct kfifo_meta *meta, void *bufp, size_t size, size_t esize,
+    gfp_t gfp)
 {
+	size_t nbytes;
 	void *buf;
+
+	if (size < 2 || esize == 0 || size > (size_t)-1/esize)
+		return -EINVAL;
+	nbytes = size*esize;
 
 	buf = kmalloc(nbytes, gfp);
 	if (buf == NULL)
@@ -129,126 +136,180 @@ _kfifo_free(struct kfifo_meta *meta, void *bufp)
 }
 
 #define	kfifo_is_empty(FIFO)	(kfifo_len(FIFO) == 0)
-#define	kfifo_len(FIFO)		_kfifo_len(&(FIFO)->kf_meta)
+#define	kfifo_is_full(FIFO)	(kfifo_avail(FIFO) == 0)
+#define	kfifo_len(FIFO)							\
+	(_kfifo_len(&(FIFO)->kf_meta)/sizeof(*(FIFO)->kf_buf))
+#define	kfifo_size(FIFO)						\
+	((FIFO)->kf_meta.kfm_nbytes/sizeof(*(FIFO)->kf_buf))
+#define	kfifo_avail(FIFO)						\
+	(_kfifo_avail(&(FIFO)->kf_meta)/sizeof(*(FIFO)->kf_buf))
 
 static inline size_t
 _kfifo_len(struct kfifo_meta *meta)
 {
-	const size_t head = meta->kfm_head;
-	const size_t tail = meta->kfm_tail;
-	const size_t nbytes = meta->kfm_nbytes;
+	size_t len;
 
-	return (head <= tail ? tail - head : nbytes + tail - head);
+	mutex_spin_enter(&meta->kfm_lock);
+	len = meta->kfm_tail - meta->kfm_head;
+	mutex_spin_exit(&meta->kfm_lock);
+
+	return len;
+}
+
+static inline size_t
+_kfifo_avail(struct kfifo_meta *meta)
+{
+	size_t avail;
+
+	mutex_spin_enter(&meta->kfm_lock);
+	avail = meta->kfm_nbytes - (meta->kfm_tail - meta->kfm_head);
+	mutex_spin_exit(&meta->kfm_lock);
+
+	return avail;
 }
 
 #define	kfifo_out_peek(FIFO, PTR, SIZE)					      \
-	_kfifo_out_peek(&(FIFO)->kf_meta, (FIFO)->kf_buf, (PTR), (SIZE))
+	(_kfifo_out_peek(&(FIFO)->kf_meta, (FIFO)->kf_buf, (PTR),		      \
+	    (SIZE)*sizeof(*(FIFO)->kf_buf))/sizeof(*(FIFO)->kf_buf))
 
 static inline size_t
 _kfifo_out_peek(struct kfifo_meta *meta, void *buf, void *ptr, size_t size)
 {
 	const char *src = buf;
 	char *dst = ptr;
-	size_t copied = 0;
+	size_t first, head, used;
 
 	mutex_spin_enter(&meta->kfm_lock);
-	const size_t head = meta->kfm_head;
-	const size_t tail = meta->kfm_tail;
-	const size_t nbytes = meta->kfm_nbytes;
-	if (head <= tail) {
-		if (size <= tail - head) {
-			memcpy(dst, src + head, size);
-			copied = size;
-		}
-	} else {
-		if (size <= nbytes - head) {
-			memcpy(dst, src + head, size);
-			copied = size;
-		} else if (size <= nbytes + tail - head) {
-			memcpy(dst, src + head, nbytes - head);
-			memcpy(dst + nbytes - head, src,
-			    size - (nbytes - head));
-			copied = size;
-		}
+	used = meta->kfm_tail - meta->kfm_head;
+	if (size > used)
+		size = used;
+	if (size != 0) {
+		head = meta->kfm_head % meta->kfm_nbytes;
+		first = meta->kfm_nbytes - head;
+		if (first > size)
+			first = size;
+		memcpy(dst, src + head, first);
+		memcpy(dst + first, src, size - first);
 	}
 	mutex_spin_exit(&meta->kfm_lock);
 
-	return copied;
+	return size;
 }
 
 #define	kfifo_out(FIFO, PTR, SIZE)					      \
-	_kfifo_out(&(FIFO)->kf_meta, (FIFO)->kf_buf, (PTR), (SIZE))
+	(_kfifo_out(&(FIFO)->kf_meta, (FIFO)->kf_buf, (PTR),		      \
+	    (SIZE)*sizeof(*(FIFO)->kf_buf))/sizeof(*(FIFO)->kf_buf))
 
 static inline size_t
 _kfifo_out(struct kfifo_meta *meta, const void *buf, void *ptr, size_t size)
 {
 	const char *src = buf;
 	char *dst = ptr;
-	size_t copied = 0;
+	size_t first, head, used;
 
 	mutex_spin_enter(&meta->kfm_lock);
-	const size_t head = meta->kfm_head;
-	const size_t tail = meta->kfm_tail;
-	const size_t nbytes = meta->kfm_nbytes;
-	if (head <= tail) {
-		if (size <= tail - head) {
-			memcpy(dst, src + head, size);
-			meta->kfm_head = head + size;
-			copied = size;
-		}
-	} else {
-		if (size <= nbytes - head) {
-			memcpy(dst, src + head, size);
-			meta->kfm_head = head + size;
-			copied = size;
-		} else if (size <= nbytes + tail - head) {
-			memcpy(dst, src + head, nbytes - head);
-			memcpy(dst + nbytes - head, src,
-			    size - (nbytes - head));
-			meta->kfm_head = size - (nbytes - head);
-			copied = size;
-		}
+	used = meta->kfm_tail - meta->kfm_head;
+	if (size > used)
+		size = used;
+	if (size != 0) {
+		head = meta->kfm_head % meta->kfm_nbytes;
+		first = meta->kfm_nbytes - head;
+		if (first > size)
+			first = size;
+		memcpy(dst, src + head, first);
+		memcpy(dst + first, src, size - first);
+		meta->kfm_head += size;
 	}
 	mutex_spin_exit(&meta->kfm_lock);
 
-	return copied;
+	return size;
 }
 
 #define	kfifo_in(FIFO, PTR, SIZE)					      \
-	_kfifo_in(&(FIFO)->kf_meta, (FIFO)->kf_buf, (PTR), (SIZE))
+	(_kfifo_in(&(FIFO)->kf_meta, (FIFO)->kf_buf, (PTR),		      \
+	    (SIZE)*sizeof(*(FIFO)->kf_buf))/sizeof(*(FIFO)->kf_buf))
 
 static inline size_t
 _kfifo_in(struct kfifo_meta *meta, void *buf, const void *ptr, size_t size)
 {
 	const char *src = ptr;
 	char *dst = buf;
-	size_t copied = 0;
+	size_t avail, first, tail;
 
 	mutex_spin_enter(&meta->kfm_lock);
-	const size_t head = meta->kfm_head;
-	const size_t tail = meta->kfm_tail;
-	const size_t nbytes = meta->kfm_nbytes;
-	if (tail <= head) {
-		if (size <= head - tail) {
-			memcpy(dst + tail, src, size);
-			meta->kfm_tail = tail + size;
-			copied = size;
-		}
-	} else {
-		if (size <= nbytes - tail) {
-			memcpy(dst + tail, src, size);
-			meta->kfm_tail = tail + size;
-		} else if (size <= nbytes + tail - head) {
-			memcpy(dst + tail, src, nbytes - tail);
-			memcpy(dst, src + nbytes - tail,
-			    size - (nbytes - tail));
-			meta->kfm_tail = size - (nbytes - tail);
-			copied = size;
-		}
+	avail = meta->kfm_nbytes - (meta->kfm_tail - meta->kfm_head);
+	if (size > avail)
+		size = avail;
+	if (size != 0) {
+		tail = meta->kfm_tail % meta->kfm_nbytes;
+		first = meta->kfm_nbytes - tail;
+		if (first > size)
+			first = size;
+		memcpy(dst + tail, src, first);
+		memcpy(dst, src + first, size - first);
+		meta->kfm_tail += size;
 	}
 	mutex_spin_exit(&meta->kfm_lock);
 
-	return copied;
+	return size;
+}
+
+#define	kfifo_put(FIFO, VALUE)						\
+({										\
+	__typeof__(*(FIFO)->kf_buf) _kfifo_value = (VALUE);		      \
+	kfifo_in((FIFO), &_kfifo_value, 1);				      \
+})
+
+#define	kfifo_get(FIFO, PTR)	kfifo_out((FIFO), (PTR), 1)
+#define	kfifo_peek(FIFO, PTR)	kfifo_out_peek((FIFO), (PTR), 1)
+
+#define	kfifo_skip_count(FIFO, SIZE) do				      \
+{									      \
+	(void)_kfifo_skip(&(FIFO)->kf_meta,				      \
+	    (SIZE)*sizeof(*(FIFO)->kf_buf));				      \
+} while (0)
+
+static inline size_t
+_kfifo_skip(struct kfifo_meta *meta, size_t size)
+{
+	size_t used;
+
+	mutex_spin_enter(&meta->kfm_lock);
+	used = meta->kfm_tail - meta->kfm_head;
+	if (size > used)
+		size = used;
+	meta->kfm_head += size;
+	mutex_spin_exit(&meta->kfm_lock);
+
+	return size;
+}
+
+#define	kfifo_out_linear_ptr(FIFO, PTR, SIZE)				      \
+({									      \
+	size_t _kfifo_offset;						      \
+	size_t _kfifo_size = _kfifo_out_linear(&(FIFO)->kf_meta,		      \
+	    &_kfifo_offset, (SIZE)*sizeof(*(FIFO)->kf_buf));		      \
+	*(PTR) = (__typeof__(*(PTR)))((char *)(FIFO)->kf_buf +		      \
+	    _kfifo_offset);						      \
+	_kfifo_size/sizeof(*(FIFO)->kf_buf);				      \
+})
+
+static inline size_t
+_kfifo_out_linear(struct kfifo_meta *meta, size_t *offsetp, size_t size)
+{
+	size_t head, used;
+
+	mutex_spin_enter(&meta->kfm_lock);
+	used = meta->kfm_tail - meta->kfm_head;
+	if (size > used)
+		size = used;
+	head = meta->kfm_head % meta->kfm_nbytes;
+	if (size > meta->kfm_nbytes - head)
+		size = meta->kfm_nbytes - head;
+	*offsetp = head;
+	mutex_spin_exit(&meta->kfm_lock);
+
+	return size;
 }
 
 #endif	/* _LINUX_KFIFO_H_ */

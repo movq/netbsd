@@ -643,7 +643,8 @@ static int gmc_v9_0_process_interrupt(struct amdgpu_device *adev,
 		amdgpu_vm_put_task_info(task_info);
 	}
 
-	dev_err(adev->dev, "  in page starting at address 0x%016llx from IH client 0x%x (%s)\n",
+	dev_err(adev->dev, "  in page starting at address 0x%016"PRIx64
+	    " from IH client 0x%x (%s)\n",
 		addr, entry->client_id,
 		soc15_ih_clientid_name[entry->client_id]);
 
@@ -1338,8 +1339,9 @@ static void gmc_v9_0_override_vm_pte_flags(struct amdgpu_device *adev,
 			*flags = AMDGPU_PTE_MTYPE_VG10(*flags, MTYPE_CC);
 		}
 
-		dev_dbg_ratelimited(adev->dev, "flags updated from %llx to %llx\n",
-				    old_flags, *flags);
+		dev_dbg_ratelimited(adev->dev,
+		    "flags updated from %"PRIx64" to %"PRIx64"\n",
+		    old_flags, *flags);
 	}
 }
 
@@ -2015,7 +2017,8 @@ static int gmc_v9_0_sw_init(struct amdgpu_ip_block *ip_block)
 				48 :
 				44;
 #ifdef __NetBSD__
-	r = drm_limit_dma_space(adev->ddev, 0, DMA_BIT_MASK(dma_addr_bits));
+	r = drm_limit_dma_space(adev_to_drm(adev), 0,
+	    DMA_BIT_MASK(dma_addr_bits));
 #else
 	r = dma_set_mask_and_coherent(adev->dev, DMA_BIT_MASK(dma_addr_bits));
 #endif
@@ -2181,10 +2184,10 @@ static int gmc_v9_0_gart_enable(struct amdgpu_device *adev)
 	DRM_INFO("PCIE GART of %uM enabled.\n",
 		 (unsigned int)(adev->gmc.gart_size >> 20));
 	if (adev->gmc.pdb0_bo)
-		DRM_INFO("PDB0 located at 0x%016llX\n",
-				(unsigned long long)amdgpu_bo_gpu_offset(adev->gmc.pdb0_bo));
-	DRM_INFO("PTB located at 0x%016llX\n",
-			(unsigned long long)amdgpu_bo_gpu_offset(adev->gart.bo));
+		DRM_INFO("PDB0 located at 0x%016"PRIX64"\n",
+		    amdgpu_bo_gpu_offset(adev->gmc.pdb0_bo));
+	DRM_INFO("PTB located at 0x%016"PRIX64"\n",
+	    amdgpu_bo_gpu_offset(adev->gart.bo));
 
 	return 0;
 }

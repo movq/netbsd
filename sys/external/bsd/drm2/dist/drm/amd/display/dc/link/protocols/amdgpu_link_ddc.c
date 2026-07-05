@@ -468,7 +468,7 @@ bool link_configure_fixed_vs_pe_retimer(struct ddc_service *ddc, const uint8_t *
 		.write = true,
 		.address = link_get_fixed_vs_pe_retimer_write_address(ddc->link),
 		.length = length,
-		.data = (uint8_t *) data,
+		.data = __UNCONST(data),
 		.reply = NULL,
 		.mot = I2C_MOT_UNDEF,
 		.write_status_update = false,

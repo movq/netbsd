@@ -12,6 +12,7 @@ __KERNEL_RCSID(0, "$NetBSD: drm_self_refresh_helper.c,v 1.4 2021/12/19 10:39:20 
 
 #include <linux/average.h>
 #include <linux/bitops.h>
+#include <linux/err.h>
 #include <linux/export.h>
 #include <linux/slab.h>
 #include <linux/workqueue.h>

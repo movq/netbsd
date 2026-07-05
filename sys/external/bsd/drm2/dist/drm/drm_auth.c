@@ -237,9 +237,11 @@ static int drm_new_set_master(struct drm_device *dev, struct drm_file *fpriv)
 static int
 drm_master_check_perm(struct drm_device *dev, struct drm_file *file_priv)
 {
+#ifndef __NetBSD__
 	if (file_priv->was_master &&
 	    rcu_access_pointer(file_priv->pid) == task_tgid(current))
 		return 0;
+#endif
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -EACCES;

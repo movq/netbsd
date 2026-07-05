@@ -40,6 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: drm_modes.c,v 1.11 2021/12/19 01:13:59 riastradh Exp
 #include <linux/fb.h> /* for KHZ2PICOS() */
 #include <linux/list.h>
 #include <linux/list_sort.h>
+#include <linux/string.h>
 #ifdef CONFIG_OF
 #include <linux/of.h>
 #endif
@@ -1862,8 +1863,10 @@ EXPORT_SYMBOL(drm_mode_prune_invalid);
 static int drm_mode_compare(void *priv, const struct list_head *lh_a,
 			    const struct list_head *lh_b)
 {
-	struct drm_display_mode *a = list_entry(lh_a, struct drm_display_mode, head);
-	struct drm_display_mode *b = list_entry(lh_b, struct drm_display_mode, head);
+	const struct drm_display_mode *a =
+	    const_container_of(lh_a, struct drm_display_mode, head);
+	const struct drm_display_mode *b =
+	    const_container_of(lh_b, struct drm_display_mode, head);
 	int diff;
 
 	diff = ((b->type & DRM_MODE_TYPE_PREFERRED) != 0) -

@@ -850,14 +850,17 @@ drm_atomic_helper_check_wb_connector_state(struct drm_connector *connector,
 	struct drm_connector_state *conn_state =
 		drm_atomic_get_new_connector_state(state, connector);
 	struct drm_writeback_job *wb_job = conn_state->writeback_job;
+#ifndef __NetBSD__
 	struct drm_property_blob *pixel_format_blob;
 	struct drm_framebuffer *fb;
 	size_t i, nformats;
 	u32 *formats;
+#endif
 
 	if (!wb_job || !wb_job->fb)
 		return 0;
 
+#ifndef __NetBSD__
 	pixel_format_blob = wb_job->connector->pixel_formats_blob_ptr;
 	nformats = pixel_format_blob->length / sizeof(u32);
 	formats = pixel_format_blob->data;
@@ -870,6 +873,8 @@ drm_atomic_helper_check_wb_connector_state(struct drm_connector *connector,
 	drm_dbg_kms(connector->dev, "Invalid pixel format %p4cc\n", &fb->format->format);
 
 	return -EINVAL;
+#endif
+	return -ENOSYS;
 }
 EXPORT_SYMBOL(drm_atomic_helper_check_wb_connector_state);
 
@@ -1922,7 +1927,7 @@ drm_atomic_helper_wait_for_vblanks(struct drm_device *dev,
 			ret = 100;
 			for (ret = 100; !done && ret; DELAY(1000), ret--) {
 				spin_lock(&dev->event_lock);
-				if (old_state->crtcs[i].last_vblank_count !=
+				if (state->crtcs[i].last_vblank_count !=
 				    drm_crtc_vblank_count(crtc)) {
 					done = true;
 				}
@@ -1933,7 +1938,7 @@ drm_atomic_helper_wait_for_vblanks(struct drm_device *dev,
 			DRM_SPIN_TIMED_WAIT_UNTIL(ret, &dev->vblank[i].queue,
 			    &dev->event_lock,
 			    msecs_to_jiffies(100),
-			    (old_state->crtcs[i].last_vblank_count !=
+			    (state->crtcs[i].last_vblank_count !=
 				drm_crtc_vblank_count(crtc)));
 			spin_unlock(&dev->event_lock);
 		}

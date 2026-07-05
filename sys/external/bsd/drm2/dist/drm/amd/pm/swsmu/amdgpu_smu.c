@@ -53,6 +53,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "smu_v14_0_2_ppt.h"
 #include "amd_pcie.h"
 
+#include <linux/nbsd-namespace.h>
+
 /*
  * DO NOT use these for err/warn/info/debug messages.
  * Use dev_err, dev_warn, dev_info and dev_dbg instead.
@@ -641,7 +643,8 @@ static int smu_sys_set_pp_table(void *handle,
 {
 	struct smu_context *smu = handle;
 	struct smu_table_context *smu_table = &smu->smu_table;
-	ATOM_COMMON_TABLE_HEADER *header = (ATOM_COMMON_TABLE_HEADER *)buf;
+	const ATOM_COMMON_TABLE_HEADER *header =
+	    (const ATOM_COMMON_TABLE_HEADER *)buf;
 	int ret = 0;
 
 	if (!smu->pm_enabled || !smu->adev->pm.dpm_enabled)
@@ -829,7 +832,7 @@ static int smu_set_default_dpm_table(struct smu_context *smu)
 	struct amdgpu_device *adev = smu->adev;
 	struct smu_power_context *smu_power = &smu->smu_power;
 	struct smu_power_gate *power_gate = &smu_power->power_gate;
-	int vcn_gate[AMDGPU_MAX_VCN_INSTANCES], jpeg_gate, i;
+	int vcn_gate[AMDGPU_MAX_VCN_INSTANCES], jpeg_gate = 0, i;
 	int ret = 0;
 
 	if (!smu->ppt_funcs->set_default_dpm_table)

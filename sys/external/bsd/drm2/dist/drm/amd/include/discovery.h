@@ -26,6 +26,8 @@
 #ifndef _DISCOVERY_H_
 #define _DISCOVERY_H_
 
+#include <linux/stddef.h>
+
 #define PSP_HEADER_SIZE                 256
 #define BINARY_SIGNATURE                0x28211407
 #define DISCOVERY_TABLE_SIGNATURE       0x53445049

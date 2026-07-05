@@ -679,16 +679,17 @@ static bool wait_for_entering_dp_alt_mode(struct dc_link *link)
 				dm_get_elapse_time_in_ns(link->ctx,
 							 finish_timestamp,
 							 enter_timestamp);
-			DC_LOG_WARNING("Alt mode entered finished after %llu ms\n",
-				       div_u64(time_taken_in_ns, 1000000));
+			DC_LOG_WARNING("Alt mode entered finished after %"PRIu64
+			    " ms\n",
+			    (uint64_t)div_u64(time_taken_in_ns, 1000000));
 			return true;
 		}
 	}
 	finish_timestamp = dm_get_timestamp(link->ctx);
 	time_taken_in_ns = dm_get_elapse_time_in_ns(link->ctx, finish_timestamp,
 						    enter_timestamp);
-	DC_LOG_WARNING("Alt mode has timed out after %llu ms\n",
-			div_u64(time_taken_in_ns, 1000000));
+	DC_LOG_WARNING("Alt mode has timed out after %"PRIu64" ms\n",
+	    (uint64_t)div_u64(time_taken_in_ns, 1000000));
 	return false;
 }
 

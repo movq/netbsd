@@ -142,8 +142,12 @@ void amdgpu_preempt_mgr_fini(struct amdgpu_device *adev)
 	if (ret)
 		return;
 
+#ifdef __NetBSD__
+	device_remove_file(adev->dev, &dev_attr_mem_info_preempt_used);
+#else
 	if (adev->dev->kobj.sd)
 		device_remove_file(adev->dev, &dev_attr_mem_info_preempt_used);
+#endif
 
 	ttm_resource_manager_cleanup(man);
 	ttm_set_driver_manager(&adev->mman.bdev, AMDGPU_PL_PREEMPT, NULL);

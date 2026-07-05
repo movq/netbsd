@@ -9,6 +9,9 @@
 #define _DRM_SUBALLOC_H_
 
 #include <drm/drm_mm.h>
+#ifdef __NetBSD__
+#include <drm/drm_wait_netbsd.h>
+#endif
 
 #include <linux/dma-fence.h>
 #include <linux/types.h>
@@ -24,7 +27,12 @@
  * @align: Default alignment for the managed range.
  */
 struct drm_suballoc_manager {
+#ifdef __NetBSD__
+	drm_waitqueue_t wq;
+	spinlock_t lock;
+#else
 	wait_queue_head_t wq;
+#endif
 	struct list_head *hole;
 	struct list_head olist;
 	struct list_head flist[DRM_SUBALLOC_MAX_QUEUES];

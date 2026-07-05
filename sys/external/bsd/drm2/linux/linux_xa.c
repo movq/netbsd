@@ -83,7 +83,7 @@ static const rb_tree_ops_t xa_rb_ops = {
 const struct xa_limit xa_limit_32b = { .min = 0, .max = UINT32_MAX };
 
 void
-xa_init_flags(struct xarray *xa, gfp_t gfp)
+linux_xa_init_flags(struct xarray *xa, gfp_t gfp)
 {
 
 	mutex_init(&xa->xa_lock, MUTEX_DEFAULT, IPL_VM);
@@ -92,7 +92,7 @@ xa_init_flags(struct xarray *xa, gfp_t gfp)
 }
 
 void
-xa_destroy(struct xarray *xa)
+linux_xa_destroy(struct xarray *xa)
 {
 	struct node *n;
 
@@ -108,25 +108,21 @@ xa_destroy(struct xarray *xa)
 }
 
 void *
-xa_load(struct xarray *xa, unsigned long key)
+linux_xa_load(struct xarray *xa, unsigned long key)
 {
 	const uint64_t key64 = key;
 	struct node *n;
 
-	/* XXX pserialize */
-	mutex_enter(&xa->xa_lock);
 	n = rb_tree_find_node(&xa->xa_tree, &key64);
-	mutex_exit(&xa->xa_lock);
 
 	return n ? n->n_datum : NULL;
 }
 
 void *
-xa_store(struct xarray *xa, unsigned long key, void *datum, gfp_t gfp)
+linux_xa_store(struct xarray *xa, unsigned long key, void *datum, gfp_t gfp)
 {
 	struct node *n, *collision, *recollision;
 
-	KASSERT(datum != NULL);
 	KASSERT(((uintptr_t)datum & 0x3) == 0);
 
 	n = kmem_zalloc(sizeof(*n), gfp & __GFP_WAIT ? KM_SLEEP : KM_NOSLEEP);
@@ -135,14 +131,12 @@ xa_store(struct xarray *xa, unsigned long key, void *datum, gfp_t gfp)
 	n->n_key = key;
 	n->n_datum = datum;
 
-	mutex_enter(&xa->xa_lock);
 	collision = rb_tree_insert_node(&xa->xa_tree, n);
 	if (collision != n) {
-		rb_tree_remove_node(&xa->xa_tree, n);
+		rb_tree_remove_node(&xa->xa_tree, collision);
 		recollision = rb_tree_insert_node(&xa->xa_tree, n);
 		KASSERT(recollision == n);
 	}
-	mutex_exit(&xa->xa_lock);
 
 	if (collision != n) {
 		datum = collision->n_datum;
@@ -152,14 +146,14 @@ xa_store(struct xarray *xa, unsigned long key, void *datum, gfp_t gfp)
 }
 
 int
-xa_alloc(struct xarray *xa, uint32_t *idp, void *datum, struct xa_limit limit,
+linux_xa_alloc(struct xarray *xa, uint32_t *idp, void *datum, struct xa_limit limit,
     gfp_t gfp)
 {
 	uint64_t key64 = limit.min;
 	struct node *n, *n1, *collision __diagused;
 	int error;
 
-	KASSERTMSG(limit.min < limit.max, "min=%"PRIu32" max=%"PRIu32,
+	KASSERTMSG(limit.min <= limit.max, "min=%"PRIu32" max=%"PRIu32,
 	    limit.min, limit.max);
 
 	n = kmem_zalloc(sizeof(*n), gfp & __GFP_WAIT ? KM_SLEEP : KM_NOSLEEP);
@@ -167,7 +161,6 @@ xa_alloc(struct xarray *xa, uint32_t *idp, void *datum, struct xa_limit limit,
 		return -ENOMEM;
 	n->n_datum = datum;
 
-	mutex_enter(&xa->xa_lock);
 	while ((n1 = rb_tree_find_node_geq(&xa->xa_tree, &key64)) != NULL &&
 	    n1->n_key == key64) {
 		if (key64 == limit.max) {
@@ -183,16 +176,40 @@ xa_alloc(struct xarray *xa, uint32_t *idp, void *datum, struct xa_limit limit,
 	collision = rb_tree_insert_node(&xa->xa_tree, n);
 	KASSERT(collision == n);
 	error = 0;
-out:	mutex_exit(&xa->xa_lock);
-
-	if (error)
+out:
+	if (error) {
+		kmem_free(n, sizeof(*n));
 		return error;
+	}
 	*idp = key64;
 	return 0;
 }
 
+int
+linux_xa_alloc_cyclic(struct xarray *xa, uint32_t *idp, void *datum,
+    struct xa_limit limit, uint32_t *nextp, gfp_t gfp)
+{
+	struct xa_limit first = limit;
+	int error;
+
+	if (*nextp <= limit.max) {
+		if (first.min < *nextp)
+			first.min = *nextp;
+		error = linux_xa_alloc(xa, idp, datum, first, gfp);
+		if (error != -EBUSY)
+			goto out;
+	}
+
+	error = linux_xa_alloc(xa, idp, datum, limit, gfp);
+
+out:
+	if (error == 0)
+		*nextp = *idp + 1;
+	return error;
+}
+
 void *
-xa_find(struct xarray *xa, unsigned long *startp, unsigned long max,
+linux_xa_find(struct xarray *xa, unsigned long *startp, unsigned long max,
     unsigned tagmask)
 {
 	uint64_t key64 = *startp;
@@ -200,9 +217,7 @@ xa_find(struct xarray *xa, unsigned long *startp, unsigned long max,
 
 	KASSERT(tagmask == -1);	/* not yet supported */
 
-	mutex_enter(&xa->xa_lock);
 	n = rb_tree_find_node_geq(&xa->xa_tree, &key64);
-	mutex_exit(&xa->xa_lock);
 
 	if (n == NULL || n->n_key > max)
 		return NULL;
@@ -212,7 +227,7 @@ xa_find(struct xarray *xa, unsigned long *startp, unsigned long max,
 }
 
 void *
-xa_find_after(struct xarray *xa, unsigned long *startp, unsigned long max,
+linux_xa_find_after(struct xarray *xa, unsigned long *startp, unsigned long max,
     unsigned tagmask)
 {
 	unsigned long start = *startp + 1;
@@ -220,24 +235,22 @@ xa_find_after(struct xarray *xa, unsigned long *startp, unsigned long max,
 
 	if (start == max)
 		return NULL;
-	found = xa_find(xa, &start, max, tagmask);
+	found = linux_xa_find(xa, &start, max, tagmask);
 	if (found)
 		*startp = start;
 	return found;
 }
 
 void *
-xa_erase(struct xarray *xa, unsigned long key)
+linux_xa_erase(struct xarray *xa, unsigned long key)
 {
 	uint64_t key64 = key;
 	struct node *n;
 	void *datum = NULL;
 
-	mutex_enter(&xa->xa_lock);
 	n = rb_tree_find_node(&xa->xa_tree, &key64);
 	if (n)
 		rb_tree_remove_node(&xa->xa_tree, n);
-	mutex_exit(&xa->xa_lock);
 
 	if (n) {
 		datum = n->n_datum;

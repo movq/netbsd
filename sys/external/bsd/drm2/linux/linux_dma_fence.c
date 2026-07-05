@@ -121,6 +121,18 @@ static const struct dma_fence_ops dma_fence_stub_ops = {
 	.release = dma_fence_stub_release,
 };
 
+static const char *
+dma_fence_private_stub_name(struct dma_fence *f)
+{
+
+	return "stub";
+}
+
+static const struct dma_fence_ops dma_fence_private_stub_ops = {
+	.get_driver_name = dma_fence_private_stub_name,
+	.get_timeline_name = dma_fence_private_stub_name,
+};
+
 /*
  * linux_dma_fences_init(), linux_dma_fences_fini()
  *
@@ -190,6 +202,15 @@ dma_fence_init(struct dma_fence *fence, const struct dma_fence_ops *ops,
 #endif
 
 	SDT_PROBE1(sdt, drm, fence, init,  fence);
+}
+
+void
+dma_fence_init64(struct dma_fence *fence, const struct dma_fence_ops *ops,
+    spinlock_t *lock, uint64_t context, uint64_t seqno)
+{
+
+	dma_fence_init(fence, ops, lock, context, seqno);
+	set_bit(DMA_FENCE_FLAG_SEQNO64_BIT, &fence->flags);
 }
 
 /*
@@ -307,7 +328,7 @@ dma_fence_context_alloc(unsigned n)
 }
 
 /*
- * __dma_fence_is_later(a, b, ops)
+ * __dma_fence_is_later(fence, a, b)
  *
  *	True if sequence number a is later than sequence number b,
  *	according to the given fence ops.
@@ -320,13 +341,13 @@ dma_fence_context_alloc(unsigned n)
  *	  than INT_MAX.
  */
 bool
-__dma_fence_is_later(uint64_t a, uint64_t b, const struct dma_fence_ops *ops)
+__dma_fence_is_later(struct dma_fence *fence, uint64_t a, uint64_t b)
 {
 
-	if (ops->use_64bit_seqno)
+	if (test_bit(DMA_FENCE_FLAG_SEQNO64_BIT, &fence->flags))
 		return a > b;
 	else
-		return (unsigned)a - (unsigned)b < INT_MAX;
+		return (int32_t)((uint32_t)a - (uint32_t)b) > 0;
 }
 
 /*
@@ -353,7 +374,7 @@ dma_fence_is_later(struct dma_fence *a, struct dma_fence *b)
 	    ": %"PRIu64" @ %p =/= %"PRIu64" @ %p",
 	    a->context, a, b->context, b);
 
-	return __dma_fence_is_later(a->seqno, b->seqno, a->ops);
+	return __dma_fence_is_later(a, a->seqno, b->seqno);
 }
 
 /*
@@ -366,6 +387,31 @@ dma_fence_get_stub(void)
 {
 
 	return dma_fence_get(&dma_fence_stub.fence);
+}
+
+/*
+ * dma_fence_allocate_private_stub(timestamp)
+ *
+ *	Return a newly allocated, already signalled fence with the
+ *	specified timestamp.
+ */
+struct dma_fence *
+dma_fence_allocate_private_stub(ktime_t timestamp)
+{
+	struct dma_fence *fence;
+	int error __diagused;
+
+	fence = kzalloc(sizeof(*fence), GFP_KERNEL);
+	if (fence == NULL)
+		return NULL;
+
+	dma_fence_init(fence, &dma_fence_private_stub_ops,
+	    &dma_fence_stub.lock, /*context*/0, /*seqno*/0);
+	set_bit(DMA_FENCE_FLAG_ENABLE_SIGNAL_BIT, &fence->flags);
+	error = dma_fence_signal_timestamp(fence, timestamp);
+	KASSERTMSG(error == 0, "error=%d", error);
+
+	return fence;
 }
 
 /*
@@ -647,6 +693,14 @@ dma_fence_is_signaled(struct dma_fence *fence)
 	return signaled;
 }
 
+void
+dma_fence_set_deadline(struct dma_fence *fence, ktime_t deadline)
+{
+
+	if (fence->ops->set_deadline != NULL && !dma_fence_is_signaled(fence))
+		(*fence->ops->set_deadline)(fence, deadline);
+}
+
 /*
  * dma_fence_is_signaled_locked(fence)
  *
@@ -755,13 +809,13 @@ dma_fence_signal(struct dma_fence *fence)
 }
 
 /*
- * dma_fence_signal_locked(fence)
+ * dma_fence_signal_timestamp_locked(fence, timestamp)
  *
- *	Signal the fence.  Like dma_fence_signal, but caller already
+ *	Signal the fence with the given timestamp.  Caller already
  *	holds the fence's lock.
  */
 int
-dma_fence_signal_locked(struct dma_fence *fence)
+dma_fence_signal_timestamp_locked(struct dma_fence *fence, ktime_t timestamp)
 {
 	struct dma_fence_cb *fcb, *next;
 
@@ -775,7 +829,7 @@ dma_fence_signal_locked(struct dma_fence *fence)
 	SDT_PROBE1(sdt, drm, fence, signal,  fence);
 
 	/* Set the timestamp.  */
-	fence->timestamp = ktime_get();
+	fence->timestamp = timestamp;
 	set_bit(DMA_FENCE_FLAG_TIMESTAMP_BIT, &fence->flags);
 
 	/* Wake waiters.  */
@@ -791,6 +845,38 @@ dma_fence_signal_locked(struct dma_fence *fence)
 
 	/* Success! */
 	return 0;
+}
+
+/*
+ * dma_fence_signal_locked(fence)
+ *
+ *	Signal the fence.  Like dma_fence_signal, but caller already
+ *	holds the fence's lock.
+ */
+int
+dma_fence_signal_locked(struct dma_fence *fence)
+{
+
+	return dma_fence_signal_timestamp_locked(fence, ktime_get());
+}
+
+/*
+ * dma_fence_signal_timestamp(fence, timestamp)
+ *
+ *	Signal the fence with the given timestamp.
+ */
+int
+dma_fence_signal_timestamp(struct dma_fence *fence, ktime_t timestamp)
+{
+	int ret;
+
+	KASSERT(dma_fence_referenced_p(fence));
+
+	spin_lock(fence->lock);
+	ret = dma_fence_signal_timestamp_locked(fence, timestamp);
+	spin_unlock(fence->lock);
+
+	return ret;
 }
 
 struct wait_any {

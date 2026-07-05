@@ -43,54 +43,18 @@ __KERNEL_RCSID(0, "$NetBSD: drm_module.c,v 1.32 2023/09/05 20:15:10 riastradh Ex
 #include <sys/systm.h>
 
 #include <linux/mutex.h>
+#include <linux/srcu.h>
+#include <linux/xarray.h>
 
-#include <drm/drm_agpsupport.h>
 #include <drm/drm_bridge.h>
+#include <drm/drm_buddy.h>
 #include <drm/drm_device.h>
-#include <drm/drm_encoder_slave.h>
 #include <drm/drm_panel.h>
 #include <drm/drm_print.h>
 #include <drm/drm_sysctl.h>
 
 #include "../dist/drm/drm_crtc_internal.h"
 #include "../dist/drm/drm_internal.h"
-
-/*
- * XXX This is stupid.
- *
- * 1. Builtin modules are broken: they don't get initialized before
- *    autoconf matches devices, but we need the initialization to be
- *    run in order to match and attach drmkms drivers.
- *
- * 2. The following dependencies are _not_ correct:
- *    - drmkms can't depend on agp because not all drmkms drivers run
- *      on platforms guaranteed to have pci, let alone agp
- *    - drmkms_pci can't depend on agp because not all _pci_ has agp
- *      (e.g., tegra)
- *    - radeon (e.g.) can't depend on agp because not all radeon
- *      devices are on platforms guaranteed to have agp
- *
- * 3. We need to register the agp hooks before we try to attach a
- *    device.
- *
- * 4. The only mechanism we have to force this is the
- *    mumblefrotz_guarantee_initialized kludge.
- *
- * 5. We don't know if we even _can_ call
- *    drmkms_agp_guarantee_initialized unless we know NAGP.
- *
- * 6. We don't know NAGP unless we include "agp.h".
- *
- * 7. We can't include "agp.h" if the platform has agp.
- *
- * 8. The way we determine whether we have agp is NAGP.
- *
- * 9. @!*#&^@&*@!&^#@
- */
-#if defined(__powerpc__) || defined(__i386__) || defined(__x86_64__)
-#include "agp.h"
-#include "drmkms_pci.h"
-#endif
 
 /*
  * XXX I2C stuff should be moved to a separate drmkms_i2c module.
@@ -100,6 +64,8 @@ MODULE(MODULE_CLASS_DRIVER, drmkms, "drmkms_linux,sysmon_power");
 struct mutex	drm_global_mutex;
 
 struct drm_sysctl_def drm_def = DRM_SYSCTL_INIT();
+
+extern struct srcu_struct drm_unplug_srcu;
 
 static int
 drm_init(void)
@@ -111,24 +77,17 @@ drm_init(void)
 	if (error)
 		return error;
 
+	error = -drm_buddy_module_init(); /* XXX errno Linux->NetBSD */
+	if (error)
+		return error;
+
 	extern bool drm_core_init_complete;
 	drm_core_init_complete = true;
-
-	drm_agp_hooks_init();
-#if NDRMKMS_PCI > 0 && NAGP > 0
-	extern int drmkms_agp_guarantee_initialized(void);
-	error = drmkms_agp_guarantee_initialized();
-	if (error) {
-		drm_agp_hooks_fini();
-		return error;
-	}
-#endif
 
 	if (ISSET(boothowto, AB_DEBUG))
 		__drm_debug = DRM_UT_DRIVER;
 
-	spin_lock_init(&drm_minor_lock);
-	idr_init(&drm_minors_idr);
+	xa_init_flags(&drm_minors_xa, XA_FLAGS_ALLOC);
 	_init_srcu_struct(&drm_unplug_srcu, "drmunplg");
 	linux_mutex_init(&drm_global_mutex);
 	linux_mutex_init(&drm_kernel_fb_helper_lock);
@@ -136,7 +95,6 @@ drm_init(void)
 	drm_panel_init_lock();
 	drm_bridge_init_lock();
 	drm_sysctl_init(&drm_def);
-	drm_i2c_encoders_init();
 
 	return 0;
 }
@@ -157,7 +115,6 @@ static void
 drm_fini(void)
 {
 
-	drm_i2c_encoders_fini();
 	drm_sysctl_fini(&drm_def);
 	drm_bridge_fini_lock();
 	drm_panel_fini_lock();
@@ -165,16 +122,8 @@ drm_fini(void)
 	linux_mutex_destroy(&drm_kernel_fb_helper_lock);
 	linux_mutex_destroy(&drm_global_mutex);
 	cleanup_srcu_struct(&drm_unplug_srcu);
-	idr_destroy(&drm_minors_idr);
-	spin_lock_destroy(&drm_minor_lock);
-	drm_agp_hooks_fini();
-}
-
-int
-drm_irq_by_busid(struct drm_device *dev, void *data, struct drm_file *file)
-{
-
-	return -ENODEV;
+	xa_destroy(&drm_minors_xa);
+	drm_buddy_module_exit();
 }
 
 static int

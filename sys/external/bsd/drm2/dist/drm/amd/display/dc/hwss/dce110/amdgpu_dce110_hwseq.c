@@ -805,19 +805,22 @@ void dce110_edp_power_control(
 	if (power_up !=
 		link->panel_cntl->funcs->is_panel_powered_on(link->panel_cntl)) {
 
-		unsigned long long current_ts = dm_get_timestamp(ctx);
-		unsigned long long time_since_edp_poweroff_ms =
+		uint64_t current_ts = dm_get_timestamp(ctx);
+		uint64_t time_since_edp_poweroff_ms =
 				div64_u64(dm_get_elapse_time_in_ns(
 						ctx,
 						current_ts,
 						ctx->dc->link_srv->dp_trace_get_edp_poweroff_timestamp(link)), 1000000);
-		unsigned long long time_since_edp_poweron_ms =
+		uint64_t time_since_edp_poweron_ms =
 				div64_u64(dm_get_elapse_time_in_ns(
 						ctx,
 						current_ts,
 						ctx->dc->link_srv->dp_trace_get_edp_poweron_timestamp(link)), 1000000);
 		DC_LOG_HW_RESUME_S3(
-				"%s: transition: power_up=%d current_ts=%llu edp_poweroff=%llu edp_poweron=%llu time_since_edp_poweroff_ms=%llu time_since_edp_poweron_ms=%llu",
+				"%s: transition: power_up=%d current_ts=%"PRIu64
+				" edp_poweroff=%"PRIu64" edp_poweron=%"PRIu64
+				" time_since_edp_poweroff_ms=%"PRIu64
+				" time_since_edp_poweron_ms=%"PRIu64,
 				__func__,
 				power_up,
 				current_ts,
@@ -829,7 +832,7 @@ void dce110_edp_power_control(
 		/* Send VBIOS command to prompt eDP panel power */
 		if (power_up) {
 			/* edp requires a min of 500ms from LCDVDD off to on */
-			unsigned long long remaining_min_edp_poweroff_time_ms = 500;
+			uint64_t remaining_min_edp_poweroff_time_ms = 500;
 
 			/* add time defined by a patch, if any (usually patch extra_t12_ms is 0) */
 			if (link->local_sink != NULL)
@@ -847,17 +850,17 @@ void dce110_edp_power_control(
 
 			if (remaining_min_edp_poweroff_time_ms) {
 				DC_LOG_HW_RESUME_S3(
-						"%s: remaining_min_edp_poweroff_time_ms=%llu: begin wait.\n",
+						"%s: remaining_min_edp_poweroff_time_ms=%"PRIu64": begin wait.\n",
 						__func__, remaining_min_edp_poweroff_time_ms);
 				msleep(remaining_min_edp_poweroff_time_ms);
 				DC_LOG_HW_RESUME_S3(
-						"%s: remaining_min_edp_poweroff_time_ms=%llu: end wait.\n",
+						"%s: remaining_min_edp_poweroff_time_ms=%"PRIu64": end wait.\n",
 						__func__, remaining_min_edp_poweroff_time_ms);
-				dm_output_to_console("%s: wait %lld ms to power on eDP.\n",
+				dm_output_to_console("%s: wait %"PRIu64" ms to power on eDP.\n",
 						__func__, remaining_min_edp_poweroff_time_ms);
 			} else {
 				DC_LOG_HW_RESUME_S3(
-						"%s: remaining_min_edp_poweroff_time_ms=%llu: no wait required.\n",
+						"%s: remaining_min_edp_poweroff_time_ms=%"PRIu64": no wait required.\n",
 						__func__, remaining_min_edp_poweroff_time_ms);
 			}
 		}
@@ -900,7 +903,8 @@ void dce110_edp_power_control(
 		ctx->dc->link_srv->dp_trace_set_edp_power_timestamp(link, power_up);
 
 		DC_LOG_HW_RESUME_S3(
-				"%s: updated values: edp_poweroff=%llu edp_poweron=%llu\n",
+				"%s: updated values: edp_poweroff=%"PRIu64
+				" edp_poweron=%"PRIu64"\n",
 				__func__,
 				ctx->dc->link_srv->dp_trace_get_edp_poweroff_timestamp(link),
 				ctx->dc->link_srv->dp_trace_get_edp_poweron_timestamp(link));

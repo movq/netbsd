@@ -42,12 +42,14 @@ struct xcp_device {
 	struct platform_device *pdev;
 };
 
+#ifndef __NetBSD__
 static const struct drm_driver amdgpu_xcp_driver = {
 	.driver_features = DRIVER_GEM | DRIVER_RENDER,
 	.name = "amdgpu_xcp_drv",
 	.major = 1,
 	.minor = 0,
 };
+#endif
 
 static int8_t pdev_num;
 static struct xcp_device *xcp_dev[MAX_XCP_PLATFORM_DEVICE];
@@ -55,6 +57,10 @@ static DEFINE_MUTEX(xcp_mutex);
 
 int amdgpu_xcp_drm_dev_alloc(struct drm_device **ddev)
 {
+#ifdef __NetBSD__
+	STUB();
+	return -ENOSYS;
+#else
 	struct platform_device *pdev;
 	struct xcp_device *pxcp_dev;
 	char dev_name[20];
@@ -102,11 +108,13 @@ out_unregister:
 	platform_device_unregister(pdev);
 
 	return ret;
+#endif
 }
 EXPORT_SYMBOL(amdgpu_xcp_drm_dev_alloc);
 
 static void free_xcp_dev(int8_t index)
 {
+#ifndef __NetBSD__
 	if ((index < MAX_XCP_PLATFORM_DEVICE) && (xcp_dev[index])) {
 		struct platform_device *pdev = xcp_dev[index]->pdev;
 
@@ -116,6 +124,7 @@ static void free_xcp_dev(int8_t index)
 		xcp_dev[index] = NULL;
 		pdev_num--;
 	}
+#endif
 }
 
 void amdgpu_xcp_drm_dev_free(struct drm_device *ddev)
@@ -145,12 +154,14 @@ void amdgpu_xcp_drv_release(void)
 }
 EXPORT_SYMBOL(amdgpu_xcp_drv_release);
 
+#ifndef __NetBSD__
 static void __exit amdgpu_xcp_drv_exit(void)
 {
 	amdgpu_xcp_drv_release();
 }
 
 module_exit(amdgpu_xcp_drv_exit);
+#endif
 
 MODULE_AUTHOR("AMD linux driver team");
 MODULE_DESCRIPTION("AMD XCP PLATFORM DEVICES");

@@ -33,6 +33,8 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_ucode.c,v 1.8 2021/12/19 12:21:29 riastradh E
 #include "amdgpu.h"
 #include "amdgpu_ucode.h"
 
+#include <linux/nbsd-namespace.h>
+
 #define AMDGPU_UCODE_NAME_MAX		(128)
 
 static const struct kicker_device kicker_device_list[] = {
@@ -129,7 +131,7 @@ void amdgpu_ucode_print_gfx_hdr(const struct common_firmware_header *hdr)
 		DRM_DEBUG("jt_size: %u\n", le32_to_cpu(gfx_hdr->jt_size));
 	} else if (version_major == 2) {
 		const struct gfx_firmware_header_v2_0 *gfx_hdr =
-			container_of(hdr, struct gfx_firmware_header_v2_0, header);
+			const_container_of(hdr, struct gfx_firmware_header_v2_0, header);
 
 		DRM_DEBUG("ucode_feature_version: %u\n",
 			  le32_to_cpu(gfx_hdr->ucode_feature_version));
@@ -326,7 +328,7 @@ void amdgpu_ucode_print_sdma_hdr(const struct common_firmware_header *hdr)
 		}
 	} else if (version_major == 2) {
 		const struct sdma_firmware_header_v2_0 *sdma_hdr =
-			container_of(hdr, struct sdma_firmware_header_v2_0, header);
+			const_container_of(hdr, struct sdma_firmware_header_v2_0, header);
 
 		DRM_DEBUG("ucode_feature_version: %u\n",
 			  le32_to_cpu(sdma_hdr->ucode_feature_version));
@@ -337,7 +339,7 @@ void amdgpu_ucode_print_sdma_hdr(const struct common_firmware_header *hdr)
 		DRM_DEBUG("ctl_jt_size: %u\n", le32_to_cpu(sdma_hdr->ctl_jt_size));
 	} else if (version_major == 3) {
 		const struct sdma_firmware_header_v3_0 *sdma_hdr =
-			container_of(hdr, struct sdma_firmware_header_v3_0, header);
+			const_container_of(hdr, struct sdma_firmware_header_v3_0, header);
 
 		DRM_DEBUG("ucode_reversion: %u\n",
 			  le32_to_cpu(sdma_hdr->ucode_feature_version));
@@ -395,9 +397,9 @@ void amdgpu_ucode_print_psp_hdr(const struct common_firmware_header *hdr)
 		}
 		if (version_minor == 3) {
 			const struct psp_firmware_header_v1_1 *psp_hdr_v1_1 =
-				container_of(psp_hdr, struct psp_firmware_header_v1_1, v1_0);
+				const_container_of(psp_hdr, struct psp_firmware_header_v1_1, v1_0);
 			const struct psp_firmware_header_v1_3 *psp_hdr_v1_3 =
-				container_of(psp_hdr_v1_1, struct psp_firmware_header_v1_3, v1_1);
+				const_container_of(psp_hdr_v1_1, struct psp_firmware_header_v1_3, v1_1);
 			DRM_DEBUG("toc_header_version: %u\n",
 				  le32_to_cpu(psp_hdr_v1_3->v1_1.toc.fw_version));
 			DRM_DEBUG("toc_offset_bytes: %u\n",
@@ -419,7 +421,7 @@ void amdgpu_ucode_print_psp_hdr(const struct common_firmware_header *hdr)
 		}
 	} else if (version_major == 2) {
 		const struct psp_firmware_header_v2_0 *psp_hdr_v2_0 =
-			 container_of(hdr, struct psp_firmware_header_v2_0, header);
+			 const_container_of(hdr, struct psp_firmware_header_v2_0, header);
 		for (fw_index = 0; fw_index < le32_to_cpu(psp_hdr_v2_0->psp_fw_bin_count); fw_index++) {
 			desc = &(psp_hdr_v2_0->psp_fw_bin[fw_index]);
 			switch (desc->fw_type) {
@@ -852,7 +854,7 @@ static int amdgpu_ucode_init_single_fw(struct amdgpu_device *adev,
 	const struct imu_firmware_header_v1_0 *imu_hdr = NULL;
 	const struct vpe_firmware_header_v1_0 *vpe_hdr = NULL;
 	const struct umsch_mm_firmware_header_v1_0 *umsch_mm_hdr = NULL;
-	u8 *ucode_addr;
+	const u8 *ucode_addr;
 
 	if (!ucode->fw)
 		return 0;
@@ -1426,7 +1428,7 @@ bool amdgpu_is_kicker_fw(struct amdgpu_device *adev)
 void amdgpu_ucode_ip_version_decode(struct amdgpu_device *adev, int block_type, char *ucode_prefix, int len)
 {
 	int maj, min, rev;
-	char *ip_name;
+	const char *ip_name;
 	const char *legacy;
 	uint32_t version = amdgpu_ip_version(adev, block_type, 0);
 

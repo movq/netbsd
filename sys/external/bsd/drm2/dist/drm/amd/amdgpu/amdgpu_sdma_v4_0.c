@@ -2185,7 +2185,7 @@ static int sdma_v4_0_print_iv_entry(struct amdgpu_device *adev,
 	addr |= ((u64)entry->src_data[1] & 0xf) << 44;
 
 	dev_dbg_ratelimited(adev->dev,
-			   "[sdma%d] address:0x%016llx src_id:%u ring:%u vmid:%u pasid:%u\n",
+			   "[sdma%d] address:0x%016"PRIx64" src_id:%u ring:%u vmid:%u pasid:%u\n",
 			   instance, addr, entry->src_id, entry->ring_id, entry->vmid,
 			   entry->pasid);
 

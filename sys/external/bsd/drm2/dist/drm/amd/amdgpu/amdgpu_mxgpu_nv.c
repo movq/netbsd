@@ -118,7 +118,7 @@ static int xgpu_nv_poll_msg(struct amdgpu_device *adev, enum idh_event event)
 	do {
 		r = xgpu_nv_mailbox_rcv_msg(adev, event);
 		if (!r) {
-			dev_dbg(adev->dev, "rcv_msg 0x%x after %llu ms\n",
+			dev_dbg(adev->dev, "rcv_msg 0x%x after %"PRIu64" ms\n",
 					event, NV_MAILBOX_POLL_MSG_TIMEDOUT - timeout + now);
 			return 0;
 		} else if (r == -ENODEV) {

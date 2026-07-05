@@ -32,4 +32,9 @@
 #ifndef _LINUX_DEBUGFS_H_
 #define _LINUX_DEBUGFS_H_
 
+struct debugfs_blob_wrapper {
+	void *data;
+	unsigned long size;
+};
+
 #endif  /* _LINUX_DEBUGFS_H_ */

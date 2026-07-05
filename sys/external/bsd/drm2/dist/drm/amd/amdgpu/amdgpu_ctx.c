@@ -32,6 +32,7 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_ctx.c,v 1.8 2021/12/19 12:38:41 riastradh Exp
 #include "amdgpu.h"
 #include "amdgpu_sched.h"
 #include "amdgpu_ras.h"
+#include <linux/capability.h>
 #include <linux/nospec.h>
 
 #include <linux/nbsd-namespace.h>

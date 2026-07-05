@@ -39,6 +39,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "oss/oss_1_0_d.h"
 #include "oss/oss_1_0_sh_mask.h"
 
+#include <linux/nbsd-namespace.h>
+
 /**
  * uvd_v3_1_ring_get_rptr - get read pointer
  *

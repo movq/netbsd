@@ -55,6 +55,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "amdgpu_ras.h"
 #include "smu_cmn.h"
 
+#include <linux/nbsd-namespace.h>
+
 /*
  * DO NOT use these for err/warn/info/debug messages.
  * Use dev_err, dev_warn, dev_info and dev_dbg instead.
@@ -442,8 +444,11 @@ static int sienna_cichlid_append_powerplay_table(struct smu_context *smu)
 	int index, ret;
 	PPTable_beige_goby_t *ppt_beige_goby;
 	PPTable_t *ppt;
+	bool beige_goby;
 
-	if (amdgpu_ip_version(smu->adev, MP1_HWIP, 0) == IP_VERSION(11, 0, 13))
+	beige_goby = (amdgpu_ip_version(smu->adev, MP1_HWIP, 0) ==
+	    IP_VERSION(11, 0, 13));
+	if (beige_goby)
 		ppt_beige_goby = smu->smu_table.driver_pptable;
 	else
 		ppt = smu->smu_table.driver_pptable;
@@ -456,7 +461,7 @@ static int sienna_cichlid_append_powerplay_table(struct smu_context *smu)
 	if (ret)
 		return ret;
 
-	if (amdgpu_ip_version(smu->adev, MP1_HWIP, 0) == IP_VERSION(11, 0, 13))
+	if (beige_goby)
 		smu_memcpy_trailing(ppt_beige_goby, I2cControllers, BoardReserved,
 				    smc_dpm_table, I2cControllers);
 	else
@@ -2647,7 +2652,7 @@ static int sienna_cichlid_i2c_control_init(struct smu_context *smu)
 		mutex_init(&smu_i2c->mutex);
 		control->owner = THIS_MODULE;
 		control->class = I2C_CLASS_HWMON;
-		control->dev.parent = &adev->pdev->dev;
+		control->dev.parent = pci_dev_dev(adev->pdev);
 		control->algo = &sienna_cichlid_i2c_algo;
 		snprintf(control->name, sizeof(control->name), "AMDGPU SMU %d", i);
 		control->quirks = &sienna_cichlid_i2c_control_quirks;

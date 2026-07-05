@@ -53,11 +53,6 @@ struct amdgpu_gtt_mgr {
 	spinlock_t lock;
 };
 
-#ifdef __NetBSD__
-#  define	__amdgpu_aperture_iomem
-#  define	__iomem	__amdgpu_aperture_iomem
-#endif
-
 struct amdgpu_mman {
 	struct ttm_device		bdev;
 	struct ttm_pool			*ttm_pools;
@@ -117,10 +112,6 @@ struct amdgpu_mman {
 	struct amdgpu_bo	*sdma_access_bo;
 	void			*sdma_access_ptr;
 };
-
-#ifdef __NetBSD__
-#  undef	__iomem
-#endif
 
 struct amdgpu_copy_mem {
 	struct ttm_buffer_object	*bo;

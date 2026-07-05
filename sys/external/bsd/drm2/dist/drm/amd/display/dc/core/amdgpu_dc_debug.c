@@ -216,7 +216,7 @@ void context_clock_trace(
  * Return:
  * A string describing the DC status.
  */
-char *dc_status_to_str(enum dc_status status)
+const char *dc_status_to_str(enum dc_status status)
 {
 	switch (status) {
 	case DC_OK:
@@ -282,7 +282,7 @@ char *dc_status_to_str(enum dc_status status)
 	return "Unexpected status error";
 }
 
-char *dc_pixel_encoding_to_str(enum dc_pixel_encoding pixel_encoding)
+const char *dc_pixel_encoding_to_str(enum dc_pixel_encoding pixel_encoding)
 {
 	switch (pixel_encoding) {
 	case PIXEL_ENCODING_RGB:
@@ -298,7 +298,7 @@ char *dc_pixel_encoding_to_str(enum dc_pixel_encoding pixel_encoding)
 	}
 }
 
-char *dc_color_depth_to_str(enum dc_color_depth color_depth)
+const char *dc_color_depth_to_str(enum dc_color_depth color_depth)
 {
 	switch (color_depth) {
 	case COLOR_DEPTH_666:

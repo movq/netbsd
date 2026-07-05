@@ -873,7 +873,7 @@ static int gmc_v10_0_sw_init(struct amdgpu_ip_block *ip_block)
 	adev->gmc.mc_mask = 0xffffffffffffULL; /* 48 bit MC */
 
 #ifdef __NetBSD__
-	r = drm_limit_dma_space(adev->ddev, 0, DMA_BIT_MASK(44));
+	r = drm_limit_dma_space(adev_to_drm(adev), 0, DMA_BIT_MASK(44));
 #else
 	r = dma_set_mask_and_coherent(adev->dev, DMA_BIT_MASK(44));
 #endif
@@ -987,9 +987,9 @@ static int gmc_v10_0_gart_enable(struct amdgpu_device *adev)
 	if (!adev->in_s0ix)
 		gmc_v10_0_flush_gpu_tlb(adev, 0, AMDGPU_GFXHUB(0), 0);
 
-	DRM_INFO("PCIE GART of %uM enabled (table at 0x%016llX).\n",
-		 (unsigned int)(adev->gmc.gart_size >> 20),
-		 (unsigned long long)amdgpu_bo_gpu_offset(adev->gart.bo));
+	DRM_INFO("PCIE GART of %uM enabled (table at 0x%016"PRIX64").\n",
+	    (unsigned int)(adev->gmc.gart_size >> 20),
+	    amdgpu_bo_gpu_offset(adev->gart.bo));
 
 	return 0;
 }

@@ -44,6 +44,11 @@ __KERNEL_RCSID(0, "$NetBSD: ttm_module.c,v 1.3 2021/12/18 23:45:44 riastradh Exp
 
 #include "ttm_module.h"
 
+#ifdef __NetBSD__
+#include <machine/cpu.h>
+#include <machine/cputypes.h>
+#endif
+
 /**
  * DOC: TTM
  *
@@ -74,7 +79,11 @@ pgprot_t ttm_prot_from_caching(enum ttm_caching caching, pgprot_t tmp)
 	if (caching == ttm_write_combined)
 		tmp = pgprot_writecombine(tmp);
 #ifndef CONFIG_UML
+#ifdef __NetBSD__
+	else if (cpu_class > CPUCLASS_386)
+#else
 	else if (boot_cpu_data.x86 > 3)
+#endif
 		tmp = pgprot_noncached(tmp);
 #endif /* CONFIG_UML */
 #endif /* __i386__ || __x86_64__ */

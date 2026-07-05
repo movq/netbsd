@@ -39,6 +39,29 @@
 
 #define	VGA_SWITCHEROO_CAN_SWITCH_DDC	__BIT(0)
 
+struct pci_dev;
+struct dev_pm_domain;
+
+struct vga_switcheroo_client_ops {
+};
+
+static inline int
+vga_switcheroo_register_client(struct pci_dev *pdev,
+    const struct vga_switcheroo_client_ops *ops, bool x)
+{
+	return 0;
+}
+
+static inline void
+vga_switcheroo_unregister_client(struct pci_dev *pdev)
+{
+}
+
+static inline void
+vga_switcheroo_process_delayed_switch(void)
+{
+}
+
 static inline int
 vga_switcheroo_handler_flags(void)
 {
@@ -48,6 +71,13 @@ vga_switcheroo_handler_flags(void)
 static inline void
 vga_switcheroo_fini_domain_pm_ops(device_t dev)
 {
+}
+
+static inline int
+vga_switcheroo_init_domain_pm_ops(device_t dev, struct dev_pm_domain *domain)
+{
+
+	return 0;
 }
 
 #endif  /* _LINUX_VGA_SWITCHEROO_H_ */

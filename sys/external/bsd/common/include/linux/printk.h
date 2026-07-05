@@ -40,14 +40,19 @@
 #define	vprintk		vprintf
 #define	printk_once	printf
 #define	pr_err		printf	/* XXX */
+#define	pr_err_ratelimited	printf	/* XXX */
 #define	pr_cont		printf	/* XXX */
 #define	pr_info		printf	/* XXX */
 #define	pr_info_once	printf	/* XXX */
 #define	pr_info_ratelimited	printf	/* XXX */
 #define	pr_warn		printf	/* XXX */
 #define	pr_warn_once	printf	/* XXX */
+#define	pr_warn_ratelimited	printf	/* XXX */
 #define	pr_notice	printf	/* XXX */
+#define	pr_notice_once	printf	/* XXX */
 #define	pr_debug	aprint_debug
+#define	pr_debug_once	aprint_debug	/* XXX */
+#define	pr_debug_ratelimited	aprint_debug	/* XXX */
 #define	KERN_EMERG	"emerg: "
 #define	KERN_ALERT	"alert: "
 #define	KERN_CRIT	"crit: "
@@ -57,6 +62,12 @@
 #define	KERN_INFO	""
 #define	KERN_DEBUG	"debug: "
 #define	KERN_CONT	""
+
+#define	FW_BUG		"[Firmware Bug]: "
+#define	FW_WARN		"[Firmware Warn]: "
+#define	FW_INFO		"[Firmware Info]: "
+#define	HW_ERR		"[Hardware Error]: "
+#define	DEPRECATED	"[Deprecated]: "
 
 #define	printk_ratelimit()	0 /* XXX */
 

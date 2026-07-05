@@ -1,11 +1,11 @@
-/*	$NetBSD$	*/
-
 /* SPDX-License-Identifier: GPL-2.0+ */
 
 #ifndef _DRM_VBLANK_HELPER_H_
 #define _DRM_VBLANK_HELPER_H_
 
+#ifndef __NetBSD__
 #include <linux/hrtimer_types.h>
+#endif
 #include <linux/types.h>
 
 struct drm_atomic_state;

@@ -796,7 +796,7 @@ bool amdgpu_ttm_tt_get_user_pages_done(struct ttm_tt *ttm,
 	if (!gtt || !gtt->userptr || !range)
 		return false;
 
-	DRM_DEBUG_DRIVER("user_pages_done 0x%llx pages 0x%x\n",
+	DRM_DEBUG_DRIVER("user_pages_done 0x%"PRIx64" pages 0x%x\n",
 		gtt->userptr, ttm->num_pages);
 
 	WARN_ONCE(!range->hmm_pfns, "No user pages to check\n");
@@ -1119,8 +1119,10 @@ static void amdgpu_ttm_backend_destroy(struct ttm_device *bdev,
 {
 	struct amdgpu_ttm_tt *gtt = ttm_to_amdgpu_ttm_tt(ttm);
 
+#ifndef __NetBSD__		/* XXX amdgpu userptr */
 	if (gtt->usertask)
 		put_task_struct(gtt->usertask);
+#endif
 
 	ttm_tt_fini(&gtt->ttm);
 	kfree(gtt);
@@ -1178,7 +1180,9 @@ static int amdgpu_ttm_tt_populate(struct ttm_device *bdev,
 	struct amdgpu_device *adev = amdgpu_ttm_adev(bdev);
 	struct amdgpu_ttm_tt *gtt = ttm_to_amdgpu_ttm_tt(ttm);
 	struct ttm_pool *pool;
+#ifndef __NetBSD__
 	pgoff_t i;
+#endif
 	int ret;
 
 	/* user pages are bound by amdgpu_ttm_tt_pin_userptr() */
@@ -1200,8 +1204,10 @@ static int amdgpu_ttm_tt_populate(struct ttm_device *bdev,
 	if (ret)
 		return ret;
 
+#ifndef __NetBSD__
 	for (i = 0; i < ttm->num_pages; ++i)
 		ttm->pages[i]->mapping = bdev->dev_mapping;
+#endif
 
 	return 0;
 }
@@ -1216,11 +1222,11 @@ static void amdgpu_ttm_tt_unpopulate(struct ttm_device *bdev,
 				     struct ttm_tt *ttm)
 {
 	struct amdgpu_ttm_tt *gtt = ttm_to_amdgpu_ttm_tt(ttm);
-#ifndef __NetBSD__
 	struct amdgpu_device *adev;
-#endif
 	struct ttm_pool *pool;
+#ifndef __NetBSD__
 	pgoff_t i;
+#endif
 
 	amdgpu_ttm_backend_unbind(bdev, ttm);
 
@@ -1234,8 +1240,10 @@ static void amdgpu_ttm_tt_unpopulate(struct ttm_device *bdev,
 	if (ttm->page_flags & TTM_TT_FLAG_EXTERNAL)
 		return;
 
+#ifndef __NetBSD__
 	for (i = 0; i < ttm->num_pages; ++i)
 		ttm->pages[i]->mapping = NULL;
+#endif
 
 	adev = amdgpu_ttm_adev(bdev);
 
@@ -1244,7 +1252,7 @@ static void amdgpu_ttm_tt_unpopulate(struct ttm_device *bdev,
 	else
 		pool = &adev->mman.bdev.pool;
 
-	return ttm_pool_free(pool, ttm);
+	ttm_pool_free(pool, ttm);
 }
 
 /**
@@ -1267,23 +1275,6 @@ int amdgpu_ttm_tt_get_userptr(const struct ttm_buffer_object *tbo,
 	return 0;
 }
 
-#ifdef __NetBSD__
-static void amdgpu_ttm_tt_swapout(struct ttm_tt *ttm)
-{
-	struct amdgpu_ttm_tt *gtt = container_of(ttm, struct amdgpu_ttm_tt,
-	    ttm.ttm);
-	struct ttm_dma_tt *ttm_dma = &gtt->ttm;
-
-	ttm_bus_dma_swapout(ttm_dma);
-}
-
-static const struct uvm_pagerops amdgpu_uvm_ops = {
-	.pgo_reference = &ttm_bo_uvm_reference,
-	.pgo_detach = &ttm_bo_uvm_detach,
-	.pgo_fault = &ttm_bo_uvm_fault,
-};
-#endif
-
 /**
  * amdgpu_ttm_tt_set_userptr - Initialize userptr GTT ttm_tt for the current
  * task
@@ -1299,6 +1290,9 @@ static const struct uvm_pagerops amdgpu_uvm_ops = {
 int amdgpu_ttm_tt_set_userptr(struct ttm_buffer_object *bo,
 			      uint64_t addr, uint32_t flags)
 {
+#ifdef __NetBSD__		/* XXX amdgpu userptr */
+	return -ENODEV;
+#else
 	struct amdgpu_ttm_tt *gtt;
 
 	if (!bo->ttm) {
@@ -1467,8 +1461,10 @@ uint64_t amdgpu_ttm_tt_pte_flags(struct amdgpu_device *adev, struct ttm_tt *ttm,
 static bool amdgpu_ttm_bo_eviction_valuable(struct ttm_buffer_object *bo,
 					    const struct ttm_place *place)
 {
+#ifndef __NetBSD__
 	struct dma_resv_iter resv_cursor;
 	struct dma_fence *f;
+#endif
 
 	if (!amdgpu_bo_is_amdgpu_bo(bo))
 		return ttm_bo_eviction_valuable(bo, place);
@@ -1485,11 +1481,7 @@ static bool amdgpu_ttm_bo_eviction_valuable(struct ttm_buffer_object *bo,
 	 * If true, then return false as any KFD process needs all its BOs to
 	 * be resident to run successfully
 	 */
-#ifdef __NetBSD__		/* XXX amdgpu kfd */
-	__USE(flist);
-	__USE(f);
-	__USE(i);
-#else
+#ifndef __NetBSD__		/* XXX amdgpu kfd */
 	dma_resv_for_each_fence(&resv_cursor, bo->base.resv,
 				DMA_RESV_USAGE_BOOKKEEP, f) {
 		if (amdkfd_fence_check_mm(f, current->mm) &&
@@ -1985,7 +1977,11 @@ int amdgpu_ttm_init(struct amdgpu_device *adev)
 	dma_set_max_seg_size(adev->dev, UINT_MAX);
 	/* No others user of address space so set it to 0 */
 	r = ttm_device_init(&adev->mman.bdev, &amdgpu_bo_driver, adev->dev,
+#ifdef __NetBSD__
+			       NULL,
+#else
 			       adev_to_drm(adev)->anon_inode->i_mapping,
+#endif
 			       adev_to_drm(adev)->vma_offset_manager,
 			       adev->need_swiotlb,
 			       dma_addressing_limited(adev->dev));
@@ -1994,6 +1990,11 @@ int amdgpu_ttm_init(struct amdgpu_device *adev)
 			"failed initializing buffer object driver(%d).\n", r);
 		return r;
 	}
+#ifdef __NetBSD__
+	adev->mman.bdev.iot = adev->ddev.bst;
+	adev->mman.bdev.memt = adev->ddev.bst;
+	adev->mman.bdev.dmat = adev->ddev.dmat;
+#endif
 
 	r = amdgpu_ttm_pools_init(adev);
 	if (r) {
@@ -2115,7 +2116,7 @@ int amdgpu_ttm_init(struct amdgpu_device *adev)
 			"Configuring gttsize via module parameter is deprecated, please use ttm.pages_limit\n");
 		if (gtt_size != configured_size)
 			drm_warn(&adev->ddev,
-				"GTT size has been set as %llu but TTM size has been set as %llu, this is unusual\n",
+				"GTT size has been set as %"PRIu64" but TTM size has been set as %"PRIu64", this is unusual\n",
 				configured_size, gtt_size);
 
 		gtt_size = configured_size;

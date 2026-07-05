@@ -34,6 +34,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "soc15_common.h"
 #include "amdgpu_mes_ctx.h"
 
+#include <linux/nbsd-namespace.h>
+
 #define AMDGPU_MES_MAX_NUM_OF_QUEUES_PER_PROCESS 1024
 #define AMDGPU_ONE_DOORBELL_SIZE 8
 

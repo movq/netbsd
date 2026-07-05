@@ -19,7 +19,7 @@ options 	MEMORY_DISK_ROOT_SIZE=10000	# size of memory disk, in blocks
 options 	MEMORY_DISK_RBFLAGS=RB_SINGLE	# boot in single-user mode
 
 # DRMKMS driver
-no i915drmkms*     at pci?
-no radeon*         at pci?
-no nouveau*	   at pci?
-no options 	DRM_LEGACY
+#no i915drmkms*     at pci?
+#no radeon*         at pci?
+#no nouveau*	   at pci?
+#no options 	DRM_LEGACY

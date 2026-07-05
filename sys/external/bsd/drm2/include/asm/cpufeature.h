@@ -34,6 +34,8 @@
 
 #include <sys/cpu.h>
 
+#include <asm/processor.h>
+
 #if defined(__i386__) || defined(__x86_64__)
 
 #include <x86/specialreg.h>
@@ -43,6 +45,8 @@
 
 #define	X86_FEATURE_CLFLUSH	0
 #define	X86_FEATURE_PAT		1
+#define	X86_FEATURE_XMM4_1	2
+#define	X86_FEATURE_HYPERVISOR	3
 
 static inline bool
 static_cpu_has(int feature)
@@ -52,6 +56,10 @@ static_cpu_has(int feature)
 		return cpu_has_clflush;
 	case X86_FEATURE_PAT:
 		return cpu_has_pat;
+	case X86_FEATURE_XMM4_1:
+		return (cpu_info_primary.ci_feat_val[1] & CPUID2_SSE41) != 0;
+	case X86_FEATURE_HYPERVISOR:
+		return (cpu_info_primary.ci_feat_val[1] & CPUID2_RAZ) != 0;
 	default:
 		return false;
 	}

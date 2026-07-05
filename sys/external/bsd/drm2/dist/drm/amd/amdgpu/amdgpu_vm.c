@@ -786,7 +786,7 @@ int amdgpu_vm_flush(struct amdgpu_ring *ring, struct amdgpu_job *job,
 	bool pasid_mapping_needed = false;
 	struct dma_fence *fence = NULL;
 	struct amdgpu_fence *af;
-	unsigned int patch;
+	unsigned int patch = 0;
 	int r;
 
 	if (amdgpu_vmid_had_gpu_reset(adev, id)) {
@@ -939,21 +939,12 @@ struct amdgpu_bo_va *amdgpu_vm_bo_find(struct amdgpu_vm *vm,
  * Returns:
  * The pointer for the page table entry.
  */
-#ifdef __NetBSD__
-uint64_t amdgpu_vm_map_gart(const bus_dma_segment_t *pages_addr, uint64_t addr)
-#else
 uint64_t amdgpu_vm_map_gart(const dma_addr_t *pages_addr, uint64_t addr)
-#endif
 {
 	uint64_t result;
 
 	/* page table offset */
-#ifdef __NetBSD__
-	KASSERT(pages_addr[addr >> PAGE_SHIFT].ds_len == PAGE_SIZE);
-	result = pages_addr[addr >> PAGE_SHIFT].ds_addr;
-#else
 	result = pages_addr[addr >> PAGE_SHIFT];
-#endif
 
 	/* in case cpu page size != gpu page size*/
 	result |= addr & (~PAGE_MASK);
@@ -1278,11 +1269,7 @@ int amdgpu_vm_bo_update(struct amdgpu_device *adev, struct amdgpu_bo_va *bo_va,
 	struct amdgpu_vm *vm = bo_va->base.vm;
 	struct amdgpu_bo_va_mapping *mapping;
 	struct dma_fence **last_update;
-#ifdef __NetBSD__
-	bus_dma_segment_t *pages_addr = NULL;
-#else
 	dma_addr_t *pages_addr = NULL;
-#endif
 	struct ttm_resource *mem;
 	struct amdgpu_sync sync;
 	bool flush_tlb = clear;
@@ -2555,6 +2542,16 @@ void amdgpu_vm_set_task_info(struct amdgpu_vm *vm)
 	if (!vm->task_info)
 		return;
 
+#ifdef __NetBSD__
+	if (vm->task_info->task.pid == task_pid_nr(current))
+		return;
+
+	vm->task_info->task.pid = task_pid_nr(current);
+	get_task_comm(vm->task_info->task.comm, current);
+
+	vm->task_info->tgid = task_pid_nr(current);
+	get_task_comm(vm->task_info->process_name, current);
+#else
 	if (vm->task_info->task.pid == current->pid)
 		return;
 
@@ -2566,6 +2563,7 @@ void amdgpu_vm_set_task_info(struct amdgpu_vm *vm)
 
 	vm->task_info->tgid = current->group_leader->pid;
 	get_task_comm(vm->task_info->process_name, current->group_leader);
+#endif
 }
 
 /**
@@ -2692,9 +2690,10 @@ error_free_delayed:
 	dma_fence_put(vm->last_unlocked);
 	ttm_lru_bulk_move_fini(&adev->mman.bdev, &vm->lru_bulk_move);
 	amdgpu_vm_fini_entities(vm);
+	mutex_destroy(&vm->eviction_lock);
 
 error_free_destroylock:
-	spin_lock_destroy(&vm->invalidated_lock);
+	spin_lock_destroy(&vm->status_lock);
 
 	return r;
 }
@@ -2853,6 +2852,8 @@ void amdgpu_vm_fini(struct amdgpu_device *adev, struct amdgpu_vm *vm)
 	}
 
 	amdgpu_vm_put_task_info(vm->task_info);
+	mutex_destroy(&vm->eviction_lock);
+	spin_lock_destroy(&vm->status_lock);
 }
 
 /**
@@ -2919,7 +2920,9 @@ void amdgpu_vm_manager_fini(struct amdgpu_device *adev)
 	xa_destroy(&adev->vm_manager.pasids);
 
 	amdgpu_vmid_mgr_fini(adev);
+#ifndef __NetBSD__
 	amdgpu_pasid_mgr_cleanup();
+#endif
 }
 
 /**

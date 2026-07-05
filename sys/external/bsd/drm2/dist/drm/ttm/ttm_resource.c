@@ -41,6 +41,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 
 #include <drm/drm_util.h>
 
+#include <linux/nbsd-namespace.h>
+
 /* Detach the cursor from the bulk move list*/
 static void
 ttm_resource_cursor_clear_bulk(struct ttm_resource_cursor *cursor)
@@ -613,8 +615,9 @@ void ttm_resource_manager_debug(struct ttm_resource_manager *man,
 {
 	drm_printf(p, "  use_type: %d\n", man->use_type);
 	drm_printf(p, "  use_tt: %d\n", man->use_tt);
-	drm_printf(p, "  size: %llu\n", man->size);
-	drm_printf(p, "  usage: %llu\n", ttm_resource_manager_usage(man));
+	drm_printf(p, "  size: %"PRIu64"\n", man->size);
+	drm_printf(p, "  usage: %"PRIu64"\n",
+	    ttm_resource_manager_usage(man));
 	if (man->func->debug)
 		man->func->debug(man, p);
 }
@@ -727,9 +730,24 @@ static void ttm_kmap_iter_iomap_map_local(struct ttm_kmap_iter *iter,
 	struct ttm_kmap_iter_iomap *iter_io =
 		container_of(iter, typeof(*iter_io), base);
 	void __iomem *addr;
+#ifdef __NetBSD__
+	bus_dmamap_t dmamap = iter_io->st->sgl->sg_dmamap;
+	const bus_dma_segment_t *seg;
+#endif
 
 retry:
 	while (i >= iter_io->cache.end) {
+#ifdef __NetBSD__
+		if (iter_io->cache.end == 0)
+			iter_io->cache.seg = 0;
+		else
+			iter_io->cache.seg++;
+		KASSERT(iter_io->cache.seg < dmamap->dm_nsegs);
+		seg = &dmamap->dm_segs[iter_io->cache.seg];
+		iter_io->cache.i = iter_io->cache.end;
+		iter_io->cache.end += seg->ds_len >> PAGE_SHIFT;
+		iter_io->cache.offs = seg->ds_addr - iter_io->start;
+#else
 		iter_io->cache.sg = iter_io->cache.sg ?
 			sg_next(iter_io->cache.sg) : iter_io->st->sgl;
 		iter_io->cache.i = iter_io->cache.end;
@@ -737,11 +755,14 @@ retry:
 			PAGE_SHIFT;
 		iter_io->cache.offs = sg_dma_address(iter_io->cache.sg) -
 			iter_io->start;
+#endif
 	}
 
 	if (i < iter_io->cache.i) {
 		iter_io->cache.end = 0;
+#ifndef __NetBSD__
 		iter_io->cache.sg = NULL;
+#endif
 		goto retry;
 	}
 
@@ -851,22 +872,62 @@ ttm_kmap_iter_linear_io_init(struct ttm_kmap_iter_linear_io *iter_io,
 	} else {
 		iter_io->needs_unmap = true;
 		memset(&iter_io->dmap, 0, sizeof(iter_io->dmap));
-		if (mem->bus.caching == ttm_write_combined)
+		if (mem->bus.caching == ttm_write_combined) {
+#ifdef __NetBSD__
+			ret = -bus_space_map(bdev->memt, mem->bus.offset,
+			    mem->size,
+			    BUS_SPACE_MAP_LINEAR | BUS_SPACE_MAP_PREFETCHABLE,
+			    &iter_io->dmap.bsh);
+			if (ret)
+				goto out_io_free;
+			iter_io->dmap.size = mem->size;
+			iosys_map_set_vaddr_iomem(&iter_io->dmap,
+			    bus_space_vaddr(bdev->memt, iter_io->dmap.bsh));
+#else
 			iosys_map_set_vaddr_iomem(&iter_io->dmap,
 						  ioremap_wc(mem->bus.offset,
 							     mem->size));
-		else if (mem->bus.caching == ttm_cached)
+#endif
+		} else if (mem->bus.caching == ttm_cached) {
+#ifdef __NetBSD__
+			int flags = BUS_SPACE_MAP_LINEAR;
+
+#ifdef CONFIG_X86
+			flags |= BUS_SPACE_MAP_CACHEABLE;
+#endif
+			ret = -bus_space_map(bdev->memt, mem->bus.offset,
+			    mem->size, flags, &iter_io->dmap.bsh);
+			if (ret)
+				goto out_io_free;
+			iter_io->dmap.size = mem->size;
+			iosys_map_set_vaddr(&iter_io->dmap,
+			    bus_space_vaddr(bdev->memt, iter_io->dmap.bsh));
+#else
 			iosys_map_set_vaddr(&iter_io->dmap,
 					    memremap(mem->bus.offset, mem->size,
 						     MEMREMAP_WB |
 						     MEMREMAP_WT |
 						     MEMREMAP_WC));
+#endif
+		}
 
 		/* If uncached requested or if mapping cached or wc failed */
-		if (iosys_map_is_null(&iter_io->dmap))
+		if (iosys_map_is_null(&iter_io->dmap)) {
+#ifdef __NetBSD__
+			ret = -bus_space_map(bdev->memt, mem->bus.offset,
+			    mem->size, BUS_SPACE_MAP_LINEAR,
+			    &iter_io->dmap.bsh);
+			if (ret)
+				goto out_io_free;
+			iter_io->dmap.size = mem->size;
+			iosys_map_set_vaddr_iomem(&iter_io->dmap,
+			    bus_space_vaddr(bdev->memt, iter_io->dmap.bsh));
+#else
 			iosys_map_set_vaddr_iomem(&iter_io->dmap,
 						  ioremap(mem->bus.offset,
 							  mem->size));
+#endif
+		}
 
 		if (iosys_map_is_null(&iter_io->dmap)) {
 			ret = -ENOMEM;
@@ -898,10 +959,15 @@ ttm_kmap_iter_linear_io_fini(struct ttm_kmap_iter_linear_io *iter_io,
 			     struct ttm_resource *mem)
 {
 	if (iter_io->needs_unmap && iosys_map_is_set(&iter_io->dmap)) {
+#ifdef __NetBSD__
+		bus_space_unmap(bdev->memt, iter_io->dmap.bsh,
+		    iter_io->dmap.size);
+#else
 		if (iter_io->dmap.is_iomem)
 			iounmap(iter_io->dmap.vaddr_iomem);
 		else
 			memunmap(iter_io->dmap.vaddr);
+#endif
 	}
 
 	ttm_mem_io_free(bdev, mem);

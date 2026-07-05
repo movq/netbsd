@@ -26,6 +26,7 @@
 __KERNEL_RCSID(0, "$NetBSD$");
 
 #include <linux/pci.h>
+#include <linux/string.h>
 
 #include "amdgpu.h"
 #include "amdgpu_i2c.h"
@@ -145,7 +146,8 @@ int amdgpu_fru_get_product_info(struct amdgpu_device *adev)
 	 * so convert it to a 16-digit HEX string for convenience and
 	 * backwards-compatibility.
 	 */
-	sprintf(fru_info->serial, "%llx", adev->unique_id);
+	snprintf(fru_info->serial, sizeof(fru_info->serial), "%"PRIx64,
+	    adev->unique_id);
 
 	/* If algo exists, it means that the i2c_adapter's initialized */
 	if (!adev->pm.fru_eeprom_i2c_bus || !adev->pm.fru_eeprom_i2c_bus->algo) {
@@ -279,6 +281,7 @@ Out:
 	return 0;
 }
 
+#ifndef __NetBSD__		/* XXX sysfs */
 /**
  * DOC: product_name
  *
@@ -411,3 +414,15 @@ void amdgpu_fru_sysfs_fini(struct amdgpu_device *adev)
 
 	sysfs_remove_files(&adev->dev->kobj, amdgpu_fru_attributes);
 }
+#else
+int
+amdgpu_fru_sysfs_init(struct amdgpu_device *adev)
+{
+	return 0;
+}
+
+void
+amdgpu_fru_sysfs_fini(struct amdgpu_device *adev)
+{
+}
+#endif

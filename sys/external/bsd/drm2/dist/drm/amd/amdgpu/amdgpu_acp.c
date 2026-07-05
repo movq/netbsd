@@ -318,10 +318,7 @@ static int acp_hw_init(struct amdgpu_ip_block *ip_block)
 		adev->acp.acp_res[2].start = amdgpu_irq_create_mapping(adev, 162);
 		adev->acp.acp_res[2].end = adev->acp.acp_res[2].start;
 
-#ifdef __NetBSD__		/* XXX amdgpu cell */
-	__USE(dev);
-	__USE(i);
-#else
+#ifndef __NetBSD__		/* XXX amdgpu cell */
 		adev->acp.acp_cell[0].name = "acp_audio_dma";
 		adev->acp.acp_cell[0].num_resources = 3;
 		adev->acp.acp_cell[0].resources = &adev->acp.acp_res[0];
@@ -344,6 +341,7 @@ static int acp_hw_init(struct amdgpu_ip_block *ip_block)
 		break;
 	}
 	default:
+#ifndef __NetBSD__		/* XXX amdgpu cell */
 		adev->acp.acp_cell = kcalloc(ACP_DEVS, sizeof(struct mfd_cell),
 					     GFP_KERNEL);
 
@@ -351,6 +349,7 @@ static int acp_hw_init(struct amdgpu_ip_block *ip_block)
 			r = -ENOMEM;
 			goto failure;
 		}
+#endif
 
 		adev->acp.acp_res = kcalloc(5, sizeof(struct resource), GFP_KERNEL);
 		if (!adev->acp.acp_res) {
@@ -359,7 +358,7 @@ static int acp_hw_init(struct amdgpu_ip_block *ip_block)
 		}
 
 #ifdef __NetBSD__		/* XXX amdgpu sound */
-    __USE(i2s_pdata)
+		__USE(i2s_pdata);
 #else
 		i2s_pdata = kcalloc(3, sizeof(struct i2s_platform_data), GFP_KERNEL);
 		if (!i2s_pdata) {
@@ -435,10 +434,7 @@ static int acp_hw_init(struct amdgpu_ip_block *ip_block)
 		adev->acp.acp_res[4].start = amdgpu_irq_create_mapping(adev, 162);
 		adev->acp.acp_res[4].end = adev->acp.acp_res[4].start;
 
-#ifdef __NetBSD__		/* XXX amdgpu cell */
-	__USE(dev);
-	__USE(i);
-#else
+#ifndef __NetBSD__		/* XXX amdgpu cell */
 		adev->acp.acp_cell[0].name = "acp_audio_dma";
 		adev->acp.acp_cell[0].num_resources = 5;
 		adev->acp.acp_cell[0].resources = &adev->acp.acp_res[0];

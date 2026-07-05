@@ -660,9 +660,20 @@ void amdgpu_vmid_mgr_fini(struct amdgpu_device *adev)
 }
 
 /**
+ * amdgpu_pasid_mgr_init - initialize PASID manager
+ *
+ * Initialize the global PASID allocator.
+ */
+void amdgpu_pasid_mgr_init(void)
+{
+	xa_init_flags(&amdgpu_pasid_xa,
+		      XA_FLAGS_LOCK_IRQ | XA_FLAGS_ALLOC1);
+}
+
+/**
  * amdgpu_pasid_mgr_cleanup - cleanup PASID manager
  *
- * Cleanup the IDR allocator.
+ * Cleanup the global PASID allocator.
  */
 void amdgpu_pasid_mgr_cleanup(void)
 {

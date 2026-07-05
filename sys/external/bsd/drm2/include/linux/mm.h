@@ -38,11 +38,20 @@
 #include <asm/page.h>
 
 #include <linux/pfn.h>
+#include <linux/pgtable.h>
+#include <linux/nodemask.h>
 #include <linux/shrinker.h>
 #include <linux/slab.h>
 #include <linux/sizes.h>
 
 struct file;
+
+typedef unsigned int vm_fault_t;
+
+#define	VM_FAULT_OOM		0x000001
+#define	VM_FAULT_SIGBUS		0x000002
+#define	VM_FAULT_NOPAGE		0x000100
+#define	VM_FAULT_RETRY		0x000400
 
 /* XXX Ugh bletch!  Whattakludge!  Linux's sense is reversed...  */
 #undef	PAGE_MASK
@@ -51,11 +60,20 @@ struct file;
 #define	PAGE_ALIGN(x)		(((x) + (PAGE_SIZE-1)) & ~(PAGE_SIZE-1))
 #define	offset_in_page(x)	((uintptr_t)(x) & (PAGE_SIZE-1))
 
+static inline int
+page_is_ram(unsigned long pfn)
+{
+
+	return uvm_pageismanaged(ptoa((paddr_t)pfn));
+}
+
 #define	untagged_addr(x)	(x)
 
 struct sysinfo {
 	unsigned long totalram;
 	unsigned long totalhigh;
+	unsigned long freeram;
+	unsigned long freehigh;
 	uint32_t mem_unit;
 };
 
@@ -65,6 +83,8 @@ si_meminfo(struct sysinfo *si)
 
 	si->totalram = uvmexp.npages;
 	si->totalhigh = kernel_map->size >> PAGE_SHIFT;
+	si->freeram = uvmexp.free;
+	si->freehigh = 0;
 	si->mem_unit = PAGE_SIZE;
 	/* XXX Fill in more as needed.  */
 }
@@ -100,11 +120,29 @@ get_num_physpages(void)
 	return uvmexp.npages;
 }
 
+static inline bool
+want_init_on_free(void)
+{
+
+	return false;
+}
+
 static inline void *
 kvmalloc(size_t size, gfp_t gfp)
 {
 
 	return kmalloc(size, gfp);
+}
+
+static inline void *
+kvrealloc(const void *ptr, size_t size, gfp_t gfp)
+{
+
+	if (size == 0) {
+		kfree(ptr);
+		return NULL;
+	}
+	return krealloc((void *)(uintptr_t)ptr, size, gfp);
 }
 
 static inline void *
@@ -141,7 +179,7 @@ kvmalloc_array(size_t nelem, size_t elemsize, gfp_t gfp)
  */
 
 static inline void
-kvfree(void *ptr)
+kvfree(const void *ptr)
 {
 	kfree(ptr);
 }

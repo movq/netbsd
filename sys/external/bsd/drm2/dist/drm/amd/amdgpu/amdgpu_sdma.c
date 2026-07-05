@@ -34,6 +34,8 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_sdma.c,v 1.2 2021/12/18 23:44:58 riastradh Ex
 #include "gc/gc_10_1_0_offset.h"
 #include "gc/gc_10_3_0_sh_mask.h"
 
+#include <linux/nbsd-namespace.h>
+
 #define AMDGPU_CSA_SDMA_SIZE 64
 /* SDMA CSA reside in the 3rd page of CSA */
 #define AMDGPU_CSA_SDMA_OFFSET (4096 * 2)
@@ -460,6 +462,7 @@ void amdgpu_debugfs_sdma_sched_mask_init(struct amdgpu_device *adev)
 #endif
 }
 
+#ifndef __NetBSD__		/* XXX amdgpu sysfs */
 static ssize_t amdgpu_get_sdma_reset_mask(struct device *dev,
 						struct device_attribute *attr,
 						char *buf)
@@ -491,9 +494,18 @@ int amdgpu_sdma_sysfs_reset_mask_init(struct amdgpu_device *adev)
 
 	return r;
 }
+#else
+int
+amdgpu_sdma_sysfs_reset_mask_init(struct amdgpu_device *adev)
+{
+
+	return 0;
+}
+#endif
 
 void amdgpu_sdma_sysfs_reset_mask_fini(struct amdgpu_device *adev)
 {
+#ifndef __NetBSD__		/* XXX amdgpu sysfs */
 	if (!amdgpu_gpu_recovery)
 		return;
 
@@ -501,6 +513,7 @@ void amdgpu_sdma_sysfs_reset_mask_fini(struct amdgpu_device *adev)
 		if (adev->sdma.num_instances)
 			device_remove_file(adev->dev, &dev_attr_sdma_reset_mask);
 	}
+#endif
 }
 
 struct amdgpu_ring *amdgpu_sdma_get_shared_ring(struct amdgpu_device *adev, struct amdgpu_ring *ring)

@@ -49,6 +49,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 
 #include "drm_dp_helper_internal.h"
 
+#include <linux/nbsd-namespace.h>
+
 DECLARE_DYNDBG_CLASSMAP(drm_debug_classes, DD_CLASS_TYPE_DISJOINT_BITS, 0,
 			"DRM_UT_CORE",
 			"DRM_UT_DRIVER",
@@ -1654,6 +1656,7 @@ int drm_dp_downstream_id(struct drm_dp_aux *aux, char id[6])
 }
 EXPORT_SYMBOL(drm_dp_downstream_id);
 
+#if IS_ENABLED(CONFIG_DEBUG_FS)
 /**
  * drm_dp_downstream_debug() - debug DP branch devices
  * @m: pointer for debugfs file
@@ -1744,6 +1747,7 @@ void drm_dp_downstream_debug(struct seq_file *m,
 	}
 }
 EXPORT_SYMBOL(drm_dp_downstream_debug);
+#endif
 
 /**
  * drm_dp_subconnector_type() - get DP branch device type

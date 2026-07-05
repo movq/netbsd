@@ -49,6 +49,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "sdma_common.h"
 #include "sdma_v5_2.h"
 
+#include <linux/nbsd-namespace.h>
+
 MODULE_FIRMWARE("amdgpu/sienna_cichlid_sdma.bin");
 MODULE_FIRMWARE("amdgpu/navy_flounder_sdma.bin");
 MODULE_FIRMWARE("amdgpu/dimgrey_cavefish_sdma.bin");
@@ -176,7 +178,7 @@ static uint64_t sdma_v5_2_ring_get_rptr(struct amdgpu_ring *ring)
 	/* XXX check if swapping is necessary on BE */
 	rptr = (u64 *)ring->rptr_cpu_addr;
 
-	DRM_DEBUG("rptr before shift == 0x%016llx\n", *rptr);
+	DRM_DEBUG("rptr before shift == 0x%016"PRIx64"\n", *rptr);
 	return ((*rptr) >> 2);
 }
 
@@ -195,12 +197,14 @@ static uint64_t sdma_v5_2_ring_get_wptr(struct amdgpu_ring *ring)
 	if (ring->use_doorbell) {
 		/* XXX check if swapping is necessary on BE */
 		wptr = READ_ONCE(*((u64 *)ring->wptr_cpu_addr));
-		DRM_DEBUG("wptr/doorbell before shift == 0x%016llx\n", wptr);
+		DRM_DEBUG("wptr/doorbell before shift == 0x%016"PRIx64"\n",
+		    wptr);
 	} else {
 		wptr = RREG32(sdma_v5_2_get_reg_offset(adev, ring->me, mmSDMA0_GFX_RB_WPTR_HI));
 		wptr = wptr << 32;
 		wptr |= RREG32(sdma_v5_2_get_reg_offset(adev, ring->me, mmSDMA0_GFX_RB_WPTR));
-		DRM_DEBUG("wptr before shift [%i] wptr == 0x%016llx\n", ring->me, wptr);
+		DRM_DEBUG("wptr before shift [%i] wptr == 0x%016"PRIx64"\n",
+		    ring->me, wptr);
 	}
 
 	return wptr >> 2;
@@ -229,8 +233,8 @@ static void sdma_v5_2_ring_set_wptr(struct amdgpu_ring *ring)
 		/* XXX check if swapping is necessary on BE */
 		atomic64_set((atomic64_t *)ring->wptr_cpu_addr,
 			     ring->wptr << 2);
-		DRM_DEBUG("calling WDOORBELL64(0x%08x, 0x%016llx)\n",
-				ring->doorbell_index, ring->wptr << 2);
+		DRM_DEBUG("calling WDOORBELL64(0x%08x, 0x%016"PRIx64")\n",
+			  ring->doorbell_index, ring->wptr << 2);
 		WDOORBELL64(ring->doorbell_index, ring->wptr << 2);
 		if (amdgpu_ip_version(adev, SDMA0_HWIP, 0) == IP_VERSION(5, 2, 1)) {
 			/* SDMA seems to miss doorbells sometimes when powergating kicks in.

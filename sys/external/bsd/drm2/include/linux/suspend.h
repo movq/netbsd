@@ -34,9 +34,43 @@
 
 #include <sys/cdefs.h>
 
+#include <linux/notifier.h>
+
+typedef int suspend_state_t;
+
+#define	PM_SUSPEND_ON		0
+#define	PM_SUSPEND_MEM		1
+#define	PM_SUSPEND_TO_IDLE	2
+#define	pm_suspend_target_state	PM_SUSPEND_MEM
+
+enum {
+	PM_HIBERNATION_PREPARE,
+	PM_POST_HIBERNATION,
+	PM_SUSPEND_PREPARE,
+	PM_POST_SUSPEND,
+};
+
 #define	ksys_sync_helper()	__nothing
 
-#define	register_pm_notifier(n)		__nothing
-#define	unregister_pm_notifier(n)	__nothing
+static inline int
+register_pm_notifier(struct notifier_block *notifier)
+{
+
+	return 0;
+}
+
+static inline int
+unregister_pm_notifier(struct notifier_block *notifier)
+{
+
+	return 0;
+}
+
+static inline bool
+pm_resume_via_firmware(void)
+{
+
+	return true;
+}
 
 #endif  /* _LINUX_SUSPEND_H_ */

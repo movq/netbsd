@@ -72,6 +72,7 @@
 __KERNEL_RCSID(0, "$NetBSD: sched_main.c,v 1.11 2021/12/19 12:42:58 riastradh Exp $");
 
 #include <linux/export.h>
+#include <linux/moduleparam.h>
 #include <linux/wait.h>
 #include <linux/sched.h>
 #include <linux/completion.h>
@@ -138,14 +139,45 @@ static bool drm_sched_can_queue(struct drm_gpu_scheduler *sched,
 	return drm_sched_available_credits(sched) >= s_job->credits;
 }
 
-static __always_inline bool drm_sched_entity_compare_before(struct rb_node *a,
-							    const struct rb_node *b)
+#ifdef __NetBSD__
+static int
+drm_sched_entity_compare(void *cookie __unused, const void *va, const void *vb)
+{
+	const struct drm_sched_entity *ent_a = va;
+	const struct drm_sched_entity *ent_b = vb;
+	int diff;
+
+	diff = ktime_compare(ent_a->oldest_job_waiting,
+	    ent_b->oldest_job_waiting);
+	if (diff)
+		return diff;
+	if ((uintptr_t)ent_a < (uintptr_t)ent_b)
+		return -1;
+	if ((uintptr_t)ent_a > (uintptr_t)ent_b)
+		return 1;
+	return 0;
+}
+
+static const rb_tree_ops_t drm_sched_entity_rb_ops = {
+	.rbto_compare_nodes = drm_sched_entity_compare,
+	.rbto_compare_key = drm_sched_entity_compare,
+	.rbto_node_offset = offsetof(struct drm_sched_entity, rb_tree_node),
+};
+
+#define	drm_sched_rq_rb_next(RQ, RB) \
+	rb_next2(&(RQ)->rb_tree_root.rb_root, (RB))
+#else
+static __always_inline bool
+drm_sched_entity_compare_before(struct rb_node *a, const struct rb_node *b)
 {
 	struct drm_sched_entity *ent_a =  rb_entry((a), struct drm_sched_entity, rb_tree_node);
 	struct drm_sched_entity *ent_b =  rb_entry((b), struct drm_sched_entity, rb_tree_node);
 
 	return ktime_before(ent_a->oldest_job_waiting, ent_b->oldest_job_waiting);
 }
+
+#define	drm_sched_rq_rb_next(RQ, RB)	rb_next(RB)
+#endif
 
 static void drm_sched_rq_remove_fifo_locked(struct drm_sched_entity *entity,
 					    struct drm_sched_rq *rq)
@@ -160,6 +192,10 @@ void drm_sched_rq_update_fifo_locked(struct drm_sched_entity *entity,
 				     struct drm_sched_rq *rq,
 				     ktime_t ts)
 {
+#ifdef __NetBSD__
+	void *collision __diagused;
+#endif
+
 	/*
 	 * Both locks need to be grabbed, one to protect from entity->rq change
 	 * for entity from within concurrent drm_sched_entity_select_rq and the
@@ -172,8 +208,14 @@ void drm_sched_rq_update_fifo_locked(struct drm_sched_entity *entity,
 
 	entity->oldest_job_waiting = ts;
 
+#ifdef __NetBSD__
+	collision = rb_tree_insert_node(&rq->rb_tree_root.rb_root.rbr_tree,
+	    entity);
+	KASSERT(collision == entity);
+#else
 	rb_add_cached(&entity->rb_tree_node, &rq->rb_tree_root,
 		      drm_sched_entity_compare_before);
+#endif
 }
 
 /**
@@ -189,7 +231,12 @@ static void drm_sched_rq_init(struct drm_gpu_scheduler *sched,
 {
 	spin_lock_init(&rq->lock);
 	INIT_LIST_HEAD(&rq->entities);
+#ifdef __NetBSD__
+	rb_tree_init(&rq->rb_tree_root.rb_root.rbr_tree,
+	    &drm_sched_entity_rb_ops);
+#else
 	rq->rb_tree_root = RB_ROOT_CACHED;
+#endif
 	rq->current_entity = NULL;
 	rq->sched = sched;
 }
@@ -321,7 +368,8 @@ drm_sched_rq_select_entity_fifo(struct drm_gpu_scheduler *sched,
 	struct rb_node *rb;
 
 	spin_lock(&rq->lock);
-	for (rb = rb_first_cached(&rq->rb_tree_root); rb; rb = rb_next(rb)) {
+	for (rb = rb_first_cached(&rq->rb_tree_root); rb;
+	     rb = drm_sched_rq_rb_next(rq, rb)) {
 		struct drm_sched_entity *entity;
 
 		entity = rb_entry(rb, struct drm_sched_entity, rb_tree_node);
@@ -1287,7 +1335,13 @@ static void drm_sched_run_job_work(struct work_struct *w)
 				   PTR_ERR(fence) : 0);
 	}
 
+#ifdef __NetBSD__
+	spin_lock(&sched->job_list_lock);
+	DRM_SPIN_WAKEUP_ALL(&sched->job_scheduled, &sched->job_list_lock);
+	spin_unlock(&sched->job_list_lock);
+#else
 	wake_up(&sched->job_scheduled);
+#endif
 	drm_sched_run_job_queue(sched);
 }
 
@@ -1345,11 +1399,6 @@ int drm_sched_init(struct drm_gpu_scheduler *sched, const struct drm_sched_init_
 		dev_warn(sched->dev, "%s: scheduler already initialized!\n", __func__);
 		return 0;
 	}
-	spin_lock(&sched->job_list_lock);
-	sched->thread = thread;
-	DRM_SPIN_WAKEUP_ALL(&sched->wake_up_worker, &sched->job_list_lock);
-	spin_unlock(&sched->job_list_lock);
-
 	if (args->submit_wq) {
 		sched->submit_wq = args->submit_wq;
 		sched->own_submit_wq = false;
@@ -1373,7 +1422,11 @@ int drm_sched_init(struct drm_gpu_scheduler *sched, const struct drm_sched_init_
 		drm_sched_rq_init(sched, sched->sched_rq[i]);
 	}
 
+#ifdef __NetBSD__
+	DRM_INIT_WAITQUEUE(&sched->job_scheduled, "drmschedj");
+#else
 	init_waitqueue_head(&sched->job_scheduled);
+#endif
 	INIT_LIST_HEAD(&sched->pending_list);
 	spin_lock_init(&sched->job_list_lock);
 	atomic_set(&sched->credit_count, 0);
@@ -1464,7 +1517,13 @@ void drm_sched_fini(struct drm_gpu_scheduler *sched)
 	}
 
 	/* Wakeup everyone stuck in drm_sched_entity_flush for this scheduler */
+#ifdef __NetBSD__
+	spin_lock(&sched->job_list_lock);
+	DRM_SPIN_WAKEUP_ALL(&sched->job_scheduled, &sched->job_list_lock);
+	spin_unlock(&sched->job_list_lock);
+#else
 	wake_up_all(&sched->job_scheduled);
+#endif
 
 	/* Confirm no work left behind accessing device structures */
 	cancel_delayed_work_sync(&sched->work_tdr);
@@ -1481,6 +1540,9 @@ void drm_sched_fini(struct drm_gpu_scheduler *sched)
 
 	if (!list_empty(&sched->pending_list))
 		dev_warn(sched->dev, "Tearing down scheduler while jobs are pending!\n");
+#ifdef __NetBSD__
+	DRM_DESTROY_WAITQUEUE(&sched->job_scheduled);
+#endif
 }
 EXPORT_SYMBOL(drm_sched_fini);
 

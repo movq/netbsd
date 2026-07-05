@@ -32,6 +32,10 @@
 #include <sys/cdefs.h>
 
 #define	FIELD_GET(MASK, VAR)	__SHIFTOUT(VAR, MASK)
+#define	FIELD_PREP(MASK, VAL)					      \
+	(((__typeof__(MASK))(VAL) << __bf_shf(MASK)) & (MASK))
+#define	FIELD_FIT(MASK, VAL)					      \
+	(!(((__typeof__(MASK))(VAL) << __bf_shf(MASK)) & ~(MASK)))
 
 #define	__bf_shf(X)		(__builtin_ffsll(X) - 1)
 

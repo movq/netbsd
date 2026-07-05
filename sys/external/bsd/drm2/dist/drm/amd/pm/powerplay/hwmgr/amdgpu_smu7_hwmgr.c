@@ -32,7 +32,7 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_smu7_hwmgr.c,v 1.5 2024/04/16 14:34:01 riastr
 #include <linux/slab.h>
 #include <linux/acpi.h>
 #include <asm/div64.h>
-#if IS_ENABLED(CONFIG_X86_64)
+#if IS_ENABLED(CONFIG_X86_64) && !defined(__NetBSD__)
 #include <asm/intel-family.h>
 #endif
 #include <drm/amdgpu_drm.h>

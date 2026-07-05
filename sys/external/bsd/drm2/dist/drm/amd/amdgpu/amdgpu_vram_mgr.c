@@ -36,6 +36,8 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_vram_mgr.c,v 1.4 2021/12/19 12:31:45 riastrad
 #include "amdgpu_res_cursor.h"
 #include "atom.h"
 
+#include <linux/nbsd-namespace.h>
+
 #define AMDGPU_MAX_SG_SEGMENT_SIZE	(2UL << 30)
 
 struct amdgpu_vram_reservation {
@@ -221,8 +223,6 @@ static DEVICE_ATTR(mem_info_vis_vram_used, S_IRUGO,
 static DEVICE_ATTR(mem_info_vram_vendor, S_IRUGO,
 		   amdgpu_mem_info_vram_vendor, NULL);
 
-#endif	/* __NetBSD__ */
-
 static struct attribute *amdgpu_vram_mgr_attributes[] = {
 	&dev_attr_mem_info_vram_total.attr,
 	&dev_attr_mem_info_vis_vram_total.attr,
@@ -253,6 +253,8 @@ const struct attribute_group amdgpu_vram_mgr_attr_group = {
 	.attrs = amdgpu_vram_mgr_attributes,
 	.is_visible = amdgpu_vram_attrs_is_visible
 };
+
+#endif	/* __NetBSD__ */
 
 /**
  * amdgpu_vram_mgr_vis_size - Calculate visible block size
@@ -323,7 +325,7 @@ static void amdgpu_vram_mgr_do_reserve(struct ttm_resource_manager *man)
 		if (!block)
 			continue;
 
-		dev_dbg(adev->dev, "Reservation 0x%llx - %lld, Succeeded\n",
+		dev_dbg(adev->dev, "Reservation 0x%"PRIx64" - %"PRIu64", Succeeded\n",
 			rsv->start, rsv->size);
 
 		vis_usage = amdgpu_vram_mgr_vis_size(adev, block);
@@ -688,6 +690,17 @@ int amdgpu_vram_mgr_alloc_sgt(struct amdgpu_device *adev,
 			      enum dma_data_direction dir,
 			      struct sg_table **sgt)
 {
+#ifdef __NetBSD__
+	__USE(adev);
+	__USE(res);
+	__USE(offset);
+	__USE(length);
+	__USE(dev);
+	__USE(dir);
+	__USE(sgt);
+
+	return -ENOSYS;
+#else
 	struct amdgpu_res_cursor cursor;
 	struct scatterlist *sg;
 	int num_entries = 0;
@@ -753,6 +766,7 @@ error_unmap:
 error_free:
 	kfree(*sgt);
 	return r;
+#endif
 }
 
 /**
@@ -768,6 +782,11 @@ void amdgpu_vram_mgr_free_sgt(struct device *dev,
 			      enum dma_data_direction dir,
 			      struct sg_table *sgt)
 {
+#ifdef __NetBSD__
+	__USE(dev);
+	__USE(dir);
+	__USE(sgt);
+#else
 	struct scatterlist *sg;
 	int i;
 
@@ -777,6 +796,7 @@ void amdgpu_vram_mgr_free_sgt(struct device *dev,
 				   DMA_ATTR_SKIP_CPU_SYNC);
 	sg_free_table(sgt);
 	kfree(sgt);
+#endif
 }
 
 /**

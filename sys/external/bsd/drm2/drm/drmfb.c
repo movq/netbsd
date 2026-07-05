@@ -65,6 +65,8 @@ __KERNEL_RCSID(0, "$NetBSD: drmfb.c,v 1.16 2022/09/01 17:54:47 riastradh Exp $")
 
 #include <dev/wsfb/genfbvar.h>
 
+#include <drm/drm.h>
+#include <drm/drm_connector.h>
 #include <drm/drm_device.h>
 #include <drm/drm_fb_helper.h>
 #include <drm/drmfb.h>
@@ -260,7 +262,7 @@ drmfb_genfb_enable_polling(void *cookie)
 	struct drmfb_softc *const sc = container_of(genfb, struct drmfb_softc,
 	    sc_genfb);
 
-	return drm_fb_helper_debug_enter_fb(sc->sc_da.da_fb_helper);
+	return drm_fb_helper_debug_enter(sc->sc_da.da_fb_helper->info);
 }
 
 static int
@@ -270,7 +272,7 @@ drmfb_genfb_disable_polling(void *cookie)
 	struct drmfb_softc *const sc = container_of(genfb, struct drmfb_softc,
 	    sc_genfb);
 
-	return drm_fb_helper_debug_leave_fb(sc->sc_da.da_fb_helper);
+	return drm_fb_helper_debug_leave(sc->sc_da.da_fb_helper->info);
 }
 
 static bool

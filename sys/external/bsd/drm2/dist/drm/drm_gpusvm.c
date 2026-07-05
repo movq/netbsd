@@ -17,6 +17,7 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include <linux/hugetlb_inline.h>
 #include <linux/memremap.h>
 #include <linux/mm_types.h>
+#include <linux/module.h>
 #include <linux/slab.h>
 
 #include <drm/drm_device.h>

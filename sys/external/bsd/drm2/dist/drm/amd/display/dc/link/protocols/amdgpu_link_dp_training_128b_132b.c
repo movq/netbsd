@@ -47,7 +47,7 @@ static enum dc_status dpcd_128b_132b_set_lane_settings(
 {
 	enum dc_status status = core_link_write_dpcd(link,
 			DP_TRAINING_LANE0_SET,
-			(uint8_t *)(link_training_setting->dpcd_lane_settings),
+			(const uint8_t *)(link_training_setting->dpcd_lane_settings),
 			sizeof(link_training_setting->dpcd_lane_settings));
 
 	DC_LOG_HW_LINK_TRAINING("%s:\n 0x%X TX_FFE_PRESET_VALUE = %x\n",

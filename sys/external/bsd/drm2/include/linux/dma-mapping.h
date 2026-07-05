@@ -37,14 +37,10 @@
 
 #include <machine/limits.h>
 
+#include <linux/dma-direction.h>
 #include <linux/types.h>
 
-enum dma_data_direction {
-	DMA_NONE		= 0,
-	DMA_TO_DEVICE		= 1,
-	DMA_FROM_DEVICE		= 2,
-	DMA_BIDIRECTIONAL	= 3,
-
+enum {
 	PCI_DMA_NONE		= DMA_NONE,
 	PCI_TO_DEVICE		= DMA_TO_DEVICE,
 	PCI_FROM_DEVICE		= DMA_FROM_DEVICE,
@@ -70,6 +66,14 @@ dma_addressing_limited(device_t dev)
 {
 
 	return false;
+}
+
+static inline void
+dma_set_max_seg_size(device_t dev, unsigned int size)
+{
+
+	__USE(dev);
+	__USE(size);
 }
 
 #endif  /* _LINUX_DMA_MAPPING_H_ */

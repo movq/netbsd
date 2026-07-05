@@ -808,7 +808,7 @@ static uint8_t write_dsc_enable_synaptics_non_virtual_dpcd_mst(
 		 */
 		if (!stream->link->link_status.link_active &&
 			memcmp(stream->link->dpcd_caps.branch_dev_name,
-				(int8_t *)SYNAPTICS_DEVICE_ID, 4) == 0)
+				SYNAPTICS_DEVICE_ID, 4) == 0)
 			apply_synaptics_fifo_reset_wa(aux);
 
 		ret = drm_dp_dpcd_write(aux, DP_DSC_ENABLE, &enable, 1);
@@ -936,6 +936,14 @@ bool dm_helpers_is_dp_sink_present(struct dc_link *link)
 static int
 dm_helpers_probe_acpi_edid(void *data, u8 *buf, unsigned int block, size_t len)
 {
+#ifdef __NetBSD__
+	__USE(data);
+	__USE(buf);
+	__USE(block);
+	__USE(len);
+
+	return -ENOSYS;
+#else
 	struct drm_connector *connector = data;
 	struct acpi_device *acpidev = ACPI_COMPANION(connector->dev->dev);
 	unsigned short start = block * EDID_LENGTH;
@@ -970,6 +978,7 @@ cleanup:
 	kfree(edid);
 
 	return r;
+#endif
 }
 
 static const struct drm_edid *
@@ -1041,7 +1050,7 @@ enum dc_edid_status dm_helpers_read_local_edid(
 			return EDID_BAD_INPUT;
 
 		sink->dc_edid.length = EDID_LENGTH * (edid->extensions + 1);
-		memmove(sink->dc_edid.raw_edid, (uint8_t *)edid, sink->dc_edid.length);
+		memmove(sink->dc_edid.raw_edid, edid, sink->dc_edid.length);
 
 		/* We don't need the original edid anymore */
 		drm_edid_free(drm_edid);
@@ -1154,7 +1163,7 @@ void *dm_helpers_allocate_gpu_mem(
 		struct dc_context *ctx,
 		enum dc_gpu_mem_alloc_type type,
 		size_t size,
-		long long *addr)
+		int64_t *addr)
 {
 	struct amdgpu_device *adev = ctx->driver_context;
 
@@ -1338,7 +1347,7 @@ bool dm_helpers_dp_handle_test_pattern_request(
 			false);
 
 	dc_link_dp_set_test_pattern(
-		(struct dc_link *) link,
+		(struct dc_link *)__UNCONST(link),
 		test_pattern,
 		test_pattern_color_space,
 		NULL,

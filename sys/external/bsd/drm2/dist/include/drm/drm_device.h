@@ -13,6 +13,7 @@
 
 #ifdef __NetBSD__
 #include <drm/drm_wait_netbsd.h>
+#include <sys/bus.h>
 #include <dev/sysmon/sysmonvar.h>
 #endif
 
@@ -24,8 +25,14 @@ struct drm_vma_offset_manager;
 struct drm_vram_mm;
 struct drm_fb_helper;
 
+struct inode;
+
 struct pci_dev;
 struct pci_controller;
+
+#ifdef __NetBSD__
+struct drm_bus_map;
+#endif
 
 /*
  * Recovery methods for wedged device in order of less to more side-effects.
@@ -83,6 +90,21 @@ struct drm_device {
 
 	/** @dev: Device structure of bus-device */
 	struct device *dev;
+
+#ifdef __NetBSD__
+	/* Native bus resources associated with the DRM device. */
+	struct pci_dev *pdev;
+	bus_space_tag_t bst;
+	struct drm_bus_map *bus_maps;
+	unsigned int bus_nmaps;
+	bus_dma_tag_t bus_dmat;
+	bus_dma_tag_t bus_dmat32;
+	bus_dma_tag_t dmat;
+	bool dmat_subregion_p;
+	bus_addr_t dmat_subregion_min;
+	bus_addr_t dmat_subregion_max;
+	struct vmem *cma_pool;
+#endif
 
 	/**
 	 * @dma_dev:
@@ -353,6 +375,15 @@ struct drm_device {
 	 */
 	struct drm_fb_helper *fb_helper;
 
+#ifdef __NetBSD__
+	struct sysmon_pswitch sc_monitor_hotplug;
+	bool sc_monitor_registered;
+	struct mutex suspend_lock;
+	drm_waitqueue_t suspend_cv;
+	uint64_t active_ioctls;
+	struct lwp *suspender;
+#endif
+
 	/**
 	 * @debugfs_root:
 	 *
@@ -379,5 +410,11 @@ static inline struct device *drm_dev_dma_dev(struct drm_device *dev)
 		return dev->dma_dev;
 	return dev->dev;
 }
+
+#ifdef __NetBSD__
+extern const struct cdevsw drm_cdevsw;
+int drm_limit_dma_space(struct drm_device *, resource_size_t, resource_size_t);
+int drm_guarantee_initialized(void);
+#endif
 
 #endif

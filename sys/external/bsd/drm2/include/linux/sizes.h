@@ -32,6 +32,12 @@
 #ifndef	_LINUX_SIZES_H_
 #define	_LINUX_SIZES_H_
 
+#define	SZ_1		1u
+#define	SZ_2		2u
+#define	SZ_4		4u
+#define	SZ_8		8u
+#define	SZ_16		16u
+#define	SZ_32		32u
 #define	SZ_64		64u
 #define	SZ_128		128u
 #define	SZ_256		256u

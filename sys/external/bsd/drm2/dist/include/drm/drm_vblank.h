@@ -288,7 +288,9 @@ struct drm_vblank_crtc {
 	 * &drm_vblank_work item has either finished executing, or was
 	 * cancelled.
 	 */
-	wait_queue_head_t work_wait_queue;
+	/* XXX drm618: usage */
+	spinlock_t wq_lock;
+	drm_waitqueue_t work_wait_queue;
 
 	/**
 	 * @vblank_timer: Holds the state of the vblank timer

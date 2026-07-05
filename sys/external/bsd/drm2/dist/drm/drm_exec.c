@@ -10,6 +10,7 @@ __KERNEL_RCSID(0, "$NetBSD$");
 
 #include <linux/dma-resv.h>
 #include <linux/export.h>
+#include <linux/module.h>
 
 /**
  * DOC: Overview

@@ -18,6 +18,7 @@ __KERNEL_RCSID(0, "$NetBSD$");
 
 #include <drm/drm_fbdev_ttm.h>
 
+#ifndef __NetBSD__
 /* @user: 1=userspace, 0=fbcon */
 static int drm_fbdev_ttm_fb_open(struct fb_info *info, int user)
 {
@@ -61,14 +62,19 @@ static void drm_fbdev_ttm_fb_destroy(struct fb_info *info)
 	drm_fb_helper_unprepare(fb_helper);
 	kfree(fb_helper);
 }
+#endif
 
 static const struct fb_ops drm_fbdev_ttm_fb_ops = {
+#ifndef __NetBSD__
 	.owner		= THIS_MODULE,
 	.fb_open	= drm_fbdev_ttm_fb_open,
 	.fb_release	= drm_fbdev_ttm_fb_release,
 	FB_DEFAULT_DEFERRED_OPS(drm_fbdev_ttm),
+#endif
 	DRM_FB_HELPER_DEFAULT_OPS,
+#ifndef __NetBSD__
 	.fb_destroy	= drm_fbdev_ttm_fb_destroy,
+#endif
 };
 
 static void drm_fbdev_ttm_damage_blit_real(struct drm_fb_helper *fb_helper,
@@ -79,7 +85,7 @@ static void drm_fbdev_ttm_damage_blit_real(struct drm_fb_helper *fb_helper,
 	size_t offset = clip->y1 * fb->pitches[0];
 	size_t len = clip->x2 - clip->x1;
 	unsigned int y;
-	void *src;
+	u8 *src;
 
 	switch (drm_format_info_bpp(fb->format, 0)) {
 	case 1:
@@ -184,7 +190,9 @@ int drm_fbdev_ttm_driver_fbdev_probe(struct drm_fb_helper *fb_helper,
 	struct drm_client_buffer *buffer;
 	struct fb_info *info;
 	size_t screen_size;
+#ifndef __NetBSD__
 	void *screen_buffer;
+#endif
 	u32 format;
 	int ret;
 
@@ -204,6 +212,7 @@ int drm_fbdev_ttm_driver_fbdev_probe(struct drm_fb_helper *fb_helper,
 	fb_helper->fb = buffer->fb;
 
 	screen_size = buffer->gem->size;
+#ifndef __NetBSD__
 	screen_buffer = vzalloc(screen_size);
 	if (!screen_buffer) {
 		ret = -ENOMEM;
@@ -215,16 +224,26 @@ int drm_fbdev_ttm_driver_fbdev_probe(struct drm_fb_helper *fb_helper,
 		ret = PTR_ERR(info);
 		goto err_vfree;
 	}
+#else
+	info = drm_fb_helper_alloc_info(fb_helper);
+	if (IS_ERR(info)) {
+		ret = PTR_ERR(info);
+		goto err_drm_client_framebuffer_delete;
+	}
+#endif
 
 	drm_fb_helper_fill_info(info, fb_helper, sizes);
 
 	info->fbops = &drm_fbdev_ttm_fb_ops;
 
 	/* screen */
+#ifndef __NetBSD__
 	info->flags |= FBINFO_VIRTFB | FBINFO_READS_FAST;
 	info->screen_buffer = screen_buffer;
+#endif
 	info->fix.smem_len = screen_size;
 
+#ifndef __NetBSD__
 	/* deferred I/O */
 	fb_helper->fbdefio.delay = HZ / 20;
 	fb_helper->fbdefio.deferred_io = drm_fb_helper_deferred_io;
@@ -233,13 +252,16 @@ int drm_fbdev_ttm_driver_fbdev_probe(struct drm_fb_helper *fb_helper,
 	ret = fb_deferred_io_init(info);
 	if (ret)
 		goto err_drm_fb_helper_release_info;
+#endif
 
 	return 0;
 
+#ifndef __NetBSD__
 err_drm_fb_helper_release_info:
 	drm_fb_helper_release_info(fb_helper);
 err_vfree:
 	vfree(screen_buffer);
+#endif
 err_drm_client_framebuffer_delete:
 	fb_helper->fb = NULL;
 	fb_helper->buffer = NULL;

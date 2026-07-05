@@ -16,6 +16,7 @@ __KERNEL_RCSID(0, "$NetBSD: drm_panel_orientation_quirks.c,v 1.2 2021/12/18 23:4
 #include <linux/dmi.h>
 #include <linux/export.h>
 #include <linux/module.h>
+#include <linux/string.h>
 #include <drm/drm_connector.h>
 #include <drm/drm_utils.h>
 
@@ -171,109 +172,109 @@ static const struct dmi_system_id orientation_data[] = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Acer"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "One S1003"),
 		},
-		.driver_data = (void *)&lcd800x1280_rightside_up,
+		.driver_data = __UNCONST(&lcd800x1280_rightside_up),
 	}, {	/* Acer Switch V 10 (SW5-017) */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Acer"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "SW5-017"),
 		},
-		.driver_data = (void *)&lcd800x1280_rightside_up,
+		.driver_data = __UNCONST(&lcd800x1280_rightside_up),
 	}, {	/* Anbernic Win600 */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "Anbernic"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Win600"),
 		},
-		.driver_data = (void *)&lcd720x1280_rightside_up,
+		.driver_data = __UNCONST(&lcd720x1280_rightside_up),
 	}, {	/* Asus T100HA */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "T100HAN"),
 		},
-		.driver_data = (void *)&lcd800x1280_leftside_up,
+		.driver_data = __UNCONST(&lcd800x1280_leftside_up),
 	}, {	/* Asus T101HA */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "T101HA"),
 		},
-		.driver_data = (void *)&lcd800x1280_rightside_up,
+		.driver_data = __UNCONST(&lcd800x1280_rightside_up),
 	}, {	/* Asus T103HAF */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "T103HAF"),
 		},
-		.driver_data = (void *)&lcd800x1280_rightside_up,
+		.driver_data = __UNCONST(&lcd800x1280_rightside_up),
 	}, {	/* AYA NEO AYANEO 2/2S */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "AYANEO"),
 		  DMI_MATCH(DMI_PRODUCT_NAME, "AYANEO 2"),
 		},
-		.driver_data = (void *)&lcd1200x1920_rightside_up,
+		.driver_data = __UNCONST(&lcd1200x1920_rightside_up),
 	}, {	/* AYA NEO 2021 */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "AYADEVICE"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "AYA NEO 2021"),
 		},
-		.driver_data = (void *)&lcd800x1280_rightside_up,
+		.driver_data = __UNCONST(&lcd800x1280_rightside_up),
 	}, {	/* AYA NEO AIR */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "AYANEO"),
 		  DMI_MATCH(DMI_PRODUCT_NAME, "AIR"),
 		},
-		.driver_data = (void *)&lcd1080x1920_leftside_up,
+		.driver_data = __UNCONST(&lcd1080x1920_leftside_up),
 	}, {    /* AYA NEO Flip DS Bottom Screen */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "AYANEO"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "FLIP DS"),
 		},
-		.driver_data = (void *)&lcd640x960_leftside_up,
+		.driver_data = __UNCONST(&lcd640x960_leftside_up),
 	}, {    /* AYA NEO Flip KB/DS Top Screen */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "AYANEO"),
 		  DMI_MATCH(DMI_PRODUCT_NAME, "FLIP"),
 		},
-		.driver_data = (void *)&lcd1080x1920_leftside_up,
+		.driver_data = __UNCONST(&lcd1080x1920_leftside_up),
 	}, {	/* AYA NEO Founder */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "AYA NEO"),
 		  DMI_MATCH(DMI_PRODUCT_NAME, "AYA NEO Founder"),
 		},
-		.driver_data = (void *)&lcd800x1280_rightside_up,
+		.driver_data = __UNCONST(&lcd800x1280_rightside_up),
 	}, {	/* AYA NEO GEEK */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "AYANEO"),
 		  DMI_MATCH(DMI_PRODUCT_NAME, "GEEK"),
 		},
-		.driver_data = (void *)&lcd800x1280_rightside_up,
+		.driver_data = __UNCONST(&lcd800x1280_rightside_up),
 	}, {	/* AYA NEO NEXT */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "AYANEO"),
 		  DMI_MATCH(DMI_BOARD_NAME, "NEXT"),
 		},
-		.driver_data = (void *)&lcd800x1280_rightside_up,
+		.driver_data = __UNCONST(&lcd800x1280_rightside_up),
 	}, {	/* AYA NEO KUN */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "AYANEO"),
 		  DMI_MATCH(DMI_BOARD_NAME, "KUN"),
 		},
-		.driver_data = (void *)&lcd1600x2560_rightside_up,
+		.driver_data = __UNCONST(&lcd1600x2560_rightside_up),
 	}, {	/* AYA NEO SLIDE */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "AYANEO"),
 		  DMI_MATCH(DMI_PRODUCT_NAME, "SLIDE"),
 		},
-		.driver_data = (void *)&lcd1080x1920_leftside_up,
+		.driver_data = __UNCONST(&lcd1080x1920_leftside_up),
 	}, {    /* AYN Loki Max */
 		.matches = {
 			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "ayn"),
 			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Loki Max"),
 		},
-		.driver_data = (void *)&lcd1080x1920_leftside_up,
+		.driver_data = __UNCONST(&lcd1080x1920_leftside_up),
 	}, {	/* AYN Loki Zero */
 		.matches = {
 			DMI_EXACT_MATCH(DMI_SYS_VENDOR, "ayn"),
 			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Loki Zero"),
 		},
-		.driver_data = (void *)&lcd1080x1920_leftside_up,
+		.driver_data = __UNCONST(&lcd1080x1920_leftside_up),
 	}, {	/* Chuwi HiBook (CWI514) */
 		.matches = {
 			DMI_MATCH(DMI_BOARD_VENDOR, "Hampoo"),
@@ -281,19 +282,19 @@ static const struct dmi_system_id orientation_data[] = {
 			/* Above matches are too generic, add bios-date match */
 			DMI_MATCH(DMI_BIOS_DATE, "05/07/2016"),
 		},
-		.driver_data = (void *)&lcd1200x1920_rightside_up,
+		.driver_data = __UNCONST(&lcd1200x1920_rightside_up),
 	}, {	/* Chuwi Hi10 Pro (CWI529) */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "Hampoo"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Hi10 pro tablet"),
 		},
-		.driver_data = (void *)&lcd1200x1920_rightside_up,
+		.driver_data = __UNCONST(&lcd1200x1920_rightside_up),
 	}, {	/* Dynabook K50 */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Dynabook Inc."),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "dynabook K50/FR"),
 		},
-		.driver_data = (void *)&lcd800x1280_leftside_up,
+		.driver_data = __UNCONST(&lcd800x1280_leftside_up),
 	}, {	/* GPD MicroPC (generic strings, also match on bios date) */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Default string"),
@@ -301,19 +302,19 @@ static const struct dmi_system_id orientation_data[] = {
 		  DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "Default string"),
 		  DMI_EXACT_MATCH(DMI_BOARD_NAME, "Default string"),
 		},
-		.driver_data = (void *)&gpd_micropc,
+		.driver_data = __UNCONST(&gpd_micropc),
 	}, {	/* GPD MicroPC (later BIOS versions with proper DMI strings) */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "GPD"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "MicroPC"),
 		},
-		.driver_data = (void *)&lcd720x1280_rightside_up,
+		.driver_data = __UNCONST(&lcd720x1280_rightside_up),
 	}, {	/* GPD Win Max */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "GPD"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "G1619-01"),
 		},
-		.driver_data = (void *)&lcd800x1280_rightside_up,
+		.driver_data = __UNCONST(&lcd800x1280_rightside_up),
 	}, {	/*
 		 * GPD Pocket, note that the DMI data is less generic then
 		 * it seems, devices with a board-vendor of "AMI Corporation"
@@ -326,7 +327,7 @@ static const struct dmi_system_id orientation_data[] = {
 		  DMI_EXACT_MATCH(DMI_BOARD_SERIAL, "Default string"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Default string"),
 		},
-		.driver_data = (void *)&gpd_pocket,
+		.driver_data = __UNCONST(&gpd_pocket),
 	}, {	/* GPD Pocket 2 (generic strings, also match on bios date) */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Default string"),
@@ -334,7 +335,7 @@ static const struct dmi_system_id orientation_data[] = {
 		  DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "Default string"),
 		  DMI_EXACT_MATCH(DMI_BOARD_NAME, "Default string"),
 		},
-		.driver_data = (void *)&gpd_pocket2,
+		.driver_data = __UNCONST(&gpd_pocket2),
 	}, {	/* GPD Win (same note on DMI match as GPD Pocket) */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "AMI Corporation"),
@@ -342,7 +343,7 @@ static const struct dmi_system_id orientation_data[] = {
 		  DMI_EXACT_MATCH(DMI_BOARD_SERIAL, "Default string"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Default string"),
 		},
-		.driver_data = (void *)&gpd_win,
+		.driver_data = __UNCONST(&gpd_win),
 	}, {	/* GPD Win 2 (too generic strings, also match on bios date) */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Default string"),
@@ -350,25 +351,25 @@ static const struct dmi_system_id orientation_data[] = {
 		  DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "Default string"),
 		  DMI_EXACT_MATCH(DMI_BOARD_NAME, "Default string"),
 		},
-		.driver_data = (void *)&gpd_win2,
+		.driver_data = __UNCONST(&gpd_win2),
 	}, {	/* GPD Win 2 (correct DMI strings) */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "GPD"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "WIN2")
 		},
-		.driver_data = (void *)&lcd720x1280_rightside_up,
+		.driver_data = __UNCONST(&lcd720x1280_rightside_up),
 	}, {	/* GPD Win 3 */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "GPD"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "G1618-03")
 		},
-		.driver_data = (void *)&lcd720x1280_rightside_up,
+		.driver_data = __UNCONST(&lcd720x1280_rightside_up),
 	}, {	/* GPD Win Mini */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "GPD"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "G1617-01")
 		},
-		.driver_data = (void *)&lcd1080x1920_rightside_up,
+		.driver_data = __UNCONST(&lcd1080x1920_rightside_up),
 	}, {	/* I.T.Works TW891 */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "To be filled by O.E.M."),
@@ -376,14 +377,14 @@ static const struct dmi_system_id orientation_data[] = {
 		  DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "To be filled by O.E.M."),
 		  DMI_EXACT_MATCH(DMI_BOARD_NAME, "TW891"),
 		},
-		.driver_data = (void *)&itworks_tw891,
+		.driver_data = __UNCONST(&itworks_tw891),
 	}, {	/* KD Kurio Smart C15200 2-in-1 */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "KD Interactive"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Kurio Smart"),
 		  DMI_EXACT_MATCH(DMI_BOARD_NAME, "KDM960BCP"),
 		},
-		.driver_data = (void *)&lcd800x1280_rightside_up,
+		.driver_data = __UNCONST(&lcd800x1280_rightside_up),
 	}, {	/*
 		 * Lenovo Ideapad Miix 310 laptop, only some production batches
 		 * have a portrait screen, the resolution checks makes the quirk
@@ -394,57 +395,57 @@ static const struct dmi_system_id orientation_data[] = {
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "80SG"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_VERSION, "MIIX 310-10ICR"),
 		},
-		.driver_data = (void *)&lcd800x1280_rightside_up,
+		.driver_data = __UNCONST(&lcd800x1280_rightside_up),
 	}, {	/* Lenovo Ideapad Miix 320 */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "LENOVO"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "80XF"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_VERSION, "Lenovo MIIX 320-10ICR"),
 		},
-		.driver_data = (void *)&lcd800x1280_rightside_up,
+		.driver_data = __UNCONST(&lcd800x1280_rightside_up),
 	}, {	/* Lenovo Ideapad D330-10IGM (HD) */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "LENOVO"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_VERSION, "Lenovo ideapad D330-10IGM"),
 		},
-		.driver_data = (void *)&lcd800x1280_rightside_up,
+		.driver_data = __UNCONST(&lcd800x1280_rightside_up),
 	}, {	/* Lenovo Ideapad D330-10IGM (FHD) */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "LENOVO"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_VERSION, "Lenovo ideapad D330-10IGM"),
 		},
-		.driver_data = (void *)&lcd1200x1920_rightside_up,
+		.driver_data = __UNCONST(&lcd1200x1920_rightside_up),
 	}, {	/* Lenovo Ideapad D330-10IGL (HD) */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "LENOVO"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_VERSION, "Lenovo ideapad D330-10IGL"),
 		},
-		.driver_data = (void *)&lcd800x1280_rightside_up,
+		.driver_data = __UNCONST(&lcd800x1280_rightside_up),
 	}, {	/* Lenovo IdeaPad Duet 3 10IGL5 */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "LENOVO"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_VERSION, "IdeaPad Duet 3 10IGL5"),
 		},
-		.driver_data = (void *)&lcd1200x1920_rightside_up,
+		.driver_data = __UNCONST(&lcd1200x1920_rightside_up),
 	}, {	/* Lenovo Legion Go 8APU1 */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "LENOVO"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_VERSION, "Legion Go 8APU1"),
 		},
-		.driver_data = (void *)&lcd1600x2560_leftside_up,
+		.driver_data = __UNCONST(&lcd1600x2560_leftside_up),
 	}, {	/* Lenovo Yoga Book X90F / X90L */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Intel Corporation"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "CHERRYVIEW D1 PLATFORM"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_VERSION, "YETI-11"),
 		},
-		.driver_data = (void *)&lcd1200x1920_rightside_up,
+		.driver_data = __UNCONST(&lcd1200x1920_rightside_up),
 	}, {	/* Lenovo Yoga Book X91F / X91L */
 		.matches = {
 		  /* Non exact match to match F + L versions */
 		  DMI_MATCH(DMI_PRODUCT_NAME, "Lenovo YB1-X91"),
 		},
-		.driver_data = (void *)&lcd1200x1920_rightside_up,
+		.driver_data = __UNCONST(&lcd1200x1920_rightside_up),
 	}, {	/* Lenovo Yoga Tablet 2 830F / 830L */
 		.matches = {
 		 /*
@@ -459,76 +460,76 @@ static const struct dmi_system_id orientation_data[] = {
 		 /* Partial match on beginning of BIOS version */
 		 DMI_MATCH(DMI_BIOS_VERSION, "BLADE_21"),
 		},
-		.driver_data = (void *)&lcd1200x1920_rightside_up,
+		.driver_data = __UNCONST(&lcd1200x1920_rightside_up),
 	}, {	/* Lenovo Yoga Tab 3 X90F */
 		.matches = {
 		 DMI_MATCH(DMI_SYS_VENDOR, "Intel Corporation"),
 		 DMI_MATCH(DMI_PRODUCT_VERSION, "Blade3-10A-001"),
 		},
-		.driver_data = (void *)&lcd1600x2560_rightside_up,
+		.driver_data = __UNCONST(&lcd1600x2560_rightside_up),
 	}, {	/* Nanote UMPC-01 */
 		.matches = {
 		 DMI_MATCH(DMI_SYS_VENDOR, "RWC CO.,LTD"),
 		 DMI_MATCH(DMI_PRODUCT_NAME, "UMPC-01"),
 		},
-		.driver_data = (void *)&lcd1200x1920_rightside_up,
+		.driver_data = __UNCONST(&lcd1200x1920_rightside_up),
 	}, {	/* OneGX1 Pro */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "SYSTEM_MANUFACTURER"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "SYSTEM_PRODUCT_NAME"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_VERSION, "Default string"),
 		},
-		.driver_data = (void *)&onegx1_pro,
+		.driver_data = __UNCONST(&onegx1_pro),
 	}, {	/* OneXPlayer */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "ONE-NETBOOK TECHNOLOGY CO., LTD."),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "ONE XPLAYER"),
 		},
-		.driver_data = (void *)&lcd1600x2560_leftside_up,
+		.driver_data = __UNCONST(&lcd1600x2560_leftside_up),
 	}, {	/* OneXPlayer Mini (Intel) */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "ONE-NETBOOK TECHNOLOGY CO., LTD."),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "ONE XPLAYER"),
 		},
-		.driver_data = (void *)&lcd1200x1920_leftside_up,
+		.driver_data = __UNCONST(&lcd1200x1920_leftside_up),
 	}, {	/* OrangePi Neo */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "OrangePi"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "NEO-01"),
 		},
-		.driver_data = (void *)&lcd1200x1920_rightside_up,
+		.driver_data = __UNCONST(&lcd1200x1920_rightside_up),
 	}, {	/* Samsung GalaxyBook 10.6 */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "SAMSUNG ELECTRONICS CO., LTD."),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Galaxy Book 10.6"),
 		},
-		.driver_data = (void *)&lcd1280x1920_rightside_up,
+		.driver_data = __UNCONST(&lcd1280x1920_rightside_up),
 	}, {	/* Valve Steam Deck (Jupiter) */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Valve"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Jupiter"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_VERSION, "1"),
 		},
-		.driver_data = (void *)&lcd800x1280_rightside_up,
+		.driver_data = __UNCONST(&lcd800x1280_rightside_up),
 	}, {	/* Valve Steam Deck (Galileo) */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Valve"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Galileo"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_VERSION, "1"),
 		},
-		.driver_data = (void *)&lcd800x1280_rightside_up,
+		.driver_data = __UNCONST(&lcd800x1280_rightside_up),
 	}, {	/* VIOS LTH17 */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "VIOS"),
 		  DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "LTH17"),
 		},
-		.driver_data = (void *)&lcd800x1280_rightside_up,
+		.driver_data = __UNCONST(&lcd800x1280_rightside_up),
 	}, {	/* ZOTAC Gaming Zone */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "ZOTAC"),
 		  DMI_EXACT_MATCH(DMI_BOARD_NAME, "G0A1W"),
 		},
-		.driver_data = (void *)&lcd1080x1920_leftside_up,
+		.driver_data = __UNCONST(&lcd1080x1920_leftside_up),
 	}, {	/* One Mix 2S (generic strings, also match on bios date) */
 		.matches = {
 		  DMI_EXACT_MATCH(DMI_SYS_VENDOR, "Default string"),
@@ -536,7 +537,7 @@ static const struct dmi_system_id orientation_data[] = {
 		  DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "Default string"),
 		  DMI_EXACT_MATCH(DMI_BOARD_NAME, "Default string"),
 		},
-		.driver_data = (void *)&gpd_onemix2s,
+		.driver_data = __UNCONST(&gpd_onemix2s),
 	},
 	{}
 };

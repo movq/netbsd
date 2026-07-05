@@ -118,7 +118,8 @@ static int amdgpu_dma_buf_attach(struct dma_buf *dmabuf,
 static int amdgpu_dma_buf_pin(struct dma_buf_attachment *attach)
 {
 	struct dma_buf *dmabuf = attach->dmabuf;
-	struct amdgpu_bo *bo = gem_to_amdgpu_bo(dmabuf->priv);
+	struct drm_gem_object *obj = dmabuf->priv;
+	struct amdgpu_bo *bo = gem_to_amdgpu_bo(obj);
 	u32 domains = bo->allowed_domains;
 
 	dma_resv_assert_held(dmabuf->resv);
@@ -222,7 +223,8 @@ static struct sg_table *amdgpu_dma_buf_map(struct dma_buf_attachment *attach,
 			return ERR_PTR(-EINVAL);
 
 		r = amdgpu_vram_mgr_alloc_sgt(adev, bo->tbo.resource, 0,
-					      bo->tbo.base.size, attach->dev,
+					      bo->tbo.base.size,
+					      (struct device *)attach->dev,
 					      dir, &sgt);
 		if (r)
 			return ERR_PTR(r);
@@ -257,7 +259,8 @@ static void amdgpu_dma_buf_unmap(struct dma_buf_attachment *attach,
 		sg_free_table(sgt);
 		kfree(sgt);
 	} else {
-		amdgpu_vram_mgr_free_sgt(attach->dev, dir, sgt);
+		amdgpu_vram_mgr_free_sgt((struct device *)attach->dev, dir,
+		    sgt);
 	}
 }
 
@@ -410,7 +413,8 @@ amdgpu_dma_buf_create_obj(struct drm_device *dev, struct dma_buf *dma_buf)
 	dma_resv_lock(resv, NULL);
 
 	if (dma_buf->ops == &amdgpu_dmabuf_ops) {
-		struct amdgpu_bo *other = gem_to_amdgpu_bo(dma_buf->priv);
+		struct drm_gem_object *other_obj = dma_buf->priv;
+		struct amdgpu_bo *other = gem_to_amdgpu_bo(other_obj);
 
 		flags |= other->flags & (AMDGPU_GEM_CREATE_CPU_GTT_USWC |
 					 AMDGPU_GEM_CREATE_COHERENT |

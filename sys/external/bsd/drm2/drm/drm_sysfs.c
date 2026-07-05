@@ -45,6 +45,18 @@ drm_sysfs_connector_add(struct drm_connector *connector)
 	return 0;
 }
 
+int
+drm_sysfs_connector_add_late(struct drm_connector *connector)
+{
+
+	return 0;
+}
+
+void
+drm_sysfs_connector_remove_early(struct drm_connector *connector)
+{
+}
+
 void
 drm_sysfs_connector_remove(struct drm_connector *connector)
 {
@@ -56,7 +68,23 @@ drm_sysfs_hotplug_event(struct drm_device *dev)
 }
 
 void
+drm_sysfs_connector_hotplug_event(struct drm_connector *connector)
+{
+}
+
+void
 drm_sysfs_connector_status_event(struct drm_connector *connector,
     struct drm_property *prop)
+{
+}
+
+void
+drm_sysfs_connector_property_event(struct drm_connector *connector,
+    struct drm_property *prop)
+{
+}
+
+void
+drm_sysfs_lease_event(struct drm_device *dev)
 {
 }

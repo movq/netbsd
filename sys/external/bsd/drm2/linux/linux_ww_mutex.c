@@ -981,20 +981,39 @@ out:	KASSERTMSG((ret == 0 || ret == -EINTR), "ret=%d", ret);
 }
 
 /*
- * ww_mutex_trylock(mutex)
+ * ww_mutex_trylock(mutex, ctx)
  *
- *	Tro to acquire mutex and return 1, but if it can't be done
+ *	Try to acquire mutex and return 1, but if it can't be done
  *	immediately, return 0.
  */
 int
-ww_mutex_trylock(struct ww_mutex *mutex)
+ww_mutex_trylock(struct ww_mutex *mutex, struct ww_acquire_ctx *ctx)
 {
 	int ret;
 
+	if (ctx != NULL) {
+		KASSERTMSG((ctx->wwx_owner == curlwp),
+		    "ctx %p owned by %p, not self (%p)", ctx, ctx->wwx_owner,
+		    curlwp);
+		KASSERTMSG((ctx->wwx_acquired != ~0U),
+		    "ctx %p finished, can't be used any more", ctx);
+		KASSERTMSG((ctx->wwx_class == mutex->wwm_class),
+		    "ctx %p in class %p, mutex %p in class %p",
+		    ctx, ctx->wwx_class, mutex, mutex->wwm_class);
+	}
+
 	mutex_enter(&mutex->wwm_lock);
+	if (ctx != NULL)
+		ww_acquire_done_check(mutex, ctx);
 	if (mutex->wwm_state == WW_UNLOCKED) {
-		mutex->wwm_state = WW_OWNED;
-		mutex->wwm_u.owner = curlwp;
+		if (ctx == NULL) {
+			mutex->wwm_state = WW_OWNED;
+			mutex->wwm_u.owner = curlwp;
+		} else {
+			mutex->wwm_state = WW_CTX;
+			mutex->wwm_u.ctx = ctx;
+			ctx->wwx_acquired++;
+		}
 		WW_WANTLOCK(mutex);
 		WW_LOCKED(mutex);
 		ret = 1;

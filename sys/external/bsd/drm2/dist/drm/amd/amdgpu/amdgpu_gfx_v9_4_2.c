@@ -37,6 +37,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "amdgpu_ras.h"
 #include "amdgpu_gfx.h"
 
+#include <linux/nbsd-namespace.h>
+
 #define SE_ID_MAX 8
 #define CU_ID_MAX 16
 #define SIMD_ID_MAX 4
@@ -1861,7 +1863,9 @@ static void gfx_v9_4_2_log_cu_timeout_status(struct amdgpu_device *adev,
 
 		dev_info(
 			adev->dev,
-			"\t SIMD %d, Wave %d: status 0x%x, pc 0x%llx, exec 0x%llx, inst 0x%llx, ib_sts 0x%x\n",
+			"\t SIMD %d, Wave %d: status 0x%x, pc 0x%"PRIx64
+			", exec 0x%"PRIx64", inst 0x%"PRIx64
+			", ib_sts 0x%x\n",
 			simd, wave, wave_status,
 			((uint64_t)wave_pc_hi << 32 | wave_pc_lo),
 			((uint64_t)wave_exec_hi << 32 | wave_exec_lo),

@@ -657,6 +657,8 @@ static ssize_t aqua_vanjaram_read_pcie_state(struct amdgpu_device *adev,
 
 	ds_pdev = pci_upstream_bridge(adev->pdev);
 	us_pdev = pci_upstream_bridge(ds_pdev);
+	if (!us_pdev)
+		return -ENODEV;
 
 	pcie_capability_read_word(us_pdev, PCI_EXP_DEVSTA,
 				  &pcie_regs->device_status);

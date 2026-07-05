@@ -29,6 +29,7 @@
 #ifndef	_LINUX_XARRAY_H_
 #define	_LINUX_XARRAY_H_
 
+#include <sys/mutex.h>
 #include <sys/rbtree.h>
 
 #include <linux/slab.h>
@@ -40,6 +41,8 @@ struct xa_limit {
 	uint32_t	max;
 	uint32_t	min;
 };
+
+#define XA_LIMIT(_min, _max) (struct xa_limit) { .min = _min, .max = _max }
 
 struct xarray {
 	kmutex_t		xa_lock;
@@ -64,30 +67,204 @@ xa_err(void *cookie)
 	return (uintptr_t)cookie >> 2;
 }
 
+static inline bool
+xa_is_err(const void *entry)
+{
+	return xa_err(__UNCONST(entry)) != 0;
+}
+
+static inline void *
+xa_mk_value(unsigned long value)
+{
+
+	return (void *)((value << 1) | 1);
+}
+
+static inline bool
+xa_is_value(const void *entry)
+{
+
+	return (uintptr_t)entry & 1;
+}
+
+static inline unsigned long
+xa_to_value(const void *entry)
+{
+
+	return (uintptr_t)entry >> 1;
+}
+
 #define	XA_FLAGS_ALLOC	0
+#define	XA_FLAGS_ALLOC1	0
+#define	XA_FLAGS_LOCK_IRQ	0
 
-#define	xa_alloc	linux_xa_alloc
-#define	xa_destroy	linux_xa_destroy
-#define	xa_erase	linux_xa_erase
-#define	xa_find		linux_xa_find
-#define	xa_find_after	linux_xa_find_after
-#define	xa_init_flags	linux_xa_init_flags
+#define	DEFINE_XARRAY_FLAGS(name, flags) \
+	struct xarray name = { .xa_gfp = (flags) }
+
+#define	DEFINE_XARRAY_ALLOC(name) \
+	DEFINE_XARRAY_FLAGS(name, XA_FLAGS_ALLOC)
+#define	DEFINE_XARRAY_ALLOC1(name) \
+	DEFINE_XARRAY_FLAGS(name, XA_FLAGS_ALLOC1)
+
+/* Lock/unlock for external callers that need atomic multi-operation sequences */
+#define	xa_lock(_xa)		mutex_enter(&(_xa)->xa_lock)
+#define	xa_unlock(_xa)		mutex_exit(&(_xa)->xa_lock)
+#define	xa_lock_irq(_xa)	mutex_enter(&(_xa)->xa_lock)
+#define	xa_unlock_irq(_xa)	mutex_exit(&(_xa)->xa_lock)
+#define	xa_lock_irqsave(_xa, _flags) \
+	do { (_flags) = 0; mutex_enter(&(_xa)->xa_lock); } while (0)
+#define	xa_unlock_irqrestore(_xa, _flags) \
+	do { (void)(_flags); mutex_exit(&(_xa)->xa_lock); } while (0)
+
+/* Lock-free implementation functions */
 #define	xa_limit_32b	linux_xa_limit_32b
-#define	xa_load		linux_xa_load
-#define	xa_store	linux_xa_store
 
-void	xa_init_flags(struct xarray *, gfp_t);
-void	xa_destroy(struct xarray *);
+void	linux_xa_init_flags(struct xarray *, gfp_t);
+void	linux_xa_destroy(struct xarray *);
 
-void *	xa_load(struct xarray *, unsigned long);
-void *	xa_store(struct xarray *, unsigned long, void *, gfp_t);
-void *	xa_erase(struct xarray *, unsigned long);
+void *	linux_xa_load(struct xarray *, unsigned long);
+void *	linux_xa_store(struct xarray *, unsigned long, void *, gfp_t);
+void *	linux_xa_erase(struct xarray *, unsigned long);
 
-int	xa_alloc(struct xarray *, uint32_t *, void *, struct xa_limit, gfp_t);
-void *	xa_find(struct xarray *, unsigned long *, unsigned long, unsigned);
-void *	xa_find_after(struct xarray *, unsigned long *, unsigned long,
+int	linux_xa_alloc(struct xarray *, uint32_t *, void *, struct xa_limit,
+	    gfp_t);
+int	linux_xa_alloc_cyclic(struct xarray *, uint32_t *, void *,
+	    struct xa_limit, uint32_t *, gfp_t);
+void *	linux_xa_find(struct xarray *, unsigned long *, unsigned long, unsigned);
+void *	linux_xa_find_after(struct xarray *, unsigned long *, unsigned long,
 	    unsigned);
 
 extern const struct xa_limit xa_limit_32b;
+
+static inline void
+xa_init_flags(struct xarray *xa, gfp_t gfp)
+{
+	linux_xa_init_flags(xa, gfp);
+}
+
+static inline void
+xa_init(struct xarray *xa)
+{
+	linux_xa_init_flags(xa, 0);
+}
+
+static inline void
+xa_destroy(struct xarray *xa)
+{
+	linux_xa_destroy(xa);
+}
+
+static inline void *
+xa_load(struct xarray *xa, unsigned long index)
+{
+	return linux_xa_load(xa, index);
+}
+
+static inline bool
+xa_empty(const struct xarray *xa)
+{
+	return xa->xa_tree.rbt_root == NULL;
+}
+
+static inline void *
+xa_store(struct xarray *xa, unsigned long index, void *entry, gfp_t gfp)
+{
+	void *r;
+	mutex_enter(&xa->xa_lock);
+	r = linux_xa_store(xa, index, entry, gfp);
+	mutex_exit(&xa->xa_lock);
+	return r;
+}
+
+static inline void *
+__xa_store(struct xarray *xa, unsigned long index, void *entry, gfp_t gfp)
+{
+
+	return linux_xa_store(xa, index, entry, gfp);
+}
+
+static inline void *
+xa_store_irq(struct xarray *xa, unsigned long index, void *entry, gfp_t gfp)
+{
+	void *r;
+
+	xa_lock_irq(xa);
+	r = __xa_store(xa, index, entry, gfp);
+	xa_unlock_irq(xa);
+	return r;
+}
+
+static inline void *
+xa_erase(struct xarray *xa, unsigned long index)
+{
+	void *r;
+	mutex_enter(&xa->xa_lock);
+	r = linux_xa_erase(xa, index);
+	mutex_exit(&xa->xa_lock);
+	return r;
+}
+
+static inline void *
+__xa_erase(struct xarray *xa, unsigned long index)
+{
+
+	return linux_xa_erase(xa, index);
+}
+
+static inline void *
+xa_erase_irq(struct xarray *xa, unsigned long index)
+{
+	void *r;
+
+	xa_lock_irq(xa);
+	r = __xa_erase(xa, index);
+	xa_unlock_irq(xa);
+	return r;
+}
+
+static inline int
+xa_alloc(struct xarray *xa, uint32_t *id, void *entry, struct xa_limit xr,
+    gfp_t gfp)
+{
+	int r;
+	mutex_enter(&xa->xa_lock);
+	r = linux_xa_alloc(xa, id, entry, xr, gfp);
+	mutex_exit(&xa->xa_lock);
+	return r;
+}
+
+static inline int
+xa_alloc_cyclic_irq(struct xarray *xa, uint32_t *id, void *entry,
+    struct xa_limit xr, uint32_t *next, gfp_t gfp)
+{
+	int r;
+
+	mutex_enter(&xa->xa_lock);
+	r = linux_xa_alloc_cyclic(xa, id, entry, xr, next, gfp);
+	mutex_exit(&xa->xa_lock);
+	return r;
+}
+
+static inline void *
+xa_find(struct xarray *xa, unsigned long *start, unsigned long max,
+    unsigned tagmask)
+{
+	void *r;
+	mutex_enter(&xa->xa_lock);
+	r = linux_xa_find(xa, start, max, tagmask);
+	mutex_exit(&xa->xa_lock);
+	return r;
+}
+
+static inline void *
+xa_find_after(struct xarray *xa, unsigned long *start, unsigned long max,
+    unsigned tagmask)
+{
+	void *r;
+	mutex_enter(&xa->xa_lock);
+	r = linux_xa_find_after(xa, start, max, tagmask);
+	mutex_exit(&xa->xa_lock);
+	return r;
+}
 
 #endif	/* _LINUX_XARRAY_H_ */

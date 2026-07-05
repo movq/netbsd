@@ -119,6 +119,64 @@ amdgpu_gem_update_timeline_node(struct drm_file *filp,
 	return 0;
 }
 
+#ifdef __NetBSD__
+static int
+amdgpu_gem_fault(struct uvm_faultinfo *ufi, vaddr_t vaddr,
+    struct vm_page **pps, int npages, int centeridx, vm_prot_t access_type,
+    int flags)
+{
+	struct uvm_object *uobj = ufi->entry->object.uvm_obj;
+	struct drm_gem_object *gobj = container_of(uobj,
+	    struct drm_gem_object, gemo_uvmobj);
+	struct ttm_buffer_object *bo =
+	    &gem_to_amdgpu_bo(gobj)->tbo;
+	struct drm_device *ddev = bo->base.dev;
+	vm_fault_t fault;
+	int error, idx;
+
+	rw_exit(uobj->vmobjlock);
+	if (UVM_ET_ISCOPYONWRITE(ufi->entry)) {
+		error = EINVAL;
+		goto out;
+	}
+
+	error = ttm_bo_uvm_reserve(bo, ufi);
+	if (error != 0) {
+		if (error == ERESTART)
+			return error;
+		goto out;
+	}
+
+	if (!drm_dev_enter(ddev, &idx)) {
+		error = EINVAL;
+		goto unlock;
+	}
+	fault = amdgpu_bo_fault_reserve_notify(bo);
+	if (fault != 0) {
+		error = (fault == VM_FAULT_NOPAGE) ? 0 : EINVAL;
+		drm_dev_exit(idx);
+		goto unlock;
+	}
+
+	error = ttm_bo_uvm_fault_reserved(ufi, vaddr, pps, npages,
+	    centeridx, access_type, flags);
+	drm_dev_exit(idx);
+	if (error == ERESTART)
+		return error;
+
+unlock:
+	dma_resv_unlock(bo->base.resv);
+out:
+	uvmfault_unlockall(ufi, ufi->entry->aref.ar_amap, NULL);
+	return error;
+}
+
+static const struct uvm_pagerops amdgpu_gem_vm_ops = {
+	.pgo_reference = ttm_bo_uvm_reference,
+	.pgo_detach = ttm_bo_uvm_detach,
+	.pgo_fault = amdgpu_gem_fault,
+};
+#else
 static vm_fault_t amdgpu_gem_fault(struct vm_fault *vmf)
 {
 	struct ttm_buffer_object *bo = vmf->vma->vm_private_data;
@@ -158,6 +216,7 @@ static const struct vm_operations_struct amdgpu_gem_vm_ops = {
 	.close = ttm_bo_vm_close,
 	.access = ttm_bo_vm_access
 };
+#endif
 
 static void amdgpu_gem_object_free(struct drm_gem_object *gobj)
 {
@@ -324,7 +383,7 @@ static void amdgpu_gem_object_close(struct drm_gem_object *obj,
 	struct dma_fence *fence = NULL;
 	struct amdgpu_bo_va *bo_va;
 	struct drm_exec exec;
-	long r;
+	long r = 0;
 
 	drm_exec_init(&exec, DRM_EXEC_IGNORE_DUPLICATES, 0);
 	drm_exec_until_all_locked(&exec) {
@@ -367,7 +426,15 @@ out_unlock:
 	drm_exec_fini(&exec);
 }
 
-static int amdgpu_gem_object_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
+#ifdef __NetBSD__
+static int
+amdgpu_gem_object_mmap(struct drm_gem_object *obj, off_t *offp, size_t size,
+    int prot, int *flagsp, int *advicep, struct uvm_object **uobjp,
+    int *maxprotp)
+#else
+static int
+amdgpu_gem_object_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
+#endif
 {
 	struct amdgpu_bo *bo = gem_to_amdgpu_bo(obj);
 
@@ -376,6 +443,10 @@ static int amdgpu_gem_object_mmap(struct drm_gem_object *obj, struct vm_area_str
 	if (bo->flags & AMDGPU_GEM_CREATE_NO_CPU_ACCESS)
 		return -EPERM;
 
+#ifdef __NetBSD__
+	return drm_gem_ttm_mmap(obj, offp, size, prot, flagsp, advicep,
+	    uobjp, maxprotp);
+#else
 	/* Workaround for Thunk bug creating PROT_NONE,MAP_PRIVATE mappings
 	 * for debugger access to invisible VRAM. Should have used MAP_SHARED
 	 * instead. Clearing VM_MAYWRITE prevents the mapping from ever
@@ -386,6 +457,7 @@ static int amdgpu_gem_object_mmap(struct drm_gem_object *obj, struct vm_area_str
 		vm_flags_clear(vma, VM_MAYWRITE);
 
 	return drm_gem_ttm_mmap(obj, vma);
+#endif
 }
 
 const struct drm_gem_object_funcs amdgpu_gem_object_funcs = {
@@ -471,8 +543,9 @@ retry:
 			initial_domain |= AMDGPU_GEM_DOMAIN_GTT;
 			goto retry;
 		}
-		DRM_DEBUG("Failed to allocate GEM object (%llu, %d, %llu, %d)\n",
-				size, initial_domain, args->in.alignment, r);
+		DRM_DEBUG("Failed to allocate GEM object (%"PRIu64", %"PRIu32
+		    ", %"PRIu64", %d)\n", size, initial_domain,
+		    args->in.alignment, r);
 	}
 
 	if (flags & AMDGPU_GEM_CREATE_VM_ALWAYS_VALID) {
@@ -836,18 +909,18 @@ int amdgpu_gem_va_ioctl(struct drm_device *dev, void *data,
 
 	/* Validate virtual address range against reserved regions. */
 	if (args->va_address < AMDGPU_VA_RESERVED_BOTTOM) {
-		dev_dbg(pci_dev_dev(dev),
+		dev_dbg(dev->dev,
 			"va_address 0x%"PRIX64" is in reserved area 0x%"PRIX64"\n",
-			args->va_address, AMDGPU_VA_RESERVED_BOTTOM);
+			args->va_address, (uint64_t)AMDGPU_VA_RESERVED_BOTTOM);
 		return -EINVAL;
 	}
 
 	if (args->va_address >= AMDGPU_GMC_HOLE_START &&
 	    args->va_address < AMDGPU_GMC_HOLE_END) {
-		dev_dbg(pci_dev_dev(dev),
+		dev_dbg(dev->dev,
 			"va_address 0x%"PRIX64" is in VA hole 0x%"PRIX64"-0x%"PRIX64"\n",
-			args->va_address, AMDGPU_GMC_HOLE_START,
-			AMDGPU_GMC_HOLE_END);
+			args->va_address, (uint64_t)AMDGPU_GMC_HOLE_START,
+			(uint64_t)AMDGPU_GMC_HOLE_END);
 		return -EINVAL;
 	}
 
@@ -856,14 +929,14 @@ int amdgpu_gem_va_ioctl(struct drm_device *dev, void *data,
 	vm_size = adev->vm_manager.max_pfn * AMDGPU_GPU_PAGE_SIZE;
 	vm_size -= AMDGPU_VA_RESERVED_TOP;
 	if (args->va_address + args->map_size > vm_size) {
-		dev_dbg(pci_dev_dev(dev),
+		dev_dbg(dev->dev,
 			"va_address 0x%"PRIX64" is in top reserved area 0x%"PRIX64"\n",
 			args->va_address + args->map_size, vm_size);
 		return -EINVAL;
 	}
 
 	if ((args->flags & ~valid_flags) && (args->flags & ~prt_flags)) {
-		dev_dbg(pci_dev_dev(dev), "invalid flags combination 0x%08X\n",
+		dev_dbg(dev->dev, "invalid flags combination 0x%08X\n",
 			args->flags);
 		return -EINVAL;
 	}
@@ -876,7 +949,7 @@ int amdgpu_gem_va_ioctl(struct drm_device *dev, void *data,
 	case AMDGPU_VA_OP_REPLACE:
 		break;
 	default:
-		dev_dbg(pci_dev_dev(dev), "unsupported operation %d\n",
+		dev_dbg(dev->dev, "unsupported operation %d\n",
 			args->operation);
 		return -EINVAL;
 	}
@@ -1007,7 +1080,7 @@ int amdgpu_gem_op_ioctl(struct drm_device *dev, void *data,
 	struct amdgpu_bo *robj;
 	struct drm_exec exec;
 	struct amdgpu_fpriv *fpriv = filp->driver_priv;
-	int r;
+	int r = 0;
 
 	if (args->padding)
 		return -EINVAL;

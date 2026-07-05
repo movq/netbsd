@@ -83,7 +83,7 @@ static void dp_retrain_link_dp_test(struct dc_link *link,
 	struct audio_output audio_output[MAX_PIPES];
 	struct dc_stream_state *streams_on_link[MAX_PIPES];
 	int num_streams_on_link = 0;
-	struct dc *dc = (struct dc *)link->dc;
+	struct dc *dc = __UNCONST(link->dc);
 
 	needs_divider_update = (link->dc->link_srv->dp_get_encoding_format(link_setting) !=
 	link->dc->link_srv->dp_get_encoding_format((const struct dc_link_settings *) &link->cur_link_settings));
@@ -689,7 +689,7 @@ bool dp_set_test_pattern(
 		/* Set CRTC Test Pattern */
 		set_crtc_test_pattern(link, pipe_ctx, test_pattern, test_pattern_color_space);
 		dp_set_hw_test_pattern(link, &pipe_ctx->link_res, test_pattern,
-				(uint8_t *)p_custom_pattern,
+				p_custom_pattern,
 				(uint32_t)cust_pattern_size);
 
 		/* Unblank Stream */
@@ -735,7 +735,7 @@ bool dp_set_test_pattern(
 		}
 
 		dp_set_hw_test_pattern(link, &pipe_ctx->link_res, test_pattern,
-				(uint8_t *)p_custom_pattern,
+				p_custom_pattern,
 				(uint32_t)cust_pattern_size);
 
 		if (test_pattern != DP_TEST_PATTERN_VIDEO_MODE) {

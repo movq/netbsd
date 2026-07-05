@@ -38,10 +38,21 @@
 #include <sys/time.h>
 #include <sys/timevar.h>
 
+#include <machine/limits.h>
+
 #include <linux/jiffies.h>
 #include <linux/time.h>
 
 typedef int64_t	ktime_t;
+
+static inline ktime_t
+ktime_set(int64_t secs, unsigned long nsecs)
+{
+	if (secs >= INT64_MAX/NSEC_PER_SEC)
+		return INT64_MAX;
+
+	return secs*NSEC_PER_SEC + (int64_t)nsecs;
+}
 
 static inline int64_t
 ktime_to_ns(ktime_t kt)
@@ -59,6 +70,22 @@ static inline int64_t
 ktime_to_ms(ktime_t kt)
 {
 	return ktime_to_ns(kt)/1000000;
+}
+
+static inline int64_t
+ktime_divns(ktime_t kt, int64_t divisor)
+{
+	return kt/divisor;
+}
+
+static inline int
+ktime_compare(ktime_t a, ktime_t b)
+{
+	if (a < b)
+		return -1;
+	if (a > b)
+		return 1;
+	return 0;
 }
 
 static inline ktime_t
@@ -159,6 +186,12 @@ ktime_get_ns(void)
 }
 
 static inline uint64_t
+ktime_get_boottime_ns(void)
+{
+	return ktime_to_ns(ktime_get_boottime());
+}
+
+static inline uint64_t
 ktime_get_raw_ns(void)
 {
 	return ktime_to_ns(ktime_get_raw());
@@ -204,6 +237,11 @@ ktime_ms_delta(ktime_t a, ktime_t b)
 	return ktime_to_ms(ktime_sub(a, b));
 }
 
+static inline bool
+ktime_before(ktime_t a, ktime_t b)
+{
+	return a < b;
+}
 
 static inline bool
 time_in_range(unsigned long x, unsigned long a, unsigned long b)

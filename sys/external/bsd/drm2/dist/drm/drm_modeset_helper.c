@@ -25,6 +25,7 @@
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, "$NetBSD: drm_modeset_helper.c,v 1.2 2021/12/18 23:44:57 riastradh Exp $");
 
+#include <linux/err.h>
 #include <linux/export.h>
 
 #include <drm/drm_atomic_helper.h>

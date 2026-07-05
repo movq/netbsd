@@ -46,9 +46,16 @@
 __KERNEL_RCSID(0, "$NetBSD$");
 
 #include <drm/drm_suballoc.h>
+
+#ifdef __NetBSD__
+#define	SUBALLOC_LOCK(sa)	(&(sa)->lock)
+#else
+#define	SUBALLOC_LOCK(sa)	(&(sa)->wq.lock)
+#endif
 #include <drm/drm_print.h>
 
 #include <linux/export.h>
+#include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/sched.h>
 #include <linux/wait.h>
@@ -79,7 +86,12 @@ void drm_suballoc_manager_init(struct drm_suballoc_manager *sa_manager,
 	if (WARN_ON_ONCE(align & (align - 1)))
 		align = roundup_pow_of_two(align);
 
+#ifdef __NetBSD__
+	DRM_INIT_WAITQUEUE(&sa_manager->wq, "drmsuballoc");
+	spin_lock_init(&sa_manager->lock);
+#else
 	init_waitqueue_head(&sa_manager->wq);
+#endif
 	sa_manager->size = size;
 	sa_manager->align = align;
 	sa_manager->hole = &sa_manager->olist;
@@ -115,6 +127,10 @@ void drm_suballoc_manager_fini(struct drm_suballoc_manager *sa_manager)
 	}
 
 	sa_manager->size = 0;
+#ifdef __NetBSD__
+	spin_lock_destroy(&sa_manager->lock);
+	DRM_DESTROY_WAITQUEUE(&sa_manager->wq);
+#endif
 }
 EXPORT_SYMBOL(drm_suballoc_manager_fini);
 
@@ -207,6 +223,7 @@ static bool __drm_suballoc_event(struct drm_suballoc_manager *sa_manager,
 	return ((eoffset - soffset) >= (size + wasted));
 }
 
+#ifndef __NetBSD__
 /**
  * drm_suballoc_event() - Check if we can stop waiting
  * @sa_manager: pointer to the sa_manager
@@ -222,11 +239,12 @@ static bool drm_suballoc_event(struct drm_suballoc_manager *sa_manager,
 {
 	bool ret;
 
-	spin_lock(&sa_manager->wq.lock);
+	spin_lock(SUBALLOC_LOCK(sa_manager));
 	ret = __drm_suballoc_event(sa_manager, size, align);
-	spin_unlock(&sa_manager->wq.lock);
+	spin_unlock(SUBALLOC_LOCK(sa_manager));
 	return ret;
 }
+#endif
 
 static bool drm_suballoc_next_hole(struct drm_suballoc_manager *sa_manager,
 				   struct dma_fence **fences,
@@ -342,7 +360,7 @@ drm_suballoc_new(struct drm_suballoc_manager *sa_manager, size_t size,
 	INIT_LIST_HEAD(&sa->olist);
 	INIT_LIST_HEAD(&sa->flist);
 
-	spin_lock(&sa_manager->wq.lock);
+	spin_lock(SUBALLOC_LOCK(sa_manager));
 	do {
 		for (i = 0; i < DRM_SUBALLOC_MAX_QUEUES; ++i)
 			tries[i] = 0;
@@ -352,7 +370,7 @@ drm_suballoc_new(struct drm_suballoc_manager *sa_manager, size_t size,
 
 			if (drm_suballoc_try_alloc(sa_manager, sa,
 						   size, align)) {
-				spin_unlock(&sa_manager->wq.lock);
+				spin_unlock(SUBALLOC_LOCK(sa_manager));
 				return sa;
 			}
 
@@ -366,7 +384,7 @@ drm_suballoc_new(struct drm_suballoc_manager *sa_manager, size_t size,
 		if (count) {
 			long t;
 
-			spin_unlock(&sa_manager->wq.lock);
+			spin_unlock(SUBALLOC_LOCK(sa_manager));
 			t = dma_fence_wait_any_timeout(fences, count, intr,
 						       MAX_SCHEDULE_TIMEOUT,
 						       NULL);
@@ -374,22 +392,34 @@ drm_suballoc_new(struct drm_suballoc_manager *sa_manager, size_t size,
 				dma_fence_put(fences[i]);
 
 			r = (t > 0) ? 0 : t;
-			spin_lock(&sa_manager->wq.lock);
+			spin_lock(SUBALLOC_LOCK(sa_manager));
 		} else if (intr) {
 			/* if we have nothing to wait for block */
+#ifdef __NetBSD__
+			DRM_SPIN_WAIT_UNTIL(r, &sa_manager->wq,
+			    SUBALLOC_LOCK(sa_manager),
+			    __drm_suballoc_event(sa_manager, size, align));
+#else
 			r = wait_event_interruptible_locked
 				(sa_manager->wq,
 				 __drm_suballoc_event(sa_manager, size, align));
+#endif
 		} else {
+#ifdef __NetBSD__
+			DRM_SPIN_WAIT_NOINTR_UNTIL(r, &sa_manager->wq,
+			    SUBALLOC_LOCK(sa_manager),
+			    __drm_suballoc_event(sa_manager, size, align));
+#else
 			spin_unlock(&sa_manager->wq.lock);
 			wait_event(sa_manager->wq,
 				   drm_suballoc_event(sa_manager, size, align));
 			r = 0;
 			spin_lock(&sa_manager->wq.lock);
+#endif
 		}
 	} while (!r);
 
-	spin_unlock(&sa_manager->wq.lock);
+	spin_unlock(SUBALLOC_LOCK(sa_manager));
 	kfree(sa);
 	return ERR_PTR(r);
 }
@@ -412,7 +442,7 @@ void drm_suballoc_free(struct drm_suballoc *suballoc,
 
 	sa_manager = suballoc->manager;
 
-	spin_lock(&sa_manager->wq.lock);
+	spin_lock(SUBALLOC_LOCK(sa_manager));
 	if (fence && !dma_fence_is_signaled(fence)) {
 		u32 idx;
 
@@ -422,8 +452,12 @@ void drm_suballoc_free(struct drm_suballoc *suballoc,
 	} else {
 		drm_suballoc_remove_locked(suballoc);
 	}
+#ifdef __NetBSD__
+	DRM_SPIN_WAKEUP_ALL(&sa_manager->wq, SUBALLOC_LOCK(sa_manager));
+#else
 	wake_up_all_locked(&sa_manager->wq);
-	spin_unlock(&sa_manager->wq.lock);
+#endif
+	spin_unlock(SUBALLOC_LOCK(sa_manager));
 }
 EXPORT_SYMBOL(drm_suballoc_free);
 
@@ -434,7 +468,7 @@ void drm_suballoc_dump_debug_info(struct drm_suballoc_manager *sa_manager,
 {
 	struct drm_suballoc *i;
 
-	spin_lock(&sa_manager->wq.lock);
+	spin_lock(SUBALLOC_LOCK(sa_manager));
 	list_for_each_entry(i, &sa_manager->olist, olist) {
 		unsigned long long soffset = i->soffset;
 		unsigned long long eoffset = i->eoffset;
@@ -455,7 +489,7 @@ void drm_suballoc_dump_debug_info(struct drm_suballoc_manager *sa_manager,
 
 		drm_puts(p, "\n");
 	}
-	spin_unlock(&sa_manager->wq.lock);
+	spin_unlock(SUBALLOC_LOCK(sa_manager));
 }
 EXPORT_SYMBOL(drm_suballoc_dump_debug_info);
 #endif

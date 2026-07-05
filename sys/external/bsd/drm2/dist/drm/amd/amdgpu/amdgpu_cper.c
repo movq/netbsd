@@ -26,8 +26,16 @@
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, "$NetBSD$");
 
+#ifdef __NetBSD__
+#include <sys/types.h>
+
+#include <dev/clock_subr.h>
+#endif
+
 #include <linux/list.h>
 #include "amdgpu.h"
+
+#include <linux/nbsd-namespace.h>
 
 static const guid_t MCE			= CPER_NOTIFY_MCE;
 static const guid_t CMC			= CPER_NOTIFY_CMC;
@@ -43,6 +51,20 @@ static void __inc_entry_length(struct cper_hdr *hdr, uint32_t size)
 
 static void amdgpu_cper_get_timestamp(struct cper_timestamp *timestamp)
 {
+#ifdef __NetBSD__
+	struct clock_ymdhms tm;
+	time_t now = ktime_get_real_seconds();
+
+	clock_secs_to_ymdhms(now, &tm);
+	timestamp->seconds = tm.dt_sec;
+	timestamp->minutes = tm.dt_min;
+	timestamp->hours = tm.dt_hour;
+	timestamp->flag = 0;
+	timestamp->day = tm.dt_day;
+	timestamp->month = tm.dt_mon;
+	timestamp->year = tm.dt_year % 100;
+	timestamp->century = tm.dt_year / 100;
+#else
 	struct tm tm;
 	time64_t now = ktime_get_real_seconds();
 
@@ -55,6 +77,7 @@ static void amdgpu_cper_get_timestamp(struct cper_timestamp *timestamp)
 	timestamp->month = 1 + tm.tm_mon;
 	timestamp->year = (1900 + tm.tm_year) % 100;
 	timestamp->century = (1900 + tm.tm_year) / 100;
+#endif
 }
 
 void amdgpu_cper_entry_fill_hdr(struct amdgpu_device *adev,

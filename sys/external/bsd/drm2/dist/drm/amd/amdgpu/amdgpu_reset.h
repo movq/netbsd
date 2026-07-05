@@ -118,7 +118,7 @@ int amdgpu_reset_restore_env(struct amdgpu_device *adev,
 			     struct amdgpu_reset_context *reset_context);
 
 struct amdgpu_reset_domain *amdgpu_reset_create_reset_domain(enum amdgpu_reset_domain_type type,
-							     char *wq_name);
+							     const char *wq_name);
 
 void amdgpu_reset_destroy_reset_domain(struct kref *ref);
 

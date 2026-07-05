@@ -65,8 +65,8 @@ enum dc_status {
 	DC_ERROR_UNEXPECTED = -1
 };
 
-char *dc_status_to_str(enum dc_status status);
-char *dc_pixel_encoding_to_str(enum dc_pixel_encoding pixel_encoding);
-char *dc_color_depth_to_str(enum dc_color_depth color_depth);
+const char *dc_status_to_str(enum dc_status status);
+const char *dc_pixel_encoding_to_str(enum dc_pixel_encoding pixel_encoding);
+const char *dc_color_depth_to_str(enum dc_color_depth color_depth);
 
 #endif /* _CORE_STATUS_H_ */

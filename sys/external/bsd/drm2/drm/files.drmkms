@@ -12,6 +12,8 @@ define	drmkms_i2c: drmkms_linux
 
 define	drmkms: drmkms_linux, drmkms_i2c, linux, sysmon_power
 
+defflag	DRMKMS: drmkms
+
 # This code comes from the Linux kernel, which assumes signed
 # overflow is OK.
 makeoptions 	drmkms	"COPTS.drmkms"+="-fwrapv"
@@ -46,17 +48,24 @@ endif
 
 makeoptions	drmkms	"CPPFLAGS.drmkms"+="-DCONFIG_BACKLIGHT_CLASS_DEVICE=0"
 makeoptions	drmkms	"CPPFLAGS.drmkms"+="-DCONFIG_BACKLIGHT_CLASS_DEVICE_MODULE=0"
+makeoptions	drmkms	"CPPFLAGS.drmkms"+="-DCONFIG_DRM_CLIENT=1"
 makeoptions	drmkms	"CPPFLAGS.drmkms"+="-DCONFIG_DRM_FBDEV_EMULATION=1"
 makeoptions	drmkms	"CPPFLAGS.drmkms"+="-DCONFIG_DRM_FBDEV_OVERALLOC=100"
+makeoptions	drmkms	"CPPFLAGS.drmkms"+="-DCONFIG_DRM_CLIENT_DEFAULT=\"fbdev\""
+makeoptions	drmkms	"CPPFLAGS.drmkms"+="-DCONFIG_DRM_CLIENT_SETUP=1"
+makeoptions	drmkms	"CPPFLAGS.drmkms"+="-DCONFIG_DRM_PANEL=1"
 makeoptions	drmkms	"CPPFLAGS.drmkms"+="-DCONFIG_FB=0"
+makeoptions	drmkms	"CPPFLAGS.drmkms"+="-DCONFIG_COMPAT"
 makeoptions	drmkms	"CPPFLAGS.drmkms"+="-DCONFIG_LOCKDEP=0"
 makeoptions	drmkms	"CPPFLAGS.drmkms"+="-DCONFIG_PCI=1"
 
 makeoptions	drmkms	"CWARNFLAGS.drmkms"+="-Wno-missing-field-initializers"
 
 # NetBSD additions.
-file	external/bsd/drm2/drm/drm_agp_hook.c		drmkms
+#file	external/bsd/drm2/drm/drm_agp_hook.c		drmkms
 file	external/bsd/drm2/drm/drm_cdevsw.c		drmkms
+file	external/bsd/drm2/dist/drm/drm_client.c		drmkms
+file	external/bsd/drm2/dist/drm/drm_client_event.c	drmkms
 file	external/bsd/drm2/drm/drm_gem_vm.c		drmkms
 file	external/bsd/drm2/drm/drm_module.c		drmkms
 file	external/bsd/drm2/drm/drm_stub.c		!drmkms & !drmbase
@@ -82,6 +91,7 @@ makeoptions 	drmkms 	"CWARNFLAGS.drm_client_modeset.c"+="-Wno-shadow"
 makeoptions 	drmkms 	"CWARNFLAGS.drm_dp_helper.c"+="-Wno-pointer-arith"
 makeoptions 	drmkms 	"CWARNFLAGS.drm_fb_helper.c"+="-Wno-shadow"
 makeoptions 	drmkms 	"CWARNFLAGS.drm_edid.c"+="-Wno-shadow"
+makeoptions	drmkms	"CWARNFLAGS.drm_format_helper.c"+="-Wno-pointer-arith"
 makeoptions 	drmkms 	"CWARNFLAGS.drm_ioctl.c"+="-Wno-shadow"
 makeoptions	drmkms	"CWARNFLAGS.drm_mm.c"+="${${ACTIVE_CC} == clang :? -Wno-unused-function :}"
 makeoptions 	drmkms 	"CWARNFLAGS.drm_modes.c"+="-Wno-shadow"
@@ -97,19 +107,19 @@ makeoptions 	drmkms 	"CWARNFLAGS.drm_modes.c"+="-Wno-shadow"
 #
 # * not yet adapted to current drm code base
 #
-define	drmums: drmkms
-makeoptions	drmums	"CPPFLAGS.drmkms"+="-DCONFIG_DRM_LEGACY"
-makeoptions	drmums	"CPPFLAGS.drmums"+="${CPPFLAGS.drmkms}"
-file	external/bsd/drm2/dist/drm/drm_bufs.c		drmums
-file	external/bsd/drm2/dist/drm/drm_context.c	drmums
-file	external/bsd/drm2/dist/drm/drm_dma.c		drmums
-file	external/bsd/drm2/dist/drm/drm_legacy_misc.c	drmums
-file	external/bsd/drm2/drm/drm_lock.c		drmums
-file	external/bsd/drm2/drm/drm_scatter.c		drmums
+#define	drmums: drmkms
+#makeoptions	drmums	"CPPFLAGS.drmkms"+="-DCONFIG_DRM_LEGACY"
+#makeoptions	drmums	"CPPFLAGS.drmums"+="${CPPFLAGS.drmkms}"
+#file	external/bsd/drm2/dist/drm/drm_bufs.c		drmums
+#file	external/bsd/drm2/dist/drm/drm_context.c	drmums
+#file	external/bsd/drm2/dist/drm/drm_dma.c		drmums
+#file	external/bsd/drm2/dist/drm/drm_legacy_misc.c	drmums
+#file	external/bsd/drm2/drm/drm_lock.c		drmums
+#file	external/bsd/drm2/drm/drm_scatter.c		drmums
 
 # Set `options DRM_LEGACY' to allow loading modules requiring drmums
 # even if none are statically linked into the kernel.
-defflag		DRM_LEGACY: drmums
+#defflag		DRM_LEGACY: drmums
 
 # GPU scheduler
 define	drmkms_sched: drmkms
@@ -128,7 +138,12 @@ file	external/bsd/drm2/dist/drm/drm_auth.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_blend.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_bridge.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_bridge_helper.c	drmkms
+file	external/bsd/drm2/dist/drm/drm_buddy.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_cache.c	drmkms
+#file	external/bsd/drm2/dist/drm/drm_client_event.c	drmkms
+file	external/bsd/drm2/dist/drm/drm_client_modeset.c	drmkms
+file	external/bsd/drm2/dist/drm/clients/drm_client_setup.c	drmkms
+file	external/bsd/drm2/dist/drm/clients/drm_fbdev_client.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_color_mgmt.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_connector.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_crtc.c	drmkms
@@ -140,10 +155,12 @@ file	external/bsd/drm2/dist/drm/drm_dumb_buffers.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_edid.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_eld.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_encoder.c	drmkms
+file	external/bsd/drm2/dist/drm/drm_exec.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_fb_helper.c	drmkms
+file	external/bsd/drm2/dist/drm/drm_fbdev_ttm.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_file.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_flip_work.c	drmkms
-#file	external/bsd/drm2/dist/drm/drm_format_helper.c	drmkms
+file	external/bsd/drm2/dist/drm/drm_format_helper.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_fourcc.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_framebuffer.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_gem.c	drmkms
@@ -151,7 +168,7 @@ file	external/bsd/drm2/dist/drm/drm_gem_atomic_helper.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_gem_framebuffer_helper.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_ioc32.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_ioctl.c	drmkms
-#file	external/bsd/drm2/dist/drm/drm_kms_helper_common.c	drmkms
+file	external/bsd/drm2/dist/drm/drm_kms_helper_common.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_lease.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_managed.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_mm.c	drmkms
@@ -160,26 +177,40 @@ file	external/bsd/drm2/dist/drm/drm_mode_object.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_modes.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_modeset_helper.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_modeset_lock.c	drmkms
-file	external/bsd/drm2/dist/drm/drm_of.c	drmkms
+#file	external/bsd/drm2/dist/drm/drm_of.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_panel.c	drmkms
+file	external/bsd/drm2/dist/drm/drm_panel_backlight_quirks.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_panel_orientation_quirks.c	drmkms
 #file	external/bsd/drm2/dist/drm/drm_pci.c	drmkms  # drmkms_pci
 file	external/bsd/drm2/dist/drm/drm_plane.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_plane_helper.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_prime.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_print.c	drmkms
-file	external/bsd/drm2/dist/drm/drm_privacy_screen.c	drmkms
-file	external/bsd/drm2/dist/drm/drm_privacy_screen_x86.c	drmkms
+#file	external/bsd/drm2/dist/drm/drm_privacy_screen.c	drmkms
+#file	external/bsd/drm2/dist/drm/drm_privacy_screen_x86.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_probe_helper.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_property.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_rect.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_self_refresh_helper.c	drmkms
-#file	external/bsd/drm2/dist/drm/drm_simple_kms_helper.c	drmkms
+file	external/bsd/drm2/dist/drm/drm_simple_kms_helper.c	drmkms
+file	external/bsd/drm2/dist/drm/drm_suballoc.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_syncobj.c	drmkms
-#file	external/bsd/drm2/dist/drm/drm_sysfs.c	drmkms
+file	external/bsd/drm2/drm/drm_sysfs.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_trace_points.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_vblank.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_vblank_helper.c	drmkms
 file	external/bsd/drm2/dist/drm/drm_vblank_work.c	drmkms
-file	external/bsd/drm2/dist/drm/drm_vma_manager.c	drmkms
-#file	external/bsd/drm2/dist/drm/drm_writeback.c	drmkms
+file	external/bsd/drm2/drm/drm_vma_manager.c	drmkms
+file	external/bsd/drm2/drm/drm_writeback.c	drmkms
+
+# Display helpers needed by amdgpu.
+file	external/bsd/drm2/dist/drm/display/drm_dp_dual_mode_helper.c	drmkms
+file	external/bsd/drm2/dist/drm/display/drm_dp_helper.c	drmkms
+file	external/bsd/drm2/dist/drm/display/drm_dp_mst_topology.c	drmkms
+file	external/bsd/drm2/dist/drm/display/drm_dsc_helper.c	drmkms
+file	external/bsd/drm2/dist/drm/display/drm_hdmi_helper.c	drmkms
+file	external/bsd/drm2/dist/drm/display/drm_scdc_helper.c	drmkms
+
+# NetBSD implementations.
+file	external/bsd/drm2/drm/drm_hdcp.c	drmkms
+file	external/bsd/drm2/drm/drm_memory.c	drmkms

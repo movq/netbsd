@@ -417,7 +417,7 @@ struct clk_mgr_internal {
 
 	bool smu_present;
 	void *wm_range_table;
-	long long wm_range_table_addr;
+	int64_t wm_range_table_addr;
 
 	bool dpm_present;
 	bool pme_trigger_pending;

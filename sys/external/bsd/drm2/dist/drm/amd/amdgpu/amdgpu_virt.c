@@ -35,6 +35,10 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_virt.c,v 1.3 2021/12/19 12:21:29 riastradh Ex
 #include <drm/drm_drv.h>
 #include <xen/xen.h>
 
+#ifdef __NetBSD__
+#define	xen_initial_domain()	false
+#endif
+
 #include "amdgpu.h"
 #include "amdgpu_ras.h"
 #include "amdgpu_reset.h"
@@ -42,6 +46,8 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_virt.c,v 1.3 2021/12/19 12:21:29 riastradh Ex
 #include "vi.h"
 #include "soc15.h"
 #include "nv.h"
+
+#include <linux/nbsd-namespace.h>
 
 #define POPULATE_UCODE_INFO(vf2pf_info, ucode, ver) \
 	do { \
@@ -395,7 +401,8 @@ static void amdgpu_virt_ras_reserve_bps(struct amdgpu_device *adev)
 			if (amdgpu_bo_create_kernel_at(adev, bp << AMDGPU_GPU_PAGE_SHIFT,
 							AMDGPU_GPU_PAGE_SIZE,
 							&bo, NULL))
-				DRM_DEBUG("RAS WARN: reserve vram for retired page %llx fail\n", bp);
+				DRM_DEBUG("RAS WARN: reserve vram for retired page %"PRIx64" fail\n",
+				    bp);
 			data->bps_bo[i] = bo;
 		}
 		data->last_reserved = i + 1;
@@ -592,7 +599,7 @@ static int amdgpu_virt_write_vf2pf_data(struct amdgpu_device *adev)
 	vf2pf_info->header.size = sizeof(struct amd_sriov_msg_vf2pf_info);
 	vf2pf_info->header.version = AMD_SRIOV_MSG_FW_VRAM_VF2PF_VER;
 
-#ifdef MODULE
+#if defined(MODULE) && !defined(__NetBSD__)
 	if (THIS_MODULE->version != NULL)
 		strcpy(vf2pf_info->driver_version, THIS_MODULE->version);
 	else
@@ -1054,17 +1061,37 @@ bool amdgpu_virt_get_rlcg_reg_access_flag(struct amdgpu_device *adev,
 	return ret;
 }
 
+static inline u32
+amdgpu_virt_mmio_read(struct amdgpu_device *adev, u32 reg)
+{
+#ifdef __NetBSD__
+	return bus_space_read_4(adev->rmmiot, adev->rmmioh, reg * 4);
+#else
+	return readl((void __iomem *)adev->rmmio + reg * 4);
+#endif
+}
+
+static inline void
+amdgpu_virt_mmio_write(struct amdgpu_device *adev, u32 reg, u32 value)
+{
+#ifdef __NetBSD__
+	bus_space_write_4(adev->rmmiot, adev->rmmioh, reg * 4, value);
+#else
+	writel(value, (void __iomem *)adev->rmmio + reg * 4);
+#endif
+}
+
 u32 amdgpu_virt_rlcg_reg_rw(struct amdgpu_device *adev, u32 offset, u32 v, u32 flag, u32 xcc_id)
 {
 	struct amdgpu_rlcg_reg_access_ctrl *reg_access_ctrl;
 	uint32_t timeout = 50000;
 	uint32_t i, tmp;
 	uint32_t ret = 0;
-	void *scratch_reg0;
-	void *scratch_reg1;
-	void *scratch_reg2;
-	void *scratch_reg3;
-	void *spare_int;
+	u32 scratch_reg0;
+	u32 scratch_reg1;
+	u32 scratch_reg2;
+	u32 scratch_reg3;
+	u32 spare_int = 0;
 	unsigned long flags;
 
 	if (!adev->gfx.rlc.rlcg_reg_access_supported) {
@@ -1082,26 +1109,26 @@ u32 amdgpu_virt_rlcg_reg_rw(struct amdgpu_device *adev, u32 offset, u32 v, u32 f
 		return 0;
 
 	reg_access_ctrl = &adev->gfx.rlc.reg_access_ctrl[xcc_id];
-	scratch_reg0 = (void __iomem *)adev->rmmio + 4 * reg_access_ctrl->scratch_reg0;
-	scratch_reg1 = (void __iomem *)adev->rmmio + 4 * reg_access_ctrl->scratch_reg1;
-	scratch_reg2 = (void __iomem *)adev->rmmio + 4 * reg_access_ctrl->scratch_reg2;
-	scratch_reg3 = (void __iomem *)adev->rmmio + 4 * reg_access_ctrl->scratch_reg3;
+	scratch_reg0 = reg_access_ctrl->scratch_reg0;
+	scratch_reg1 = reg_access_ctrl->scratch_reg1;
+	scratch_reg2 = reg_access_ctrl->scratch_reg2;
+	scratch_reg3 = reg_access_ctrl->scratch_reg3;
 
 	spin_lock_irqsave(&adev->virt.rlcg_reg_lock, flags);
 
 	if (reg_access_ctrl->spare_int)
-		spare_int = (void __iomem *)adev->rmmio + 4 * reg_access_ctrl->spare_int;
+		spare_int = reg_access_ctrl->spare_int;
 
 	if (offset == reg_access_ctrl->grbm_cntl) {
 		/* if the target reg offset is grbm_cntl, write to scratch_reg2 */
-		writel(v, scratch_reg2);
+		amdgpu_virt_mmio_write(adev, scratch_reg2, v);
 		if (flag == AMDGPU_RLCG_GC_WRITE_LEGACY)
-			writel(v, ((void __iomem *)adev->rmmio) + (offset * 4));
+			amdgpu_virt_mmio_write(adev, offset, v);
 	} else if (offset == reg_access_ctrl->grbm_idx) {
 		/* if the target reg offset is grbm_idx, write to scratch_reg3 */
-		writel(v, scratch_reg3);
+		amdgpu_virt_mmio_write(adev, scratch_reg3, v);
 		if (flag == AMDGPU_RLCG_GC_WRITE_LEGACY)
-			writel(v, ((void __iomem *)adev->rmmio) + (offset * 4));
+			amdgpu_virt_mmio_write(adev, offset, v);
 	} else {
 		/*
 		 * SCRATCH_REG0 	= read/write value
@@ -1109,19 +1136,19 @@ u32 amdgpu_virt_rlcg_reg_rw(struct amdgpu_device *adev, u32 offset, u32 v, u32 f
 		 * SCRATCH_REG1[19:0]	= address in dword
 		 * SCRATCH_REG1[27:24]	= Error reporting
 		 */
-		writel(v, scratch_reg0);
-		writel((offset | flag), scratch_reg1);
+		amdgpu_virt_mmio_write(adev, scratch_reg0, v);
+		amdgpu_virt_mmio_write(adev, scratch_reg1, offset | flag);
 		if (reg_access_ctrl->spare_int)
-			writel(1, spare_int);
+			amdgpu_virt_mmio_write(adev, spare_int, 1);
 
 		for (i = 0; i < timeout; i++) {
-			tmp = readl(scratch_reg1);
+			tmp = amdgpu_virt_mmio_read(adev, scratch_reg1);
 			if (!(tmp & AMDGPU_RLCG_SCRATCH1_ADDRESS_MASK))
 				break;
 			udelay(10);
 		}
 
-		tmp = readl(scratch_reg1);
+		tmp = amdgpu_virt_mmio_read(adev, scratch_reg1);
 		if (i >= timeout || (tmp & AMDGPU_RLCG_SCRATCH1_ERROR_MASK) != 0) {
 			if (amdgpu_sriov_rlcg_error_report_enabled(adev)) {
 				if (tmp & AMDGPU_RLCG_VFGATE_DISABLED) {
@@ -1144,7 +1171,7 @@ u32 amdgpu_virt_rlcg_reg_rw(struct amdgpu_device *adev, u32 offset, u32 v, u32 f
 		}
 	}
 
-	ret = readl(scratch_reg0);
+	ret = amdgpu_virt_mmio_read(adev, scratch_reg0);
 
 	spin_unlock_irqrestore(&adev->virt.rlcg_reg_lock, flags);
 
@@ -1406,7 +1433,7 @@ amdgpu_virt_write_cpers_to_ring(struct amdgpu_device *adev,
 	if (cper_dump->wptr < adev->virt.ras.cper_rptr) {
 		dev_warn(
 			adev->dev,
-			"guest specified rptr that was too high! guest rptr: 0x%llx, host rptr: 0x%llx\n",
+			"guest specified rptr that was too high! guest rptr: 0x%"PRIx64", host rptr: 0x%"PRIx64"\n",
 			adev->virt.ras.cper_rptr, cper_dump->wptr);
 
 		adev->virt.ras.cper_rptr = cper_dump->wptr;
@@ -1423,7 +1450,7 @@ amdgpu_virt_write_cpers_to_ring(struct amdgpu_device *adev,
 
 	if (cper_dump->overflow_count)
 		dev_warn(adev->dev,
-			 "host reported CPER overflow of 0x%llx entries!\n",
+			 "host reported CPER overflow of 0x%"PRIx64" entries!\n",
 			 cper_dump->overflow_count);
 
 	adev->virt.ras.cper_rptr = cper_dump->wptr;

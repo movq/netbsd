@@ -63,9 +63,13 @@ static void ttm_global_release(void)
 		goto out;
 
 	ttm_pool_mgr_fini();
+#if defined(CONFIG_DEBUG_FS)
 	debugfs_remove(ttm_debugfs_root);
+#endif
 
+#ifndef __NetBSD__
 	__free_page(glob->dummy_read_page);
+#endif
 	memset(glob, 0, sizeof(*glob));
 out:
 	mutex_unlock(&ttm_global_mutex);
@@ -84,10 +88,12 @@ static int ttm_global_init(void)
 
 	si_meminfo(&si);
 
+#if defined(CONFIG_DEBUG_FS)
 	ttm_debugfs_root = debugfs_create_dir("ttm", NULL);
 	if (IS_ERR(ttm_debugfs_root)) {
 		ttm_debugfs_root = NULL;
 	}
+#endif
 
 	/* Limit the number of pages in the pool to about 50% of the total
 	 * system memory.
@@ -103,8 +109,15 @@ static int ttm_global_init(void)
 	ttm_pool_mgr_init(num_pages);
 	ttm_tt_mgr_init(num_pages, num_dma32);
 
+#ifdef __NetBSD__
+	/*
+	 * DRM AGP is not part of this import, and the native UVM fault path
+	 * reports an inaccessible device instead of installing a dummy page.
+	 */
+	glob->dummy_read_page = NULL;
+#else
 	glob->dummy_read_page = alloc_page(__GFP_ZERO | GFP_DMA32 |
-					   __GFP_NOWARN);
+	    __GFP_NOWARN);
 
 	/* Retry without GFP_DMA32 for platforms DMA32 is not available */
 	if (unlikely(glob->dummy_read_page == NULL)) {
@@ -115,15 +128,20 @@ static int ttm_global_init(void)
 		}
 		pr_warn("Using GFP_DMA32 fallback for dummy_read_page\n");
 	}
+#endif
 
 	INIT_LIST_HEAD(&glob->device_list);
 	atomic_set(&glob->bo_count, 0);
 
+#if defined(CONFIG_DEBUG_FS)
 	debugfs_create_atomic_t("buffer_objects", 0444, ttm_debugfs_root,
 				&glob->bo_count);
 out:
 	if (ret && ttm_debugfs_root)
 		debugfs_remove(ttm_debugfs_root);
+#else
+out:
+#endif
 	if (ret)
 		--ttm_glob_use_count;
 	mutex_unlock(&ttm_global_mutex);
@@ -225,8 +243,15 @@ int ttm_device_init(struct ttm_device *bdev, const struct ttm_device_funcs *func
 	if (ret)
 		return ret;
 
+	/* XXX NetBSD DRM618 */
+#ifndef __NetBSD__
 	bdev->wq = alloc_workqueue("ttm",
 				   WQ_MEM_RECLAIM | WQ_HIGHPRI | WQ_UNBOUND, 16);
+#endif
+	bdev->wq = alloc_workqueue("ttm",
+				   WQ_MEM_RECLAIM | WQ_HIGHPRI | WQ_UNBOUND, 1);
+
+
 	if (!bdev->wq) {
 		ttm_global_release();
 		return -ENOMEM;

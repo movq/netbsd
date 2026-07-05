@@ -13,6 +13,7 @@
 #include <linux/slab.h>
 #include <linux/kgdb.h>
 #include <linux/kref.h>
+#include <linux/math64.h>
 #include <linux/types.h>
 #include <linux/delay.h>
 #include <linux/mm.h>

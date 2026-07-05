@@ -59,4 +59,32 @@ void	kunmap_atomic(void *);
 void *	kmap(struct page *);
 void	kunmap(struct page *);
 
+static inline void *
+kmap_local_page(struct page *page)
+{
+
+	return kmap_atomic(page);
+}
+
+static inline void *
+kmap_local_page_prot(struct page *page, pgprot_t prot __unused)
+{
+
+	return kmap_atomic(page);
+}
+
+static inline void *
+kmap_local_page_try_from_panic(struct page *page)
+{
+
+	return kmap_atomic(page);
+}
+
+static inline void
+kunmap_local(void *addr)
+{
+
+	kunmap_atomic(addr);
+}
+
 #endif  /* _LINUX_HIGHMEM_H_ */

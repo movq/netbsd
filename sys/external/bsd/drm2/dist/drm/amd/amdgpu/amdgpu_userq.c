@@ -29,12 +29,15 @@ __KERNEL_RCSID(0, "$NetBSD$");
 
 #include <drm/drm_auth.h>
 #include <drm/drm_exec.h>
+#include <linux/capability.h>
 #include <linux/pm_runtime.h>
 
 #include "amdgpu.h"
 #include "amdgpu_vm.h"
 #include "amdgpu_userq.h"
 #include "amdgpu_userq_fence.h"
+
+#include <linux/nbsd-namespace.h>
 
 u32 amdgpu_userq_get_supported_ip_mask(struct amdgpu_device *adev)
 {
@@ -194,7 +197,8 @@ amdgpu_userq_wait_for_last_fence(struct amdgpu_userq_mgr *uq_mgr,
 	if (f && !dma_fence_is_signaled(f)) {
 		ret = dma_fence_wait_timeout(f, true, msecs_to_jiffies(100));
 		if (ret <= 0)
-			drm_file_err(uq_mgr->file, "Timed out waiting for fence=%llu:%llu\n",
+			drm_file_err(uq_mgr->file,
+				     "Timed out waiting for fence=%"PRIu64":%"PRIu64"\n",
 				     f->context, f->seqno);
 	}
 }
@@ -373,7 +377,7 @@ amdgpu_userq_get_doorbell_index(struct amdgpu_userq_mgr *uq_mgr,
 	index = amdgpu_doorbell_index_on_bar(uq_mgr->adev, db_obj->obj,
 					     db_info->doorbell_offset, db_size);
 	drm_dbg_driver(adev_to_drm(uq_mgr->adev),
-		       "[Usermode queues] doorbell index=%lld\n", index);
+		       "[Usermode queues] doorbell index=%"PRIu64"\n", index);
 	amdgpu_bo_unreserve(db_obj->obj);
 	return index;
 
@@ -463,7 +467,8 @@ static int amdgpu_mqd_info_read(struct seq_file *m, void *unused)
 	}
 
 	seq_printf(m, "queue_type: %d\n", queue->queue_type);
-	seq_printf(m, "mqd_gpu_address: 0x%llx\n", amdgpu_bo_gpu_offset(queue->mqd.obj));
+	seq_printf(m, "mqd_gpu_address: 0x%"PRIx64"\n",
+		   amdgpu_bo_gpu_offset(queue->mqd.obj));
 
 	amdgpu_bo_unreserve(bo);
 	amdgpu_bo_unref(&bo);
@@ -937,7 +942,8 @@ amdgpu_userq_wait_for_signal(struct amdgpu_userq_mgr *uq_mgr)
 			continue;
 		ret = dma_fence_wait_timeout(f, true, msecs_to_jiffies(100));
 		if (ret <= 0) {
-			drm_file_err(uq_mgr->file, "Timed out waiting for fence=%llu:%llu\n",
+			drm_file_err(uq_mgr->file,
+				     "Timed out waiting for fence=%"PRIu64":%"PRIu64"\n",
 				     f->context, f->seqno);
 			return -ETIMEDOUT;
 		}

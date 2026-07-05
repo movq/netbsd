@@ -1222,9 +1222,9 @@ struct dc_init_data {
 	 * applicable starting with DCN32/321 and are not used for ASICs upstreamed
 	 * before them.
 	 */
-	uint32_t *dcn_reg_offsets;
-	uint32_t *nbio_reg_offsets;
-	uint32_t *clk_reg_offsets;
+	const uint32_t *dcn_reg_offsets;
+	const uint32_t *nbio_reg_offsets;
+	const uint32_t *clk_reg_offsets;
 	void *bb_from_dmub;
 };
 
@@ -1755,9 +1755,9 @@ struct dc {
 	const char *build_id;
 	struct vm_helper *vm_helper;
 
-	uint32_t *dcn_reg_offsets;
-	uint32_t *nbio_reg_offsets;
-	uint32_t *clk_reg_offsets;
+	const uint32_t *dcn_reg_offsets;
+	const uint32_t *nbio_reg_offsets;
+	const uint32_t *clk_reg_offsets;
 
 	/* Scratch memory */
 	struct {

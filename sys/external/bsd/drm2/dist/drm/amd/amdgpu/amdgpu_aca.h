@@ -28,6 +28,7 @@
 
 #include <linux/list.h>
 
+struct dentry;
 struct ras_err_data;
 struct ras_query_context;
 
@@ -69,9 +70,15 @@ struct ras_query_context;
 #define ACA_EXTERROR_CODE_CE			0x3a
 #define ACA_EXTERROR_CODE_FAULT			0x3b
 
+#ifdef __NetBSD__
+#define ACA_ERROR_UE_MASK		BIT(ACA_ERROR_TYPE_UE)
+#define ACA_ERROR_CE_MASK		BIT(ACA_ERROR_TYPE_CE)
+#define ACA_ERROR_DEFERRED_MASK		BIT(ACA_ERROR_TYPE_DEFERRED)
+#else
 #define ACA_ERROR_UE_MASK		BIT_MASK(ACA_ERROR_TYPE_UE)
 #define ACA_ERROR_CE_MASK		BIT_MASK(ACA_ERROR_TYPE_CE)
 #define ACA_ERROR_DEFERRED_MASK		BIT_MASK(ACA_ERROR_TYPE_DEFERRED)
+#endif
 
 #define mmSMNAID_AID0_MCA_SMU		0x03b30400	/* SMN AID AID0 */
 #define mmSMNAID_XCD0_MCA_SMU		0x36430400	/* SMN AID XCD0 */
@@ -177,7 +184,9 @@ struct aca_handle {
 	struct aca_handle_manager *mgr;
 	struct aca_error_cache error_cache;
 	const struct aca_bank_ops *bank_ops;
+#ifndef __NetBSD__
 	struct device_attribute aca_attr;
+#endif
 	char attr_name[64];
 	const char *name;
 	u32 mask;

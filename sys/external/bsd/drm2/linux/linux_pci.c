@@ -42,9 +42,15 @@ __KERNEL_RCSID(0, "$NetBSD: linux_pci.c,v 1.30 2024/06/24 21:23:53 riastradh Exp
 #include <dev/acpi/acpi_pci.h>
 #endif
 
+#include <linux/delay.h>
 #include <linux/pci.h>
+#include <linux/slab.h>
 
 #include <drm/drm_agp_netbsd.h>
+
+struct pci_saved_state {
+	struct pci_conf_state pss_pc;
+};
 
 device_t
 pci_dev_dev(struct pci_dev *pdev)
@@ -56,12 +62,18 @@ pci_dev_dev(struct pci_dev *pdev)
 void
 pci_set_drvdata(struct pci_dev *pdev, void *drvdata)
 {
+
 	pdev->pd_drvdata = drvdata;
+	if (pdev->pd_dev != NULL)
+		dev_set_drvdata(pdev->pd_dev, drvdata);
 }
 
 void *
 pci_get_drvdata(struct pci_dev *pdev)
 {
+
+	if (pdev->pd_dev != NULL)
+		return dev_get_drvdata(pdev->pd_dev);
 	return pdev->pd_drvdata;
 }
 
@@ -165,6 +177,7 @@ linux_pci_dev_init(struct pci_dev *pdev, device_t dev, device_t parent,
 	pdev->pd_saved_state = NULL;
 	pdev->pd_intr_handles = NULL;
 	pdev->pd_drvdata = NULL;
+	pdev->msix_cap = pci_find_capability(pdev, PCI_CAP_MSIX);
 	pdev->bus = kmem_zalloc(sizeof(*pdev->bus), KM_NOSLEEP);
 	pdev->bus->pb_pc = pa->pa_pc;
 	pdev->bus->pb_dev = parent;
@@ -212,9 +225,25 @@ linux_pci_dev_init(struct pci_dev *pdev, device_t dev, device_t parent,
 int
 pci_find_capability(struct pci_dev *pdev, int cap)
 {
+	int offset;
 
-	return pci_get_capability(pdev->pd_pa.pa_pc, pdev->pd_pa.pa_tag, cap,
-	    NULL, NULL);
+	if (!pci_get_capability(pdev->pd_pa.pa_pc, pdev->pd_pa.pa_tag, cap,
+		&offset, NULL))
+		return 0;
+
+	return offset;
+}
+
+int
+pci_find_ext_capability(struct pci_dev *pdev, int cap)
+{
+	int offset;
+
+	if (!pci_get_ext_capability(pdev->pd_pa.pa_pc, pdev->pd_pa.pa_tag,
+		cap, &offset, NULL))
+		return 0;
+
+	return offset;
 }
 
 int
@@ -474,6 +503,17 @@ pcie_capability_write_word(struct pci_dev *pdev, int reg, uint16_t value)
 	return 0;
 }
 
+bool
+pcie_aspm_enabled(struct pci_dev *pdev)
+{
+	uint16_t lcsr;
+
+	if (pcie_capability_read_word(pdev, PCI_EXP_LNKCTL, &lcsr) != 0)
+		return false;
+
+	return (lcsr & (PCIE_LCSR_ASPM_L0S | PCIE_LCSR_ASPM_L1)) != 0;
+}
+
 /* From PCIe 5.0 7.5.3.4 "Device Control Register" */
 static const unsigned readrqmax[] = {
 	128,
@@ -622,6 +662,7 @@ pci_dev_put(struct pci_dev *pdev)
 
 struct pci_get_class_state {
 	uint32_t		class_subclass_interface;
+	bool			base_class_only;
 	const struct pci_dev	*from;
 };
 
@@ -639,11 +680,16 @@ pci_get_class_match(void *cookie, const struct pci_attach_args *pa)
 			C->from = NULL;
 		return 0;
 	}
-	if (C->class_subclass_interface !=
-	    (PCI_CLASS(pa->pa_class) << 16 |
-		PCI_SUBCLASS(pa->pa_class) << 8 |
-		PCI_INTERFACE(pa->pa_class)))
-		return 0;
+	if (C->base_class_only) {
+		if (C->class_subclass_interface != PCI_CLASS(pa->pa_class))
+			return 0;
+	} else {
+		if (C->class_subclass_interface !=
+		    (PCI_CLASS(pa->pa_class) << 16 |
+			PCI_SUBCLASS(pa->pa_class) << 8 |
+			PCI_INTERFACE(pa->pa_class)))
+			return 0;
+	}
 
 	return 1;
 }
@@ -651,7 +697,27 @@ pci_get_class_match(void *cookie, const struct pci_attach_args *pa)
 struct pci_dev *
 pci_get_class(uint32_t class_subclass_interface, struct pci_dev *from)
 {
-	struct pci_get_class_state context = {class_subclass_interface, from},
+	struct pci_get_class_state context = {
+		class_subclass_interface, false, from
+	},
+	    *C = &context;
+	struct pci_attach_args pa;
+	struct pci_dev *pdev = NULL;
+
+	if (!pci_find_device1(&pa, &pci_get_class_match, C))
+		goto out;
+	pdev = kmem_zalloc(sizeof(*pdev), KM_SLEEP);
+	linux_pci_dev_init(pdev, NULL, NULL, &pa, NBPCI_KLUDGE_GET_MUMBLE);
+
+out:	if (from)
+		pci_dev_put(from);
+	return pdev;
+}
+
+struct pci_dev *
+pci_get_base_class(uint32_t base_class, struct pci_dev *from)
+{
+	struct pci_get_class_state context = {base_class, true, from},
 	    *C = &context;
 	struct pci_attach_args pa;
 	struct pci_dev *pdev = NULL;
@@ -880,15 +946,70 @@ pci_iounmap(struct pci_dev *pdev, void __pci_iomem *kva)
 	    pdev->pd_resources[i].size);
 }
 
-void
+int
 pci_save_state(struct pci_dev *pdev)
 {
 
-	KASSERT(pdev->pd_saved_state == NULL);
-	pdev->pd_saved_state = kmem_alloc(sizeof(*pdev->pd_saved_state),
-	    KM_SLEEP);
+	if (pdev->pd_saved_state == NULL)
+		pdev->pd_saved_state = kmem_alloc(sizeof(*pdev->pd_saved_state),
+		    KM_SLEEP);
 	pci_conf_capture(pdev->pd_pa.pa_pc, pdev->pd_pa.pa_tag,
 	    pdev->pd_saved_state);
+
+	return 0;
+}
+
+struct pci_saved_state *
+pci_store_saved_state(struct pci_dev *pdev)
+{
+	struct pci_saved_state *state;
+
+	if (pdev->pd_saved_state == NULL)
+		return NULL;
+
+	state = kmalloc(sizeof(*state), GFP_KERNEL);
+	if (state == NULL)
+		return NULL;
+
+	state->pss_pc = *pdev->pd_saved_state;
+	return state;
+}
+
+int
+pci_load_saved_state(struct pci_dev *pdev, struct pci_saved_state *state)
+{
+
+	if (state == NULL)
+		return 0;
+
+	if (pdev->pd_saved_state == NULL)
+		pdev->pd_saved_state = kmem_alloc(sizeof(*pdev->pd_saved_state),
+		    KM_SLEEP);
+	*pdev->pd_saved_state = state->pss_pc;
+
+	return 0;
+}
+
+int
+pci_wait_for_pending_transaction(struct pci_dev *pdev)
+{
+	uint16_t status;
+	unsigned i;
+
+	if (!pci_is_pcie(pdev))
+		return 1;
+
+	for (i = 0; i < 4; i++) {
+		if (i != 0)
+			msleep((1 << (i - 1)) * 100);
+		if (pcie_capability_read_word(pdev, PCI_EXP_DEVSTA,
+			&status) != 0)
+			return 0;
+		if (!ISSET(status, PCI_EXP_DEVSTA_TRPND))
+			return 1;
+	}
+
+	return 0;
 }
 
 void
@@ -900,6 +1021,33 @@ pci_restore_state(struct pci_dev *pdev)
 	    pdev->pd_saved_state);
 	kmem_free(pdev->pd_saved_state, sizeof(*pdev->pd_saved_state));
 	pdev->pd_saved_state = NULL;
+}
+
+/*
+ * Restore the conventional PCI configuration header even if config-space
+ * reads already return the saved values.  Some PCIe switches virtualize BAR
+ * values, so a device reset may require writes that pci_conf_restore would
+ * otherwise skip.
+ */
+void
+linux_pci_restore_state_force(struct pci_dev *pdev,
+    struct pci_saved_state *state)
+{
+	int i;
+
+	if (state == NULL)
+		return;
+
+	(void)pci_load_saved_state(pdev, state);
+	for (i = 0; i < 16; i++)
+		pci_conf_write(pdev->pd_pa.pa_pc, pdev->pd_pa.pa_tag, i * 4,
+		    pdev->pd_saved_state->reg[i]);
+
+	/*
+	 * Restore the saved capability and MSI state, and release the
+	 * temporary copy installed by pci_load_saved_state.
+	 */
+	pci_restore_state(pdev);
 }
 
 bool
@@ -996,6 +1144,8 @@ linux_pci_dev_destroy(struct pci_dev *pdev)
 {
 	unsigned i;
 
+	pci_set_drvdata(pdev, NULL);
+
 	if (pdev->bus->self != NULL) {
 		kmem_free(pdev->bus->self, sizeof(*pdev->bus->self));
 	}
@@ -1078,6 +1228,24 @@ pcie_get_speed_cap(struct pci_dev *dev)
 	}
 
 	return PCI_SPEED_UNKNOWN;
+}
+
+enum pcie_link_width
+pcie_get_width_cap(struct pci_dev *dev)
+{
+	pci_chipset_tag_t pc = dev->pd_pa.pa_pc;
+	pcitag_t tag = dev->pd_pa.pa_tag;
+	pcireg_t lcap;
+	int off;
+
+	if (pci_get_capability(pc, tag, PCI_CAP_PCIEXPRESS, &off, NULL) == 0)
+		return PCIE_LNK_WIDTH_UNKNOWN;
+
+	lcap = pci_conf_read(pc, tag, off + PCIE_LCAP);
+	if (lcap == 0)
+		return PCIE_LNK_WIDTH_UNKNOWN;
+
+	return __SHIFTOUT(lcap, PCIE_LCAP_MAX_WIDTH);
 }
 
 /*

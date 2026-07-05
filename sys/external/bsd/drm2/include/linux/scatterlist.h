@@ -45,8 +45,10 @@
 #define	__sg_alloc_table_from_pages	linux___sg_alloc_table_from_pages
 #define	dma_map_sg			linux_dma_map_sg
 #define	dma_map_sg_attrs		linux_dma_map_sg_attrs
+#define	dma_map_sgtable			linux_dma_map_sgtable
 #define	dma_unmap_sg			linux_dma_unmap_sg
 #define	dma_unmap_sg_attrs		linux_dma_unmap_sg_attrs
+#define	dma_unmap_sgtable		linux_dma_unmap_sgtable
 #define	sg_alloc_table			linux_sg_alloc_table
 #define	sg_alloc_table_from_bus_dmamem	linux_sg_alloc_table_from_bus_dmamem
 #define	sg_alloc_table_from_pages	linux_sg_alloc_table_from_pages
@@ -64,7 +66,41 @@ struct sg_table {
 		bus_dmamap_t	sg_dmamap;
 	} sgl[1];
 	unsigned	nents;
+	unsigned	orig_nents;
 };
+
+struct sg_page_iter {
+	struct scatterlist *sg;
+	unsigned int sg_pgoffset;
+};
+
+static inline void
+__sg_page_iter_start(struct sg_page_iter *iter, struct scatterlist *sgl,
+    unsigned int nents __unused, unsigned long pgoffset)
+{
+
+	iter->sg = sgl;
+	iter->sg_pgoffset = pgoffset - 1;
+}
+
+static inline bool
+__sg_page_iter_next(struct sg_page_iter *iter)
+{
+
+	iter->sg_pgoffset++;
+	return iter->sg_pgoffset < iter->sg->sg_npgs;
+}
+
+static inline struct page *
+sg_page_iter_page(struct sg_page_iter *iter)
+{
+
+	return iter->sg->sg_pgs[iter->sg_pgoffset];
+}
+
+#define	for_each_sgtable_page(sgt, iter, pgoffset)			      \
+	for (__sg_page_iter_start((iter), (sgt)->sgl, (sgt)->orig_nents,    \
+		(pgoffset)); __sg_page_iter_next(iter);)
 
 int sg_alloc_table(struct sg_table *, unsigned, gfp_t);
 int __sg_alloc_table_from_pages(struct sg_table *, struct page **, unsigned,
@@ -78,9 +114,18 @@ void sg_free_table(struct sg_table *);
 bus_addr_t sg_dma_address(const struct scatterlist *);
 bus_size_t sg_dma_len(const struct scatterlist *);
 
+static inline struct page *
+sg_page(const struct scatterlist *sg)
+{
+
+	return sg->sg_npgs ? sg->sg_pgs[0] : NULL;
+}
+
 int dma_map_sg(bus_dma_tag_t, struct scatterlist *, int, int);
 int dma_map_sg_attrs(bus_dma_tag_t, struct scatterlist *, int, int, int);
+int dma_map_sgtable(bus_dma_tag_t, struct sg_table *, int, unsigned long);
 void dma_unmap_sg(bus_dma_tag_t, struct scatterlist *, int, int);
 void dma_unmap_sg_attrs(bus_dma_tag_t, struct scatterlist *, int, int, int);
+void dma_unmap_sgtable(bus_dma_tag_t, struct sg_table *, int, unsigned long);
 
 #endif	/* _LINUX_SCATTERLIST_H_ */

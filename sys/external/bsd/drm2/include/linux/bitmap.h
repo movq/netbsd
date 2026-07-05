@@ -38,6 +38,51 @@
 
 #include <linux/slab.h>
 
+static inline unsigned long
+bitmap_read(const unsigned long *bitmap, unsigned long start,
+    unsigned long nbits)
+{
+	const unsigned long bpl = NBBY * sizeof(*bitmap);
+	unsigned long value = 0, bit;
+
+	if (nbits > bpl)
+		return 0;
+	for (bit = 0; bit < nbits; bit++)
+		if (bitmap[(start + bit) / bpl] &
+		    (1UL << ((start + bit) % bpl)))
+			value |= 1UL << bit;
+	return value;
+}
+
+static inline void
+bitmap_to_arr32(uint32_t *dst, const unsigned long *src, size_t nbits)
+{
+	size_t bit;
+
+	for (bit = 0; bit < nbits; bit += 32)
+		*dst++ = (uint32_t)bitmap_read(src, bit, MIN(32, nbits - bit));
+}
+
+static inline void
+bitmap_write(unsigned long *bitmap, unsigned long value,
+    unsigned long start, unsigned long nbits)
+{
+	const unsigned long bpl = NBBY * sizeof(*bitmap);
+	unsigned long bit;
+
+	if (nbits > bpl)
+		return;
+	for (bit = 0; bit < nbits; bit++) {
+		unsigned long *word = &bitmap[(start + bit) / bpl];
+		unsigned long mask = 1UL << ((start + bit) % bpl);
+
+		if (value & (1UL << bit))
+			*word |= mask;
+		else
+			*word &= ~mask;
+	}
+}
+
 /*
  * bitmap_zero(bitmap, nbits)
  *
@@ -51,6 +96,21 @@ bitmap_zero(unsigned long *bitmap, size_t nbits)
 	size_t n = howmany(nbits, bpl);
 
 	memset(bitmap, 0, n * sizeof(*bitmap));
+}
+
+/*
+ * bitmap_fill(bitmap, nbits)
+ *
+ *	Fill a bitmap that was allocated to have nbits bits.  Like
+ *	bitmap_zero, this also fills bits past nbits.
+ */
+static inline void
+bitmap_fill(unsigned long *bitmap, size_t nbits)
+{
+	const size_t bpl = NBBY * sizeof(*bitmap);
+	size_t n = howmany(nbits, bpl);
+
+	memset(bitmap, 0xff, n * sizeof(*bitmap));
 }
 
 /*

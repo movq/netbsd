@@ -236,6 +236,19 @@ static void __drm_dev_vprintk(const struct device *dev, const char *level,
 	if (!prefix)
 		prefix = "";
 
+#ifdef __NetBSD__
+	if (dev)
+		printf("%s ", device_xname(__UNCONST(dev)));
+	if (origin) {
+		char symbuf[128];
+
+		drm_symstr((vaddr_t)origin, symbuf, sizeof(symbuf));
+		printf("{" DRM_NAME ":%s}%s%s ", symbuf, prefix_pad, prefix);
+	} else {
+		printf("{" DRM_NAME "}%s%s ", prefix_pad, prefix);
+	}
+	vprintf(vaf->fmt, *vaf->va);
+#else
 	if (dev) {
 		if (origin)
 			dev_printk(level, dev, "[" DRM_NAME ":%ps]%s%s %pV",
@@ -251,6 +264,7 @@ static void __drm_dev_vprintk(const struct device *dev, const char *level,
 			printk("%s" "[" DRM_NAME "]%s%s %pV",
 			       level, prefix_pad, prefix, vaf);
 	}
+#endif
 }
 
 void __drm_printfn_info(struct drm_printer *p, struct va_format *vaf)

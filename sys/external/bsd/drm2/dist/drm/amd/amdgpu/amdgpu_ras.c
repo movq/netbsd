@@ -52,7 +52,9 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_ras.c,v 1.5 2021/12/19 12:31:45 riastradh Exp
 
 static bool notifier_registered;
 #endif
+#ifndef __NetBSD__		/* XXX debugfs/sysfs */
 static const char *RAS_FS_NAME = "ras";
+#endif
 
 #include <linux/nbsd-namespace.h>
 
@@ -148,8 +150,10 @@ atomic_t amdgpu_ras_in_intr = ATOMIC_INIT(0);
 
 static int amdgpu_ras_check_bad_page_unlock(struct amdgpu_ras *con,
 				uint64_t addr);
+#ifndef __NetBSD__		/* XXX debugfs */
 static int amdgpu_ras_check_bad_page(struct amdgpu_device *adev,
 				uint64_t addr);
+#endif
 
 static void amdgpu_ras_critical_region_init(struct amdgpu_device *adev);
 static void amdgpu_ras_critical_region_fini(struct amdgpu_device *adev);
@@ -169,6 +173,7 @@ void amdgpu_ras_set_error_query_ready(struct amdgpu_device *adev, bool ready)
 		amdgpu_ras_get_context(adev)->error_query_ready = ready;
 }
 
+#ifndef __NetBSD__		/* XXX debugfs/sysfs */
 static bool amdgpu_ras_get_error_query_ready(struct amdgpu_device *adev)
 {
 	if (adev && amdgpu_ras_get_context(adev))
@@ -176,7 +181,9 @@ static bool amdgpu_ras_get_error_query_ready(struct amdgpu_device *adev)
 
 	return false;
 }
+#endif
 
+#ifndef __NetBSD__		/* XXX debugfs */
 static int amdgpu_reserve_page_direct(struct amdgpu_device *adev, uint64_t address)
 {
 	struct ras_err_data err_data;
@@ -186,12 +193,12 @@ static int amdgpu_reserve_page_direct(struct amdgpu_device *adev, uint64_t addre
 	ret = amdgpu_ras_check_bad_page(adev, address);
 	if (ret == -EINVAL) {
 		dev_warn(adev->dev,
-			"RAS WARN: input address 0x%llx is invalid.\n",
+			"RAS WARN: input address 0x%"PRIx64" is invalid.\n",
 			address);
 		return -EINVAL;
 	} else if (ret == 1) {
 		dev_warn(adev->dev,
-			"RAS WARN: 0x%llx has already been marked as bad page!\n",
+			"RAS WARN: 0x%"PRIx64" has already been marked as bad page!\n",
 			address);
 		return 0;
 	}
@@ -257,7 +264,11 @@ static int amdgpu_check_address_validity(struct amdgpu_device *adev,
 			 */
 			if ((flags == BYPASS_ALLOCATED_ADDRESS) &&
 			    ((blk_info.task.pid != task_pid_nr(current)) ||
+#ifdef __NetBSD__
+				strncmp(blk_info.task.comm, current->p_comm, TASK_COMM_LEN)))
+#else
 				strncmp(blk_info.task.comm, current->comm, TASK_COMM_LEN)))
+#endif
 				return -EACCES;
 			else if ((flags == BYPASS_INITIALIZATION_ADDRESS) &&
 				(blk_info.task.pid == con->init_task_pid) &&
@@ -269,7 +280,6 @@ static int amdgpu_check_address_validity(struct amdgpu_device *adev,
 	return 0;
 }
 
-#ifndef __NetBSD__		/* XXX debugfs */
 static ssize_t amdgpu_ras_debugfs_read(struct file *f, char __user *buf,
 					size_t size, loff_t *pos)
 {
@@ -1140,7 +1150,7 @@ static void amdgpu_ras_error_print_error_data(struct amdgpu_device *adev,
 			mcm_info = &err_info->mcm_info;
 			if (err_info->ue_count) {
 				RAS_EVENT_LOG(adev, event_id, "socket: %d, die: %d, "
-					      "%lld new uncorrectable hardware errors detected in %s block\n",
+					      "%"PRIu64" new uncorrectable hardware errors detected in %s block\n",
 					      mcm_info->socket_id,
 					      mcm_info->die_id,
 					      err_info->ue_count,
@@ -1152,7 +1162,7 @@ static void amdgpu_ras_error_print_error_data(struct amdgpu_device *adev,
 			err_info = &err_node->err_info;
 			mcm_info = &err_info->mcm_info;
 			RAS_EVENT_LOG(adev, event_id, "socket: %d, die: %d, "
-				      "%lld uncorrectable hardware errors detected in total in %s block\n",
+				      "%"PRIu64" uncorrectable hardware errors detected in total in %s block\n",
 				      mcm_info->socket_id, mcm_info->die_id, err_info->ue_count, blk_name);
 		}
 
@@ -1163,7 +1173,7 @@ static void amdgpu_ras_error_print_error_data(struct amdgpu_device *adev,
 				mcm_info = &err_info->mcm_info;
 				if (err_info->de_count) {
 					RAS_EVENT_LOG(adev, event_id, "socket: %d, die: %d, "
-						      "%lld new deferred hardware errors detected in %s block\n",
+						      "%"PRIu64" new deferred hardware errors detected in %s block\n",
 						      mcm_info->socket_id,
 						      mcm_info->die_id,
 						      err_info->de_count,
@@ -1175,7 +1185,7 @@ static void amdgpu_ras_error_print_error_data(struct amdgpu_device *adev,
 				err_info = &err_node->err_info;
 				mcm_info = &err_info->mcm_info;
 				RAS_EVENT_LOG(adev, event_id, "socket: %d, die: %d, "
-					      "%lld deferred hardware errors detected in total in %s block\n",
+					      "%"PRIu64" deferred hardware errors detected in total in %s block\n",
 					      mcm_info->socket_id, mcm_info->die_id,
 					      err_info->de_count, blk_name);
 			}
@@ -1188,7 +1198,7 @@ static void amdgpu_ras_error_print_error_data(struct amdgpu_device *adev,
 				mcm_info = &err_info->mcm_info;
 				if (err_info->ce_count) {
 					RAS_EVENT_LOG(adev, event_id, "socket: %d, die: %d, "
-						      "%lld new correctable hardware errors detected in %s block\n",
+						      "%"PRIu64" new correctable hardware errors detected in %s block\n",
 						      mcm_info->socket_id,
 						      mcm_info->die_id,
 						      err_info->ce_count,
@@ -1200,7 +1210,7 @@ static void amdgpu_ras_error_print_error_data(struct amdgpu_device *adev,
 				err_info = &err_node->err_info;
 				mcm_info = &err_info->mcm_info;
 				RAS_EVENT_LOG(adev, event_id, "socket: %d, die: %d, "
-					      "%lld correctable hardware errors detected in total in %s block\n",
+					      "%"PRIu64" correctable hardware errors detected in total in %s block\n",
 					      mcm_info->socket_id, mcm_info->die_id,
 					      err_info->ce_count, blk_name);
 			}
@@ -1412,6 +1422,7 @@ static int amdgpu_aca_log_ras_error_data(struct amdgpu_device *adev, enum amdgpu
 	return amdgpu_aca_get_error_data(adev, &obj->aca_handle, type, err_data, qctx);
 }
 
+#ifndef __NetBSD__
 ssize_t amdgpu_ras_aca_sysfs_read(struct device *dev, struct device_attribute *attr,
 				  struct aca_handle *handle, char *buf, void *data)
 {
@@ -1429,6 +1440,7 @@ ssize_t amdgpu_ras_aca_sysfs_read(struct device *dev, struct device_attribute *a
 	return sysfs_emit(buf, "%s: %lu\n%s: %lu\n%s: %lu\n", "ue", info.ue_count,
 			  "ce", info.ce_count, "de", info.de_count);
 }
+#endif
 
 static int amdgpu_ras_query_error_status_helper(struct amdgpu_device *adev,
 						struct ras_query_if *info,
@@ -1724,7 +1736,7 @@ int amdgpu_ras_query_error_count(struct amdgpu_device *adev,
 	struct amdgpu_ras *con = amdgpu_ras_get_context(adev);
 	struct ras_manager *obj;
 	unsigned long ce, ue;
-	int ret;
+	int ret = 0;
 
 	if (!adev->ras_enabled || !con)
 		return -EOPNOTSUPP;
@@ -2087,11 +2099,11 @@ static struct dentry *amdgpu_ras_debugfs_create_ctrl_node(struct amdgpu_device *
 
 #endif	/* __NetBSD__ */
 
+#ifndef __NetBSD__		/* XXX amdgpu debugfs */
 static void amdgpu_ras_debugfs_create(struct amdgpu_device *adev,
 				      struct ras_fs_if *head,
 				      struct dentry *dir)
 {
-#ifndef __NetBSD__		/* XXX amdgpu debugfs */
 	struct ras_manager *obj = amdgpu_ras_find_obj(adev, &head->head);
 
 	if (!obj || !dir)
@@ -2105,8 +2117,8 @@ static void amdgpu_ras_debugfs_create(struct amdgpu_device *adev,
 
 	debugfs_create_file(obj->fs_data.debugfs_name, S_IWUGO | S_IRUGO, dir,
 			    obj, &amdgpu_ras_debugfs_ops);
-#endif
 }
+#endif
 
 static bool amdgpu_ras_aca_is_supported(struct amdgpu_device *adev)
 {
@@ -2165,6 +2177,7 @@ void amdgpu_ras_debugfs_create_all(struct amdgpu_device *adev)
 /* debugfs end */
 
 /* ras fs */
+#ifndef __NetBSD__		/* XXX amdgpu sysfs */
 static const BIN_ATTR(gpu_vram_bad_pages, S_IRUGO,
 		      amdgpu_ras_sysfs_badpages_read, NULL, 0);
 static DEVICE_ATTR(features, S_IRUGO,
@@ -2175,6 +2188,7 @@ static DEVICE_ATTR(schema, 0444,
 		amdgpu_ras_sysfs_schema_show, NULL);
 static DEVICE_ATTR(event_state, 0444,
 		   amdgpu_ras_sysfs_event_state_show, NULL);
+#endif
 static int amdgpu_ras_fs_init(struct amdgpu_device *adev)
 {
 #ifndef __NetBSD__		/* XXX amdgpu debugfs sysfs */
@@ -2354,7 +2368,14 @@ static void amdgpu_ras_interrupt_poison_creation_handler(struct ras_manager *obj
 		atomic_inc(&con->page_retirement_req_cnt);
 		atomic_inc(&con->poison_creation_count);
 
+#ifdef __NetBSD__
+		spin_lock(&con->page_retirement_wq_lock);
+		DRM_SPIN_WAKEUP_ALL(&con->page_retirement_wq,
+		    &con->page_retirement_wq_lock);
+		spin_unlock(&con->page_retirement_wq_lock);
+#else
 		wake_up(&con->page_retirement_wq);
+#endif
 	}
 }
 
@@ -3268,6 +3289,7 @@ static int amdgpu_ras_check_bad_page_unlock(struct amdgpu_ras *con,
  *
  * Note: this check is only for umc block
  */
+#ifndef __NetBSD__		/* XXX debugfs */
 static int amdgpu_ras_check_bad_page(struct amdgpu_device *adev,
 				uint64_t addr)
 {
@@ -3282,6 +3304,7 @@ static int amdgpu_ras_check_bad_page(struct amdgpu_device *adev,
 	mutex_unlock(&con->recovery_lock);
 	return ret;
 }
+#endif
 
 static void amdgpu_ras_validate_threshold(struct amdgpu_device *adev,
 					  uint32_t max_count)
@@ -3531,9 +3554,18 @@ static int amdgpu_ras_page_retirement_thread(void *param)
 
 	while (!kthread_should_stop()) {
 
+#ifdef __NetBSD__
+		spin_lock(&con->page_retirement_wq_lock);
+		DRM_SPIN_WAIT_UNTIL(ret, &con->page_retirement_wq,
+		    &con->page_retirement_wq_lock,
+		    kthread_should_stop() ||
+		    atomic_read(&con->page_retirement_req_cnt));
+		spin_unlock(&con->page_retirement_wq_lock);
+#else
 		wait_event_interruptible(con->page_retirement_wq,
-				kthread_should_stop() ||
-				atomic_read(&con->page_retirement_req_cnt));
+		    kthread_should_stop() ||
+		    atomic_read(&con->page_retirement_req_cnt));
+#endif
 
 		if (kthread_should_stop())
 			break;
@@ -3698,12 +3730,23 @@ int amdgpu_ras_recovery_init(struct amdgpu_device *adev, bool init_bp_info)
 	mutex_init(&con->page_rsv_lock);
 	INIT_KFIFO(con->poison_fifo);
 	mutex_init(&con->page_retirement_lock);
+#ifdef __NetBSD__
+	spin_lock_init(&con->page_retirement_wq_lock);
+	DRM_INIT_WAITQUEUE(&con->page_retirement_wq, "amdgpu_ras");
+#else
 	init_waitqueue_head(&con->page_retirement_wq);
+#endif
 	atomic_set(&con->page_retirement_req_cnt, 0);
 	atomic_set(&con->poison_creation_count, 0);
 	atomic_set(&con->poison_consumption_count, 0);
 	con->page_retirement_thread =
+#ifdef __NetBSD__
+		kthread_run(amdgpu_ras_page_retirement_thread, adev,
+		    "umc_page_retirement", &con->page_retirement_wq_lock,
+		    &con->page_retirement_wq);
+#else
 		kthread_run(amdgpu_ras_page_retirement_thread, adev, "umc_page_retirement");
+#endif
 	if (IS_ERR(con->page_retirement_thread)) {
 		con->page_retirement_thread = NULL;
 		dev_warn(adev->dev, "Failed to create umc_page_retirement thread!!!\n");
@@ -3758,6 +3801,12 @@ static int amdgpu_ras_recovery_fini(struct amdgpu_device *adev)
 	if (con->page_retirement_thread)
 		kthread_stop(con->page_retirement_thread);
 
+#ifdef __NetBSD__
+	FINI_KFIFO(con->poison_fifo);
+	DRM_DESTROY_WAITQUEUE(&con->page_retirement_wq);
+	spin_lock_destroy(&con->page_retirement_wq_lock);
+	mutex_destroy(&con->page_retirement_lock);
+#endif
 	atomic_set(&con->page_retirement_req_cnt, 0);
 	atomic_set(&con->poison_creation_count, 0);
 
@@ -5182,10 +5231,14 @@ static struct ras_err_node *amdgpu_ras_error_node_new(void)
 
 static int ras_err_info_cmp(void *priv, const struct list_head *a, const struct list_head *b)
 {
-	struct ras_err_node *nodea = container_of(a, struct ras_err_node, node);
-	struct ras_err_node *nodeb = container_of(b, struct ras_err_node, node);
-	struct amdgpu_smuio_mcm_config_info *infoa = &nodea->err_info.mcm_info;
-	struct amdgpu_smuio_mcm_config_info *infob = &nodeb->err_info.mcm_info;
+	const struct ras_err_node *nodea =
+		const_container_of(a, struct ras_err_node, node);
+	const struct ras_err_node *nodeb =
+		const_container_of(b, struct ras_err_node, node);
+	const struct amdgpu_smuio_mcm_config_info *infoa =
+		&nodea->err_info.mcm_info;
+	const struct amdgpu_smuio_mcm_config_info *infob =
+		&nodeb->err_info.mcm_info;
 
 	if (unlikely(infoa->socket_id != infob->socket_id))
 		return infoa->socket_id - infob->socket_id;
@@ -5413,17 +5466,28 @@ int amdgpu_ras_reserve_page(struct amdgpu_device *adev, uint64_t pfn)
 void amdgpu_ras_event_log_print(struct amdgpu_device *adev, u64 event_id,
 				const char *fmt, ...)
 {
+#ifndef __NetBSD__
 	struct va_format vaf;
+#endif
 	va_list args;
 
 	va_start(args, fmt);
+#ifdef __NetBSD__
+	if (adev->dev != NULL)
+		printf("%s: ", device_xname(adev->dev));
+	if (RAS_EVENT_ID_IS_VALID(event_id))
+		printf("{%"PRIu64"}", event_id);
+	vprintf(fmt, args);
+#else
 	vaf.fmt = fmt;
 	vaf.va = &args;
 
 	if (RAS_EVENT_ID_IS_VALID(event_id))
-		dev_printk(KERN_INFO, adev->dev, "{%llu}%pV", event_id, &vaf);
+		dev_printk(KERN_INFO, adev->dev, "{%"PRIu64"}%pV",
+			   event_id, &vaf);
 	else
 		dev_printk(KERN_INFO, adev->dev, "%pV", &vaf);
+#endif
 
 	va_end(args);
 }

@@ -38,12 +38,57 @@
 
 #include <linux/hrtimer.h>
 #include <linux/ratelimit.h>
+#include <linux/sysfs.h>
+
+#define	dev_get_drvdata		linux_dev_get_drvdata
+#define	dev_set_drvdata		linux_dev_set_drvdata
+
+struct device_attribute {
+	struct attribute attr;
+	ssize_t (*show)(struct device *, struct device_attribute *, char *);
+	ssize_t (*store)(struct device *, struct device_attribute *,
+	    const char *, size_t);
+};
+
+#define	__ATTR(_name, _mode, _show, _store) {			      \
+	.attr = { .name = #_name, .mode = (_mode) },		      \
+	.show = (_show),						      \
+	.store = (_store),					      \
+}
+
+#define	DEVICE_ATTR(_name, _mode, _show, _store)			      \
+	struct device_attribute dev_attr_##_name =			      \
+	    __ATTR(_name, _mode, _show, _store)
+#define	DEVICE_ATTR_RO(_name)					      \
+	DEVICE_ATTR(_name, 0444, _name##_show, NULL)
+#define	DEVICE_ATTR_RW(_name)					      \
+	DEVICE_ATTR(_name, 0644, _name##_show, _name##_store)
+
+#define	device_create_file(dev, attr)		\
+	((void)(dev), (void)(attr), 0)
+#define	device_remove_file(dev, attr)		do {	\
+	(void)(dev);					\
+	(void)(attr);					\
+} while (0)
+
+void	linux_device_init(void);
+void	linux_device_fini(void);
+
+void *	dev_get_drvdata(struct device *);
+void	dev_set_drvdata(struct device *, void *);
 
 #define	dev_crit(DEV, FMT, ...)	do {					      \
 	if (DEV)							      \
 		aprint_error_dev((DEV), "critical: " FMT, ##__VA_ARGS__);     \
 	else								      \
 		aprint_error("critical: " FMT, ##__VA_ARGS__);		      \
+} while (0)
+
+#define	dev_emerg(DEV, FMT, ...)	do {					      \
+	if (DEV)							      \
+		aprint_error_dev((DEV), "emergency: " FMT, ##__VA_ARGS__);    \
+	else								      \
+		aprint_error("emergency: " FMT, ##__VA_ARGS__);		      \
 } while (0)
 
 #define	dev_err(DEV, FMT, ...)	do {					      \
@@ -55,13 +100,25 @@
 
 #define	dev_err_once	dev_err	/* XXX rate-limit */
 
+#define	dev_err_probe(DEV, ERR, FMT, ...)	({			\
+	dev_err((DEV), FMT, ##__VA_ARGS__);				\
+	(ERR);								\
+})
+
 #define	dev_warn(DEV, FMT, ...)	do {					      \
 	if (DEV)							      \
 		aprint_normal_dev((DEV), "warn: " FMT, ##__VA_ARGS__);	      \
 	else								      \
 		aprint_normal("warn: " FMT, ##__VA_ARGS__);		      \
 } while (0)
+#define	dev_warn_once	dev_warn	/* XXX rate-limit */
+#define	dev_WARN_ONCE(DEV, CONDITION, FMT, ...)	do {		      \
+	if (CONDITION)							      \
+		dev_warn_once((DEV), FMT, ##__VA_ARGS__);		      \
+} while (0)
 #define	dev_WARN	dev_warn
+#define	dev_info_once	dev_info	/* XXX once */
+#define	dev_dbg_once	dev_dbg		/* XXX once */
 
 #define	dev_notice(DEV, FMT, ...)	do {				      \
 	if (DEV)							      \
@@ -85,11 +142,43 @@
 } while (0)
 
 #define	dev_name	device_xname
-#define	get_device(x)	(x)
+#define	dev_is_removable(dev)	false
+
+static inline struct device *
+get_device(struct device *dev)
+{
+
+	return dev;
+}
+
+#define	put_device(x)	do { } while (0)
+
+#define	NUMA_NO_NODE	(-1)
+
+static inline int
+dev_to_node(struct device *dev)
+{
+
+	return NUMA_NO_NODE;
+}
+
+static inline void
+set_dev_node(struct device *dev, int node)
+{
+}
+
+static inline const char *
+dev_driver_string(struct device *dev)
+{
+	return device_cfdriver(dev)->cd_name;
+}
 
 #define	DPM_FLAG_NEVER_SKIP	0
 
 #define	dev_warn_ratelimited	dev_warn
+#define	dev_notice_ratelimited	dev_notice
+#define	dev_err_ratelimited	dev_err
+#define	dev_dbg_ratelimited	dev_dbg
 
 static inline void
 dev_pm_set_driver_flags(struct device *dev, uint32_t flags)

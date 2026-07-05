@@ -88,27 +88,27 @@ static int amdgpu_gart_dummy_page_init(struct amdgpu_device *adev)
 	if (adev->dummy_page_map != NULL)
 		return 0;
 
-	error = bus_dmamem_alloc(adev->ddev->dmat, PAGE_SIZE, PAGE_SIZE, 0,
+	error = bus_dmamem_alloc(adev->ddev.dmat, PAGE_SIZE, PAGE_SIZE, 0,
 	    &adev->dummy_page_seg, 1, &rsegs, BUS_DMA_WAITOK);
 	if (error)
 		goto fail0;
 	KASSERT(rsegs == 1);
-	error = bus_dmamem_map(adev->ddev->dmat, &adev->dummy_page_seg, 1,
+	error = bus_dmamem_map(adev->ddev.dmat, &adev->dummy_page_seg, 1,
 	    PAGE_SIZE, &p, BUS_DMA_WAITOK);
 	if (error)
 		goto fail1;
 	memset(p, 0, PAGE_SIZE);
-	bus_dmamem_unmap(adev->ddev->dmat, p, PAGE_SIZE);
-	error = bus_dmamap_create(adev->ddev->dmat, PAGE_SIZE, 1, PAGE_SIZE, 0,
+	bus_dmamem_unmap(adev->ddev.dmat, p, PAGE_SIZE);
+	error = bus_dmamap_create(adev->ddev.dmat, PAGE_SIZE, 1, PAGE_SIZE, 0,
 	    BUS_DMA_WAITOK, &adev->dummy_page_map);
 	if (error)
 		goto fail1;
-	error = bus_dmamap_load_raw(adev->ddev->dmat, adev->dummy_page_map,
+	error = bus_dmamap_load_raw(adev->ddev.dmat, adev->dummy_page_map,
 	    &adev->dummy_page_seg, 1, PAGE_SIZE, BUS_DMA_WAITOK);
 	if (error)
 		goto fail2;
 
-	bus_dmamap_sync(adev->ddev->dmat, adev->dummy_page_map, 0, PAGE_SIZE,
+	bus_dmamap_sync(adev->ddev.dmat, adev->dummy_page_map, 0, PAGE_SIZE,
 	    BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
 
 	/* Success!  */
@@ -116,9 +116,9 @@ static int amdgpu_gart_dummy_page_init(struct amdgpu_device *adev)
 	return 0;
 
 fail3: __unused
-	bus_dmamap_unload(adev->ddev->dmat, adev->dummy_page_map);
-fail2:	bus_dmamap_destroy(adev->ddev->dmat, adev->dummy_page_map);
-fail1:	bus_dmamem_free(adev->ddev->dmat, &adev->dummy_page_seg, 1);
+	bus_dmamap_unload(adev->ddev.dmat, adev->dummy_page_map);
+fail2:	bus_dmamap_destroy(adev->ddev.dmat, adev->dummy_page_map);
+fail1:	bus_dmamem_free(adev->ddev.dmat, &adev->dummy_page_seg, 1);
 fail0:	KASSERT(error);
 	adev->dummy_page_map = NULL;
 	adev->dummy_page_addr = 0; /* paranoia */
@@ -152,10 +152,16 @@ void amdgpu_gart_dummy_page_fini(struct amdgpu_device *adev)
 {
 	if (!adev->dummy_page_addr)
 		return;
-    /* XXX drm618 */
+#ifdef __NetBSD__
+	bus_dmamap_unload(adev->ddev.dmat, adev->dummy_page_map);
+	bus_dmamap_destroy(adev->ddev.dmat, adev->dummy_page_map);
+	bus_dmamem_free(adev->ddev.dmat, &adev->dummy_page_seg, 1);
+	adev->dummy_page_map = NULL;
+#else
 	dma_unmap_page_attrs(&adev->pdev->dev, adev->dummy_page_addr, PAGE_SIZE,
 				DMA_BIDIRECTIONAL,
 				DMA_ATTR_SKIP_CPU_SYNC);
+#endif
 	adev->dummy_page_addr = 0;
 }
 
@@ -170,6 +176,9 @@ void amdgpu_gart_dummy_page_fini(struct amdgpu_device *adev)
  */
 int amdgpu_gart_table_ram_alloc(struct amdgpu_device *adev)
 {
+#ifdef __NetBSD__
+	return -ENOSYS;
+#else
 	unsigned int order = get_order(adev->gart.table_size);
 	gfp_t gfp_flags = GFP_KERNEL | __GFP_ZERO;
 	struct amdgpu_bo *bo = NULL;
@@ -269,6 +278,7 @@ error:
 	}
 	__free_pages(p, order);
 	return ret;
+#endif
 }
 
 /**
@@ -281,6 +291,9 @@ error:
  */
 void amdgpu_gart_table_ram_free(struct amdgpu_device *adev)
 {
+#ifdef __NetBSD__
+	return;
+#else
 	unsigned int order = get_order(adev->gart.table_size);
 	struct sg_table *sg = adev->gart.bo->tbo.sg;
 	struct page *p;
@@ -301,6 +314,7 @@ void amdgpu_gart_table_ram_free(struct amdgpu_device *adev)
 	__free_pages(p, order);
 
 	adev->gart.ptr = NULL;
+#endif
 }
 
 /**
@@ -354,7 +368,7 @@ amdgpu_gart_pre_update(struct amdgpu_device *adev, unsigned gpu_pgstart,
 		const unsigned entsize =
 		    adev->gart.table_size / adev->gart.num_gpu_pages;
 
-		bus_dmamap_sync(adev->ddev->dmat, adev->gart.ag_table_map,
+		bus_dmamap_sync(adev->ddev.dmat, adev->gart.ag_table_map,
 		    gpu_pgstart*entsize, gpu_npages*entsize,
 		    BUS_DMASYNC_POSTWRITE);
 	}
@@ -370,14 +384,24 @@ amdgpu_gart_post_update(struct amdgpu_device *adev, unsigned gpu_pgstart,
 		const unsigned entsize =
 		    adev->gart.table_size / adev->gart.num_gpu_pages;
 
-		bus_dmamap_sync(adev->ddev->dmat, adev->gart.ag_table_map,
+		bus_dmamap_sync(adev->ddev.dmat, adev->gart.ag_table_map,
 		    gpu_pgstart*entsize, gpu_npages*entsize,
 		    BUS_DMASYNC_PREWRITE);
 	}
 	mb();			/* XXX why is bus_dmamap_sync not enough? */
 	amdgpu_asic_flush_hdp(adev, NULL);
-	for (i = 0; i < adev->num_vmhubs; i++)
+	for_each_set_bit(i, adev->vmhubs_mask, AMDGPU_MAX_VMHUBS)
 		amdgpu_gmc_flush_gpu_tlb(adev, 0, i, 0);
+}
+
+void
+amdgpu_gart_invalidate_tlb(struct amdgpu_device *adev)
+{
+
+	if (!adev->gart.ptr)
+		return;
+
+	amdgpu_gart_post_update(adev, 0, adev->gart.num_gpu_pages);
 }
 #endif
 
@@ -400,7 +424,7 @@ amdgpu_gart_unbind(struct amdgpu_device *adev, uint64_t gpu_start,
 	KASSERT(npages <= adev->gart.num_cpu_pages);
 	KASSERT(gpu_npages <= adev->gart.num_cpu_pages);
 
-	if (!adev->gart.ready) {
+	if (!adev->gart.ptr) {
 		WARN(1, "trying to bind memory to uninitialized GART !\n");
 		return -EINVAL;
 	}
@@ -483,49 +507,29 @@ void amdgpu_gart_unbind(struct amdgpu_device *adev, uint64_t offset,
  * Returns 0 for success, -EINVAL for failure.
  */
 #ifdef __NetBSD__
-/* XXX drm618 fix signature */
 int amdgpu_gart_map(struct amdgpu_device *adev, uint64_t gpu_start,
-    unsigned npages, bus_size_t map_start, bus_dmamap_t dmamap, uint32_t flags,
-    void *dst)
+    unsigned npages, dma_addr_t *dma_addr, uint64_t flags, void *dst)
 {
-	bus_size_t seg_off = 0;
-	unsigned i, j, t;
+	uint64_t page_base;
+	unsigned int i, j, t;
 
 	CTASSERT(AMDGPU_GPU_PAGE_SIZE <= PAGE_SIZE);
 	CTASSERT((PAGE_SIZE % AMDGPU_GPU_PAGE_SIZE) == 0);
 
-	KASSERT((gpu_start & (PAGE_SIZE - 1)) == 0);
+	KASSERT((gpu_start & (AMDGPU_GPU_PAGE_SIZE - 1)) == 0);
 
-	if (!adev->gart.ready) {
+	if (!adev->gart.ptr) {
 		WARN(1, "trying to bind memory to uninitialized GART !\n");
 		return -EINVAL;
 	}
 
-	for (i = 0; i < dmamap->dm_nsegs; i++) {
-		KASSERT((dmamap->dm_segs[i].ds_len & (PAGE_SIZE - 1)) == 0);
-		if (map_start == 0)
-			break;
-		if (map_start < dmamap->dm_segs[i].ds_len) {
-			seg_off = map_start;
-			break;
-		}
-		map_start -= dmamap->dm_segs[i].ds_len;
-	}
-	KASSERT(i < dmamap->dm_nsegs);
-
 	t = gpu_start / AMDGPU_GPU_PAGE_SIZE;
-
-	for (i = 0; npages --> 0;) {
+	for (i = 0; i < npages; i++) {
+		page_base = dma_addr[i];
 		for (j = 0; j < AMDGPU_GPU_PAGES_IN_CPU_PAGE; j++, t++) {
-			KASSERT(i < dmamap->dm_nsegs);
-			KASSERT(seg_off < dmamap->dm_segs[i].ds_len);
 			amdgpu_gmc_set_pte_pde(adev, dst, t,
-			    dmamap->dm_segs[i].ds_addr + seg_off, flags);
-			seg_off += AMDGPU_GPU_PAGE_SIZE;
-			if (seg_off == dmamap->dm_segs[i].ds_len) {
-				i++;
-				seg_off = 0;
-			}
+			    page_base, flags);
+			page_base += AMDGPU_GPU_PAGE_SIZE;
 		}
 	}
 
@@ -559,42 +563,36 @@ void amdgpu_gart_map(struct amdgpu_device *adev, uint64_t offset,
 #ifdef __NetBSD__
 int
 amdgpu_gart_bind(struct amdgpu_device *adev, uint64_t gpu_start,
-    unsigned npages, struct page **pages, bus_dmamap_t dmamap, uint32_t flags)
+    unsigned npages, dma_addr_t *dma_addr, uint64_t flags)
 {
 	const unsigned gpu_per_cpu = AMDGPU_GPU_PAGES_IN_CPU_PAGE;
 	const unsigned gpu_npages = (npages * gpu_per_cpu);
 	const uint64_t gpu_pgstart = (gpu_start / AMDGPU_GPU_PAGE_SIZE);
 	const uint64_t pgstart __diagused = (gpu_pgstart / gpu_per_cpu);
-	uint64_t pgno, gpu_pgno;
+	unsigned int i;
+	int error;
 
-	KASSERT(pgstart == (gpu_start / PAGE_SIZE));
-	KASSERT(npages == dmamap->dm_nsegs);
-	KASSERT(npages <= adev->gart.num_cpu_pages);
-	KASSERT(gpu_npages <= adev->gart.num_cpu_pages);
-
-	if (!adev->gart.ready) {
+	if (!adev->gart.ptr) {
 		WARN(1, "trying to bind memory to uninitialized GART !\n");
 		return -EINVAL;
 	}
 
-	amdgpu_gart_pre_update(adev, gpu_pgstart, gpu_npages);
-	for (pgno = 0; pgno < npages; pgno++) {
-		const bus_addr_t addr = dmamap->dm_segs[pgno].ds_addr;
+	KASSERT(pgstart == (gpu_start / PAGE_SIZE));
+	KASSERT(npages <= adev->gart.num_cpu_pages);
+	KASSERT(gpu_npages <= adev->gart.num_gpu_pages);
 
-		KASSERT(dmamap->dm_segs[pgno].ds_len == PAGE_SIZE);
+	amdgpu_gart_pre_update(adev, gpu_pgstart, gpu_npages);
 #ifdef CONFIG_DRM_AMDGPU_GART_DEBUGFS
-		adev->gart.pages[pgstart + pgno] = NULL;
+	for (i = 0; i < npages; i++)
+		adev->gart.pages[pgstart + i] = NULL;
+#else
+	__USE(i);
 #endif
 
-		if (adev->gart.ptr == NULL)
-			continue;
-
-		for (gpu_pgno = 0; gpu_pgno < gpu_per_cpu; gpu_pgno++) {
-			amdgpu_gmc_set_pte_pde(adev, adev->gart.ptr,
-			    gpu_pgstart + gpu_per_cpu*pgno + gpu_pgno,
-			    addr + gpu_pgno*AMDGPU_GPU_PAGE_SIZE, flags);
-		}
-	}
+	error = amdgpu_gart_map(adev, gpu_start, npages, dma_addr, flags,
+	    adev->gart.ptr);
+	if (error)
+		return error;
 	amdgpu_gart_post_update(adev, gpu_pgstart, gpu_npages);
 
 	return 0;

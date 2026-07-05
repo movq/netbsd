@@ -12,6 +12,7 @@
 #define __DRM_PRIVACY_SCREEN_CONSUMER_H__
 
 #include <linux/device.h>
+#include <linux/err.h>
 #include <drm/drm_connector.h>
 
 struct drm_privacy_screen;

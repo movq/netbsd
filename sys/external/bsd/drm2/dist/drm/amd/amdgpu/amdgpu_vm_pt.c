@@ -33,6 +33,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "amdgpu_vm.h"
 #include "amdgpu_job.h"
 
+#include <linux/nbsd-namespace.h>
+
 /*
  * amdgpu_vm_pt_cursor - state for for_each_amdgpu_vm_pt
  */

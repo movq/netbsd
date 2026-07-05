@@ -120,6 +120,13 @@ ida_simple_get(struct ida *ida, unsigned start, unsigned end, gfp_t gfp)
 }
 
 static inline int
+ida_alloc_min(struct ida *ida, unsigned min, gfp_t gfp)
+{
+
+	return ida_simple_get(ida, min, INT_MAX, gfp);
+}
+
+static inline int
 ida_alloc_max(struct ida *ida, unsigned max, gfp_t gfp)
 {
 

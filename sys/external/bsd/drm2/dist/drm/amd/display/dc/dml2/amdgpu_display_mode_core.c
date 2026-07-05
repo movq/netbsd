@@ -29,6 +29,8 @@
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, "$NetBSD$");
 
+#include <linux/compiler.h>
+
 #include "display_mode_core.h"
 #include "display_mode_util.h"
 #include "display_mode_lib_defines.h"

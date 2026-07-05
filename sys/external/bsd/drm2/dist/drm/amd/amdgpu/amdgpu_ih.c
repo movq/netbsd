@@ -71,30 +71,30 @@ int amdgpu_ih_ring_init(struct amdgpu_device *adev, struct amdgpu_ih_ring *ih,
 		const bus_size_t size = ih->ring_size + 8;
 		int rseg __diagused;
 		void *kva;
-		r = -bus_dmamem_alloc(adev->ddev->dmat, size, PAGE_SIZE, 0,
+		r = -bus_dmamem_alloc(adev->ddev.dmat, size, PAGE_SIZE, 0,
 		    &ih->ring_seg, 1, &rseg, BUS_DMA_WAITOK);
 		if (r) {
 fail0:			KASSERT(r);
 			return r;
 		}
 		KASSERT(rseg == 1);
-		r = -bus_dmamap_create(adev->ddev->dmat, size, 1, size, 0,
+		r = -bus_dmamap_create(adev->ddev.dmat, size, 1, size, 0,
 		    BUS_DMA_WAITOK, &ih->ring_map);
 		if (r) {
-fail1:			bus_dmamem_free(adev->ddev->dmat, &ih->ring_seg, 1);
+fail1:			bus_dmamem_free(adev->ddev.dmat, &ih->ring_seg, 1);
 			goto fail0;
 		}
-		r = -bus_dmamem_map(adev->ddev->dmat, &ih->ring_seg, 1, size,
+		r = -bus_dmamem_map(adev->ddev.dmat, &ih->ring_seg, 1, size,
 		    &kva, BUS_DMA_WAITOK|BUS_DMA_COHERENT);
 		if (r) {
-fail2:			bus_dmamap_destroy(adev->ddev->dmat, ih->ring_map);
+fail2:			bus_dmamap_destroy(adev->ddev.dmat, ih->ring_map);
 			ih->ring_map = NULL;
 			goto fail1;
 		}
-		r = -bus_dmamap_load(adev->ddev->dmat, ih->ring_map, kva, size,
+		r = -bus_dmamap_load(adev->ddev.dmat, ih->ring_map, kva, size,
 		    NULL, BUS_DMA_WAITOK);
 		if (r) {
-fail3: __unused		bus_dmamem_unmap(adev->ddev->dmat, kva, size);
+fail3: __unused		bus_dmamem_unmap(adev->ddev.dmat, kva, size);
 			goto fail2;
 		}
 		ih->ring = kva;
@@ -140,7 +140,12 @@ fail3: __unused		bus_dmamem_unmap(adev->ddev->dmat, kva, size);
 		ih->rptr_cpu = &adev->wb.wb[rptr_offs];
 	}
 
+#ifdef __NetBSD__
+	DRM_INIT_WAITQUEUE(&ih->wait_process, "amdgpu_ih");
+	spin_lock_init(&ih->wait_process_lock);
+#else
 	init_waitqueue_head(&ih->wait_process);
+#endif
 	return 0;
 }
 
@@ -167,10 +172,10 @@ void amdgpu_ih_ring_fini(struct amdgpu_device *adev, struct amdgpu_ih_ring *ih)
 #ifdef __NetBSD__
 		const bus_size_t size = ih->ring_size + 8;
 		void *kva = __UNVOLATILE(ih->ring);
-		bus_dmamap_unload(adev->ddev->dmat, ih->ring_map);
-		bus_dmamem_unmap(adev->ddev->dmat, kva, size);
-		bus_dmamap_destroy(adev->ddev->dmat, ih->ring_map);
-		bus_dmamem_free(adev->ddev->dmat, &ih->ring_seg, 1);
+		bus_dmamap_unload(adev->ddev.dmat, ih->ring_map);
+		bus_dmamem_unmap(adev->ddev.dmat, kva, size);
+		bus_dmamap_destroy(adev->ddev.dmat, ih->ring_map);
+		bus_dmamem_free(adev->ddev.dmat, &ih->ring_seg, 1);
 #else
 		dma_free_coherent(adev->dev, ih->ring_size + 8,
 				  (void *)ih->ring, ih->gpu_addr);
@@ -182,6 +187,10 @@ void amdgpu_ih_ring_fini(struct amdgpu_device *adev, struct amdgpu_ih_ring *ih)
 		amdgpu_device_wb_free(adev, (ih->wptr_addr - ih->gpu_addr) / 4);
 		amdgpu_device_wb_free(adev, (ih->rptr_addr - ih->gpu_addr) / 4);
 	}
+#ifdef __NetBSD__
+	spin_lock_destroy(&ih->wait_process_lock);
+	DRM_DESTROY_WAITQUEUE(&ih->wait_process);
+#endif
 }
 
 /**
@@ -240,9 +249,24 @@ int amdgpu_ih_wait_on_checkpoint_process_ts(struct amdgpu_device *adev,
 	rmb();
 	checkpoint_ts = amdgpu_ih_decode_iv_ts(adev, ih, checkpoint_wptr, -1);
 
+#ifdef __NetBSD__
+	{
+		long ret;
+
+		spin_lock(&ih->wait_process_lock);
+		DRM_SPIN_TIMED_WAIT_UNTIL(ret, &ih->wait_process,
+		    &ih->wait_process_lock, timeout,
+		    amdgpu_ih_ts_after(checkpoint_ts,
+			ih->processed_timestamp) ||
+		    ih->rptr == amdgpu_ih_get_wptr(adev, ih));
+		spin_unlock(&ih->wait_process_lock);
+		return ret;
+	}
+#else
 	return wait_event_interruptible_timeout(ih->wait_process,
-		    amdgpu_ih_ts_after(checkpoint_ts, ih->processed_timestamp) ||
-		    ih->rptr == amdgpu_ih_get_wptr(adev, ih), timeout);
+	    amdgpu_ih_ts_after(checkpoint_ts, ih->processed_timestamp) ||
+	    ih->rptr == amdgpu_ih_get_wptr(adev, ih), timeout);
+#endif
 }
 
 /**
@@ -279,7 +303,13 @@ restart_ih:
 	if (!ih->overflow)
 		amdgpu_ih_set_rptr(adev, ih);
 
+#ifdef __NetBSD__
+	spin_lock(&ih->wait_process_lock);
+	DRM_SPIN_WAKEUP_ALL(&ih->wait_process, &ih->wait_process_lock);
+	spin_unlock(&ih->wait_process_lock);
+#else
 	wake_up_all(&ih->wait_process);
+#endif
 
 	/* make sure wptr hasn't changed while processing */
 	wptr = amdgpu_ih_get_wptr(adev, ih);

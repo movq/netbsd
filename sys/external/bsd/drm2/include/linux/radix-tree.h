@@ -44,6 +44,10 @@
 #define	radix_tree_lookup		linux_radix_tree_lookup
 #define	radix_tree_next_chunk		linux_radix_tree_next_chunk
 #define	radix_tree_next_slot		linux_radix_tree_next_slot
+#define	radix_tree_gang_lookup_tag	linux_radix_tree_gang_lookup_tag
+#define	radix_tree_tag_clear		linux_radix_tree_tag_clear
+#define	radix_tree_tag_set		linux_radix_tree_tag_set
+#define	radix_tree_tagged		linux_radix_tree_tagged
 
 struct radix_tree_root {
 	struct radix_tree	rtr_tree;
@@ -63,6 +67,11 @@ void *	radix_tree_delete(struct radix_tree_root *, unsigned long);
 bool	radix_tree_empty(struct radix_tree_root *);
 void *	radix_tree_lookup(const struct radix_tree_root *, unsigned long);
 void *	radix_tree_deref_slot(void **);
+unsigned int radix_tree_gang_lookup_tag(const struct radix_tree_root *, void **,
+	    unsigned long, unsigned int, unsigned int);
+void *	radix_tree_tag_clear(struct radix_tree_root *, unsigned long, unsigned);
+void *	radix_tree_tag_set(struct radix_tree_root *, unsigned long, unsigned);
+int	radix_tree_tagged(const struct radix_tree_root *, unsigned);
 
 void **	radix_tree_iter_init(struct radix_tree_iter *, unsigned long);
 void **	radix_tree_next_chunk(const struct radix_tree_root *,

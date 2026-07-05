@@ -36,6 +36,7 @@
 __KERNEL_RCSID(0, "$NetBSD: drm_damage_helper.c,v 1.2 2021/12/18 23:44:57 riastradh Exp $");
 
 #include <linux/export.h>
+#include <linux/err.h>
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_damage_helper.h>

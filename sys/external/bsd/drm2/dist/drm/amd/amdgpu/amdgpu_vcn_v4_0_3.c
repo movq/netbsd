@@ -43,6 +43,8 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include "vcn/vcn_4_0_3_sh_mask.h"
 #include "ivsrcid/vcn/irqsrcs_vcn_4_0.h"
 
+#include <linux/nbsd-namespace.h>
+
 #define mmUVD_DPG_LMA_CTL		regUVD_DPG_LMA_CTL
 #define mmUVD_DPG_LMA_CTL_BASE_IDX	regUVD_DPG_LMA_CTL_BASE_IDX
 #define mmUVD_DPG_LMA_DATA		regUVD_DPG_LMA_DATA

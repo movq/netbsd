@@ -32,6 +32,8 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_rlc.c,v 1.3 2021/12/19 12:21:29 riastradh Exp
 #include "amdgpu_gfx.h"
 #include "amdgpu_rlc.h"
 
+#include <linux/nbsd-namespace.h>
+
 /**
  * amdgpu_gfx_rlc_enter_safe_mode - Set RLC into safe mode
  *
@@ -356,15 +358,15 @@ static void amdgpu_gfx_rlc_init_microcode_v2_1(struct amdgpu_device *adev)
 	adev->gfx.rlc_srlc_fw_version = le32_to_cpu(rlc_hdr->save_restore_list_cntl_ucode_ver);
 	adev->gfx.rlc_srlc_feature_version = le32_to_cpu(rlc_hdr->save_restore_list_cntl_feature_ver);
 	adev->gfx.rlc.save_restore_list_cntl_size_bytes = le32_to_cpu(rlc_hdr->save_restore_list_cntl_size_bytes);
-	adev->gfx.rlc.save_restore_list_cntl = (u8 *)rlc_hdr + le32_to_cpu(rlc_hdr->save_restore_list_cntl_offset_bytes);
+	adev->gfx.rlc.save_restore_list_cntl = (u8 *)__UNCONST(rlc_hdr) + le32_to_cpu(rlc_hdr->save_restore_list_cntl_offset_bytes);
 	adev->gfx.rlc_srlg_fw_version = le32_to_cpu(rlc_hdr->save_restore_list_gpm_ucode_ver);
 	adev->gfx.rlc_srlg_feature_version = le32_to_cpu(rlc_hdr->save_restore_list_gpm_feature_ver);
 	adev->gfx.rlc.save_restore_list_gpm_size_bytes = le32_to_cpu(rlc_hdr->save_restore_list_gpm_size_bytes);
-	adev->gfx.rlc.save_restore_list_gpm = (u8 *)rlc_hdr + le32_to_cpu(rlc_hdr->save_restore_list_gpm_offset_bytes);
+	adev->gfx.rlc.save_restore_list_gpm = (u8 *)__UNCONST(rlc_hdr) + le32_to_cpu(rlc_hdr->save_restore_list_gpm_offset_bytes);
 	adev->gfx.rlc_srls_fw_version = le32_to_cpu(rlc_hdr->save_restore_list_srm_ucode_ver);
 	adev->gfx.rlc_srls_feature_version = le32_to_cpu(rlc_hdr->save_restore_list_srm_feature_ver);
 	adev->gfx.rlc.save_restore_list_srm_size_bytes = le32_to_cpu(rlc_hdr->save_restore_list_srm_size_bytes);
-	adev->gfx.rlc.save_restore_list_srm = (u8 *)rlc_hdr + le32_to_cpu(rlc_hdr->save_restore_list_srm_offset_bytes);
+	adev->gfx.rlc.save_restore_list_srm = (u8 *)__UNCONST(rlc_hdr) + le32_to_cpu(rlc_hdr->save_restore_list_srm_offset_bytes);
 	adev->gfx.rlc.reg_list_format_direct_reg_list_length =
 		le32_to_cpu(rlc_hdr->reg_list_format_direct_reg_list_length);
 
@@ -402,9 +404,9 @@ static void amdgpu_gfx_rlc_init_microcode_v2_2(struct amdgpu_device *adev)
 
 	rlc_hdr = (const struct rlc_firmware_header_v2_2 *)adev->gfx.rlc_fw->data;
 	adev->gfx.rlc.rlc_iram_ucode_size_bytes = le32_to_cpu(rlc_hdr->rlc_iram_ucode_size_bytes);
-	adev->gfx.rlc.rlc_iram_ucode = (u8 *)rlc_hdr + le32_to_cpu(rlc_hdr->rlc_iram_ucode_offset_bytes);
+	adev->gfx.rlc.rlc_iram_ucode = (u8 *)__UNCONST(rlc_hdr) + le32_to_cpu(rlc_hdr->rlc_iram_ucode_offset_bytes);
 	adev->gfx.rlc.rlc_dram_ucode_size_bytes = le32_to_cpu(rlc_hdr->rlc_dram_ucode_size_bytes);
-	adev->gfx.rlc.rlc_dram_ucode = (u8 *)rlc_hdr + le32_to_cpu(rlc_hdr->rlc_dram_ucode_offset_bytes);
+	adev->gfx.rlc.rlc_dram_ucode = (u8 *)__UNCONST(rlc_hdr) + le32_to_cpu(rlc_hdr->rlc_dram_ucode_offset_bytes);
 
 	if (adev->firmware.load_type == AMDGPU_FW_LOAD_PSP) {
 		if (adev->gfx.rlc.rlc_iram_ucode_size_bytes) {
@@ -434,12 +436,12 @@ static void amdgpu_gfx_rlc_init_microcode_v2_3(struct amdgpu_device *adev)
 	adev->gfx.rlcp_ucode_version = le32_to_cpu(rlc_hdr->rlcp_ucode_version);
 	adev->gfx.rlcp_ucode_feature_version = le32_to_cpu(rlc_hdr->rlcp_ucode_feature_version);
 	adev->gfx.rlc.rlcp_ucode_size_bytes = le32_to_cpu(rlc_hdr->rlcp_ucode_size_bytes);
-	adev->gfx.rlc.rlcp_ucode = (u8 *)rlc_hdr + le32_to_cpu(rlc_hdr->rlcp_ucode_offset_bytes);
+	adev->gfx.rlc.rlcp_ucode = (u8 *)__UNCONST(rlc_hdr) + le32_to_cpu(rlc_hdr->rlcp_ucode_offset_bytes);
 
 	adev->gfx.rlcv_ucode_version = le32_to_cpu(rlc_hdr->rlcv_ucode_version);
 	adev->gfx.rlcv_ucode_feature_version = le32_to_cpu(rlc_hdr->rlcv_ucode_feature_version);
 	adev->gfx.rlc.rlcv_ucode_size_bytes = le32_to_cpu(rlc_hdr->rlcv_ucode_size_bytes);
-	adev->gfx.rlc.rlcv_ucode = (u8 *)rlc_hdr + le32_to_cpu(rlc_hdr->rlcv_ucode_offset_bytes);
+	adev->gfx.rlc.rlcv_ucode = (u8 *)__UNCONST(rlc_hdr) + le32_to_cpu(rlc_hdr->rlcv_ucode_offset_bytes);
 
 	if (adev->firmware.load_type == AMDGPU_FW_LOAD_PSP) {
 		if (adev->gfx.rlc.rlcp_ucode_size_bytes) {
@@ -467,15 +469,15 @@ static void amdgpu_gfx_rlc_init_microcode_v2_4(struct amdgpu_device *adev)
 
 	rlc_hdr = (const struct rlc_firmware_header_v2_4 *)adev->gfx.rlc_fw->data;
 	adev->gfx.rlc.global_tap_delays_ucode_size_bytes = le32_to_cpu(rlc_hdr->global_tap_delays_ucode_size_bytes);
-	adev->gfx.rlc.global_tap_delays_ucode = (u8 *)rlc_hdr + le32_to_cpu(rlc_hdr->global_tap_delays_ucode_offset_bytes);
+	adev->gfx.rlc.global_tap_delays_ucode = (u8 *)__UNCONST(rlc_hdr) + le32_to_cpu(rlc_hdr->global_tap_delays_ucode_offset_bytes);
 	adev->gfx.rlc.se0_tap_delays_ucode_size_bytes = le32_to_cpu(rlc_hdr->se0_tap_delays_ucode_size_bytes);
-	adev->gfx.rlc.se0_tap_delays_ucode = (u8 *)rlc_hdr + le32_to_cpu(rlc_hdr->se0_tap_delays_ucode_offset_bytes);
+	adev->gfx.rlc.se0_tap_delays_ucode = (u8 *)__UNCONST(rlc_hdr) + le32_to_cpu(rlc_hdr->se0_tap_delays_ucode_offset_bytes);
 	adev->gfx.rlc.se1_tap_delays_ucode_size_bytes = le32_to_cpu(rlc_hdr->se1_tap_delays_ucode_size_bytes);
-	adev->gfx.rlc.se1_tap_delays_ucode = (u8 *)rlc_hdr + le32_to_cpu(rlc_hdr->se1_tap_delays_ucode_offset_bytes);
+	adev->gfx.rlc.se1_tap_delays_ucode = (u8 *)__UNCONST(rlc_hdr) + le32_to_cpu(rlc_hdr->se1_tap_delays_ucode_offset_bytes);
 	adev->gfx.rlc.se2_tap_delays_ucode_size_bytes = le32_to_cpu(rlc_hdr->se2_tap_delays_ucode_size_bytes);
-	adev->gfx.rlc.se2_tap_delays_ucode = (u8 *)rlc_hdr + le32_to_cpu(rlc_hdr->se2_tap_delays_ucode_offset_bytes);
+	adev->gfx.rlc.se2_tap_delays_ucode = (u8 *)__UNCONST(rlc_hdr) + le32_to_cpu(rlc_hdr->se2_tap_delays_ucode_offset_bytes);
 	adev->gfx.rlc.se3_tap_delays_ucode_size_bytes = le32_to_cpu(rlc_hdr->se3_tap_delays_ucode_size_bytes);
-	adev->gfx.rlc.se3_tap_delays_ucode = (u8 *)rlc_hdr + le32_to_cpu(rlc_hdr->se3_tap_delays_ucode_offset_bytes);
+	adev->gfx.rlc.se3_tap_delays_ucode = (u8 *)__UNCONST(rlc_hdr) + le32_to_cpu(rlc_hdr->se3_tap_delays_ucode_offset_bytes);
 
 	if (adev->firmware.load_type == AMDGPU_FW_LOAD_PSP) {
 		if (adev->gfx.rlc.global_tap_delays_ucode_size_bytes) {

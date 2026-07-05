@@ -141,4 +141,24 @@ mutex_trylock_recursive(struct mutex *mutex)
 		return MUTEX_TRYLOCK_FAILED;
 }
 
+#define DEFINE_MUTEX(mutexname) \
+	struct mutex mutexname
+
+#include <linux/cleanup.h>
+
+typedef struct mutex *class_mutex_t;
+
+static inline struct mutex *
+class_mutex_constructor(struct mutex *m)
+{
+	mutex_lock(m);
+	return m;
+}
+
+static inline void
+class_mutex_destructor(struct mutex **p)
+{
+	mutex_unlock(*p);
+}
+
 #endif  /* _LINUX_MUTEX_H_ */

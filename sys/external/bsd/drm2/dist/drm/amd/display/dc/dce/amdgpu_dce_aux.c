@@ -658,7 +658,7 @@ static void dce_aux_log_payload(const char *payload_name,
 		unsigned char *payload_ptr = payload;
 		unsigned char *payload_max_to_log_ptr = payload_ptr + min(max_length_to_log, length);
 		unsigned int count;
-		char *padding = "";
+		const char *padding = "";
 
 		while (payload_ptr < payload_max_to_log_ptr) {
 			count = snprintf_count(hex_str_ptr, hex_str_remaining, "%s%02X", padding, *payload_ptr);

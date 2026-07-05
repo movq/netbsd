@@ -32,6 +32,10 @@
 #include <linux/mutex.h>
 #include <linux/kref.h>
 
+#ifdef __NetBSD__
+#include <linux/kconfig.h>
+#endif
+
 struct backlight_device;
 struct dentry;
 struct device_node;

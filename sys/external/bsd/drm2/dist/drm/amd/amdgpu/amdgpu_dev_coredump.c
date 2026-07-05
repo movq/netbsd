@@ -27,8 +27,10 @@
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, "$NetBSD$");
 
+#ifdef CONFIG_DEV_COREDUMP
 #include <generated/utsrelease.h>
 #include <linux/devcoredump.h>
+#endif
 #include "amdgpu_dev_coredump.h"
 #include "atom.h"
 

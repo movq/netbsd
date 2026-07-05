@@ -58,6 +58,9 @@ struct amdgpufb_softc {
 	device_t			sc_dev;
 	struct amdgpufb_attach_args	sc_afa;
 	struct amdgpu_task		sc_attach_task;
+	struct amdgpu_bo		*sc_bo;
+	bool				sc_bo_pinned:1;
+	bool				sc_bo_mapped:1;
 	bool				sc_attached:1;
 };
 
@@ -86,6 +89,9 @@ amdgpufb_attach(device_t parent, device_t self, void *aux)
 
 	sc->sc_dev = self;
 	sc->sc_afa = *afa;
+	sc->sc_bo = NULL;
+	sc->sc_bo_pinned = false;
+	sc->sc_bo_mapped = false;
 	sc->sc_attached = false;
 
 	aprint_naive("\n");
@@ -100,6 +106,7 @@ static int
 amdgpufb_detach(device_t self, int flags)
 {
 	struct amdgpufb_softc *const sc = device_private(self);
+	bool bo_reserved = false;
 	int error;
 
 	if (sc->sc_attached) {
@@ -113,6 +120,26 @@ amdgpufb_detach(device_t self, int flags)
 		}
 		sc->sc_attached = false;
 	}
+	if (sc->sc_bo_mapped || sc->sc_bo_pinned) {
+		error = amdgpu_bo_reserve(sc->sc_bo, true);
+		if (error)
+			return error;
+		bo_reserved = true;
+	}
+	if (sc->sc_bo_mapped) {
+		sc->sc_afa.afa_fb_helper->info->screen_buffer = NULL;
+		sc->sc_afa.afa_fb_helper->info->screen_base = NULL;
+		sc->sc_afa.afa_fb_helper->info->screen_size = 0;
+		amdgpu_bo_kunmap(sc->sc_bo);
+		sc->sc_bo_mapped = false;
+	}
+	if (sc->sc_bo_pinned) {
+		amdgpu_bo_unpin(sc->sc_bo);
+		sc->sc_bo_pinned = false;
+	}
+	if (bo_reserved)
+		amdgpu_bo_unreserve(sc->sc_bo);
+	sc->sc_bo = NULL;
 
 	return 0;
 }
@@ -122,16 +149,55 @@ amdgpufb_attach_task(struct amdgpu_task *task)
 {
 	struct amdgpufb_softc *const sc = container_of(task,
 	    struct amdgpufb_softc, sc_attach_task);
-	const struct amdgpufb_attach_args *const afa = &sc->sc_afa;
+	struct amdgpufb_attach_args *const afa = &sc->sc_afa;
+	struct drm_fb_helper *const helper = afa->afa_fb_helper;
+	struct drm_framebuffer *const fb = helper->fb;
+	struct drm_gem_object *const gobj = fb->obj[0];
+	void *fb_ptr;
+	bool bo_reserved = false;
+	int error;
+
+	sc->sc_bo = gem_to_amdgpu_bo(gobj);
+	error = amdgpu_bo_reserve(sc->sc_bo, false);
+	if (error) {
+		aprint_error_dev(sc->sc_dev,
+		    "failed to reserve framebuffer: %d\n", error);
+		goto out;
+	}
+	bo_reserved = true;
+
+	error = amdgpu_bo_pin(sc->sc_bo, AMDGPU_GEM_DOMAIN_VRAM);
+	if (error) {
+		aprint_error_dev(sc->sc_dev,
+		    "failed to pin framebuffer: %d\n", error);
+		goto out;
+	}
+	sc->sc_bo_pinned = true;
+
+	error = amdgpu_bo_kmap(sc->sc_bo, &fb_ptr);
+	if (error) {
+		aprint_error_dev(sc->sc_dev,
+		    "failed to map framebuffer: %d\n", error);
+		goto out;
+	}
+	sc->sc_bo_mapped = true;
+
+	amdgpu_bo_unreserve(sc->sc_bo);
+	bo_reserved = false;
+
+	afa->afa_fb_ptr = fb_ptr;
+	helper->info->screen_buffer = fb_ptr;
+	helper->info->screen_base = fb_ptr;
+	helper->info->screen_size = helper->info->fix.smem_len;
+
 	const struct drmfb_attach_args da = {
 		.da_dev = sc->sc_dev,
-		.da_fb_helper = afa->afa_fb_helper,
+		.da_fb_helper = helper,
 		.da_fb_sizes = &afa->afa_fb_sizes,
-		.da_fb_vaddr = __UNVOLATILE(afa->afa_fb_ptr),
+		.da_fb_vaddr = fb_ptr,
 		.da_fb_linebytes = afa->afa_fb_linebytes,
 		.da_params = &amdgpufb_drmfb_params,
 	};
-	int error;
 
 	error = drmfb_attach(&sc->sc_drmfb, &da);
 	if (error) {
@@ -146,6 +212,21 @@ amdgpufb_attach_task(struct amdgpu_task *task)
 
 	sc->sc_attached = true;
 out:
+	if (!sc->sc_attached && sc->sc_bo_mapped) {
+		helper->info->screen_buffer = NULL;
+		helper->info->screen_base = NULL;
+		helper->info->screen_size = 0;
+		amdgpu_bo_kunmap(sc->sc_bo);
+		sc->sc_bo_mapped = false;
+	}
+	if (!sc->sc_attached && sc->sc_bo_pinned) {
+		amdgpu_bo_unpin(sc->sc_bo);
+		sc->sc_bo_pinned = false;
+	}
+	if (bo_reserved)
+		amdgpu_bo_unreserve(sc->sc_bo);
+	if (!sc->sc_attached)
+		sc->sc_bo = NULL;
 	config_pending_decr(sc->sc_dev);
 }
 
@@ -162,20 +243,19 @@ amdgpufb_drmfb_mmapfb(struct drmfb_softc *drmfb, off_t offset, int prot)
 {
 	struct amdgpufb_softc *const sc = container_of(drmfb,
 	    struct amdgpufb_softc, sc_drmfb);
-	struct drm_fb_helper *const helper = sc->sc_afa.afa_fb_helper;
-	struct drm_framebuffer *const fb = helper->fb;
-	struct drm_gem_object *const gobj = fb->obj[0];
-	struct amdgpu_bo *const rbo = gem_to_amdgpu_bo(gobj);
-	const unsigned num_pages __diagused = rbo->tbo.num_pages;
+	struct amdgpu_bo *const rbo = sc->sc_bo;
+	struct ttm_resource *const res = rbo->tbo.resource;
+	const unsigned num_pages __diagused =
+	    PFN_UP(rbo->tbo.base.size);
 	int flags = 0;
 
 	KASSERT(0 <= offset);
 	KASSERT(offset < ((uintmax_t)num_pages << PAGE_SHIFT));
-	KASSERT(rbo->tbo.mem.bus.is_iomem);
+	KASSERT(res->bus.is_iomem);
 
-	if (ISSET(rbo->tbo.mem.placement, TTM_PL_FLAG_WC))
+	if (res->bus.caching == ttm_write_combined)
 		flags |= BUS_SPACE_MAP_PREFETCHABLE;
 
-	return bus_space_mmap(rbo->tbo.bdev->memt, rbo->tbo.mem.bus.base,
-	    rbo->tbo.mem.bus.offset + offset, prot, flags);
+	return bus_space_mmap(rbo->tbo.bdev->memt, res->bus.offset,
+	    offset, prot, flags);
 }

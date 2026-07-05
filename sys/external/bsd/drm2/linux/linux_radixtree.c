@@ -121,6 +121,77 @@ radix_tree_lookup(const struct radix_tree_root *root, unsigned long key)
 	return kludge->k_datum;
 }
 
+unsigned int
+radix_tree_gang_lookup_tag(const struct radix_tree_root *root, void **results,
+    unsigned long first_index, unsigned int max_items, unsigned int tag)
+{
+	unsigned int nresults, i;
+	struct kludge *kludge;
+
+	KASSERT(tag < RADIX_TREE_TAG_ID_MAX);
+
+	__cpu_simple_lock(__UNVOLANST(&root->rtr_lock));
+	nresults = radix_tree_gang_lookup_tagged_node(
+	    __UNVOLANST(&root->rtr_tree), first_index, results, max_items,
+	    /*dense*/false, __BIT(tag));
+	for (i = 0; i < nresults; i++) {
+		kludge = results[i];
+		results[i] = kludge->k_datum;
+	}
+	__cpu_simple_unlock(__UNVOLANST(&root->rtr_lock));
+
+	return nresults;
+}
+
+void *
+radix_tree_tag_clear(struct radix_tree_root *root, unsigned long key,
+    unsigned int tag)
+{
+	struct kludge *kludge;
+
+	KASSERT(tag < RADIX_TREE_TAG_ID_MAX);
+
+	__cpu_simple_lock(&root->rtr_lock);
+	kludge = radix_tree_lookup_node(&root->rtr_tree, key);
+	if (kludge != NULL)
+		radix_tree_clear_tag(&root->rtr_tree, key, __BIT(tag));
+	__cpu_simple_unlock(&root->rtr_lock);
+
+	return kludge == NULL ? NULL : kludge->k_datum;
+}
+
+void *
+radix_tree_tag_set(struct radix_tree_root *root, unsigned long key,
+    unsigned int tag)
+{
+	struct kludge *kludge;
+
+	KASSERT(tag < RADIX_TREE_TAG_ID_MAX);
+
+	__cpu_simple_lock(&root->rtr_lock);
+	kludge = radix_tree_lookup_node(&root->rtr_tree, key);
+	KASSERT(kludge != NULL);
+	radix_tree_set_tag(&root->rtr_tree, key, __BIT(tag));
+	__cpu_simple_unlock(&root->rtr_lock);
+
+	return kludge->k_datum;
+}
+
+int
+radix_tree_tagged(const struct radix_tree_root *root, unsigned int tag)
+{
+	bool empty;
+
+	KASSERT(tag < RADIX_TREE_TAG_ID_MAX);
+
+	__cpu_simple_lock(__UNVOLANST(&root->rtr_lock));
+	empty = radix_tree_empty_tagged_tree_p(__UNVOLANST(&root->rtr_tree),
+	    __BIT(tag));
+	__cpu_simple_unlock(__UNVOLANST(&root->rtr_lock));
+
+	return !empty;
+}
+
 void *
 radix_tree_deref_slot(void **slot)
 {

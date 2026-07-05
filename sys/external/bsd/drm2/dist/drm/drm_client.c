@@ -400,7 +400,7 @@ struct drm_client_buffer *
 drm_client_framebuffer_create(struct drm_client_dev *client, u32 width, u32 height, u32 format)
 {
 	struct drm_client_buffer *buffer;
-	u32 handle;
+	u32 handle = 0;
 	int ret;
 
 	buffer = drm_client_buffer_create(client, width, height, format,

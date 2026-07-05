@@ -467,7 +467,8 @@ static int amdgpu_syncobj_lookup_and_add(struct amdgpu_cs_parser *p,
 
 	r = drm_syncobj_find_fence(p->filp, handle, point, flags, &fence);
 	if (r) {
-		drm_err(adev_to_drm(p->adev), "syncobj %u failed to find fence @ %llu (%d)!\n",
+		drm_err(adev_to_drm(p->adev),
+		    "syncobj %u failed to find fence @ %"PRIu64" (%d)!\n",
 			  handle, point, r);
 		return r;
 	}
@@ -936,10 +937,18 @@ static int amdgpu_cs_parser_bos(struct amdgpu_cs_parser *p,
 	}
 
 	amdgpu_bo_list_for_each_userptr_entry(e, p->bo_list) {
+#ifdef __NetBSD__
+		struct vmspace *usermm;
+#else
 		struct mm_struct *usermm;
+#endif
 
 		usermm = amdgpu_ttm_tt_get_usermm(e->bo->tbo.ttm);
+#ifdef __NetBSD__
+		if (usermm && usermm != curproc->p_vmspace) {
+#else
 		if (usermm && usermm != current->mm) {
+#endif
 			r = -EPERM;
 			goto out_free_user_pages;
 		}

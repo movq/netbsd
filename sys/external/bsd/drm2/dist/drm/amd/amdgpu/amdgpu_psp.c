@@ -31,6 +31,19 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_psp.c,v 1.3 2021/12/19 12:21:29 riastradh Exp
 #include <linux/firmware.h>
 #include <drm/drm_drv.h>
 
+#ifdef __NetBSD__
+#include <sys/bus.h>
+#include <drm/ttm/ttm_tt.h>
+#if defined(__x86_64__)
+#include <machine/cpufunc.h>
+#include <machine/cpuvar.h>
+#include <machine/pmap.h>
+#include <machine/pmap_private.h>
+#include <machine/pte.h>
+#include <machine/specialreg.h>
+#endif
+#endif
+
 #include "amdgpu.h"
 #include "amdgpu_psp.h"
 #include "amdgpu_ucode.h"
@@ -45,15 +58,57 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_psp.c,v 1.3 2021/12/19 12:21:29 riastradh Exp
 #include "psp_v13_0_4.h"
 #include "psp_v14_0.h"
 
+#include "gc/gc_11_0_3_offset.h"
+#include "hdp/hdp_5_2_1_offset.h"
+#include "mmhub/mmhub_3_0_2_offset.h"
+#include "mp/mp_13_0_4_offset.h"
+
 #include "amdgpu_ras.h"
 #include "amdgpu_securedisplay.h"
 #include "amdgpu_atomfirmware.h"
+
+#include <linux/nbsd-namespace.h>
 
 #define AMD_VBIOS_FILE_MAX_SIZE_B      (1024*1024*16)
 
 static int psp_load_smu_fw(struct psp_context *psp);
 static int psp_rap_terminate(struct psp_context *psp);
 static int psp_securedisplay_terminate(struct psp_context *psp);
+static const char *psp_gfx_cmd_name(enum psp_gfx_cmd_id cmd_id);
+
+#ifdef __NetBSD__
+/*
+ * Transfer ownership of a GTT-backed PSP buffer between the CPU and PSP.
+ *
+ * NetBSD keeps one bus_dma map with each populated ttm_tt, so accesses at
+ * the PSP submission boundary must be synchronized explicitly.  VRAM BOs
+ * have no ttm_tt DMA map and continue to use the HDP flush/invalidate
+ * operations below.
+ */
+static void
+psp_bo_dma_sync(struct amdgpu_bo *bo, int ops)
+{
+	struct ttm_tt *ttm;
+
+	if (bo == NULL || (ttm = bo->tbo.ttm) == NULL ||
+	    ttm->dma_map == NULL)
+		return;
+
+	bus_dmamap_sync(ttm->dmat, ttm->dma_map, 0,
+	    (bus_size_t)ttm->num_pages << PAGE_SHIFT, ops);
+}
+
+static void
+psp_vram_aperture_barrier(struct amdgpu_device *adev, int flags)
+{
+	if (adev->mman.aper_base_kaddr == NULL)
+		return;
+
+	bus_space_barrier(adev->gmc.aper_tag,
+	    adev->mman.aper_base_handle, 0,
+	    adev->gmc.visible_vram_size, flags);
+}
+#endif
 
 static int psp_ring_init(struct psp_context *psp,
 			 enum psp_ring_type ring_type)
@@ -345,7 +400,8 @@ static int psp_memory_training_init(struct psp_context *psp)
 	}
 
 	dev_dbg(psp->adev->dev,
-		"train_data_size:%llx,p2c_train_data_offset:%llx,c2p_train_data_offset:%llx.\n",
+		"train_data_size:%"PRIx64",p2c_train_data_offset:%"PRIx64
+		",c2p_train_data_offset:%"PRIx64".\n",
 		ctx->train_data_size,
 		ctx->p2c_train_data_offset,
 		ctx->c2p_train_data_offset);
@@ -585,7 +641,7 @@ int psp_wait_for(struct psp_context *psp, uint32_t reg_index, uint32_t reg_val,
 {
 	bool check_changed = flags & PSP_WAITREG_CHANGED;
 	bool verbose = !(flags & PSP_WAITREG_NOVERBOSE);
-	uint32_t val;
+	uint32_t val = 0;
 	int i;
 	struct amdgpu_device *adev = psp->adev;
 
@@ -716,11 +772,19 @@ psp_cmd_submit_buf(struct psp_context *psp,
 	ret = psp_ring_cmd_submit(psp, psp->cmd_buf_mc_addr, fence_mc_addr, index);
 	if (ret) {
 		atomic_dec(&psp->fence_value);
+#ifdef __NetBSD__
+		psp_bo_dma_sync(psp->cmd_buf_bo, BUS_DMASYNC_POSTWRITE);
+#endif
 		goto exit;
 	}
 
 	amdgpu_device_invalidate_hdp(psp->adev, NULL);
 	while (*((unsigned int *)psp->fence_buf) != index) {
+#ifdef __NetBSD__
+		psp_bo_dma_sync(psp->fence_buf_bo, BUS_DMASYNC_POSTREAD);
+		psp_vram_aperture_barrier(psp->adev,
+		    BUS_SPACE_BARRIER_READ);
+#endif
 		if (--timeout == 0)
 			break;
 		/*
@@ -731,9 +795,20 @@ psp_cmd_submit_buf(struct psp_context *psp,
 		ras_intr = amdgpu_ras_intr_triggered();
 		if (ras_intr)
 			break;
+#ifdef __NetBSD__
+		psp_bo_dma_sync(psp->fence_buf_bo, BUS_DMASYNC_PREREAD);
+#endif
 		usleep_range(60, 100);
 		amdgpu_device_invalidate_hdp(psp->adev, NULL);
 	}
+
+#ifdef __NetBSD__
+	psp_vram_aperture_barrier(psp->adev, BUS_SPACE_BARRIER_READ);
+	psp_bo_dma_sync(psp->cmd_buf_bo,
+	    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
+	psp_bo_dma_sync(psp->adev->firmware.rbuf, BUS_DMASYNC_POSTWRITE);
+	psp_bo_dma_sync(psp->fw_pri_bo, BUS_DMASYNC_POSTWRITE);
+#endif
 
 	/* We allow TEE_ERROR_NOT_SUPPORTED for VMR command and PSP_ERR_UNKNOWN_COMMAND in SRIOV */
 	skip_unsupport = (psp->cmd_buf_mem->resp.status == TEE_ERROR_NOT_SUPPORTED ||
@@ -1371,8 +1446,16 @@ int psp_ta_invoke(struct psp_context *psp,
 
 	psp_prep_ta_invoke_cmd_buf(cmd, ta_cmd_id, context->session_id);
 
+#ifdef __NetBSD__
+	psp_bo_dma_sync(context->mem_context.shared_bo,
+	    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
+#endif
 	ret = psp_cmd_submit_buf(psp, NULL, cmd,
 				 psp->fence_buf_mc_addr);
+#ifdef __NetBSD__
+	psp_bo_dma_sync(context->mem_context.shared_bo,
+	    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
+#endif
 
 	context->resp_status = cmd->resp.status;
 
@@ -3468,7 +3551,24 @@ int psp_ring_cmd_submit(struct psp_context *psp,
 	write_frame->fence_addr_hi = upper_32_bits(fence_mc_addr);
 	write_frame->fence_addr_lo = lower_32_bits(fence_mc_addr);
 	write_frame->fence_value = index;
+#ifdef __NetBSD__
+	psp_bo_dma_sync(adev->firmware.rbuf, BUS_DMASYNC_PREWRITE);
+	/*
+	 * The VRAM aperture is mapped write-combining.  Publish every field
+	 * of the ring frame before the C2PMSG write-pointer update below.
+	 * This matters on APUs, where amdgpu_device_flush_hdp() intentionally
+	 * does nothing.
+	 */
+	psp_vram_aperture_barrier(adev, BUS_SPACE_BARRIER_WRITE);
+	/*
+	 * Test the Linux x86 APU coherence assumption explicitly.  The
+	 * device-level helper skips this flush on native x86 APUs, so call
+	 * the ASIC operation directly before notifying the PSP.
+	 */
+	amdgpu_asic_flush_hdp(adev, NULL);
+#else
 	amdgpu_device_flush_hdp(adev, NULL);
+#endif
 
 	/* Update the write Pointer in DWORDs */
 	psp_write_ptr_reg = (psp_write_ptr_reg + rb_frame_size_dw) % ring_size_dw;
@@ -3491,7 +3591,8 @@ int psp_init_asd_microcode(struct psp_context *psp, const char *chip_name)
 	adev->psp.asd_context.bin_desc.fw_version = le32_to_cpu(asd_hdr->header.ucode_version);
 	adev->psp.asd_context.bin_desc.feature_version = le32_to_cpu(asd_hdr->sos.fw_version);
 	adev->psp.asd_context.bin_desc.size_bytes = le32_to_cpu(asd_hdr->header.ucode_size_bytes);
-	adev->psp.asd_context.bin_desc.start_addr = (uint8_t *)asd_hdr +
+	adev->psp.asd_context.bin_desc.start_addr =
+		(uint8_t *)__UNCONST(asd_hdr) +
 				le32_to_cpu(asd_hdr->header.ucode_array_offset_bytes);
 	return 0;
 out:
@@ -3514,8 +3615,8 @@ int psp_init_toc_microcode(struct psp_context *psp, const char *chip_name)
 	adev->psp.toc.fw_version = le32_to_cpu(toc_hdr->header.ucode_version);
 	adev->psp.toc.feature_version = le32_to_cpu(toc_hdr->sos.fw_version);
 	adev->psp.toc.size_bytes = le32_to_cpu(toc_hdr->header.ucode_size_bytes);
-	adev->psp.toc.start_addr = (uint8_t *)toc_hdr +
-				le32_to_cpu(toc_hdr->header.ucode_array_offset_bytes);
+	adev->psp.toc.start_addr = (uint8_t *)__UNCONST(toc_hdr) +
+			le32_to_cpu(toc_hdr->header.ucode_array_offset_bytes);
 	return 0;
 out:
 	amdgpu_ucode_release(&adev->psp.toc_fw);
@@ -3531,7 +3632,7 @@ static int parse_sos_bin_descriptor(struct psp_context *psp,
 	if (!psp || !desc || !sos_hdr)
 		return -EINVAL;
 
-	ucode_start_addr  = (uint8_t *)sos_hdr +
+	ucode_start_addr  = (uint8_t *)__UNCONST(sos_hdr) +
 			    le32_to_cpu(desc->offset_bytes) +
 			    le32_to_cpu(sos_hdr->header.ucode_array_offset_bytes);
 
@@ -3623,7 +3724,7 @@ static int psp_init_sos_base_fw(struct amdgpu_device *adev)
 	uint8_t *ucode_array_start_addr;
 
 	sos_hdr = (const struct psp_firmware_header_v1_0 *)adev->psp.sos_fw->data;
-	ucode_array_start_addr = (uint8_t *)sos_hdr +
+	ucode_array_start_addr = (uint8_t *)__UNCONST(sos_hdr) +
 		le32_to_cpu(sos_hdr->header.ucode_array_offset_bytes);
 
 	if (adev->gmc.xgmi.connected_to_cpu ||
@@ -3685,7 +3786,7 @@ int psp_init_sos_microcode(struct psp_context *psp, const char *chip_name)
 		goto out;
 
 	sos_hdr = (const struct psp_firmware_header_v1_0 *)adev->psp.sos_fw->data;
-	ucode_array_start_addr = (uint8_t *)sos_hdr +
+	ucode_array_start_addr = (uint8_t *)__UNCONST(sos_hdr) +
 		le32_to_cpu(sos_hdr->header.ucode_array_offset_bytes);
 	amdgpu_ucode_print_psp_hdr(&sos_hdr->header);
 
@@ -3814,7 +3915,7 @@ static int parse_ta_bin_descriptor(struct psp_context *psp,
 	if (!is_ta_fw_applicable(psp, desc))
 		return 0;
 
-	ucode_start_addr  = (uint8_t *)ta_hdr +
+	ucode_start_addr  = (uint8_t *)__UNCONST(ta_hdr) +
 			    le32_to_cpu(desc->offset_bytes) +
 			    le32_to_cpu(ta_hdr->header.ucode_array_offset_bytes);
 
@@ -3882,7 +3983,7 @@ static int parse_ta_v1_microcode(struct psp_context *psp)
 	adev->psp.xgmi_context.context.bin_desc.size_bytes =
 		le32_to_cpu(ta_hdr->xgmi.size_bytes);
 	adev->psp.xgmi_context.context.bin_desc.start_addr =
-		(uint8_t *)ta_hdr +
+		(uint8_t *)__UNCONST(ta_hdr) +
 		le32_to_cpu(ta_hdr->header.ucode_array_offset_bytes);
 
 	adev->psp.ras_context.context.bin_desc.fw_version =
@@ -3898,7 +3999,7 @@ static int parse_ta_v1_microcode(struct psp_context *psp)
 	adev->psp.hdcp_context.context.bin_desc.size_bytes =
 		le32_to_cpu(ta_hdr->hdcp.size_bytes);
 	adev->psp.hdcp_context.context.bin_desc.start_addr =
-		(uint8_t *)ta_hdr +
+		(uint8_t *)__UNCONST(ta_hdr) +
 		le32_to_cpu(ta_hdr->header.ucode_array_offset_bytes);
 
 	adev->psp.dtm_context.context.bin_desc.fw_version =
@@ -4074,6 +4175,7 @@ static int psp_set_powergating_state(struct amdgpu_ip_block *ip_block,
 	return 0;
 }
 
+#ifndef __NetBSD__		/* XXX amdgpu sysfs */
 static ssize_t psp_usbc_pd_fw_sysfs_read(struct device *dev,
 					 struct device_attribute *attr,
 					 char *buf)
@@ -4158,6 +4260,7 @@ fail:
 	drm_dev_exit(idx);
 	return count;
 }
+#endif
 
 void psp_copy_fw(struct psp_context *psp, uint8_t *start_addr, uint32_t bin_size)
 {
@@ -4168,6 +4271,9 @@ void psp_copy_fw(struct psp_context *psp, uint8_t *start_addr, uint32_t bin_size
 
 	memset(psp->fw_pri_buf, 0, PSP_1_MEG);
 	memcpy(psp->fw_pri_buf, start_addr, bin_size);
+#ifdef __NetBSD__
+	psp_bo_dma_sync(psp->fw_pri_bo, BUS_DMASYNC_PREWRITE);
+#endif
 
 	drm_dev_exit(idx);
 }
@@ -4177,15 +4283,18 @@ void psp_copy_fw(struct psp_context *psp, uint8_t *start_addr, uint32_t bin_size
  * Reading from this file will retrieve the USB-C PD firmware version. Writing to
  * this file will trigger the update process.
  */
+#ifndef __NetBSD__		/* XXX amdgpu sysfs */
 static DEVICE_ATTR(usbc_pd_fw, 0644,
 		   psp_usbc_pd_fw_sysfs_read,
 		   psp_usbc_pd_fw_sysfs_write);
+#endif
 
 int is_psp_fw_valid(struct psp_bin_desc bin)
 {
 	return bin.size_bytes;
 }
 
+#ifndef __NetBSD__		/* XXX amdgpu sysfs */
 static ssize_t amdgpu_psp_vbflash_write(struct file *filp, struct kobject *kobj,
 					const struct bin_attribute *bin_attr,
 					char *buffer, loff_t pos, size_t count)
@@ -4346,6 +4455,7 @@ const struct attribute_group amdgpu_flash_attr_group = {
 	.is_bin_visible = amdgpu_bin_flash_attr_is_visible,
 	.is_visible = amdgpu_flash_attr_is_visible,
 };
+#endif
 
 #if defined(CONFIG_DEBUG_FS)
 static int psp_read_spirom_debugfs_open(struct inode *inode, struct file *filp)

@@ -39,6 +39,8 @@
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, "$NetBSD$");
 
+#include <linux/string_choices.h>
+
 #include "link_dp_capability.h"
 #include "link_ddc.h"
 #include "link_dpcd.h"

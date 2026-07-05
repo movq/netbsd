@@ -153,7 +153,7 @@ static const struct dma_fence_ops dma_fence_array_ops = {
 
 struct dma_fence_array *
 dma_fence_array_create(int num_fences, struct dma_fence **fences,
-    unsigned context, unsigned seqno, bool signal_on_any)
+    uint64_t context, unsigned seqno, bool signal_on_any)
 {
 	struct dma_fence_array *A;
 
@@ -181,13 +181,40 @@ bool
 dma_fence_is_array(struct dma_fence *fence)
 {
 
-	return fence->ops == &dma_fence_array_ops;
+	return fence != NULL && fence->ops == &dma_fence_array_ops;
 }
 
 struct dma_fence_array *
 to_dma_fence_array(struct dma_fence *fence)
 {
 
-	KASSERT(dma_fence_is_array(fence));
+	if (!dma_fence_is_array(fence))
+		return NULL;
 	return container_of(fence, struct dma_fence_array, base);
+}
+
+struct dma_fence *
+dma_fence_array_first(struct dma_fence *head)
+{
+	struct dma_fence_array *array;
+
+	if (head == NULL)
+		return NULL;
+
+	array = to_dma_fence_array(head);
+	if (array == NULL)
+		return head;
+	if (array->num_fences == 0)
+		return NULL;
+	return array->fences[0];
+}
+
+struct dma_fence *
+dma_fence_array_next(struct dma_fence *head, unsigned index)
+{
+	struct dma_fence_array *array = to_dma_fence_array(head);
+
+	if (array == NULL || index >= array->num_fences)
+		return NULL;
+	return array->fences[index];
 }

@@ -170,4 +170,10 @@ void drm_buddy_print(struct drm_buddy *mm, struct drm_printer *p);
 void drm_buddy_block_print(struct drm_buddy *mm,
 			   struct drm_buddy_block *block,
 			   struct drm_printer *p);
+
+#ifdef __NetBSD__
+int drm_buddy_module_init(void);
+void drm_buddy_module_exit(void);
+#endif
+
 #endif

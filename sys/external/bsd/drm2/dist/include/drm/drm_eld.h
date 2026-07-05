@@ -10,6 +10,8 @@
 
 #include <linux/types.h>
 
+#include <sys/null.h>
+
 struct cea_sad;
 
 /* ELD Header Block */

@@ -24,6 +24,13 @@ static void drm_fbdev_client_unregister(struct drm_client_dev *client)
 
 	if (fb_helper->info) {
 		drm_fb_helper_unregister_info(fb_helper);
+#ifdef __NetBSD__
+		drm_fb_helper_fini(fb_helper);
+		drm_client_framebuffer_delete(fb_helper->buffer);
+		drm_client_release(&fb_helper->client);
+		drm_fb_helper_unprepare(fb_helper);
+		kfree(fb_helper);
+#endif
 	} else {
 		drm_client_release(&fb_helper->client);
 		drm_fb_helper_unprepare(fb_helper);

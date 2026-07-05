@@ -62,7 +62,8 @@ static int	linux_i2cbb_write_byte(void *, uint8_t, int);
  */
 
 struct i2c_client *
-i2c_new_device(struct i2c_adapter *adapter, const struct i2c_board_info *info)
+i2c_new_client_device(struct i2c_adapter *adapter,
+    const struct i2c_board_info *info)
 {
 	struct i2c_client *client;
 

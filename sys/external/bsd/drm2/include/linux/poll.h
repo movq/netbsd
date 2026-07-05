@@ -32,6 +32,8 @@
 #ifndef _LINUX_POLL_H_
 #define _LINUX_POLL_H_
 
+#include <sys/epoll.h>
+
 #include <linux/fs.h>
 #include <linux/uaccess.h>
 

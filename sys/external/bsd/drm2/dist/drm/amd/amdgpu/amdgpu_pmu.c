@@ -31,6 +31,8 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_pmu.c,v 1.2 2021/12/18 23:44:58 riastradh Exp
 #include "amdgpu.h"
 #include "amdgpu_pmu.h"
 
+#include <linux/nbsd-namespace.h>
+
 #define PMU_NAME_SIZE 32
 #define NUM_FORMATS_AMDGPU_PMU		4
 #define NUM_FORMATS_DF_VEGA20		3

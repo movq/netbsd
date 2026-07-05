@@ -455,7 +455,8 @@ static unsigned int spl_calculate_sharpness_level(struct spl_fixed31_32 ratio,
 void spl_build_isharp_1dlut_from_reference_curve(struct spl_fixed31_32 ratio, enum system_setup setup,
 	struct adaptive_sharpness sharpness, enum scale_to_sharpness_policy scale_to_sharpness_policy)
 {
-	uint8_t *byte_ptr_1dlut_src, *byte_ptr_1dlut_dst;
+	const uint8_t *byte_ptr_1dlut_src;
+	uint8_t *byte_ptr_1dlut_dst;
 	struct spl_fixed31_32 sharp_base, sharp_calc, sharp_level;
 	int j;
 	int size_1dlut;
@@ -485,7 +486,7 @@ void spl_build_isharp_1dlut_from_reference_curve(struct spl_fixed31_32 ratio, en
 	 *  where iGain is base sharpness level 3.0
 	 *  where LUT_128_gained[i] is adjusted 1dlut value based on desired sharpness level
 	 */
-	byte_ptr_1dlut_src = (uint8_t *)filter_isharp_1D_lut_3p0x;
+	byte_ptr_1dlut_src = (const uint8_t *)filter_isharp_1D_lut_3p0x;
 	byte_ptr_1dlut_dst = (uint8_t *)filter_pregen_store;
 	size_1dlut = sizeof(filter_isharp_1D_lut_3p0x);
 	memset(byte_ptr_1dlut_dst, 0, size_1dlut);

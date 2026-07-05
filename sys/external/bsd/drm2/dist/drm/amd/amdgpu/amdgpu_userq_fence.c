@@ -30,6 +30,7 @@ __KERNEL_RCSID(0, "$NetBSD$");
 #include <linux/kref.h>
 #include <linux/slab.h>
 #include <linux/dma-fence-unwrap.h>
+#include <linux/uaccess.h>
 
 #include <drm/drm_exec.h>
 #include <drm/drm_syncobj.h>

@@ -368,22 +368,22 @@ SUBDIR+=	viac7temp
 .if ${MACHINE_ARCH} == "i386" || \
     ${MACHINE_ARCH} == "x86_64" || \
     ${MACHINE_CPU} == "aarch64"
-SUBDIR+=	amdgpu
-SUBDIR+=	drmkms
-SUBDIR+=	drmkms_linux
-SUBDIR+=	drmkms_pci
-SUBDIR+=	drmkms_sched
-SUBDIR+=	drmkms_ttm
+#SUBDIR+=	amdgpu
+#SUBDIR+=	drmkms
+#SUBDIR+=	drmkms_linux
+#SUBDIR+=	drmkms_pci
+#SUBDIR+=	drmkms_sched
+#SUBDIR+=	drmkms_ttm
 .endif
 
 .if ${MACHINE_ARCH} == "i386" || \
     ${MACHINE_ARCH} == "x86_64"
-SUBDIR+=	drm
-SUBDIR+=	compat_linux
-SUBDIR+=	drmkms_agp
-SUBDIR+=	i915drm
-SUBDIR+=	i915drmkms
-SUBDIR+=	viadrmums
+#SUBDIR+=	drm
+#SUBDIR+=	compat_linux
+#SUBDIR+=	drmkms_agp
+#SUBDIR+=	i915drm
+#SUBDIR+=	i915drmkms
+#SUBDIR+=	viadrmums
 #
 # ISA modules
 #

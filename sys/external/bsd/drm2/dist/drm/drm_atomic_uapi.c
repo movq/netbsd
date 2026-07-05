@@ -506,7 +506,7 @@ static int drm_atomic_plane_set_property(struct drm_plane *plane,
 
 		if (val && !crtc) {
 			drm_dbg_atomic(dev,
-				       "[PROP:%d:%s] cannot find CRTC with ID %llu\n",
+				       "[PROP:%d:%s] cannot find CRTC with ID %"PRIu64"\n",
 				       property->base.id, property->name, val);
 			return -EACCES;
 		}
@@ -561,7 +561,7 @@ static int drm_atomic_plane_set_property(struct drm_plane *plane,
 	} else if (property == plane->hotspot_x_property) {
 		if (plane->type != DRM_PLANE_TYPE_CURSOR) {
 			drm_dbg_atomic(plane->dev,
-				       "[PLANE:%d:%s] is not a cursor plane: 0x%llx\n",
+				       "[PLANE:%d:%s] is not a cursor plane: 0x%"PRIx64"\n",
 				       plane->base.id, plane->name, val);
 			return -EINVAL;
 		}
@@ -569,7 +569,7 @@ static int drm_atomic_plane_set_property(struct drm_plane *plane,
 	} else if (property == plane->hotspot_y_property) {
 		if (plane->type != DRM_PLANE_TYPE_CURSOR) {
 			drm_dbg_atomic(plane->dev,
-				       "[PLANE:%d:%s] is not a cursor plane: 0x%llx\n",
+				       "[PLANE:%d:%s] is not a cursor plane: 0x%"PRIx64"\n",
 				       plane->base.id, plane->name, val);
 			return -EINVAL;
 		}
@@ -685,7 +685,7 @@ static int drm_atomic_connector_set_property(struct drm_connector *connector,
 
 		if (val && !crtc) {
 			drm_dbg_atomic(dev,
-				       "[PROP:%d:%s] cannot find CRTC with ID %llu\n",
+				       "[PROP:%d:%s] cannot find CRTC with ID %"PRIu64"\n",
 				       property->base.id, property->name, val);
 			return -EACCES;
 		}

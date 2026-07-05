@@ -42,6 +42,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_dma_buf.c,v 1.17 2024/05/20 11:35:10 riastradh
 #include <linux/dma-buf.h>
 #include <linux/err.h>
 #include <linux/dma-resv.h>
+#include <linux/sched.h>
 
 static int	dmabuf_fop_poll(struct file *, int);
 static int	dmabuf_fop_close(struct file *);
@@ -82,6 +83,7 @@ dma_buf_export(struct dma_buf_export_info *info)
 	dmabuf->ops = info->ops;
 	dmabuf->size = info->size;
 	dmabuf->resv = info->resv;
+	INIT_LIST_HEAD(&dmabuf->attachments);
 
 	mutex_init(&dmabuf->db_lock, MUTEX_DEFAULT, IPL_NONE);
 	dmabuf->db_refcnt = 1;
@@ -180,7 +182,7 @@ dma_buf_put(struct dma_buf *dmabuf)
 
 struct dma_buf_attachment *
 dma_buf_dynamic_attach(struct dma_buf *dmabuf, bus_dma_tag_t dmat,
-    bool dynamic_mapping)
+    const struct dma_buf_attach_ops *importer_ops, void *importer_priv)
 {
 	struct dma_buf_attachment *attach;
 	int ret = 0;
@@ -188,17 +190,19 @@ dma_buf_dynamic_attach(struct dma_buf *dmabuf, bus_dma_tag_t dmat,
 	attach = kmem_zalloc(sizeof(*attach), KM_SLEEP);
 	attach->dmabuf = dmabuf;
 	attach->dev = dmat;
-	attach->dynamic_mapping = dynamic_mapping;
+	attach->importer_ops = importer_ops;
+	attach->importer_priv = importer_priv;
+	if (importer_ops)
+		attach->peer2peer = importer_ops->allow_peer2peer;
 
 	mutex_enter(&dmabuf->db_lock);
 	if (dmabuf->ops->attach)
 		ret = dmabuf->ops->attach(dmabuf, attach);
+	if (ret == 0)
+		list_add(&attach->node, &dmabuf->attachments);
 	mutex_exit(&dmabuf->db_lock);
 	if (ret)
 		goto fail0;
-
-	if (attach->dynamic_mapping != dmabuf->ops->dynamic_mapping)
-		panic("%s: NYI", __func__);
 
 	return attach;
 
@@ -210,7 +214,7 @@ struct dma_buf_attachment *
 dma_buf_attach(struct dma_buf *dmabuf, bus_dma_tag_t dmat)
 {
 
-	return dma_buf_dynamic_attach(dmabuf, dmat, /*dynamic_mapping*/false);
+	return dma_buf_dynamic_attach(dmabuf, dmat, NULL, NULL);
 }
 
 void
@@ -218,11 +222,44 @@ dma_buf_detach(struct dma_buf *dmabuf, struct dma_buf_attachment *attach)
 {
 
 	mutex_enter(&dmabuf->db_lock);
+	list_del(&attach->node);
 	if (dmabuf->ops->detach)
 		dmabuf->ops->detach(dmabuf, attach);
 	mutex_exit(&dmabuf->db_lock);
 
 	kmem_free(attach, sizeof(*attach));
+}
+
+void
+dma_buf_move_notify(struct dma_buf *dmabuf)
+{
+	struct dma_buf_attachment *attach;
+
+	dma_resv_assert_held(dmabuf->resv);
+
+	mutex_enter(&dmabuf->db_lock);
+	list_for_each_entry(attach, &dmabuf->attachments, node) {
+		if (attach->importer_ops)
+			attach->importer_ops->move_notify(attach);
+	}
+	mutex_exit(&dmabuf->db_lock);
+}
+
+int
+dma_buf_pin(struct dma_buf_attachment *attach)
+{
+
+	if (attach->dmabuf->ops->pin)
+		return attach->dmabuf->ops->pin(attach);
+	return 0;
+}
+
+void
+dma_buf_unpin(struct dma_buf_attachment *attach)
+{
+
+	if (attach->dmabuf->ops->unpin)
+		attach->dmabuf->ops->unpin(attach);
 }
 
 struct sg_table *
@@ -231,10 +268,10 @@ dma_buf_map_attachment(struct dma_buf_attachment *attach,
 {
 	struct sg_table *sg;
 
-	if (attach->dmabuf->ops->dynamic_mapping)
+	if (dma_buf_is_dynamic(attach->dmabuf))
 		dma_resv_lock(attach->dmabuf->resv, NULL);
 	sg = attach->dmabuf->ops->map_dma_buf(attach, dir);
-	if (attach->dmabuf->ops->dynamic_mapping)
+	if (dma_buf_is_dynamic(attach->dmabuf))
 		dma_resv_unlock(attach->dmabuf->resv);
 
 	return sg;
@@ -245,11 +282,47 @@ dma_buf_unmap_attachment(struct dma_buf_attachment *attach,
     struct sg_table *sg, enum dma_data_direction dir)
 {
 
-	if (attach->dmabuf->ops->dynamic_mapping)
+	if (dma_buf_is_dynamic(attach->dmabuf))
 		dma_resv_lock(attach->dmabuf->resv, NULL);
 	attach->dmabuf->ops->unmap_dma_buf(attach, sg, dir);
-	if (attach->dmabuf->ops->dynamic_mapping)
+	if (dma_buf_is_dynamic(attach->dmabuf))
 		dma_resv_unlock(attach->dmabuf->resv);
+}
+
+int
+dma_buf_begin_cpu_access(struct dma_buf *dmabuf,
+    enum dma_data_direction direction)
+{
+	const bool write = direction == DMA_BIDIRECTIONAL ||
+	    direction == DMA_TO_DEVICE;
+	long ret;
+
+	if (dmabuf == NULL)
+		return -EINVAL;
+
+	if (dmabuf->ops->begin_cpu_access) {
+		ret = dmabuf->ops->begin_cpu_access(dmabuf, direction);
+		if (ret)
+			return ret;
+	}
+
+	ret = dma_resv_wait_timeout(dmabuf->resv, dma_resv_usage_rw(write),
+	    true, MAX_SCHEDULE_TIMEOUT);
+	return ret < 0 ? ret : 0;
+}
+
+int
+dma_buf_end_cpu_access(struct dma_buf *dmabuf,
+    enum dma_data_direction direction)
+{
+
+	if (dmabuf == NULL)
+		return -EINVAL;
+
+	if (dmabuf->ops->end_cpu_access)
+		return dmabuf->ops->end_cpu_access(dmabuf, direction);
+
+	return 0;
 }
 
 static int

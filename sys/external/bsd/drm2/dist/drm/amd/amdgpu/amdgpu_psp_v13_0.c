@@ -622,7 +622,7 @@ static int psp_v13_0_memory_training(struct psp_context *psp, uint32_t ops)
 		sz = BIST_MEM_TRAINING_ENCROACHED_SIZE;
 
 		if (adev->gmc.visible_vram_size < sz || !adev->mman.aper_base_kaddr) {
-			dev_err(adev->dev, "visible_vram_size %llx or aper_base_kaddr %p is not initialized.\n",
+			dev_err(adev->dev, "visible_vram_size %"PRIx64" or aper_base_kaddr %p is not initialized.\n",
 				  adev->gmc.visible_vram_size,
 				  adev->mman.aper_base_kaddr);
 			return -EINVAL;

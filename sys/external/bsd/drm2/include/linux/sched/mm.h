@@ -70,4 +70,16 @@ memalloc_nofs_restore(unsigned flags)
 	KASSERT(flags == 0xeb13162c);
 }
 
+static inline unsigned
+memalloc_noreclaim_save(void)
+{
+	return 0x4e4f5243;
+}
+
+static inline void
+memalloc_noreclaim_restore(unsigned flags)
+{
+	KASSERT(flags == 0x4e4f5243);
+}
+
 #endif	/* _LINUX_SCHED_MM_H_ */

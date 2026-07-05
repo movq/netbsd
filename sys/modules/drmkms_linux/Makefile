@@ -33,6 +33,7 @@ SRCS+=	linux_dma_fence.c
 SRCS+=	linux_dma_fence_array.c
 SRCS+=	linux_dma_fence_chain.c
 SRCS+=	linux_dma_resv.c
+SRCS+=	linux_device.c
 SRCS+=	linux_dmi.c
 SRCS+=	linux_firmware.c
 SRCS+=	linux_hrtimer.c

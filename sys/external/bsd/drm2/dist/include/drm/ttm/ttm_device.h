@@ -27,6 +27,10 @@
 #ifndef _TTM_DEVICE_H_
 #define _TTM_DEVICE_H_
 
+#ifdef __NetBSD__
+#include <sys/bus.h>
+#endif
+
 #include <linux/types.h>
 #include <linux/workqueue.h>
 #include <drm/ttm/ttm_resource.h>
@@ -215,6 +219,16 @@ struct ttm_device_funcs {
  * struct ttm_device - Buffer object driver device-specific data.
  */
 struct ttm_device {
+#ifdef __NetBSD__
+	/*
+	 * Native tags used for device-memory mappings and DMA mappings.
+	 * Drivers initialize these immediately after ttm_device_init().
+	 */
+	bus_space_tag_t iot;
+	bus_space_tag_t memt;
+	bus_dma_tag_t dmat;
+#endif
+
 	/**
 	 * @device_list: Our entry in the global device list.
 	 * Constant after bo device init
@@ -279,15 +293,23 @@ int ttm_device_prepare_hibernation(struct ttm_device *bdev);
 static inline struct ttm_resource_manager *
 ttm_manager_type(struct ttm_device *bdev, int mem_type)
 {
+#ifdef __NetBSD__
+	KASSERT(mem_type >= 0 && mem_type < TTM_NUM_MEM_TYPES);
+#else
 	BUILD_BUG_ON(__builtin_constant_p(mem_type)
 		     && mem_type >= TTM_NUM_MEM_TYPES);
+#endif
 	return bdev->man_drv[mem_type];
 }
 
 static inline void ttm_set_driver_manager(struct ttm_device *bdev, int type,
 					  struct ttm_resource_manager *manager)
 {
+#ifdef __NetBSD__
+	KASSERT(type >= 0 && type < TTM_NUM_MEM_TYPES);
+#else
 	BUILD_BUG_ON(__builtin_constant_p(type) && type >= TTM_NUM_MEM_TYPES);
+#endif
 	bdev->man_drv[type] = manager;
 }
 

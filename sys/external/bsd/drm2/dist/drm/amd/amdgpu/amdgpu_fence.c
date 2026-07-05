@@ -39,6 +39,9 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_fence.c,v 1.11 2023/07/20 18:02:45 mrg Exp $"
 #include <linux/kref.h>
 #include <linux/slab.h>
 #include <linux/firmware.h>
+#ifdef __NetBSD__
+#include <drm/amdgpu_pci.h>
+#endif
 #include <linux/pm_runtime.h>
 
 #include <drm/drm_drv.h>
@@ -612,10 +615,17 @@ void amdgpu_fence_driver_isr_toggle(struct amdgpu_device *adev, bool stop)
 		if (!ring || !ring->fence_drv.initialized || !ring->fence_drv.irq_src)
 			continue;
 
+#ifdef __NetBSD__
+		if (stop)
+			amdgpu_pci_irq_disable(adev_to_drm(adev));
+		else
+			amdgpu_pci_irq_enable(adev_to_drm(adev));
+#else
 		if (stop)
 			disable_irq(adev->irq.irq);
 		else
 			enable_irq(adev->irq.irq);
+#endif
 	}
 }
 
@@ -1101,4 +1111,3 @@ void amdgpu_debugfs_fence_init(struct amdgpu_device *adev)
 	}
 #endif
 }
-

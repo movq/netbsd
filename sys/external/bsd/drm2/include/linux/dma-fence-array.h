@@ -38,6 +38,8 @@
 #include <linux/irq_work.h>
 
 #define	dma_fence_array_create		linux_dma_fence_array_create
+#define	dma_fence_array_first		linux_dma_fence_array_first
+#define	dma_fence_array_next		linux_dma_fence_array_next
 #define	dma_fence_is_array		linux_dma_fence_is_array
 #define	to_dma_fence_array		linux_to_dma_fence_array
 
@@ -58,8 +60,12 @@ struct dma_fence_array {
 };
 
 struct dma_fence_array *
-	dma_fence_array_create(int, struct dma_fence **, unsigned, unsigned,
+	dma_fence_array_create(int, struct dma_fence **, uint64_t, unsigned,
 	    bool);
+struct dma_fence *
+	dma_fence_array_first(struct dma_fence *);
+struct dma_fence *
+	dma_fence_array_next(struct dma_fence *, unsigned);
 
 bool	dma_fence_is_array(struct dma_fence *);
 struct dma_fence_array *

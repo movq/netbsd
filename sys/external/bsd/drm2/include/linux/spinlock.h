@@ -58,6 +58,12 @@ spin_lock(spinlock_t *spinlock)
 	mutex_enter(&spinlock->sl_lock);
 }
 
+static inline int
+spin_trylock(spinlock_t *spinlock)
+{
+	return mutex_tryenter(&spinlock->sl_lock);
+}
+
 static inline void
 spin_unlock(spinlock_t *spinlock)
 {

@@ -47,6 +47,7 @@
 #define	rcu_access_pointer(P) 	atomic_load_relaxed(&(P))
 
 #define	rcu_dereference_raw	rcu_dereference
+#define	rcu_dereference_check(P, C)	rcu_dereference(P)
 
 #define	rcu_dereference_protected(P, C) ({				      \
 	WARN_ON(!(C));							      \

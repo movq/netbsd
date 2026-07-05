@@ -50,6 +50,11 @@ struct drm_prime_file_private;
 struct drm_printer;
 struct drm_vblank_crtc;
 
+#ifdef __NetBSD__
+/* drm_fb_helper.c */
+extern struct mutex drm_kernel_fb_helper_lock;
+#endif
+
 /* drm_client_event.c */
 #if defined(CONFIG_DRM_CLIENT)
 void drm_client_debugfs_init(struct drm_device *dev);
@@ -63,6 +68,7 @@ extern struct mutex drm_global_mutex;
 bool drm_dev_needs_global_mutex(struct drm_device *dev);
 struct drm_file *drm_file_alloc(struct drm_minor *minor);
 void drm_file_free(struct drm_file *file);
+void drm_lastclose(struct drm_device *dev);
 
 #ifdef CONFIG_PCI
 
@@ -104,7 +110,9 @@ static inline bool drm_vblank_passed(u64 seq, u64 ref)
 
 void drm_vblank_disable_and_save(struct drm_device *dev, unsigned int pipe);
 int drm_vblank_get(struct drm_device *dev, unsigned int pipe);
+int drm_vblank_get_locked(struct drm_device *dev, unsigned int pipe);
 void drm_vblank_put(struct drm_device *dev, unsigned int pipe);
+void drm_vblank_put_locked(struct drm_device *dev, unsigned int pipe);
 u64 drm_vblank_count(struct drm_device *dev, unsigned int pipe);
 
 /* drm_vblank_work.c */

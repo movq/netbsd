@@ -62,6 +62,7 @@ struct i2c_msg;
  */
 #define	I2C_CLASS_DDC	0x01
 #define	I2C_CLASS_SPD	0x02
+#define	I2C_CLASS_HWMON	0x04
 
 /*
  * I2C_FUNC_*: i2c_adapter functionality bits
@@ -72,6 +73,26 @@ struct i2c_msg;
 #define	I2C_FUNC_SMBUS_READ_BLOCK_DATA	0x08
 #define	I2C_FUNC_SMBUS_BLOCK_PROC_CALL	0x10
 #define	I2C_FUNC_10BIT_ADDR		0x20
+
+#define	I2C_AQ_COMB			__BIT(0)
+#define	I2C_AQ_COMB_WRITE_FIRST		__BIT(1)
+#define	I2C_AQ_COMB_READ_SECOND		__BIT(2)
+#define	I2C_AQ_COMB_SAME_ADDR		__BIT(3)
+#define	I2C_AQ_NO_CLK_STRETCH		__BIT(4)
+#define	I2C_AQ_NO_ZERO_LEN_READ		__BIT(5)
+#define	I2C_AQ_NO_ZERO_LEN_WRITE	__BIT(6)
+#define	I2C_AQ_NO_ZERO_LEN		\
+	(I2C_AQ_NO_ZERO_LEN_READ | I2C_AQ_NO_ZERO_LEN_WRITE)
+#define	I2C_AQ_NO_REP_START		__BIT(7)
+
+struct i2c_adapter_quirks {
+	uint64_t	flags;
+	int		max_num_msgs;
+	uint16_t	max_write_len;
+	uint16_t	max_read_len;
+	uint16_t	max_comb_1st_msg_len;
+	uint16_t	max_comb_2nd_msg_len;
+};
 
 /*
  * struct i2c_msg: A single i2c message request on a particular
@@ -95,6 +116,7 @@ struct i2c_adapter {
 	int				retries;
 	struct module			*owner;
 	unsigned int			class; /* I2C_CLASS_* */
+	const struct i2c_adapter_quirks	*quirks;
 	struct {
 		device_t	parent;
 	}				dev;
@@ -179,6 +201,14 @@ i2c_add_adapter(struct i2c_adapter *adapter __unused)
 	return 0;
 }
 
+static inline int
+devm_i2c_add_adapter(struct device *dev __unused,
+    struct i2c_adapter *adapter)
+{
+
+	return i2c_add_adapter(adapter);
+}
+
 static inline void
 i2c_del_adapter(struct i2c_adapter *adapter __unused)
 {
@@ -202,14 +232,15 @@ i2c_set_adapdata(struct i2c_adapter *adapter, void *data)
 #define	__i2c_transfer		linux___i2c_transfer
 #define	i2c_master_recv		linux_i2c_master_recv
 #define	i2c_master_send		linux_i2c_master_send
-#define	i2c_new_device		linux_i2c_new_device
+#define	i2c_new_client_device	linux_i2c_new_client_device
 #define	i2c_transfer		linux_i2c_transfer
 #define	i2c_unregister_device	linux_i2c_unregister_device
 
 int	i2c_master_send(const struct i2c_client *, const char *, int);
 int	i2c_master_recv(const struct i2c_client *, char *, int);
 struct i2c_client *
-	i2c_new_device(struct i2c_adapter *, const struct i2c_board_info *);
+	i2c_new_client_device(struct i2c_adapter *,
+	    const struct i2c_board_info *);
 int	__i2c_transfer(struct i2c_adapter *, struct i2c_msg *, int);
 int	i2c_transfer(struct i2c_adapter *, struct i2c_msg *, int);
 void	i2c_unregister_device(struct i2c_client *);

@@ -327,7 +327,6 @@ static void ttm_bo_release(struct kref *kref)
 
 	atomic_dec(&ttm_glob.bo_count);
 	bo->destroy(bo);
->>>>>>> vendor/linux-drm-v6.18
 }
 
 /**
@@ -1065,7 +1064,33 @@ void ttm_bo_unmap_virtual(struct ttm_buffer_object *bo)
 {
 	struct ttm_device *bdev = bo->bdev;
 
+#ifdef __NetBSD__
+	if (bo->resource != NULL && bo->resource->bus.is_iomem) {
+		paddr_t start, end, pa;
+
+		start = bo->resource->bus.offset;
+		KASSERTMSG((start & PAGE_MASK) == 0,
+		    "bo bus address not page-aligned: %"PRIxPADDR, start);
+		KASSERT((bo->resource->size & PAGE_MASK) == 0);
+		end = start + bo->resource->size;
+
+		for (pa = start; pa < end; pa += PAGE_SIZE)
+			pmap_pv_protect(pa, VM_PROT_NONE);
+	} else if (bo->ttm != NULL) {
+		struct uvm_object *uobj = &bo->base.gemo_uvmobj;
+		unsigned int i;
+
+		rw_enter(uobj->vmobjlock, RW_WRITER);
+		for (i = 0; i < bo->ttm->num_pages; i++) {
+			if (bo->ttm->pages[i] != NULL)
+				pmap_page_protect(&bo->ttm->pages[i]->p_vmp,
+				    VM_PROT_NONE);
+		}
+		rw_exit(uobj->vmobjlock);
+	}
+#else
 	drm_vma_node_unmap(&bo->base.vma_node, bdev->dev_mapping);
+#endif
 	ttm_mem_io_free(bdev, bo->resource);
 }
 EXPORT_SYMBOL(ttm_bo_unmap_virtual);

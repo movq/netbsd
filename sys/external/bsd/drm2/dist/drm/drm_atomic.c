@@ -1151,10 +1151,20 @@ drm_atomic_get_connector_state(struct drm_atomic_state *state,
 		struct __drm_connnectors_state *c;
 		int alloc = max(index + 1, config->num_connector);
 
+#ifndef __NetBSD__
 		c = krealloc_array(state->connectors, alloc,
 				   sizeof(*state->connectors), GFP_KERNEL);
 		if (!c)
 			return ERR_PTR(-ENOMEM);
+#else
+		c = kmalloc_array(alloc,
+				   sizeof(*state->connectors), GFP_KERNEL);
+		if (!c)
+			return ERR_PTR(-ENOMEM);
+		memcpy(c, state->connectors,
+		    state->num_connector * sizeof(*state->connectors));
+		kfree(state->connectors);
+#endif
 
 		state->connectors = c;
 		memset(&state->connectors[state->num_connector], 0,

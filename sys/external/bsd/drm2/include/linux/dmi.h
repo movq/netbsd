@@ -34,6 +34,10 @@
 
 #include <sys/types.h>
 
+#include <linux/kconfig.h>
+
+#define	CONFIG_DMI	1
+
 enum dmi_field {
 	DMI_NONE,
 	DMI_BIOS_VENDOR,
@@ -66,14 +70,19 @@ struct dmi_system_id {
 	int (*callback)(const struct dmi_system_id *);
 	const char *ident;
 	struct dmi_strmatch matches[4];
+	void *driver_data;
 };
 #define DMI_MATCH(a, b)		{(a), (b)}
 #define DMI_EXACT_MATCH(a, b)	{(a), (b)}
 
 #define	dmi_check_system	linux_dmi_check_system
+#define	dmi_first_match		linux_dmi_first_match
+#define	dmi_get_system_info	linux_dmi_get_system_info
 #define	dmi_match		linux_dmi_match
 
 int dmi_check_system(const struct dmi_system_id *list);
+const struct dmi_system_id *dmi_first_match(const struct dmi_system_id *list);
+const char *dmi_get_system_info(enum dmi_field);
 bool dmi_match(enum dmi_field, const char[]);
 
 #endif  /* _LINUX_DMI_H_ */

@@ -18,24 +18,61 @@ makeoptions	amdgpufb	"CPPFLAGS.amdgpufb"+="${CPPFLAGS.amdgpu}"
 makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/include/asic_reg"
 makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/include"
 makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/amdgpu"
-makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/powerplay/inc"
-makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/powerplay/smumgr"
-makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/powerplay/hwmgr"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/pm/inc"
 makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/acp/include"
 makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display"
 makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/include"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/modules/inc"
 makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/amdgpu_dm"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/amdkfd"
+
+# Additional paths for sources outside the amdgpu directory.
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/pm/legacy-dpm"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/pm/swsmu"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/pm/swsmu/inc"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/pm/swsmu/inc/pmfw_if"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/pm/swsmu/smu11"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/pm/swsmu/smu12"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/pm/swsmu/smu13"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/pm/swsmu/smu14"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/pm/powerplay/inc"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/pm/powerplay/hwmgr"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/pm/powerplay/smumgr"
 makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/inc"
 makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/inc/hw"
 makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/clk_mgr"
-makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/modules/inc"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/dccg"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/dio"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/dpp"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/dsc"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/dwb"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/hubbub"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/hpo"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/hwss"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/hubp"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/dml2"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/dml2/dml21"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/dml2/dml21/inc"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/dml2/dml21/src/dml2_core"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/dml2/dml21/src/dml2_dpmm"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/dml2/dml21/src/dml2_mcg"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/dml2/dml21/src/dml2_pmo"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/dml2/dml21/src/dml2_standalone_libraries"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/dml2/dml21/src/inc"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/mmhubbub"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/mpc"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/opp"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/optc"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/pg"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dc/resource"
 makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/modules/hdcp"
-makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/amdgpu_dm"
 makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-I$S/external/bsd/drm2/dist/drm/amd/display/dmub/inc"
 
 makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-DCONFIG_DRM_AMD_ACP=1"
 makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-DCONFIG_DRM_AMD_DC=1"
 makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-DCONFIG_DRM_AMD_DC_DCN=1"
+makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-DCONFIG_DRM_AMD_DC_FP=1"
 makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-DCONFIG_DRM_AMD_DC_HDCP=1"
 makeoptions	amdgpu	"CPPFLAGS.amdgpu"+="-DCONFIG_PERF_EVENTS=0"
 
@@ -83,19 +120,71 @@ makeoptions	amdgpu	"COPTS.amdgpu_dcn21_resource.c"+="${COPTS.amdgpu_float}"
 makeoptions	amdgpu	"COPTS.amdgpu_dcn_calc_auto.c"+="${COPTS.amdgpu_float}"
 makeoptions	amdgpu	"COPTS.amdgpu_dcn_calc_math.c"+="${COPTS.amdgpu_float}"
 makeoptions	amdgpu	"COPTS.amdgpu_dcn_calcs.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dcn10_fpu.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dcn20_fpu.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dcn30_fpu.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dcn301_fpu.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dcn302_fpu.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dcn303_fpu.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dcn31_fpu.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dcn314_fpu.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dcn32_fpu.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dcn321_fpu.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dcn35_fpu.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dcn351_fpu.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_display_mode_lib.c"+="${COPTS.amdgpu_float}"
 makeoptions	amdgpu	"COPTS.amdgpu_display_mode_vba.c"+="${COPTS.amdgpu_float}"
 makeoptions	amdgpu	"COPTS.amdgpu_display_mode_vba_20.c"+="${COPTS.amdgpu_float}"
 makeoptions	amdgpu	"COPTS.amdgpu_display_mode_vba_20v2.c"+="${COPTS.amdgpu_float}"
 makeoptions	amdgpu	"COPTS.amdgpu_display_mode_vba_21.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_display_mode_vba_30.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_display_mode_vba_31.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_display_mode_vba_314.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_display_mode_vba_32.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_display_mode_vba_util_32.c"+="${COPTS.amdgpu_float}"
 makeoptions	amdgpu	"COPTS.amdgpu_display_rq_dlg_calc_20.c"+="${COPTS.amdgpu_float}"
 makeoptions	amdgpu	"COPTS.amdgpu_display_rq_dlg_calc_20v2.c"+="${COPTS.amdgpu_float}"
 makeoptions	amdgpu	"COPTS.amdgpu_display_rq_dlg_calc_21.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_display_rq_dlg_calc_30.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_display_rq_dlg_calc_31.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_display_rq_dlg_calc_314.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_display_rq_dlg_calc_32.c"+="${COPTS.amdgpu_float}"
 makeoptions	amdgpu	"COPTS.amdgpu_display_rq_dlg_helpers.c"+="${COPTS.amdgpu_float}"
 makeoptions	amdgpu	"COPTS.amdgpu_dml1_display_rq_dlg_calc.c"+="${COPTS.amdgpu_float}"
 makeoptions	amdgpu	"COPTS.amdgpu_dml_common_defs.c"+="${COPTS.amdgpu_float}"
 makeoptions	amdgpu	"COPTS.amdgpu_rc_calc.c"+="${COPTS.amdgpu_float}"
 makeoptions	amdgpu	"COPTS.amdgpu_rc_calc_dpi.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_rc_calc_fpu.c"+="${COPTS.amdgpu_float}"
 makeoptions	amdgpu	"COPTS.amdgpu_rn_clk_mgr.c"+="${COPTS.amdgpu_float}"
+
+makeoptions	amdgpu	"COPTS.amdgpu_display_mode_core.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_display_mode_util.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dml2_dc_resource_mgmt.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dml2_mall_phantom.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dml2_policy.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dml2_translation_helper.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dml2_utils.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dml2_wrapper.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dml_display_rq_dlg_calc.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dml21_translation_helper.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dml21_utils.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dml21_wrapper.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dml2_core_dcn4.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dml2_core_dcn4_calcs.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dml2_core_factory.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dml2_core_utils.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dml2_dpmm_dcn4.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dml2_dpmm_factory.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dml2_mcg_dcn4.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dml2_mcg_factory.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dml2_pmo_dcn3.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dml2_pmo_dcn4_fams2.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dml2_pmo_factory.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_lib_float_math.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dml2_top_interfaces.c"+="${COPTS.amdgpu_float}"
+makeoptions	amdgpu	"COPTS.amdgpu_dml2_top_soc15.c"+="${COPTS.amdgpu_float}"
+
+makeoptions	amdgpu	"COPTS.amdgpu_dcn401_soc_and_ip_translator.c"+="${COPTS.amdgpu_float}"
 
 # Local additions.
 file	external/bsd/drm2/amdgpu/amdgpu_module.c	amdgpu
@@ -104,44 +193,6 @@ file	external/bsd/drm2/amdgpu/amdgpufb.c		amdgpufb
 
 # Generated from amdgpu2netbsd.
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../acp/amdgpu_acp_hw.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_cik_event_interrupt.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_chardev.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_crat.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_debug.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_device.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_device_queue_manager.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_device_queue_manager_cik.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_device_queue_manager_v10.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_device_queue_manager_v11.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_device_queue_manager_v12.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_device_queue_manager_v9.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_device_queue_manager_vi.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_doorbell.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_events.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_flat_memory.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_int_process_v10.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_int_process_v11.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_int_process_v9.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_interrupt.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_kernel_queue.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_migrate.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_module.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_mqd_manager.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_mqd_manager_cik.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_mqd_manager_v10.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_mqd_manager_v11.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_mqd_manager_v12.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_mqd_manager_v9.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_mqd_manager_vi.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_packet_manager.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_packet_manager_v9.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_packet_manager_vi.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_process.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_process_queue_manager.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_queue.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_smi_events.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_svm.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../amdkfd/amdgpu_kfd_topology.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/amdgpu_dm/amdgpu_dc_fpu.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/amdgpu_dm/amdgpu_dm.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/amdgpu_dm/amdgpu_dm_color.c	amdgpu
@@ -181,14 +232,12 @@ file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/bios/amdgpu_command_tab
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/bios/dce110/amdgpu_command_table_helper_dce110.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/bios/dce112/amdgpu_command_table_helper2_dce112.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/bios/dce112/amdgpu_command_table_helper_dce112.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/bios/dce60/amdgpu_command_table_helper_dce60.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/bios/dce80/amdgpu_command_table_helper_dce80.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/clk_mgr/amdgpu_clk_mgr.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/clk_mgr/dce100/amdgpu_dce_clk_mgr.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/clk_mgr/dce110/amdgpu_dce110_clk_mgr.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/clk_mgr/dce112/amdgpu_dce112_clk_mgr.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/clk_mgr/dce120/amdgpu_dce120_clk_mgr.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/clk_mgr/dce60/amdgpu_dce60_clk_mgr.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/clk_mgr/dcn10/amdgpu_rv1_clk_mgr.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/clk_mgr/dcn10/amdgpu_rv1_clk_mgr_vbios_smu.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/clk_mgr/dcn10/amdgpu_rv2_clk_mgr.c	amdgpu
@@ -271,7 +320,6 @@ file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/dce110/amdgpu_dce110_ti
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/dce110/amdgpu_dce110_transform_v.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/dce112/amdgpu_dce112_compressor.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/dce120/amdgpu_dce120_timing_generator.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/dce60/amdgpu_dce60_timing_generator.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/dce80/amdgpu_dce80_timing_generator.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/dcn10/amdgpu_dcn10_cm_common.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/dcn10/amdgpu_dcn10_hw_sequencer_debug.c	amdgpu
@@ -403,8 +451,6 @@ file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/gpio/dce110/amdgpu_hw_f
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/gpio/dce110/amdgpu_hw_translate_dce110.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/gpio/dce120/amdgpu_hw_factory_dce120.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/gpio/dce120/amdgpu_hw_translate_dce120.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/gpio/dce60/amdgpu_hw_factory_dce60.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/gpio/dce60/amdgpu_hw_translate_dce60.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/gpio/dce80/amdgpu_hw_factory_dce80.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/gpio/dce80/amdgpu_hw_translate_dce80.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/gpio/dcn10/amdgpu_hw_factory_dcn10.c	amdgpu
@@ -449,7 +495,6 @@ file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/hwss/dce100/amdgpu_dce1
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/hwss/dce110/amdgpu_dce110_hwseq.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/hwss/dce112/amdgpu_dce112_hwseq.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/hwss/dce120/amdgpu_dce120_hwseq.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/hwss/dce60/amdgpu_dce60_hwseq.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/hwss/dce80/amdgpu_dce80_hwseq.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/hwss/dcn10/amdgpu_dcn10_hwseq.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/hwss/dcn10/amdgpu_dcn10_init.c	amdgpu
@@ -482,7 +527,6 @@ file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/hwss/dcn401/amdgpu_dcn4
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/irq/amdgpu_irq_service.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/irq/dce110/amdgpu_irq_service_dce110.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/irq/dce120/amdgpu_irq_service_dce120.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/irq/dce60/amdgpu_irq_service_dce60.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/irq/dce80/amdgpu_irq_service_dce80.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/irq/dcn10/amdgpu_irq_service_dcn10.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/irq/dcn20/amdgpu_irq_service_dcn20.c	amdgpu
@@ -552,7 +596,6 @@ file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/resource/dce100/amdgpu_
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/resource/dce110/amdgpu_dce110_resource.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/resource/dce112/amdgpu_dce112_resource.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/resource/dce120/amdgpu_dce120_resource.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/resource/dce60/amdgpu_dce60_resource.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/resource/dce80/amdgpu_dce80_resource.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/resource/dcn10/amdgpu_dcn10_resource.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../display/dc/resource/dcn20/amdgpu_dcn20_resource.c	amdgpu
@@ -622,8 +665,8 @@ file	external/bsd/drm2/dist/drm/amd/amdgpu/../pm/amdgpu_pm.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../pm/legacy-dpm/amdgpu_kv_dpm.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../pm/legacy-dpm/amdgpu_kv_smc.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../pm/legacy-dpm/amdgpu_legacy_dpm.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../pm/legacy-dpm/amdgpu_si_dpm.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/../pm/legacy-dpm/amdgpu_si_smc.c	amdgpu
+file	external/bsd/drm2/dist/drm/amd/amdgpu/../pm/legacy-dpm/amdgpu_si_dpm.c	amdgpu & amdgpu_si
+file	external/bsd/drm2/dist/drm/amd/amdgpu/../pm/legacy-dpm/amdgpu_si_smc.c	amdgpu & amdgpu_si
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../pm/powerplay/amdgpu_amd_powerplay.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../pm/powerplay/hwmgr/amdgpu_ci_baco.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/../pm/powerplay/hwmgr/amdgpu_common_baco.c	amdgpu
@@ -705,18 +748,6 @@ file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_afmt.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_aldebaran.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_aldebaran_reg_init.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_amdkfd.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_amdkfd_aldebaran.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_amdkfd_arcturus.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_amdkfd_fence.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_amdkfd_gc_9_4_3.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_amdkfd_gfx_v10.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_amdkfd_gfx_v10_3.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_amdkfd_gfx_v11.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_amdkfd_gfx_v12.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_amdkfd_gfx_v7.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_amdkfd_gfx_v8.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_amdkfd_gfx_v9.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_aqua_vanjaram.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_arct_reg_init.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_athub_v1_0.c	amdgpu
@@ -731,7 +762,6 @@ file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_atombios_dp.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_atombios_encoders.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_atombios_i2c.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_atomfirmware.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_atpx_handler.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_benchmark.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_bios.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_bo_list.c	amdgpu
@@ -747,7 +777,7 @@ file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_ctx.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_cyan_skillfish_reg_init.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_cz_ih.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_dce_v10_0.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_dce_v6_0.c	amdgpu
+file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_dce_v6_0.c	amdgpu & amdgpu_si
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_dce_v8_0.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_debugfs.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_dev_coredump.c	amdgpu
@@ -776,7 +806,7 @@ file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_gfx_v10_0.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_gfx_v11_0.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_gfx_v11_0_3.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_gfx_v12_0.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_gfx_v6_0.c	amdgpu
+file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_gfx_v6_0.c	amdgpu & amdgpu_si
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_gfx_v7_0.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_gfx_v8_0.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_gfx_v9_0.c	amdgpu
@@ -796,7 +826,7 @@ file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_gmc.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_gmc_v10_0.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_gmc_v11_0.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_gmc_v12_0.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_gmc_v6_0.c	amdgpu
+file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_gmc_v6_0.c	amdgpu & amdgpu_si
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_gmc_v7_0.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_gmc_v8_0.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_gmc_v9_0.c	amdgpu
@@ -807,7 +837,6 @@ file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_hdp_v5_0.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_hdp_v5_2.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_hdp_v6_0.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_hdp_v7_0.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_hmm.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_i2c.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_ib.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_iceland_ih.c	amdgpu
@@ -819,7 +848,8 @@ file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_ih_v7_0.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_imu_v11_0.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_imu_v11_0_3.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_imu_v12_0.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_ioc32.c	amdgpu
+# Linux compat32 ioctl glue is not used by NetBSD.
+#file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_ioc32.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_ip.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_irq.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_job.c	amdgpu
@@ -873,7 +903,6 @@ file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_nbio_v7_9.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_nv.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_object.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_pll.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_pmu.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_preempt_mgr.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_psp.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_psp_ta.c	amdgpu
@@ -906,9 +935,9 @@ file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_sdma_v6_0.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_sdma_v7_0.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_securedisplay.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_seq64.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_si.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_si_dma.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_si_ih.c	amdgpu
+file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_si.c	amdgpu & amdgpu_si
+file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_si_dma.c	amdgpu & amdgpu_si
+file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_si_ih.c	amdgpu & amdgpu_si
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_sienna_cichlid.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_smu_v11_0_i2c.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_smu_v13_0_10.c	amdgpu
@@ -940,7 +969,7 @@ file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_umsch_mm_v4_0.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_userq.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_userq_fence.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_uvd.c	amdgpu
-file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_uvd_v3_1.c	amdgpu
+file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_uvd_v3_1.c	amdgpu & amdgpu_si
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_uvd_v4_2.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_uvd_v5_0.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_uvd_v6_0.c	amdgpu
@@ -977,4 +1006,5 @@ file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_vpe.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_vpe_v6_1.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_vram_mgr.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_xcp.c	amdgpu
+file	external/bsd/drm2/dist/drm/amd/amdxcp/amdgpu_xcp_drv.c	amdgpu
 file	external/bsd/drm2/dist/drm/amd/amdgpu/amdgpu_xgmi.c	amdgpu

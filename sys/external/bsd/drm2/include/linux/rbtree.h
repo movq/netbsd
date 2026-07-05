@@ -38,18 +38,28 @@
 
 struct rb_root {
 	struct rb_tree	rbr_tree;
+	rb_tree_ops_t	rbr_linux_ops;
+	bool		(*rbr_linux_less)(struct rb_node *,
+			    const struct rb_node *);
 };
 
 struct rb_root_cached {
 	struct rb_root	rb_root; /* Linux API name */
 };
 
-#define	rb_entry(P, T, F) container_of(P, T, F)
+#define	rb_entry(P, T, F) \
+	container_of((struct rb_node *)__UNCONST(P), T, F)
 #define	rb_entry_safe(P, T, F)						      \
 ({									      \
 	__typeof__(P) __p = (P);					      \
-	__p ? container_of(__p, T, F) : NULL;				      \
+	__p ? container_of((struct rb_node *)__UNCONST(__p), T, F) : NULL;      \
 })
+
+#define	RB_EMPTY_NODE(NODE)	(RB_FATHER(NODE) == (NODE))
+#define	RB_CLEAR_NODE(NODE)	RB_SET_FATHER((NODE), (NODE))
+
+static const struct rb_root RB_ROOT __unused = {0};
+static const struct rb_root_cached RB_ROOT_CACHED __unused = {0};
 
 /*
  * Several of these functions take const inputs and return non-const
@@ -94,6 +104,18 @@ rb_next2(const struct rb_root *root, const struct rb_node *rbnode)
 }
 
 static inline struct rb_node *
+rb_prev2(const struct rb_root *root, const struct rb_node *rbnode)
+{
+	char *vnode = (char *)__UNCONST(rbnode);
+
+	vnode -= root->rbr_tree.rbt_ops->rbto_node_offset;
+	vnode = RB_TREE_PREV(__UNCONST(&root->rbr_tree), vnode);
+	if (vnode)
+		vnode += root->rbr_tree.rbt_ops->rbto_node_offset;
+	return (struct rb_node *)vnode;
+}
+
+static inline struct rb_node *
 rb_last(const struct rb_root *root)
 {
 	char *vnode = RB_TREE_MAX(__UNCONST(&root->rbr_tree));
@@ -122,6 +144,78 @@ static inline void
 rb_erase_cached(struct rb_node *rbnode, struct rb_root_cached *root)
 {
 	rb_erase(rbnode, &root->rb_root);
+}
+
+static inline int
+rb_linux_compare_nodes(void *cookie, const void *va, const void *vb)
+{
+	struct rb_root *root = cookie;
+	struct rb_node *a = (struct rb_node *)__UNCONST(va);
+	struct rb_node *b = (struct rb_node *)__UNCONST(vb);
+
+	/*
+	 * NetBSD asks whether the existing node a sorts before the new node
+	 * b, whereas Linux's less callback takes the new node first.
+	 */
+	if ((*root->rbr_linux_less)(b, a))
+		return 1;
+	if ((*root->rbr_linux_less)(a, b))
+		return -1;
+
+	/*
+	 * Linux permits equivalent nodes and inserts a new equivalent node
+	 * to the right.  NetBSD requires a total order, so use the node
+	 * address as a stable tie-breaker.
+	 */
+	if ((uintptr_t)a < (uintptr_t)b)
+		return -1;
+	if ((uintptr_t)a > (uintptr_t)b)
+		return 1;
+	return 0;
+}
+
+static inline int
+rb_linux_compare_key(void *cookie, const void *vn, const void *vk)
+{
+
+	return rb_linux_compare_nodes(cookie, vn, vk);
+}
+
+static inline void
+rb_linux_init(struct rb_root *root,
+    bool (*less)(struct rb_node *, const struct rb_node *))
+{
+
+	root->rbr_linux_less = less;
+	root->rbr_linux_ops.rbto_compare_nodes = rb_linux_compare_nodes;
+	root->rbr_linux_ops.rbto_compare_key = rb_linux_compare_key;
+	root->rbr_linux_ops.rbto_node_offset = 0;
+	root->rbr_linux_ops.rbto_context = root;
+	rb_tree_init(&root->rbr_tree, &root->rbr_linux_ops);
+}
+
+static inline void
+rb_add(struct rb_node *node, struct rb_root *root,
+    bool (*less)(struct rb_node *, const struct rb_node *))
+{
+	struct rb_node *collision __diagused;
+
+	if (root->rbr_tree.rbt_ops == NULL)
+		rb_linux_init(root, less);
+	KASSERT(root->rbr_tree.rbt_ops == &root->rbr_linux_ops);
+	KASSERT(root->rbr_linux_less == less);
+
+	collision = rb_tree_insert_node(&root->rbr_tree, node);
+	KASSERT(collision == node);
+}
+
+static inline struct rb_node *
+rb_add_cached(struct rb_node *node, struct rb_root_cached *root,
+    bool (*less)(struct rb_node *, const struct rb_node *))
+{
+
+	rb_add(node, &root->rb_root, less);
+	return rb_first(&root->rb_root) == node ? node : NULL;
 }
 
 static inline void
@@ -211,9 +305,15 @@ static inline void
 rb_move(struct rb_root *to, struct rb_root *from)
 {
 	struct rb_node *root;
+	bool linux_order;
 
+	linux_order = from->rbr_tree.rbt_ops == &from->rbr_linux_ops;
 	*to = *from;
 	memset(from, 0, sizeof(*from)); /* paranoia */
+	if (linux_order) {
+		to->rbr_tree.rbt_ops = &to->rbr_linux_ops;
+		to->rbr_linux_ops.rbto_context = to;
+	}
 	if ((root = to->rbr_tree.rbt_root) == NULL)
 		return;
 

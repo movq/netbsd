@@ -174,7 +174,7 @@ void dmub_abm_init_config(struct abm *abm,
 	dmub_flush_buffer_mem(&dc->dmub_srv->dmub->scratch_mem_fb);
 
 	// Copy iramtable into cw7
-	memcpy(dc->dmub_srv->dmub->scratch_mem_fb.cpu_addr, (void *)src, bytes);
+	memcpy(dc->dmub_srv->dmub->scratch_mem_fb.cpu_addr, src, bytes);
 
 	memset(&cmd, 0, sizeof(cmd));
 	// Fw will copy from cw7 to fw_state

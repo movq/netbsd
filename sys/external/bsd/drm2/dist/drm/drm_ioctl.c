@@ -128,6 +128,7 @@ int drm_getunique(struct drm_device *dev, void *data,
 {
 	struct drm_unique *u = data;
 	struct drm_master *master;
+	int ret;
 
 	mutex_lock(&dev->master_mutex);
 	master = dev->master;
@@ -890,6 +891,8 @@ long drm_ioctl_kernel(struct file *file, drm_ioctl_t *func, void *kdata,
 	drm_ioctl_enter(dev);
 	ret = func(dev, kdata, file_priv);
 	drm_ioctl_exit(dev);
+
+	return ret;
 }
 EXPORT_SYMBOL(drm_ioctl_kernel);
 
@@ -976,16 +979,8 @@ drm_ioctl(struct file *fp, unsigned long cmd, void *data)
 	}
 
 	drm_ioctl_enter(dev);
-	if ((drm_core_check_feature(dev, DRIVER_MODESET) && is_driver_ioctl) ||
-	    ISSET(ioctl->flags, DRM_UNLOCKED)) {
-		/* XXX errno Linux->NetBSD */
-		error = -(*ioctl->func)(dev, data0, file);
-	} else {
-		mutex_lock(&drm_global_mutex);
-		/* XXX errno Linux->NetBSD */
-		error = -(*ioctl->func)(dev, data0, file);
-		mutex_unlock(&drm_global_mutex);
-	}
+	/* XXX errno Linux->NetBSD */
+	error = -(*ioctl->func)(dev, data0, file);
 	drm_ioctl_exit(dev);
 
 	/* If we used a temporary buffer, copy it back out.  */

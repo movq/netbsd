@@ -232,6 +232,9 @@ int drm_client_modeset_dpms(struct drm_client_dev *client, int mode);
 	for (({ lockdep_assert_held(&(client)->modeset_mutex); }), \
 	     modeset = (client)->modesets; modeset->crtc; modeset++)
 
+#define drm_client_for_each_modeset_unlocked(modeset, client) \
+	for (modeset = (client)->modesets; modeset->crtc; modeset++)
+
 /**
  * drm_client_for_each_connector_iter - connector_list iterator macro
  * @connector: &struct drm_connector pointer used as cursor

@@ -72,7 +72,9 @@ struct amdgpu_xcp_res_details {
 	enum amdgpu_xcp_res_id id;
 	u8 num_inst;
 	u8 num_shared;
+#ifndef __NetBSD__
 	struct kobject kobj;
+#endif
 };
 
 struct amdgpu_xcp_cfg {
@@ -80,7 +82,9 @@ struct amdgpu_xcp_cfg {
 	struct amdgpu_xcp_res_details xcp_res[AMDGPU_XCP_RES_MAX];
 	u8 num_res;
 	struct amdgpu_xcp_mgr *xcp_mgr;
+#ifndef __NetBSD__
 	struct kobject kobj;
+#endif
 	u16 compatible_nps_modes;
 };
 
@@ -109,11 +113,13 @@ struct amdgpu_xcp {
 	struct drm_device *ddev;
 	struct drm_device *rdev;
 	struct drm_device *pdev;
-	struct drm_driver *driver;
+	const struct drm_driver *driver;
 	struct drm_vma_offset_manager *vma_offset_manager;
 	struct amdgpu_sched	gpu_sched[AMDGPU_HW_IP_NUM][AMDGPU_RING_PRIO_MAX];
 	struct amdgpu_xcp_mgr *xcp_mgr;
+#ifndef __NetBSD__
 	struct kobject kobj;
+#endif
 	uint64_t unique_id;
 };
 
