@@ -1,4 +1,4 @@
-/*	$NetBSD: t_signal_and_fpu.c,v 1.3 2026/07/10 20:36:11 riastradh Exp $	*/
+/*	$NetBSD: t_signal_and_fpu.c,v 1.3.2.2 2026/07/19 15:57:27 martin Exp $	*/
 
 /*
  * Copyright (c) 2026 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_signal_and_fpu.c,v 1.3 2026/07/10 20:36:11 riastradh Exp $");
+__RCSID("$NetBSD: t_signal_and_fpu.c,v 1.3.2.2 2026/07/19 15:57:27 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
