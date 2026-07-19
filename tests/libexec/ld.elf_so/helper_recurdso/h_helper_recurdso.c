@@ -1,4 +1,4 @@
-/*	$NetBSD: h_helper_recurdso.c,v 1.1 2026/07/16 02:50:11 riastradh Exp $	*/
+/*	$NetBSD: h_helper_recurdso.c,v 1.1.2.2 2026/07/19 16:17:13 martin Exp $	*/
 
 /*-
  * Copyright (c) 2026 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: h_helper_recurdso.c,v 1.1 2026/07/16 02:50:11 riastradh Exp $");
+__RCSID("$NetBSD: h_helper_recurdso.c,v 1.1.2.2 2026/07/19 16:17:13 martin Exp $");
 
 #include <dlfcn.h>
 #include <stdbool.h>

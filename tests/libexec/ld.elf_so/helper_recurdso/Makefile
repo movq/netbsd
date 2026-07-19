@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2026/07/16 02:50:11 riastradh Exp $
+# $NetBSD: Makefile,v 1.1.2.2 2026/07/19 16:17:13 martin Exp $
 #
 
 LIB=		h_helper_recurdso
