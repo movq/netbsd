@@ -1,4 +1,4 @@
-/*	$NetBSD: sig_fpu.h,v 1.1 2026/07/09 02:05:45 riastradh Exp $	*/
+/*	$NetBSD: sig_fpu.h,v 1.1.2.2 2026/07/19 15:57:28 martin Exp $	*/
 
 /*-
  * Copyright (c) 2026 The NetBSD Foundation, Inc.
