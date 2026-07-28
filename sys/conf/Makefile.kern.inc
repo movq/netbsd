@@ -214,7 +214,13 @@ SYSTEM_LIB=	${MD_LIBS} ${LIBKERN}
 SYSTEM_OBJ?=	${_MD_OBJS} ${OBJS} ${SYSTEM_LIB}
 SYSTEM_DEP+=	Makefile ${SYSTEM_OBJ:O}
 .if defined(CTFMERGE)
-SYSTEM_CTFMERGE= ${CTFMERGE} ${CTFMFLAGS} -o ${.TARGET} ${SYSTEM_OBJ} ${EXTRA_OBJ} vers.o
+# Turn each CTFMERGE_EXCLUDE pattern into an :N modifier.  Keep these
+# recursive since conditional makeoptions are emitted after this file.
+_CTFMERGE_EXCLUDE_MOD=	@pattern@N$${pattern}@:ts:
+_CTFMERGE_FILTER=	${CTFMERGE_EXCLUDE:${_CTFMERGE_EXCLUDE_MOD}}
+SYSTEM_CTFMERGE= ${CTFMERGE} ${CTFMFLAGS} -o ${.TARGET} \
+	${SYSTEM_OBJ:${_CTFMERGE_FILTER}} \
+	${EXTRA_OBJ:${_CTFMERGE_FILTER}} vers.o
 .else
 SYSTEM_CTFMERGE= ${_MKSHECHO}
 .endif
