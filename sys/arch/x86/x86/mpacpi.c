@@ -792,6 +792,11 @@ mpacpi_config_irouting(struct acpi_softc *acpi)
 			mpi->ioapic_ih = i;
 
 		mpi->flags = MPS_INTPO_DEF | (MPS_INTTR_DEF << 2);
+		/* AMD Framework 13 hack */
+		if (i == 1) {
+			mpi->flags = MPS_INTPO_ACTLO | (MPS_INTTR_EDGE << 2);
+			mpi->redir |= IOAPIC_REDLO_ACTLO;
+		}
 		mpi->global_int = i;
 		mpacpi_intr_index++;
 	}
