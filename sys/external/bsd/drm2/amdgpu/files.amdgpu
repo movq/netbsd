@@ -6,6 +6,8 @@ define	amdgpufbbus	{ }
 device	amdgpu: drmkms, drmkms_pci, drmkms_sched, drmkms_ttm, amdgpufbbus, firmload
 attach	amdgpu at pci
 makeoptions	amdgpu		"CPPFLAGS.amdgpu"+="${CPPFLAGS.drmkms}"
+# The amdgpu objects make the final CTF merge prohibitively expensive.
+makeoptions	amdgpu		"CTFMERGE_EXCLUDE"+="amdgpu_*.o"
 
 defflag	opt_amdgpu_cik.h	AMDGPU_CIK
 defflag	opt_amdgpu_si.h		AMDGPU_SI
