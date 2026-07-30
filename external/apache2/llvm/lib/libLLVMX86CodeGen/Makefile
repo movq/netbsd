@@ -6,65 +6,77 @@ LIB=	LLVMX86CodeGen
 
 .PATH: ${LLVM_SRCDIR}/lib/Target/X86
 
-SRCS+=	X86AsmPrinter.cpp \
-	X86AvoidStoreForwardingBlocks.cpp \
+SRCS+=	X86ArgumentStackSlotRebase.cpp \
+	X86AsmPrinter.cpp \
 	X86AvoidTrailingCall.cpp \
 	X86CallFrameOptimization.cpp \
 	X86CallingConv.cpp \
-	X86CallLowering.cpp \
 	X86CmovConversion.cpp \
-	X86DiscriminateMemOps.cpp \
+	X86CodeGenPassBuilder.cpp \
 	X86DomainReassignment.cpp \
-	X86EvexToVex.cpp\
+	X86LowerTileCopy.cpp \
+	X86LowerAMXType.cpp \
+	X86LowerAMXIntrinsics.cpp \
+	X86TileConfig.cpp \
+	X86FastPreTileConfig.cpp \
+	X86FastTileConfig.cpp \
+	X86PreTileConfig.cpp \
 	X86ExpandPseudo.cpp \
 	X86FastISel.cpp \
-	X86FastTileConfig.cpp \
 	X86FixupBWInsts.cpp \
 	X86FixupLEAs.cpp \
+	X86FixupInstTuning.cpp \
+	X86FixupVectorConstants.cpp \
+	X86AvoidStoreForwardingBlocks.cpp \
+	X86DynAllocaExpander.cpp \
 	X86FixupSetCC.cpp \
 	X86FlagsCopyLowering.cpp \
 	X86FloatingPoint.cpp \
 	X86FrameLowering.cpp \
+	X86ISelDAGToDAG.cpp \
+	X86ISelLowering.cpp \
+	X86ISelLoweringCall.cpp \
 	X86IndirectBranchTracking.cpp \
 	X86IndirectThunks.cpp \
-	X86InsertPrefetch.cpp \
-	X86InsertWait.cpp \
+	X86InterleavedAccess.cpp \
 	X86InstCombineIntrinsic.cpp \
 	X86InstrFMA3Info.cpp \
 	X86InstrFoldTables.cpp \
 	X86InstrInfo.cpp \
-	X86InstructionSelector.cpp \
-	X86InterleavedAccess.cpp \
-	X86ISelDAGToDAG.cpp \
-	X86ISelLowering.cpp \
-	X86LegalizerInfo.cpp \
+	X86CompressEVEX.cpp \
 	X86LoadValueInjectionLoadHardening.cpp \
 	X86LoadValueInjectionRetHardening.cpp \
-	X86LowerAMXIntrinsics.cpp \
-	X86LowerAMXType.cpp \
-	X86LowerTileCopy.cpp \
+	X86MCInstLower.cpp \
 	X86MachineFunctionInfo.cpp \
 	X86MacroFusion.cpp \
-	X86MCInstLower.cpp \
 	X86OptimizeLEAs.cpp \
 	X86PadShortFunction.cpp \
 	X86PartialReduction.cpp \
-	X86PreAMXConfig.cpp \
-	X86PreTileConfig.cpp \
-	X86RegisterBankInfo.cpp \
 	X86RegisterInfo.cpp \
+	X86ReturnThunks.cpp \
 	X86SelectionDAGInfo.cpp \
 	X86ShuffleDecodeConstantPool.cpp \
-	X86SpeculativeExecutionSideEffectSuppression.cpp \
 	X86SpeculativeLoadHardening.cpp \
+	X86SpeculativeExecutionSideEffectSuppression.cpp \
 	X86Subtarget.cpp \
+	X86SuppressAPXForReloc.cpp \
 	X86TargetMachine.cpp \
 	X86TargetObjectFile.cpp \
 	X86TargetTransformInfo.cpp \
-	X86TileConfig.cpp \
 	X86VZeroUpper.cpp \
-	X86WinAllocaExpander.cpp \
-	X86WinEHState.cpp
+	X86WinEHState.cpp \
+	X86WinEHUnwindV2.cpp \
+	X86InsertWait.cpp
+
+.PATH: ${LLVM_SRCDIR}/lib/Target/X86/GISel
+
+SRCS+=	X86CallLowering.cpp \
+	X86InstructionSelector.cpp \
+	X86LegalizerInfo.cpp \
+	X86PreLegalizerCombiner.cpp \
+	X86RegisterBankInfo.cpp
+
+CPPFLAGS+=-I${LLVM_SRCDIR}/lib/Target/X86
 
 TABLEGEN_SRC=		X86.td
 TABLEGEN_INCLUDES=	-I${LLVM_SRCDIR}/lib/Target/X86
@@ -75,13 +87,17 @@ TABLEGEN_OUTPUT= \
 	X86GenCallingConv.inc|-gen-callingconv \
 	X86GenDAGISel.inc|-gen-dag-isel \
 	X86GenDisassemblerTables.inc|-gen-disassembler \
-	X86GenEVEX2VEXTables.inc|-gen-x86-EVEX2VEX-tables \
+	X86GenInstrMapping.inc|-gen-x86-instr-mapping \
+	X86GenExegesis.inc|-gen-exegesis \
 	X86GenFastISel.inc|-gen-fast-isel \
 	X86GenGlobalISel.inc|-gen-global-isel \
-	X86GenInstrInfo.inc|-gen-instr-info \
+	X86GenInstrInfo.inc|-gen-instr-info^-instr-info-expand-mi-operand-info=0 \
+	X86GenMnemonicTables.inc|-gen-x86-mnemonic-tables^-asmwriternum=1 \
 	X86GenRegisterBank.inc|-gen-register-bank \
 	X86GenRegisterInfo.inc|-gen-register-info \
-	X86GenSubtargetInfo.inc|-gen-subtarget
+	X86GenSubtargetInfo.inc|-gen-subtarget \
+	X86GenFoldTables.inc|-gen-x86-fold-tables^-asmwriternum=1 \
+	X86GenPreLegalizeGICombiner.inc|-gen-global-isel-combiner^-combiners=X86PreLegalizerCombiner
 
 .include "${.PARSEDIR}/../../tablegen.mk"
 

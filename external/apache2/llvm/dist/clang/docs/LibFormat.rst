@@ -3,7 +3,7 @@ LibFormat
 =========
 
 LibFormat is a library that implements automatic source code formatting based
-on Clang. This documents describes the LibFormat interface and design as well
+on Clang. This document describes the LibFormat interface and design as well
 as some basic style discussions.
 
 If you just want to use `clang-format` as a tool or integrated into an editor,
@@ -53,7 +53,7 @@ several style guides are hard-coded:
   FormatStyle getGoogleStyle();
 
   /// Returns a format style complying with Chromium's style guide:
-  /// https://chromium.googlesource.com/chromium/src/+/master/styleguide/styleguide.md
+  /// https://chromium.googlesource.com/chromium/src/+/refs/heads/main/styleguide/styleguide.md
   FormatStyle getChromiumStyle();
 
   /// Returns a format style complying with the GNU coding standards:

@@ -1,0 +1,11 @@
+#	$NetBSD$
+
+LIB=	LLVMFrontendAtomic
+.include <bsd.init.mk>
+.PATH: ${LLVM_SRCDIR}/lib/Frontend/Atomic
+SRCS+=	Atomic.cpp
+.if defined(HOSTLIB)
+.include <bsd.hostlib.mk>
+.else
+.include <bsd.lib.mk>
+.endif

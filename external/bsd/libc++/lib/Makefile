@@ -8,17 +8,23 @@ NOLINT=		# defined
 
 .PATH: ${LIBCXX_SRCDIR}/src
 
-SRCS=	algorithm.cpp bind.cpp charconv.cpp chrono.cpp condition_variable.cpp \
-	condition_variable_destructor.cpp debug.cpp exception.cpp format.cpp \
-	functional.cpp future.cpp hash.cpp ios.cpp ios.instantiations.cpp \
-	iostream.cpp locale.cpp memory.cpp mutex.cpp mutex_destructor.cpp \
-	new.cpp optional.cpp random.cpp random_shuffle.cpp regex.cpp \
-	shared_mutex.cpp stdexcept.cpp string.cpp strstream.cpp \
-	system_error.cpp thread.cpp utility.cpp valarray.cpp variant.cpp \
-	vector.cpp
+SRCS=	algorithm.cpp any.cpp atomic.cpp barrier.cpp bind.cpp call_once.cpp \
+	charconv.cpp chrono.cpp condition_variable.cpp \
+	condition_variable_destructor.cpp error_category.cpp exception.cpp \
+	expected.cpp fstream.cpp functional.cpp future.cpp hash.cpp ios.cpp \
+	ios.instantiations.cpp iostream.cpp locale.cpp memory.cpp \
+	memory_resource.cpp mutex.cpp mutex_destructor.cpp new.cpp \
+	new_handler.cpp new_helpers.cpp optional.cpp ostream.cpp print.cpp \
+	random.cpp random_shuffle.cpp regex.cpp shared_mutex.cpp stdexcept.cpp \
+	string.cpp strstream.cpp system_error.cpp thread.cpp valarray.cpp \
+	variant.cpp vector.cpp verbose_abort.cpp
 
 .PATH: ${LIBCXX_SRCDIR}/src/filesystem
-SRCS+=	directory_iterator.cpp operations.cpp
+SRCS+=	directory_entry.cpp directory_iterator.cpp filesystem_clock.cpp \
+	filesystem_error.cpp operations.cpp path.cpp
+
+.PATH: ${LIBCXX_SRCDIR}/src/ryu
+SRCS+=	d2fixed.cpp d2s.cpp f2s.cpp
 
 # typeinfo.cc: prefer libcxxrt's version
 
@@ -40,9 +46,13 @@ CLEANFILES+=	rt_${src}
 .include <bsd.own.mk>
 
 CPPFLAGS+=	-nostdinc++ -cxx-isystem ${LIBCXX_SRCDIR}/include
-CPPFLAGS+=	-cxx-isystem ${.CURDIR}/../include -I${LIBCXXRT_SRCDIR}/src
+CPPFLAGS+=	-cxx-isystem ${.OBJDIR}/../include
+CPPFLAGS+=	-cxx-isystem ${.CURDIR}/../include -I${LIBCXX_SRCDIR}/src
+CPPFLAGS+=	-I${LIBCXXRT_SRCDIR}/src
+CPPFLAGS+=	-I${LLVM_LIBC_SRCDIR}
 CPPFLAGS+=	-DLIBCXXRT -D_LIBCPP_BUILDING_LIBRARY
-CXXFLAGS+=	-std=gnu++17
+CPPFLAGS+=	-DLIBC_NAMESPACE=__llvm_libc_common_utils
+CXXFLAGS+=	-std=gnu++23
 
 CWARNFLAGS.gcc+=	-Wno-error
 
@@ -50,6 +60,7 @@ CWARNFLAGS.clang+=	-Wno-error=unused-variable -Wno-error=missing-noreturn
 CWARNFLAGS.clang+=	-Wno-error=missing-prototypes -Wno-error=sometimes-uninitialized
 CWARNFLAGS.clang+=	-Wno-error=missing-field-initializers -Wno-error=switch
 CWARNFLAGS.clang+=	-Wno-error=implicit-exception-spec-mismatch -Wno-error=format-nonliteral -Wno-error=format-security
+CWARNFLAGS.clang+=	-Wno-error=old-style-cast
 
 .if ${MKSANITIZER} != "yes"
 LDFLAGS+=	-Wl,-z,defs

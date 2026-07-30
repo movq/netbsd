@@ -5,13 +5,17 @@ NOMAN=		yes
 
 .include <bsd.init.mk>
 
-.PATH: ${LLVM_SRCDIR}/tools/llvm-symbolizer
+.PATH: ${LLVM_SRCDIR}/tools/llvm-symbolizer ${.PARSEDIR}/..
 
-SRCS=	llvm-symbolizer.cpp
+SRCS=	llvm-tool-driver.cpp llvm-symbolizer.cpp
+CPPFLAGS.llvm-tool-driver.cpp+=	-DLLVM_TOOL_MAIN=llvm_symbolizer_main
 
 LLVM_LIBS+= \
+	Debuginfod \
 	DebugInfoSymbolize \
+	DebugInfoGSYM \
 	DebugInfoDWARF \
+	DebugInfoDWARFLowLevel \
 	DebugInfoPDB \
 	DebugInfoMSF \
 	DebugInfoCodeView \
@@ -27,6 +31,7 @@ LLVM_LIBS+= \
 	ObjectYAML \
 	TextAPI \
 	Option \
+	TargetParser \
 	Support \
 	Demangle
 

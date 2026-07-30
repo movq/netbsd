@@ -1,0 +1,18 @@
+#	$NetBSD$
+
+LIB=	LLVMDebuginfod
+
+.include <bsd.init.mk>
+
+.PATH: ${LLVM_SRCDIR}/lib/Debuginfod
+
+SRCS+=	BuildIDFetcher.cpp \
+	Debuginfod.cpp \
+	HTTPClient.cpp \
+	HTTPServer.cpp
+
+.if defined(HOSTLIB)
+.include <bsd.hostlib.mk>
+.else
+.include <bsd.lib.mk>
+.endif

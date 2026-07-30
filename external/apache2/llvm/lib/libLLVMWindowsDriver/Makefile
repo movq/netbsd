@@ -1,0 +1,15 @@
+#	$NetBSD$
+
+LIB=	LLVMWindowsDriver
+
+.include <bsd.init.mk>
+
+.PATH: ${LLVM_SRCDIR}/lib/WindowsDriver
+
+SRCS+=	MSVCPaths.cpp
+
+.if defined(HOSTLIB)
+.include <bsd.hostlib.mk>
+.else
+.include <bsd.lib.mk>
+.endif

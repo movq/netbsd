@@ -10,14 +10,26 @@ SUBDIR=	\
 	libLLVMBitReader \
 	libLLVMBitWriter \
 	libLLVMBitstreamReader \
+	libLLVMCGData \
 	libLLVMCodeGen \
+	libLLVMCodeGenTypes \
 	libLLVMDebugInfoCodeView \
 	libLLVMDebugInfoDWARF \
+	libLLVMDebugInfoDWARFLowLevel \
 	libLLVMDebugInfoMSF \
 	libLLVMDemangle \
+	libLLVMExtensions \
+	libLLVMFrontendAtomic \
+	libLLVMFrontendDirective \
+	libLLVMFrontendDriver \
+	libLLVMFrontendHLSL \
+	libLLVMFrontendOffloading \
+	libLLVMFrontendOpenACC \
 	libLLVMFrontendOpenMP \
 	libLLVMGlobalISel \
+	libLLVMHipStdPar \
 	libLLVMIR \
+	libLLVMIRPrinter \
 	libLLVMIRReader \
 	libLLVMInstCombine \
 	libLLVMInstrumentation \
@@ -31,20 +43,27 @@ SUBDIR=	\
 	libLLVMObject \
 	libLLVMOption \
 	libLLVMPasses \
+	libLLVMPlugins \
 	libLLVMProfileData \
 	libLLVMProfileDataCoverage \
 	libLLVMRemarks \
+	libLLVMSandboxIR \
 	libLLVMScalarOpts \
 	libLLVMSelectionDAG \
 	libLLVMSupport \
+	libLLVMTableGenBasic \
+	libLLVMTableGenCommon \
 	libLLVMTableGen \
 	libLLVMTarget \
+	libLLVMTargetParser \
 	libLLVMTextAPI \
+	libLLVMTextAPIBinaryReader \
 	libLLVMTransformsAggressiveInstCombine \
 	libLLVMTransformsCFGuard \
 	libLLVMTransformsCoroutines \
 	libLLVMTransformsUtils \
 	libLLVMVectorize \
+	libLLVMWindowsDriver \
 	libLLVMAArch64CodeGen \
 	libLLVMARMCodeGen \
 	libLLVMMipsCodeGen \
@@ -54,7 +73,9 @@ SUBDIR=	\
 
 .if !defined(HOSTLIB) && !defined(_BSD_HOSTINIT_MK_)
 SUBDIR+= \
-	libLLVMAMDGPUCodeGen
+	libLLVMAMDGPUCodeGen \
+	libLLVMDebuginfod \
+	libLLVMDebugInfoGSYM
 .endif
 
 SUBDIR+= .WAIT
@@ -123,13 +144,14 @@ SUBDIR+= \
 .if !defined(HOSTLIB) && !defined(_BSD_HOSTINIT_MK_)
 SUBDIR+= \
 	libLLVMDebugInfoPDB \
-	libLLVMDebugInfoSymbolize \
-	libLLVMObjectYAML
+	libLLVMDebugInfoSymbolize
 .endif
+
+SUBDIR+= \
+	libLLVMObjectYAML
 
 .if ${NO_LLVM_DEVELOPER:Uno} == "no" && ${LLVM_DEVELOPER:U} == "yes"
 SUBDIR+= \
-	libLLVMDebugInfoGSYM \
 	libLLVMHello \
 	libLLVMInterpreter \
 	libLLVMLineEditor \
@@ -139,8 +161,9 @@ SUBDIR+= \
 .endif
 
 SUBDIR+= \
+	libclangAPINotes \
 	libclangAnalysis \
-	libclangARCMigrate \
+	libclangAnalysisLifetimeSafety \
 	libclangAST \
 	libclangASTMatchers \
 	libclangBasic \
@@ -148,32 +171,35 @@ SUBDIR+= \
 	libclangCrossTU \
 	libclangDriver \
 	libclangEdit \
+	libclangExtractAPI \
+	libclangFormat \
 	libclangFrontend \
 	libclangFrontendRewrite \
 	libclangFrontendTool \
 	libclangIndex \
+	libclangInstallAPI \
 	libclangLex \
+	libclangOptions \
 	libclangParse \
 	libclangRewrite \
 	libclangSema \
 	libclangSerialization \
 	libclangStaticAnalyzerCheckers \
 	libclangStaticAnalyzerCore \
+	libclangSupport \
+	libclangToolingInclusions \
 	libclangToolingCore \
 	.WAIT \
 	libclangStaticAnalyzerFrontend
 
 .if ${NO_LLVM_DEVELOPER:Uno} == "no" && ${LLVM_DEVELOPER:U} == "yes"
 SUBDIR+= \
-	libclangAPINotes \
 	libclangASTMatchersDynamic \
-	libclangFormat \
 	libclangIndexSerialization \
 	libclangInterpreter \
 	libclangTesting \
 	libclangTooling \
 	libclangToolingDependencyScanning \
-	libclangToolingInclusions \
 	libclangToolingRefactoring \
 	libclangToolingSyntax
 .endif

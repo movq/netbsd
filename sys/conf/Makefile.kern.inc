@@ -96,7 +96,26 @@ CWARNFLAGS+=	-Wno-sign-compare
 
 CWARNFLAGS.clang+=	-Wno-unknown-pragmas -Wno-conversion \
 			-Wno-self-assign \
-			-Wno-error=constant-conversion
+			-Wno-error=alloc-size \
+			-Wno-error=array-compare \
+			-Wno-error=bitwise-instead-of-logical \
+			-Wno-error=cast-function-type-mismatch \
+			-Wno-error=constant-conversion \
+			-Wno-error=default-const-init-field-unsafe \
+			-Wno-error=deprecated-non-prototype \
+			-Wno-error=format-truncation \
+			-Wno-error=fortify-source \
+			-Wno-error=missing-format-attribute \
+			-Wno-error=null-pointer-subtraction \
+			-Wno-error=sometimes-uninitialized \
+			-Wno-error=single-bit-bitfield-constant-conversion \
+			-Wno-error=strict-prototypes \
+			-Wno-error=tautological-compare \
+			-Wno-error=unterminated-string-initialization \
+			-Wno-error=uninitialized-const-pointer \
+			-Wno-error=unused-but-set-parameter \
+			-Wno-error=unused-but-set-variable \
+			-Wno-error=vla-cxx-extension
 CWARNFLAGS+=		${CC_WNO_ADDRESS_OF_PACKED_MEMBER}
 
 CWARNFLAGS.ah_regdomain.c= ${${ACTIVE_CC} == "clang":? \

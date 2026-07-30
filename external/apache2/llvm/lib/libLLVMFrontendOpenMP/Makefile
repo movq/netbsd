@@ -8,7 +8,8 @@ LIB=	LLVMFrontendOpenMP
 
 SRCS+=	OMP.cpp \
 	OMPContext.cpp \
-	OMPIRBuilder.cpp
+	OMPIRBuilder.cpp \
+	DirectiveNameParser.cpp
 
 .if defined(HOSTLIB)
 .include <bsd.hostlib.mk>

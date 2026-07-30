@@ -8,12 +8,18 @@ LIB=	LLVMTextAPI
 SRCS+=	Architecture.cpp \
 	ArchitectureSet.cpp \
 	InterfaceFile.cpp \
+	TextStubV5.cpp \
 	PackedVersion.cpp \
 	Platform.cpp \
+	RecordsSlice.cpp \
+	RecordVisitor.cpp \
 	Symbol.cpp \
+	SymbolSet.cpp \
 	Target.cpp \
+	TextAPIError.cpp \
 	TextStub.cpp \
-	TextStubCommon.cpp
+	TextStubCommon.cpp \
+	Utils.cpp
 
 .if defined(HOSTLIB)
 .include <bsd.hostlib.mk>

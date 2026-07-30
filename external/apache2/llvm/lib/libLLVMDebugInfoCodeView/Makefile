@@ -22,6 +22,7 @@ SRCS+=	AppendingTypeTableBuilder.cpp \
 	DebugSubsection.cpp \
 	DebugSubsectionRecord.cpp \
 	DebugSubsectionVisitor.cpp \
+	DebugSymbolRVASubsection.cpp \
 	DebugSymbolsSubsection.cpp \
 	EnumTables.cpp \
 	Formatters.cpp \
@@ -38,9 +39,9 @@ SRCS+=	AppendingTypeTableBuilder.cpp \
 	SymbolRecordMapping.cpp \
 	SymbolSerializer.cpp \
 	TypeDumpVisitor.cpp \
-	TypeHashing.cpp \
 	TypeIndex.cpp \
 	TypeIndexDiscovery.cpp \
+	TypeHashing.cpp \
 	TypeRecordHelpers.cpp \
 	TypeRecordMapping.cpp \
 	TypeStreamMerger.cpp \

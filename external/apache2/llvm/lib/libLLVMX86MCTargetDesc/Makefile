@@ -12,6 +12,7 @@ CPPFLAGS+=	-I${X86_OBJDIR} -I${LLVM_SRCDIR}/lib/Target/X86
 SRCS+=	X86AsmBackend.cpp \
 	X86ATTInstPrinter.cpp \
 	X86ELFObjectWriter.cpp \
+	X86EncodingOptimization.cpp \
 	X86InstComments.cpp \
 	X86InstPrinterCommon.cpp \
 	X86IntelInstPrinter.cpp \
@@ -19,6 +20,7 @@ SRCS+=	X86AsmBackend.cpp \
 	X86MCAsmInfo.cpp \
 	X86MCCodeEmitter.cpp \
 	X86MCTargetDesc.cpp \
+	X86MnemonicTables.cpp \
 	X86ShuffleDecode.cpp \
 	X86WinCOFFObjectWriter.cpp \
 	X86WinCOFFStreamer.cpp \

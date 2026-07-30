@@ -23,8 +23,8 @@ OPTIONS
 -------
 
 If ``filename`` is "``-``" or omitted, :program:`llc` reads from standard input.
-Otherwise, it will from ``filename``.  Inputs can be in either the LLVM assembly
-language format (``.ll``) or the LLVM bitcode format (``.bc``).
+Otherwise, it will read from ``filename``.  Inputs can be in either the LLVM
+assembly language format (``.ll``) or the LLVM bitcode format (``.bc``).
 
 If the :option:`-o` option is omitted, then :program:`llc` will send its output
 to standard output if the input is from standard input.  If the :option:`-o`
@@ -42,6 +42,11 @@ End-user Options
 .. option:: -help
 
  Print a summary of command line options.
+
+.. option:: -M
+
+ Pass target-specific InstPrinter options.
+ Refer to the ``-M`` option of :manpage:`llvm-objdump(1)`.
 
 .. option:: -o <filename>
 
@@ -120,16 +125,15 @@ End-user Options
 
  Enable setting the FP exceptions build attribute not to use exceptions.
 
-.. option:: --enable-unsafe-fp-math
-
- Enable optimizations that make unsafe assumptions about IEEE math (e.g. that
- addition is associative) or may not work for all input ranges.  These
- optimizations allow the code generator to make use of some instructions which
- would otherwise not be usable (such as ``fsin`` on X86).
-
 .. option:: --stats
 
  Print statistics recorded by code-generation passes.
+
+.. option:: --save-stats, --save-stats=cwd, --save-stats=obj
+
+ Save LLVM statistics to a file in the current directory
+ (:option:`--save-stats`/"--save-stats=cwd") or the directory
+ of the output file ("--save-stats=obj") in JSON format.
 
 .. option:: --time-passes
 

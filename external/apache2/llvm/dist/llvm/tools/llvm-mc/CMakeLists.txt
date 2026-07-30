@@ -6,6 +6,8 @@ set(LLVM_LINK_COMPONENTS
   MC
   MCParser
   Support
+  TargetParser
+  DWARFCFIChecker
   )
 
 add_llvm_tool(llvm-mc

@@ -101,7 +101,7 @@ Accessing the SourceManager and ASTContext
 ==========================================
 
 Some of the information about the AST, like source locations and global
-identifier information, are not stored in the AST nodes themselves, but
+identifier information, is not stored in the AST nodes themselves, but
 in the ASTContext and its associated source manager. To retrieve them we
 need to hand the ASTContext into our RecursiveASTVisitor implementation.
 
@@ -208,7 +208,7 @@ following CMakeLists.txt to link it:
 
     add_clang_executable(find-class-decls FindClassDecls.cpp)
 
-    target_link_libraries(find-class-decls 
+    target_link_libraries(find-class-decls
       PRIVATE
       clangAST
       clangBasic
@@ -224,4 +224,3 @@ declarations of a class n::m::C it found:
 
       $ ./bin/find-class-decls "namespace n { namespace m { class C {}; } }"
       Found declaration at 1:29
-

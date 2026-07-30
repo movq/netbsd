@@ -13,7 +13,6 @@ SRCS+=	AccelTable.cpp \
 	AsmPrinter.cpp \
 	AsmPrinterDwarf.cpp \
 	AsmPrinterInlineAsm.cpp \
-	CodeViewDebug.cpp \
 	DbgEntityHistoryCalculator.cpp \
 	DebugHandlerBase.cpp \
 	DebugLocStream.cpp \
@@ -30,9 +29,10 @@ SRCS+=	AccelTable.cpp \
 	ErlangGCPrinter.cpp \
 	OcamlGCPrinter.cpp \
 	PseudoProbePrinter.cpp \
-	WasmException.cpp \
 	WinCFGuard.cpp \
-	WinException.cpp
+	WinException.cpp \
+	CodeViewDebug.cpp \
+	WasmException.cpp
 
 .if defined(HOSTLIB)
 .include <bsd.hostlib.mk>

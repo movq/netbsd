@@ -7,17 +7,44 @@ LIB=	LLVMVectorize
 .PATH: ${LLVM_SRCDIR}/lib/Transforms/Vectorize
 
 SRCS+=	LoadStoreVectorizer.cpp \
+	LoopIdiomVectorize.cpp \
 	LoopVectorizationLegality.cpp \
 	LoopVectorize.cpp \
 	SLPVectorizer.cpp \
-	VectorCombine.cpp \
 	Vectorize.cpp \
+	VectorCombine.cpp \
 	VPlan.cpp \
-	VPlanHCFGBuilder.cpp \
+	VPlanAnalysis.cpp \
+	VPlanConstruction.cpp \
 	VPlanPredicator.cpp \
+	VPlanRecipes.cpp \
 	VPlanSLP.cpp \
 	VPlanTransforms.cpp \
-	VPlanVerifier.cpp
+	VPlanUnroll.cpp \
+	VPlanVerifier.cpp \
+	VPlanUtils.cpp
+
+.PATH: ${LLVM_SRCDIR}/lib/Transforms/Vectorize/SandboxVectorizer
+
+SRCS+=	DependencyGraph.cpp \
+	InstrMaps.cpp \
+	Interval.cpp \
+	Legality.cpp \
+	SandboxVectorizer.cpp \
+	SandboxVectorizerPassBuilder.cpp \
+	Scheduler.cpp \
+	SeedCollector.cpp \
+	VecUtils.cpp
+
+.PATH: ${LLVM_SRCDIR}/lib/Transforms/Vectorize/SandboxVectorizer/Passes
+
+SRCS+=	BottomUpVec.cpp \
+	PackReuse.cpp \
+	RegionsFromBBs.cpp \
+	RegionsFromMetadata.cpp \
+	SeedCollection.cpp \
+	TransactionAcceptOrRevert.cpp \
+	TransactionSave.cpp
 
 .if defined(HOSTLIB)
 .include <bsd.hostlib.mk>

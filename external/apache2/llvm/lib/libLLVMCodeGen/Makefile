@@ -5,34 +5,42 @@ LIB=	LLVMCodeGen
 .include <bsd.init.mk>
 
 .PATH: ${LLVM_SRCDIR}/lib/CodeGen
-.PATH: ${LLVM_SRCDIR}/lib/CodeGen/LiveDebugValues
 
 SRCS+=	AggressiveAntiDepBreaker.cpp \
 	AllocationOrder.cpp \
 	Analysis.cpp \
+	AssignmentTrackingAnalysis.cpp \
 	AtomicExpandPass.cpp \
-	BasicBlockSections.cpp \
 	BasicTargetTransformInfo.cpp \
 	BranchFolding.cpp \
 	BranchRelaxation.cpp \
 	BreakFalseDeps.cpp \
+	BasicBlockSections.cpp \
+	BasicBlockPathCloning.cpp \
+	BasicBlockSectionsProfileReader.cpp \
+	BasicBlockMatchingAndInference.cpp \
 	CalcSpillWeights.cpp \
+	CallBrPrepare.cpp \
 	CallingConvLower.cpp \
 	CFGuardLongjmp.cpp \
+	CFIFixup.cpp \
 	CFIInstrInserter.cpp \
 	CodeGen.cpp \
-	CodeGenPassBuilder.cpp \
+	CodeGenCommonISel.cpp \
 	CodeGenPrepare.cpp \
 	CommandFlags.cpp \
+	ComplexDeinterleavingPass.cpp \
 	CriticalAntiDepBreaker.cpp \
 	DeadMachineInstructionElim.cpp \
 	DetectDeadLanes.cpp \
 	DFAPacketizer.cpp \
+	DroppedVariableStatsMIR.cpp \
 	DwarfEHPrepare.cpp \
 	EarlyIfConversion.cpp \
 	EdgeBundles.cpp \
-	EHContGuardCatchret.cpp \
+	EHContGuardTargets.cpp \
 	ExecutionDomainFix.cpp \
+	ExpandIRInsts.cpp \
 	ExpandMemCmp.cpp \
 	ExpandPostRAPseudos.cpp \
 	ExpandReductions.cpp \
@@ -42,51 +50,61 @@ SRCS+=	AggressiveAntiDepBreaker.cpp \
 	FinalizeISel.cpp \
 	FixupStatepointCallerSaved.cpp \
 	FuncletLayout.cpp \
+	MachineFunctionAnalysis.cpp \
 	GCMetadata.cpp \
 	GCMetadataPrinter.cpp \
 	GCRootLowering.cpp \
 	GlobalMerge.cpp \
+	GlobalMergeFunctions.cpp \
 	HardwareLoops.cpp \
 	IfConversion.cpp \
 	ImplicitNullChecks.cpp \
 	IndirectBrExpandPass.cpp \
+	InitUndef.cpp \
 	InlineSpiller.cpp \
-	InstrRefBasedImpl.cpp \
+	InsertCodePrefetch.cpp \
 	InterferenceCache.cpp \
 	InterleavedAccessPass.cpp \
 	InterleavedLoadCombinePass.cpp \
 	IntrinsicLowering.cpp \
+	JMCInstrumenter.cpp \
+	KCFI.cpp \
 	LatencyPriorityQueue.cpp \
 	LazyMachineBlockFrequencyInfo.cpp \
 	LexicalScopes.cpp \
-	LiveDebugValues.cpp \
+	LibcallLoweringInfo.cpp \
 	LiveDebugVariables.cpp \
-	LiveIntervalCalc.cpp \
-	LiveInterval.cpp \
 	LiveIntervals.cpp \
+	LiveInterval.cpp \
 	LiveIntervalUnion.cpp \
 	LivePhysRegs.cpp \
 	LiveRangeCalc.cpp \
+	LiveIntervalCalc.cpp \
 	LiveRangeEdit.cpp \
 	LiveRangeShrink.cpp \
 	LiveRegMatrix.cpp \
 	LiveRegUnits.cpp \
 	LiveStacks.cpp \
 	LiveVariables.cpp \
-	LLVMTargetMachine.cpp \
+	CodeGenTargetMachineImpl.cpp \
 	LocalStackSlotAllocation.cpp \
 	LoopTraversal.cpp \
+	LowLevelTypeUtils.cpp \
 	LowerEmuTLS.cpp \
-	LowLevelType.cpp \
 	MachineBasicBlock.cpp \
 	MachineBlockFrequencyInfo.cpp \
+	MachineBlockHashInfo.cpp \
 	MachineBlockPlacement.cpp \
 	MachineBranchProbabilityInfo.cpp \
-	MachineCheckDebugify.cpp \
+	MachineCFGPrinter.cpp \
 	MachineCombiner.cpp \
+	MachineConvergenceVerifier.cpp \
 	MachineCopyPropagation.cpp \
 	MachineCSE.cpp \
+	MachineCheckDebugify.cpp \
+	MachineCycleAnalysis.cpp \
 	MachineDebugify.cpp \
+	MachineDomTreeUpdater.cpp \
 	MachineDominanceFrontier.cpp \
 	MachineDominators.cpp \
 	MachineFrameInfo.cpp \
@@ -96,11 +114,13 @@ SRCS+=	AggressiveAntiDepBreaker.cpp \
 	MachineFunctionSplitter.cpp \
 	MachineInstrBundle.cpp \
 	MachineInstr.cpp \
+	MachineLateInstrsCleanup.cpp \
 	MachineLICM.cpp \
 	MachineLoopInfo.cpp \
 	MachineLoopUtils.cpp \
 	MachineModuleInfo.cpp \
 	MachineModuleInfoImpls.cpp \
+	MachineModuleSlotTracker.cpp \
 	MachineOperand.cpp \
 	MachineOptimizationRemarkEmitter.cpp \
 	MachineOutliner.cpp \
@@ -112,26 +132,27 @@ SRCS+=	AggressiveAntiDepBreaker.cpp \
 	MachineScheduler.cpp \
 	MachineSink.cpp \
 	MachineSizeOpts.cpp \
+	MachineSSAContext.cpp \
 	MachineSSAUpdater.cpp \
-	MachineStableHash.cpp \
 	MachineStripDebug.cpp \
 	MachineTraceMetrics.cpp \
+	MachineUniformityAnalysis.cpp \
 	MachineVerifier.cpp \
-	MacroFusion.cpp \
-	MBFIWrapper.cpp \
-	MIRCanonicalizerPass.cpp \
 	MIRFSDiscriminator.cpp \
-	MIRNamerPass.cpp \
-	MIRPrinter.cpp \
-	MIRPrintingPass.cpp \
-	MIRVRegNamerUtils.cpp \
+	MIRSampleProfile.cpp \
 	MIRYamlMapping.cpp \
+	MIR2Vec.cpp \
+	MLRegAllocEvictAdvisor.cpp \
+	MLRegAllocPriorityAdvisor.cpp \
 	ModuloSchedule.cpp \
 	MultiHazardRecognizer.cpp \
+	PatchableFunction.cpp \
+	MBFIWrapper.cpp \
+	MIRPrinter.cpp \
+	MIRPrintingPass.cpp \
+	MacroFusion.cpp \
 	NonRelocatableStringpool.cpp \
 	OptimizePHIs.cpp \
-	ParallelCG.cpp \
-	PatchableFunction.cpp \
 	PeepholeOptimizer.cpp \
 	PHIElimination.cpp \
 	PHIEliminationUtils.cpp \
@@ -148,25 +169,39 @@ SRCS+=	AggressiveAntiDepBreaker.cpp \
 	ReachingDefAnalysis.cpp \
 	RegAllocBase.cpp \
 	RegAllocBasic.cpp \
+	RegAllocEvictionAdvisor.cpp \
 	RegAllocFast.cpp \
 	RegAllocGreedy.cpp \
 	RegAllocPBQP.cpp \
+	RegAllocPriorityAdvisor.cpp \
+	RegAllocScore.cpp \
 	RegisterClassInfo.cpp \
 	RegisterCoalescer.cpp \
 	RegisterPressure.cpp \
 	RegisterScavenging.cpp \
+	GCEmptyBasicBlocks.cpp \
+	RemoveRedundantDebugValues.cpp \
+	RenameIndependentSubregs.cpp \
+	MachineStableHash.cpp \
+	MIRVRegNamerUtils.cpp \
+	MIRNamerPass.cpp \
+	MIRCanonicalizerPass.cpp \
 	RegisterUsageInfo.cpp \
 	RegUsageInfoCollector.cpp \
 	RegUsageInfoPropagate.cpp \
-	RenameIndependentSubregs.cpp \
+	RemoveLoadsIntoFakeUses.cpp \
 	ReplaceWithVeclib.cpp \
 	ResetMachineFunctionPass.cpp \
+	RegisterBank.cpp \
+	RegisterBankInfo.cpp \
 	SafeStack.cpp \
 	SafeStackLayout.cpp \
+	SanitizerBinaryMetadata.cpp \
 	ScheduleDAG.cpp \
 	ScheduleDAGInstrs.cpp \
 	ScheduleDAGPrinter.cpp \
 	ScoreboardHazardRecognizer.cpp \
+	SelectOptimize.cpp \
 	ShadowStackGCLowering.cpp \
 	ShrinkWrap.cpp \
 	SjLjEHPrepare.cpp \
@@ -174,10 +209,13 @@ SRCS+=	AggressiveAntiDepBreaker.cpp \
 	SpillPlacement.cpp \
 	SplitKit.cpp \
 	StackColoring.cpp \
+	StackFrameLayoutAnalysisPass.cpp \
 	StackMapLivenessAnalysis.cpp \
 	StackMaps.cpp \
 	StackProtector.cpp \
 	StackSlotColoring.cpp \
+	StaticDataSplitter.cpp \
+	StaticDataAnnotator.cpp \
 	SwiftErrorValueTracking.cpp \
 	SwitchLoweringUtils.cpp \
 	TailDuplication.cpp \
@@ -195,11 +233,18 @@ SRCS+=	AggressiveAntiDepBreaker.cpp \
 	TypePromotion.cpp \
 	UnreachableBlockElim.cpp \
 	ValueTypes.cpp \
-	VarLocBasedImpl.cpp \
+	VLIWMachineScheduler.cpp \
 	VirtRegMap.cpp \
 	WasmEHPrepare.cpp \
+	WindowScheduler.cpp \
+	WindowsSecureHotPatching.cpp \
 	WinEHPrepare.cpp \
-	XRayInstrumentation.cpp \
+	XRayInstrumentation.cpp
+
+.PATH: ${LLVM_SRCDIR}/lib/CodeGen/LiveDebugValues
+SRCS+=	LiveDebugValues.cpp \
+	VarLocBasedImpl.cpp \
+	InstrRefBasedImpl.cpp
 
 .if defined(HOSTLIB)
 .include <bsd.hostlib.mk>

@@ -12,45 +12,63 @@ SYMLINKS+=	clang ${BINDIR}/clang-cpp
 
 .PATH: ${CLANG_SRCDIR}/tools/driver
 
-SRCS=	driver.cpp \
+SRCS=	clang-driver.cpp \
+	driver.cpp \
 	cc1_main.cpp \
 	cc1as_main.cpp \
 	cc1gen_reproducer_main.cpp
 
 CLANG_LIBS+= \
 	clangFrontendTool \
+	clangExtractAPI \
+	clangInstallAPI \
 	clangFrontend \
-	clangARCMigrate \
 	clangStaticAnalyzerFrontend \
 	clangStaticAnalyzerCheckers \
 	clangStaticAnalyzerCore \
-	clangToolingCore \
 	clangCrossTU \
 	clangIndex \
-	clangASTMatchers \
 	clangCodeGen \
 	clangFrontendRewrite \
 	clangFrontend \
 	clangSerialization \
 	clangParse \
 	clangSema \
+	clangAPINotes \
+	clangAnalysisLifetimeSafety \
 	clangAnalysis \
+	clangASTMatchers \
+	clangFormat \
+	clangToolingInclusions \
+	clangToolingCore \
 	clangEdit \
 	clangDriver \
+	clangOptions \
 	clangRewrite \
 	clangAST \
 	clangLex \
+	clangSupport \
 	clangBasic
 
 LLVM_LIBS+= \
+	FrontendDriver \
+	WindowsDriver \
+	TextAPIBinaryReader \
+	FrontendHLSL \
+	FrontendOpenACC \
 	FrontendOpenMP \
-	TransformsAggressiveInstCombine \
-	TransformsCoroutines \
+	FrontendOffloading \
+	FrontendAtomic \
+	FrontendDirective \
 	ProfileDataCoverage \
 	LTO \
-	ObjCARC \
 	Passes \
-	ipo \
+	TransformsAggressiveInstCombine \
+	TransformsCoroutines \
+	HipStdPar \
+	ObjCARC \
+	Extensions \
+	Plugins \
 	IRReader \
 	AsmParser \
 	BitstreamReader \
@@ -94,23 +112,30 @@ LLVM_LIBS+= \
 	X86MCTargetDesc \
 	X86TargetInfo \
 	X86AsmParser \
+	ipo \
 	GlobalISel \
 	SelectionDAG \
 	AsmPrinter \
-	DebugInfoDWARF \
-	DebugInfoCodeView \
-	DebugInfoMSF \
 	CodeGen \
+	CGData \
+	CodeGenTypes \
 	Vectorize \
+	SandboxIR \
 	Target \
 	InstCombine \
 	Instrumentation \
 	ScalarOpts \
+	ObjectYAML \
 	ProfileData \
+	DebugInfoDWARF \
 	MCDisassembler \
 	MCParser \
 	MC \
+	DebugInfoDWARFLowLevel \
+	DebugInfoCodeView \
+	DebugInfoMSF \
 	TransformsUtils \
+	IRPrinter \
 	Analysis \
 	Object \
 	TextAPI \
@@ -120,6 +145,7 @@ LLVM_LIBS+= \
 	Remarks \
 	Option \
 	BinaryFormat \
+	TargetParser \
 	Support \
 	Demangle
 

@@ -7,20 +7,39 @@
 
 
 .if ${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH} == "x86_64"
-INCS=	adxintrin.h \
+INCS=	adcintrin.h \
+	adxintrin.h \
 	ammintrin.h \
+	amxavx512intrin.h \
+	amxcomplexintrin.h \
+	amxfp16intrin.h \
+	amxfp8intrin.h \
 	amxintrin.h \
+	amxmovrsintrin.h \
+	amxtf32intrin.h \
+	avx10_2_512bf16intrin.h \
+	avx10_2_512convertintrin.h \
+	avx10_2_512minmaxintrin.h \
+	avx10_2_512niintrin.h \
+	avx10_2_512satcvtdsintrin.h \
+	avx10_2_512satcvtintrin.h \
+	avx10_2bf16intrin.h \
+	avx10_2convertintrin.h \
+	avx10_2copyintrin.h \
+	avx10_2minmaxintrin.h \
+	avx10_2niintrin.h \
+	avx10_2satcvtdsintrin.h \
+	avx10_2satcvtintrin.h \
 	avx2intrin.h \
 	avx512bf16intrin.h \
 	avx512bitalgintrin.h \
 	avx512bwintrin.h \
 	avx512cdintrin.h \
 	avx512dqintrin.h \
-	avx512erintrin.h \
 	avx512fintrin.h \
+	avx512fp16intrin.h \
 	avx512ifmaintrin.h \
 	avx512ifmavlintrin.h \
-	avx512pfintrin.h \
 	avx512vbmi2intrin.h \
 	avx512vbmiintrin.h \
 	avx512vbmivlintrin.h \
@@ -29,6 +48,7 @@ INCS=	adxintrin.h \
 	avx512vlbwintrin.h \
 	avx512vlcdintrin.h \
 	avx512vldqintrin.h \
+	avx512vlfp16intrin.h \
 	avx512vlintrin.h \
 	avx512vlvbmi2intrin.h \
 	avx512vlvnniintrin.h \
@@ -37,16 +57,23 @@ INCS=	adxintrin.h \
 	avx512vp2intersectintrin.h \
 	avx512vpopcntdqintrin.h \
 	avx512vpopcntdqvlintrin.h \
+	avxifmaintrin.h \
 	avxintrin.h \
+	avxneconvertintrin.h \
+	avxvnniint16intrin.h \
+	avxvnniint8intrin.h \
 	avxvnniintrin.h \
 	bmi2intrin.h \
 	bmiintrin.h \
+	cet.h \
 	cetintrin.h \
 	cldemoteintrin.h \
 	clflushoptintrin.h \
 	clwbintrin.h \
 	clzerointrin.h \
+	cmpccxaddintrin.h \
 	cpuid.h \
+	crc32intrin.h \
 	emmintrin.h \
 	enqcmdintrin.h \
 	f16cintrin.h \
@@ -65,24 +92,36 @@ INCS=	adxintrin.h \
 	mmintrin.h \
 	mm_malloc.h \
 	movdirintrin.h \
+	movrs_avx10_2_512intrin.h \
+	movrs_avx10_2intrin.h \
+	movrsintrin.h \
 	mwaitxintrin.h \
 	nmmintrin.h \
 	pconfigintrin.h \
 	pkuintrin.h \
 	pmmintrin.h \
 	popcntintrin.h \
+	prfchiintrin.h \
 	prfchwintrin.h \
+	ptrauth.h \
 	ptwriteintrin.h \
+	raointintrin.h \
+	rdpruintrin.h \
 	rdseedintrin.h \
 	rtmintrin.h \
 	serializeintrin.h \
 	sgxintrin.h \
+	sha512intrin.h \
 	shaintrin.h \
+	sm3intrin.h \
+	sm4evexintrin.h \
+	sm4intrin.h \
 	smmintrin.h \
 	tbmintrin.h \
 	tmmintrin.h \
 	tsxldtrkintrin.h \
 	uintrintrin.h \
+	usermsrintrin.h \
 	vaesintrin.h \
 	vpclmulqdqintrin.h \
 	waitpkgintrin.h \
@@ -118,11 +157,25 @@ INCS+=	stdatomic.h tgmath.h
 INCSDIR=	/usr/include/clang-${CLANG_VERSION:R}
 .endif # MKLLVM
 
+.PATH:	${LLVM_SRCDIR}/include/llvm/Analysis
+.PATH:	${LLVM_SRCDIR}/include/llvm/CodeGen
 .PATH:	${LLVM_SRCDIR}/include/llvm/IR
 .PATH:	${LLVM_SRCDIR}/include/llvm/Frontend/OpenACC
 .PATH:	${LLVM_SRCDIR}/include/llvm/Frontend/OpenMP
+.PATH:	${LLVM_SRCDIR}/lib/Target/AArch64
+.PATH:	${LLVM_SRCDIR}/lib/Target/ARM
+.PATH:	${LLVM_SRCDIR}/lib/Target/PowerPC
+.PATH:	${LLVM_SRCDIR}/lib/Target/RISCV
 
-TABLEGEN_SRC=	Attributes.td Intrinsics.td Options.td ACC.td OMP.td
+TABLEGEN_SRC=	Attributes.td Intrinsics.td Options.td ACC.td OMP.td \
+		RuntimeLibcalls.td TargetLibraryInfo.td \
+		AArch64.td ARM.td PPC.td RISCV.td
+
+.if !defined(HOST_BUILD)
+TABLEGEN_SRC+=	ValueTypes.td
+TABLEGEN_OUTPUT.ValueTypes.td= \
+	llvm/CodeGen/GenVT.inc|-gen-vt
+.endif
 
 TABLEGEN_OUTPUT.Attributes.td= \
 	llvm/IR/Attributes.inc|-gen-attrs
@@ -134,17 +187,23 @@ TABLEGEN_OUTPUT.Intrinsics.td= \
 	llvm/IR/IntrinsicsAMDGPU.h|-gen-intrinsic-enums^-intrinsic-prefix=amdgcn \
 	llvm/IR/IntrinsicsARM.h|-gen-intrinsic-enums^-intrinsic-prefix=arm \
 	llvm/IR/IntrinsicsBPF.h|-gen-intrinsic-enums^-intrinsic-prefix=bpf \
+	llvm/IR/IntrinsicsDirectX.h|-gen-intrinsic-enums^-intrinsic-prefix=dx \
 	llvm/IR/IntrinsicsHexagon.h|-gen-intrinsic-enums^-intrinsic-prefix=hexagon \
+	llvm/IR/IntrinsicsLoongArch.h|-gen-intrinsic-enums^-intrinsic-prefix=loongarch \
 	llvm/IR/IntrinsicsMips.h|-gen-intrinsic-enums^-intrinsic-prefix=mips \
 	llvm/IR/IntrinsicsNVPTX.h|-gen-intrinsic-enums^-intrinsic-prefix=nvvm \
 	llvm/IR/IntrinsicsPowerPC.h|-gen-intrinsic-enums^-intrinsic-prefix=ppc \
 	llvm/IR/IntrinsicsR600.h|-gen-intrinsic-enums^-intrinsic-prefix=r600 \
 	llvm/IR/IntrinsicsRISCV.h|-gen-intrinsic-enums^-intrinsic-prefix=riscv \
+	llvm/IR/IntrinsicsSPIRV.h|-gen-intrinsic-enums^-intrinsic-prefix=spv \
 	llvm/IR/IntrinsicsS390.h|-gen-intrinsic-enums^-intrinsic-prefix=s390 \
         llvm/IR/IntrinsicsVE.h|-gen-intrinsic-enums^-intrinsic-prefix=ve \
 	llvm/IR/IntrinsicsWebAssembly.h|-gen-intrinsic-enums^-intrinsic-prefix=wasm \
 	llvm/IR/IntrinsicsX86.h|-gen-intrinsic-enums^-intrinsic-prefix=x86 \
 	llvm/IR/IntrinsicsXCore.h|-gen-intrinsic-enums^-intrinsic-prefix=xcore \
+
+TABLEGEN_OUTPUT.RuntimeLibcalls.td= \
+	llvm/IR/RuntimeLibcalls.inc|-gen-runtime-libcalls
 
 TABLEGEN_OUTPUT.OMP.td=	\
 	llvm/Frontend/OpenMP/OMP.h.inc|--gen-directive-decl \
@@ -154,10 +213,30 @@ TABLEGEN_OUTPUT.ACC.td=	\
 	llvm/Frontend/OpenACC/ACC.h.inc|--gen-directive-decl \
 	llvm/Frontend/OpenACC/ACC.inc|--gen-directive-impl
 
+TABLEGEN_OUTPUT.TargetLibraryInfo.td= \
+	llvm/Analysis/TargetLibraryInfo.inc|-gen-target-library-info
+
+TABLEGEN_INCLUDES.AArch64.td=	-I${LLVM_SRCDIR}/lib/Target/AArch64
+TABLEGEN_OUTPUT.AArch64.td= \
+	llvm/TargetParser/AArch64TargetParserDef.inc|-gen-arm-target-def
+
+TABLEGEN_INCLUDES.ARM.td=	-I${LLVM_SRCDIR}/lib/Target/ARM
+TABLEGEN_OUTPUT.ARM.td= \
+	llvm/TargetParser/ARMTargetParserDef.inc|-gen-arm-target-def
+
+TABLEGEN_INCLUDES.PPC.td=	-I${LLVM_SRCDIR}/lib/Target/PowerPC
+TABLEGEN_OUTPUT.PPC.td= \
+	llvm/TargetParser/PPCGenTargetFeatures.inc|-gen-target-features
+
+TABLEGEN_INCLUDES.RISCV.td=	-I${LLVM_SRCDIR}/lib/Target/RISCV
+TABLEGEN_OUTPUT.RISCV.td= \
+	llvm/TargetParser/RISCVTargetParserDef.inc|-gen-riscv-target-def
+
 .if ${MKLLVM} != "no"
 .PATH:	${CLANG_SRCDIR}/include/clang/AST \
 	${CLANG_SRCDIR}/include/clang/Basic \
 	${CLANG_SRCDIR}/include/clang/Driver \
+	${CLANG_SRCDIR}/include/clang/Options \
 	${CLANG_SRCDIR}/include/clang/StaticAnalyzer/Checkers \
 	${CLANG_SRCDIR}/include/clang/Tooling/Syntax
 CLANG_TABLEGEN_SRC=	\
@@ -165,8 +244,21 @@ CLANG_TABLEGEN_SRC=	\
 	arm_fp16.td \
 	arm_mve.td \
 	arm_neon.td \
+	arm_sme.td \
 	arm_sve.td \
 	Attr.td \
+	Builtins.td \
+	BuiltinsBPF.td \
+	BuiltinsDirectX.td \
+	BuiltinsHexagon.td \
+	BuiltinsNVPTX.td \
+	BuiltinsRISCV.td \
+	BuiltinsSPIRVCommon.td \
+	BuiltinsSPIRVVK.td \
+	BuiltinsSPIRVCL.td \
+	BuiltinsX86.td \
+	BuiltinsX86_64.td \
+	BuiltinTemplates.td \
 	Checkers.td \
 	CommentCommands.td \
 	CommentHTMLNamedCharacterReferences.td \
@@ -176,6 +268,8 @@ CLANG_TABLEGEN_SRC=	\
 	Diagnostic.td \
 	Nodes.td \
 	PropertiesBase.td \
+	riscv_andes_vector.td \
+	riscv_sifive_vector.td \
 	riscv_vector.td \
 	StmtDataCollectors.td \
 	StmtNodes.td \
@@ -191,9 +285,14 @@ CLANG_TABLEGEN_OUTPUT.Attr.td= \
 	clang/AST/AttrVisitor.inc|-gen-clang-attr-ast-visitor \
 	clang/Basic/AttrHasAttributeImpl.inc|-gen-clang-attr-has-attribute-impl \
 	clang/Basic/AttrList.inc|-gen-clang-attr-list \
+	clang/Basic/AttrParsedAttrList.inc|-gen-clang-attr-parsed-attr-list \
 	clang/Basic/AttrSubMatchRulesList.inc|-gen-clang-attr-subject-match-rule-list \
+	clang/Basic/AttributeSpellingList.inc|-gen-attribute-spelling-list \
+	clang/Basic/RegularKeywordAttrInfo.inc|-gen-clang-regular-keyword-attr-info \
+	clang/Basic/CXX11AttributeInfo.inc|-gen-cxx11-attribute-info \
 	clang/Parse/AttrParserStringSwitches.inc|-gen-clang-attr-parser-string-switches \
 	clang/Parse/AttrSubMatchRulesParserStringSwitches.inc|-gen-clang-attr-subject-match-rules-parser-string-switches \
+	clang/Sema/AttrIsTypeDependent.inc|-gen-clang-attr-is-type-dependent \
 	clang/Sema/AttrParsedAttrImpl.inc|-gen-clang-attr-parsed-attr-impl \
 	clang/Sema/AttrParsedAttrKinds.inc|-gen-clang-attr-parsed-attr-kinds \
 	clang/Sema/AttrParsedAttrList.inc|-gen-clang-attr-parsed-attr-list \
@@ -201,6 +300,53 @@ CLANG_TABLEGEN_OUTPUT.Attr.td= \
 	clang/Sema/AttrTemplateInstantiate.inc|-gen-clang-attr-template-instantiate \
 	clang/Serialization/AttrPCHRead.inc|-gen-clang-attr-pch-read \
 	clang/Serialization/AttrPCHWrite.inc|-gen-clang-attr-pch-write
+
+CLANG_TABLEGEN_OUTPUT.BuiltinTemplates.td= \
+	clang/Basic/BuiltinTemplates.inc|-gen-clang-builtin-templates
+
+CLANG_TABLEGEN_OUTPUT.Builtins.td= \
+	clang/Basic/Builtins.inc|-gen-clang-builtins
+CLANG_TABLEGEN_INCLUDES.Builtins.td=	-I${CLANG_SRCDIR}/include
+
+CLANG_TABLEGEN_OUTPUT.BuiltinsBPF.td= \
+	clang/Basic/BuiltinsBPF.inc|-gen-clang-builtins
+CLANG_TABLEGEN_INCLUDES.BuiltinsBPF.td=	-I${CLANG_SRCDIR}/include
+
+CLANG_TABLEGEN_OUTPUT.BuiltinsDirectX.td= \
+	clang/Basic/BuiltinsDirectX.inc|-gen-clang-builtins
+CLANG_TABLEGEN_INCLUDES.BuiltinsDirectX.td=	-I${CLANG_SRCDIR}/include
+
+CLANG_TABLEGEN_OUTPUT.BuiltinsHexagon.td= \
+	clang/Basic/BuiltinsHexagon.inc|-gen-clang-builtins
+CLANG_TABLEGEN_INCLUDES.BuiltinsHexagon.td=	-I${CLANG_SRCDIR}/include
+
+CLANG_TABLEGEN_OUTPUT.BuiltinsNVPTX.td= \
+	clang/Basic/BuiltinsNVPTX.inc|-gen-clang-builtins
+CLANG_TABLEGEN_INCLUDES.BuiltinsNVPTX.td=	-I${CLANG_SRCDIR}/include
+
+CLANG_TABLEGEN_OUTPUT.BuiltinsRISCV.td= \
+	clang/Basic/BuiltinsRISCV.inc|-gen-clang-builtins
+CLANG_TABLEGEN_INCLUDES.BuiltinsRISCV.td=	-I${CLANG_SRCDIR}/include
+
+CLANG_TABLEGEN_OUTPUT.BuiltinsSPIRVCommon.td= \
+	clang/Basic/BuiltinsSPIRVCommon.inc|-gen-clang-builtins
+CLANG_TABLEGEN_INCLUDES.BuiltinsSPIRVCommon.td=	-I${CLANG_SRCDIR}/include
+
+CLANG_TABLEGEN_OUTPUT.BuiltinsSPIRVVK.td= \
+	clang/Basic/BuiltinsSPIRVVK.inc|-gen-clang-builtins
+CLANG_TABLEGEN_INCLUDES.BuiltinsSPIRVVK.td=	-I${CLANG_SRCDIR}/include
+
+CLANG_TABLEGEN_OUTPUT.BuiltinsSPIRVCL.td= \
+	clang/Basic/BuiltinsSPIRVCL.inc|-gen-clang-builtins
+CLANG_TABLEGEN_INCLUDES.BuiltinsSPIRVCL.td=	-I${CLANG_SRCDIR}/include
+
+CLANG_TABLEGEN_OUTPUT.BuiltinsX86.td= \
+	clang/Basic/BuiltinsX86.inc|-gen-clang-builtins
+CLANG_TABLEGEN_INCLUDES.BuiltinsX86.td=	-I${CLANG_SRCDIR}/include
+
+CLANG_TABLEGEN_OUTPUT.BuiltinsX86_64.td= \
+	clang/Basic/BuiltinsX86_64.inc|-gen-clang-builtins
+CLANG_TABLEGEN_INCLUDES.BuiltinsX86_64.td=	-I${CLANG_SRCDIR}/include
 
 CLANG_TABLEGEN_OUTPUT.PropertiesBase.td= \
 	clang/AST/AbstractBasicReader.inc|-gen-clang-basic-reader \
@@ -250,19 +396,64 @@ CLANG_TABLEGEN_INCLUDES.TypeNodes.td=	-I${CLANG_SRCDIR}/include
 CLANG_TABLEGEN_INCLUDES.Diagnostic.td=	-I${CLANG_SRCDIR}/include/clang/Basic
 CLANG_TABLEGEN_OUTPUT.Diagnostic.td= \
 	clang/Basic/DiagnosticAnalysisKinds.inc|-gen-clang-diags-defs^-clang-component=Analysis \
+	clang/Basic/DiagnosticAnalysisEnums.inc|-gen-clang-diags-enums^-clang-component=Analysis \
+	clang/Basic/DiagnosticAnalysisCompatIDs.inc|-gen-clang-diags-compat-ids^-clang-component=Analysis \
+	clang/Basic/DiagnosticAnalysisInterface.inc|-gen-clang-diags-iface^-clang-component=Analysis \
 	clang/Basic/DiagnosticASTKinds.inc|-gen-clang-diags-defs^-clang-component=AST \
+	clang/Basic/DiagnosticASTEnums.inc|-gen-clang-diags-enums^-clang-component=AST \
+	clang/Basic/DiagnosticASTCompatIDs.inc|-gen-clang-diags-compat-ids^-clang-component=AST \
+	clang/Basic/DiagnosticASTInterface.inc|-gen-clang-diags-iface^-clang-component=AST \
 	clang/Basic/DiagnosticCommentKinds.inc|-gen-clang-diags-defs^-clang-component=Comment \
+	clang/Basic/DiagnosticCommentEnums.inc|-gen-clang-diags-enums^-clang-component=Comment \
+	clang/Basic/DiagnosticCommentCompatIDs.inc|-gen-clang-diags-compat-ids^-clang-component=Comment \
+	clang/Basic/DiagnosticCommentInterface.inc|-gen-clang-diags-iface^-clang-component=Comment \
 	clang/Basic/DiagnosticCommonKinds.inc|-gen-clang-diags-defs^-clang-component=Common \
+	clang/Basic/DiagnosticCommonEnums.inc|-gen-clang-diags-enums^-clang-component=Common \
+	clang/Basic/DiagnosticCommonCompatIDs.inc|-gen-clang-diags-compat-ids^-clang-component=Common \
+	clang/Basic/DiagnosticCommonInterface.inc|-gen-clang-diags-iface^-clang-component=Common \
 	clang/Basic/DiagnosticCrossTUKinds.inc|-gen-clang-diags-defs^-clang-component=CrossTU \
+	clang/Basic/DiagnosticCrossTUEnums.inc|-gen-clang-diags-enums^-clang-component=CrossTU \
+	clang/Basic/DiagnosticCrossTUCompatIDs.inc|-gen-clang-diags-compat-ids^-clang-component=CrossTU \
+	clang/Basic/DiagnosticCrossTUInterface.inc|-gen-clang-diags-iface^-clang-component=CrossTU \
 	clang/Basic/DiagnosticDriverKinds.inc|-gen-clang-diags-defs^-clang-component=Driver \
+	clang/Basic/DiagnosticDriverEnums.inc|-gen-clang-diags-enums^-clang-component=Driver \
+	clang/Basic/DiagnosticDriverCompatIDs.inc|-gen-clang-diags-compat-ids^-clang-component=Driver \
+	clang/Basic/DiagnosticDriverInterface.inc|-gen-clang-diags-iface^-clang-component=Driver \
 	clang/Basic/DiagnosticFrontendKinds.inc|-gen-clang-diags-defs^-clang-component=Frontend \
+	clang/Basic/DiagnosticFrontendEnums.inc|-gen-clang-diags-enums^-clang-component=Frontend \
+	clang/Basic/DiagnosticFrontendCompatIDs.inc|-gen-clang-diags-compat-ids^-clang-component=Frontend \
+	clang/Basic/DiagnosticFrontendInterface.inc|-gen-clang-diags-iface^-clang-component=Frontend \
 	clang/Basic/DiagnosticGroups.inc|-gen-clang-diag-groups \
 	clang/Basic/DiagnosticIndexName.inc|-gen-clang-diags-index-name \
+	clang/Basic/DiagnosticAllCompatIDs.inc|-gen-clang-diags-compat-ids \
+	clang/Basic/DiagnosticInstallAPIKinds.inc|-gen-clang-diags-defs^-clang-component=InstallAPI \
+	clang/Basic/DiagnosticInstallAPIEnums.inc|-gen-clang-diags-enums^-clang-component=InstallAPI \
+	clang/Basic/DiagnosticInstallAPICompatIDs.inc|-gen-clang-diags-compat-ids^-clang-component=InstallAPI \
+	clang/Basic/DiagnosticInstallAPIInterface.inc|-gen-clang-diags-iface^-clang-component=InstallAPI \
 	clang/Basic/DiagnosticLexKinds.inc|-gen-clang-diags-defs^-clang-component=Lex \
+	clang/Basic/DiagnosticLexEnums.inc|-gen-clang-diags-enums^-clang-component=Lex \
+	clang/Basic/DiagnosticLexCompatIDs.inc|-gen-clang-diags-compat-ids^-clang-component=Lex \
+	clang/Basic/DiagnosticLexInterface.inc|-gen-clang-diags-iface^-clang-component=Lex \
 	clang/Basic/DiagnosticParseKinds.inc|-gen-clang-diags-defs^-clang-component=Parse \
+	clang/Basic/DiagnosticParseEnums.inc|-gen-clang-diags-enums^-clang-component=Parse \
+	clang/Basic/DiagnosticParseCompatIDs.inc|-gen-clang-diags-compat-ids^-clang-component=Parse \
+	clang/Basic/DiagnosticParseInterface.inc|-gen-clang-diags-iface^-clang-component=Parse \
 	clang/Basic/DiagnosticRefactoringKinds.inc|-gen-clang-diags-defs^-clang-component=Refactoring \
+	clang/Basic/DiagnosticRefactoringEnums.inc|-gen-clang-diags-enums^-clang-component=Refactoring \
+	clang/Basic/DiagnosticRefactoringCompatIDs.inc|-gen-clang-diags-compat-ids^-clang-component=Refactoring \
+	clang/Basic/DiagnosticRefactoringInterface.inc|-gen-clang-diags-iface^-clang-component=Refactoring \
 	clang/Basic/DiagnosticSemaKinds.inc|-gen-clang-diags-defs^-clang-component=Sema \
-	clang/Basic/DiagnosticSerializationKinds.inc|-gen-clang-diags-defs^-clang-component=Serialization
+	clang/Basic/DiagnosticSemaEnums.inc|-gen-clang-diags-enums^-clang-component=Sema \
+	clang/Basic/DiagnosticSemaCompatIDs.inc|-gen-clang-diags-compat-ids^-clang-component=Sema \
+	clang/Basic/DiagnosticSemaInterface.inc|-gen-clang-diags-iface^-clang-component=Sema \
+	clang/Basic/DiagnosticSerializationKinds.inc|-gen-clang-diags-defs^-clang-component=Serialization \
+	clang/Basic/DiagnosticSerializationEnums.inc|-gen-clang-diags-enums^-clang-component=Serialization \
+	clang/Basic/DiagnosticSerializationCompatIDs.inc|-gen-clang-diags-compat-ids^-clang-component=Serialization \
+	clang/Basic/DiagnosticSerializationInterface.inc|-gen-clang-diags-iface^-clang-component=Serialization \
+	clang/Basic/DiagnosticTrapKinds.inc|-gen-clang-diags-defs^-clang-component=Trap \
+	clang/Basic/DiagnosticTrapEnums.inc|-gen-clang-diags-enums^-clang-component=Trap \
+	clang/Basic/DiagnosticTrapCompatIDs.inc|-gen-clang-diags-compat-ids^-clang-component=Trap \
+	clang/Basic/DiagnosticTrapInterface.inc|-gen-clang-diags-iface^-clang-component=Trap
 
 CLANG_TABLEGEN_INCLUDES.arm_cde.td=	-I${CLANG_SRCDIR}/include/clang/Basic
 CLANG_TABLEGEN_OUTPUT.arm_cde.td= \
@@ -273,10 +464,22 @@ CLANG_TABLEGEN_OUTPUT.arm_cde.td= \
 
 CLANG_TABLEGEN_INCLUDES.arm_sve.td=	-I${CLANG_SRCDIR}/include/clang/Basic
 CLANG_TABLEGEN_OUTPUT.arm_sve.td= \
+	clang/Basic/arm_immcheck_types.inc|-gen-arm-immcheck-types \
 	clang/Basic/arm_sve_builtins.inc|-gen-arm-sve-builtins \
+	clang/Basic/arm_sve_builtins.json|-gen-arm-sve-builtins-json \
 	clang/Basic/arm_sve_builtin_cg.inc|-gen-arm-sve-builtin-codegen \
 	clang/Basic/arm_sve_sema_rangechecks.inc|-gen-arm-sve-sema-rangechecks \
+	clang/Basic/arm_sve_streaming_attrs.inc|-gen-arm-sve-streaming-attrs \
 	clang/Basic/arm_sve_typeflags.inc|-gen-arm-sve-typeflags
+
+CLANG_TABLEGEN_INCLUDES.arm_sme.td=	-I${CLANG_SRCDIR}/include/clang/Basic
+CLANG_TABLEGEN_OUTPUT.arm_sme.td= \
+	clang/Basic/arm_sme_builtins.inc|-gen-arm-sme-builtins \
+	clang/Basic/arm_sme_builtins.json|-gen-arm-sme-builtins-json \
+	clang/Basic/arm_sme_builtin_cg.inc|-gen-arm-sme-builtin-codegen \
+	clang/Basic/arm_sme_sema_rangechecks.inc|-gen-arm-sme-sema-rangechecks \
+	clang/Basic/arm_sme_streaming_attrs.inc|-gen-arm-sme-streaming-attrs \
+	clang/Basic/arm_sme_builtins_za_state.inc|-gen-arm-sme-builtin-za-state
 
 CLANG_TABLEGEN_INCLUDES.arm_neon.td=	-I${CLANG_SRCDIR}/include/clang/Basic
 CLANG_TABLEGEN_OUTPUT.arm_neon.td= \
@@ -293,10 +496,23 @@ CLANG_TABLEGEN_OUTPUT.arm_mve.td= \
 	clang/Basic/arm_mve_builtin_cg.inc|-gen-arm-mve-builtin-codegen \
 	clang/Basic/arm_mve_builtin_sema.inc|-gen-arm-mve-builtin-sema \
 
-#CLANG_TABLEGEN_INCLUDES.riscv_vector.td=	-I${CLANG_SRCDIR}/include/clang/Basic
+CLANG_TABLEGEN_INCLUDES.riscv_vector.td=	-I${CLANG_SRCDIR}/include/clang/Basic
 CLANG_TABLEGEN_OUTPUT.riscv_vector.td= \
 	clang/Basic/riscv_vector_builtins.inc|-gen-riscv-vector-builtins \
-	clang/Basic/riscv_vector_builtin_cg.inc|-gen-riscv-vector-builtin-codegen
+	clang/Basic/riscv_vector_builtin_cg.inc|-gen-riscv-vector-builtin-codegen \
+	clang/Basic/riscv_vector_builtin_sema.inc|-gen-riscv-vector-builtin-sema
+
+CLANG_TABLEGEN_INCLUDES.riscv_sifive_vector.td=	-I${CLANG_SRCDIR}/include/clang/Basic
+CLANG_TABLEGEN_OUTPUT.riscv_sifive_vector.td= \
+	clang/Basic/riscv_sifive_vector_builtins.inc|-gen-riscv-sifive-vector-builtins \
+	clang/Basic/riscv_sifive_vector_builtin_cg.inc|-gen-riscv-sifive-vector-builtin-codegen \
+	clang/Basic/riscv_sifive_vector_builtin_sema.inc|-gen-riscv-sifive-vector-builtin-sema
+
+CLANG_TABLEGEN_INCLUDES.riscv_andes_vector.td=	-I${CLANG_SRCDIR}/include/clang/Basic
+CLANG_TABLEGEN_OUTPUT.riscv_andes_vector.td= \
+	clang/Basic/riscv_andes_vector_builtins.inc|-gen-riscv-andes-vector-builtins \
+	clang/Basic/riscv_andes_vector_builtin_cg.inc|-gen-riscv-andes-vector-builtin-codegen \
+	clang/Basic/riscv_andes_vector_builtin_sema.inc|-gen-riscv-andes-vector-builtin-sema
 
 CLANG_TABLEGEN_INCLUDES.Checkers.td=	\
 	-I${CLANG_SRCDIR}/include \
@@ -304,9 +520,9 @@ CLANG_TABLEGEN_INCLUDES.Checkers.td=	\
 CLANG_TABLEGEN_OUTPUT.Checkers.td= \
 	clang/StaticAnalyzer/Checkers/Checkers.inc|-gen-clang-sa-checkers
 
-TABLEGEN_INCLUDES.Options.td=	-I${CLANG_SRCDIR}/include/clang/Driver
+TABLEGEN_INCLUDES.Options.td=	-I${CLANG_SRCDIR}/include/clang/Options
 TABLEGEN_OUTPUT.Options.td= \
-	clang/Driver/Options.inc|-gen-opt-parser-defs
+	clang/Options/Options.inc|-gen-opt-parser-defs
 
 .endif # MKLLVM
 
@@ -324,13 +540,15 @@ llvm/Support/VCSRevision.h: ${LLVM_TOPLEVEL}/Makefile.inc
 DPSRCS+=	clang/Basic/Version.inc
 CLEANFILES+=	clang/Basic/Version.inc
 
-clang/Basic/Version.inc: ${LLVM_TOPLEVEL}/Makefile.inc
+clang/Basic/Version.inc: ${LLVM_TOPLEVEL}/Makefile.inc ${LLVM_TOPLEVEL}/include/Makefile
 	mkdir -p ${.TARGET:H}
 	printf '#define CLANG_VERSION ${CLANG_VERSION}\n' > ${.TARGET}.tmp
 	printf '#define CLANG_VERSION_STRING "${CLANG_VERSION}"\n' >> ${.TARGET}.tmp
 	printf '#define CLANG_VERSION_MAJOR ${CLANG_VERSION:R:R}\n' >> ${.TARGET}.tmp
+	printf '#define CLANG_VERSION_MAJOR_STRING "${CLANG_VERSION:R:R}"\n' >> ${.TARGET}.tmp
 	printf '#define CLANG_VERSION_MINOR ${CLANG_VERSION:R:E}\n' >> ${.TARGET}.tmp
-	printf '#define CLANG_VERSION_PATCHLEVEL ${CLANG_VERSION:R:R}\n' >> ${.TARGET}.tmp
+	printf '#define CLANG_VERSION_PATCHLEVEL ${CLANG_VERSION:E}\n' >> ${.TARGET}.tmp
+	printf '#define MAX_CLANG_ABI_COMPAT_VERSION ${CLANG_VERSION:R:R}\n' >> ${.TARGET}.tmp
 	mv ${.TARGET}.tmp ${.TARGET}
 .endif # MKLLVM
 

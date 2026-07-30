@@ -5,10 +5,16 @@ LIB=	clangASTMatchers
 .include <bsd.init.mk>
 
 .PATH: ${CLANG_SRCDIR}/lib/ASTMatchers
+.PATH: ${CLANG_SRCDIR}/lib/ASTMatchers/Dynamic
 
 SRCS+=	ASTMatchFinder.cpp \
 	ASTMatchersInternal.cpp \
-	GtestMatchers.cpp
+	LowLevelHelpers.cpp \
+	Diagnostics.cpp \
+	Marshallers.cpp \
+	Parser.cpp \
+	Registry.cpp \
+	VariantValue.cpp
 
 .if defined(HOSTLIB)
 .include <bsd.hostlib.mk>

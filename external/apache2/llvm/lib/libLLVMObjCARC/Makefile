@@ -6,12 +6,11 @@ LIB=	LLVMObjCARC
 
 .PATH: ${LLVM_SRCDIR}/lib/Transforms/ObjCARC
 
-SRCS+=	DependencyAnalysis.cpp \
-	ObjCARC.cpp \
-	ObjCARCAPElim.cpp \
-	ObjCARCContract.cpp \
-	ObjCARCExpand.cpp \
+SRCS+=	ObjCARC.cpp \
 	ObjCARCOpts.cpp \
+	ObjCARCExpand.cpp \
+	ObjCARCContract.cpp \
+	DependencyAnalysis.cpp \
 	ProvenanceAnalysis.cpp \
 	ProvenanceAnalysisEvaluator.cpp \
 	PtrState.cpp

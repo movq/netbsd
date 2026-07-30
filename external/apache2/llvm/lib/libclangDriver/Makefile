@@ -10,13 +10,14 @@ CPPFLAGS+=	-I${CLANG_SRCDIR}/lib/Driver
 
 SRCS+=	Action.cpp \
 	Compilation.cpp \
-	DarwinSDKInfo.cpp \
+	CreateASTUnitFromArgs.cpp \
+	CreateInvocationFromArgs.cpp \
 	Distro.cpp \
 	Driver.cpp \
-	DriverOptions.cpp \
 	Job.cpp \
 	Multilib.cpp \
-	OptionUtils.cpp \
+	MultilibBuilder.cpp \
+	OffloadBundler.cpp \
 	Phases.cpp \
 	SanitizerArgs.cpp \
 	Tool.cpp \
@@ -26,18 +27,17 @@ SRCS+=	Action.cpp \
 
 .PATH: ${CLANG_SRCDIR}/lib/Driver/ToolChains
 
-SRCS+=	AMDGPU.cpp \
-	Ananas.cpp \
-	AIX.cpp \
+SRCS+=	AIX.cpp \
+	AMDGPU.cpp \
 	AMDGPUOpenMP.cpp \
 	AVR.cpp \
 	BareMetal.cpp \
+	CSKYToolChain.cpp \
 	Clang.cpp \
-	CloudABI.cpp \
 	CommonArgs.cpp \
-	Contiki.cpp \
 	CrossWindows.cpp \
 	Cuda.cpp \
+	Cygwin.cpp \
 	Darwin.cpp \
 	DragonFly.cpp \
 	Flang.cpp \
@@ -46,25 +46,31 @@ SRCS+=	AMDGPU.cpp \
 	Gnu.cpp \
 	Haiku.cpp \
 	Hexagon.cpp \
-	HIP.cpp \
+	HIPAMD.cpp \
+	HIPSPV.cpp \
+	HIPUtility.cpp \
+	HLSL.cpp \
 	Hurd.cpp \
 	InterfaceStubs.cpp \
+	LFILinux.cpp \
 	Linux.cpp \
-	M68k.cpp \
+	Managarm.cpp \
 	MinGW.cpp \
-	Minix.cpp \
 	MipsLinux.cpp \
 	MSP430.cpp \
 	MSVC.cpp \
-	Myriad.cpp \
-	NaCl.cpp \
 	NetBSD.cpp \
+	OHOS.cpp \
 	OpenBSD.cpp \
+	PPCFreeBSD.cpp \
 	PPCLinux.cpp \
 	PS4CPU.cpp \
-	RISCVToolchain.cpp \
+	SPIRV.cpp \
+	SPIRVOpenMP.cpp \
 	Solaris.cpp \
+	SYCL.cpp \
 	TCE.cpp \
+	UEFI.cpp \
 	VEToolchain.cpp \
 	WebAssembly.cpp \
 	XCore.cpp \
@@ -74,6 +80,9 @@ SRCS+=	AMDGPU.cpp \
 
 SRCS+=	AArch64.cpp \
 	ARM.cpp \
+	CSKY.cpp \
+	LoongArch.cpp \
+	M68k.cpp \
 	Mips.cpp \
 	PPC.cpp \
 	RISCV.cpp \

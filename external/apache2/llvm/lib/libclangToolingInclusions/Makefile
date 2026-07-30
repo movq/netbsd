@@ -6,7 +6,8 @@ LIB=	clangToolingInclusions
 
 .PATH: ${CLANG_SRCDIR}/lib/Tooling/Inclusions
 
-SRCS+=	HeaderIncludes.cpp \
+SRCS+=	HeaderAnalysis.cpp \
+	HeaderIncludes.cpp \
 	IncludeStyle.cpp
 
 .if defined(HOSTLIB)
