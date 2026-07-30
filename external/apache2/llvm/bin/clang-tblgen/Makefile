@@ -8,9 +8,12 @@ NOMAN=		yes
 .PATH: ${CLANG_SRCDIR}/utils/TableGen
 
 SRCS=	ASTTableGen.cpp \
+	CIRLoweringEmitter.cpp \
 	ClangASTNodesEmitter.cpp \
 	ClangASTPropertiesEmitter.cpp \
 	ClangAttrEmitter.cpp \
+	ClangBuiltinsEmitter.cpp \
+	ClangBuiltinTemplatesEmitter.cpp \
 	ClangCommentCommandInfoEmitter.cpp \
 	ClangCommentHTMLNamedCharacterReferenceEmitter.cpp \
 	ClangCommentHTMLTagsEmitter.cpp \
@@ -27,6 +30,9 @@ SRCS=	ASTTableGen.cpp \
 	RISCVVEmitter.cpp \
 	SveEmitter.cpp \
 	TableGen.cpp
+
+CLANG_LIBS+= \
+	clangSupport
 
 LLVM_LIBS+= \
 	TableGen \

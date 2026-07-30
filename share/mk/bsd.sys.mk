@@ -148,6 +148,31 @@ CFLAGS+=	-Wno-maybe-uninitialized
 .endif
 .endif
 
+.if defined(HAVE_LLVM)
+# LLVM 22 defaults to DWARF 5, which is not supported by ctfconvert.
+CFLAGS+=	${${ACTIVE_CC} == "clang":? \
+	-gdwarf-4 \
+	-Wno-error=alloc-size \
+	-Wno-error=array-compare \
+	-Wno-error=bitwise-instead-of-logical \
+	-Wno-error=cast-function-type-mismatch \
+	-Wno-error=default-const-init-field-unsafe \
+	-Wno-error=deprecated-non-prototype \
+	-Wno-error=format-truncation \
+	-Wno-error=fortify-source \
+	-Wno-error=missing-format-attribute \
+	-Wno-error=null-pointer-subtraction \
+	-Wno-error=sometimes-uninitialized \
+	-Wno-error=single-bit-bitfield-constant-conversion \
+	-Wno-error=strict-prototypes \
+	-Wno-error=tautological-compare \
+	-Wno-error=unterminated-string-initialization \
+	-Wno-error=uninitialized-const-pointer \
+	-Wno-error=unused-but-set-parameter \
+	-Wno-error=unused-but-set-variable \
+	-Wno-error=vla-cxx-extension :}
+.endif
+
 .if ${MKRELRO:Uno} != "no"
 LDFLAGS+=	-Wl,-z,relro
 .endif

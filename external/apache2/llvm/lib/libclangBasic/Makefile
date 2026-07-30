@@ -6,11 +6,14 @@ LIB=	clangBasic
 
 .PATH: ${CLANG_SRCDIR}/lib/Basic
 
-SRCS+=	Attributes.cpp \
+SRCS+=	ASTSourceDescriptor.cpp \
+	Attributes.cpp \
 	Builtins.cpp \
+	CLWarnings.cpp \
 	CharInfo.cpp \
 	CodeGenOptions.cpp \
 	Cuda.cpp \
+	DarwinSDKInfo.cpp \
 	Diagnostic.cpp \
 	DiagnosticIDs.cpp \
 	DiagnosticOptions.cpp \
@@ -21,24 +24,30 @@ SRCS+=	Attributes.cpp \
 	IdentifierTable.cpp \
 	LangOptions.cpp \
 	LangStandards.cpp \
+	MakeSupport.cpp \
 	Module.cpp \
-	NoSanitizeList.cpp \
 	ObjCRuntime.cpp \
+	OffloadArch.cpp \
 	OpenCLOptions.cpp \
 	OpenMPKinds.cpp \
 	OperatorPrecedence.cpp \
+	ParsedAttrInfo.cpp \
 	ProfileList.cpp \
-	Sanitizers.cpp \
+	NoSanitizeList.cpp \
 	SanitizerSpecialCaseList.cpp \
+	Sanitizers.cpp \
+	Sarif.cpp \
+	SimpleTypoCorrection.cpp \
 	SourceLocation.cpp \
 	SourceManager.cpp \
+	SourceMgrAdapter.cpp \
 	Stack.cpp \
+	StackExhaustionHandler.cpp \
 	TargetID.cpp \
 	TargetInfo.cpp \
 	Targets.cpp \
 	TokenKinds.cpp \
 	TypeTraits.cpp \
-	VE.cpp \
 	Version.cpp \
 	Warnings.cpp \
 	XRayInstr.cpp \
@@ -52,24 +61,27 @@ SRCS+=	AArch64.cpp \
 	ARM.cpp \
 	AVR.cpp \
 	BPF.cpp \
+	CSKY.cpp \
+	DirectX.cpp \
 	Hexagon.cpp \
 	Lanai.cpp \
-	Le64.cpp \
+	LoongArch.cpp \
 	M68k.cpp \
 	MSP430.cpp \
 	Mips.cpp \
 	NVPTX.cpp \
 	OSTargets.cpp \
-	PNaCl.cpp \
 	PPC.cpp \
 	RISCV.cpp \
 	SPIR.cpp \
 	Sparc.cpp \
 	SystemZ.cpp \
 	TCE.cpp \
+	VE.cpp \
 	WebAssembly.cpp \
 	X86.cpp \
-	XCore.cpp
+	XCore.cpp \
+	Xtensa.cpp
 
 CPPFLAGS+=	-I${CLANG_SRCDIR}/lib/Basic -I.
 

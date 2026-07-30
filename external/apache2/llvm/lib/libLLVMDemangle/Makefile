@@ -10,7 +10,8 @@ SRCS+=	Demangle.cpp \
 	ItaniumDemangle.cpp \
 	MicrosoftDemangle.cpp \
 	MicrosoftDemangleNodes.cpp \
-	RustDemangle.cpp
+	RustDemangle.cpp \
+	DLangDemangle.cpp
 
 .if defined(HOSTLIB)
 .include <bsd.hostlib.mk>

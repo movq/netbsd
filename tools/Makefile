@@ -118,7 +118,7 @@ SUBDIR += .WAIT texinfo \
 		file lint1 slc \
 		makefs sortinfo \
 		.WAIT menuc mkcsmapper mkesdb mklocale mknod msgc \
-		.WAIT disklabel gpt \
+		.WAIT disklabel .WAIT gpt \
 		.WAIT paxctl \
 		.WAIT fdisk \
 		.WAIT installboot \
@@ -132,11 +132,15 @@ SUBDIR+= xz-bin
 .if ${MKLLVM} != "no" || ${MKLLVMRT} != "no"
 SUBDIR+= \
 	llvm .WAIT \
-	llvm-lib/libLLVMDemangle llvm-lib/libLLVMSupport llvm-lib/libLLVMTableGen .WAIT \
+	llvm-lib/libLLVMDemangle llvm-lib/libLLVMSupport llvm-lib/libLLVMTableGen \
+	llvm-lib/libLLVMTableGenBasic .WAIT \
+	llvm-tblgen-min .WAIT \
+	llvm-lib/libLLVMTableGenCommon .WAIT \
 	llvm-tblgen
 .endif
 .if ${MKLLVM} != "no"
 SUBDIR+= \
+	llvm-lib/libclangSupport .WAIT \
 	llvm-clang-tblgen
 .endif
 .if ${MKLLVM} != "no" && !defined(EXTERNAL_TOOLCHAIN)

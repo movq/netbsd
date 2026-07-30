@@ -13,29 +13,31 @@ SRCS+=	A15SDOptimizer.cpp \
 	ARMBaseInstrInfo.cpp \
 	ARMBaseRegisterInfo.cpp \
 	ARMBasicBlockInfo.cpp \
-	ARMBlockPlacement.cpp \
+	ARMBranchTargets.cpp \
 	ARMCallingConv.cpp \
 	ARMCallLowering.cpp \
 	ARMConstantIslandPass.cpp \
 	ARMConstantPoolValue.cpp \
 	ARMExpandPseudoInsts.cpp \
 	ARMFastISel.cpp \
+	ARMFixCortexA57AES1742098Pass.cpp \
 	ARMFrameLowering.cpp \
 	ARMHazardRecognizer.cpp \
-	ARMInstrInfo.cpp \
 	ARMInstructionSelector.cpp \
 	ARMISelDAGToDAG.cpp \
 	ARMISelLowering.cpp \
+	ARMInstrInfo.cpp \
 	ARMLegalizerInfo.cpp \
+	ARMParallelDSP.cpp \
 	ARMLoadStoreOptimizer.cpp \
 	ARMLowOverheadLoops.cpp \
+	ARMBlockPlacement.cpp \
+	ARMMCInstLower.cpp \
 	ARMMachineFunctionInfo.cpp \
 	ARMMacroFusion.cpp \
-	ARMMCInstLower.cpp \
-	ARMOptimizeBarriersPass.cpp \
-	ARMParallelDSP.cpp \
-	ARMRegisterBankInfo.cpp \
 	ARMRegisterInfo.cpp \
+	ARMOptimizeBarriersPass.cpp \
+	ARMRegisterBankInfo.cpp \
 	ARMSelectionDAGInfo.cpp \
 	ARMSLSHardening.cpp \
 	ARMSubtarget.cpp \
@@ -46,14 +48,15 @@ SRCS+=	A15SDOptimizer.cpp \
 	MVEGatherScatterLowering.cpp \
 	MVELaneInterleavingPass.cpp \
 	MVETailPredication.cpp \
-	MVETPAndVPTOptimisationsPass.cpp \
 	MVEVPTBlockPass.cpp \
+	MVETPAndVPTOptimisationsPass.cpp \
+	ARMLatencyMutations.cpp \
 	Thumb1FrameLowering.cpp \
 	Thumb1InstrInfo.cpp \
-	Thumb2InstrInfo.cpp \
+	ThumbRegisterInfo.cpp \
 	Thumb2ITBlockPass.cpp \
-	Thumb2SizeReduction.cpp \
-	ThumbRegisterInfo.cpp
+	Thumb2InstrInfo.cpp \
+	Thumb2SizeReduction.cpp
 
 TABLEGEN_SRC=		ARM.td
 TABLEGEN_INCLUDES=	-I${LLVM_SRCDIR}/lib/Target/ARM
@@ -61,7 +64,6 @@ TABLEGEN_OUTPUT= \
 	ARMGenAsmMatcher.inc|-gen-asm-matcher \
 	ARMGenAsmWriter.inc|-gen-asm-writer \
 	ARMGenCallingConv.inc|-gen-callingconv \
-	ARMGenCodeEmitter.inc|-gen-emitter \
 	ARMGenDAGISel.inc|-gen-dag-isel \
 	ARMGenDisassemblerTables.inc|-gen-disassembler \
 	ARMGenFastISel.inc|-gen-fast-isel \
@@ -71,6 +73,7 @@ TABLEGEN_OUTPUT= \
 	ARMGenMCPseudoLowering.inc|-gen-pseudo-lowering \
 	ARMGenRegisterBank.inc|-gen-register-bank \
 	ARMGenRegisterInfo.inc|-gen-register-info \
+	ARMGenSDNodeInfo.inc|-gen-sd-node-info \
 	ARMGenSubtargetInfo.inc|-gen-subtarget \
 	ARMGenSystemRegister.inc|-gen-searchable-tables
 

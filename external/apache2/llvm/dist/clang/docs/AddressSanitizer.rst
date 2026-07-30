@@ -14,8 +14,10 @@ following types of bugs:
 
 * Out-of-bounds accesses to heap, stack and globals
 * Use-after-free
-* Use-after-return (runtime flag `ASAN_OPTIONS=detect_stack_use_after_return=1`)
-* Use-after-scope (clang flag `-fsanitize-address-use-after-scope`)
+* Use-after-return (clang flag ``-fsanitize-address-use-after-return=(never|runtime|always)`` default: ``runtime``)
+    * Enable with: ``ASAN_OPTIONS=detect_stack_use_after_return=1`` (already enabled on Linux).
+    * Disable with: ``ASAN_OPTIONS=detect_stack_use_after_return=0``.
+* Use-after-scope (clang flag ``-fsanitize-address-use-after-scope``)
 * Double-free, invalid free
 * Memory leaks (experimental)
 
@@ -24,7 +26,13 @@ Typical slowdown introduced by AddressSanitizer is **2x**.
 How to build
 ============
 
-Build LLVM/Clang with `CMake <https://llvm.org/docs/CMake.html>`_.
+Build LLVM/Clang with `CMake <https://llvm.org/docs/CMake.html>`_ and enable
+the ``compiler-rt`` runtime. An example CMake configuration that will allow
+for the use/testing of AddressSanitizer:
+
+.. code-block:: console
+
+   $ cmake -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_PROJECTS="clang" -DLLVM_ENABLE_RUNTIMES="compiler-rt" <path to source>/llvm
 
 Usage
 =====
@@ -136,6 +144,38 @@ you should set environment variable
 
 Note that this option is not supported on macOS.
 
+Stack Use After Return (UAR)
+----------------------------
+
+AddressSanitizer can optionally detect stack use after return problems.
+This is available by default, or explicitly
+(``-fsanitize-address-use-after-return=runtime``).
+To disable this check at runtime, set the environment variable
+``ASAN_OPTIONS=detect_stack_use_after_return=0``.
+
+Enabling this check (``-fsanitize-address-use-after-return=always``) will
+reduce code size.  The code size may be reduced further by completely
+eliminating this check (``-fsanitize-address-use-after-return=never``).
+
+To summarize: ``-fsanitize-address-use-after-return=<mode>``
+  * ``never``: Completely disables detection of UAR errors (reduces code size).
+  * ``runtime``: Adds the code for detection, but it can be disabled via the
+    runtime environment (``ASAN_OPTIONS=detect_stack_use_after_return=0``).
+  * ``always``: Enables detection of UAR errors in all cases. (reduces code
+    size, but not as much as ``never``).
+
+Container Overflow Detection
+----------------------------
+
+AddressSanitizer can detect overflows in containers with custom allocators
+(such as std::vector) where the library developers have added calls into the
+AddressSanitizer runtime to indicate which memory is poisoned etc.
+
+In environments where not all the process binaries can be recompiled with
+AddressSanitizer enabled, these checks can cause false positives.
+
+See `Disabling container overflow checks`_ for details on suppressing checks.
+
 Memory leak detection
 ---------------------
 
@@ -208,6 +248,86 @@ compilers, so we suggest to use it together with
 The same attribute used on a global variable prevents AddressSanitizer
 from adding redzones around it and detecting out of bounds accesses.
 
+
+AddressSanitizer also supports
+``__attribute__((disable_sanitizer_instrumentation))``. This attribute
+works similarly to ``__attribute__((no_sanitize("address")))``, but it also
+prevents instrumentation performed by other sanitizers.
+
+Conditional Sanitizer Checks with ``__builtin_allow_sanitize_check``
+--------------------------------------------------------------------
+
+The ``__builtin_allow_sanitize_check("address")`` builtin can be used to
+conditionally execute code only when AddressSanitizer is active for the current
+function (after inlining). This is particularly useful for inserting explicit,
+sanitizer-specific checks around operations like syscalls or inline assembly,
+which might otherwise be unchecked by the sanitizer.
+
+Example:
+
+.. code-block:: c
+
+    inline __attribute__((always_inline))
+    void copy_to_device(void *addr, size_t size) {
+      if (__builtin_allow_sanitize_check("address")) {
+        // Custom checks that address range is valid.
+      }
+      // ... actual device memory copy logic, potentially a syscall ...
+    }
+
+    void instrumented_function() {
+      ...
+      copy_to_device(buf, sizeof(buf)); // checks are active
+      ...
+    }
+
+    __attribute__((no_sanitize("address")))
+    void uninstrumented_function() {
+      ...
+      copy_to_device(buf, sizeof(buf)); // checks are skipped
+      ...
+    }
+
+Disabling container overflow checks
+-----------------------------------
+
+Runtime suppression
+^^^^^^^^^^^^^^^^^^^
+
+Container overflow checks can be disabled at runtime using the
+``ASAN_OPTIONS=detect_container_overflow=0`` environment variable.
+
+Compile time suppression
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+``-D__SANITIZER_DISABLE_CONTAINER_OVERFLOW__`` can be used at compile time to
+disable container overflow checks if the container library has added support
+for this define.
+
+To support a standard way to disable container overflow checks at compile time,
+library developers should use this definition in conjunction with the
+AddressSanitizer feature test to conditionally include container overflow
+related code compiled into user code:
+
+The recommended form is
+
+.. code-block:: c
+
+    // include the sanitizer common interfaces
+    #include <sanitizer/common_interface_defs.h>
+
+    #if __has_feature(address_sanitizer)
+    // Container overflow detection enabled - include annotations
+    __sanitizer_annotate_contiguous_container(beg, end, old_mid, new_mid);
+    #endif
+
+This pattern ensures that:
+
+* Container overflow annotations are only included when AddressSanitizer is
+  enabled
+* Container overflow detection can be disabled by passing
+  ``-D__SANITIZER_DISABLE_CONTAINER_OVERFLOW__`` to the compiler
+
 Suppressing Errors in Recompiled Code (Ignorelist)
 --------------------------------------------------
 
@@ -255,11 +375,23 @@ library name in the symbolized stack trace of the leak report. See
 <https://github.com/google/sanitizers/wiki/AddressSanitizerLeakSanitizer#suppressions>`_
 for more details.
 
+Code generation control
+=======================
+
+Instrumentation code outlining
+------------------------------
+
+By default AddressSanitizer inlines the instrumentation code to improve the
+run-time performance, which leads to increased binary size. Using the
+(clang flag ``-fsanitize-address-outline-instrumentation`` default: ``false``)
+flag forces all code instrumentation to be outlined, which reduces the size
+of the generated code, but also reduces the run-time performance.
+
 Limitations
 ===========
 
 * AddressSanitizer uses more real memory than a native run. Exact overhead
-  depends on the allocations sizes. The smaller the allocations you make the
+  depends on the allocation sizes. The smaller the allocations you make the
   bigger the overhead is.
 * AddressSanitizer uses more stack memory. We have seen up to 3x increase.
 * On 64-bit platforms AddressSanitizer maps (but not reserves) 16+ Terabytes of
@@ -267,20 +399,26 @@ Limitations
   usually expected.
 * Static linking of executables is not supported.
 
+Security Considerations
+=======================
+
+AddressSanitizer is a bug detection tool and its runtime is not meant to be
+linked against production executables. While it may be useful for testing,
+AddressSanitizer's runtime was not developed with security-sensitive
+constraints in mind and may compromise the security of the resulting executable.
+
 Supported Platforms
 ===================
 
 AddressSanitizer is supported on:
 
-* Linux i386/x86\_64 (tested on Ubuntu 12.04)
-* macOS 10.7 - 10.11 (i386/x86\_64)
+* Linux
+* macOS
 * iOS Simulator
-* Android ARM
-* NetBSD i386/x86\_64
-* FreeBSD i386/x86\_64 (tested on FreeBSD 11-current)
-* Windows 8.1+ (i386/x86\_64)
-
-Ports to various other platforms are in progress.
+* Android
+* NetBSD
+* FreeBSD
+* Windows 8.1+
 
 Current Status
 ==============

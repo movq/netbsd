@@ -57,12 +57,20 @@ CPPFLAGS+= -DFS=${FS}
 COPTS=	${OPT_SIZE.${ACTIVE_CC}}
 DBG=
 
+.if ${ACTIVE_CC} == "clang"
+COPTS+=	-ffunction-sections -fdata-sections
+LDFLAGS+=	-Wl,--gc-sections
+.endif
+
 CPPFLAGS+= -DNO_LBA_CHECK
 
 .if ${MACHINE_ARCH} == "x86_64"
 LDFLAGS+=  -Wl,-m,elf_i386
 AFLAGS+=   -m32
 CPUFLAGS=  -m32
+.if ${ACTIVE_CC} == "clang"
+CPUFLAGS+= -march=i386 -mtune=i386
+.endif
 LIBKERN_ARCH=i386
 KERNMISCMAKEFLAGS="LIBKERN_ARCH=i386"
 .else

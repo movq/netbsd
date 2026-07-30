@@ -5,71 +5,56 @@ NOMAN=		yes
 
 .include <bsd.init.mk>
 
+CPPFLAGS+=	-I${LLVM_SRCDIR}/utils/TableGen
+
 .PATH: ${LLVM_SRCDIR}/utils/TableGen
 
 SRCS=	AsmMatcherEmitter.cpp \
 	AsmWriterEmitter.cpp \
-	AsmWriterInst.cpp \
-	Attributes.cpp \
 	CallingConvEmitter.cpp \
-	CodeBeadsGen.cpp \
 	CodeEmitterGen.cpp \
-	CodeGenDAGPatterns.cpp \
-	CodeGenHwModes.cpp \
-	CodeGenInstruction.cpp \
 	CodeGenMapTable.cpp \
-	CodeGenRegisters.cpp \
-	CodeGenSchedule.cpp \
-	CodeGenTarget.cpp \
+	CompressInstEmitter.cpp \
 	CTagsEmitter.cpp \
 	DAGISelEmitter.cpp \
 	DAGISelMatcher.cpp \
 	DAGISelMatcherEmitter.cpp \
 	DAGISelMatcherGen.cpp \
 	DAGISelMatcherOpt.cpp \
+	DecoderEmitter.cpp \
+	DecoderTableEmitter.cpp \
+	DecoderTree.cpp \
 	DFAEmitter.cpp \
 	DFAPacketizerEmitter.cpp \
-	DirectiveEmitter.cpp \
 	DisassemblerEmitter.cpp \
+	DXILEmitter.cpp \
 	ExegesisEmitter.cpp \
 	FastISelEmitter.cpp \
-	FixedLenDecoderEmitter.cpp \
-	GICombinerEmitter.cpp \
+	GlobalISelCombinerEmitter.cpp \
 	GlobalISelEmitter.cpp \
-	InfoByHwMode.cpp \
 	InstrDocsEmitter.cpp \
 	InstrInfoEmitter.cpp \
-	IntrinsicEmitter.cpp \
-	OptEmitter.cpp \
-	OptParserEmitter.cpp \
-	OptRSTEmitter.cpp \
-	PredicateExpander.cpp \
+	llvm-tblgen.cpp \
+	MacroFusionPredicatorEmitter.cpp \
+	OptionParserEmitter.cpp \
+	OptionRSTEmitter.cpp \
 	PseudoLoweringEmitter.cpp \
 	RegisterBankEmitter.cpp \
 	RegisterInfoEmitter.cpp \
-	RISCVCompressInstEmitter.cpp \
-	SDNodeProperties.cpp \
+	SDNodeInfoEmitter.cpp \
 	SearchableTableEmitter.cpp \
 	SubtargetEmitter.cpp \
-	SubtargetFeatureInfo.cpp \
-	TableGen.cpp \
-	Types.cpp \
 	WebAssemblyDisassemblerEmitter.cpp \
+	X86InstrMappingEmitter.cpp \
 	X86DisassemblerTables.cpp \
-	X86EVEX2VEXTablesEmitter.cpp \
 	X86FoldTablesEmitter.cpp \
+	X86MnemonicTables.cpp \
 	X86ModRMFilters.cpp \
 	X86RecognizableInstr.cpp
 
-.PATH: ${LLVM_SRCDIR}/utils/TableGen/GlobalISel
-SRCS+=	CodeExpander.cpp \
-	GIMatchDag.cpp \
-	GIMatchDagEdge.cpp \
-	GIMatchDagInstr.cpp \
-	GIMatchDagOperands.cpp \
-	GIMatchDagPredicate.cpp \
-	GIMatchDagPredicateDependencyEdge.cpp \
-	GIMatchTree.cpp
+LLVM_LIBS_WHOLE_ARCHIVE+= \
+	TableGenCommon \
+	TableGenBasic
 
 LLVM_LIBS+= \
 	TableGen \

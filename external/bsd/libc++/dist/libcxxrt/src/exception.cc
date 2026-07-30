@@ -120,7 +120,7 @@ static inline _Unwind_Reason_Code continueUnwinding(struct _Unwind_Exception *ex
 }
 
 
-extern "C" void __cxa_free_exception(void *thrown_exception);
+extern "C" void __cxa_free_exception(void *thrown_exception) _LIBCXXRT_NOEXCEPT;
 extern "C" void __cxa_free_dependent_exception(void *thrown_exception);
 extern "C" void* __dynamic_cast(const void *sub,
                                 const __class_type_info *src,
@@ -578,7 +578,7 @@ static void free_exception(char *e)
  * emergency buffer if malloc() fails, and may block if there are no such
  * buffers available.
  */
-extern "C" void *__cxa_allocate_exception(size_t thrown_size)
+extern "C" void *__cxa_allocate_exception(size_t thrown_size) _LIBCXXRT_NOEXCEPT
 {
 	size_t size = thrown_size + sizeof(__cxa_exception);
 	char *buffer = alloc_or_die(size);
@@ -600,7 +600,7 @@ extern "C" void *__cxa_allocate_dependent_exception(void)
  * In this implementation, it is also called by __cxa_end_catch() and during
  * thread cleanup.
  */
-extern "C" void __cxa_free_exception(void *thrown_exception)
+extern "C" void __cxa_free_exception(void *thrown_exception) _LIBCXXRT_NOEXCEPT
 {
 	__cxa_exception *ex = reinterpret_cast<__cxa_exception*>(thrown_exception) - 1;
 	// Free the object that was thrown, calling its destructor
@@ -759,6 +759,22 @@ static void throw_exception(__cxa_exception *ex)
 }
 
 
+extern "C" __cxa_exception *__cxa_init_primary_exception(
+		void *object, std::type_info* tinfo, void (*dest)(void *)) _LIBCXXRT_NOEXCEPT
+{
+	__cxa_exception *ex = reinterpret_cast<__cxa_exception*>(object) - 1;
+
+	ex->referenceCount = 0;
+	ex->exceptionType = tinfo;
+
+	ex->exceptionDestructor = dest;
+
+	ex->unwindHeader.exception_class = exception_class;
+	ex->unwindHeader.exception_cleanup = exception_cleanup;
+
+	return ex;
+}
+
 /**
  * ABI function for throwing an exception.  Takes the object to be thrown (the
  * pointer returned by __cxa_allocate_exception()), the type info for the
@@ -768,15 +784,8 @@ extern "C" void __cxa_throw(void *thrown_exception,
                             std::type_info *tinfo,
                             void(*dest)(void*))
 {
-	__cxa_exception *ex = reinterpret_cast<__cxa_exception*>(thrown_exception) - 1;
-
+	__cxa_exception *ex = __cxa_init_primary_exception(thrown_exception, tinfo, dest);
 	ex->referenceCount = 1;
-	ex->exceptionType = tinfo;
-	
-	ex->exceptionDestructor = dest;
-	
-	ex->unwindHeader.exception_class = exception_class;
-	ex->unwindHeader.exception_cleanup = exception_cleanup;
 
 	throw_exception(ex);
 }

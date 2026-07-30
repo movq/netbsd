@@ -10,13 +10,16 @@ SRCS+=	DetailedRecordsBackend.cpp \
 	Error.cpp \
 	JSONBackend.cpp \
 	Main.cpp \
+	Parser.cpp \
 	Record.cpp \
 	SetTheory.cpp \
 	StringMatcher.cpp \
+	StringToOffsetTable.cpp \
 	TableGenBackend.cpp \
 	TableGenBackendSkeleton.cpp \
 	TGLexer.cpp \
-	TGParser.cpp
+	TGParser.cpp \
+	TGTimer.cpp
 
 .if defined(HOSTLIB)
 .include <bsd.hostlib.mk>

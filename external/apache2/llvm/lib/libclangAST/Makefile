@@ -16,7 +16,9 @@ SRCS+=	APValue.cpp \
 	ASTImporterLookupTable.cpp \
 	ASTStructuralEquivalence.cpp \
 	ASTTypeTraits.cpp \
+	AttrDocTable.cpp \
 	AttrImpl.cpp \
+	Availability.cpp \
 	CommentBriefParser.cpp \
 	CommentCommandTraits.cpp \
 	Comment.cpp \
@@ -28,12 +30,14 @@ SRCS+=	APValue.cpp \
 	CXXInheritance.cpp \
 	DataCollection.cpp \
 	DeclarationName.cpp \
+	DynamicRecursiveASTVisitor.cpp \
 	DeclBase.cpp \
 	Decl.cpp \
 	DeclCXX.cpp \
 	DeclFriend.cpp \
 	DeclGroup.cpp \
 	DeclObjC.cpp \
+	DeclOpenACC.cpp \
 	DeclOpenMP.cpp \
 	DeclPrinter.cpp \
 	DeclTemplate.cpp \
@@ -46,6 +50,7 @@ SRCS+=	APValue.cpp \
 	ExternalASTMerger.cpp \
 	ExternalASTSource.cpp \
 	FormatString.cpp \
+	InferAlloc.cpp \
 	InheritViz.cpp \
 	ItaniumCXXABI.cpp \
 	ItaniumMangle.cpp \
@@ -55,13 +60,16 @@ SRCS+=	APValue.cpp \
 	MicrosoftMangle.cpp \
 	NestedNameSpecifier.cpp \
 	NSAPI.cpp \
+	ODRDiagsEmitter.cpp \
 	ODRHash.cpp \
+	OpenACCClause.cpp \
 	OpenMPClause.cpp \
 	OSLog.cpp \
 	ParentMapContext.cpp \
 	ParentMap.cpp \
 	PrintfFormatString.cpp \
 	QualTypeNames.cpp \
+	Randstruct.cpp \
 	RawCommentList.cpp \
 	RecordLayoutBuilder.cpp \
 	RecordLayout.cpp \
@@ -71,6 +79,7 @@ SRCS+=	APValue.cpp \
 	StmtCXX.cpp \
 	StmtIterator.cpp \
 	StmtObjC.cpp \
+	StmtOpenACC.cpp \
 	StmtOpenMP.cpp \
 	StmtPrinter.cpp \
 	StmtProfile.cpp \
@@ -84,23 +93,30 @@ SRCS+=	APValue.cpp \
 	VTableBuilder.cpp \
 	VTTBuilder.cpp
 
-.PATH: ${CLANG_SRCDIR}/lib/AST/Interp
+.PATH: ${CLANG_SRCDIR}/lib/AST/ByteCode
 
-SRCS+=	ByteCodeEmitter.cpp \
-	ByteCodeExprGen.cpp \
-	ByteCodeGenError.cpp \
-	ByteCodeStmtGen.cpp \
+SRCS+=	BitcastBuffer.cpp \
+	ByteCodeEmitter.cpp \
+	Compiler.cpp \
 	Context.cpp \
 	Descriptor.cpp \
 	Disasm.cpp \
+	DynamicAllocator.cpp \
 	EvalEmitter.cpp \
-	Frame.cpp \
+	EvaluationResult.cpp \
+	Floating.cpp \
 	Function.cpp \
+	FunctionPointer.cpp \
+	InitMap.cpp \
 	Interp.cpp \
 	InterpBlock.cpp \
+	InterpBuiltin.cpp \
+	InterpBuiltinBitCast.cpp \
 	InterpFrame.cpp \
+	InterpShared.cpp \
 	InterpStack.cpp \
 	InterpState.cpp \
+	MemberPointer.cpp \
 	Pointer.cpp \
 	PrimType.cpp \
 	Program.cpp \
@@ -109,8 +125,15 @@ SRCS+=	ByteCodeEmitter.cpp \
 	State.cpp
 
 CLANG_TABLEGEN_SRC=	Opcodes.td
-CLANG_TABLEGEN_OUTPUT= \
+CLANG_TABLEGEN_OUTPUT.Opcodes.td= \
 	Opcodes.inc|-gen-clang-opcodes
+
+.PATH: ${CLANG_SRCDIR}/include/clang/Basic
+
+CLANG_TABLEGEN_SRC+=	Attr.td
+CLANG_TABLEGEN_INCLUDES.Attr.td=	-I${CLANG_SRCDIR}/include
+CLANG_TABLEGEN_OUTPUT.Attr.td= \
+	AttrDocTable.inc|-gen-clang-attr-doc-table
 
 .include "${.PARSEDIR}/../../tablegen.mk"
 

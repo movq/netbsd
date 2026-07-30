@@ -9,8 +9,8 @@ COMMON_REVISION=	249b40b558955afe5ac2b549edcf2d7f859c8cc9
 CLANG_REVISION=		${COMMON_REVISION}
 LLVM_REVISION=		${COMMON_REVISION}
 
-LLVM_VERSION=		13.0.0
-CLANG_VERSION=		13.0.0
+LLVM_VERSION=		22.1.8
+CLANG_VERSION=		22.1.8
 
 CLANG_SRCDIR:=	${.PARSEDIR}/dist/clang
 LLVM_SRCDIR:=	${.PARSEDIR}/dist/llvm
@@ -26,7 +26,7 @@ MODULES_CXXFLAGS=	-fmodules -fcxx-modules -Werror=incomplete-umbrella \
 
 .if defined(HOSTLIB) || defined(HOSTPROG) || defined(_BSD_HOSTINIT_MK_)
 LLVM_INCLUDE_CONFIG=	${LLVM_TOOLCONF_OBJDIR}/config/include
-CLANG_INCLUDE_CONFIG=	${LLVM_TOOLCONF_OBJDIR}/config/tools/clang/include
+CLANG_INCLUDE_CONFIG=	${LLVM_TOPLEVEL}/config
 LLVM_INCLUDE_OBJDIR!=	cd ${NETBSDSRCDIR}/tools/llvm-include && ${PRINTOBJDIR}
 LLVM_TOOLCONF_OBJDIR!=	cd ${NETBSDSRCDIR}/tools/llvm && ${PRINTOBJDIR}
 LLVM_MODULE_CACHE=	${LLVM_TOOLCONF_OBJDIR}/module.cache
@@ -36,7 +36,7 @@ HOST_CXXFLAGS+=	-O2 -fno-rtti -fno-exceptions -fno-strict-aliasing
 .if ${HOST_SUPPORTS_MODULES:Uno} == "yes"
 HOST_CXXFLAGS+=	${MODULES_CXXFLAGS}
 .endif
-HOST_CXXFLAGS+=	-std=c++14
+HOST_CXXFLAGS+=	-std=c++17
 LLVM_TARGETS=	x86,powerpc,sparc,aarch64,arm,mips
 .else
 LLVM_INCLUDE_CONFIG=	${LLVM_TOPLEVEL}/config
@@ -44,9 +44,8 @@ CLANG_INCLUDE_CONFIG=	${LLVM_TOPLEVEL}/config
 LLVM_INCLUDE_OBJDIR!=	cd ${LLVM_TOPLEVEL}/include && ${PRINTOBJDIR}
 LLVM_MODULE_CACHE=	${LLVM_INCLUDE_OBJDIR}/module.cache
 LLVM_TARGETS=	x86,powerpc,sparc,aarch64,arm,mips,amdgpu
-CXXFLAGS+=		${${ACTIVE_CC} == "clang":? ${MODULES_CXXFLAGS} :}
 
-CXXFLAGS+=	-std=c++14
+CXXFLAGS+=	-std=c++17
 .if ${MKDEBUG:Uno} != "no"
 CXXFLAGS+=	-g1
 .endif

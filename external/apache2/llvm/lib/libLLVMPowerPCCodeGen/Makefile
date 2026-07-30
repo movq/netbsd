@@ -8,40 +8,42 @@ CPPFLAGS+=	-I${LLVM_SRCDIR}/lib/Target/PowerPC
 
 .PATH: ${LLVM_SRCDIR}/lib/Target/PowerPC
 
-SRCS+=	PPCAsmPrinter.cpp \
-	PPCBoolRetToInt.cpp \
-	PPCBranchCoalescing.cpp \
+SRCS+=	PPCBoolRetToInt.cpp \
+	PPCAsmPrinter.cpp \
 	PPCBranchSelector.cpp \
+	PPCBranchCoalescing.cpp \
 	PPCCallingConv.cpp \
-	PPCCCState.cpp \
 	PPCCTRLoops.cpp \
-	PPCEarlyReturn.cpp \
-	PPCExpandISEL.cpp \
-	PPCFastISel.cpp \
-	PPCFrameLowering.cpp \
+	PPCCTRLoopsVerify.cpp \
+	PPCExpandAtomicPseudoInsts.cpp \
 	PPCHazardRecognizers.cpp \
 	PPCInstrInfo.cpp \
 	PPCISelDAGToDAG.cpp \
 	PPCISelLowering.cpp \
+	PPCEarlyReturn.cpp \
+	PPCFastISel.cpp \
+	PPCFrameLowering.cpp \
 	PPCLoopInstrFormPrep.cpp \
-	PPCLowerMASSVEntries.cpp \
+	PPCMCInstLower.cpp \
 	PPCMachineFunctionInfo.cpp \
 	PPCMachineScheduler.cpp \
 	PPCMacroFusion.cpp \
-	PPCMCInstLower.cpp \
 	PPCMIPeephole.cpp \
-	PPCPreEmitPeephole.cpp \
-	PPCReduceCRLogicals.cpp \
 	PPCRegisterInfo.cpp \
+	PPCSelectionDAGInfo.cpp \
 	PPCSubtarget.cpp \
 	PPCTargetMachine.cpp \
 	PPCTargetObjectFile.cpp \
 	PPCTargetTransformInfo.cpp \
-	PPCTLSDynamicCall.cpp \
 	PPCTOCRegDeps.cpp \
-	PPCVSXCopy.cpp \
+	PPCTLSDynamicCall.cpp \
+	PPCVSXWACCCopy.cpp \
+	PPCReduceCRLogicals.cpp \
 	PPCVSXFMAMutate.cpp \
-	PPCVSXSwapRemoval.cpp
+	PPCVSXSwapRemoval.cpp \
+	PPCPreEmitPeephole.cpp \
+	PPCLowerMASSVEntries.cpp \
+	PPCGenScalarMASSEntries.cpp
 
 .PATH: ${LLVM_SRCDIR}/lib/Target/PowerPC/GISel
 
@@ -65,6 +67,7 @@ TABLEGEN_OUTPUT= \
 	PPCGenMCCodeEmitter.inc|-gen-emitter \
 	PPCGenRegisterBank.inc|-gen-register-bank \
 	PPCGenRegisterInfo.inc|-gen-register-info \
+	PPCGenSDNodeInfo.inc|-gen-sd-node-info \
 	PPCGenSubtargetInfo.inc|-gen-subtarget
 
 .include "${.PARSEDIR}/../../tablegen.mk"

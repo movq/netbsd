@@ -7,6 +7,8 @@ LIB=	LLVMDebugInfoSymbolize
 .PATH: ${LLVM_SRCDIR}/lib/DebugInfo/Symbolize
 
 SRCS+=	DIPrinter.cpp \
+	Markup.cpp \
+	MarkupFilter.cpp \
 	Symbolize.cpp \
 	SymbolizableObjectFile.cpp
 

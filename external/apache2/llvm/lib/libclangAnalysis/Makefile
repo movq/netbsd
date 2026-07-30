@@ -20,6 +20,8 @@ SRCS+=	AnalysisDeclContext.cpp \
 	Consumed.cpp \
 	Dominators.cpp \
 	ExprMutationAnalyzer.cpp \
+	FixitUtil.cpp \
+	IntervalPartition.cpp \
 	IssueHash.cpp \
 	LiveVariables.cpp \
 	MacroExpansionContext.cpp \
@@ -33,7 +35,8 @@ SRCS+=	AnalysisDeclContext.cpp \
 	ThreadSafety.cpp \
 	ThreadSafetyLogical.cpp \
 	ThreadSafetyTIL.cpp \
-	UninitializedValues.cpp
+	UninitializedValues.cpp \
+	UnsafeBufferUsage.cpp
 
 .if defined(HOSTLIB)
 .include <bsd.hostlib.mk>

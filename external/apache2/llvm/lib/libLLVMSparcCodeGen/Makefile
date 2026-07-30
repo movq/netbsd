@@ -13,9 +13,9 @@ SRCS+=	DelaySlotFiller.cpp \
 	SparcISelDAGToDAG.cpp \
 	SparcISelLowering.cpp \
 	SparcFrameLowering.cpp \
-	SparcMCInstLower.cpp \
 	SparcMachineFunctionInfo.cpp \
 	SparcRegisterInfo.cpp \
+	SparcSelectionDAGInfo.cpp \
 	SparcSubtarget.cpp \
 	SparcTargetMachine.cpp \
 	SparcTargetObjectFile.cpp
@@ -32,6 +32,8 @@ TABLEGEN_OUTPUT= \
 	SparcGenInstrInfo.inc|-gen-instr-info \
 	SparcGenMCCodeEmitter.inc|-gen-emitter \
 	SparcGenRegisterInfo.inc|-gen-register-info \
+	SparcGenSDNodeInfo.inc|-gen-sd-node-info^-sdnode-namespace=SPISD \
+	SparcGenSearchableTables.inc|-gen-searchable-tables \
 	SparcGenSubtargetInfo.inc|-gen-subtarget
 
 .include "${.PARSEDIR}/../../tablegen.mk"

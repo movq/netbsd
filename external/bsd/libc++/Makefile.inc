@@ -4,3 +4,4 @@
 
 LIBCXXRT_SRCDIR:=	${.PARSEDIR}/dist/libcxxrt
 LIBCXX_SRCDIR:=		${NETBSDSRCDIR}/external/apache2/llvm/dist/libcxx
+LLVM_LIBC_SRCDIR:=	${NETBSDSRCDIR}/external/apache2/llvm/dist/libc

@@ -9,19 +9,19 @@ CPPFLAGS+=	-I${MIPS_OBJDIR} -I${LLVM_SRCDIR}/lib/Target/Mips
 
 .PATH: ${LLVM_SRCDIR}/lib/Target/Mips/MCTargetDesc
 
-SRCS+=	MipsABIFlagsSection.cpp \
-	MipsABIInfo.cpp \
+SRCS+=	MipsABIInfo.cpp \
+	MipsABIFlagsSection.cpp \
 	MipsAsmBackend.cpp \
 	MipsELFObjectWriter.cpp \
 	MipsELFStreamer.cpp \
 	MipsInstPrinter.cpp \
 	MipsMCAsmInfo.cpp \
 	MipsMCCodeEmitter.cpp \
-	MipsMCExpr.cpp \
 	MipsMCTargetDesc.cpp \
-	MipsNaClELFStreamer.cpp \
 	MipsOptionRecord.cpp \
-	MipsTargetStreamer.cpp
+	MipsTargetStreamer.cpp \
+	MipsWinCOFFObjectWriter.cpp \
+	MipsWinCOFFStreamer.cpp
 
 .if defined(HOSTLIB)
 .include <bsd.hostlib.mk>

@@ -3,17 +3,21 @@ set(LLVM_LINK_COMPONENTS
   ExecutionEngine
   IRReader
   JITLink
+  OrcDebugging
   OrcJIT
   OrcShared
   OrcTargetProcess
   Support
+  TargetParser
   nativecodegen
   )
 
-add_llvm_example(LLJITWithRemoteDebugging
-  LLJITWithRemoteDebugging.cpp
-  RemoteJITUtils.cpp
+if (LLVM_INCLUDE_UTILS AND LLVM_ENABLE_THREADS)
+  add_llvm_example(LLJITWithRemoteDebugging
+    LLJITWithRemoteDebugging.cpp
+    RemoteJITUtils.cpp
 
-  DEPENDS
-    llvm-jitlink-executor
+    DEPENDS
+      llvm-jitlink-executor
   )
+endif()

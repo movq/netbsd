@@ -16,7 +16,9 @@ SRCS+=	ADCE.cpp \
 	CorrelatedValuePropagation.cpp \
 	DCE.cpp \
 	DeadStoreElimination.cpp \
+	DFAJumpThreading.cpp \
 	DivRemPairs.cpp \
+	DropUnnecessaryAssumes.cpp \
 	EarlyCSE.cpp \
 	FlattenCFGPass.cpp \
 	Float2Int.cpp \
@@ -24,35 +26,37 @@ SRCS+=	ADCE.cpp \
 	GVN.cpp \
 	GVNHoist.cpp \
 	GVNSink.cpp \
+	IVUsersPrinter.cpp \
 	InductiveRangeCheckElimination.cpp \
 	IndVarSimplify.cpp \
 	InferAddressSpaces.cpp \
+	InferAlignment.cpp \
 	InstSimplifyPass.cpp \
-	IVUsersPrinter.cpp \
 	JumpThreading.cpp \
+	JumpTableToSwitch.cpp \
 	LICM.cpp \
 	LoopAccessAnalysisPrinter.cpp \
-	LoopDataPrefetch.cpp \
+	LoopBoundSplit.cpp \
+	LoopSink.cpp \
 	LoopDeletion.cpp \
+	LoopDataPrefetch.cpp \
 	LoopDistribute.cpp \
-	LoopFlatten.cpp \
 	LoopFuse.cpp \
 	LoopIdiomRecognize.cpp \
 	LoopInstSimplify.cpp \
 	LoopInterchange.cpp \
+	LoopFlatten.cpp \
 	LoopLoadElimination.cpp \
 	LoopPassManager.cpp \
 	LoopPredication.cpp \
-	LoopRerollPass.cpp \
 	LoopRotation.cpp \
 	LoopSimplifyCFG.cpp \
-	LoopSink.cpp \
 	LoopStrengthReduce.cpp \
-	LoopUnrollAndJamPass.cpp \
+	LoopTermFold.cpp \
 	LoopUnrollPass.cpp \
-	LoopUnswitch.cpp \
+	LoopUnrollAndJamPass.cpp \
 	LoopVersioningLICM.cpp \
-	LowerAtomic.cpp \
+	LowerAtomicPass.cpp \
 	LowerConstantIntrinsics.cpp \
 	LowerExpectIntrinsic.cpp \
 	LowerGuardIntrinsic.cpp \
@@ -60,8 +64,8 @@ SRCS+=	ADCE.cpp \
 	LowerWidenableCondition.cpp \
 	MakeGuardsExplicit.cpp \
 	MemCpyOptimizer.cpp \
-	MergedLoadStoreMotion.cpp \
 	MergeICmps.cpp \
+	MergedLoadStoreMotion.cpp \
 	NaryReassociate.cpp \
 	NewGVN.cpp \
 	PartiallyInlineLibCalls.cpp \
@@ -69,17 +73,16 @@ SRCS+=	ADCE.cpp \
 	Reassociate.cpp \
 	Reg2Mem.cpp \
 	RewriteStatepointsForGC.cpp \
-	Scalar.cpp \
-	ScalarizeMaskedMemIntrin.cpp \
-	Scalarizer.cpp \
 	SCCP.cpp \
+	SROA.cpp \
+	Scalar.cpp \
+	Scalarizer.cpp \
+	ScalarizeMaskedMemIntrin.cpp \
 	SeparateConstOffsetFromGEP.cpp \
 	SimpleLoopUnswitch.cpp \
 	SimplifyCFGPass.cpp \
 	Sink.cpp \
-	SpeculateAroundPHIs.cpp \
 	SpeculativeExecution.cpp \
-	SROA.cpp \
 	StraightLineStrengthReduce.cpp \
 	StructurizeCFG.cpp \
 	TailRecursionElimination.cpp \

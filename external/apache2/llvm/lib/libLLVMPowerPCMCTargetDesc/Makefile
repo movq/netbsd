@@ -10,15 +10,14 @@ CPPFLAGS+=	-I${PPC_OBJDIR} -I${LLVM_SRCDIR}/lib/Target/PowerPC
 .PATH: ${LLVM_SRCDIR}/lib/Target/PowerPC/MCTargetDesc
 
 SRCS+=	PPCAsmBackend.cpp \
-	PPCELFObjectWriter.cpp \
-	PPCELFStreamer.cpp \
 	PPCInstPrinter.cpp \
+	PPCMCTargetDesc.cpp \
 	PPCMCAsmInfo.cpp \
 	PPCMCCodeEmitter.cpp \
-	PPCMCExpr.cpp \
-	PPCMCTargetDesc.cpp \
 	PPCPredicates.cpp \
+	PPCELFObjectWriter.cpp \
 	PPCXCOFFObjectWriter.cpp \
+	PPCELFStreamer.cpp \
 	PPCXCOFFStreamer.cpp
 
 .if defined(HOSTLIB)
