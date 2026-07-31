@@ -9,6 +9,8 @@
 #       continue to have debug data.  Exceptions: shared objects that
 #       are only used through dlopen() at runtime.
 #
+./usr/libdata/debug/usr/lib/libLLVM.so.22.1.debug		comp-c-debug		llvmlib,debug
+./usr/libdata/debug/usr/lib/libclang-cpp.so.22.1.debug	comp-c-debug		llvm,debug
 ./usr/libdata/debug/lib						base-sys-usr	debug,dynamicroot,compatdir
 ./usr/libdata/debug/lib/libavl.so.0.0.debug			comp-zfs-debug	debug,dynamicroot,zfs
 ./usr/libdata/debug/lib/libblocklist.so.0.1.debug		comp-sys-debug	debug,dynamicroot

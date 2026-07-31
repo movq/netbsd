@@ -4,7 +4,6 @@
 
 SUBDIR=	clang \
 	clang-tblgen \
-	tblgen-min \
 	tblgen \
 	llvm-symbolizer
 

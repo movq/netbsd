@@ -76,7 +76,9 @@
 #define PPC_LINUX_DEFAULT_IEEELONGDOUBLE 0
 
 #define CLANG_ENABLE_OBJC_REWRITER 1
+#ifndef CLANG_ENABLE_STATIC_ANALYZER
 #define CLANG_ENABLE_STATIC_ANALYZER 1
+#endif
 
 /* Spawn a new process clang.exe for the CC1 tool invocation, when necessary */
 #define CLANG_SPAWN_CC1 1

@@ -259,7 +259,6 @@ CLANG_TABLEGEN_SRC=	\
 	BuiltinsX86.td \
 	BuiltinsX86_64.td \
 	BuiltinTemplates.td \
-	Checkers.td \
 	CommentCommands.td \
 	CommentHTMLNamedCharacterReferences.td \
 	CommentHTMLTags.td \
@@ -275,6 +274,10 @@ CLANG_TABLEGEN_SRC=	\
 	StmtNodes.td \
 	TypeNodes.td \
 	TypeProperties.td
+
+.if ${CLANG_ENABLE_STATIC_ANALYZER} == 1
+CLANG_TABLEGEN_SRC+=	Checkers.td
+.endif
 
 CLANG_TABLEGEN_INCLUDES.Attr.td=	-I${CLANG_SRCDIR}/include
 CLANG_TABLEGEN_OUTPUT.Attr.td= \

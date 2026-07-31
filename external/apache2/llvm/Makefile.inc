@@ -19,6 +19,14 @@ CONFIG_DIR:=	${.PARSEDIR}/autoconf
 
 CPPFLAGS+=	-I. -I${CLANG_SRCDIR}/include -I${LLVM_SRCDIR}/include
 
+.if defined(HOSTLIB) || defined(HOSTPROG) || defined(HOST_BUILD) || \
+    defined(_BSD_HOSTINIT_MK_) || ${MKCLANGSTATICANALYZER:Uno} == "no"
+CLANG_ENABLE_STATIC_ANALYZER=	0
+.else
+CLANG_ENABLE_STATIC_ANALYZER=	1
+.endif
+CPPFLAGS+=	-DCLANG_ENABLE_STATIC_ANALYZER=${CLANG_ENABLE_STATIC_ANALYZER}
+
 MODULES_CXXFLAGS=	-fmodules -fcxx-modules -Werror=incomplete-umbrella \
 			-fmodules-validate-system-headers \
 			-Xclang -fmodules-local-submodule-visibility \

@@ -52,12 +52,23 @@ SRCS=	AsmMatcherEmitter.cpp \
 	X86ModRMFilters.cpp \
 	X86RecognizableInstr.cpp
 
+.if defined(HOSTPROG)
 LLVM_LIBS_WHOLE_ARCHIVE+= \
 	TableGenCommon \
 	TableGenBasic
 
 LLVM_LIBS+= \
-	TableGen \
+	TableGen
+.else
+LLVM_LIBS_STATIC_WHOLE_ARCHIVE+= \
+	TableGenCommon \
+	TableGenBasic
+
+LLVM_LIBS_STATIC+= \
+	TableGen
+.endif
+
+LLVM_LIBS+= \
 	Support \
 	Demangle
 

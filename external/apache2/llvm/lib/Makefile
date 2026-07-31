@@ -51,9 +51,6 @@ SUBDIR=	\
 	libLLVMScalarOpts \
 	libLLVMSelectionDAG \
 	libLLVMSupport \
-	libLLVMTableGenBasic \
-	libLLVMTableGenCommon \
-	libLLVMTableGen \
 	libLLVMTarget \
 	libLLVMTargetParser \
 	libLLVMTextAPI \
@@ -70,6 +67,13 @@ SUBDIR=	\
 	libLLVMPowerPCCodeGen \
 	libLLVMSparcCodeGen \
 	libLLVMX86CodeGen
+
+.if ${MKLLVM} != "no"
+SUBDIR+= \
+	libLLVMTableGenBasic \
+	libLLVMTableGenCommon \
+	libLLVMTableGen
+.endif
 
 .if !defined(HOSTLIB) && !defined(_BSD_HOSTINIT_MK_)
 SUBDIR+= \
@@ -127,22 +131,27 @@ SUBDIR+= \
 	libLLVMX86MCTargetDesc \
 	libLLVMX86TargetInfo
 
-.if ${NO_LLVM_DEVELOPER:Uno} == "no" && ${LLVM_DEVELOPER:U} == "yes"
+.if !defined(HOSTLIB) && !defined(_BSD_HOSTINIT_MK_)
 SUBDIR+= \
 	libLLVMAMDGPUDisassembler \
 	libLLVMExecutionEngine \
 	libLLVMExecutionEngineJITLink \
 	libLLVMExecutionEngineOrcShared \
 	libLLVMExecutionEngineOrcTargetProcess \
-	libLLVMFileCheck \
-	libLLVMInterfaceStub \
 	libLLVMMCJIT \
 	libLLVMOrc \
 	libLLVMRuntimeDyld
 .endif
 
+.if ${NO_LLVM_DEVELOPER:Uno} == "no" && ${LLVM_DEVELOPER:U} == "yes"
+SUBDIR+= \
+	libLLVMFileCheck \
+	libLLVMInterfaceStub
+.endif
+
 .if !defined(HOSTLIB) && !defined(_BSD_HOSTINIT_MK_)
 SUBDIR+= \
+	libLLVMDebugInfoBTF \
 	libLLVMDebugInfoPDB \
 	libLLVMDebugInfoSymbolize
 .endif
@@ -160,6 +169,7 @@ SUBDIR+= \
 	libLLVMXRay
 .endif
 
+.if ${MKLLVM} != "no"
 SUBDIR+= \
 	libclangAPINotes \
 	libclangAnalysis \
@@ -184,13 +194,18 @@ SUBDIR+= \
 	libclangRewrite \
 	libclangSema \
 	libclangSerialization \
-	libclangStaticAnalyzerCheckers \
-	libclangStaticAnalyzerCore \
 	libclangSupport \
 	libclangToolingInclusions \
-	libclangToolingCore \
+	libclangToolingCore
+
+.if !defined(HOSTLIB) && !defined(_BSD_HOSTINIT_MK_) && \
+    ${MKCLANGSTATICANALYZER} != "no"
+SUBDIR+= \
+	libclangStaticAnalyzerCheckers \
+	libclangStaticAnalyzerCore \
 	.WAIT \
 	libclangStaticAnalyzerFrontend
+.endif
 
 .if ${NO_LLVM_DEVELOPER:Uno} == "no" && ${LLVM_DEVELOPER:U} == "yes"
 SUBDIR+= \
@@ -202,6 +217,18 @@ SUBDIR+= \
 	libclangToolingDependencyScanning \
 	libclangToolingRefactoring \
 	libclangToolingSyntax
+.endif
+.endif
+
+.if !defined(HOSTLIB) && !defined(_BSD_HOSTINIT_MK_)
+SUBDIR+= \
+	.WAIT \
+	libLLVM
+.if ${MKLLVM} != "no"
+SUBDIR+= \
+	.WAIT \
+	libclang-cpp
+.endif
 .endif
 
 .include <bsd.subdir.mk>

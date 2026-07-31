@@ -4,14 +4,13 @@
 
 SUBDIR=	include \
 
-.if ${MKLLVMRT} != "no"
+.if ${MKLLVM} != "no" || ${MKLLVMRT} != "no"
 SUBDIR+= \
-	librt
+	lib
 .endif
 
 .if ${MKLLVM} != "no"
 SUBDIR+= \
-	lib \
 	.WAIT \
 	bin
 .endif

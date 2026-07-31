@@ -1,0 +1,16 @@
+# $NetBSD$
+
+LIB=	LLVMDebugInfoBTF
+
+.include <bsd.init.mk>
+
+.PATH: ${LLVM_SRCDIR}/lib/DebugInfo/BTF
+
+SRCS+=	BTFContext.cpp \
+	BTFParser.cpp
+
+.if defined(HOSTLIB)
+.include <bsd.hostlib.mk>
+.else
+.include <bsd.lib.mk>
+.endif

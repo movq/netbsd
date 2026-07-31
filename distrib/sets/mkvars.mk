@@ -31,6 +31,7 @@ MKEXTRAVARS= \
 	MKCOMPAT \
 	MKCOMPATMODULES \
 	MKGDBSERVER \
+	MKLLVMLIB \
 	MKMANPAGES \
 	MKPIE \
 	MKSTATICPIE \
@@ -48,6 +49,12 @@ MKEXTRAVARS= \
 
 .include <bsd.own.mk>
 .include <bsd.endian.mk>
+
+.if ${MKLLVM} != "no" || ${MKLLVMRT} != "no"
+MKLLVMLIB=yes
+.else
+MKLLVMLIB=no
+.endif
 
 .if (${MKMAN} == "no" || empty(MANINSTALL:Mmaninstall))
 MKMANPAGES=no

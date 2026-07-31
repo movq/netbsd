@@ -209,7 +209,7 @@ SUBDIR+= ../external/gpl3/${EXTERNAL_GCC_SUBDIR}/lib/lib${sanitizer}
 .endif
 
 .if (${MKLLVMRT} != "no" && (!defined(MLIBDIR) || ${MKCOMPATX11} != "no"))
-SUBDIR+=	../external/apache2/llvm/librt
+SUBDIR+=	../external/apache2/llvm/lib
 .endif
 
 SUBDIR+=	../external/bsd/libarchive/lib	# depends on libxz, zstd
