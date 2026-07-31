@@ -16,7 +16,9 @@ dependall: clean-modulecache
 clean-modulecache:
 	rm -rf ${LLVM_MODULE_CACHE}
 
-config/config.status: ${LLVM_SRCDIR}/configure
+config/config.status: ${LLVM_SRCDIR}/configure \
+	${CONFIG_DIR}/include/clang/Config/config.h.in \
+	${CONFIG_DIR}/include/llvm/Config/config.h.in
 	mkdir -p config
 	printf '#!/bin/sh\necho 2.7.3' > config/python
 	chmod 755 config/python

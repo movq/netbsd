@@ -42,7 +42,9 @@
 #undef CLANG_ENABLE_OBJC_REWRITER
 
 /* Build Static analyzer */
+#ifndef CLANG_ENABLE_STATIC_ANALYZER
 #undef CLANG_ENABLE_STATIC_ANALYZER
+#endif
 
 /* Multilib suffix for libdir. */
 #undef CLANG_LIBDIR_SUFFIX

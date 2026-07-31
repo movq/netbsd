@@ -34,8 +34,15 @@ SRCS=	ASTTableGen.cpp \
 CLANG_LIBS+= \
 	clangSupport
 
+.if defined(HOSTPROG)
 LLVM_LIBS+= \
-	TableGen \
+	TableGen
+.else
+LLVM_LIBS_STATIC+= \
+	TableGen
+.endif
+
+LLVM_LIBS+= \
 	Support \
 	Demangle
 

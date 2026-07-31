@@ -2,6 +2,12 @@
 #
 # Note: don't delete entries from here - mark them as "obsolete" instead.
 #
+./usr/lib/libLLVM.so				comp-c-shlib		llvmlib
+./usr/lib/libLLVM.so.22				comp-c-shlib		llvmlib
+./usr/lib/libLLVM.so.22.1			comp-c-shlib		llvmlib
+./usr/lib/libclang-cpp.so			comp-c-shlib		llvm
+./usr/lib/libclang-cpp.so.22			comp-c-shlib		llvm
+./usr/lib/libclang-cpp.so.22.1			comp-c-shlib		llvm
 ./usr/lib/crtbeginS.o				comp-c-lib		compatfile
 ./usr/lib/crtbeginT.o				comp-c-lib		compatfile
 ./usr/lib/crtendS.o				comp-c-lib		compatfile

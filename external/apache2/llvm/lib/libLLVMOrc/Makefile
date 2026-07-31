@@ -6,33 +6,62 @@ LIB=	LLVMOrc
 
 .PATH: ${LLVM_SRCDIR}/lib/ExecutionEngine/Orc
 
-SRCS+=	CompileOnDemandLayer.cpp \
+SRCS+=	AbsoluteSymbols.cpp \
+	BacktraceTools.cpp \
+	COFF.cpp \
+	COFFVCRuntimeSupport.cpp \
+	COFFPlatform.cpp \
+	CompileOnDemandLayer.cpp \
 	CompileUtils.cpp \
 	Core.cpp \
-	DebugObjectManagerPlugin.cpp \
 	DebugUtils.cpp \
+	EHFrameRegistrationPlugin.cpp \
+	EPCDynamicLibrarySearchGenerator.cpp \
+	EPCGenericDylibManager.cpp \
+	EPCGenericJITLinkMemoryManager.cpp \
+	EPCGenericRTDyldMemoryManager.cpp \
+	EPCIndirectionUtils.cpp \
 	ExecutionUtils.cpp \
+	ExecutorResolutionGenerator.cpp \
+	ObjectFileInterface.cpp \
 	IndirectionUtils.cpp \
+	InProcessMemoryAccess.cpp \
 	IRCompileLayer.cpp \
 	IRTransformLayer.cpp \
+	IRPartitionLayer.cpp \
 	JITTargetMachineBuilder.cpp \
-	Layer.cpp \
+	JITLinkReentryTrampolines.cpp \
+	LazyObjectLinkingLayer.cpp \
 	LazyReexports.cpp \
+	Layer.cpp \
+	LinkGraphLayer.cpp \
+	LinkGraphLinkingLayer.cpp \
+	LoadLinkableFile.cpp \
+	LookupAndRecordAddrs.cpp \
 	LLJIT.cpp \
+	MachO.cpp \
 	MachOPlatform.cpp \
+	MapperJITLinkMemoryManager.cpp \
+	MemoryMapper.cpp \
+	ELFNixPlatform.cpp \
 	Mangling.cpp \
 	ObjectLinkingLayer.cpp \
 	ObjectTransformLayer.cpp \
 	OrcABISupport.cpp \
 	OrcV2CBindings.cpp \
 	RTDyldObjectLinkingLayer.cpp \
-	SpeculateAnalyses.cpp \
+	SectCreate.cpp \
+	SelfExecutorProcessControl.cpp \
+	SimpleRemoteEPC.cpp \
+	SimpleRemoteMemoryMapper.cpp \
 	Speculation.cpp \
-	TargetProcessControl.cpp \
+	SpeculateAnalyses.cpp \
+	ExecutorProcessControl.cpp \
+	TaskDispatch.cpp \
 	ThreadSafeModule.cpp \
-	TPCDebugObjectRegistrar.cpp \
-	TPCDynamicLibrarySearchGenerator.cpp \
-	TPCEHFrameRegistrar.cpp \
-	TPCIndirectionUtils.cpp
+	UnwindInfoRegistrationPlugin.cpp \
+	RedirectionManager.cpp \
+	JITLinkRedirectableSymbolManager.cpp \
+	ReOptimizeLayer.cpp
 
 .include <bsd.lib.mk>

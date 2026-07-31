@@ -15,9 +15,6 @@ CLANG_LIBS+= \
 	clangInterpreter \
 	clangFrontendTool \
 	clangFrontend \
-	clangStaticAnalyzerFrontend \
-	clangStaticAnalyzerCheckers \
-	clangStaticAnalyzerCore \
 	clangToolingCore \
 	clangCrossTU \
 	clangIndex \
@@ -35,6 +32,13 @@ CLANG_LIBS+= \
 	clangAST \
 	clangLex \
 	clangBasic
+
+.if !defined(HOSTPROG) && ${MKCLANGSTATICANALYZER} != "no"
+CLANG_LIBS+= \
+	clangStaticAnalyzerFrontend \
+	clangStaticAnalyzerCheckers \
+	clangStaticAnalyzerCore
+.endif
 
 LLVM_LIBS+= \
 	FrontendOpenMP \

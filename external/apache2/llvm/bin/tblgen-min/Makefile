@@ -9,11 +9,21 @@ NOMAN=		yes
 
 SRCS=	llvm-min-tblgen.cpp
 
+.if defined(HOSTPROG)
 LLVM_LIBS_WHOLE_ARCHIVE+= \
 	TableGenBasic
 
 LLVM_LIBS+= \
-	TableGen \
+	TableGen
+.else
+LLVM_LIBS_STATIC_WHOLE_ARCHIVE+= \
+	TableGenBasic
+
+LLVM_LIBS_STATIC+= \
+	TableGen
+.endif
+
+LLVM_LIBS+= \
 	Support \
 	Demangle
 

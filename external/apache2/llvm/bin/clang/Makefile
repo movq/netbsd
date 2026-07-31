@@ -23,9 +23,6 @@ CLANG_LIBS+= \
 	clangExtractAPI \
 	clangInstallAPI \
 	clangFrontend \
-	clangStaticAnalyzerFrontend \
-	clangStaticAnalyzerCheckers \
-	clangStaticAnalyzerCore \
 	clangCrossTU \
 	clangIndex \
 	clangCodeGen \
@@ -49,6 +46,13 @@ CLANG_LIBS+= \
 	clangLex \
 	clangSupport \
 	clangBasic
+
+.if !defined(HOSTPROG) && ${MKCLANGSTATICANALYZER} != "no"
+CLANG_LIBS+= \
+	clangStaticAnalyzerFrontend \
+	clangStaticAnalyzerCheckers \
+	clangStaticAnalyzerCore
+.endif
 
 LLVM_LIBS+= \
 	FrontendDriver \
