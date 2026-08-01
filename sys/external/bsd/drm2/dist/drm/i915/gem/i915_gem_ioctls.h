@@ -1,8 +1,7 @@
 /*	$NetBSD: i915_gem_ioctls.h,v 1.2 2021/12/18 23:45:30 riastradh Exp $	*/
 
+/* SPDX-License-Identifier: MIT */
 /*
- * SPDX-License-Identifier: MIT
- *
  * Copyright © 2019 Intel Corporation
  */
 
@@ -16,7 +15,7 @@ int i915_gem_busy_ioctl(struct drm_device *dev, void *data,
 			struct drm_file *file);
 int i915_gem_create_ioctl(struct drm_device *dev, void *data,
 			  struct drm_file *file);
-int i915_gem_execbuffer_ioctl(struct drm_device *dev, void *data,
+int i915_gem_create_ext_ioctl(struct drm_device *dev, void *data,
 			      struct drm_file *file);
 int i915_gem_execbuffer2_ioctl(struct drm_device *dev, void *data,
 			       struct drm_file *file);

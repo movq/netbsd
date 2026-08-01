@@ -348,15 +348,15 @@ nvkm_therm_intr(struct nvkm_subdev *subdev)
 }
 
 static int
-nvkm_therm_fini(struct nvkm_subdev *subdev, bool suspend)
+nvkm_therm_fini(struct nvkm_subdev *subdev, enum nvkm_suspend_state suspend)
 {
 	struct nvkm_therm *therm = nvkm_therm(subdev);
 
 	if (therm->func->fini)
 		therm->func->fini(therm);
 
-	nvkm_therm_fan_fini(therm, suspend);
-	nvkm_therm_sensor_fini(therm, suspend);
+	nvkm_therm_fan_fini(therm, suspend != NVKM_POWEROFF);
+	nvkm_therm_sensor_fini(therm, suspend != NVKM_POWEROFF);
 
 	if (suspend) {
 		therm->suspend = therm->mode;
@@ -431,10 +431,10 @@ nvkm_therm = {
 };
 
 void
-nvkm_therm_ctor(struct nvkm_therm *therm, struct nvkm_device *device,
-		int index, const struct nvkm_therm_func *func)
+nvkm_therm_ctor(struct nvkm_therm *therm, struct nvkm_device *device, enum nvkm_subdev_type type,
+		int inst, const struct nvkm_therm_func *func)
 {
-	nvkm_subdev_ctor(&nvkm_therm, device, index, &therm->subdev);
+	nvkm_subdev_ctor(&nvkm_therm, device, type, inst, &therm->subdev);
 	therm->func = func;
 
 	nvkm_alarm_init(&therm->alarm, nvkm_therm_alarm);
@@ -453,13 +453,13 @@ nvkm_therm_ctor(struct nvkm_therm *therm, struct nvkm_device *device,
 
 int
 nvkm_therm_new_(const struct nvkm_therm_func *func, struct nvkm_device *device,
-		int index, struct nvkm_therm **ptherm)
+		enum nvkm_subdev_type type, int inst, struct nvkm_therm **ptherm)
 {
 	struct nvkm_therm *therm;
 
 	if (!(therm = *ptherm = kzalloc(sizeof(*therm), GFP_KERNEL)))
 		return -ENOMEM;
 
-	nvkm_therm_ctor(therm, device, index, func);
+	nvkm_therm_ctor(therm, device, type, inst, func);
 	return 0;
 }

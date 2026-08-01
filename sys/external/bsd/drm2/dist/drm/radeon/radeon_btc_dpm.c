@@ -34,7 +34,9 @@ __KERNEL_RCSID(0, "$NetBSD: radeon_btc_dpm.c,v 1.3 2022/07/15 06:42:08 mrg Exp $
 #include "btc_dpm.h"
 #include "btcd.h"
 #include "cypress_dpm.h"
+#include "evergreen.h"
 #include "r600_dpm.h"
+#include "rv770.h"
 #include "radeon.h"
 #include "radeon_asic.h"
 
@@ -53,15 +55,10 @@ __KERNEL_RCSID(0, "$NetBSD: radeon_btc_dpm.c,v 1.3 2022/07/15 06:42:08 mrg Exp $
 #ifndef BTC_MGCG_SEQUENCE
 #define BTC_MGCG_SEQUENCE  300
 
-struct rv7xx_ps *rv770_get_ps(struct radeon_ps *rps);
-struct rv7xx_power_info *rv770_get_pi(struct radeon_device *rdev);
-struct evergreen_power_info *evergreen_get_pi(struct radeon_device *rdev);
-
 extern int ni_mc_load_microcode(struct radeon_device *rdev);
 
 //********* BARTS **************//
-static const u32 barts_cgcg_cgls_default[] =
-{
+static const u32 barts_cgcg_cgls_default[] = {
 	/* Register,   Value,     Mask bits */
 	0x000008f8, 0x00000010, 0xffffffff,
 	0x000008fc, 0x00000000, 0xffffffff,
@@ -114,8 +111,7 @@ static const u32 barts_cgcg_cgls_default[] =
 };
 #define BARTS_CGCG_CGLS_DEFAULT_LENGTH sizeof(barts_cgcg_cgls_default) / (3 * sizeof(u32))
 
-static const u32 barts_cgcg_cgls_disable[] =
-{
+static const u32 barts_cgcg_cgls_disable[] = {
 	0x000008f8, 0x00000010, 0xffffffff,
 	0x000008fc, 0xffffffff, 0xffffffff,
 	0x000008f8, 0x00000011, 0xffffffff,
@@ -169,8 +165,7 @@ static const u32 barts_cgcg_cgls_disable[] =
 };
 #define BARTS_CGCG_CGLS_DISABLE_LENGTH sizeof(barts_cgcg_cgls_disable) / (3 * sizeof(u32))
 
-static const u32 barts_cgcg_cgls_enable[] =
-{
+static const u32 barts_cgcg_cgls_enable[] = {
 	/* 0x0000c124, 0x84180000, 0x00180000, */
 	0x00000644, 0x000f7892, 0x001f4080,
 	0x000008f8, 0x00000010, 0xffffffff,
@@ -224,8 +219,7 @@ static const u32 barts_cgcg_cgls_enable[] =
 };
 #define BARTS_CGCG_CGLS_ENABLE_LENGTH sizeof(barts_cgcg_cgls_enable) / (3 * sizeof(u32))
 
-static const u32 barts_mgcg_default[] =
-{
+static const u32 barts_mgcg_default[] = {
 	0x0000802c, 0xc0000000, 0xffffffff,
 	0x00005448, 0x00000100, 0xffffffff,
 	0x000055e4, 0x00600100, 0xffffffff,
@@ -373,8 +367,7 @@ static const u32 barts_mgcg_default[] =
 };
 #define BARTS_MGCG_DEFAULT_LENGTH sizeof(barts_mgcg_default) / (3 * sizeof(u32))
 
-static const u32 barts_mgcg_disable[] =
-{
+static const u32 barts_mgcg_disable[] = {
 	0x0000802c, 0xc0000000, 0xffffffff,
 	0x000008f8, 0x00000000, 0xffffffff,
 	0x000008fc, 0xffffffff, 0xffffffff,
@@ -388,8 +381,7 @@ static const u32 barts_mgcg_disable[] =
 };
 #define BARTS_MGCG_DISABLE_LENGTH sizeof(barts_mgcg_disable) / (3 * sizeof(u32))
 
-static const u32 barts_mgcg_enable[] =
-{
+static const u32 barts_mgcg_enable[] = {
 	0x0000802c, 0xc0000000, 0xffffffff,
 	0x000008f8, 0x00000000, 0xffffffff,
 	0x000008fc, 0x00000000, 0xffffffff,
@@ -404,8 +396,7 @@ static const u32 barts_mgcg_enable[] =
 #define BARTS_MGCG_ENABLE_LENGTH sizeof(barts_mgcg_enable) / (3 * sizeof(u32))
 
 //********* CAICOS **************//
-static const u32 caicos_cgcg_cgls_default[] =
-{
+static const u32 caicos_cgcg_cgls_default[] = {
 	0x000008f8, 0x00000010, 0xffffffff,
 	0x000008fc, 0x00000000, 0xffffffff,
 	0x000008f8, 0x00000011, 0xffffffff,
@@ -457,8 +448,7 @@ static const u32 caicos_cgcg_cgls_default[] =
 };
 #define CAICOS_CGCG_CGLS_DEFAULT_LENGTH sizeof(caicos_cgcg_cgls_default) / (3 * sizeof(u32))
 
-static const u32 caicos_cgcg_cgls_disable[] =
-{
+static const u32 caicos_cgcg_cgls_disable[] = {
 	0x000008f8, 0x00000010, 0xffffffff,
 	0x000008fc, 0xffffffff, 0xffffffff,
 	0x000008f8, 0x00000011, 0xffffffff,
@@ -512,8 +502,7 @@ static const u32 caicos_cgcg_cgls_disable[] =
 };
 #define CAICOS_CGCG_CGLS_DISABLE_LENGTH sizeof(caicos_cgcg_cgls_disable) / (3 * sizeof(u32))
 
-static const u32 caicos_cgcg_cgls_enable[] =
-{
+static const u32 caicos_cgcg_cgls_enable[] = {
 	/* 0x0000c124, 0x84180000, 0x00180000, */
 	0x00000644, 0x000f7892, 0x001f4080,
 	0x000008f8, 0x00000010, 0xffffffff,
@@ -567,8 +556,7 @@ static const u32 caicos_cgcg_cgls_enable[] =
 };
 #define CAICOS_CGCG_CGLS_ENABLE_LENGTH sizeof(caicos_cgcg_cgls_enable) / (3 * sizeof(u32))
 
-static const u32 caicos_mgcg_default[] =
-{
+static const u32 caicos_mgcg_default[] = {
 	0x0000802c, 0xc0000000, 0xffffffff,
 	0x00005448, 0x00000100, 0xffffffff,
 	0x000055e4, 0x00600100, 0xffffffff,
@@ -647,8 +635,7 @@ static const u32 caicos_mgcg_default[] =
 };
 #define CAICOS_MGCG_DEFAULT_LENGTH sizeof(caicos_mgcg_default) / (3 * sizeof(u32))
 
-static const u32 caicos_mgcg_disable[] =
-{
+static const u32 caicos_mgcg_disable[] = {
 	0x0000802c, 0xc0000000, 0xffffffff,
 	0x000008f8, 0x00000000, 0xffffffff,
 	0x000008fc, 0xffffffff, 0xffffffff,
@@ -662,8 +649,7 @@ static const u32 caicos_mgcg_disable[] =
 };
 #define CAICOS_MGCG_DISABLE_LENGTH sizeof(caicos_mgcg_disable) / (3 * sizeof(u32))
 
-static const u32 caicos_mgcg_enable[] =
-{
+static const u32 caicos_mgcg_enable[] = {
 	0x0000802c, 0xc0000000, 0xffffffff,
 	0x000008f8, 0x00000000, 0xffffffff,
 	0x000008fc, 0x00000000, 0xffffffff,
@@ -678,8 +664,7 @@ static const u32 caicos_mgcg_enable[] =
 #define CAICOS_MGCG_ENABLE_LENGTH sizeof(caicos_mgcg_enable) / (3 * sizeof(u32))
 
 //********* TURKS **************//
-static const u32 turks_cgcg_cgls_default[] =
-{
+static const u32 turks_cgcg_cgls_default[] = {
 	0x000008f8, 0x00000010, 0xffffffff,
 	0x000008fc, 0x00000000, 0xffffffff,
 	0x000008f8, 0x00000011, 0xffffffff,
@@ -731,8 +716,7 @@ static const u32 turks_cgcg_cgls_default[] =
 };
 #define TURKS_CGCG_CGLS_DEFAULT_LENGTH  sizeof(turks_cgcg_cgls_default) / (3 * sizeof(u32))
 
-static const u32 turks_cgcg_cgls_disable[] =
-{
+static const u32 turks_cgcg_cgls_disable[] = {
 	0x000008f8, 0x00000010, 0xffffffff,
 	0x000008fc, 0xffffffff, 0xffffffff,
 	0x000008f8, 0x00000011, 0xffffffff,
@@ -786,8 +770,7 @@ static const u32 turks_cgcg_cgls_disable[] =
 };
 #define TURKS_CGCG_CGLS_DISABLE_LENGTH sizeof(turks_cgcg_cgls_disable) / (3 * sizeof(u32))
 
-static const u32 turks_cgcg_cgls_enable[] =
-{
+static const u32 turks_cgcg_cgls_enable[] = {
 	/* 0x0000c124, 0x84180000, 0x00180000, */
 	0x00000644, 0x000f7892, 0x001f4080,
 	0x000008f8, 0x00000010, 0xffffffff,
@@ -842,8 +825,7 @@ static const u32 turks_cgcg_cgls_enable[] =
 #define TURKS_CGCG_CGLS_ENABLE_LENGTH sizeof(turks_cgcg_cgls_enable) / (3 * sizeof(u32))
 
 // These are the sequences for turks_mgcg_shls
-static const u32 turks_mgcg_default[] =
-{
+static const u32 turks_mgcg_default[] = {
 	0x0000802c, 0xc0000000, 0xffffffff,
 	0x00005448, 0x00000100, 0xffffffff,
 	0x000055e4, 0x00600100, 0xffffffff,
@@ -942,8 +924,7 @@ static const u32 turks_mgcg_default[] =
 };
 #define TURKS_MGCG_DEFAULT_LENGTH sizeof(turks_mgcg_default) / (3 * sizeof(u32))
 
-static const u32 turks_mgcg_disable[] =
-{
+static const u32 turks_mgcg_disable[] = {
 	0x0000802c, 0xc0000000, 0xffffffff,
 	0x000008f8, 0x00000000, 0xffffffff,
 	0x000008fc, 0xffffffff, 0xffffffff,
@@ -957,8 +938,7 @@ static const u32 turks_mgcg_disable[] =
 };
 #define TURKS_MGCG_DISABLE_LENGTH sizeof(turks_mgcg_disable) / (3 * sizeof(u32))
 
-static const u32 turks_mgcg_enable[] =
-{
+static const u32 turks_mgcg_enable[] = {
 	0x0000802c, 0xc0000000, 0xffffffff,
 	0x000008f8, 0x00000000, 0xffffffff,
 	0x000008fc, 0x00000000, 0xffffffff,
@@ -979,8 +959,7 @@ static const u32 turks_mgcg_enable[] =
 
 
 //********* BARTS **************//
-static const u32 barts_sysls_default[] =
-{
+static const u32 barts_sysls_default[] = {
 	/* Register,   Value,     Mask bits */
 	0x000055e8, 0x00000000, 0xffffffff,
 	0x0000d0bc, 0x00000000, 0xffffffff,
@@ -1000,8 +979,7 @@ static const u32 barts_sysls_default[] =
 };
 #define BARTS_SYSLS_DEFAULT_LENGTH sizeof(barts_sysls_default) / (3 * sizeof(u32))
 
-static const u32 barts_sysls_disable[] =
-{
+static const u32 barts_sysls_disable[] = {
 	0x000055e8, 0x00000000, 0xffffffff,
 	0x0000d0bc, 0x00000000, 0xffffffff,
 	0x000015c0, 0x00041401, 0xffffffff,
@@ -1020,8 +998,7 @@ static const u32 barts_sysls_disable[] =
 };
 #define BARTS_SYSLS_DISABLE_LENGTH sizeof(barts_sysls_disable) / (3 * sizeof(u32))
 
-static const u32 barts_sysls_enable[] =
-{
+static const u32 barts_sysls_enable[] = {
 	0x000055e8, 0x00000001, 0xffffffff,
 	0x0000d0bc, 0x00000100, 0xffffffff,
 	0x000015c0, 0x000c1401, 0xffffffff,
@@ -1041,8 +1018,7 @@ static const u32 barts_sysls_enable[] =
 #define BARTS_SYSLS_ENABLE_LENGTH sizeof(barts_sysls_enable) / (3 * sizeof(u32))
 
 //********* CAICOS **************//
-static const u32 caicos_sysls_default[] =
-{
+static const u32 caicos_sysls_default[] = {
 	0x000055e8, 0x00000000, 0xffffffff,
 	0x0000d0bc, 0x00000000, 0xffffffff,
 	0x000015c0, 0x000c1401, 0xffffffff,
@@ -1060,8 +1036,7 @@ static const u32 caicos_sysls_default[] =
 };
 #define CAICOS_SYSLS_DEFAULT_LENGTH sizeof(caicos_sysls_default) / (3 * sizeof(u32))
 
-static const u32 caicos_sysls_disable[] =
-{
+static const u32 caicos_sysls_disable[] = {
 	0x000055e8, 0x00000000, 0xffffffff,
 	0x0000d0bc, 0x00000000, 0xffffffff,
 	0x000015c0, 0x00041401, 0xffffffff,
@@ -1079,8 +1054,7 @@ static const u32 caicos_sysls_disable[] =
 };
 #define CAICOS_SYSLS_DISABLE_LENGTH sizeof(caicos_sysls_disable) / (3 * sizeof(u32))
 
-static const u32 caicos_sysls_enable[] =
-{
+static const u32 caicos_sysls_enable[] = {
 	0x000055e8, 0x00000001, 0xffffffff,
 	0x0000d0bc, 0x00000100, 0xffffffff,
 	0x000015c0, 0x000c1401, 0xffffffff,
@@ -1099,8 +1073,7 @@ static const u32 caicos_sysls_enable[] =
 #define CAICOS_SYSLS_ENABLE_LENGTH sizeof(caicos_sysls_enable) / (3 * sizeof(u32))
 
 //********* TURKS **************//
-static const u32 turks_sysls_default[] =
-{
+static const u32 turks_sysls_default[] = {
 	0x000055e8, 0x00000000, 0xffffffff,
 	0x0000d0bc, 0x00000000, 0xffffffff,
 	0x000015c0, 0x000c1401, 0xffffffff,
@@ -1119,8 +1092,7 @@ static const u32 turks_sysls_default[] =
 };
 #define TURKS_SYSLS_DEFAULT_LENGTH sizeof(turks_sysls_default) / (3 * sizeof(u32))
 
-static const u32 turks_sysls_disable[] =
-{
+static const u32 turks_sysls_disable[] = {
 	0x000055e8, 0x00000000, 0xffffffff,
 	0x0000d0bc, 0x00000000, 0xffffffff,
 	0x000015c0, 0x00041401, 0xffffffff,
@@ -1139,8 +1111,7 @@ static const u32 turks_sysls_disable[] =
 };
 #define TURKS_SYSLS_DISABLE_LENGTH sizeof(turks_sysls_disable) / (3 * sizeof(u32))
 
-static const u32 turks_sysls_enable[] =
-{
+static const u32 turks_sysls_enable[] = {
 	0x000055e8, 0x00000001, 0xffffffff,
 	0x0000d0bc, 0x00000100, 0xffffffff,
 	0x000015c0, 0x000c1401, 0xffffffff,
@@ -1161,8 +1132,7 @@ static const u32 turks_sysls_enable[] =
 
 #endif
 
-u32 btc_valid_sclk[40] =
-{
+u32 btc_valid_sclk[40] = {
 	5000,   10000,  15000,  20000,  25000,  30000,  35000,  40000,  45000,  50000,
 	55000,  60000,  65000,  70000,  75000,  80000,  85000,  90000,  95000,  100000,
 	105000, 110000, 11500,  120000, 125000, 130000, 135000, 140000, 145000, 150000,
@@ -1201,7 +1171,7 @@ void btc_apply_voltage_dependency_rules(struct radeon_clock_voltage_dependency_t
 	if ((table == NULL) || (table->count == 0))
 		return;
 
-	for (i= 0; i < table->count; i++) {
+	for (i = 0; i < table->count; i++) {
 		if (clock <= table->entries[i].clk) {
 			if (*voltage < table->entries[i].v)
 				*voltage = (u16)((table->entries[i].v < max_voltage) ?
@@ -1448,7 +1418,7 @@ void btc_program_mgcg_hw_sequence(struct radeon_device *rdev,
 	u32 i, length = count * 3;
 	u32 tmp;
 
-	for (i = 0; i < length; i+=3) {
+	for (i = 0; i < length; i += 3) {
 		tmp = RREG32(sequence[i]);
 		tmp &= ~sequence[i+2];
 		tmp |= sequence[i+1] & sequence[i+2];
@@ -2010,7 +1980,7 @@ static int btc_copy_vbios_mc_reg_table(struct atom_mc_reg_table *table,
 	for (i = 0; i < table->num_entries; i++) {
 		eg_table->mc_reg_table_entry[i].mclk_max =
 			table->mc_reg_table_entry[i].mclk_max;
-		for(j = 0; j < table->last; j++)
+		for (j = 0; j < table->last; j++)
 			eg_table->mc_reg_table_entry[i].mc_data[j] =
 				table->mc_reg_table_entry[i].mc_data[j];
 	}

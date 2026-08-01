@@ -1,5 +1,6 @@
 /*	$NetBSD: amdgpu_dm_debugfs.h,v 1.2 2021/12/18 23:45:00 riastradh Exp $	*/
 
+/* SPDX-License-Identifier: MIT */
 /*
  * Copyright 2018 Advanced Micro Devices, Inc.
  *
@@ -32,6 +33,7 @@
 #include "amdgpu_dm.h"
 
 void connector_debugfs_init(struct amdgpu_dm_connector *connector);
-int dtn_debugfs_init(struct amdgpu_device *adev);
+void dtn_debugfs_init(struct amdgpu_device *adev);
+void crtc_debugfs_init(struct drm_crtc *crtc);
 
 #endif

@@ -76,6 +76,7 @@ typedef int drm_ioctl_compat_t(struct file *filp, unsigned int cmd,
 #define	DRM_MAJOR	cdevsw_lookup_major(&drm_cdevsw)
 #else
 #define DRM_IOCTL_NR(n)                _IOC_NR(n)
+#define DRM_IOCTL_TYPE(n)              _IOC_TYPE(n)
 #define DRM_MAJOR       226
 #endif
 
@@ -117,17 +118,6 @@ enum drm_ioctl_flags {
 	 * This is equivalent to callers with the SYSADMIN capability.
 	 */
 	DRM_ROOT_ONLY		= BIT(2),
-	/**
-	 * @DRM_UNLOCKED:
-	 *
-	 * Whether &drm_ioctl_desc.func should be called with the DRM BKL held
-	 * or not. Enforced as the default for all modern drivers, hence there
-	 * should never be a need to set this flag.
-	 *
-	 * Do not use anywhere else than for the VBLANK_WAIT IOCTL, which is the
-	 * only legacy IOCTL which needs this.
-	 */
-	DRM_UNLOCKED		= BIT(4),
 	/**
 	 * @DRM_RENDER_ALLOW:
 	 *
@@ -174,8 +164,6 @@ struct drm_ioctl_desc {
 		.flags = _flags,					\
 		.name = #ioctl						\
 	}
-
-int drm_ioctl_permit(u32 flags, struct drm_file *file_priv);
 #ifdef __NetBSD__
 int drm_ioctl(struct file *, unsigned long, void *);
 void drm_suspend_ioctl(struct drm_device *);

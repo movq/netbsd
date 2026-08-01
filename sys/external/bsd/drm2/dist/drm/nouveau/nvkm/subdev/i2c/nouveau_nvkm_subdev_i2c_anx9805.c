@@ -29,7 +29,7 @@ __KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_i2c_anx9805.c,v 1.3 2021/12/18 2
 #define anx9805_pad(p) container_of((p), struct anx9805_pad, base)
 #define anx9805_bus(p) container_of((p), struct anx9805_bus, base)
 #define anx9805_aux(p) container_of((p), struct anx9805_aux, base)
-#include "aux.h"
+#include "auxch.h"
 #include "bus.h"
 
 struct anx9805_pad {

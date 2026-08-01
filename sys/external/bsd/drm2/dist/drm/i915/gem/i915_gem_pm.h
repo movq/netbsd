@@ -1,8 +1,7 @@
 /*	$NetBSD: i915_gem_pm.h,v 1.2 2021/12/18 23:45:30 riastradh Exp $	*/
 
+/* SPDX-License-Identifier: MIT */
 /*
- * SPDX-License-Identifier: MIT
- *
  * Copyright © 2019 Intel Corporation
  */
 
@@ -20,5 +19,9 @@ void i915_gem_idle_work_handler(struct work_struct *work);
 
 void i915_gem_suspend(struct drm_i915_private *i915);
 void i915_gem_suspend_late(struct drm_i915_private *i915);
+int i915_gem_backup_suspend(struct drm_i915_private *i915);
+
+int i915_gem_freeze(struct drm_i915_private *i915);
+int i915_gem_freeze_late(struct drm_i915_private *i915);
 
 #endif /* __I915_GEM_PM_H__ */

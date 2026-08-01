@@ -24,7 +24,7 @@
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_i2c_auxgf119.c,v 1.2 2021/12/18 23:45:40 riastradh Exp $");
 
-#include "aux.h"
+#include "auxch.h"
 
 static const struct nvkm_i2c_aux_func
 gf119_i2c_aux = {

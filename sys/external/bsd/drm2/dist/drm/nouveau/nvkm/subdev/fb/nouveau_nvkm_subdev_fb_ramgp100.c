@@ -32,7 +32,7 @@ __KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_fb_ramgp100.c,v 1.2 2021/12/18 2
 #include <subdev/bios/init.h>
 #include <subdev/bios/rammap.h>
 
-static int
+int
 gp100_ram_init(struct nvkm_ram *ram)
 {
 	struct nvkm_subdev *subdev = &ram->fb->subdev;

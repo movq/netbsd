@@ -100,10 +100,6 @@ static bool offset_to_id(
 			return true;
 		default:
 			ASSERT_CRITICAL(false);
-#ifdef PALLADIUM_SUPPORTED
-		*en = GPIO_DDC_LINE_DDC1;
-		return true;
-#endif
 			return false;
 		}
 	break;
@@ -158,7 +154,8 @@ static bool offset_to_id(
 	/* DDC */
 	/* we don't care about the GPIO_ID for DDC
 	 * in DdcHandle it will use GPIO_ID_DDC_DATA/GPIO_ID_DDC_CLOCK
-	 * directly in the create method */
+	 * directly in the create method
+	 */
 	case REG(DC_GPIO_DDC1_A):
 		*en = GPIO_DDC_LINE_DDC1;
 		return true;
@@ -178,19 +175,16 @@ static bool offset_to_id(
 		*en = GPIO_DDC_LINE_DDC_VGA;
 		return true;
 
-//	case REG(DC_GPIO_I2CPAD_A): not exit
-//	case REG(DC_GPIO_PWRSEQ_A):
-//	case REG(DC_GPIO_PAD_STRENGTH_1):
-//	case REG(DC_GPIO_PAD_STRENGTH_2):
-//	case REG(DC_GPIO_DEBUG):
+/*
+ *	case REG(DC_GPIO_I2CPAD_A): not exit
+ *	case REG(DC_GPIO_PWRSEQ_A):
+ *	case REG(DC_GPIO_PAD_STRENGTH_1):
+ *	case REG(DC_GPIO_PAD_STRENGTH_2):
+ *	case REG(DC_GPIO_DEBUG):
+ */
 	/* UNEXPECTED */
 	default:
-//	case REG(DC_GPIO_SYNCA_A): not exist
-#ifdef PALLADIUM_SUPPORTED
-		*id = GPIO_ID_HPD;
-		*en = GPIO_DDC_LINE_DDC1;
-		return true;
-#endif
+/*	case REG(DC_GPIO_SYNCA_A): not exist */
 		ASSERT_CRITICAL(false);
 		return false;
 	}
@@ -310,10 +304,6 @@ static bool id_to_offset(
 		break;
 		default:
 			ASSERT_CRITICAL(false);
-#ifdef PALLADIUM_SUPPORTED
-			info->mask = DC_GPIO_HPD_A__DC_GPIO_HPD1_A_MASK;
-			result = true;
-#endif
 			result = false;
 		}
 	break;

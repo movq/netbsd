@@ -29,11 +29,13 @@ __KERNEL_RCSID(0, "$NetBSD: radeon_rv770_dpm.c,v 1.3 2021/12/18 23:45:43 riastra
 
 #include "radeon.h"
 #include "radeon_asic.h"
+#include "rv770.h"
 #include "rv770d.h"
 #include "r600_dpm.h"
 #include "rv770_dpm.h"
 #include "cypress_dpm.h"
 #include "atom.h"
+#include "evergreen.h"
 #include <linux/seq_file.h>
 
 #define MC_CG_ARB_FREQ_F0           0x0a
@@ -1013,7 +1015,7 @@ int rv770_populate_initial_mvdd_value(struct radeon_device *rdev,
 	struct rv7xx_power_info *pi = rv770_get_pi(rdev);
 
 	if ((pi->s0_vid_lower_smio_cntl & pi->mvdd_mask_low) ==
-	     (pi->mvdd_low_smio[MVDD_LOW_INDEX] & pi->mvdd_mask_low) ) {
+	     (pi->mvdd_low_smio[MVDD_LOW_INDEX] & pi->mvdd_mask_low)) {
 		voltage->index = MVDD_LOW_INDEX;
 		voltage->value = cpu_to_be16(MVDD_LOW_VALUE);
 	} else {
@@ -1263,7 +1265,7 @@ static int rv770_construct_vddc_table(struct radeon_device *rdev)
 		pi->vddc_mask_low = gpio_mask;
 		if (i > 0) {
 			if ((pi->vddc_table[i].low_smio !=
-			     pi->vddc_table[i - 1].low_smio ) ||
+			     pi->vddc_table[i - 1].low_smio) ||
 			     (pi->vddc_table[i].high_smio !=
 			      pi->vddc_table[i - 1].high_smio))
 				vddc_index++;

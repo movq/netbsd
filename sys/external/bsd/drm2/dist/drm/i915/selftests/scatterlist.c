@@ -27,7 +27,7 @@
 __KERNEL_RCSID(0, "$NetBSD: scatterlist.c,v 1.2 2021/12/18 23:45:31 riastradh Exp $");
 
 #include <linux/prime_numbers.h>
-#include <linux/random.h>
+#include <linux/prandom.h>
 
 #include "i915_selftest.h"
 #include "i915_utils.h"
@@ -224,6 +224,10 @@ static int alloc_table(struct pfn_table *pt,
 {
 	struct scatterlist *sg;
 	unsigned long n, pfn;
+
+	/* restricted by sg_alloc_table */
+	if (overflows_type(max, unsigned int))
+		return -E2BIG;
 
 	if (sg_alloc_table(&pt->st, max,
 			   GFP_KERNEL | __GFP_NORETRY | __GFP_NOWARN))

@@ -29,10 +29,10 @@
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, "$NetBSD: radeon_atombios_crtc.c,v 1.3 2021/12/19 11:08:32 riastradh Exp $");
 
-#include <drm/drm_crtc_helper.h>
-#include <drm/drm_fb_helper.h>
 #include <drm/drm_fixed.h>
 #include <drm/drm_fourcc.h>
+#include <drm/drm_framebuffer.h>
+#include <drm/drm_modeset_helper_vtables.h>
 #include <drm/drm_vblank.h>
 #include <drm/radeon_drm.h>
 
@@ -83,7 +83,7 @@ static void atombios_overscan_setup(struct drm_crtc *crtc,
 		args.usOverscanTop = cpu_to_le16(radeon_crtc->v_border);
 		break;
 	}
-	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args);
+	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args, sizeof(args));
 }
 
 static void atombios_scaler_setup(struct drm_crtc *crtc)
@@ -163,7 +163,7 @@ static void atombios_scaler_setup(struct drm_crtc *crtc)
 			break;
 		}
 	}
-	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args);
+	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args, sizeof(args));
 	if ((is_tv || is_cv)
 	    && rdev->family >= CHIP_RV515 && rdev->family <= CHIP_R580) {
 		atom_rv515_force_tv_scaler(rdev, radeon_crtc);
@@ -184,7 +184,7 @@ static void atombios_lock_crtc(struct drm_crtc *crtc, int lock)
 	args.ucCRTC = radeon_crtc->crtc_id;
 	args.ucEnable = lock;
 
-	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args);
+	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args, sizeof(args));
 }
 
 static void atombios_enable_crtc(struct drm_crtc *crtc, int state)
@@ -200,7 +200,7 @@ static void atombios_enable_crtc(struct drm_crtc *crtc, int state)
 	args.ucCRTC = radeon_crtc->crtc_id;
 	args.ucEnable = state;
 
-	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args);
+	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args, sizeof(args));
 }
 
 static void atombios_enable_crtc_memreq(struct drm_crtc *crtc, int state)
@@ -216,7 +216,7 @@ static void atombios_enable_crtc_memreq(struct drm_crtc *crtc, int state)
 	args.ucCRTC = radeon_crtc->crtc_id;
 	args.ucEnable = state;
 
-	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args);
+	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args, sizeof(args));
 }
 
 static const u32 vga_control_regs[6] =
@@ -248,7 +248,7 @@ static void atombios_blank_crtc(struct drm_crtc *crtc, int state)
 	args.ucCRTC = radeon_crtc->crtc_id;
 	args.ucBlanking = state;
 
-	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args);
+	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args, sizeof(args));
 
 	if (ASIC_IS_DCE8(rdev))
 		WREG32(vga_control_regs[radeon_crtc->crtc_id], vga_control);
@@ -267,7 +267,7 @@ static void atombios_powergate_crtc(struct drm_crtc *crtc, int state)
 	args.ucDispPipeId = radeon_crtc->crtc_id;
 	args.ucEnable = state;
 
-	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args);
+	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args, sizeof(args));
 }
 
 void atombios_crtc_dpms(struct drm_crtc *crtc, int mode)
@@ -349,7 +349,7 @@ atombios_set_crtc_dtd_timing(struct drm_crtc *crtc,
 	args.susModeMiscInfo.usAccess = cpu_to_le16(misc);
 	args.ucCRTC = radeon_crtc->crtc_id;
 
-	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args);
+	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args, sizeof(args));
 }
 
 static void atombios_crtc_set_timing(struct drm_crtc *crtc,
@@ -395,7 +395,7 @@ static void atombios_crtc_set_timing(struct drm_crtc *crtc,
 	args.susModeMiscInfo.usAccess = cpu_to_le16(misc);
 	args.ucCRTC = radeon_crtc->crtc_id;
 
-	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args);
+	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args, sizeof(args));
 }
 
 static void atombios_disable_ss(struct radeon_device *rdev, int pll_id)
@@ -552,7 +552,7 @@ static void atombios_crtc_program_ss(struct radeon_device *rdev,
 		args.lvds_ss.ucSpreadSpectrumStepSize_Delay |= (ss->delay & 7) << 4;
 		args.lvds_ss.ucEnable = enable;
 	}
-	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args);
+	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args, sizeof(args));
 }
 
 union adjust_pixel_clock {
@@ -620,13 +620,6 @@ static u32 atombios_adjust_pll(struct drm_crtc *crtc,
 
 			dp_clock = dig_connector->dp_clock;
 		}
-	}
-
-	if (radeon_encoder->is_mst_encoder) {
-		struct radeon_encoder_mst *mst_enc = radeon_encoder->enc_priv;
-		struct radeon_connector_atom_dig *dig_connector = mst_enc->connector->con_priv;
-
-		dp_clock = dig_connector->dp_clock;
 	}
 
 	/* use recommended ref_div for ss */
@@ -705,7 +698,7 @@ static u32 atombios_adjust_pll(struct drm_crtc *crtc,
 						ADJUST_DISPLAY_CONFIG_SS_ENABLE;
 
 				atom_execute_table(rdev->mode_info.atom_context,
-						   index, (uint32_t *)&args);
+						   index, (uint32_t *)&args, sizeof(args));
 				adjusted_clock = le16_to_cpu(args.v1.usPixelClock) * 10;
 				break;
 			case 3:
@@ -738,7 +731,7 @@ static u32 atombios_adjust_pll(struct drm_crtc *crtc,
 					args.v3.sInput.ucExtTransmitterID = 0;
 
 				atom_execute_table(rdev->mode_info.atom_context,
-						   index, (uint32_t *)&args);
+						   index, (uint32_t *)&args, sizeof(args));
 				adjusted_clock = le32_to_cpu(args.v3.sOutput.ulDispPllFreq) * 10;
 				if (args.v3.sOutput.ucRefDiv) {
 					radeon_crtc->pll_flags |= RADEON_PLL_USE_FRAC_FB_DIV;
@@ -822,7 +815,7 @@ static void atombios_crtc_set_disp_eng_pll(struct radeon_device *rdev,
 		DRM_ERROR("Unknown table version %d %d\n", frev, crev);
 		return;
 	}
-	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args);
+	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args, sizeof(args));
 }
 
 static void atombios_crtc_program_pll(struct drm_crtc *crtc,
@@ -962,7 +955,7 @@ static void atombios_crtc_program_pll(struct drm_crtc *crtc,
 		return;
 	}
 
-	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args);
+	atom_execute_table(rdev->mode_info.atom_context, index, (uint32_t *)&args, sizeof(args));
 }
 
 static bool atombios_crtc_prepare_pll(struct drm_crtc *crtc, struct drm_display_mode *mode)
@@ -977,9 +970,7 @@ static bool atombios_crtc_prepare_pll(struct drm_crtc *crtc, struct drm_display_
 	radeon_crtc->bpc = 8;
 	radeon_crtc->ss_enabled = false;
 
-	if (radeon_encoder->is_mst_encoder) {
-		radeon_dp_mst_prepare_pll(crtc, mode);
-	} else if ((radeon_encoder->active_device & (ATOM_DEVICE_LCD_SUPPORT | ATOM_DEVICE_DFP_SUPPORT)) ||
+	if ((radeon_encoder->active_device & (ATOM_DEVICE_LCD_SUPPORT | ATOM_DEVICE_DFP_SUPPORT)) ||
 	    (radeon_encoder_get_dp_bridge_encoder_id(radeon_crtc->encoder) != ENCODER_OBJECT_ID_NONE)) {
 		struct radeon_encoder_atom_dig *dig = radeon_encoder->enc_priv;
 		struct drm_connector *connector =
@@ -1163,7 +1154,6 @@ static int dce4_crtc_do_set_base(struct drm_crtc *crtc,
 	u32 tmp, viewport_w, viewport_h;
 	int r;
 	bool bypass_lut = false;
-	struct drm_format_name_buf format_name;
 
 	/* no fb bound */
 	if (!atomic && !crtc->primary->fb) {
@@ -1274,8 +1264,8 @@ static int dce4_crtc_do_set_base(struct drm_crtc *crtc,
 #endif
 		break;
 	default:
-		DRM_ERROR("Unsupported screen format %s\n",
-		          drm_get_format_name(target_fb->format->format, &format_name));
+		DRM_ERROR("Unsupported screen format %p4cc\n",
+			  &target_fb->format->format);
 		return -EINVAL;
 	}
 
@@ -1485,7 +1475,6 @@ static int avivo_crtc_do_set_base(struct drm_crtc *crtc,
 	u32 viewport_w, viewport_h;
 	int r;
 	bool bypass_lut = false;
-	struct drm_format_name_buf format_name;
 
 	/* no fb bound */
 	if (!atomic && !crtc->primary->fb) {
@@ -1588,8 +1577,8 @@ static int avivo_crtc_do_set_base(struct drm_crtc *crtc,
 #endif
 		break;
 	default:
-		DRM_ERROR("Unsupported screen format %s\n",
-		          drm_get_format_name(target_fb->format->format, &format_name));
+		DRM_ERROR("Unsupported screen format %p4cc\n",
+			  &target_fb->format->format);
 		return -EINVAL;
 	}
 
@@ -1796,7 +1785,6 @@ static int radeon_get_shared_dp_ppll(struct drm_crtc *crtc)
  * radeon_get_shared_nondp_ppll - return the PPLL used by another non-DP crtc
  *
  * @crtc: drm crtc
- * @encoder: drm encoder
  *
  * Returns the PPLL (Pixel PLL) used by another non-DP crtc/encoder which can
  * be shared (i.e., same clock).
@@ -2240,6 +2228,7 @@ static const struct drm_crtc_helper_funcs atombios_helper_funcs = {
 	.prepare = atombios_crtc_prepare,
 	.commit = atombios_crtc_commit,
 	.disable = atombios_crtc_disable,
+	.get_scanout_position = radeon_get_crtc_scanout_position,
 };
 
 void radeon_atombios_init_crtc(struct drm_device *dev,

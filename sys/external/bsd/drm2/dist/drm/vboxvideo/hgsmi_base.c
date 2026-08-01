@@ -14,7 +14,8 @@ __KERNEL_RCSID(0, "$NetBSD: hgsmi_base.c,v 1.2 2021/12/18 23:45:44 riastradh Exp
 #include "hgsmi_ch_setup.h"
 
 /**
- * Inform the host of the location of the host flags in VRAM via an HGSMI cmd.
+ * hgsmi_report_flags_location - Inform the host of the location of
+ *                               the host flags in VRAM via an HGSMI cmd.
  * Return: 0 or negative errno value.
  * @ctx:        The context of the guest heap to use.
  * @location:   The offset chosen for the flags within guest VRAM.
@@ -38,7 +39,8 @@ int hgsmi_report_flags_location(struct gen_pool *ctx, u32 location)
 }
 
 /**
- * Notify the host of HGSMI-related guest capabilities via an HGSMI command.
+ * hgsmi_send_caps_info - Notify the host of HGSMI-related guest capabilities
+ *                        via an HGSMI command.
  * Return: 0 or negative errno value.
  * @ctx:        The context of the guest heap to use.
  * @caps:       The capabilities to report, see vbva_caps.
@@ -76,7 +78,8 @@ int hgsmi_test_query_conf(struct gen_pool *ctx)
 }
 
 /**
- * Query the host for an HGSMI configuration parameter via an HGSMI command.
+ * hgsmi_query_conf - Query the host for an HGSMI configuration
+ *                    parameter via an HGSMI command.
  * Return: 0 or negative errno value.
  * @ctx:        The context containing the heap used.
  * @index:      The index of the parameter to query.
@@ -104,7 +107,8 @@ int hgsmi_query_conf(struct gen_pool *ctx, u32 index, u32 *value_ret)
 }
 
 /**
- * Pass the host a new mouse pointer shape via an HGSMI command.
+ * hgsmi_update_pointer_shape - Pass the host a new mouse pointer shape
+ *                              via an HGSMI command.
  * Return: 0 or negative errno value.
  * @ctx:        The context containing the heap to be used.
  * @flags:      Cursor flags.
@@ -140,7 +144,15 @@ int hgsmi_update_pointer_shape(struct gen_pool *ctx, u32 flags,
 		flags |= VBOX_MOUSE_POINTER_VISIBLE;
 	}
 
-	p = hgsmi_buffer_alloc(ctx, sizeof(*p) + pixel_len, HGSMI_CH_VBVA,
+	/*
+	 * The 4 extra bytes come from switching struct vbva_mouse_pointer_shape
+	 * from having a 4 bytes fixed array at the end to using a proper VLA
+	 * at the end. These 4 extra bytes were not subtracted from sizeof(*p)
+	 * before the switch to the VLA, so this way the behavior is unchanged.
+	 * Chances are these 4 extra bytes are not necessary but they are kept
+	 * to avoid regressions.
+	 */
+	p = hgsmi_buffer_alloc(ctx, sizeof(*p) + pixel_len + 4, HGSMI_CH_VBVA,
 			       VBVA_MOUSE_POINTER_SHAPE);
 	if (!p)
 		return -ENOMEM;
@@ -173,40 +185,4 @@ int hgsmi_update_pointer_shape(struct gen_pool *ctx, u32 flags,
 	hgsmi_buffer_free(ctx, p);
 
 	return rc;
-}
-
-/**
- * Report the guest cursor position.  The host may wish to use this information
- * to re-position its own cursor (though this is currently unlikely).  The
- * current host cursor position is returned.
- * Return: 0 or negative errno value.
- * @ctx:              The context containing the heap used.
- * @report_position:  Are we reporting a position?
- * @x:                Guest cursor X position.
- * @y:                Guest cursor Y position.
- * @x_host:           Host cursor X position is stored here.  Optional.
- * @y_host:           Host cursor Y position is stored here.  Optional.
- */
-int hgsmi_cursor_position(struct gen_pool *ctx, bool report_position,
-			  u32 x, u32 y, u32 *x_host, u32 *y_host)
-{
-	struct vbva_cursor_position *p;
-
-	p = hgsmi_buffer_alloc(ctx, sizeof(*p), HGSMI_CH_VBVA,
-			       VBVA_CURSOR_POSITION);
-	if (!p)
-		return -ENOMEM;
-
-	p->report_position = report_position;
-	p->x = x;
-	p->y = y;
-
-	hgsmi_buffer_submit(ctx, p);
-
-	*x_host = p->x;
-	*y_host = p->y;
-
-	hgsmi_buffer_free(ctx, p);
-
-	return 0;
 }

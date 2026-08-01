@@ -1,6 +1,6 @@
 /*	$NetBSD: nouveau_ioc32.c,v 1.3 2021/12/18 23:45:32 riastradh Exp $	*/
 
-/**
+/*
  * \file mga_ioc32.c
  *
  * 32-bit ioctl compatibility routines for the MGA DRM.
@@ -43,7 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: nouveau_ioc32.c,v 1.3 2021/12/18 23:45:32 riastradh 
 
 #include "nouveau_ioctl.h"
 
-/**
+/*
  * Called whenever a 32-bit process running under a 64-bit kernel
  * performs an ioctl on /dev/dri/card<n>.
  *

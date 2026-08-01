@@ -42,23 +42,12 @@ struct dc_state;
  *
  */
 
-void dc_conn_log_hex_linux(const uint8_t *hex_data, int hex_data_count);
-
-void pre_surface_trace(
-		struct dc *dc,
-		const struct dc_plane_state *const *plane_states,
-		int surface_count);
-
 void update_surface_trace(
 		struct dc *dc,
 		const struct dc_surface_update *updates,
 		int surface_count);
 
 void post_surface_trace(struct dc *dc);
-
-void context_timing_trace(
-		struct dc *dc,
-		struct resource_context *res_ctx);
 
 void context_clock_trace(
 		struct dc *dc,
@@ -104,14 +93,12 @@ void context_clock_trace(
 #define CONN_DATA_DETECT(link, hex_data, hex_len, ...) \
 		do { \
 			(void)(link); \
-			dc_conn_log_hex_linux(hex_data, hex_len); \
 			DC_LOG_EVENT_DETECTION(__VA_ARGS__); \
 		} while (0)
 
 #define CONN_DATA_LINK_LOSS(link, hex_data, hex_len, ...) \
 		do { \
 			(void)(link); \
-			dc_conn_log_hex_linux(hex_data, hex_len); \
 			DC_LOG_EVENT_LINK_LOSS(__VA_ARGS__); \
 		} while (0)
 

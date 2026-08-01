@@ -13,11 +13,11 @@
 #include <subdev/devinit.h>
 #include <subdev/fault.h>
 #include <subdev/fb.h>
+#include <subdev/fsp.h>
 #include <subdev/fuse.h>
 #include <subdev/gpio.h>
 #include <subdev/gsp.h>
 #include <subdev/i2c.h>
-#include <subdev/ibus.h>
 #include <subdev/iccsense.h>
 #include <subdev/instmem.h>
 #include <subdev/ltc.h>
@@ -26,9 +26,11 @@
 #include <subdev/mxm.h>
 #include <subdev/pci.h>
 #include <subdev/pmu.h>
+#include <subdev/privring.h>
 #include <subdev/therm.h>
 #include <subdev/timer.h>
 #include <subdev/top.h>
+#include <subdev/vfn.h>
 #include <subdev/volt.h>
 
 #include <engine/bsp.h>
@@ -44,7 +46,6 @@
 #include <engine/msvld.h>
 #include <engine/nvenc.h>
 #include <engine/nvdec.h>
-#include <engine/pm.h>
 #include <engine/sec.h>
 #include <engine/sec2.h>
 #include <engine/sw.h>
@@ -58,8 +59,7 @@ int  nvkm_device_ctor(const struct nvkm_device_func *,
 		      struct acpi_devnode *acpidev,
 #endif
 		      const char *name, const char *cfg, const char *dbg,
-		      bool detect, bool mmio, u64 subdev_mask,
 		      struct nvkm_device *);
 int  nvkm_device_init(struct nvkm_device *);
-int  nvkm_device_fini(struct nvkm_device *, bool suspend);
+int  nvkm_device_fini(struct nvkm_device *, enum nvkm_suspend_state suspend);
 #endif
