@@ -528,7 +528,8 @@ cpu_attach(device_t parent, device_t self, void *aux)
 		panic("unknown processor type??\n");
 	}
 
-	pat_init(ci);
+	if ((ci->ci_flags & CPUF_AP) == 0)
+		pat_init(ci);
 
 	if (!pmf_device_register1(self, cpu_suspend, cpu_resume, cpu_shutdown))
 		aprint_error_dev(self, "couldn't establish power handler\n");
@@ -943,6 +944,7 @@ cpu_hatch(void *v)
 	cpu_init_msrs(ci, true);
 
 	cpu_probe(ci);
+	pat_init(ci);
 	cpu_speculation_init(ci);
 #if NHYPERV > 0
 	hyperv_init_cpu(ci);
