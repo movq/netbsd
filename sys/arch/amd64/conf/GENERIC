@@ -864,6 +864,7 @@ mskc*	at pci? dev ? function ?	# Marvell Yukon 2 Gigabit Ethernet
 msk*	at mskc?			# Marvell Yukon 2 Gigabit Ethernet
 mtd*	at pci? dev ? function ?	# Myson MTD803 3-in-1 Ethernet
 #mtax*	at pci? dev ? function ?	# MediaTek MT7922 Wireless
+mwx*	at pci? dev ? function ?	# MediaTek MT7921/7922 wireless
 ne*	at pci? dev ? function ?	# NE2000-compatible Ethernet
 nfe*	at pci?	dev ? function ?	# NVIDIA nForce Ethernet
 ntwoc*	at pci? dev ? function ?	# Riscom/N2 PCI Sync Serial
