@@ -5,7 +5,6 @@
 .include "../mesa-which.mk"
 
 LIB=		GL
-LIBISCXX=	yes
 
 SUBDIR=		internal
 
@@ -41,57 +40,19 @@ SRCS.glx=	\
 	render2.c \
 	renderpix.c \
 	single2.c \
-	singlepix.c \
 	vertarr.c \
 
-SRCS+=	UTILdebug.c
-CPPFLAGS.UTILdebug.c+=	-I${X11SRCDIR.Mesa}/src/util \
-			-I${X11SRCDIR.Mesa}/src/mesa \
-			-I${X11SRCDIR.Mesa}/src \
-			-I${X11SRCDIR.Mesa}/src/gallium/include
-
-
-BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/../src/mapi/glapi/gen/indirect_init.c MESAindirect_init.c
+BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/../src/mesa/glapi/glapi/gen/indirect_init.c MESAindirect_init.c
 BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/src/glx/indirect_window_pos.c MESAindirect_window_pos.c
-BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/../src/mapi/glapi/gen/indirect.c MESAindirect.c
-BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/../src/mapi/glapi/gen/indirect_size.c MESAindirect_size.c
-BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/src/util/debug.c UTILdebug.c
+BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/../src/mesa/glapi/glapi/gen/indirect.c MESAindirect.c
+BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/../src/mesa/glapi/glapi/gen/indirect_size.c MESAindirect_size.c
 
 # glapi
-.PATH:		${X11SRCDIR.Mesa}/src/mapi
-.PATH:		${X11SRCDIR.Mesa}/src/mapi/glapi
-#SRCS.glapi=	glapi_gentable.c
-
-.PATH:		${X11SRCDIR.Mesa}/src/mesa/x86
-.PATH:		${X11SRCDIR.Mesa}/src/mesa/x86-64
-.PATH:		${X11SRCDIR.Mesa}/src/mesa/sparc
-
-SRCS.i386.glx=	common_x86_asm.S \
-		x86_xform2.S	\
-		x86_xform3.S	\
-		x86_xform4.S	\
-		x86_cliptest.S	\
-		mmx_blend.S	\
-		3dnow_xform1.S	\
-		3dnow_xform2.S	\
-		3dnow_xform3.S	\
-		3dnow_xform4.S	\
-		sse_xform1.S	\
-		sse_xform2.S	\
-		sse_xform3.S	\
-		sse_xform4.S	\
-		sse_normal.S	\
-		read_rgba_span_x86.S
-SRCS.x86_64.glx=	xform4.S
-SRCS.sparc.glx=		xform.S norm.S sparc_clip.S
-
-.if !empty(SRCS.${MACHINE_ARCH}.glx)
-SRCS.glx += ${SRCS.${XORG_MACHINE_ARCH:U${MACHINE_ARCH}}.glx}
-.endif
-SRCS.glapi+=			entry.c
+.PATH:		${X11SRCDIR.Mesa}/src/mesa/glapi/glapi
+SRCS.glapi=	libgl_public.c
 
 .for _f in ${SRCS.glx}
-CPPFLAGS.${_f}= -I${X11SRCDIR.Mesa}/../src/mapi/glapi/gen \
+CPPFLAGS.${_f}= -I${X11SRCDIR.Mesa}/../src/mesa/glapi/glapi/gen \
 		-I${X11SRCDIR.Mesa}/src \
 		-I${X11SRCDIR.Mesa}/src/mesa \
 		-I${X11SRCDIR.Mesa}/../src/mesa \
@@ -99,10 +60,9 @@ CPPFLAGS.${_f}= -I${X11SRCDIR.Mesa}/../src/mapi/glapi/gen \
 .endfor
 
 .for _f in ${SRCS.glapi}
-CPPFLAGS.${_f}= -DMAPI_MODE_BRIDGE \
-		-DMAPI_ABI_HEADER=\"glapi/gen/glapi_mapi_tmp.h\" \
-		-I${X11SRCDIR.Mesa}/src \
-		-I${X11SRCDIR.Mesa}/../src/mapi
+CPPFLAGS.${_f}= -I${X11SRCDIR.Mesa}/src \
+		-I${X11SRCDIR.Mesa}/src/mesa \
+		-I${X11SRCDIR.Mesa}/../src/mesa/glapi/glapi/gen
 .endfor
 
 
@@ -111,11 +71,9 @@ CPPFLAGS.${_f}= -DMAPI_MODE_BRIDGE \
 SRCS.dri=	\
 	dri_common.c \
 	dri_common_query_renderer.c \
-	dri_common_interop.c \
 	xfont.c \
 	drisw_glx.c \
-	dri2.c \
-	dri2_glx.c
+	dri3_glx.c
 
 .for fn in ${SRCS.dri}
 CPPFLAGS.${fn}= \
@@ -124,37 +82,38 @@ CPPFLAGS.${fn}= \
 .endfor
 .endif
 
-SRCS.util+= \
-	ralloc.c \
-	os_file.c \
-	mesa-sha1.c \
-	u_printf.cpp \
-	u_process.c 
-
-CPPFLAGS.ralloc.c += -I${X11SRCDIR.Mesa}/src
-CPPFLAGS.u_printf.cpp += -I${X11SRCDIR.Mesa}/src
-
 .include "../libloader.mk"
+.include "../mesa-private-libs.mk"
+
+.PATH:		${X11SRCDIR.Mesa}/src/x11
+SRCS.x11=	x11_display.c x11_dri3.c
 
 .PATH:		${X11SRCDIR.Mesa}/src/glw
 .PATH:		${X11SRCDIR.Mesa}/include/GL
 .PATH:		${X11SRCDIR.Mesa}/src/mesa/drivers/x11
 INCS=	gl.h glcorearb.h glext.h \
 	glx.h glxext.h \
-	osmesa.h wglext.h
+	wglext.h
 INCSDIR=${X11INCDIR}/GL
 
 
-SRCS+=	${SRCS.dri} ${SRCS.util} ${SRCS.glx} ${SRCS.glapi}
+SRCS+=	${SRCS.dri} ${SRCS.x11} ${SRCS.glx} ${SRCS.glapi}
 
 CPPFLAGS+= \
 	-I${X11SRCDIR.Mesa}/include \
 	-I${X11SRCDIR.Mesa}/include/GL/internal \
 	-I${X11SRCDIR.Mesa}/src/loader \
-	-I${X11SRCDIR.Mesa}/src/mapi \
-	-I${X11SRCDIR.Mesa}/src/mapi/glapi \
-	-I${X11SRCDIR.Mesa}/../src/mapi/glapi \
+	-I${X11SRCDIR.Mesa}/src/x11 \
+	-I${X11SRCDIR.Mesa}/src \
+	-I${X11SRCDIR.Mesa}/../src \
+	-I${X11SRCDIR.Mesa}/src/mesa \
+	-I${X11SRCDIR.Mesa}/src/mesa/glapi \
+	-I${X11SRCDIR.Mesa}/src/mesa/glapi/glapi \
+	-I${X11SRCDIR.Mesa}/../src/mesa/glapi/glapi/gen \
 	-I${X11SRCDIR.Mesa}/src/glx \
+	-I${X11SRCDIR.Mesa}/src/gallium/include \
+	-I${X11SRCDIR.Mesa}/src/gallium/auxiliary \
+	-I${X11SRCDIR.Mesa}/src/gallium/frontends/dri \
 	-I${DESTDIR}${X11INCDIR}/libdrm \
 	-I${DESTDIR}${X11INCDIR}/GL \
 	-I${DESTDIR}${X11INCDIR}/X11 \
@@ -190,7 +149,8 @@ CPPFLAGS+=	\
 	-DHAVE_FUNC_ATTRIBUTE_NORETURN=1 -DHAVE_ENDIAN_H=1 -DHAVE_DLADDR=1 \
 	-DHAVE_CLOCK_GETTIME=1 -DHAVE_PTHREAD_PRIO_INHERIT=1 \
 	-DHAVE_PTHREAD=1 -DENABLE_ST_OMX_BELLAGIO=0 -DENABLE_ST_OMX_TIZONIA=0 \
-	-DHAVE_TIMESPEC_GET -DGLX_USE_TLS \
+	-DHAVE_TIMESPEC_GET -DHAVE_STRUCT_TIMESPEC -DHAVE_SYS_SHM_H \
+	-DGLX_USE_TLS \
 	-DHAVE_NOATEXIT
 
 .include "../asm.mk"
@@ -198,7 +158,9 @@ CPPFLAGS+=	\
 CPPFLAGS+=	\
 	-DHAVE_LIBDRM -DGLX_USE_DRM \
 	-DGLX_INDIRECT_RENDERING -DGLX_DIRECT_RENDERING \
-	-DHAVE_ALIAS -DMESA_EGL_NO_X11_HEADERS
+	-DHAVE_ALIAS -DMESA_EGL_NO_X11_HEADERS \
+	-Ddri_destroy_context=glx_dri_destroy_context \
+	-Ddri_unbind_context=glx_dri_unbind_context
 
 CPPFLAGS+=	\
 	-DUSE_EXTERNAL_DXTN_LIB=1 \
@@ -207,19 +169,28 @@ CPPFLAGS+=	\
 CFLAGS+=	-fvisibility=hidden -fno-strict-aliasing -fno-builtin-memcmp
 CFLAGS+=	-pthread
 
-LIBDPLIBS=	Xext		${.CURDIR}/../libXext \
+LIBDPLIBS=	gallium	${.CURDIR}/../gallium \
+		Xext		${.CURDIR}/../libXext \
 		X11		${.CURDIR}/../libX11/dynamic \
 		Xxf86vm		${.CURDIR}/../libXxf86vm \
 		Xfixes		${.CURDIR}/../libXfixes \
 		Xdamage		${.CURDIR}/../libXdamage \
-		glapi		${.CURDIR}/../libglapi${OLD_SUFFIX} \
 		drm		${.CURDIR}/../libdrm \
 		X11-xcb		${.CURDIR}/../libX11/libX11-xcb \
 		xcb-dri2	${.CURDIR}/../libxcb/dri2 \
+		xcb-dri3	${.CURDIR}/../libxcb/dri3 \
 		xcb-glx		${.CURDIR}/../libxcb/glx \
+		xcb-present	${.CURDIR}/../libxcb/present \
+		xcb-randr	${.CURDIR}/../libxcb/randr \
 		xcb-shm		${.CURDIR}/../libxcb/shm \
 		xcb-sync	${.CURDIR}/../libxcb/sync \
+		xcb-xfixes	${.CURDIR}/../libxcb/xfixes \
+		xshmfence	${.CURDIR}/../libxshmfence \
 		expat		${NETBSDSRCDIR}/external/mit/expat/lib/libexpat \
+		terminfo	${NETBSDSRCDIR}/lib/libterminfo \
+		execinfo	${NETBSDSRCDIR}/lib/libexecinfo \
+		elf		${NETBSDSRCDIR}/external/bsd/elftoolchain/lib/libelf \
+		z		${NETBSDSRCDIR}/lib/libz \
 		m		${NETBSDSRCDIR}/lib/libm \
 		pthread		${NETBSDSRCDIR}/lib/libpthread
 
@@ -228,6 +199,7 @@ MKLINT=no
 PKGCONFIG=	gl
 PKGDIST.gl=	${X11SRCDIR.Mesa}/../src/pkgconfig
 .include "${.CURDIR}/../libGL${OLD_SUFFIX}/mesa-ver.mk"
+CPPFLAGS+=	-DPACKAGE_VERSION=\"${MESA_VER}\"
 PKGCONFIG_VERSION.gl=	${MESA_VER}
 
 # XXX remove these from bsd.x11.mk

@@ -11,7 +11,8 @@ SRCS=	intel_bufmgr.c intel_bufmgr_fake.c intel_bufmgr_gem.c \
 CFLAGS+=	-std=c99
 
 CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/libdrm
-CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/X11 -I${X11SRCDIR.drm}
+CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/X11 -I${X11SRCDIR.drm} \
+		-I${X11SRCDIR.pciaccess}/include
 
 LIBDPLIBS=	drm	${.CURDIR}/../libdrm
 LIBDPLIBS+=	pciaccess	${.CURDIR}/../libpciaccess

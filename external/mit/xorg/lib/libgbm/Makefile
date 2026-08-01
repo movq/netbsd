@@ -11,54 +11,41 @@ SRCS.main=	\
 	backend.c \
 	gbm.c
 
-.PATH:	${X11SRCDIR.Mesa}/src/gbm/backends/dri
-SRCS.dri=	\
-	gbm_dri.c
-
-BUILDSYMLINKS+= ${X11SRCDIR.Mesa}/src/util/debug.c UTILdebug.c
-SRCS.util=      \
-	UTILdebug.c \
-	ralloc.c \
-	mesa-sha1.c \
-	os_file.c \
-	u_printf.cpp \
-	u_process.c
-CPPFLAGS.UTILdebug.c+=          -I${X11SRCDIR.Mesa}/src/util \
-				-I${X11SRCDIR.Mesa}/src/mesa \
-				-I${X11SRCDIR.Mesa}/src \
-				-I${X11SRCDIR.Mesa}/src/gallium/include
-
-SRCS=	${SRCS.main} ${SRCS.dri} ${SRCS.util}
+SRCS=	${SRCS.main}
 
 CPPFLAGS+=	-D_OS_UNIX=1
-CPPFLAGS+=	-DHAVE_PTHREAD=1 -DHAVE_TIMESPEC_GET
+CPPFLAGS+=	-DHAVE_PTHREAD=1 -DHAVE_TIMESPEC_GET -DHAVE_STRUCT_TIMESPEC
 CPPFLAGS+=	-DHAVE_NOATEXIT
-CPPFLAGS+=	-DDEFAULT_BACKENDS_PATH=\"${X11USRLIBDIR}/modules/dri\"
-CPPFLAGS+=	-DMODULEDIR=\"${X11USRLIBDIR}/gbm\"
+CPPFLAGS+=	-DDEFAULT_BACKENDS_PATH=\"${X11USRLIBDIR}/gbm\"
 CPPFLAGS+=	-I${X11SRCDIR.Mesa}/include
 CPPFLAGS+=	-I${X11SRCDIR.Mesa}/src
+CPPFLAGS+=	-I${X11SRCDIR.Mesa}/../src
+CPPFLAGS+=	-I${X11SRCDIR.Mesa}/src/gallium/include
 CPPFLAGS+=	-I${X11SRCDIR.Mesa}/src/loader
 CPPFLAGS+=	-I${X11SRCDIR.Mesa}/src/gbm/main
 CPPFLAGS+=	-I${X11SRCDIR.Mesa}/src/mapi
 CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/libdrm
+CPPFLAGS+=	-I${X11SRCDIR.drm}
 CFLAGS+=	-fno-strict-aliasing -fexceptions
 
 COPTS.gbm_dri.c+=	-Wno-error
 
 .include "../libloader.mk"
+.include "../mesa-private-libs.mk"
 
 .PATH:	${X11SRCDIR.Mesa}/src/gbm/main
-.PATH:	${X11SRCDIR.Mesa}/src/gbm/backends/dri
-INCS=		gbm.h
+INCS=		gbm.h gbm_backend_abi.h
 INCSDIR=	${X11INCDIR}
 
-LIBDPLIBS=	glapi	${.CURDIR}/../libglapi${OLD_SUFFIX}
-LIBDPLIBS+=	drm     ${.CURDIR}/../libdrm
+LIBDPLIBS=	drm     ${.CURDIR}/../libdrm
 LIBDPLIBS+=	expat	${NETBSDSRCDIR}/external/mit/expat/lib/libexpat
+LIBDPLIBS+=	pthread	${NETBSDSRCDIR}/lib/libpthread
+LIBDPLIBS+=	m	${NETBSDSRCDIR}/lib/libm
 
 PKGCONFIG=	gbm
 PKGDIST.gbm=	${X11SRCDIR.Mesa}/../src/pkgconfig
 .include "${.CURDIR}/../libGL/mesa-ver.mk"
+CPPFLAGS+=	-DPACKAGE_VERSION=\"${MESA_VER}\"
 PKGCONFIG_VERSION.gbm=	${MESA_VER}
 
 .include "../libdrm/Makefile.defines"

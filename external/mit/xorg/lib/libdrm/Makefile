@@ -10,7 +10,9 @@ SRCS=	xf86drm.c xf86drmHash.c xf86drmMode.c xf86drmRandom.c xf86drmSL.c
 INCS=	xf86drm.h xf86drmMode.h libsync.h
 INCSDIR=${X11INCDIR}
 
-CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/libdrm -I${X11SRCDIR.${LIB}}/../include
+CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/libdrm \
+		-I${X11SRCDIR.${LIB}}/include/drm \
+		-I${X11SRCDIR.${LIB}}/../include
 
 SUBDIR=	drm
 
@@ -18,7 +20,7 @@ PKGCONFIG=	libdrm
 PKGDIST=	${LIB}
 
 COPTS.xf86drm.c+=	${${ACTIVE_CC} == "gcc":? -Wno-error=cpp :}
-COPTS.xf86drm.c+=	${${ACTIVE_CC} == "clang":? -Wno-error=\#warnings :}
+COPTS.xf86drm.c+=	${${ACTIVE_CC} == "clang":? -Wno-error=\#warnings -Wno-error=macro-redefined :}
 
 CWARNFLAGS.clang+=	-Wno-conversion -Wno-tautological-compare
 

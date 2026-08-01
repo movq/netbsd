@@ -8,32 +8,17 @@ LIBISCXX=	yes
 SHLIB_MAJOR=    1
 SHLIB_MINOR=    0
 
-# mapi
-.PATH:		${X11SRCDIR.Mesa}/src/mapi
-SRCS.mapi=	\
-	mapi_glapi.c \
-	shared_entry.c \
-	stub.c \
-	table.c \
-	u_current.c \
-	u_execmem.c
-
-BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/src/mapi/entry.c shared_entry.c
-
-.for _f in ${SRCS.mapi}
-CPPFLAGS.${_f}=	-DMAPI_MODE_GLAPI -DMAPI_ABI_HEADER=\"shared-glapi/glapi_mapi_tmp.h\"
-.endfor
-
-# above is shared/libglapi.la
-
-SRCS+=	${SRCS.mapi} ${SRCS.mapi-glapi}
+# Mesa 26's shared GL dispatch implementation.
+.PATH:		${X11SRCDIR.Mesa}/src/mesa/glapi/shared-glapi
+SRCS=		core.c
+CPPFLAGS.core.c+=	-DMAPI_MODE_SHARED_GLAPI
 
 CPPFLAGS+= \
 	-I${X11SRCDIR.Mesa}/include \
-	-I${X11SRCDIR.Mesa}/src/mapi \
 	-I${X11SRCDIR.Mesa}/src \
-	-I${X11SRCDIR.Mesa}/../src/mapi \
-	-I${X11SRCDIR.Mesa}/../src/mapi/glapi
+	-I${X11SRCDIR.Mesa}/src/mesa \
+	-I${X11SRCDIR.Mesa}/src/mesa/glapi \
+	-I${X11SRCDIR.Mesa}/../src/mesa/glapi/shared-glapi
 
 CPPFLAGS+=	${X11FLAGS.THREADLIB}
 
@@ -50,12 +35,15 @@ CPPFLAGS+=	\
 	-DVERSION=\"${MESA_VER}\" \
 	-DPACKAGE_URL=\"\" \
 	-DPACKAGE=\"mesa\" \
+	-DHAVE_OPENGL=1 -DHAVE_OPENGL_ES_1=1 -DHAVE_OPENGL_ES_2=1 \
 	-D__STDC_CONSTANT_MACROS \
 	-D__STDC_FORMAT_MACROS \
 	-D__STDC_LIMIT_MACROS \
 	-DUSE_GCC_ATOMIC_BUILTINS \
 	-DNDEBUG \
 	-DHAVE_SYS_SYSCTL_H \
+	-DHAVE_SYSCONF=1 \
+	-DHAVE_STRUCT_TIMESPEC=1 \
 	-DHAVE_DLFCN_H \
 	-DHAVE_STRTOF \
 	-DHAVE_MKOSTEMP \

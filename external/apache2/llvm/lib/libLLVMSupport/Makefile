@@ -175,6 +175,8 @@ SRCS+=AArch64AttributeParser.cpp \
 	xxhash.cpp \
 	zOSLibFunctions.cpp
 
+CWARNFLAGS.gcc+= -Wno-error=stringop-overread
+
 .PATH: ${LLVM_SRCDIR}/lib/Support/BLAKE3
 
 SRCS+=	blake3.c \

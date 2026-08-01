@@ -713,6 +713,7 @@
 ./usr/X11R7/include/libdrm/intel_debug.h		xcomp-libdrm-include	xorg
 ./usr/X11R7/include/libdrm/mach64_drm.h			xcomp-libdrm-include	xorg
 ./usr/X11R7/include/libdrm/mga_drm.h			xcomp-libdrm-include	xorg
+./usr/X11R7/include/libdrm/msm_drm.h			xcomp-libdrm-include	xorg
 ./usr/X11R7/include/libdrm/nouveau.h			xcomp-libdrm-include	xorg
 ./usr/X11R7/include/libdrm/nouveau_drm.h		xcomp-libdrm-include	xorg
 ./usr/X11R7/include/libdrm/qxl_drm.h			xcomp-libdrm-include	xorg
@@ -728,8 +729,11 @@
 ./usr/X11R7/include/libdrm/radeon_surface.h		xcomp-libdrm-include	xorg
 ./usr/X11R7/include/libdrm/savage_drm.h			xcomp-libdrm-include	xorg
 ./usr/X11R7/include/libdrm/sis_drm.h			xcomp-libdrm-include	xorg
+./usr/X11R7/include/libdrm/tegra_drm.h			xcomp-libdrm-include	xorg
+./usr/X11R7/include/libdrm/vc4_drm.h			xcomp-libdrm-include	xorg
 ./usr/X11R7/include/libdrm/via_drm.h			xcomp-libdrm-include	xorg
 ./usr/X11R7/include/libdrm/virtgpu_drm.h		xcomp-libdrm-include	xorg
+./usr/X11R7/include/libdrm/vmwgfx_drm.h			xcomp-libdrm-include	xorg
 ./usr/X11R7/include/libkms/libkms.h			xcomp-obsolete		obsolete
 ./usr/X11R7/include/libsync.h				xcomp-libdrm-include	xorg
 ./usr/X11R7/include/libxcvt/libxcvt.h			xcomp-libxcvt-include	xorg

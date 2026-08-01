@@ -24,7 +24,15 @@ SUBDIR+=libxcb \
 	libX11 \
 	.WAIT
 .if !defined(MLIBDIR)
-SUBDIR+=dri${OLD_SUFFIX} gallium${OLD_SUFFIX}
+SUBDIR+=libglapi${OLD_SUFFIX}
+.endif
+.if empty(OLD_SUFFIX)
+SUBDIR+=libmesa_util libxmlconfig
+.endif
+SUBDIR+= \
+	.WAIT
+.if !defined(MLIBDIR)
+SUBDIR+=gallium${OLD_SUFFIX}
 .endif
 SUBDIR+=fontconfig libSM \
 	.WAIT \
@@ -57,7 +65,9 @@ SUBDIR+=libGLU libGLw libXaw6 libXaw libXcursor \
 	.WAIT \
 	libXdmGreet \
 	xcb-util
-SUBDIR+=libgbm${OLD_SUFFIX}
+SUBDIR+=libgbm${OLD_SUFFIX} \
+	.WAIT \
+	dri_gbm
 .if ${HAVE_XORG_EGL} != "no"
 # libEGL depends upon libgbm
 SUBDIR+=.WAIT libEGL${OLD_SUFFIX}
