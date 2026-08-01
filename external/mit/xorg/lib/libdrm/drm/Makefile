@@ -15,6 +15,7 @@ INCS=	drm.h \
 	drm_mode.h \
 	drm_sarea.h \
 	i915_drm.h \
+	msm_drm.h \
 	amdgpu.h \
 	amdgpu_drm.h \
 	intel_aub.h \
@@ -36,8 +37,11 @@ INCS=	drm.h \
 	radeon_surface.h \
 	savage_drm.h \
 	sis_drm.h \
+	tegra_drm.h \
+	vc4_drm.h \
 	via_drm.h \
 	virtgpu_drm.h \
+	vmwgfx_drm.h \
 	qxl_drm.h
 
 INCSDIR=${X11INCDIR}/libdrm

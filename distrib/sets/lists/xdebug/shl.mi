@@ -60,6 +60,7 @@
 ./usr/libdata/debug/usr/X11R7/lib/libfontenc.so.2.0.debug	xdebug-libfontenc-debug		xorg,debug,compatx11file
 ./usr/libdata/debug/usr/X11R7/lib/libfreetype.so.19.0.debug	xdebug-freetype-debug		xorg,debug,compatx11file
 ./usr/libdata/debug/usr/X11R7/lib/libgbm.so.1.0.debug	xdebug-libgbm-debug		xorg,debug,compatx11file
+./usr/libdata/debug/usr/X11R7/lib/libgallium.so.0.0.debug	xdebug-gallium-debug	xorg,debug,compatx11file
 ./usr/libdata/debug/usr/X11R7/lib/libglapi.so.1.0.debug	xdebug-libglapi-debug		xorg,debug,compatx11file
 ./usr/libdata/debug/usr/X11R7/lib/libpciaccess.so.0.4.debug	xdebug-libpciaccess-debug		xorg,debug,compatx11file
 ./usr/libdata/debug/usr/X11R7/lib/libpixman-1.so.2.4.debug	xdebug-pixman-debug		xorg,debug,compatx11file

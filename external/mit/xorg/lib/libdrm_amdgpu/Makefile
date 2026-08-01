@@ -32,6 +32,7 @@ PKGCONFIG=	libdrm_amdgpu
 PKGDIST=	drm
 
 COPTS.amdgpu_cs.c+= -Wno-stack-protector
+COPTS.amdgpu_vamgr.c+= -Wno-error=attributes
 
 FILES=		amdgpu.ids
 FILESDIR=	${LIBDRMDATADIR}

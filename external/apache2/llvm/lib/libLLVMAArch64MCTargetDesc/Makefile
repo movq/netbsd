@@ -22,6 +22,8 @@ SRCS+=	AArch64AsmBackend.cpp \
 	AArch64WinCOFFObjectWriter.cpp \
 	AArch64WinCOFFStreamer.cpp
 
+CWARNFLAGS.gcc+= -Wno-error=stringop-overread
+
 .if defined(HOSTLIB)
 .include <bsd.hostlib.mk>
 .else

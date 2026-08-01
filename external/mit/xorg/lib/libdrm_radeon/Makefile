@@ -11,11 +11,11 @@ SRCS=	radeon_bo.c \
 	radeon_cs.c \
 	radeon_cs_gem.c \
 	radeon_cs_space.c \
-	radeon_surface.c \
-	bof.c
+	radeon_surface.c
 
 CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/libdrm
-CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/X11 -I${X11SRCDIR.drm}
+CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/X11 -I${X11SRCDIR.drm} \
+		-I${X11SRCDIR.drm}/radeon
 
 CWARNFLAGS.clang+=	-Wno-pointer-sign -Wno-parentheses-equality
 

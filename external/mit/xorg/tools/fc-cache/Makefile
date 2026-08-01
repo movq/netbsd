@@ -84,7 +84,7 @@ SRCS.freetype+=	type42.c
 SRCS.freetype+=	winfnt.c
 
 .PATH:	${EXPAT}/lib
-SRCS.expat=	xmlparse.c xmltok.c xmlrole.c random_arc4random_buf.c
+SRCS.expat=	xmlparse.c xmltok.c xmlrole.c
 
 SRCS=	${SRCS.fc-cache} ${SRCS.fontconfig} ${SRCS.freetype} ${SRCS.expat}
 

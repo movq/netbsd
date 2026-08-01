@@ -9,5 +9,7 @@ HOST_CPPFLAGS= 	-DDARWIN_NO_CARBON
 TOOL_STRING=	"NetBSD tool ucs2any"
 HOST_CPPFLAGS= 	-DPACKAGE_STRING=${TOOL_STRING:Q}
 
+CPPFLAGS+=	-DPACKAGE_STRING=\"${PACKAGE_STRING}\"
+
 .include <bsd.x11.mk>
 .include <bsd.hostprog.mk>

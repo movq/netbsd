@@ -146,6 +146,7 @@
 ./usr/X11R7/lib/X11/xkb/symbols/sun_vndr
 ./usr/X11R7/lib/X11/xkb/symbols/xfree68_vndr
 ./usr/X11R7/lib/X11/xkb/types
+./usr/X11R7/lib/gbm
 ./usr/X11R7/lib/modules
 ./usr/X11R7/lib/modules/dri
 ./usr/X11R7/lib/modules/drivers

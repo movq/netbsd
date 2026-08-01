@@ -10,11 +10,13 @@
 #include <endian.h>
 #define BYTEORDER _BYTE_ORDER
 
+#if ! defined(TOOL_FCCACHE)
 /* Define to 1 if you have the `arc4random' function. */
-#define HAVE_ARC4RANDOM 1
+#  define HAVE_ARC4RANDOM 1
 
 /* Define to 1 if you have the `arc4random_buf' function. */
-#define HAVE_ARC4RANDOM_BUF 1
+#  define HAVE_ARC4RANDOM_BUF 1
+#endif
 
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #define HAVE_DLFCN_H 1
@@ -25,11 +27,13 @@
 /* Define to 1 if you have the `getpagesize' function. */
 #define HAVE_GETPAGESIZE 1
 
+#if ! defined(TOOL_FCCACHE)
 /* Define to 1 if you have the `getrandom' function. */
-#define HAVE_GETRANDOM 1
+#  define HAVE_GETRANDOM 1
 
 /* Define to 1 if you have the `getentropy' function. */
-#define HAVE_GETENTROPY 1
+#  define HAVE_GETENTROPY 1
+#endif
 
 /* Define to 1 if you have the <inttypes.h> header file. */
 #define HAVE_INTTYPES_H 1
@@ -55,8 +59,10 @@
 /* Define to 1 if you have the <string.h> header file. */
 #define HAVE_STRING_H 1
 
+#if ! defined(TOOL_FCCACHE)
 /* Define to 1 if you have `syscall' and `SYS_getrandom'. */
-#define HAVE_SYSCALL_GETRANDOM 1
+#  define HAVE_SYSCALL_GETRANDOM 1
+#endif
 
 /* Define to 1 if you have the <sys/stat.h> header file. */
 #define HAVE_SYS_STAT_H 1
@@ -113,7 +119,7 @@
    point, 0 to disable. */
 #define XML_CONTEXT_BYTES 1024
 
-#  if ! defined(_WIN32)
+#  if ! defined(_WIN32) && ! defined(TOOL_FCCACHE)
 /* Define to include code reading entropy from `/dev/urandom'. */
 #define XML_DEV_URANDOM 1
 #  endif

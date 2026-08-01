@@ -2,6 +2,12 @@
 
 # common defiles for libdrm components
 
+CPPFLAGS+=	-I${X11SRCDIR.drm}/include/drm
+
+.for _drm_pc in libdrm libdrm_amdgpu libdrm_intel libdrm_nouveau libdrm_radeon
+PKGCONFIG_VERSION.${_drm_pc}=	2.4.134
+.endfor
+
 CPPFLAGS+= \
 		-DHAVE_INTTYPES_H \
 		-DHAVE_OPEN_MEMSTREAM \
