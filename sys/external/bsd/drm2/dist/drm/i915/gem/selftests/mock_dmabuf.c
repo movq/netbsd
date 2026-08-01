@@ -9,6 +9,7 @@
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, "$NetBSD: mock_dmabuf.c,v 1.2 2021/12/18 23:45:30 riastradh Exp $");
 
+#include <linux/vmalloc.h>
 #include "mock_dmabuf.h"
 
 static struct sg_table *mock_map_dma_buf(struct dma_buf_attachment *attachment,
@@ -33,10 +34,9 @@ static struct sg_table *mock_map_dma_buf(struct dma_buf_attachment *attachment,
 		sg = sg_next(sg);
 	}
 
-	if (!dma_map_sg(attachment->dev, st->sgl, st->nents, dir)) {
-		err = -ENOMEM;
+	err = dma_map_sgtable(attachment->dev, st, dir, 0);
+	if (err)
 		goto err_st;
-	}
 
 	return st;
 
@@ -51,7 +51,7 @@ static void mock_unmap_dma_buf(struct dma_buf_attachment *attachment,
 			       struct sg_table *st,
 			       enum dma_data_direction dir)
 {
-	dma_unmap_sg(attachment->dev, st->sgl, st->nents, dir);
+	dma_unmap_sgtable(attachment->dev, st, dir, 0);
 	sg_free_table(st);
 	kfree(st);
 }
@@ -67,18 +67,24 @@ static void mock_dmabuf_release(struct dma_buf *dma_buf)
 	kfree(mock);
 }
 
-static void *mock_dmabuf_vmap(struct dma_buf *dma_buf)
+static int mock_dmabuf_vmap(struct dma_buf *dma_buf, struct iosys_map *map)
 {
 	struct mock_dmabuf *mock = to_mock(dma_buf);
+	void *vaddr;
 
-	return vm_map_ram(mock->pages, mock->npages, 0, PAGE_KERNEL);
+	vaddr = vm_map_ram(mock->pages, mock->npages, 0);
+	if (!vaddr)
+		return -ENOMEM;
+	iosys_map_set_vaddr(map, vaddr);
+
+	return 0;
 }
 
-static void mock_dmabuf_vunmap(struct dma_buf *dma_buf, void *vaddr)
+static void mock_dmabuf_vunmap(struct dma_buf *dma_buf, struct iosys_map *map)
 {
 	struct mock_dmabuf *mock = to_mock(dma_buf);
 
-	vm_unmap_ram(vaddr, mock->npages);
+	vm_unmap_ram(map->vaddr, mock->npages);
 }
 
 static int mock_dmabuf_mmap(struct dma_buf *dma_buf, struct vm_area_struct *vma)
@@ -102,8 +108,7 @@ static struct dma_buf *mock_dmabuf(int npages)
 	struct dma_buf *dmabuf;
 	int i;
 
-	mock = kmalloc(sizeof(*mock) + npages * sizeof(struct page *),
-		       GFP_KERNEL);
+	mock = kmalloc(struct_size(mock, pages, npages), GFP_KERNEL);
 	if (!mock)
 		return ERR_PTR(-ENOMEM);
 

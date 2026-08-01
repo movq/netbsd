@@ -28,8 +28,6 @@
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, "$NetBSD: amdgpu_hw_hpd.c,v 1.3 2021/12/19 12:02:39 riastradh Exp $");
 
-#include <linux/slab.h>
-
 #include "dm_services.h"
 
 #include "include/gpio_interface.h"
@@ -69,7 +67,7 @@ static void dal_hw_hpd_destroy(
 	*ptr = NULL;
 }
 
-static enum gpio_result get_value(
+static enum gpio_result dal_hw_hpd_get_value(
 	const struct hw_gpio_pin *ptr,
 	uint32_t *value)
 {
@@ -93,7 +91,7 @@ static enum gpio_result get_value(
 	return dal_hw_gpio_get_value(ptr, value);
 }
 
-static enum gpio_result set_config(
+static enum gpio_result dal_hw_hpd_set_config(
 	struct hw_gpio_pin *ptr,
 	const struct gpio_config_data *config_data)
 {
@@ -112,9 +110,9 @@ static enum gpio_result set_config(
 static const struct hw_gpio_pin_funcs funcs = {
 	.destroy = dal_hw_hpd_destroy,
 	.open = dal_hw_gpio_open,
-	.get_value = get_value,
+	.get_value = dal_hw_hpd_get_value,
 	.set_value = dal_hw_gpio_set_value,
-	.set_config = set_config,
+	.set_config = dal_hw_hpd_set_config,
 	.change_mode = dal_hw_gpio_change_mode,
 	.close = dal_hw_gpio_close,
 };
@@ -135,7 +133,7 @@ void dal_hw_hpd_init(
 	enum gpio_id id,
 	uint32_t en)
 {
-	if ((en < GPIO_DDC_LINE_MIN) || (en > GPIO_DDC_LINE_MAX)) {
+	if (en > GPIO_DDC_LINE_MAX) {
 		ASSERT_CRITICAL(false);
 		*hw_hpd = NULL;
 	}

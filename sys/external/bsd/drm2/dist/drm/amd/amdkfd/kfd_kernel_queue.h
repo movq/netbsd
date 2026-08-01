@@ -1,7 +1,8 @@
 /*	$NetBSD: kfd_kernel_queue.h,v 1.3 2021/12/18 23:44:59 riastradh Exp $	*/
 
+/* SPDX-License-Identifier: GPL-2.0 OR MIT */
 /*
- * Copyright 2014 Advanced Micro Devices, Inc.
+ * Copyright 2014-2022 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -48,13 +49,13 @@
 int kq_acquire_packet_buffer(struct kernel_queue *kq,
 				size_t packet_size_in_dwords,
 				unsigned int **buffer_ptr);
-void kq_submit_packet(struct kernel_queue *kq);
+int kq_submit_packet(struct kernel_queue *kq);
 void kq_rollback_packet(struct kernel_queue *kq);
 
 
 struct kernel_queue {
 	/* data */
-	struct kfd_dev		*dev;
+	struct kfd_node		*dev;
 	struct mqd_manager	*mqd_mgr;
 	struct queue		*queue;
 	uint64_t		pending_wptr64;

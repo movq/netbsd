@@ -43,6 +43,9 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_dcn20_vmid.c,v 1.2 2021/12/18 23:45:03 riastr
 #define FN(reg_name, field_name) \
 	vmid->shifts->field_name, vmid->masks->field_name
 
+#define DC_LOGGER \
+	CTX->logger
+
 static void dcn20_wait_for_vmid_ready(struct dcn20_vmid *vmid)
 {
 	/* According the hardware spec, we need to poll for the lowest

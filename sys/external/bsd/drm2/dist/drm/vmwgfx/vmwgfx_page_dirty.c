@@ -3,32 +3,14 @@
 // SPDX-License-Identifier: GPL-2.0 OR MIT
 /**************************************************************************
  *
- * Copyright 2019 VMware, Inc., Palo Alto, CA., USA
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the
- * "Software"), to deal in the Software without restriction, including
- * without limitation the rights to use, copy, modify, merge, publish,
- * distribute, sub license, and/or sell copies of the Software, and to
- * permit persons to whom the Software is furnished to do so, subject to
- * the following conditions:
- *
- * The above copyright notice and this permission notice (including the
- * next paragraph) shall be included in all copies or substantial portions
- * of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT. IN NO EVENT SHALL
- * THE COPYRIGHT HOLDERS, AUTHORS AND/OR ITS SUPPLIERS BE LIABLE FOR ANY CLAIM,
- * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
- * USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * Copyright (c) 2019-2025 Broadcom. All Rights Reserved. The term
+ * “Broadcom” refers to Broadcom Inc. and/or its subsidiaries.
  *
  **************************************************************************/
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, "$NetBSD: vmwgfx_page_dirty.c,v 1.2 2021/12/18 23:45:45 riastradh Exp $");
 
+#include "vmwgfx_bo.h"
 #include "vmwgfx_drv.h"
 
 /*
@@ -55,27 +37,30 @@ enum vmw_bo_dirty_method {
 
 /**
  * struct vmw_bo_dirty - Dirty information for buffer objects
+ * @ref_count: Reference count for this structure. Must be first member!
  * @start: First currently dirty bit
  * @end: Last currently dirty bit + 1
  * @method: The currently used dirty method
  * @change_count: Number of consecutive method change triggers
- * @ref_count: Reference count for this structure
  * @bitmap_size: The size of the bitmap in bits. Typically equal to the
  * nuber of pages in the bo.
- * @size: The accounting size for this struct.
  * @bitmap: A bitmap where each bit represents a page. A set bit means a
  * dirty page.
  */
 struct vmw_bo_dirty {
+	struct   kref ref_count;
 	unsigned long start;
 	unsigned long end;
 	enum vmw_bo_dirty_method method;
 	unsigned int change_count;
-	unsigned int ref_count;
 	unsigned long bitmap_size;
-	size_t size;
-	unsigned long bitmap[0];
+	unsigned long bitmap[];
 };
+
+bool vmw_bo_is_dirty(struct vmw_bo *vbo)
+{
+	return vbo->dirty && (vbo->dirty->start < vbo->dirty->end);
+}
 
 /**
  * vmw_bo_dirty_scan_pagetable - Perform a pagetable scan for dirty bits
@@ -85,11 +70,11 @@ struct vmw_bo_dirty {
  * dirty structure with the results. This function may change the
  * dirty-tracking method.
  */
-static void vmw_bo_dirty_scan_pagetable(struct vmw_buffer_object *vbo)
+static void vmw_bo_dirty_scan_pagetable(struct vmw_bo *vbo)
 {
 	struct vmw_bo_dirty *dirty = vbo->dirty;
-	pgoff_t offset = drm_vma_node_start(&vbo->base.base.vma_node);
-	struct address_space *mapping = vbo->base.bdev->dev_mapping;
+	pgoff_t offset = drm_vma_node_start(&vbo->tbo.base.vma_node);
+	struct address_space *mapping = vbo->tbo.bdev->dev_mapping;
 	pgoff_t num_marked;
 
 	num_marked = clean_record_shared_mapping_range
@@ -123,26 +108,25 @@ static void vmw_bo_dirty_scan_pagetable(struct vmw_buffer_object *vbo)
  *
  * This function may change the dirty-tracking method.
  */
-static void vmw_bo_dirty_scan_mkwrite(struct vmw_buffer_object *vbo)
+static void vmw_bo_dirty_scan_mkwrite(struct vmw_bo *vbo)
 {
 	struct vmw_bo_dirty *dirty = vbo->dirty;
-	unsigned long offset = drm_vma_node_start(&vbo->base.base.vma_node);
-	struct address_space *mapping = vbo->base.bdev->dev_mapping;
+	unsigned long offset = drm_vma_node_start(&vbo->tbo.base.vma_node);
+	struct address_space *mapping = vbo->tbo.bdev->dev_mapping;
 	pgoff_t num_marked;
 
 	if (dirty->end <= dirty->start)
 		return;
 
-	num_marked = wp_shared_mapping_range(vbo->base.bdev->dev_mapping,
-					dirty->start + offset,
-					dirty->end - dirty->start);
+	num_marked = wp_shared_mapping_range(vbo->tbo.bdev->dev_mapping,
+					     dirty->start + offset,
+					     dirty->end - dirty->start);
 
 	if (100UL * num_marked / dirty->bitmap_size >
-	    VMW_DIRTY_PERCENTAGE) {
+	    VMW_DIRTY_PERCENTAGE)
 		dirty->change_count++;
-	} else {
+	else
 		dirty->change_count = 0;
-	}
 
 	if (dirty->change_count > VMW_DIRTY_NUM_CHANGE_TRIGGERS) {
 		pgoff_t start = 0;
@@ -167,7 +151,7 @@ static void vmw_bo_dirty_scan_mkwrite(struct vmw_buffer_object *vbo)
  *
  * This function may change the dirty tracking method.
  */
-void vmw_bo_dirty_scan(struct vmw_buffer_object *vbo)
+void vmw_bo_dirty_scan(struct vmw_bo *vbo)
 {
 	struct vmw_bo_dirty *dirty = vbo->dirty;
 
@@ -188,12 +172,12 @@ void vmw_bo_dirty_scan(struct vmw_buffer_object *vbo)
  * when calling unmap_mapping_range(). This function makes sure we pick
  * up all dirty pages.
  */
-static void vmw_bo_dirty_pre_unmap(struct vmw_buffer_object *vbo,
+static void vmw_bo_dirty_pre_unmap(struct vmw_bo *vbo,
 				   pgoff_t start, pgoff_t end)
 {
 	struct vmw_bo_dirty *dirty = vbo->dirty;
-	unsigned long offset = drm_vma_node_start(&vbo->base.base.vma_node);
-	struct address_space *mapping = vbo->base.bdev->dev_mapping;
+	unsigned long offset = drm_vma_node_start(&vbo->tbo.base.vma_node);
+	struct address_space *mapping = vbo->tbo.bdev->dev_mapping;
 
 	if (dirty->method != VMW_BO_DIRTY_PAGETABLE || start >= end)
 		return;
@@ -211,13 +195,13 @@ static void vmw_bo_dirty_pre_unmap(struct vmw_buffer_object *vbo,
  * @start: First page of the range within the buffer object.
  * @end: Last page of the range within the buffer object + 1.
  *
- * This is similar to ttm_bo_unmap_virtual_locked() except it takes a subrange.
+ * This is similar to ttm_bo_unmap_virtual() except it takes a subrange.
  */
-void vmw_bo_dirty_unmap(struct vmw_buffer_object *vbo,
+void vmw_bo_dirty_unmap(struct vmw_bo *vbo,
 			pgoff_t start, pgoff_t end)
 {
-	unsigned long offset = drm_vma_node_start(&vbo->base.base.vma_node);
-	struct address_space *mapping = vbo->base.bdev->dev_mapping;
+	unsigned long offset = drm_vma_node_start(&vbo->tbo.base.vma_node);
+	struct address_space *mapping = vbo->tbo.bdev->dev_mapping;
 
 	vmw_bo_dirty_pre_unmap(vbo, start, end);
 	unmap_shared_mapping_range(mapping, (offset + start) << PAGE_SHIFT,
@@ -234,46 +218,34 @@ void vmw_bo_dirty_unmap(struct vmw_buffer_object *vbo,
  *
  * Return: Zero on success, -ENOMEM on memory allocation failure.
  */
-int vmw_bo_dirty_add(struct vmw_buffer_object *vbo)
+int vmw_bo_dirty_add(struct vmw_bo *vbo)
 {
 	struct vmw_bo_dirty *dirty = vbo->dirty;
-	pgoff_t num_pages = vbo->base.num_pages;
-	size_t size, acc_size;
+	pgoff_t num_pages = PFN_UP(vbo->tbo.resource->size);
+	size_t size;
 	int ret;
-	static struct ttm_operation_ctx ctx = {
-		.interruptible = false,
-		.no_wait_gpu = false
-	};
 
 	if (dirty) {
-		dirty->ref_count++;
+		kref_get(&dirty->ref_count);
 		return 0;
 	}
 
 	size = sizeof(*dirty) + BITS_TO_LONGS(num_pages) * sizeof(long);
-	acc_size = ttm_round_pot(size);
-	ret = ttm_mem_global_alloc(&ttm_mem_glob, acc_size, &ctx);
-	if (ret) {
-		VMW_DEBUG_USER("Out of graphics memory for buffer object "
-			       "dirty tracker.\n");
-		return ret;
-	}
 	dirty = kvzalloc(size, GFP_KERNEL);
 	if (!dirty) {
 		ret = -ENOMEM;
 		goto out_no_dirty;
 	}
 
-	dirty->size = acc_size;
 	dirty->bitmap_size = num_pages;
 	dirty->start = dirty->bitmap_size;
 	dirty->end = 0;
-	dirty->ref_count = 1;
+	kref_init(&dirty->ref_count);
 	if (num_pages < PAGE_SIZE / sizeof(pte_t)) {
 		dirty->method = VMW_BO_DIRTY_PAGETABLE;
 	} else {
-		struct address_space *mapping = vbo->base.bdev->dev_mapping;
-		pgoff_t offset = drm_vma_node_start(&vbo->base.base.vma_node);
+		struct address_space *mapping = vbo->tbo.bdev->dev_mapping;
+		pgoff_t offset = drm_vma_node_start(&vbo->tbo.base.vma_node);
 
 		dirty->method = VMW_BO_DIRTY_MKWRITE;
 
@@ -290,8 +262,14 @@ int vmw_bo_dirty_add(struct vmw_buffer_object *vbo)
 	return 0;
 
 out_no_dirty:
-	ttm_mem_global_free(&ttm_mem_glob, acc_size);
 	return ret;
+}
+
+static void vmw_bo_dirty_free(struct kref *kref)
+{
+	struct vmw_bo_dirty *dirty = container_of(kref, struct vmw_bo_dirty, ref_count);
+
+	kvfree(dirty);
 }
 
 /**
@@ -304,17 +282,12 @@ out_no_dirty:
  *
  * Return: Zero on success, -ENOMEM on memory allocation failure.
  */
-void vmw_bo_dirty_release(struct vmw_buffer_object *vbo)
+void vmw_bo_dirty_release(struct vmw_bo *vbo)
 {
 	struct vmw_bo_dirty *dirty = vbo->dirty;
 
-	if (dirty && --dirty->ref_count == 0) {
-		size_t acc_size = dirty->size;
-
-		kvfree(dirty);
-		ttm_mem_global_free(&ttm_mem_glob, acc_size);
+	if (dirty && kref_put(&dirty->ref_count, vmw_bo_dirty_free))
 		vbo->dirty = NULL;
-	}
 }
 
 /**
@@ -329,11 +302,11 @@ void vmw_bo_dirty_release(struct vmw_buffer_object *vbo)
  */
 void vmw_bo_dirty_transfer_to_res(struct vmw_resource *res)
 {
-	struct vmw_buffer_object *vbo = res->backup;
+	struct vmw_bo *vbo = res->guest_memory_bo;
 	struct vmw_bo_dirty *dirty = vbo->dirty;
 	pgoff_t start, cur, end;
-	unsigned long res_start = res->backup_offset;
-	unsigned long res_end = res->backup_offset + res->backup_size;
+	unsigned long res_start = res->guest_memory_offset;
+	unsigned long res_end = res->guest_memory_offset + res->guest_memory_size;
 
 	WARN_ON_ONCE(res_start & ~PAGE_MASK);
 	res_start >>= PAGE_SHIFT;
@@ -364,6 +337,41 @@ void vmw_bo_dirty_transfer_to_res(struct vmw_resource *res)
 		dirty->end = res_start;
 }
 
+void vmw_bo_dirty_clear(struct vmw_bo *vbo)
+{
+	struct vmw_bo_dirty *dirty = vbo->dirty;
+	pgoff_t start, cur, end;
+	unsigned long res_start = 0;
+	unsigned long res_end = vbo->tbo.base.size;
+
+	WARN_ON_ONCE(res_start & ~PAGE_MASK);
+	res_start >>= PAGE_SHIFT;
+	res_end = DIV_ROUND_UP(res_end, PAGE_SIZE);
+
+	if (res_start >= dirty->end || res_end <= dirty->start)
+		return;
+
+	cur = max(res_start, dirty->start);
+	res_end = max(res_end, dirty->end);
+	while (cur < res_end) {
+		unsigned long num;
+
+		start = find_next_bit(&dirty->bitmap[0], res_end, cur);
+		if (start >= res_end)
+			break;
+
+		end = find_next_zero_bit(&dirty->bitmap[0], res_end, start + 1);
+		cur = end + 1;
+		num = end - start;
+		bitmap_clear(&dirty->bitmap[0], start, num);
+	}
+
+	if (res_start <= dirty->start && res_end > dirty->start)
+		dirty->start = res_end;
+	if (res_start < dirty->end && res_end >= dirty->end)
+		dirty->end = res_start;
+}
+
 /**
  * vmw_bo_dirty_clear_res - Clear a resource's dirty region from
  * its backing mob.
@@ -374,9 +382,9 @@ void vmw_bo_dirty_transfer_to_res(struct vmw_resource *res)
  */
 void vmw_bo_dirty_clear_res(struct vmw_resource *res)
 {
-	unsigned long res_start = res->backup_offset;
-	unsigned long res_end = res->backup_offset + res->backup_size;
-	struct vmw_buffer_object *vbo = res->backup;
+	unsigned long res_start = res->guest_memory_offset;
+	unsigned long res_end = res->guest_memory_offset + res->guest_memory_size;
+	struct vmw_bo *vbo = res->guest_memory_bo;
 	struct vmw_bo_dirty *dirty = vbo->dirty;
 
 	res_start >>= PAGE_SHIFT;
@@ -403,8 +411,7 @@ vm_fault_t vmw_bo_vm_mkwrite(struct vm_fault *vmf)
 	vm_fault_t ret;
 	unsigned long page_offset;
 	unsigned int save_flags;
-	struct vmw_buffer_object *vbo =
-		container_of(bo, typeof(*vbo), base);
+	struct vmw_bo *vbo = to_vmw_bo(&bo->base);
 
 	/*
 	 * mkwrite() doesn't handle the VM_FAULT_RETRY return value correctly.
@@ -418,7 +425,7 @@ vm_fault_t vmw_bo_vm_mkwrite(struct vm_fault *vmf)
 		return ret;
 
 	page_offset = vmf->pgoff - drm_vma_node_start(&bo->base.vma_node);
-	if (unlikely(page_offset >= bo->num_pages)) {
+	if (unlikely(page_offset >= PFN_UP(bo->resource->size))) {
 		ret = VM_FAULT_SIGBUS;
 		goto out_unlock;
 	}
@@ -442,8 +449,7 @@ vm_fault_t vmw_bo_vm_fault(struct vm_fault *vmf)
 	struct vm_area_struct *vma = vmf->vma;
 	struct ttm_buffer_object *bo = (struct ttm_buffer_object *)
 	    vma->vm_private_data;
-	struct vmw_buffer_object *vbo =
-		container_of(bo, struct vmw_buffer_object, base);
+	struct vmw_bo *vbo = to_vmw_bo(&bo->base);
 	pgoff_t num_prefault;
 	pgprot_t prot;
 	vm_fault_t ret;
@@ -461,7 +467,7 @@ vm_fault_t vmw_bo_vm_fault(struct vm_fault *vmf)
 
 		page_offset = vmf->pgoff -
 			drm_vma_node_start(&bo->base.vma_node);
-		if (page_offset >= bo->num_pages ||
+		if (page_offset >= PFN_UP(bo->resource->size) ||
 		    vmw_resources_clean(vbo, page_offset,
 					page_offset + PAGE_SIZE,
 					&allowed_prefault)) {
@@ -478,7 +484,7 @@ vm_fault_t vmw_bo_vm_fault(struct vm_fault *vmf)
 	 * a lot of unnecessary write faults.
 	 */
 	if (vbo->dirty && vbo->dirty->method == VMW_BO_DIRTY_MKWRITE)
-		prot = vma->vm_page_prot;
+		prot = vm_get_page_prot(vma->vm_flags & ~VM_SHARED);
 	else
 		prot = vm_get_page_prot(vma->vm_flags);
 

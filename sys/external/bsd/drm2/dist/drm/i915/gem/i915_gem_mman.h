@@ -1,8 +1,7 @@
 /*	$NetBSD: i915_gem_mman.h,v 1.8 2021/12/19 11:56:52 riastradh Exp $	*/
 
+/* SPDX-License-Identifier: MIT */
 /*
- * SPDX-License-Identifier: MIT
- *
  * Copyright © 2019 Intel Corporation
  */
 
@@ -33,7 +32,9 @@ int i915_gem_dumb_mmap_offset(struct drm_file *file_priv,
 			      u32 handle, u64 *offset);
 
 void __i915_gem_object_release_mmap_gtt(struct drm_i915_gem_object *obj);
-void i915_gem_object_release_mmap(struct drm_i915_gem_object *obj);
-void i915_gem_object_release_mmap_offset(struct drm_i915_gem_object *obj);
+void i915_gem_object_release_mmap_gtt(struct drm_i915_gem_object *obj);
 
+void i915_gem_object_runtime_pm_release_mmap_offset(struct drm_i915_gem_object *obj);
+void i915_gem_object_release_mmap_offset(struct drm_i915_gem_object *obj);
+int i915_gem_fb_mmap(struct drm_i915_gem_object *obj, struct vm_area_struct *vma);
 #endif

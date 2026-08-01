@@ -27,7 +27,7 @@
 __KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_i2c_padgf119.c,v 1.3 2021/12/18 23:45:40 riastradh Exp $");
 
 #include "pad.h"
-#include "aux.h"
+#include "auxch.h"
 #include "bus.h"
 
 static const struct nvkm_i2c_pad_func

@@ -30,6 +30,8 @@
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, "$NetBSD: dvo_ch7017.c,v 1.2 2021/12/18 23:45:29 riastradh Exp $");
 
+#include <drm/drm_print.h>
+
 #include "intel_display_types.h"
 #include "intel_dvo_dev.h"
 
@@ -175,13 +177,13 @@ static bool ch7017_read(struct intel_dvo_device *dvo, u8 addr, u8 *val)
 {
 	struct i2c_msg msgs[] = {
 		{
-			.addr = dvo->slave_addr,
+			.addr = dvo->target_addr,
 			.flags = 0,
 			.len = 1,
 			.buf = &addr,
 		},
 		{
-			.addr = dvo->slave_addr,
+			.addr = dvo->target_addr,
 			.flags = I2C_M_RD,
 			.len = 1,
 			.buf = val,
@@ -194,7 +196,7 @@ static bool ch7017_write(struct intel_dvo_device *dvo, u8 addr, u8 val)
 {
 	u8 buf[2] = { addr, val };
 	struct i2c_msg msg = {
-		.addr = dvo->slave_addr,
+		.addr = dvo->target_addr,
 		.flags = 0,
 		.len = 2,
 		.buf = buf,
@@ -202,7 +204,7 @@ static bool ch7017_write(struct intel_dvo_device *dvo, u8 addr, u8 val)
 	return i2c_transfer(dvo->i2c_bus, &msg, 1) == 1;
 }
 
-/** Probes for a CH7017 on the given bus and slave address. */
+/** Probes for a CH7017 on the given bus and target address. */
 static bool ch7017_init(struct intel_dvo_device *dvo,
 			struct i2c_adapter *adapter)
 {
@@ -210,7 +212,7 @@ static bool ch7017_init(struct intel_dvo_device *dvo,
 	const char *str;
 	u8 val;
 
-	priv = kzalloc(sizeof(struct ch7017_priv), GFP_KERNEL);
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (priv == NULL)
 		return false;
 
@@ -232,13 +234,13 @@ static bool ch7017_init(struct intel_dvo_device *dvo,
 		break;
 	default:
 		DRM_DEBUG_KMS("ch701x not detected, got %d: from %s "
-			      "slave %d.\n",
-			      val, adapter->name, dvo->slave_addr);
+			      "target %d.\n",
+			      val, adapter->name, dvo->target_addr);
 		goto fail;
 	}
 
 	DRM_DEBUG_KMS("%s detected on %s, addr %d\n",
-		      str, adapter->name, dvo->slave_addr);
+		      str, adapter->name, dvo->target_addr);
 	return true;
 
 fail:
@@ -252,7 +254,7 @@ static enum drm_connector_status ch7017_detect(struct intel_dvo_device *dvo)
 }
 
 static enum drm_mode_status ch7017_mode_valid(struct intel_dvo_device *dvo,
-					      struct drm_display_mode *mode)
+					      const struct drm_display_mode *mode)
 {
 	if (mode->clock > 160000)
 		return MODE_CLOCK_HIGH;

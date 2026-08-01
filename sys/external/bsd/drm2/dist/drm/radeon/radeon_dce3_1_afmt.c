@@ -26,6 +26,7 @@
 __KERNEL_RCSID(0, "$NetBSD: radeon_dce3_1_afmt.c,v 1.2 2021/12/18 23:45:43 riastradh Exp $");
 
 #include <linux/hdmi.h>
+#include <drm/drm_edid.h>
 
 #include "radeon.h"
 #include "radeon_asic.h"

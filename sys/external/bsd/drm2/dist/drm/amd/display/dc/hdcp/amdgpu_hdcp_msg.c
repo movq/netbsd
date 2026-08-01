@@ -28,23 +28,21 @@
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, "$NetBSD: amdgpu_hdcp_msg.c,v 1.3 2021/12/19 12:02:39 riastradh Exp $");
 
-#include <linux/slab.h>
-
 #include "dm_services.h"
 #include "dm_helpers.h"
-#include "include/hdcp_types.h"
-#include "include/i2caux_interface.h"
+#include "include/hdcp_msg_types.h"
 #include "include/signal_types.h"
 #include "core_types.h"
-#include "dc_link_ddc.h"
+#include "link_service.h"
 #include "link_hwss.h"
+#include "link/protocols/link_dpcd.h"
 
 #define DC_LOGGER \
 	link->ctx->logger
 #define HDCP14_KSV_SIZE 5
 #define HDCP14_MAX_KSV_FIFO_SIZE 127*HDCP14_KSV_SIZE
 
-static const bool hdcp_cmd_is_read[] = {
+static const bool hdcp_cmd_is_read[HDCP_MESSAGE_ID_MAX] = {
 	[HDCP_MESSAGE_ID_READ_BKSV] = true,
 	[HDCP_MESSAGE_ID_READ_RI_R0] = true,
 	[HDCP_MESSAGE_ID_READ_PJ] = true,
@@ -77,10 +75,10 @@ static const bool hdcp_cmd_is_read[] = {
 	[HDCP_MESSAGE_ID_WRITE_REPEATER_AUTH_STREAM_MANAGE] = false,
 	[HDCP_MESSAGE_ID_READ_REPEATER_AUTH_STREAM_READY] = true,
 	[HDCP_MESSAGE_ID_READ_RXSTATUS] = true,
-	[HDCP_MESSAGE_ID_WRITE_CONTENT_STREAM_TYPE] = false
+	[HDCP_MESSAGE_ID_WRITE_CONTENT_STREAM_TYPE] = false,
 };
 
-static const uint8_t hdcp_i2c_offsets[] = {
+static const uint8_t hdcp_i2c_offsets[HDCP_MESSAGE_ID_MAX] = {
 	[HDCP_MESSAGE_ID_READ_BKSV] = 0x0,
 	[HDCP_MESSAGE_ID_READ_RI_R0] = 0x8,
 	[HDCP_MESSAGE_ID_READ_PJ] = 0xA,
@@ -111,7 +109,8 @@ static const uint8_t hdcp_i2c_offsets[] = {
 	[HDCP_MESSAGE_ID_WRITE_REPEATER_AUTH_SEND_ACK] = 0x60,
 	[HDCP_MESSAGE_ID_WRITE_REPEATER_AUTH_STREAM_MANAGE] = 0x60,
 	[HDCP_MESSAGE_ID_READ_REPEATER_AUTH_STREAM_READY] = 0x80,
-	[HDCP_MESSAGE_ID_READ_RXSTATUS] = 0x70
+	[HDCP_MESSAGE_ID_READ_RXSTATUS] = 0x70,
+	[HDCP_MESSAGE_ID_WRITE_CONTENT_STREAM_TYPE] = 0x0,
 };
 
 struct protection_properties {
@@ -134,12 +133,20 @@ static bool hdmi_14_process_transaction(
 	const uint8_t hdcp_i2c_addr_link_primary = 0x3a; /* 0x74 >> 1*/
 	const uint8_t hdcp_i2c_addr_link_secondary = 0x3b; /* 0x76 >> 1*/
 	struct i2c_command i2c_command;
-	uint8_t offset = hdcp_i2c_offsets[message_info->msg_id];
+	uint8_t offset;
 	struct i2c_payload i2c_payloads[] = {
-		{ true, 0, 1, &offset },
+		{ true, 0, 1, 0 },
 		/* actual hdcp payload, will be filled later, zeroed for now*/
 		{ 0 }
 	};
+
+	if (message_info->msg_id == HDCP_MESSAGE_ID_INVALID) {
+		DC_LOG_ERROR("%s: Invalid message_info msg_id - %d\n", __func__, message_info->msg_id);
+		return false;
+	}
+
+	offset = hdcp_i2c_offsets[message_info->msg_id];
+	i2c_payloads[0].data = &offset;
 
 	switch (message_info->link) {
 	case HDCP_LINK_SECONDARY:
@@ -189,7 +196,7 @@ static const struct protection_properties hdmi_14_protection __unused = {
 	.process_transaction = hdmi_14_process_transaction
 };
 
-static const uint32_t hdcp_dpcd_addrs[] = {
+static const uint32_t hdcp_dpcd_addrs[HDCP_MESSAGE_ID_MAX] = {
 	[HDCP_MESSAGE_ID_READ_BKSV] = 0x68000,
 	[HDCP_MESSAGE_ID_READ_RI_R0] = 0x68005,
 	[HDCP_MESSAGE_ID_READ_PJ] = 0xFFFFFFFF,
@@ -314,6 +321,11 @@ static bool dp_11_process_transaction(
 	struct dc_link *link,
 	struct hdcp_protection_message *message_info)
 {
+	if (message_info->msg_id == HDCP_MESSAGE_ID_INVALID) {
+		DC_LOG_ERROR("%s: Invalid message_info msg_id - %d\n", __func__, message_info->msg_id);
+		return false;
+	}
+
 	return dpcd_access_helper(
 		link,
 		message_info->length,
@@ -327,3 +339,91 @@ static const struct protection_properties dp_11_protection __unused = {
 	.process_transaction = dp_11_process_transaction
 };
 
+static const struct protection_properties *get_protection_properties_by_signal(
+	struct dc_link *link,
+	enum signal_type st,
+	enum hdcp_version version)
+{
+	switch (version) {
+	case HDCP_VERSION_14:
+		switch (st) {
+		case SIGNAL_TYPE_DVI_SINGLE_LINK:
+		case SIGNAL_TYPE_DVI_DUAL_LINK:
+		case SIGNAL_TYPE_HDMI_TYPE_A:
+			return &hdmi_14_protection;
+		case SIGNAL_TYPE_DISPLAY_PORT:
+			if (link &&
+				(link->dpcd_caps.dongle_type == DISPLAY_DONGLE_DP_VGA_CONVERTER ||
+				link->dpcd_caps.dongle_caps.dongle_type == DISPLAY_DONGLE_DP_VGA_CONVERTER)) {
+				return &non_supported_protection;
+			}
+			return &dp_11_protection;
+		case SIGNAL_TYPE_DISPLAY_PORT_MST:
+		case SIGNAL_TYPE_EDP:
+			return &dp_11_protection;
+		default:
+			return &non_supported_protection;
+		}
+		break;
+	case HDCP_VERSION_22:
+		switch (st) {
+		case SIGNAL_TYPE_DVI_SINGLE_LINK:
+		case SIGNAL_TYPE_DVI_DUAL_LINK:
+		case SIGNAL_TYPE_HDMI_TYPE_A:
+			return &hdmi_14_protection; //todo version2.2
+		case SIGNAL_TYPE_DISPLAY_PORT:
+		case SIGNAL_TYPE_DISPLAY_PORT_MST:
+		case SIGNAL_TYPE_EDP:
+			return &dp_11_protection;  //todo version2.2
+		default:
+			return &non_supported_protection;
+		}
+		break;
+	default:
+		return &non_supported_protection;
+	}
+}
+
+enum hdcp_message_status dc_process_hdcp_msg(
+	enum signal_type signal,
+	struct dc_link *link,
+	struct hdcp_protection_message *message_info)
+{
+	enum hdcp_message_status status = HDCP_MESSAGE_FAILURE;
+	uint32_t i = 0;
+
+	const struct protection_properties *protection_props;
+
+	if (!message_info)
+		return HDCP_MESSAGE_UNSUPPORTED;
+
+	if (message_info->msg_id < HDCP_MESSAGE_ID_READ_BKSV ||
+		message_info->msg_id >= HDCP_MESSAGE_ID_MAX)
+		return HDCP_MESSAGE_UNSUPPORTED;
+
+	protection_props =
+		get_protection_properties_by_signal(
+			link,
+			signal,
+			message_info->version);
+
+	if (!protection_props->supported)
+		return HDCP_MESSAGE_UNSUPPORTED;
+
+	if (protection_props->process_transaction(
+		link,
+		message_info)) {
+		status = HDCP_MESSAGE_SUCCESS;
+	} else {
+		for (i = 0; i < message_info->max_retries; i++) {
+			if (protection_props->process_transaction(
+						link,
+						message_info)) {
+				status = HDCP_MESSAGE_SUCCESS;
+				break;
+			}
+		}
+	}
+
+	return status;
+}

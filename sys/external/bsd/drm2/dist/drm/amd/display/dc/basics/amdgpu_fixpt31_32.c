@@ -31,6 +31,10 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_fixpt31_32.c,v 1.3 2021/12/19 12:02:39 riastr
 #include "dm_services.h"
 #include "include/fixed31_32.h"
 
+static const struct fixed31_32 dc_fixpt_two_pi = { 26986075409LL };
+static const struct fixed31_32 dc_fixpt_ln2 = { 2977044471LL };
+static const struct fixed31_32 dc_fixpt_ln2_div_2 = { 1488522236LL };
+
 static inline unsigned long long abs_i64(
 	long long arg)
 {
@@ -53,10 +57,8 @@ static inline unsigned long long complete_integer_division_u64(
 	unsigned long long result;
 	uint64_t r64;
 
-	ASSERT(divisor);
-
 	result = div64_u64_rem(dividend, divisor, &r64);
-	*remainder = r64;
+    *remainder = r64;
 
 	return result;
 }
@@ -143,8 +145,6 @@ struct fixed31_32 dc_fixpt_mul(struct fixed31_32 arg1, struct fixed31_32 arg2)
 
 	res.value = arg1_int * arg2_int;
 
-	ASSERT(res.value <= LONG_MAX);
-
 	res.value <<= FIXED31_32_BITS_PER_FRACTIONAL_PART;
 
 	tmp = arg1_int * arg2_fra;
@@ -188,8 +188,6 @@ struct fixed31_32 dc_fixpt_sqr(struct fixed31_32 arg)
 
 	res.value = arg_int * arg_int;
 
-	ASSERT(res.value <= LONG_MAX);
-
 	res.value <<= FIXED31_32_BITS_PER_FRACTIONAL_PART;
 
 	tmp = arg_int * arg_fra;
@@ -220,9 +218,6 @@ struct fixed31_32 dc_fixpt_recip(struct fixed31_32 arg)
 	 * @note
 	 * Good idea to use Newton's method
 	 */
-
-	ASSERT(arg.value);
-
 	return dc_fixpt_from_fraction(
 		dc_fixpt_one.value,
 		arg.value);
@@ -296,7 +291,7 @@ struct fixed31_32 dc_fixpt_cos(struct fixed31_32 arg)
 				dc_fixpt_mul(
 					square,
 					res),
-				n * (n - 1)));
+				(long long)n * (n - 1)));
 
 		n -= 2;
 	} while (n != 0);
@@ -492,4 +487,31 @@ int dc_fixpt_s4d19(struct fixed31_32 arg)
 		return -(int)ux_dy(dc_fixpt_abs(arg).value, 4, 19);
 	else
 		return ux_dy(arg.value, 4, 19);
+}
+
+struct fixed31_32 dc_fixpt_from_ux_dy(unsigned int value,
+	unsigned int integer_bits,
+	unsigned int fractional_bits)
+{
+	struct fixed31_32 fixpt_value = dc_fixpt_zero;
+	struct fixed31_32 fixpt_int_value = dc_fixpt_zero;
+	long long frac_mask = ((long long)1 << (long long)integer_bits) - 1;
+
+	fixpt_value.value = (long long)value << (FIXED31_32_BITS_PER_FRACTIONAL_PART - fractional_bits);
+	frac_mask = frac_mask << fractional_bits;
+	fixpt_int_value.value = value & frac_mask;
+	fixpt_int_value.value <<= (FIXED31_32_BITS_PER_FRACTIONAL_PART - fractional_bits);
+	fixpt_value.value |= fixpt_int_value.value;
+	return fixpt_value;
+}
+
+struct fixed31_32 dc_fixpt_from_int_dy(unsigned int int_value,
+	unsigned int frac_value,
+	unsigned int integer_bits,
+	unsigned int fractional_bits)
+{
+	struct fixed31_32 fixpt_value = dc_fixpt_from_int(int_value);
+
+	fixpt_value.value |= (long long)frac_value << (FIXED31_32_BITS_PER_FRACTIONAL_PART - fractional_bits);
+	return fixpt_value;
 }

@@ -27,6 +27,7 @@ __KERNEL_RCSID(0, "$NetBSD: nouveau_nvkm_subdev_bar_tu102.c,v 1.2 2021/12/18 23:
 #include "gf100.h"
 
 #include <core/memory.h>
+#include <subdev/gsp.h>
 #include <subdev/timer.h>
 
 static void
@@ -97,7 +98,11 @@ tu102_bar = {
 };
 
 int
-tu102_bar_new(struct nvkm_device *device, int index, struct nvkm_bar **pbar)
+tu102_bar_new(struct nvkm_device *device, enum nvkm_subdev_type type, int inst,
+	      struct nvkm_bar **pbar)
 {
-	return gf100_bar_new_(&tu102_bar, device, index, pbar);
+	if (nvkm_gsp_rm(device->gsp))
+		return r535_bar_new_(&tu102_bar, device, type, inst, pbar);
+
+	return gf100_bar_new_(&tu102_bar, device, type, inst, pbar);
 }

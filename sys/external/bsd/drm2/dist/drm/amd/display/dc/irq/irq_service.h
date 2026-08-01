@@ -55,7 +55,7 @@ struct irq_source_info {
 	uint32_t ack_mask;
 	uint32_t ack_value;
 	uint32_t status_reg;
-	const struct irq_source_info_funcs *funcs;
+	struct irq_source_info_funcs *funcs;
 };
 
 struct irq_service_funcs {
@@ -83,5 +83,13 @@ void dal_irq_service_set_generic(
 	struct irq_service *irq_service,
 	const struct irq_source_info *info,
 	bool enable);
+
+bool hpd0_ack(
+	struct irq_service *irq_service,
+	const struct irq_source_info *info);
+
+bool hpd1_ack(
+	struct irq_service *irq_service,
+	const struct irq_source_info *info);
 
 #endif

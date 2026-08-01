@@ -50,6 +50,7 @@ struct bit_entry {
 
 int bit_table(struct drm_device *, u8 id, struct bit_entry *);
 
+#include <subdev/bios.h>
 #include <subdev/bios/dcb.h>
 #include <subdev/bios/conn.h>
 

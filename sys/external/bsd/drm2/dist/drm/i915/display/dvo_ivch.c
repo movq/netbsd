@@ -34,6 +34,8 @@
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, "$NetBSD: dvo_ivch.c,v 1.2 2021/12/18 23:45:29 riastradh Exp $");
 
+#include <drm/drm_print.h>
+
 #include "intel_display_types.h"
 #include "intel_dvo_dev.h"
 
@@ -203,7 +205,7 @@ static bool ivch_read(struct intel_dvo_device *dvo, int addr, u16 *data)
 
 	struct i2c_msg msgs[] = {
 		{
-			.addr = dvo->slave_addr,
+			.addr = dvo->target_addr,
 			.flags = I2C_M_RD,
 			.len = 0,
 		},
@@ -214,7 +216,7 @@ static bool ivch_read(struct intel_dvo_device *dvo, int addr, u16 *data)
 			.buf = out_buf,
 		},
 		{
-			.addr = dvo->slave_addr,
+			.addr = dvo->target_addr,
 			.flags = I2C_M_RD | I2C_M_NOSTART,
 			.len = 2,
 			.buf = in_buf,
@@ -231,7 +233,7 @@ static bool ivch_read(struct intel_dvo_device *dvo, int addr, u16 *data)
 	if (!priv->quiet) {
 		DRM_DEBUG_KMS("Unable to read register 0x%02x from "
 				"%s:%02x.\n",
-			  addr, adapter->name, dvo->slave_addr);
+			  addr, adapter->name, dvo->target_addr);
 	}
 	return false;
 }
@@ -243,7 +245,7 @@ static bool ivch_write(struct intel_dvo_device *dvo, int addr, u16 data)
 	struct i2c_adapter *adapter = dvo->i2c_bus;
 	u8 out_buf[3];
 	struct i2c_msg msg = {
-		.addr = dvo->slave_addr,
+		.addr = dvo->target_addr,
 		.flags = 0,
 		.len = 3,
 		.buf = out_buf,
@@ -258,13 +260,13 @@ static bool ivch_write(struct intel_dvo_device *dvo, int addr, u16 data)
 
 	if (!priv->quiet) {
 		DRM_DEBUG_KMS("Unable to write register 0x%02x to %s:%d.\n",
-			  addr, adapter->name, dvo->slave_addr);
+			  addr, adapter->name, dvo->target_addr);
 	}
 
 	return false;
 }
 
-/* Probes the given bus and slave address for an ivch */
+/* Probes the given bus and target address for an ivch */
 static bool ivch_init(struct intel_dvo_device *dvo,
 		      struct i2c_adapter *adapter)
 {
@@ -272,7 +274,7 @@ static bool ivch_init(struct intel_dvo_device *dvo,
 	u16 temp;
 	int i;
 
-	priv = kzalloc(sizeof(struct ivch_priv), GFP_KERNEL);
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (priv == NULL)
 		return false;
 
@@ -288,10 +290,10 @@ static bool ivch_init(struct intel_dvo_device *dvo,
 	 * very unique, check that the value in the base address field matches
 	 * the address it's responding on.
 	 */
-	if ((temp & VR00_BASE_ADDRESS_MASK) != dvo->slave_addr) {
+	if ((temp & VR00_BASE_ADDRESS_MASK) != dvo->target_addr) {
 		DRM_DEBUG_KMS("ivch detect failed due to address mismatch "
 			  "(%d vs %d)\n",
-			  (temp & VR00_BASE_ADDRESS_MASK), dvo->slave_addr);
+			  (temp & VR00_BASE_ADDRESS_MASK), dvo->target_addr);
 		goto out;
 	}
 
@@ -319,7 +321,7 @@ static enum drm_connector_status ivch_detect(struct intel_dvo_device *dvo)
 }
 
 static enum drm_mode_status ivch_mode_valid(struct intel_dvo_device *dvo,
-					    struct drm_display_mode *mode)
+					    const struct drm_display_mode *mode)
 {
 	if (mode->clock > 112000)
 		return MODE_CLOCK_HIGH;

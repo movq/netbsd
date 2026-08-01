@@ -35,7 +35,6 @@ __KERNEL_RCSID(0, "$NetBSD: radeon_asic.c,v 1.5 2021/12/18 23:45:43 riastradh Ex
 #include <linux/pci.h>
 #include <linux/vgaarb.h>
 
-#include <drm/drm_crtc_helper.h>
 #include <drm/radeon_drm.h>
 
 #include "atom.h"
@@ -1528,6 +1527,7 @@ static struct radeon_asic sumo_asic = {
 		.force_performance_level = &sumo_dpm_force_performance_level,
 		.get_current_sclk = &sumo_dpm_get_current_sclk,
 		.get_current_mclk = &sumo_dpm_get_current_mclk,
+		.get_current_vddc = &sumo_dpm_get_current_vddc,
 	},
 	.pflip = {
 		.page_flip = &evergreen_page_flip,
@@ -2427,10 +2427,10 @@ int radeon_asic_init(struct radeon_device *rdev)
 	case CHIP_RS880:
 		rdev->asic = &rs780_asic;
 		/* 760G/780V/880V don't have UVD */
-		if ((rdev->pdev->device == 0x9616)||
-		    (rdev->pdev->device == 0x9611)||
-		    (rdev->pdev->device == 0x9613)||
-		    (rdev->pdev->device == 0x9711)||
+		if ((rdev->pdev->device == 0x9616) ||
+		    (rdev->pdev->device == 0x9611) ||
+		    (rdev->pdev->device == 0x9613) ||
+		    (rdev->pdev->device == 0x9711) ||
 		    (rdev->pdev->device == 0x9713))
 			rdev->has_uvd = false;
 		else
@@ -2503,6 +2503,9 @@ int radeon_asic_init(struct radeon_device *rdev)
 			rdev->num_crtc = 6;
 		if (rdev->family == CHIP_HAINAN) {
 			rdev->has_uvd = false;
+			rdev->has_vce = false;
+		} else if (rdev->family == CHIP_OLAND) {
+			rdev->has_uvd = true;
 			rdev->has_vce = false;
 		} else {
 			rdev->has_uvd = true;

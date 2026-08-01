@@ -1,5 +1,6 @@
 /*	$NetBSD: amdgpu_dm_irq.h,v 1.2 2021/12/18 23:45:00 riastradh Exp $	*/
 
+/* SPDX-License-Identifier: MIT */
 /*
  * Copyright 2015 Advanced Micro Devices, Inc.
  *
@@ -84,6 +85,7 @@ void amdgpu_dm_irq_unregister_interrupt(struct amdgpu_device *adev,
 
 void amdgpu_dm_set_irq_funcs(struct amdgpu_device *adev);
 
+void amdgpu_dm_outbox_init(struct amdgpu_device *adev);
 void amdgpu_dm_hpd_init(struct amdgpu_device *adev);
 void amdgpu_dm_hpd_fini(struct amdgpu_device *adev);
 
@@ -91,14 +93,14 @@ void amdgpu_dm_hpd_fini(struct amdgpu_device *adev);
  * amdgpu_dm_irq_suspend - disable ASIC interrupt during suspend.
  *
  */
-int amdgpu_dm_irq_suspend(struct amdgpu_device *adev);
+void amdgpu_dm_irq_suspend(struct amdgpu_device *adev);
 
 /**
  * amdgpu_dm_irq_resume_early - enable HPDRX ASIC interrupts during resume.
  * amdgpu_dm_irq_resume - enable ASIC interrupt during resume.
  *
  */
-int amdgpu_dm_irq_resume_early(struct amdgpu_device *adev);
-int amdgpu_dm_irq_resume_late(struct amdgpu_device *adev);
+void amdgpu_dm_irq_resume_early(struct amdgpu_device *adev);
+void amdgpu_dm_irq_resume_late(struct amdgpu_device *adev);
 
 #endif /* __AMDGPU_DM_IRQ_H__ */
