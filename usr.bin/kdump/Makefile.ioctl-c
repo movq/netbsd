@@ -60,9 +60,14 @@ CPPFLAGS+=	-DQXL_DRM_H		# Dup ioctls
 CPPFLAGS+=	-D__R128_DRM_H__	# Dup ioctls
 CPPFLAGS+=	-D__SIS_DRM_H__		# Dup ioctls
 CPPFLAGS+=	-D__SAVAGE_DRM_H__	# Dup ioctls
-#CPPFLAGS+=	-D__RADEON_DRM_H__	# Dup ioctls
+CPPFLAGS+=	-D__AMDGPU_DRM_H__	# Dup ioctls
+CPPFLAGS+=	-D__RADEON_DRM_H__	# Dup ioctls
 CPPFLAGS+=	-D__MACH64_DRM_H__	# Dup ioctls
 CPPFLAGS+=	-D__MGA_DRM_H__		# Dup ioctls
+CPPFLAGS+=	-D__MSM_DRM_H__		# Dup ioctls
+CPPFLAGS+=	-D_UAPI_TEGRA_DRM_H_	# Dup ioctls
+CPPFLAGS+=	-D_UAPI_VC4_DRM_H_	# Dup ioctls
+CPPFLAGS+=	-DVIRTGPU_DRM_H		# Dup ioctls
 
 ${PROG}-ioctl.c: mkioctls Makefile ${DEPFILES} ${SETFILES}
 	${_MKTARGET_CREATE}
