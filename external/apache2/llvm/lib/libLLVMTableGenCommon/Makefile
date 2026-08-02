@@ -6,7 +6,6 @@ LIB=    LLVMTableGenCommon
 genvt_inc=	${LLVM_INCLUDE_OBJDIR}/llvm/CodeGen/GenVT.inc
 
 ${genvt_inc}:	${TOOLDIR}/bin/${_TOOL_PREFIX}llvm-tblgen-min
-	echo REGENERATING GENVT
 	mkdir -p ${genvt_inc:H}
 	${TOOLDIR}/bin/${_TOOL_PREFIX}llvm-tblgen-min -gen-vt \
 	    ${LLVM_SRCDIR}/include/llvm/CodeGen/ValueTypes.td \

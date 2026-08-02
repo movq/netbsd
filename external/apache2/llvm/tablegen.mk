@@ -6,7 +6,6 @@
 .for f in ${TABLEGEN_OUTPUT} ${TABLEGEN_OUTPUT.${t}}
 ${f:C,\|.*$,,}: ${t} ${TOOL_LLVM_TBLGEN}
 	[ -z "${f:C,\|.*$,,}" ] || mkdir -p ${f:C,\|.*$,,:H}
-	echo "TBLGEN: ${f}"
 	${TOOL_LLVM_TBLGEN} -I${LLVM_SRCDIR}/include ${TABLEGEN_INCLUDES} \
 	    ${TABLEGEN_INCLUDES.${t}} ${f:C,^.*\|,,:C,\^, ,g} \
 	    ${.ALLSRC:M*/${t}} -d ${.TARGET}.d -o ${.TARGET}
