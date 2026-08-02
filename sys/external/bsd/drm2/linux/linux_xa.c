@@ -102,7 +102,7 @@ linux_xa_destroy(struct xarray *xa)
 	 */
 	while ((n = RB_TREE_MIN(&xa->xa_tree)) != NULL) {
 		rb_tree_remove_node(&xa->xa_tree, n);
-		kmem_free(n, sizeof(*n));
+		kmem_intr_free(n, sizeof(*n));
 	}
 	mutex_destroy(&xa->xa_lock);
 }
@@ -140,7 +140,7 @@ linux_xa_store(struct xarray *xa, unsigned long key, void *datum, gfp_t gfp)
 
 	if (collision != n) {
 		datum = collision->n_datum;
-		kmem_free(collision, sizeof(*collision));
+		kmem_intr_free(collision, sizeof(*collision));
 	}
 	return datum;
 }
@@ -178,7 +178,7 @@ linux_xa_alloc(struct xarray *xa, uint32_t *idp, void *datum, struct xa_limit li
 	error = 0;
 out:
 	if (error) {
-		kmem_free(n, sizeof(*n));
+		kmem_intr_free(n, sizeof(*n));
 		return error;
 	}
 	*idp = key64;
@@ -254,7 +254,7 @@ linux_xa_erase(struct xarray *xa, unsigned long key)
 
 	if (n) {
 		datum = n->n_datum;
-		kmem_free(n, sizeof(*n));
+		kmem_intr_free(n, sizeof(*n));
 	}
 	return datum;
 }
