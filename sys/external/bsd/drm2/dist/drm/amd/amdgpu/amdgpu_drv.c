@@ -3136,6 +3136,7 @@ static const struct drm_driver amdgpu_kms_driver = {
 	DRM_FBDEV_TTM_DRIVER_OPS,
 #ifdef __NetBSD__
 	.fops = NULL,
+	.mmap_object = drm_gem_mmap_object,
 #else
 	.fops = &amdgpu_driver_kms_fops,
 #endif
@@ -3166,6 +3167,7 @@ const struct drm_driver amdgpu_partition_driver = {
 	DRM_FBDEV_TTM_DRIVER_OPS,
 #ifdef __NetBSD__
 	.fops = NULL,
+	.mmap_object = drm_gem_mmap_object,
 #else
 	.fops = &amdgpu_driver_kms_fops,
 #endif
