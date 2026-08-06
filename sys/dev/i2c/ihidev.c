@@ -690,6 +690,14 @@ ihidev_intr_init(struct ihidev_softc *sc)
 	ACPI_STATUS rv;
 	char buf[100];
 
+	if (workqueue_create(&sc->sc_wq, device_xname(sc->sc_dev), ihidev_work,
+		sc, PRI_NONE, IPL_TTY, WQ_MPSAFE)) {
+		aprint_error_dev(sc->sc_dev,
+		    "can't establish workqueue\n");
+		return false;
+	}
+
+	sc->sc_work_pending = 0;
 	rv = acpi_resource_parse(sc->sc_dev, hdl, "_CRS", &res,
 	    &acpi_resource_parse_ops_quiet);
 	if (ACPI_FAILURE(rv)) {
@@ -705,7 +713,7 @@ ihidev_intr_init(struct ihidev_softc *sc)
 		goto try_gpioint;
 #else
 		return false;
-#endif
+#endif /* NGPIO > 0 */
 	}
 
 	sc->sc_intr_type =
@@ -743,6 +751,9 @@ try_gpioint:
 			return false;
 		}
 
+		sc->sc_intr_type = (irqmode & GPIO_INTR_LEVEL_MASK) ?
+		    IST_LEVEL : IST_EDGE;
+
 		sc->sc_ih = gpio_intr_establish(sc->sc_ih_gpio,
 		    &sc->sc_ih_gpiomap, 0, IPL_VM, irqmode, ihidev_intr, sc);
 		if (sc->sc_ih == NULL) {
@@ -751,28 +762,16 @@ try_gpioint:
 			return false;
 		}
 
-		sc->sc_intr_type = (irqmode & GPIO_INTR_LEVEL_MASK) ?
-		    IST_LEVEL : IST_EDGE;
-
 		gpio_intr_str(sc->sc_ih_gpio, &sc->sc_ih_gpiomap, 0,
 		    irqmode, buf, sizeof(buf));
 		aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", buf);
 	}
-#endif
-
-	if (workqueue_create(&sc->sc_wq, device_xname(sc->sc_dev), ihidev_work,
-		sc, PRI_NONE, IPL_TTY, WQ_MPSAFE)) {
-		aprint_error_dev(sc->sc_dev,
-		    "can't establish workqueue\n");
-		return false;
-	}
-	sc->sc_work_pending = 0;
-
+#endif /* NGPIO > 0 */
 	return true;
 #else
 	aprint_error_dev(sc->sc_dev, "can't establish interrupt\n");
 	return false;
-#endif
+#endif /* NACPICA > 0 */
 }
 
 static void
