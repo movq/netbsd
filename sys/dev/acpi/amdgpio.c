@@ -242,6 +242,15 @@ amdgpio_attach(device_t parent, device_t self, void *aux)
 		    amdgpio_acpi_translate, sc);
 	}
 
+	/* Ensure all interrupts are initially disabled */
+	for (pin = 0; pin < sc->sc_config->num_pins; pin++) {
+		int val;
+
+		val = RD4(sc, AMDGPIO_PIN_REG(pin));
+		val &= ~(AMDGPIO_CONF_INTR_EN | AMDGPIO_CONF_INTR_MASK_EN);
+		WR4(sc, AMDGPIO_PIN_REG(pin), val);
+	}
+
 done:
 	acpi_resource_cleanup(&res);
 }
@@ -408,8 +417,13 @@ amdgpio_intr_establish(void *priv, int pin, int ipl, int irqmode,
 	LIST_INSERT_HEAD(&sc->sc_intrs, aih, ih_list);
 
 	if ((irqmode & GPIO_INTR_LEVEL_MASK) != 0) {
+		/* Level triggered */
 		dect = AMDGPIO_CONF_LEVEL;
+		if ((irqmode & GPIO_INTR_LOW_LEVEL) != 0) {
+			dect |= AMDGPIO_CONF_ACTLO;
+		}
 	} else {
+		/* Edge triggered */
 		KASSERT((irqmode & GPIO_INTR_EDGE_MASK) != 0);
 		if ((irqmode & GPIO_INTR_NEG_EDGE) != 0) {
 			dect = AMDGPIO_CONF_ACTLO;
@@ -517,19 +531,18 @@ amdgpio_intr(void *priv)
 		val = RD4(sc, AMDGPIO_PIN_REG(pin));
 		if ((val & AMDGPIO_CONF_INTR_STATUS) != 0) {
 			rv |= aih->ih_func(aih->ih_arg);
-
-			val &= ~(AMDGPIO_CONF_INTR_MASK_EN |
-			    AMDGPIO_CONF_INTR_EN);
+			/* read again: handler might have set mask */
+			val = RD4(sc, AMDGPIO_PIN_REG(pin));
 			WR4(sc, AMDGPIO_PIN_REG(pin), val);
 		}
 	}
 
+out:
 	/* Signal end of interrupt */
 	val = RD4(sc, AMDGPIO_INTR_MASTER);
 	val |= AMDGPIO_INTR_MASTER_EIO;
 	WR4(sc, AMDGPIO_INTR_MASTER, val);
 
-out:
 	mutex_exit(&sc->sc_lock);
 
 	return rv;
