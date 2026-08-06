@@ -196,6 +196,15 @@ ims_enable(void *v)
 	error = ihidev_open(&sc->sc_hdev);
 	if (error)
 		sc->sc_enabled = 0;
+
+	/* DEBUG: Switch to mouse mode */
+	int mode = 0;
+	error = ihidev_set_report((device_t)sc->sc_hdev.sc_parent, hid_feature, 6, &mode, sizeof mode);
+	if (error) {
+		ihidev_close(&sc->sc_hdev);
+		sc->sc_enabled = 0;
+	}
+
 	return error;
 }
 
