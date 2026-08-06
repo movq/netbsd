@@ -617,7 +617,10 @@ iic*		at dwiic?
 #sdtemp* at iic? addr 0x1f
 
 # Intel GPIO
-igpio*         at acpi? 
+igpio*         at acpi?
+
+# AMD GPIO
+amdgpio*	at acpi?
 
 # I2C HID devices
 ihidev* at iic?
