@@ -238,5 +238,5 @@
 ./usr/libdata/debug/usr/X11R7/bin/xwd.debug		xdebug-xwd-debug	xorg,debug
 ./usr/libdata/debug/usr/X11R7/bin/xwininfo.debug	xdebug-xwininfo-debug	xorg,debug
 ./usr/libdata/debug/usr/X11R7/bin/xwud.debug		xdebug-xwud-debug	xorg,debug
-./usr/libdata/debug/usr/X11R7/lib/modules/dri/gallium_dri.so.0.debug	xdebug-gallium-debug		xorg,debug
+./usr/libdata/debug/usr/X11R7/lib/modules/dri/gallium_dri.so.0.debug	xdebug-obsolete		xorg,obsolete
 ./usr/libdata/debug/usr/X11R7/libexec/chooser.debug	xdebug-chooser-debug	xorg,debug
