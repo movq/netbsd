@@ -27,7 +27,8 @@ LLVM_INCLUDE_OBJDIR!=	cd ${NETBSDSRCDIR}/external/apache2/llvm/include && ${PRIN
 CWARNFLAGS.clang += -Wno-atomic-alignment -Wno-unknown-warning-option -Wno-implicit-int-float-conversion -Wno-c99-designator
 COPTS.nouveau.c+=	${${ACTIVE_CC} == "clang":? -Wno-error=gnu-variable-sized-type-not-at-end :}
 
-CXXFLAGS+=	-std=c++17
+CXXFLAGS+=	-std=c++17 -Dalloca=__builtin_alloca
+CXXFLAGS+=	${${ACTIVE_CXX} == "gcc":? -flifetime-dse=1 :}
 CFLAGS+=	-std=gnu11
 CPPFLAGS+=	-I${X11SRCDIR.Mesa}/src/gallium/winsys/nouveau/drm \
 		-I${X11SRCDIR.Mesa}/src/nouveau/drm \
@@ -126,9 +127,11 @@ BUILD_I915=0
 BUILD_IRIS=0
 BUILD_CROCUS=0
 .if ${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH} == "x86_64"
+. if ${MKLLVMRT} != "no"
 BUILD_I915=1
-#BUILD_IRIS=1
-#BUILD_CROCUS=1
+. endif
+BUILD_IRIS=1
+BUILD_CROCUS=1
 .endif
 .if ${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH} == "x86_64" || ${MACHINE} == "evbarm"
 BUILD_NOUVEAU=1
@@ -160,12 +163,15 @@ DRIVERS+=		nouveau
 GALLIUM_SUBDIRS+=	${GALLIUM_SUBDIRS_NOUVEAU}
 .endif
 .if ${BUILD_I915} == 1
+DRIVERS+=		i915
 GALLIUM_SUBDIRS+=	${GALLIUM_SUBDIRS_I915}
 .endif
 .if ${BUILD_IRIS} == 1
+DRIVERS+=		iris
 GALLIUM_SUBDIRS+=	${GALLIUM_SUBDIRS_IRIS}
 .endif
 .if ${BUILD_CROCUS} == 1
+DRIVERS+=		crocus
 GALLIUM_SUBDIRS+=	${GALLIUM_SUBDIRS_CROCUS}
 .endif
 .if ${BUILD_LLVMPIPE} == 1
@@ -487,6 +493,12 @@ GALLIUM_SOURCES.winsys/i915/drm= \
 	i915_drm_winsys.c
 
 GALLIUM_SOURCES.drivers/iris= \
+	i915_iris_batch.c \
+	i915_iris_bufmgr.c \
+	i915_iris_kmd_backend.c \
+	xe_iris_batch.c \
+	xe_iris_bufmgr.c \
+	xe_iris_kmd_backend.c \
 	iris_batch.c \
 	iris_binder.c \
 	iris_blit.c \
@@ -499,8 +511,10 @@ GALLIUM_SOURCES.drivers/iris= \
 	iris_fence.c \
 	iris_fine_fence.c \
 	iris_formats.c \
+	iris_kmd_backend.c \
 	iris_measure.c \
 	iris_monitor.c \
+	iris_nir_analyze_ubo_ranges.c \
 	iris_perf.c \
 	iris_performance_query.c \
 	iris_pipe_control.c \
@@ -508,33 +522,57 @@ GALLIUM_SOURCES.drivers/iris= \
 	iris_program_cache.c \
 	iris_resolve.c \
 	iris_resource.c \
-	iris_screen.c
+	iris_screen.c \
+	iris_utrace.c
+
+BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/src/gallium/drivers/iris/i915/iris_batch.c i915_iris_batch.c
+BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/src/gallium/drivers/iris/i915/iris_bufmgr.c i915_iris_bufmgr.c
+BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/src/gallium/drivers/iris/i915/iris_kmd_backend.c i915_iris_kmd_backend.c
+BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/src/gallium/drivers/iris/xe/iris_batch.c xe_iris_batch.c
+BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/src/gallium/drivers/iris/xe/iris_bufmgr.c xe_iris_bufmgr.c
+BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/src/gallium/drivers/iris/xe/iris_kmd_backend.c xe_iris_kmd_backend.c
 
 GALLIUM_SOURCES.winsys/iris/drm= \
 	iris_drm_winsys.c
 
-IRIS_GENS_BLORP=	80 90 110 120 125
+IRIS_SHADER_SOURCES= \
+	intel_gfx90_shaders_binding.cpp \
+	intel_gfx110_shaders_binding.cpp \
+	intel_gfx120_shaders_binding.cpp \
+	intel_gfx125_shaders_binding.cpp \
+	intel_gfx200_shaders_binding.cpp \
+	intel_gfx300_shaders_binding.cpp \
+	intel_gfx350_shaders_binding.cpp
+GALLIUM_SOURCES.drivers/iris+=	${IRIS_SHADER_SOURCES}
+.PATH:	${X11SRCDIR.Mesa}/../src/intel/shaders
+
+IRIS_GENS_BLORP=	90 110 120 125 200 300 350
 
 .for _gen in ${IRIS_GENS_BLORP}
 BUILDSYMLINKS+=		${X11SRCDIR.Mesa}/src/gallium/drivers/iris/iris_blorp.c ${_gen}_iris_blorp.c
 BUILDSYMLINKS+=		${X11SRCDIR.Mesa}/src/gallium/drivers/iris/iris_query.c ${_gen}_iris_query.c
 BUILDSYMLINKS+=		${X11SRCDIR.Mesa}/src/gallium/drivers/iris/iris_state.c ${_gen}_iris_state.c
-GALLIIUM_SOURCES.drivers/iris+=	${_gen}_iris_blorp.c ${_gen}_iris_query.c ${_gen}_iris_state.c
+BUILDSYMLINKS+=		${X11SRCDIR.Mesa}/src/gallium/drivers/iris/iris_indirect_gen.c ${_gen}_iris_indirect_gen.c
+GALLIUM_SOURCES.drivers/iris+=	${_gen}_iris_blorp.c ${_gen}_iris_query.c \
+				${_gen}_iris_state.c ${_gen}_iris_indirect_gen.c
 
 CPPFLAGS.${_gen}_iris_blorp.c+=		-DGFX_VERx10=${_gen}
 CPPFLAGS.${_gen}_iris_query.c+=		-DGFX_VERx10=${_gen}
 CPPFLAGS.${_gen}_iris_state.c+=		-DGFX_VERx10=${_gen}
+CPPFLAGS.${_gen}_iris_indirect_gen.c+=	-DGFX_VERx10=${_gen}
 .endfor
 
 .for _f in ${GALLIUM_SOURCES.drivers/iris}
-CPPFLAGS.${_f} +=	-I${X11SRCDIR.Mesa}/src/intel
+CPPFLAGS.${_f} +=	-I${X11SRCDIR.Mesa}/src/intel \
+			-I${X11SRCDIR.Mesa}/../src/intel \
+			-I${X11SRCDIR.Mesa}/src/intel/genxml \
+			-I${X11SRCDIR.Mesa}/src/intel/shaders \
+			-I${X11SRCDIR.Mesa}/../src/intel/shaders
 .endfor
 
 GALLIUM_SOURCES.drivers/crocus= \
 	crocus_batch.c \
 	crocus_blit.c \
-	crocus_blorp.c \
-	crocus_blt.c \
 	crocus_bufmgr.c \
 	crocus_clear.c \
 	crocus_context.c \
@@ -544,14 +582,14 @@ GALLIUM_SOURCES.drivers/crocus= \
 	crocus_fine_fence.c \
 	crocus_formats.c \
 	crocus_monitor.c \
+	crocus_perf.c \
+	crocus_performance_query.c \
 	crocus_pipe_control.c \
 	crocus_program.c \
 	crocus_program_cache.c \
-	crocus_query.c \
 	crocus_resolve.c \
 	crocus_resource.c \
-	crocus_screen.c \
-	crocus_state.c
+	crocus_screen.c
 
 GALLIUM_SOURCES.winsys/crocus/drm= \
 	crocus_drm_winsys.c
@@ -562,8 +600,8 @@ CROCUS_GENS_BLORP=	40 45 50 60 70 75 80
 BUILDSYMLINKS+=		${X11SRCDIR.Mesa}/src/gallium/drivers/crocus/crocus_blorp.c ${_gen}_crocus_blorp.c
 BUILDSYMLINKS+=		${X11SRCDIR.Mesa}/src/gallium/drivers/crocus/crocus_query.c ${_gen}_crocus_query.c
 BUILDSYMLINKS+=		${X11SRCDIR.Mesa}/src/gallium/drivers/crocus/crocus_state.c ${_gen}_crocus_state.c
-BUILDSYMLINKS+=		${X11SRCDIR.Mesa}/src/gallium/drivers/crocus/crocus_blt.c ${_gen}_crocus_bltec
-GALLIIUM_SOURCES.drivers/iris+=	${_gen}_crocus_blorp.c ${_gen}_crocus_query.c ${_gen}_crocus_state.c ${_gen}_crocus_blt.c 
+BUILDSYMLINKS+=		${X11SRCDIR.Mesa}/src/gallium/drivers/crocus/crocus_blt.c ${_gen}_crocus_blt.c
+GALLIUM_SOURCES.drivers/crocus+=	${_gen}_crocus_blorp.c ${_gen}_crocus_query.c ${_gen}_crocus_state.c ${_gen}_crocus_blt.c
 
 CPPFLAGS.${_gen}_crocus_blorp.c+=	-DGFX_VERx10=${_gen}
 CPPFLAGS.${_gen}_crocus_query.c+=	-DGFX_VERx10=${_gen}
@@ -572,7 +610,9 @@ CPPFLAGS.${_gen}_crocus_blt.c+=		-DGFX_VERx10=${_gen}
 .endfor
 
 .for _f in ${GALLIUM_SOURCES.drivers/crocus}
-CPPFLAGS.${_f} +=	-I${X11SRCDIR.Mesa}/src/intel
+CPPFLAGS.${_f} +=	-I${X11SRCDIR.Mesa}/src/intel \
+			-I${X11SRCDIR.Mesa}/../src/intel \
+			-I${X11SRCDIR.Mesa}/src/intel/genxml
 .endfor
 
 GALLIUM_SOURCES.drivers/r600= \
@@ -1100,24 +1140,11 @@ GALLIUM_SOURCES.frontends/dri = \
 	loader_dri3_helper.c
 
 # Sources kept in standalone Meson helper libraries upstream.
-SRCS+=		intel_gem.c common_intel_engine.c i915_intel_gem.c \
-		i915_intel_engine.c xe_intel_gem.c xe_intel_engine.c \
-		xe_intel_device_query.c nv_push.c
-.PATH:		${X11SRCDIR.Mesa}/src/intel/common
+.include "intel.mk"
+
+SRCS+=		nv_push.c
 .PATH:		${X11SRCDIR.Mesa}/src/nouveau/headers
 .PATH:		${X11SRCDIR.Mesa}/../src/nouveau/headers
-BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/src/intel/common/i915/intel_gem.c i915_intel_gem.c
-BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/src/intel/common/i915/intel_engine.c i915_intel_engine.c
-BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/src/intel/common/xe/intel_gem.c xe_intel_gem.c
-BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/src/intel/common/xe/intel_engine.c xe_intel_engine.c
-BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/src/intel/common/xe/intel_device_query.c xe_intel_device_query.c
-BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/src/intel/common/intel_engine.c common_intel_engine.c
-.for _intel_src in intel_gem.c common_intel_engine.c i915_intel_gem.c \
-		i915_intel_engine.c xe_intel_gem.c xe_intel_engine.c \
-		xe_intel_device_query.c
-CPPFLAGS.${_intel_src}+=	-I${X11SRCDIR.Mesa}/src/intel \
-				-I${X11SRCDIR.Mesa}/src/intel/common
-.endfor
 CPPFLAGS.nv_push.c+=	-I${X11SRCDIR.Mesa}/src/nouveau/headers \
 			-I${X11SRCDIR.Mesa}/src/nouveau/headers/nvidia/classes \
 			-I${X11SRCDIR.Mesa}/src/nouveau/headers/nvidia \
@@ -1196,14 +1223,14 @@ LIBDPLIBS+=	z		${.CURDIR}/../../../../../lib/libz
 LIBDPLIBS+=	m		${.CURDIR}/../../../../../lib/libm
 
 # gallium drivers requiring LLVM
-.if ${BUILD_LLVMPIPE} == 1 || ${BUILD_RADEON} == 1
+.if ${BUILD_I915} == 1 || ${BUILD_LLVMPIPE} == 1 || ${BUILD_RADEON} == 1
 
 # LLVM support is provided by the canonical target shared library.
 LLVM_LIBS=	Support
 
 .include "${NETBSDSRCDIR}/external/apache2/llvm/link.mk"
 
-.endif  # ${BUILD_LLVM_PIPE} == 1 || ${BUILD_RADEON} == 1
+.endif  # ${BUILD_I915} == 1 || ${BUILD_LLVMPIPE} == 1 || ${BUILD_RADEON} == 1
 
 LDFLAGS+=	-Wl,--version-script=${X11SRCDIR.Mesa}/../src/gallium/targets/dri/dri.sym
 .if ${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH} == "x86_64" || ${MACHINE_CPU} == "aarch64"
