@@ -39,6 +39,7 @@ struct seq_file;
 struct ttm_backup_flags;
 struct ttm_operation_ctx;
 struct ttm_pool;
+struct ttm_pool_page;
 struct ttm_tt;
 
 /**
@@ -60,6 +61,7 @@ struct ttm_pool_type {
 
 	spinlock_t lock;
 	struct list_head pages;
+	LIST_HEAD(, ttm_pool_page) pages_list;
 };
 
 /**

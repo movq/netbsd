@@ -98,7 +98,7 @@ struct ttm_tt {
 	 * struct ttm_tt has been (possibly partially) backed up.
 	 *
 	 * TTM_TT_FLAG_PRIV_POPULATED: TTM internal only. DO NOT USE. This is
-	 * set by TTM after ttm_tt_populate() has successfully returned, and is
+	 * set by TTM after ttm_tt_populate() has succsys/dev/pci/drm/include/asm/set_memory.hessfully returned, and is
 	 * then unset when TTM calls ttm_tt_unpopulate().
 	 *
 	 */
