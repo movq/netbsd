@@ -104,7 +104,8 @@
 ./usr/libdata/debug/usr/X11R7/lib/libxkbfile.so.2.1.debug	xdebug-libxkbfile-debug		xorg,debug,compatx11file
 ./usr/libdata/debug/usr/X11R7/lib/libxkbui.so.2.0.debug		xdebug-libxkbui-debug		xorg,debug,compatx11file
 ./usr/libdata/debug/usr/X11R7/lib/libxshmfence.so.1.0.debug	xdebug-libxshmfence-debug		xorg,debug,compatx11file
-./usr/libdata/debug/usr/X11R7/lib/modules/dri/gallium_dri.so.0.debug	xdebug-gallium-debug	xorg,debug
+./usr/libdata/debug/usr/X11R7/lib/modules/dri/dril_dri.so.0.debug	xdebug-gallium-debug	xorg,debug
+./usr/libdata/debug/usr/X11R7/lib/modules/dri/gallium_dri.so.0.debug	xdebug-obsolete	xorg,obsolete
 ./usr/libdata/debug/usr/X11R7/lib/modules/dri/kms_swrast_dri.so.0.debug	xdebug-MesaLib-debug	xorg,debug
 ./usr/libdata/debug/usr/X11R7/lib/modules/dri/libmesa_dri.so.0.debug	xorg,obsolete	obsolete
 ./usr/libdata/debug/usr/X11R7/lib/modules/dri/libswrast_dri.so.0.debug	xorg,obsolete	obsolete
