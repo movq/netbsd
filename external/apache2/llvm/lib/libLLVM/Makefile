@@ -2,6 +2,7 @@
 
 LIB=	LLVM
 LIBISCXX=	yes
+NOPROFILE=	yes
 
 .include <bsd.init.mk>
 
