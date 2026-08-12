@@ -24,7 +24,7 @@
 ./etc/X11/xdm/xorg.xpm					xetc-obsolete	obsolete
 ./etc/X11/xinit/xinitrc					xetc-xinit-etc	xorg
 ./etc/X11/xsm/system.xsm				xetc-xfm-etc	xorg
-./etc/drirc						xetc-dri-etc	xorg
+./etc/drirc						xetc-obsolete	obsolete
 ./etc/fonts/conf.avail/05-reset-dirs-sample.conf	xetc-fontconfig-etc	xorg
 ./etc/fonts/conf.avail/09-autohint-if-no-hinting.conf	xetc-fontconfig-etc	xorg
 ./etc/fonts/conf.avail/10-autohint.conf			xetc-fontconfig-etc	xorg
