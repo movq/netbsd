@@ -43,6 +43,8 @@
 #ifndef _LINUX_RWSEM_H_
 #define _LINUX_RWSEM_H_
 
+#include <sys/stdbool.h>
+#include <sys/condvar.h>
 #include <sys/mutex.h>
 
 #define	destroy_rwsem		linux_destroy_rwsem

@@ -78,6 +78,14 @@ fls(int x)
 	return fls32(x);
 }
 
+static inline unsigned long
+__fls(unsigned long x)
+{
+
+	return fls64(x) - 1;
+}
+
+
 static inline unsigned int
 hweight8(uint8_t w)
 {

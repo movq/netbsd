@@ -22,11 +22,11 @@ file	external/bsd/drm2/dist/drm/ttm/ttm_bo_util.c		drmkms_ttm
 file	external/bsd/drm2/ttm/ttm_bo_vm.c			drmkms_ttm
 file	external/bsd/drm2/dist/drm/ttm/ttm_module.c		drmkms_ttm
 file	external/bsd/drm2/dist/drm/ttm/ttm_device.c		drmkms_ttm
+file	external/bsd/drm2/dist/drm/ttm/ttm_pool.c			drmkms_ttm
 file	external/bsd/drm2/dist/drm/ttm/ttm_resource.c		drmkms_ttm
 file	external/bsd/drm2/dist/drm/ttm/ttm_range_manager.c	drmkms_ttm
 file	external/bsd/drm2/dist/drm/ttm/ttm_sys_manager.c		drmkms_ttm
 file	external/bsd/drm2/ttm/ttm_backup.c			drmkms_ttm
-file	external/bsd/drm2/ttm/ttm_pool.c			drmkms_ttm
 file	external/bsd/drm2/ttm/ttm_netbsd_module.c		drmkms_ttm
 # Used only by vmwgfx.  Needs porting for rcu -> pserialize.
 #file	external/bsd/drm2/dist/drm/ttm/ttm_object.c		drmkms_ttm

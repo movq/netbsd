@@ -31,6 +31,9 @@
  * Authors: Thomas Hellstrom <thellstrom-at-vmware-dot-com>
  */
 
+#include "amd64/include/vmparam.h"
+#include "sys/rwlock.h"
+#include "uvm/uvm_extern.h"
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, "$NetBSD: ttm_tt.c,v 1.19 2022/06/26 17:53:06 riastradh Exp $");
 
@@ -170,16 +173,11 @@ static void ttm_tt_init_fields(struct ttm_tt *ttm,
 	WARN(ttm->num_pages == 0,
 	    "zero-size allocation in %s, please file a NetBSD PR",
 	    __func__);	/* paranoia -- can't prove in five minutes */
-	ttm->swap_storage =
-	    uao_create(PAGE_SIZE * MAX(1, ttm->num_pages), 0);
 	ttm->dmat = bo->bdev->dmat;
 	ttm->dma_map = NULL;
-	if (ttm->swap_storage != NULL)
-		uao_set_pgfl(ttm->swap_storage,
-		    bus_dmamem_pgfl(bo->bdev->dmat));
 #else
-	ttm->swap_storage = NULL;
 #endif
+	ttm->swap_storage = NULL;
 	ttm->sg = bo->sg;
 	ttm->caching = caching;
 	ttm->restore = NULL;
@@ -252,11 +250,29 @@ EXPORT_SYMBOL(ttm_sg_tt_init);
 int ttm_tt_swapin(struct ttm_tt *ttm)
 {
 #ifdef __NetBSD__
-	/*
-	 * The native pool wires the same UAO that backed the object before
-	 * swapout, so UVM has already restored the contents for us.
-	 */
+	int ret;
+	const size_t nbytes = ttm->num_pages * PAGE_SIZE;
+	struct uvm_object *obj = ttm->swap_storage;
+	KASSERT(obj != NULL);
+
+	ret = uvm_obj_wirepages(obj, 0, nbytes, NULL);
+	if (ret)
+		return -ENOMEM;
+
+	rw_enter(obj->vmobjlock, RW_READER);
+	for (int i = 0; i < ttm->num_pages; ++i) {
+		struct vm_page *swap_page = uvm_pagelookup(obj, i * PAGE_SIZE);
+		struct vm_page *to_page = (struct vm_page *)ttm->pages[i];
+		uvm_pagecopy(swap_page, to_page);
+	}
+	rw_exit(obj->vmobjlock);
+
+	uvm_obj_unwirepages(obj, 0, nbytes);
+	uao_detach(obj);
+
+	ttm->swap_storage = NULL;
 	ttm->page_flags &= ~TTM_TT_FLAG_SWAPPED;
+
 	return 0;
 #else
 	struct address_space *swap_space;
@@ -358,13 +374,41 @@ int ttm_tt_swapout(struct ttm_device *bdev, struct ttm_tt *ttm,
 		   gfp_t gfp_flags)
 {
 #ifdef __NetBSD__
-	/*
-	 * The UAO remains attached while its pages are unwired.  UVM can
-	 * deactivate and page them to swap without a separate copy object.
-	 */
+	int ret;
+	const size_t nbytes = ttm->num_pages * PAGE_SIZE;
+	struct uvm_object *obj = ttm->swap_storage;
+
+	/* Set up a UVM AO */
+	obj = uao_create(nbytes, 0);
+	if (obj == NULL)
+		return -ENOMEM;
+
+	ret = uvm_obj_wirepages(obj, 0, nbytes, NULL);
+	if (ret)
+		goto cleanup_uao;
+
+	/* Copy the ttm pages into it */
+	rw_enter(obj->vmobjlock, RW_WRITER);
+	for (int i = 0; i < ttm->num_pages; i++) {
+		struct vm_page *from_page = (struct vm_page *)ttm->pages[i];
+		if (unlikely(from_page == NULL))
+			continue;
+		struct vm_page *swap_page = uvm_pagelookup(obj, i * PAGE_SIZE);
+		uvm_pagecopy(from_page, swap_page);
+	}
+	rw_exit(obj->vmobjlock);
+
+	/* Unwire it so it can be swapped out */
+	uvm_obj_unwirepages(obj, 0, nbytes);
+
 	ttm_tt_unpopulate(bdev, ttm);
 	ttm->page_flags |= TTM_TT_FLAG_SWAPPED;
+	ttm->swap_storage = obj;
 	return ttm->num_pages;
+
+cleanup_uao:
+	uao_detach(obj);
+	return ret;
 #else
 	loff_t size = (loff_t)ttm->num_pages << PAGE_SHIFT;
 	struct address_space *swap_space;
