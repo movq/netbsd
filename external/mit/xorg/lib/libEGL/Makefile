@@ -87,7 +87,10 @@ CPPFLAGS+=	${X11FLAGS.THREADLIB} \
 		-DHAVE_PTHREAD \
 		-DHAVE_LIBDRM \
 		-DHAVE_MINCORE \
-		-DHAVE_NOATEXIT
+		-DHAVE_NOATEXIT \
+		-DHAVE_OPENGL=1 \
+		-DHAVE_OPENGL_ES_1=1 \
+		-DHAVE_OPENGL_ES_2=1
 
 .include "../libloader.mk"
 .include "../mesa-private-libs.mk"
