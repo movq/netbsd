@@ -402,7 +402,6 @@ static void drm_sched_entity_wakeup(struct dma_fence *f,
 	entity->dependency = NULL;
 	dma_fence_put(f);
 	drm_sched_wakeup(entity->rq->sched);
-	spin_unlock(&entity->rq->sched->job_list_lock);
 }
 
 /**
