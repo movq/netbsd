@@ -980,8 +980,93 @@
 ./usr/include/c++/__utility			base-cxx-usr
 ./usr/include/c++/experimental			base-cxx-usr
 ./usr/include/c++/ext				base-cxx-usr
+./usr/include/c++/__algorithm			base-cxx-user
+./usr/include/c++/__atomic			base-cxx-user
+./usr/include/c++/__atomic/support			base-cxx-user
+./usr/include/c++/__bit			base-cxx-user
+./usr/include/c++/__charconv			base-cxx-user
+./usr/include/c++/__chrono			base-cxx-user
+./usr/include/c++/__compare			base-cxx-user
+./usr/include/c++/__concepts			base-cxx-user
+./usr/include/c++/__condition_variable			base-cxx-user
+./usr/include/c++/__configuration			base-cxx-user
+./usr/include/c++/__coroutine			base-cxx-user
+./usr/include/c++/__cstddef			base-cxx-user
+./usr/include/c++/__cxx03			base-cxx-user
+./usr/include/c++/__cxx03/__algorithm			base-cxx-user
+./usr/include/c++/__cxx03/__atomic			base-cxx-user
+./usr/include/c++/__cxx03/__bit			base-cxx-user
+./usr/include/c++/__cxx03/__chrono			base-cxx-user
+./usr/include/c++/__cxx03/__condition_variable			base-cxx-user
+./usr/include/c++/__cxx03/__configuration			base-cxx-user
+./usr/include/c++/__cxx03/__debug_utils			base-cxx-user
+./usr/include/c++/__cxx03/__exception			base-cxx-user
+./usr/include/c++/__cxx03/__functional			base-cxx-user
+./usr/include/c++/__cxx03/__fwd			base-cxx-user
+./usr/include/c++/__cxx03/__ios			base-cxx-user
+./usr/include/c++/__cxx03/__iterator			base-cxx-user
+./usr/include/c++/__cxx03/__locale_dir			base-cxx-user
+./usr/include/c++/__cxx03/__locale_dir/locale_base_api			base-cxx-user
+./usr/include/c++/__cxx03/__math			base-cxx-user
+./usr/include/c++/__cxx03/__memory			base-cxx-user
+./usr/include/c++/__cxx03/__mutex			base-cxx-user
+./usr/include/c++/__cxx03/__numeric			base-cxx-user
+./usr/include/c++/__cxx03/__ostream			base-cxx-user
+./usr/include/c++/__cxx03/__random			base-cxx-user
+./usr/include/c++/__cxx03/__string			base-cxx-user
+./usr/include/c++/__cxx03/__support			base-cxx-user
+./usr/include/c++/__cxx03/__support/ibm			base-cxx-user
+./usr/include/c++/__cxx03/__support/xlocale			base-cxx-user
+./usr/include/c++/__cxx03/__system_error			base-cxx-user
+./usr/include/c++/__cxx03/__thread			base-cxx-user
+./usr/include/c++/__cxx03/__thread/support			base-cxx-user
+./usr/include/c++/__cxx03/__tuple			base-cxx-user
+./usr/include/c++/__cxx03/__type_traits			base-cxx-user
+./usr/include/c++/__cxx03/__utility			base-cxx-user
+./usr/include/c++/__cxx03/__variant			base-cxx-user
+./usr/include/c++/__cxx03/experimental			base-cxx-user
+./usr/include/c++/__cxx03/ext			base-cxx-user
+./usr/include/c++/__debug_utils			base-cxx-user
+./usr/include/c++/__exception			base-cxx-user
+./usr/include/c++/__expected			base-cxx-user
+./usr/include/c++/__filesystem			base-cxx-user
+./usr/include/c++/__flat_map			base-cxx-user
+./usr/include/c++/__flat_set			base-cxx-user
+./usr/include/c++/__format			base-cxx-user
+./usr/include/c++/__functional			base-cxx-user
+./usr/include/c++/__fwd			base-cxx-user
+./usr/include/c++/__ios			base-cxx-user
+./usr/include/c++/__locale_dir			base-cxx-user
+./usr/include/c++/__locale_dir/locale_base_api			base-cxx-user
+./usr/include/c++/__locale_dir/support			base-cxx-user
+./usr/include/c++/__locale_dir/support/no_locale			base-cxx-user
+./usr/include/c++/__math			base-cxx-user
+./usr/include/c++/__mdspan			base-cxx-user
+./usr/include/c++/__memory_resource			base-cxx-user
+./usr/include/c++/__mutex			base-cxx-user
+./usr/include/c++/__new			base-cxx-user
+./usr/include/c++/__numeric			base-cxx-user
+./usr/include/c++/__ostream			base-cxx-user
+./usr/include/c++/__pstl			base-cxx-user
+./usr/include/c++/__pstl/backends			base-cxx-user
+./usr/include/c++/__pstl/cpu_algos			base-cxx-user
+./usr/include/c++/__random			base-cxx-user
+./usr/include/c++/__stop_token			base-cxx-user
+./usr/include/c++/__string			base-cxx-user
+./usr/include/c++/__support			base-cxx-user
+./usr/include/c++/__support/ibm			base-cxx-user
+./usr/include/c++/__support/xlocale			base-cxx-user
+./usr/include/c++/__system_error			base-cxx-user
+./usr/include/c++/__thread			base-cxx-user
+./usr/include/c++/__thread/support			base-cxx-user
+./usr/include/c++/__tuple			base-cxx-user
+./usr/include/c++/__type_traits			base-cxx-user
+./usr/include/c++/__variant			base-cxx-user
+./usr/include/c++/__vector			base-cxx-user
+./usr/include/c++/experimental/__simd			base-cxx-user
 ./usr/include/cdk				base-obsolete		obsolete
-./usr/include/clang-13.0			base-c-usr
+./usr/include/clang-22.1			base-cxx-user
+./usr/include/clang-13.0			base-obsolete		obsolete
 ./usr/include/clang-3.4				base-obsolete		obsolete
 ./usr/include/clang-3.5				base-obsolete		obsolete
 ./usr/include/clang-3.6				base-obsolete		obsolete
@@ -1190,13 +1275,20 @@
 ./usr/include/vm				base-obsolete		obsolete
 ./usr/lib					base-sys-usr		compatdir
 ./usr/lib/clang					base-sys-usr
-./usr/lib/clang/13.0.0				base-sys-usr
-./usr/lib/clang/13.0.0/include			base-sys-usr
-./usr/lib/clang/13.0.0/include/sanitizer	base-sys-usr
-./usr/lib/clang/13.0.0/include/xray		base-sys-usr
-./usr/lib/clang/13.0.0/lib			base-sys-usr
-./usr/lib/clang/13.0.0/lib/netbsd		base-sys-usr
-./usr/lib/clang/13.0.0/share			base-sys-usr
+./usr/lib/clang/22.1.8				base-sys-usr
+./usr/lib/clang/22.1.8/include			base-sys-user
+./usr/lib/clang/22.1.8/include/sanitizer	base-sys-user
+./usr/lib/clang/22.1.8/include/xray		base-sys-user
+./usr/lib/clang/22.1.8/lib			base-sys-user
+./usr/lib/clang/22.1.8/lib/netbsd		base-sys-user
+./usr/lib/clang/22.1.8/share			base-sys-user
+./usr/lib/clang/13.0.0				base-obsolete	obsolete
+./usr/lib/clang/13.0.0/include			base-obsolete	obsolete
+./usr/lib/clang/13.0.0/include/sanitizer	base-obsolete	obsolete
+./usr/lib/clang/13.0.0/include/xray		base-obsolete	obsolete
+./usr/lib/clang/13.0.0/lib			base-obsolete	obsolete
+./usr/lib/clang/13.0.0/lib/netbsd		base-obsolete	obsolete
+./usr/lib/clang/13.0.0/share			base-obsolete	obsolete
 ./usr/lib/clang/7.0.0				base-obsolete	obsolete
 ./usr/lib/clang/7.0.0/include			base-obsolete	obsolete
 ./usr/lib/clang/7.0.0/include/sanitizer		base-obsolete	obsolete
