@@ -59,6 +59,8 @@
 ./usr/libdata/debug/usr/X11R7/lib/libfontconfig.so.2.3.debug	xdebug-fontconfig-debug		xorg,debug,compatx11file
 ./usr/libdata/debug/usr/X11R7/lib/libfontenc.so.2.0.debug	xdebug-libfontenc-debug		xorg,debug,compatx11file
 ./usr/libdata/debug/usr/X11R7/lib/libfreetype.so.19.0.debug	xdebug-freetype-debug		xorg,debug,compatx11file
+./usr/libdata/debug/usr/X11R7/lib/gbm				xdebug-libgbm-debug		xorg,debug,compatx11file
+./usr/libdata/debug/usr/X11R7/lib/gbm/dri_gbm.so.0.debug	xdebug-libgbm-debug		xorg,debug,compatx11file
 ./usr/libdata/debug/usr/X11R7/lib/libgbm.so.1.0.debug	xdebug-libgbm-debug		xorg,debug,compatx11file
 ./usr/libdata/debug/usr/X11R7/lib/libgallium.so.0.0.debug	xdebug-gallium-debug	xorg,debug,compatx11file
 ./usr/libdata/debug/usr/X11R7/lib/libglapi.so.1.0.debug	xdebug-libglapi-debug		xorg,debug,compatx11file

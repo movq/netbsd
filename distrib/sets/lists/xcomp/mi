@@ -7,7 +7,7 @@
 ./usr/X11R7/bin/xft-config				xcomp-obsolete	obsolete
 ./usr/X11R7/include/EGL/egl.h				xcomp-EGL-include	xorg,xorg_egl
 ./usr/X11R7/include/EGL/eglext.h			xcomp-EGL-include	xorg,xorg_egl
-./usr/X11R7/include/EGL/eglextchromium.h		xcomp-EGL-include	xorg,xorg_egl
+./usr/X11R7/include/EGL/eglextchromium.h		xcomp-obsolete	obsolete
 ./usr/X11R7/include/EGL/eglmesaext.h			xcomp-EGL-include	xorg,xorg_egl
 ./usr/X11R7/include/EGL/eglplatform.h			xcomp-EGL-include	xorg,xorg_egl
 ./usr/X11R7/include/GL/GLwDrawA.h			xcomp-xorgproto-include	xorg
@@ -34,7 +34,7 @@
 ./usr/X11R7/include/GL/internal/dri_interface.h		xcomp-xorgproto-include	xorg
 ./usr/X11R7/include/GL/internal/glcore.h		xcomp-xorgproto-include	xorg
 ./usr/X11R7/include/GL/internal/sarea.h			xcomp-obsolete	obsolete
-./usr/X11R7/include/GL/osmesa.h				xcomp-xorgproto-include	xorg
+./usr/X11R7/include/GL/osmesa.h				xcomp-obsolete	obsolete
 ./usr/X11R7/include/GL/wglext.h				xcomp-xorgproto-include	xorg
 ./usr/X11R7/include/GL/wmesa.h				xcomp-obsolete	obsolete
 ./usr/X11R7/include/GL/xmesa.h				xcomp-obsolete	obsolete
@@ -700,6 +700,7 @@
 ./usr/X11R7/include/freetype2/tttags.h			xcomp-obsolete	obsolete
 ./usr/X11R7/include/freetype2/ttunpat.h			xcomp-obsolete	obsolete
 ./usr/X11R7/include/ft2build.h				xcomp-obsolete	obsolete
+./usr/X11R7/include/gbm_backend_abi.h			xcomp-MesaLib-include	xorg
 ./usr/X11R7/include/gbm.h				xcomp-MesaLib-include	xorg
 ./usr/X11R7/include/libdrm/amdgpu.h			xcomp-libdrm-include	xorg
 ./usr/X11R7/include/libdrm/amdgpu_drm.h			xcomp-libdrm-include	xorg
@@ -1342,7 +1343,7 @@
 ./usr/X11R7/lib/pkgconfig/damageproto.pc		xcomp-xorgproto-lib	xorg
 ./usr/X11R7/lib/pkgconfig/dmxproto.pc			xcomp-xorgproto-lib	xorg
 ./usr/X11R7/lib/pkgconfig/dpmsproto.pc			xcomp-xorgproto-lib	xorg
-./usr/X11R7/lib/pkgconfig/dri.pc			xcomp-dri-lib	xorg
+./usr/X11R7/lib/pkgconfig/dri.pc			xcomp-obsolete	obsolete
 ./usr/X11R7/lib/pkgconfig/dri2proto.pc			xcomp-xorgproto-lib	xorg
 ./usr/X11R7/lib/pkgconfig/dri3proto.pc			xcomp-xorgproto-lib	xorg
 ./usr/X11R7/lib/pkgconfig/epoxy.pc			xcomp-libepoxy-lib	xorg
