@@ -112,6 +112,13 @@ SRCS.mesa_util+= \
 	c11_time.c \
 	c11_threads_posix.c
 
+.if ${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH} == "x86_64"
+SRCS.mesa_util+=	cache_ops_x86.c
+COPTS.cache_ops_x86.c+=	-msse2
+.else
+SRCS.mesa_util+=	cache_ops_null.c
+.endif
+
 BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/src/c11/impl/time.c c11_time.c
 BUILDSYMLINKS+=	${X11SRCDIR.Mesa}/src/c11/impl/threads_posix.c c11_threads_posix.c
 
@@ -122,6 +129,7 @@ COPTS.streaming-load-memcpy.c+=	-msse4.1
 .endif
 
 CPPFLAGS.hash_table.c+=		-I${X11SRCDIR.Mesa}/src/util
+CPPFLAGS.format_srgb.c+=	-I${X11SRCDIR.Mesa}/src/util
 CPPFLAGS.u_hash_table.c+=	-I${X11SRCDIR.Mesa}/src/gallium/auxiliary
 CPPFLAGS.strtod.c+=		-D_GNU_SOURCE -DHAVE_STRTOD_L
 CPPFLAGS.u_process.c+=		-DHAVE_NOATEXIT
