@@ -192,6 +192,7 @@
 ./usr/libdata/debug/usr/X11R7
 ./usr/libdata/debug/usr/X11R7/bin
 ./usr/libdata/debug/usr/X11R7/lib
+./usr/libdata/debug/usr/X11R7/lib/gbm
 ./usr/libdata/debug/usr/X11R7/lib/X11
 ./usr/libdata/debug/usr/X11R7/lib/X11/locale
 ./usr/libdata/debug/usr/X11R7/lib/X11/locale/lib
