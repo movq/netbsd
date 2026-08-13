@@ -19,8 +19,6 @@ SHLIB_MAJOR=    0
 SHLIB_MINOR=    0
 
 LIB=		gallium
-DRIDIR=		${X11USRLIBDIR}/modules/dri
-DRIDEBUGDIR=	${DEBUGDIR}${X11USRLIBDIR}/modules/dri
 
 LLVM_INCLUDE_OBJDIR!=	cd ${NETBSDSRCDIR}/external/apache2/llvm/include && ${PRINTOBJDIR}
 
@@ -1332,21 +1330,6 @@ CWARNFLAGS.clang+=	-Wno-error=constant-conversion \
 CWARNFLAGS+=		-Wno-error=stack-protector
 
 .include <bsd.x11.mk>
-
-SYMLINKS+= ../../libgallium.so.${SHLIB_MAJOR} ${DRIDIR}/gallium_dri.so
-SYMLINKS+= ../../libgallium.so.${SHLIB_MAJOR} ${DRIDIR}/gallium_dri.so.${SHLIB_MAJOR}
-.if ${MKDEBUG} != "no"
-SYMLINKS+= ../../libgallium.so.${SHLIB_MAJOR}.${SHLIB_MINOR}.debug \
-	${DRIDEBUGDIR}/gallium_dri.so.${SHLIB_MAJOR}.debug
-.endif
-
-.for _d in ${DRIVERS}
-SYMLINKS+= gallium_dri.so ${DRIDIR}/${_d}_dri.so
-SYMLINKS+= gallium_dri.so.${SHLIB_MAJOR} ${DRIDIR}/${_d}_dri.so.${SHLIB_MAJOR} 
-.if ${MKDEBUG} != "no"
-SYMLINKS+= gallium_dri.so.${SHLIB_MAJOR}.debug ${DRIDEBUGDIR}/${_d}_dri.so.${SHLIB_MAJOR}.debug
-.endif
-.endfor
 
 .if ${MACHINE_ARCH} == "sparc" || ${COMMON_MACHINE_ARCH:U} == "sparc"
 COPTS+=	${${ACTIVE_CC} == "clang":? -Wa,-Av8plus  :}

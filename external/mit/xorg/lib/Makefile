@@ -66,8 +66,11 @@ SUBDIR+=libGLU libGLw libXaw6 libXaw libXcursor \
 	libXdmGreet \
 	xcb-util
 SUBDIR+=libgbm${OLD_SUFFIX} \
-	.WAIT \
-	dri_gbm
+	.WAIT
+.if empty(OLD_SUFFIX)
+SUBDIR+=dril
+.endif
+SUBDIR+=dri_gbm
 .if ${HAVE_XORG_EGL} != "no"
 # libEGL depends upon libgbm
 SUBDIR+=.WAIT libEGL${OLD_SUFFIX}
