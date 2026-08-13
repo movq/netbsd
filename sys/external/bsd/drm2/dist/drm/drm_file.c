@@ -825,8 +825,14 @@ static void drm_send_event_helper(struct drm_device *dev,
 	list_del(&e->pending_link);
 	list_add_tail(&e->link,
 		      &e->file_priv->event_list);
+#ifdef __NetBSD__
+	DRM_SPIN_WAKEUP_ONE(&e->file_priv->event_wait, &dev->event_lock);
+        selnotify(&e->file_priv->event_selq,
+            POLLIN | POLLRDNORM, NOTE_SUBMIT);
+#else
 	wake_up_interruptible_poll(&e->file_priv->event_wait,
 		EPOLLIN | EPOLLRDNORM);
+#endif
 }
 
 /**
