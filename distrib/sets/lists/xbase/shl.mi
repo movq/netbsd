@@ -33,8 +33,8 @@
 ./usr/X11R7/lib/gbm/dri_gbm.so			xbase-libgbm-lib		xorg,compatx11file
 ./usr/X11R7/lib/gbm/dri_gbm.so.0		xbase-libgbm-lib		xorg,compatx11file
 ./usr/X11R7/lib/libEGL.so			xbase-libEGL-lib		xorg,compatx11file,xorg_egl
-./usr/X11R7/lib/libEGL.so.0			xbase-libEGL-lib		xorg,compatx11file,xorg_egl
-./usr/X11R7/lib/libEGL.so.0.0			xbase-libEGL-lib		xorg,compatx11file,xorg_egl
+./usr/X11R7/lib/libEGL.so.1			xbase-libEGL-lib		xorg,compatx11file,xorg_egl
+./usr/X11R7/lib/libEGL.so.1.0			xbase-libEGL-lib		xorg,compatx11file,xorg_egl
 ./usr/X11R7/lib/libFS.so			xbase-libFS-lib		xorg,compatx11file
 ./usr/X11R7/lib/libFS.so.7			xbase-libFS-lib		xorg,compatx11file
 ./usr/X11R7/lib/libFS.so.7.0			xbase-libFS-lib		xorg,compatx11file
