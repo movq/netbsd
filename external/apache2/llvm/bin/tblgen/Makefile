@@ -74,4 +74,8 @@ LLVM_LIBS+= \
 
 .include "${.PARSEDIR}/../../link.mk"
 
+.if defined(HOSTPROG)
+CPPFLAGS+=	-I${LLVM_OBJDIR.TableGenCommon}
+.endif
+
 .include <bsd.prog.mk>

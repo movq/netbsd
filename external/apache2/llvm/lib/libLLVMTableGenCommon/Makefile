@@ -3,7 +3,9 @@ LIB=    LLVMTableGenCommon
 .include <bsd.init.mk>
 
 .if defined(HOSTLIB)
-genvt_inc=	${LLVM_INCLUDE_OBJDIR}/llvm/CodeGen/GenVT.inc
+genvt_inc=	${.OBJDIR}/llvm/CodeGen/GenVT.inc
+
+CPPFLAGS+=	-I${.OBJDIR}
 
 ${genvt_inc}:	${TOOLDIR}/bin/${_TOOL_PREFIX}llvm-tblgen-min
 	mkdir -p ${genvt_inc:H}
