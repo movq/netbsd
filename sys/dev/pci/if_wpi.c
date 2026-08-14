@@ -64,9 +64,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_wpi.c,v 1.92 2021/12/05 07:08:08 msaitoh Exp $");
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
 
+#include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_amrr.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <dev/firmload.h>
 

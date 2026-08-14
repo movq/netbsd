@@ -19,6 +19,7 @@ typedef int (*parser_exec_t)(prop_dictionary_t, prop_dictionary_t);
 typedef int (*parser_match_t)(const struct parser *, const struct match *,
     struct match *, int, const char *);
 typedef int (*parser_init_t)(struct parser *);
+typedef int (*parser_fixup_t)(struct match *, int, int);
 
 struct match {
 	prop_dictionary_t	m_env;
@@ -26,6 +27,7 @@ struct match {
 	const struct parser 	*m_parser;
 	int			m_argidx;
 	parser_exec_t		m_exec;
+	bool			m_override_parser_exec;
 };
 
 /* method table */
@@ -39,6 +41,7 @@ struct parser {
 	parser_exec_t			p_exec;
 	const char			*p_name;
 	struct parser			*p_nextparser;
+	parser_fixup_t			p_post_match_fixup;
 	bool				p_initialized;
 };
 
@@ -98,12 +101,37 @@ extern const struct parser_methods pterm_methods;
 	.ps_hexok = (__defhexok)					\
 }
 
+#define	PSTR_INITIALIZER2(__ps, __name, __defexec, __defkey, __defhexok,\
+    __defnext, __deffixup, __def_as_cstring)				\
+{									\
+	.ps_parser = {.p_name = (__name), .p_methods = &pstr_methods,	\
+	               .p_exec = (__defexec),				\
+	               .p_nextparser = (__defnext),			\
+		       .p_post_match_fixup = (__deffixup)},		\
+	.ps_key = (__defkey),						\
+	.ps_hexok = (__defhexok),					\
+	.ps_as_cstring = (__def_as_cstring),				\
+}
+
 #define	PADDR_INITIALIZER(__pa, __name, __defexec, __addrkey,		\
     __maskkey, __activator, __deactivator, __defnext)		\
 {									\
 	.pa_parser = {.p_name = (__name), .p_methods = &paddr_methods,	\
 	               .p_exec = (__defexec),				\
 	               .p_nextparser = (__defnext)},			\
+	.pa_addrkey = (__addrkey),					\
+	.pa_maskkey = (__maskkey),					\
+	.pa_activator = (__activator),					\
+	.pa_deactivator = (__deactivator),				\
+}
+
+#define	PADDR_INITIALIZER2(__pa, __name, __defexec, __addrkey,		\
+    __maskkey, __activator, __deactivator, __defnext, __deffixup)	\
+{									\
+	.pa_parser = {.p_name = (__name), .p_methods = &paddr_methods,	\
+	               .p_exec = (__defexec),				\
+	               .p_nextparser = (__defnext),			\
+		       .p_post_match_fixup = (__deffixup)},		\
 	.pa_addrkey = (__addrkey),					\
 	.pa_maskkey = (__maskkey),					\
 	.pa_activator = (__activator),					\
@@ -143,6 +171,21 @@ extern const struct parser_methods pterm_methods;
 		      .p_exec = (__defexec),				\
 		      .p_methods = &pkw_methods,			\
 		      .p_initialized = false},				\
+	.pk_keywords = SIMPLEQ_HEAD_INITIALIZER((__pk)->pk_keywords),	\
+	.pk_kwinit = (__kws),						\
+	.pk_nkwinit = (__nkw),						\
+	.pk_keyinit = (__defkey),					\
+	.pk_nextinit = (__defnext)					\
+}
+
+#define	PKW_INITIALIZER1(__pk, __name, __defexec, __defkey, __kws, __nkw,\
+	__defnext, __deffixup)						\
+{									\
+	.pk_parser = {.p_name = (__name),				\
+		      .p_exec = (__defexec),				\
+		      .p_methods = &pkw_methods,			\
+		      .p_initialized = false,				\
+		      .p_post_match_fixup = (__deffixup)},		\
 	.pk_keywords = SIMPLEQ_HEAD_INITIALIZER((__pk)->pk_keywords),	\
 	.pk_kwinit = (__kws),						\
 	.pk_nkwinit = (__nkw),						\
@@ -212,6 +255,7 @@ struct pstr {
 	struct parser		ps_parser;
 	const char		*ps_key;
 	bool			ps_hexok;
+	bool			ps_as_cstring;
 };
 
 struct pinteger {

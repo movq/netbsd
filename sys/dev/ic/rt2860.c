@@ -52,9 +52,11 @@ __KERNEL_RCSID(0, "$NetBSD: rt2860.c,v 1.36 2021/06/16 00:21:18 riastradh Exp $"
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
+#include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_amrr.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <dev/firmload.h>
 

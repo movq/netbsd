@@ -47,7 +47,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_run.c,v 1.42 2020/06/24 21:06:39 jdolecek Exp $")
 #include <machine/endian.h>
 #include <sys/intr.h>
 
-#include <net/bpf.h>
 #include <net/if.h>
 #include <net/if_arp.h>
 #include <net/if_dl.h>
@@ -55,17 +54,20 @@ __KERNEL_RCSID(0, "$NetBSD: if_run.c,v 1.42 2020/06/24 21:06:39 jdolecek Exp $")
 #include <net/if_media.h>
 #include <net/if_types.h>
 
+#include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
-#include <net80211/ieee80211_amrr.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_ratectl.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <dev/firmload.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
-#include <dev/usb/usbdivar.h>
 #include <dev/usb/usbdi_util.h>
 #include <dev/usb/usbdevs.h>
+
+#include <dev/usb/usbwifi.h>
 
 #include <dev/ic/rt2860reg.h>		/* shared with ral(4) */
 #include <dev/usb/if_runvar.h>
@@ -331,15 +333,10 @@ static const struct usb_devno run_devs[] = {
 static int		run_match(device_t, cfdata_t, void *);
 static void		run_attach(device_t, device_t, void *);
 static int		run_detach(device_t, int);
-static int		run_activate(device_t, enum devact);
 
 CFATTACH_DECL_NEW(run, sizeof(struct run_softc),
-	run_match, run_attach, run_detach, run_activate);
+	run_match, run_attach, run_detach, usbwifi_activate);
 
-static int		run_alloc_rx_ring(struct run_softc *);
-static void		run_free_rx_ring(struct run_softc *);
-static int		run_alloc_tx_ring(struct run_softc *, int);
-static void		run_free_tx_ring(struct run_softc *, int);
 static int		run_load_microcode(struct run_softc *);
 static int		run_reset(struct run_softc *);
 static int		run_read(struct run_softc *, uint16_t, uint32_t *);
@@ -370,16 +367,13 @@ static const char *	run_get_rf(uint16_t);
 static void		run_rt3593_get_txpower(struct run_softc *);
 static void		run_get_txpower(struct run_softc *);
 static int		run_read_eeprom(struct run_softc *);
-static struct ieee80211_node *
-			run_node_alloc(struct ieee80211_node_table *);
 static int		run_media_change(struct ifnet *);
-static void		run_next_scan(void *);
 static void		run_task(void *);
 static void		run_do_async(struct run_softc *,
 			    void (*)(struct run_softc *, void *), void *, int);
-static int		run_newstate(struct ieee80211com *,
+static int		run_newstate(struct ieee80211vap *,
 			    enum ieee80211_state, int);
-static void		run_newstate_cb(struct run_softc *, void *);
+/* static void		run_newstate_cb(struct run_softc *, void *); */
 static int		run_updateedca(struct ieee80211com *);
 static void		run_updateedca_cb(struct run_softc *, void *);
 #ifdef RUN_HWCRYPTO
@@ -390,19 +384,20 @@ static int		run_delete_key(struct ieee80211com *,
 			    const struct ieee80211_key *);
 static void		run_delete_key_cb(struct run_softc *, void *);
 #endif
-static void		run_calibrate_to(void *);
-static void		run_calibrate_cb(struct run_softc *, void *);
+static void		run_ratectl_to(void *);
+static void		run_ratectl_cb(struct run_softc *, void *);
+static void		run_ratectl_node(void *arg, struct ieee80211_node *ni);
 static void		run_newassoc(struct ieee80211_node *, int);
 static void		run_rx_frame(struct run_softc *, uint8_t *, int);
-static void		run_rxeof(struct usbd_xfer *, void *,
-			    usbd_status);
-static void		run_txeof(struct usbd_xfer *, void *,
-			    usbd_status);
-static int		run_tx(struct run_softc *, struct mbuf *,
-			    struct ieee80211_node *);
-static void		run_start(struct ifnet *);
-static void		run_watchdog(struct ifnet *);
-static int		run_ioctl(struct ifnet *, u_long, void *);
+static void		run_rx_loop(struct usbwifi *, struct usbwifi_chain *,
+				    uint32_t);
+/* static void		run_txeof(struct usbd_xfer *, void *,
+			    usbd_status); */
+static unsigned	run_tx_prepare(struct usbwifi *, struct usbwifi_chain *,
+				    uint8_t);
+/* static void		run_start(struct ifnet *); */
+// static void		run_watchdog(void *);
+/* static int		run_ioctl(struct ifnet *, u_long, void *); */
 static void		run_select_chan_group(struct run_softc *, int);
 static void		run_iq_calib(struct run_softc *, u_int);
 static void		run_set_agc(struct run_softc *, uint8_t);
@@ -415,15 +410,16 @@ static void		run_rt5390_set_chan(struct run_softc *, u_int);
 static void		run_rt5592_set_chan(struct run_softc *, u_int);
 static int		run_set_chan(struct run_softc *,
 			    struct ieee80211_channel *);
-static void		run_updateprot(struct run_softc *);
-static void		run_enable_tsf_sync(struct run_softc *);
+static void		run_updateprot_cb(struct run_softc *, void *);
+static void		run_updateprot(struct ieee80211com *);
+static void		run_enable_tsf_sync(struct ieee80211vap *);
 static void		run_enable_mrr(struct run_softc *);
 static void		run_set_txpreamble(struct run_softc *);
 static void		run_set_basicrates(struct run_softc *);
 static void		run_set_leds(struct run_softc *, uint16_t);
 static void		run_set_bssid(struct run_softc *, const uint8_t *);
 static void		run_set_macaddr(struct run_softc *, const uint8_t *);
-static void		run_updateslot(struct ifnet *);
+static void		run_updateslot(struct ieee80211com *);
 static void		run_updateslot_cb(struct run_softc *, void *);
 static int8_t		run_rssi2dbm(struct run_softc *, uint8_t, uint8_t);
 static void		run_rt5390_bbp_init(struct run_softc *);
@@ -438,11 +434,24 @@ static void		run_rt3593_rf_setup(struct run_softc *);
 static void		run_rt5390_rf_setup(struct run_softc *);
 static int		run_txrx_enable(struct run_softc *);
 static int     		run_adjust_freq_offset(struct run_softc *);
-static int		run_init(struct ifnet *);
-static void		run_stop(struct ifnet *, int);
+static int		run_init(struct usbwifi *);
+static void		run_stop(struct usbwifi *);
 #ifndef IEEE80211_STA_ONLY
-static int		run_setup_beacon(struct run_softc *);
+static void		run_update_beacon(struct ieee80211vap *, int);
+static void		run_update_beacon_cb(struct run_softc *, void*);
 #endif
+static void	run_get_radiocaps(struct ieee80211com *, int , int *,
+			struct ieee80211_channel []);
+static struct ieee80211vap *	run_vap_create(struct ieee80211com *,
+				    const char [IFNAMSIZ],int,
+				    enum ieee80211_opmode, int,
+				    const uint8_t [IEEE80211_ADDR_LEN],
+				    const uint8_t [IEEE80211_ADDR_LEN]);
+static void	run_vap_delete(struct ieee80211vap *);
+static void	run_scan_start(struct ieee80211com *);
+static void	run_scan_end(struct ieee80211com *);
+static void	run_set_channel(struct ieee80211com *);
+
 
 static const struct {
 	uint32_t reg;
@@ -529,6 +538,20 @@ static const struct {
 	RT5592_CHAN_5GHZ
 };
 
+struct run_vap {
+	struct ieee80211vap vap;
+	int (*newstate)(struct ieee80211vap *, enum ieee80211_state, int);
+	struct mbuf *beacon_mbuf;
+	int rvp_id;
+};
+
+static const struct usbwifi_ops run_ops = {
+	.uwo_rx_loop = run_rx_loop,
+	.uwo_tx_prepare = run_tx_prepare,
+	.uwo_init = run_init,
+	.uwo_stop = run_stop,
+};
+
 static int
 firmware_load(const char *dname, const char *iname, uint8_t **ucodep,
     size_t *sizep)
@@ -564,35 +587,48 @@ run_attach(device_t parent, device_t self, void *aux)
 {
 	struct run_softc *sc = device_private(self);
 	struct usb_attach_arg *uaa = aux;
-	struct ieee80211com *ic = &sc->sc_ic;
-	struct ifnet *ifp = &sc->sc_if;
+	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
 	usb_interface_descriptor_t *id;
 	usb_endpoint_descriptor_t *ed;
 	char *devinfop;
 	int i, nrx, ntx, ntries, error;
 	uint32_t ver;
+	uint8_t rxq, txq[RUN_MAXEPOUT];
 
 	aprint_naive("\n");
 	aprint_normal("\n");
 
-	sc->sc_dev = self;
-	sc->sc_udev = uaa->uaa_device;
+	ic->ic_softc = sc;
 
-	devinfop = usbd_devinfo_alloc(sc->sc_udev, 0);
-	aprint_normal_dev(sc->sc_dev, "%s\n", devinfop);
+	sc->sc_uw.uw_sc = sc;
+	sc->sc_uw.uw_dev = self;
+	sc->sc_uw.uw_udev = uaa->uaa_device;
+	sc->sc_uw.uw_ops = &run_ops;
+	sc->sc_uw.uw_rx_bufsz = RUN_MAX_RXSZ;
+	sc->sc_uw.uw_tx_bufsz = RUN_MAX_TXSZ;
+	sc->sc_uw.uw_rx_list_cnt = RUN_RX_RING_COUNT;
+	sc->sc_uw.uw_tx_list_cnt = RUN_TX_RING_COUNT;
+
+	devinfop = usbd_devinfo_alloc(sc->sc_uw.uw_udev, 0);
+	aprint_normal_dev(self, "%s\n", devinfop);
 	usbd_devinfo_free(devinfop);
 
-	error = usbd_set_config_no(sc->sc_udev, 1, 0);
+	usbwifi_attach(&sc->sc_uw);
+
+	/* override default settings */
+	sc->sc_uw.uw_tx_xfer_timeout = RUN_TX_TIMEOUT;
+
+	error = usbd_set_config_no(sc->sc_uw.uw_udev, 1, 0);
 	if (error != 0) {
-		aprint_error_dev(sc->sc_dev, "failed to set configuration"
+		aprint_error_dev(self, "failed to set configuration"
 		    ", err=%s\n", usbd_errstr(error));
 		return;
 	}
 
 	/* get the first interface handle */
-	error = usbd_device2interface_handle(sc->sc_udev, 0, &sc->sc_iface);
+	error = usbd_device2interface_handle(sc->sc_uw.uw_udev, 0, &sc->sc_uw.uw_iface);
 	if (error != 0) {
-		aprint_error_dev(sc->sc_dev,
+		aprint_error_dev(self,
 		    "could not get interface handle\n");
 		return;
 	}
@@ -604,34 +640,36 @@ run_attach(device_t parent, device_t self, void *aux)
 	 * seem to have only 4 TX bulk endpoints (Fukaumi Naoki).
 	 */
 	nrx = ntx = 0;
-	id = usbd_get_interface_descriptor(sc->sc_iface);
+	id = usbd_get_interface_descriptor(sc->sc_uw.uw_iface);
 	for (i = 0; i < id->bNumEndpoints; i++) {
-		ed = usbd_interface2endpoint_descriptor(sc->sc_iface, i);
+		ed = usbd_interface2endpoint_descriptor(sc->sc_uw.uw_iface, i);
 		if (ed == NULL || UE_GET_XFERTYPE(ed->bmAttributes) != UE_BULK)
 			continue;
 
 		if (UE_GET_DIR(ed->bEndpointAddress) == UE_DIR_IN) {
-			sc->rxq.pipe_no = ed->bEndpointAddress;
+			rxq = ed->bEndpointAddress;
 			nrx++;
 		} else if (ntx < RUN_MAXEPOUT) {
-			sc->txq[ntx].pipe_no = ed->bEndpointAddress;
+			txq[ntx] = ed->bEndpointAddress;
 			ntx++;
 		}
 	}
 	/* make sure we've got them all */
 	if (nrx < 1 || ntx < RUN_MAXEPOUT) {
-		aprint_error_dev(sc->sc_dev, "missing endpoint\n");
+		aprint_error_dev(self, "missing endpoint\n");
 		return;
 	}
 
+	memcpy(&sc->sc_uw.uw_ed[0], txq, sizeof(txq[0])*ntx);
+	memcpy(&sc->sc_uw.uw_ed[ntx], &rxq, sizeof(rxq)*nrx);
+
 	usb_init_task(&sc->sc_task, run_task, sc, 0);
+	/*
 	callout_init(&sc->scan_to, 0);
 	callout_setfunc(&sc->scan_to, run_next_scan, sc);
-	callout_init(&sc->calib_to, 0);
-	callout_setfunc(&sc->calib_to, run_calibrate_to, sc);
-
-	sc->amrr.amrr_min_success_threshold =  1;
-	sc->amrr.amrr_max_success_threshold = 10;
+	*/
+	callout_init(&sc->ratectl_to, CALLOUT_MPSAFE);
+	callout_setfunc(&sc->ratectl_to, run_ratectl_to, sc);
 
 	/* wait for the chip to settle */
 	for (ntries = 0; ntries < 100; ntries++) {
@@ -642,7 +680,7 @@ run_attach(device_t parent, device_t self, void *aux)
 		DELAY(10);
 	}
 	if (ntries == 100) {
-		aprint_error_dev(sc->sc_dev,
+		aprint_error_dev(self,
 		    "timeout waiting for NIC to initialize\n");
 		return;
 	}
@@ -660,24 +698,28 @@ run_attach(device_t parent, device_t self, void *aux)
 	* here.
 	*/
 	if (sc->mac_ver == 0x5390)
-		sc->sc_flags |= RUN_USE_BLOCK_WRITE;
+		sc->sc_uw.uw_flags |= RUN_USE_BLOCK_WRITE;
 
 	/* retrieve RF rev. no and various other things from EEPROM */
 	run_read_eeprom(sc);
 
-	aprint_verbose_dev(sc->sc_dev,
+	aprint_verbose_dev(self,
 	    "MAC/BBP RT%04X (rev 0x%04X), RF %s (MIMO %dT%dR), address %s\n",
 	    sc->mac_ver, sc->mac_rev, run_get_rf(sc->rf_rev), sc->ntxchains,
-	    sc->nrxchains, ether_sprintf(ic->ic_myaddr));
+	    sc->nrxchains, ether_sprintf(ic->ic_macaddr));
 
-	ic->ic_ifp = ifp;
+	ic->ic_name = device_xname(self);
+
+	ic->ic_txstream = sc->ntxchains;
+	ic->ic_rxstream = sc->nrxchains;
+
 	ic->ic_phytype = IEEE80211_T_OFDM;	/* not only, but not used */
 	ic->ic_opmode = IEEE80211_M_STA;	/* default to BSS mode */
-	ic->ic_state = IEEE80211_S_INIT;
 
 	/* set device capabilities */
 	ic->ic_caps =
-	    IEEE80211_C_MONITOR |	/* monitor mode supported */
+	     IEEE80211_C_STA |
+	     IEEE80211_C_MONITOR |	/* monitor mode supported */
 #ifndef IEEE80211_STA_ONLY
 	    IEEE80211_C_IBSS |		/* IBSS mode supported */
 	    IEEE80211_C_HOSTAP |	/* HostAP mode supported */
@@ -693,49 +735,14 @@ run_attach(device_t parent, device_t self, void *aux)
 	    IEEE80211_C_WME |		/* WME */
 	    IEEE80211_C_WPA;		/* WPA/RSN */
 
-	if (sc->rf_rev == RT2860_RF_2750 ||
-	    sc->rf_rev == RT2860_RF_2850 ||
-	    sc->rf_rev == RT3070_RF_3052 ||
-	    sc->rf_rev == RT3070_RF_3053 ||
-	    sc->rf_rev == RT5592_RF_5592) {
-		/* set supported .11a rates */
-		ic->ic_sup_rates[IEEE80211_MODE_11A] =
-		    ieee80211_std_rateset_11a;
+	run_get_radiocaps(ic, IEEE80211_CHAN_MAX, &ic->ic_nchans,
+	    ic->ic_channels);
 
-		/* set supported .11a channels */
-		for (i = 14; i < (int)__arraycount(rt2860_rf2850); i++) {
-			uint8_t chan = rt2860_rf2850[i].chan;
-			ic->ic_channels[chan].ic_freq =
-			    ieee80211_ieee2mhz(chan, IEEE80211_CHAN_5GHZ);
-			ic->ic_channels[chan].ic_flags = IEEE80211_CHAN_A;
-		}
-	}
+	usbwifi_ic_attach(&sc->sc_uw, sc->ntxchains, sc->nrxchains, ntx,
+	    nrx, IEEE80211_F_DATAPAD | IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST);
 
-	/* set supported .11b and .11g rates */
-	ic->ic_sup_rates[IEEE80211_MODE_11B] = ieee80211_std_rateset_11b;
-	ic->ic_sup_rates[IEEE80211_MODE_11G] = ieee80211_std_rateset_11g;
-
-	/* set supported .11b and .11g channels (1 through 14) */
-	for (i = 1; i <= 14; i++) {
-		ic->ic_channels[i].ic_freq =
-		    ieee80211_ieee2mhz(i, IEEE80211_CHAN_2GHZ);
-		ic->ic_channels[i].ic_flags =
-		    IEEE80211_CHAN_CCK | IEEE80211_CHAN_OFDM |
-		    IEEE80211_CHAN_DYN | IEEE80211_CHAN_2GHZ;
-	}
-
-	ifp->if_softc = sc;
-	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
-	ifp->if_init = run_init;
-	ifp->if_ioctl = run_ioctl;
-	ifp->if_start = run_start;
-	ifp->if_watchdog = run_watchdog;
-	IFQ_SET_READY(&ifp->if_snd);
-	memcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
-
-	if_attach(ifp);
-	ieee80211_ifattach(ic);
-	ic->ic_node_alloc = run_node_alloc;
+	ic->ic_getradiocaps = run_get_radiocaps;
+	ic->ic_node_size = sizeof(struct run_node);
 	ic->ic_newassoc = run_newassoc;
 	ic->ic_updateslot = run_updateslot;
 	ic->ic_wme.wme_update = run_updateedca;
@@ -743,18 +750,11 @@ run_attach(device_t parent, device_t self, void *aux)
 	ic->ic_crypto.cs_key_set = run_set_key;
 	ic->ic_crypto.cs_key_delete = run_delete_key;
 #endif
-	/* override state transition machine */
-	sc->sc_newstate = ic->ic_newstate;
-	ic->ic_newstate = run_newstate;
-
-	/* XXX media locking needs revisiting */
-	mutex_init(&sc->sc_media_mtx, MUTEX_DEFAULT, IPL_SOFTUSB);
-	ieee80211_media_init_with_lock(ic,
-	    run_media_change, ieee80211_media_status, &sc->sc_media_mtx);
-
-	bpf_attach2(ifp, DLT_IEEE802_11_RADIO,
-	    sizeof(struct ieee80211_frame) + IEEE80211_RADIOTAP_HDRLEN,
-	    &sc->sc_drvbpf);
+	ic->ic_vap_create = run_vap_create;
+	ic->ic_vap_delete = run_vap_delete;
+	ic->ic_scan_start = run_scan_start;
+	ic->ic_scan_end = run_scan_end;
+	ic->ic_set_channel = run_set_channel;
 
 	sc->sc_rxtap_len = sizeof(sc->sc_rxtapu);
 	sc->sc_rxtap.wr_ihdr.it_len = htole16(sc->sc_rxtap_len);
@@ -764,171 +764,28 @@ run_attach(device_t parent, device_t self, void *aux)
 	sc->sc_txtap.wt_ihdr.it_len = htole16(sc->sc_txtap_len);
 	sc->sc_txtap.wt_ihdr.it_present = htole32(RUN_TX_RADIOTAP_PRESENT);
 
-	ieee80211_announce(ic);
+	/* let the stack know we support radiotap */
+	ic->ic_rh = &sc->sc_rxtapu.th.wr_ihdr;
+	ic->ic_th = &sc->sc_txtapu.th.wt_ihdr;
 
-	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev, sc->sc_dev);
-
-	if (!pmf_device_register(self, NULL, NULL))
-		aprint_error_dev(self, "couldn't establish power handler\n");
+	usbwifi_attach_finalize(&sc->sc_uw);
 }
 
 static int
 run_detach(device_t self, int flags)
 {
 	struct run_softc *sc = device_private(self);
-	struct ifnet *ifp = &sc->sc_if;
-	struct ieee80211com *ic = &sc->sc_ic;
-	int s;
+	int err;
 
-	if (ifp->if_softc == NULL)
-		return 0;
+	sc->ratectl_run = RUN_RATECTL_OFF;
+	err = usbwifi_detach(self, flags);
+	if (err)
+		return err;
 
-	pmf_device_deregister(self);
-
-	s = splusb();
-
-	sc->sc_flags |= RUN_DETACHING;
-
-	if (ifp->if_flags & IFF_RUNNING) {
-		run_stop(ifp, 0);
-		callout_halt(&sc->scan_to, NULL);
-		callout_halt(&sc->calib_to, NULL);
-		usb_rem_task_wait(sc->sc_udev, &sc->sc_task, USB_TASKQ_DRIVER,
-		    NULL);
-	}
-
-	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
-	bpf_detach(ifp);
-	ieee80211_ifdetach(ic);
-	if_detach(ifp);
-
-	splx(s);
-
-	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev, sc->sc_dev);
-
-	callout_stop(&sc->scan_to);
-	callout_stop(&sc->calib_to);
-
-	callout_destroy(&sc->scan_to);
-	callout_destroy(&sc->calib_to);
+	callout_stop(&sc->ratectl_to);
+	callout_destroy(&sc->ratectl_to);
 
 	return 0;
-}
-
-static int
-run_activate(device_t self, enum devact act)
-{
-	struct run_softc *sc = device_private(self);
-
-	switch (act) {
-	case DVACT_DEACTIVATE:
-		if_deactivate(sc->sc_ic.ic_ifp);
-		return 0;
-	default:
-		return EOPNOTSUPP;
-	}
-}
-
-static int
-run_alloc_rx_ring(struct run_softc *sc)
-{
-	struct run_rx_ring *rxq = &sc->rxq;
-	int i, error;
-
-	error = usbd_open_pipe(sc->sc_iface, rxq->pipe_no, 0, &rxq->pipeh);
-	if (error != 0)
-		goto fail;
-
-	for (i = 0; i < RUN_RX_RING_COUNT; i++) {
-		struct run_rx_data *data = &rxq->data[i];
-
-		data->sc = sc;	/* backpointer for callbacks */
-
-		error = usbd_create_xfer(sc->rxq.pipeh, RUN_MAX_RXSZ,
-		    0, 0, &data->xfer);
-		if (error)
-			goto fail;
-
-		data->buf = usbd_get_buffer(data->xfer);
-	}
-	if (error != 0)
-fail:		run_free_rx_ring(sc);
-	return error;
-}
-
-static void
-run_free_rx_ring(struct run_softc *sc)
-{
-	struct run_rx_ring *rxq = &sc->rxq;
-	int i;
-
-	if (rxq->pipeh != NULL) {
-		usbd_abort_pipe(rxq->pipeh);
-	}
-	for (i = 0; i < RUN_RX_RING_COUNT; i++) {
-		if (rxq->data[i].xfer != NULL)
-			usbd_destroy_xfer(rxq->data[i].xfer);
-		rxq->data[i].xfer = NULL;
-	}
-	if (rxq->pipeh != NULL) {
-		usbd_close_pipe(rxq->pipeh);
-		rxq->pipeh = NULL;
-	}
-}
-
-static int
-run_alloc_tx_ring(struct run_softc *sc, int qid)
-{
-	struct run_tx_ring *txq = &sc->txq[qid];
-	int i, error;
-	uint16_t txwisize;
-
-	txwisize = sizeof(struct rt2860_txwi);
-	if (sc->mac_ver == 0x5592)
-		txwisize += sizeof(uint32_t);
-
-	txq->cur = txq->queued = 0;
-
-	error = usbd_open_pipe(sc->sc_iface, txq->pipe_no, 0, &txq->pipeh);
-	if (error != 0)
-		goto fail;
-
-	for (i = 0; i < RUN_TX_RING_COUNT; i++) {
-		struct run_tx_data *data = &txq->data[i];
-
-		data->sc = sc;	/* backpointer for callbacks */
-		data->qid = qid;
-
-		error = usbd_create_xfer(txq->pipeh, RUN_MAX_TXSZ,
-		    USBD_FORCE_SHORT_XFER, 0, &data->xfer);
-		if (error)
-			goto fail;
-
-		data->buf = usbd_get_buffer(data->xfer);
-		/* zeroize the TXD + TXWI part */
-		memset(data->buf, 0, sizeof(struct rt2870_txd) + txwisize);
-	}
-	if (error != 0)
-fail:		run_free_tx_ring(sc, qid);
-	return error;
-}
-
-static void
-run_free_tx_ring(struct run_softc *sc, int qid)
-{
-	struct run_tx_ring *txq = &sc->txq[qid];
-	int i;
-
-	if (txq->pipeh != NULL) {
-		usbd_abort_pipe(txq->pipeh);
-		usbd_close_pipe(txq->pipeh);
-		txq->pipeh = NULL;
-	}
-	for (i = 0; i < RUN_TX_RING_COUNT; i++) {
-		if (txq->data[i].xfer != NULL)
-			usbd_destroy_xfer(txq->data[i].xfer);
-		txq->data[i].xfer = NULL;
-	}
 }
 
 static int __noinline
@@ -941,6 +798,8 @@ run_load_microcode(struct run_softc *sc)
 	uint32_t tmp;
 	int ntries, error;
 
+	usbwifi_isowned_ic(&sc->sc_uw);
+
 	/* RT3071/RT3072 use a different firmware */
 	if (sc->mac_ver != 0x2860 &&
 	    sc->mac_ver != 0x2872 &&
@@ -950,12 +809,12 @@ run_load_microcode(struct run_softc *sc)
 		fwname = "run-rt2870";
 
 	if ((error = firmware_load("run", fwname, &ucode, &size)) != 0) {
-		device_printf(sc->sc_dev,
+		device_printf(sc->sc_uw.uw_dev,
 		    "error %d, could not read firmware %s\n", error, fwname);
 		return error;
 	}
 	if (size != 4096) {
-		device_printf(sc->sc_dev,
+		device_printf(sc->sc_uw.uw_dev,
 		    "invalid firmware size (should be 4KB)\n");
 		firmware_free(ucode, size);
 		return EINVAL;
@@ -973,10 +832,10 @@ run_load_microcode(struct run_softc *sc)
 	USETW(req.wValue, 8);
 	USETW(req.wIndex, 0);
 	USETW(req.wLength, 0);
-	if ((error = usbd_do_request(sc->sc_udev, &req, NULL)) != 0)
+	if ((error = usbd_do_request(sc->sc_uw.uw_udev, &req, NULL)) != 0)
 		return error;
 
-	usbd_delay_ms(sc->sc_udev, 10);
+	usbd_delay_ms(sc->sc_uw.uw_udev, 10);
 	run_write(sc, RT2860_H2M_BBPAGENT, 0);
 	run_write(sc, RT2860_H2M_MAILBOX, 0);
 	run_write(sc, RT2860_H2M_INTSRC, 0);
@@ -989,19 +848,20 @@ run_load_microcode(struct run_softc *sc)
 			return error;
 		if (tmp & RT2860_MCU_READY)
 			break;
-		usbd_delay_ms(sc->sc_udev, 10);
+		usbd_delay_ms(sc->sc_uw.uw_udev, 10);
 	}
 	if (ntries == 1000) {
-		device_printf(sc->sc_dev,
+		device_printf(sc->sc_uw.uw_dev,
 		    "timeout waiting for MCU to initialize\n");
 		return ETIMEDOUT;
 	}
 
-	sc->sc_flags |= RUN_FWLOADED;
+	sc->sc_uw.uw_flags |= RUN_FWLOADED;
 
 	DPRINTF(("microcode successfully loaded after %d tries\n", ntries));
 	return 0;
 }
+
 
 static int __noinline
 run_reset(struct run_softc *sc)
@@ -1013,8 +873,9 @@ run_reset(struct run_softc *sc)
 	USETW(req.wValue, 1);
 	USETW(req.wIndex, 0);
 	USETW(req.wLength, 0);
-	return usbd_do_request(sc->sc_udev, &req, NULL);
+	return usbd_do_request(sc->sc_uw.uw_udev, &req, NULL);
 }
+
 
 static int __noinline
 run_read(struct run_softc *sc, uint16_t reg, uint32_t *val)
@@ -1040,7 +901,7 @@ run_read_region_1(struct run_softc *sc, uint16_t reg, uint8_t *buf, int len)
 	USETW(req.wValue, 0);
 	USETW(req.wIndex, reg);
 	USETW(req.wLength, len);
-	return usbd_do_request(sc->sc_udev, &req, buf);
+	return usbd_do_request(sc->sc_uw.uw_udev, &req, buf);
 }
 
 static int
@@ -1053,7 +914,7 @@ run_write_2(struct run_softc *sc, uint16_t reg, uint16_t val)
 	USETW(req.wValue, val);
 	USETW(req.wIndex, reg);
 	USETW(req.wLength, 0);
-	return usbd_do_request(sc->sc_udev, &req, NULL);
+	return usbd_do_request(sc->sc_uw.uw_udev, &req, NULL);
 }
 
 static int __noinline
@@ -1068,7 +929,7 @@ run_write_region_1(struct run_softc *sc, uint16_t reg, const uint8_t *buf,
     int len)
 {
 	int error = 0;
-	if (sc->sc_flags & RUN_USE_BLOCK_WRITE) {
+	if (sc->sc_uw.uw_flags & RUN_USE_BLOCK_WRITE) {
 		usb_device_request_t req;
 		/*
 		 * NOTE: It appears the WRITE_REGION_1 command cannot be
@@ -1083,7 +944,7 @@ run_write_region_1(struct run_softc *sc, uint16_t reg, const uint8_t *buf,
 			USETW(req.wValue, 0);
 			USETW(req.wIndex, reg);
 			USETW(req.wLength, delta);
-			error = usbd_do_request(sc->sc_udev, &req,
+			error = usbd_do_request(sc->sc_uw.uw_udev, &req,
 			    __UNCONST(buf));
 			if (error != 0)
 				break;
@@ -1109,7 +970,7 @@ run_set_region_4(struct run_softc *sc, uint16_t reg, uint32_t val, int count)
 {
 	int error = 0;
 
-	if (sc->sc_flags & RUN_USE_BLOCK_WRITE) {
+	if (sc->sc_uw.uw_flags & RUN_USE_BLOCK_WRITE) {
 		while (count > 0) {
 			int i, delta;
 			uint32_t tmp[16];
@@ -1158,7 +1019,7 @@ run_efuse_read(struct run_softc *sc, uint16_t addr, uint16_t *val, int count)
 			return error;
 		if (!(tmp & RT3070_EFSROM_KICK))
 			break;
-		usbd_delay_ms(sc->sc_udev, 2);
+		usbd_delay_ms(sc->sc_uw.uw_udev, 2);
 	}
 	if (ntries == 100)
 		return ETIMEDOUT;
@@ -1197,7 +1058,7 @@ run_eeprom_read_2(struct run_softc *sc, uint16_t addr, uint16_t *val)
 	USETW(req.wValue, 0);
 	USETW(req.wIndex, addr);
 	USETW(req.wLength, sizeof(tmp));
-	error = usbd_do_request(sc->sc_udev, &req, &tmp);
+	error = usbd_do_request(sc->sc_uw.uw_udev, &req, &tmp);
 	if (error == 0)
 		*val = le16toh(tmp);
 	else
@@ -1524,7 +1385,7 @@ run_get_txpower(struct run_softc *sc)
 static int
 run_read_eeprom(struct run_softc *sc)
 {
-	struct ieee80211com *ic = &sc->sc_ic;
+	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
 	int8_t delta_2ghz, delta_5ghz;
 	uint32_t tmp;
 	uint16_t val;
@@ -1545,14 +1406,14 @@ run_read_eeprom(struct run_softc *sc)
 
 	/* read MAC address */
 	run_srom_read(sc, RT2860_EEPROM_MAC01, &val);
-	ic->ic_myaddr[0] = val & 0xff;
-	ic->ic_myaddr[1] = val >> 8;
+	ic->ic_macaddr[0] = val & 0xff;
+	ic->ic_macaddr[1] = val >> 8;
 	run_srom_read(sc, RT2860_EEPROM_MAC23, &val);
-	ic->ic_myaddr[2] = val & 0xff;
-	ic->ic_myaddr[3] = val >> 8;
+	ic->ic_macaddr[2] = val & 0xff;
+	ic->ic_macaddr[3] = val >> 8;
 	run_srom_read(sc, RT2860_EEPROM_MAC45, &val);
-	ic->ic_myaddr[4] = val & 0xff;
-	ic->ic_myaddr[5] = val >> 8;
+	ic->ic_macaddr[4] = val & 0xff;
+	ic->ic_macaddr[5] = val >> 8;
 
 	if (sc->mac_ver < 0x3593) {
 		/* read vendor BBP settings */
@@ -1774,26 +1635,18 @@ run_read_eeprom(struct run_softc *sc)
 	return 0;
 }
 
-static struct ieee80211_node *
-run_node_alloc(struct ieee80211_node_table *nt)
-{
-	struct run_node *rn =
-	    malloc(sizeof(struct run_node), M_DEVBUF, M_NOWAIT | M_ZERO);
-	return rn ? &rn->ni : NULL;
-}
-
 static int
 run_media_change(struct ifnet *ifp)
 {
 	struct run_softc *sc = ifp->if_softc;
-	struct ieee80211com *ic = &sc->sc_ic;
-	uint8_t rate, ridx;
 	int error;
 
 	error = ieee80211_media_change(ifp);
 	if (error != ENETRESET)
 		return error;
 
+	/* XXX fixed rates? */
+	/*
 	if (ic->ic_fixed_rate != IEEE80211_FIXED_RATE_NONE) {
 		rate = ic->ic_sup_rates[ic->ic_curmode].
 		    rs_rates[ic->ic_fixed_rate] & IEEE80211_RATE_VAL;
@@ -1802,20 +1655,11 @@ run_media_change(struct ifnet *ifp)
 				break;
 		sc->fixed_ridx = ridx;
 	}
-
+	*/
 	if ((ifp->if_flags & (IFF_UP | IFF_RUNNING)) == (IFF_UP | IFF_RUNNING))
-		run_init(ifp);
+		run_init(&sc->sc_uw);
 
 	return 0;
-}
-
-static void
-run_next_scan(void *arg)
-{
-	struct run_softc *sc = arg;
-
-	if (sc->sc_ic.ic_state == IEEE80211_S_SCAN)
-		ieee80211_next_scan(&sc->sc_ic);
 }
 
 static void
@@ -1850,7 +1694,7 @@ run_do_async(struct run_softc *sc, void (*cb)(struct run_softc *, void *),
 	struct run_host_cmd *cmd;
 	int s;
 
-	if (sc->sc_flags & RUN_DETACHING)
+	if (usbwifi_isdying(&sc->sc_uw))
 		return;
 
 	s = splusb();
@@ -1863,47 +1707,35 @@ run_do_async(struct run_softc *sc, void (*cb)(struct run_softc *, void *),
 
 	/* if there is no pending command already, schedule a task */
 	if (atomic_inc_uint_nv(&ring->queued) == 1)
-		usb_add_task(sc->sc_udev, &sc->sc_task, USB_TASKQ_DRIVER);
+		usb_add_task(sc->sc_uw.uw_udev, &sc->sc_task, USB_TASKQ_DRIVER);
 	splx(s);
 }
 
+/*
+ * A VAP changes state.
+ * This is called with thread context and the 'ic' lock held.
+ */
 static int
-run_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int arg)
+run_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 {
-	struct run_softc *sc = ic->ic_ifp->if_softc;
-	struct run_cmd_newstate cmd;
-
-	callout_stop(&sc->scan_to);
-	callout_stop(&sc->calib_to);
-
-	/* do it in a process context */
-	cmd.state = nstate;
-	cmd.arg = arg;
-	run_do_async(sc, run_newstate_cb, &cmd, sizeof(cmd));
-	return 0;
-}
-
-static void
-run_newstate_cb(struct run_softc *sc, void *arg)
-{
-	struct run_cmd_newstate *cmd = arg;
-	struct ifnet *ifp = &sc->sc_if;
-	struct ieee80211com *ic = &sc->sc_ic;
-	enum ieee80211_state ostate;
+	struct run_vap *rvap = (struct run_vap *)vap;
+	struct ieee80211com *ic = vap->iv_ic;
+	struct run_softc *sc = ic->ic_softc;
 	struct ieee80211_node *ni;
+	enum ieee80211_state ostate;
 	uint32_t tmp, sta[3];
 	uint8_t wcid;
-	int s;
 
-	s = splnet();
-	ostate = ic->ic_state;
+	callout_stop(&sc->ratectl_to);
+
+	ostate = vap->iv_state;
 
 	if (ostate == IEEE80211_S_RUN) {
 		/* turn link LED off */
 		run_set_leds(sc, RT2860_LED_RADIO);
 	}
 
-	switch (cmd->state) {
+	switch (nstate) {
 	case IEEE80211_S_INIT:
 		if (ostate == IEEE80211_S_RUN) {
 			/* abort TSF synchronization */
@@ -1916,7 +1748,9 @@ run_newstate_cb(struct run_softc *sc, void *arg)
 
 	case IEEE80211_S_SCAN:
 		run_set_chan(sc, ic->ic_curchan);
+		/*
 		callout_schedule(&sc->scan_to, hz / 5);
+		*/
 		break;
 
 	case IEEE80211_S_AUTH:
@@ -1927,10 +1761,10 @@ run_newstate_cb(struct run_softc *sc, void *arg)
 	case IEEE80211_S_RUN:
 		run_set_chan(sc, ic->ic_curchan);
 
-		ni = ic->ic_bss;
+		ni = vap->iv_bss;
 
 		if (ic->ic_opmode != IEEE80211_M_MONITOR) {
-			run_updateslot(ifp);
+			run_updateslot(ic->ic_softc);
 			run_enable_mrr(sc);
 			run_set_txpreamble(sc);
 			run_set_basicrates(sc);
@@ -1939,25 +1773,27 @@ run_newstate_cb(struct run_softc *sc, void *arg)
 #ifndef IEEE80211_STA_ONLY
 		if (ic->ic_opmode == IEEE80211_M_HOSTAP ||
 		    ic->ic_opmode == IEEE80211_M_IBSS)
-			(void)run_setup_beacon(sc);
+			run_update_beacon_cb(sc, &vap);
 #endif
 		if (ic->ic_opmode == IEEE80211_M_STA) {
 			/* add BSS entry to the WCID table */
 			wcid = RUN_AID2WCID(ni->ni_associd);
 			run_write_region_1(sc, RT2860_WCID_ENTRY(wcid),
 			    ni->ni_macaddr, IEEE80211_ADDR_LEN);
+			memset(&(sc->wcid_stats[wcid]), 0,
+			     sizeof(sc->wcid_stats[wcid]));
 
 			/* fake a join to init the tx rate */
 			run_newassoc(ni, 1);
 		}
 		if (ic->ic_opmode != IEEE80211_M_MONITOR) {
-			run_enable_tsf_sync(sc);
+			run_enable_tsf_sync(vap);
 
 			/* clear statistic registers used by AMRR */
 			run_read_region_1(sc, RT2860_TX_STA_CNT0,
 			    (uint8_t *)sta, sizeof(sta));
 			/* start calibration timer */
-			callout_schedule(&sc->calib_to, hz);
+			callout_schedule(&sc->ratectl_to, hz);
 		}
 
 		/* turn link LED on */
@@ -1965,17 +1801,112 @@ run_newstate_cb(struct run_softc *sc, void *arg)
 		    (IEEE80211_IS_CHAN_2GHZ(ic->ic_curchan) ?
 		     RT2860_LED_LINK_2GHZ : RT2860_LED_LINK_5GHZ));
 		break;
+	case IEEE80211_S_CAC:
+	case IEEE80211_S_CSA:
+	case IEEE80211_S_SLEEP:
+		/* NNN what do we do in these states? XXX */
+		printf ("RUN UNKNOWN nSTATE: %d\n", nstate);
+		break;
 	}
-	(void)sc->sc_newstate(ic, cmd->state, cmd->arg);
-	splx(s);
+
+	return (*rvap->newstate)(vap, nstate, arg);
 }
+
+/* XXX to be removed? */
+// static void
+// run_newstate_cb(struct run_softc *sc, void *arg)
+// {
+// 	struct run_cmd_newstate *cmd = arg;
+// 	struct ifnet *ifp = &sc->sc_if;
+// 	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
+// 	enum ieee80211_state ostate;
+// 	struct ieee80211_node *ni;
+// 	uint32_t tmp, sta[3];
+// 	uint8_t wcid;
+// 	int s;
+
+// 	s = splnet();
+// 	ostate = ic->ic_state; /* XXX change to vap state */
+
+// 	if (ostate == IEEE80211_S_RUN) {
+// 		/* turn link LED off */
+// 		run_set_leds(sc, RT2860_LED_RADIO);
+// 	}
+
+// 	switch (cmd->state) {
+// 	case IEEE80211_S_INIT:
+// 		if (ostate == IEEE80211_S_RUN) {
+// 			/* abort TSF synchronization */
+// 			run_read(sc, RT2860_BCN_TIME_CFG, &tmp);
+// 			run_write(sc, RT2860_BCN_TIME_CFG,
+// 			    tmp & ~(RT2860_BCN_TX_EN | RT2860_TSF_TIMER_EN |
+// 			    RT2860_TBTT_TIMER_EN));
+// 		}
+// 		break;
+
+// 	case IEEE80211_S_SCAN:
+// 		run_set_chan(sc, ic->ic_curchan);
+// 		callout_schedule(&sc->scan_to, hz / 5);
+// 		break;
+
+// 	case IEEE80211_S_AUTH:
+// 	case IEEE80211_S_ASSOC:
+// 		run_set_chan(sc, ic->ic_curchan);
+// 		break;
+
+// 	case IEEE80211_S_RUN:
+// 		run_set_chan(sc, ic->ic_curchan);
+
+// 		ni = ic->ic_bss;
+
+// 		if (ic->ic_opmode != IEEE80211_M_MONITOR) {
+// 			run_updateslot(ifp);
+// 			run_enable_mrr(sc);
+// 			run_set_txpreamble(sc);
+// 			run_set_basicrates(sc);
+// 			run_set_bssid(sc, ni->ni_bssid);
+// 		}
+// #ifndef IEEE80211_STA_ONLY
+// 		if (ic->ic_opmode == IEEE80211_M_HOSTAP ||
+// 		    ic->ic_opmode == IEEE80211_M_IBSS)
+// 			(void)run_setup_beacon(sc);
+// #endif
+// 		if (ic->ic_opmode == IEEE80211_M_STA) {
+// 			/* add BSS entry to the WCID table */
+// 			wcid = RUN_AID2WCID(ni->ni_associd);
+// 			run_write_region_1(sc, RT2860_WCID_ENTRY(wcid),
+// 			    ni->ni_macaddr, IEEE80211_ADDR_LEN);
+
+// 			/* fake a join to init the tx rate */
+// 			run_newassoc(ni, 1);
+// 		}
+// 		if (ic->ic_opmode != IEEE80211_M_MONITOR) {
+// 			run_enable_tsf_sync(sc);
+
+// 			/* clear statistic registers used by AMRR */
+// 			run_read_region_1(sc, RT2860_TX_STA_CNT0,
+// 			    (uint8_t *)sta, sizeof(sta));
+// 			/* start calibration timer */
+// 			callout_schedule(&sc->ratctl_to, hz);
+// 		}
+
+// 		/* turn link LED on */
+// 		run_set_leds(sc, RT2860_LED_RADIO |
+// 		    (IEEE80211_IS_CHAN_2GHZ(ic->ic_curchan) ?
+// 		     RT2860_LED_LINK_2GHZ : RT2860_LED_LINK_5GHZ));
+// 		break;
+// 	}
+// 	(void)sc->sc_newstate(ic, cmd->state, cmd->arg);
+// 	splx(s);
+// }
 
 static int
 run_updateedca(struct ieee80211com *ic)
 {
 
 	/* do it in a process context */
-	run_do_async(ic->ic_ifp->if_softc, run_updateedca_cb, NULL, 0);
+    /* XXX get softc from usb wifi struct */
+	run_do_async(ic->ic_softc, run_updateedca_cb, NULL, 0);
 	return 0;
 }
 
@@ -1983,7 +1914,7 @@ run_updateedca(struct ieee80211com *ic)
 static void
 run_updateedca_cb(struct run_softc *sc, void *arg)
 {
-	struct ieee80211com *ic = &sc->sc_ic;
+	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
 	int s, aci;
 
 	s = splnet();
@@ -2041,7 +1972,7 @@ static void
 run_set_key_cb(struct run_softc *sc, void *arg)
 {
 #ifndef IEEE80211_STA_ONLY
-	struct ieee80211com *ic = &sc->sc_ic;
+	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
 #endif
 	struct run_cmd_key *cmd = arg;
 	struct ieee80211_key *k = &cmd->key;
@@ -2099,7 +2030,8 @@ run_set_key_cb(struct run_softc *sc, void *arg)
 		/* set initial packet number in IV+EIV */
 		if (k->wk_cipher->ic_cipher == IEEE80211_CIPHER_WEP) {
 			memset(iv, 0, sizeof(iv));
-			iv[3] = sc->sc_ic.ic_crypto.cs_def_txkey << 6;
+			iv[3] = usbwifi_ic(&sc->sc_uw)
+			     ->ic_crypto.cs_def_txkey << 6;
 		} else {
 			if (k->wk_cipher->ic_cipher == IEEE80211_CIPHER_TKIP) {
 				iv[0] = k->wk_keytsc >> 8;
@@ -2175,63 +2107,224 @@ run_delete_key_cb(struct run_softc *sc, void *arg)
 #endif
 
 static void
-run_calibrate_to(void *arg)
+run_reset_livelock(struct run_softc *sc)
+{
+	uint32_t tmp;
+
+	usbwifi_isowned_ic(&sc->sc_uw);
+
+	/*
+	 * In IBSS or HostAP modes (when the hardware sends beacons), the MAC
+	 * can run into a livelock and start sending CTS-to-self frames like
+	 * crazy if protection is enabled.  Reset MAC/BBP for a while
+	 */
+	run_read(sc, RT2860_DEBUG, &tmp);
+	DPRINTFN(4, ("debug reg %08x\n", tmp));
+	if ((tmp & (1 << 29)) && (tmp & (1 << 7 | 1 << 5))) {
+		DPRINTFN(4,
+		    ("CTS-to-self livelock detected\n"));
+		run_write(sc, RT2860_MAC_SYS_CTRL, RT2860_MAC_SRST);
+		usbd_delay_ms(sc->sc_uw.uw_udev, 1);
+		run_write(sc, RT2860_MAC_SYS_CTRL,
+		    RT2860_MAC_RX_EN | RT2860_MAC_TX_EN);
+	}
+}
+
+static void
+run_drain_fifo(struct run_softc *sc, void *arg)
+{
+	uint32_t stat;
+	uint16_t (*wstat)[3];
+	uint8_t wcid, mcs, pid;
+	int8_t retry;
+
+	usbwifi_isowned_ic(&sc->sc_uw);
+
+	for (;;) {
+		/* drain Tx status FIFO (maxsize = 16) */
+		run_read(sc, RT2860_TX_STAT_FIFO, &stat);
+		DPRINTFN(6, ("tx stat 0x%08x\n", stat));
+		if (!(stat & RT2860_TXQ_VLD))
+			break;
+
+		wcid = (stat >> RT2860_TXQ_WCID_SHIFT) & 0xff;
+
+		/* if no ACK was requested, no feedback is available */
+		if (!(stat & RT2860_TXQ_ACKREQ) || wcid > RT2870_WCID_MAX ||
+		    wcid == 0)
+			continue;
+
+		/*
+		 * Even though each stat is Tx-complete-status like format,
+		 * the device can poll stats. Because there is no guarantee
+		 * that the referring node is still around when read the stats.
+		 * So that, if we use ieee80211_ratectl_tx_update(), we will
+		 * have hard time not to refer already freed node.
+		 *
+		 * To eliminate such page faults, we poll stats in softc.
+		 * Then, update the rates later with ieee80211_ratectl_tx_updat$
+		 */
+		wstat = &(sc->wcid_stats[wcid]);
+		(*wstat)[RUN_TXCNT]++;
+		if (stat & RT2860_TXQ_OK)
+			(*wstat)[RUN_SUCCESS]++;
+		else
+			ieee80211_stat_add(&sc->sc_uw.uw_ic.ic_oerrors, 1);
+		/*
+		 * Check if there were retries, ie if the Tx success rate is
+		 * different from the requested rate. Note that it works only
+		 * because we do not allow rate fallback from OFDM to CCK.
+		 */
+		mcs = (stat >> RT2860_TXQ_MCS_SHIFT) & 0x7f;
+		pid = (stat >> RT2860_TXQ_PID_SHIFT) & 0xf;
+		if ((retry = pid -1 - mcs) > 0) {
+			(*wstat)[RUN_TXCNT] += retry;
+			(*wstat)[RUN_RETRY] += retry;
+		}
+	}
+
+	DPRINTFN(5, ("clearing tx stat fifo count=%d\n", sc->fifo_cnt));
+	sc->fifo_cnt = 0;
+}
+
+
+static void
+run_ratectl_to(void *arg)
 {
 
 	/* do it in a process context */
-	run_do_async(arg, run_calibrate_cb, NULL, 0);
+	run_do_async(arg, run_ratectl_cb, NULL, 0);
 	/* next timeout will be rescheduled in the calibration task */
 }
 
 /* ARGSUSED */
 static void
-run_calibrate_cb(struct run_softc *sc, void *arg)
+run_ratectl_cb(struct run_softc *sc, void *arg)
 {
-	struct ifnet *ifp = &sc->sc_if;
-	uint32_t sta[3];
-	int s, error;
+	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
+	struct ieee80211vap *vap;
+	bool has_non_sta_vaps;
 
-	/* read statistic counters (clear on read) and update AMRR state */
-	error = run_read_region_1(sc, RT2860_TX_STA_CNT0, (uint8_t *)sta,
-	    sizeof(sta));
-	if (error != 0)
+	if (sc->rvp_cnt == 0)
+		return;
+
+	 if (sc->rvp_cnt > 1) {
+		/*
+		 * run_reset_livelock() doesn't do anything with AMRR,
+		 * but Ralink wants us to call it every 1 sec. So, we
+		 * piggyback here rather than creating another callout.
+		 * Livelock may occur only in HOSTAP or IBSS mode
+		 * (when h/w is sending beacons).
+		 */
+		usbwifi_lock_ic(&sc->sc_uw);
+		has_non_sta_vaps = false;
+		TAILQ_FOREACH(vap, &ic->ic_vaps, iv_next) {
+			if (vap->iv_opmode != IEEE80211_M_STA) {
+				has_non_sta_vaps = true;
+				break;
+			}
+		}
+		if (has_non_sta_vaps)
+			run_reset_livelock(sc);
+		/* drain stats if needed */
+		if (sc->fifo_cnt > 0)
+			run_drain_fifo(sc, NULL);
+		usbwifi_unlock_ic(&sc->sc_uw);
+	}
+
+	ieee80211_iterate_nodes(&ic->ic_sta, run_ratectl_node, sc);
+
+	usbwifi_lock_ic(&sc->sc_uw);
+	if (sc->ratectl_run != RUN_RATECTL_OFF)
+		callout_schedule(&sc->ratectl_to, hz);
+	usbwifi_unlock_ic(&sc->sc_uw);
+}
+
+static void
+run_ratectl_node(void *arg, struct ieee80211_node *ni)
+{
+	struct run_softc *sc = arg;
+	struct ieee80211_ratectl_tx_stats *txs = &sc->sc_txs;
+	struct ieee80211vap *vap = ni->ni_vap;
+	struct run_node *rn = (void*)ni;
+	uint32_t sta[3];
+	uint16_t (*wstat)[3];
+	int error, ridx;
+
+	usbwifi_lock_ic(&sc->sc_uw);
+
+	/* Check for special case */
+	if (sc->rvp_cnt <= 1 && vap->iv_opmode == IEEE80211_M_STA &&
+	    ni != vap->iv_bss)
 		goto skip;
 
-	DPRINTF(("retrycnt=%d txcnt=%d failcnt=%d\n",
-	    le32toh(sta[1]) >> 16, le32toh(sta[1]) & 0xffff,
-	    le32toh(sta[0]) & 0xffff));
+	txs->flags = 	IEEE80211_RATECTL_TX_STATS_NODE |
+			IEEE80211_RATECTL_TX_STATS_RETRIES;
+	txs->ni = ni;
 
-	s = splnet();
-	/* count failed TX as errors */
-	if_statadd(ifp, if_oerrors, le32toh(sta[0]) & 0xffff);
+	if (sc->rvp_cnt <= 1 && (vap->iv_opmode == IEEE80211_M_IBSS ||
+	    vap->iv_opmode == IEEE80211_M_STA)) {
 
-	sc->amn.amn_retrycnt =
-	    (le32toh(sta[0]) & 0xffff) +	/* failed TX count */
-	    (le32toh(sta[1]) >> 16);		/* TX retransmission count */
+		/* read statistic counters (clear on read) and update AMRR
+		   state */
+		error = run_read_region_1(sc, RT2860_TX_STA_CNT0,
+		    (uint8_t *)sta, sizeof(sta));
+		if (error != 0)
+			goto skip;
 
-	sc->amn.amn_txcnt =
-	    sc->amn.amn_retrycnt +
-	    (le32toh(sta[1]) & 0xffff);		/* successful TX count */
+		uint16_t txerr = le32toh(sta[0]) & 0xffff;
+		uint16_t txret = le32toh(sta[1]) >> 16;
+		uint16_t txok = le32toh(sta[1]) & 0xffff;
 
-	ieee80211_amrr_choose(&sc->amrr, sc->sc_ic.ic_bss, &sc->amn);
-	splx(s);
+		DPRINTF(("retrycnt=%d txcnt=%d failcnt=%d\n",
+		    txret, txok, txerr));
 
-skip:	callout_schedule(&sc->calib_to, hz);
+		/* count failed TX as errors */
+		if_inc_counter(vap->iv_ifp, IFCOUNTER_OERRORS, txerr);
+
+		txs->nretries = txret;
+		txs->nsuccess = txok;
+		txs->nframes = txok+txret+txerr;
+	} else {
+		/* collect and clear polled stats */
+		wstat = &(sc->wcid_stats[RUN_AID2WCID(ni->ni_associd)]);
+
+		if (wstat == &(sc->wcid_stats[0]) ||
+		    wstat > &(sc->wcid_stats[RT2870_WCID_MAX]))
+			goto skip;
+
+		txs->nretries = (*wstat)[RUN_RETRY];
+		txs->nsuccess = (*wstat)[RUN_SUCCESS];
+		txs->nframes = (*wstat)[RUN_TXCNT];
+		memset(wstat, 0, sizeof(*wstat));
+	}
+	ieee80211_ratectl_tx_update(vap, txs);
+	ieee80211_ratectl_rate(ni, NULL, 0);
+	for (ridx = 0; ridx < RT2860_RIDX_MAX; ridx++)
+		if (rt2860_rates[ridx].rate == ni->ni_txrate)
+			break;
+	rn->amrr_ridx = ridx;
+
+skip:
+	usbwifi_unlock_ic(&sc->sc_uw);
 }
 
 static void
 run_newassoc(struct ieee80211_node *ni, int isnew)
 {
-	struct run_softc *sc = ni->ni_ic->ic_ifp->if_softc;
 	struct run_node *rn = (void *)ni;
 	struct ieee80211_rateset *rs = &ni->ni_rates;
-	uint8_t rate;
-	int ridx, i, j;
+	struct run_softc *sc = ni->ni_vap->iv_ic->ic_softc;
+	uint8_t rate, wcid;
+	int ridx, i/*, j*/;
 
 	DPRINTF(("new assoc isnew=%d addr=%s\n",
 	    isnew, ether_sprintf(ni->ni_macaddr)));
 
-	ieee80211_amrr_node_init(&sc->amrr, &sc->amn);
+	/* clear ratectl stats */
+	wcid = RUN_AID2WCID(ni->ni_associd);
+	memset(&(sc->wcid_stats[wcid]), 0, sizeof(sc->wcid_stats[wcid]));
+
 	/* start at lowest available bit-rate, AMRR will raise */
 	ni->ni_txrate = 0;
 
@@ -2241,7 +2334,8 @@ run_newassoc(struct ieee80211_node *ni, int isnew)
 		for (ridx = 0; ridx < RT2860_RIDX_MAX; ridx++)
 			if (rt2860_rates[ridx].rate == rate)
 				break;
-		rn->ridx[i] = ridx;
+		rn->amrr_ridx = ridx;
+#if 0 // XXX
 		/* determine rate of control response frames */
 		for (j = i; j >= 0; j--) {
 			if ((rs->rs_rates[j] & IEEE80211_RATE_BASIC) &&
@@ -2257,6 +2351,7 @@ run_newassoc(struct ieee80211_node *ni, int isnew)
 		}
 		DPRINTF(("rate=0x%02x ridx=%d ctl_ridx=%d\n",
 		    rs->rs_rates[i], rn->ridx[i], rn->ctl_ridx[i]));
+#endif
 	}
 }
 
@@ -2281,20 +2376,16 @@ run_maxrssi_chain(struct run_softc *sc, const struct rt2860_rxwi *rxwi)
 static void
 run_rx_frame(struct run_softc *sc, uint8_t *buf, int dmalen)
 {
-	struct ieee80211com *ic = &sc->sc_ic;
-	struct ifnet *ifp = &sc->sc_if;
+	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
 	struct ieee80211_frame *wh;
-	struct ieee80211_node *ni;
 	struct rt2870_rxd *rxd;
 	struct rt2860_rxwi *rxwi;
-	struct mbuf *m;
 	uint32_t flags;
 	uint16_t len, rxwisize, phy;
 	uint8_t ant, rssi;
-	int s;
-#ifdef RUN_HWCRYPTO
-	int decrypted = 0;
-#endif
+
+	DPRINTFN(5, ("%s: %s: buf %p dmalen %d\n",
+	    device_xname(sc->sc_uw.uw_dev), __func__, buf, dmalen));
 
 	rxwi = (struct rt2860_rxwi *)buf;
 	rxwisize = sizeof(struct rt2860_rxwi);
@@ -2312,7 +2403,7 @@ run_rx_frame(struct run_softc *sc, uint8_t *buf, int dmalen)
 	flags = le32toh(rxd->flags);
 
 	if (__predict_false(flags & (RT2860_RX_CRCERR | RT2860_RX_ICVERR))) {
-		if_statinc(ifp, if_ierrors);
+		ieee80211_stat_add(&ic->ic_ierrors, 1);
 		return;
 	}
 
@@ -2320,48 +2411,25 @@ run_rx_frame(struct run_softc *sc, uint8_t *buf, int dmalen)
 
 	if (__predict_false((flags & RT2860_RX_MICERR))) {
 		/* report MIC failures to net80211 for TKIP */
-		ieee80211_notify_michael_failure(ic, wh, 0/* XXX */);
-		if_statinc(ifp, if_ierrors);
+		/* XXX need to pass vap into michael */
+		//ieee80211_notify_michael_failure(ic, wh, 0/);
+		ieee80211_stat_add(&ic->ic_ierrors, 1);
 		return;
 	}
 	
-	if (flags & RT2860_RX_L2PAD) {
-		u_int hdrlen = ieee80211_hdrspace(ic, wh);
-		memmove((uint8_t *)wh + 2, wh, hdrlen);
-		wh = (struct ieee80211_frame *)((uint8_t *)wh + 2);
-	}
+	if (flags & RT2860_RX_L2PAD)
+		len += 2;
 
 #ifdef RUN_HWCRYPTO
 	if (wh->i_fc[1] & IEEE80211_FC1_WEP) {
 		wh->i_fc[1] &= ~IEEE80211_FC1_WEP;
-		decrypted = 1;
 	}
 #endif
-
-	/* could use m_devget but net80211 wants contig mgmt frames */
-	MGETHDR(m, M_DONTWAIT, MT_DATA);
-	if (__predict_false(m == NULL)) {
-		if_statinc(ifp, if_ierrors);
-		return;
-	}
-	if (len > MHLEN) {
-		if (__predict_true(len <= MCLBYTES))
-			MCLGET(m, M_DONTWAIT);
-		if (__predict_false(!(m->m_flags & M_EXT))) {
-			if_statinc(ifp, if_ierrors);
-			m_freem(m);
-			return;
-		}
-	}
-	/* finalize mbuf */
-	m_set_rcvif(m, ifp);
-	memcpy(mtod(m, void *), wh, len);
-	m->m_pkthdr.len = m->m_len = len;
 
 	ant = run_maxrssi_chain(sc, rxwi);
 	rssi = rxwi->rssi[ant];
 
-	if (__predict_false(sc->sc_drvbpf != NULL)) {
+	if (ic->ic_flags_ext & IEEE80211_FEXT_BPF) {
 		struct run_rx_radiotap_header *tap = &sc->sc_rxtap;
 
 		tap->wr_flags = 0;
@@ -2396,46 +2464,23 @@ run_rx_frame(struct run_softc *sc, uint8_t *buf, int dmalen)
 			}
 			break;
 		}
-		bpf_mtap2(sc->sc_drvbpf, tap, sc->sc_rxtap_len, m, BPF_D_IN);
 	}
 
-	s = splnet();
-	ni = ieee80211_find_rxnode(ic, (struct ieee80211_frame_min *)wh);
-#ifdef RUN_HWCRYPTO
-	if (decrypted) {
-		uint32_t icflags = ic->ic_flags;
-
-		ic->ic_flags &= ~IEEE80211_F_DROPUNENC; /* XXX */
-		ieee80211_input(ic, m, ni, rssi, 0);
-		ic->ic_flags = icflags;
-	} else
-#endif
-	ieee80211_input(ic, m, ni, rssi, 0);
-
-	/* node is no longer needed */
-	ieee80211_free_node(ni);
-
-	/*
-	 * In HostAP mode, ieee80211_input() will enqueue packets in if_snd
-	 * without calling if_start().
-	 */
-	if (!IFQ_IS_EMPTY(&ifp->if_snd) && !(ifp->if_flags & IFF_OACTIVE))
-		run_start(ifp);
-
-	splx(s);
+	usbwifi_enqueue(&sc->sc_uw, (uint8_t *)wh, len, rssi, 0, 0, 0);
 }
 
 static void
-run_rxeof(struct usbd_xfer *xfer, void *priv, usbd_status status)
+run_rx_loop(struct usbwifi *uw, struct usbwifi_chain *c, uint32_t len)
 {
-	struct run_rx_data *data = priv;
-	struct run_softc *sc = data->sc;
+	struct run_softc *sc = usbwifi_softc(uw);
 	uint8_t *buf;
 	uint32_t dmalen;
-	int xferlen;
 	uint16_t rxwisize;
 
-	if (__predict_false(sc->sc_flags & RUN_DETACHING))
+	DPRINTFN(5, ("%s: %s: chain %p len %u\n",
+	    device_xname(sc->sc_uw.uw_dev), __func__, c, len));
+
+	if (__predict_false(usbwifi_isdying(&sc->sc_uw)))
 		return;
 
 	rxwisize = sizeof(struct rt2860_rxwi);
@@ -2444,25 +2489,15 @@ run_rxeof(struct usbd_xfer *xfer, void *priv, usbd_status status)
 	else if (sc->mac_ver == 0x3593)
 		rxwisize += sizeof(uint32_t);
 
-	if (__predict_false(status != USBD_NORMAL_COMPLETION)) {
-		DPRINTF(("RX status=%s\n", usbd_errstr(status)));
-		if (status == USBD_STALLED)
-			usbd_clear_endpoint_stall_async(sc->rxq.pipeh);
-		if (status != USBD_CANCELLED)
-			goto skip;
-		return;
-	}
-	usbd_get_xfer_status(xfer, NULL, NULL, &xferlen, NULL);
-
-	if (__predict_false(xferlen < (int)(sizeof(uint32_t) +
+	if (__predict_false(len < (int)(sizeof(uint32_t) +
 	    rxwisize + sizeof(struct rt2870_rxd)))) {
-		DPRINTF(("xfer too short %d\n", xferlen));
-		goto skip;
+		DPRINTF(("xfer too short %d\n", len));
+		return;
 	}
 
 	/* HW can aggregate multiple 802.11 frames in a single USB xfer */
-	buf = data->buf;
-	while (xferlen > 8) {
+	buf = c->uwc_buf;
+	while (len > 8) {
 		dmalen = le32toh(*(uint32_t *)buf) & 0xffff;
 
 		if (__predict_false((dmalen >= (uint32_t)-8) || dmalen == 0 ||
@@ -2470,87 +2505,48 @@ run_rxeof(struct usbd_xfer *xfer, void *priv, usbd_status status)
 			DPRINTF(("bad DMA length %u (%x)\n", dmalen, dmalen));
 			break;
 		}
-		if (__predict_false(dmalen + 8 > (uint32_t)xferlen)) {
+		if (__predict_false(dmalen + 8 > (uint32_t)len)) {
 			DPRINTF(("bad DMA length %u > %d\n",
-			    dmalen + 8, xferlen));
+			    dmalen + 8, len));
 			break;
 		}
 		run_rx_frame(sc, buf + sizeof(uint32_t), dmalen);
 		buf += dmalen + 8;
-		xferlen -= dmalen + 8;
+		len -= dmalen + 8;
 	}
-
-skip:	/* setup a new transfer */
-	usbd_setup_xfer(xfer, data, data->buf, RUN_MAX_RXSZ,
-	    USBD_SHORT_XFER_OK, USBD_NO_TIMEOUT, run_rxeof);
-	status = usbd_transfer(xfer);
-	if (status != USBD_NORMAL_COMPLETION &&
-	    status != USBD_IN_PROGRESS)
-		device_printf(sc->sc_dev, "requeuing rx failed: %s\n",
-		    usbd_errstr(status));
 }
 
-static void
-run_txeof(struct usbd_xfer *xfer, void *priv, usbd_status status)
+static unsigned
+run_tx_prepare(struct usbwifi *uw, struct usbwifi_chain *chain, uint8_t qid)
 {
-	struct run_tx_data *data = priv;
-	struct run_softc *sc = data->sc;
-	struct run_tx_ring *txq = &sc->txq[data->qid];
-	struct ifnet *ifp = &sc->sc_if;
-	int s;
-
-	s = splnet();
-	txq->queued--;
-	sc->qfullmsk &= ~(1 << data->qid);
-
-	if (__predict_false(status != USBD_NORMAL_COMPLETION)) {
-		if (status == USBD_NOT_STARTED || status == USBD_CANCELLED)
-			return;
-
-		DPRINTF(("%s: usb error on tx: %s\n",
-			device_xname(sc->sc_dev), usbd_errstr(status)));
-		if (status == USBD_STALLED)
-			usbd_clear_endpoint_stall_async(txq->pipeh);
-		if_statinc(ifp, if_oerrors);
-		splx(s);
-		return;
-	}
-
-	sc->sc_tx_timer = 0;
-	if_statinc(ifp, if_opackets);
-	ifp->if_flags &= ~IFF_OACTIVE;
-	run_start(ifp);
-	splx(s);
-}
-
-static int
-run_tx(struct run_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
-{
-	struct ieee80211com *ic = &sc->sc_ic;
+	struct ieee80211com *ic = usbwifi_ic(uw);
+	struct ieee80211_node *ni = chain->uwc_ni;
+	const struct ieee80211_txparam *tp = ni->ni_txparms;
 	struct run_node *rn = (void *)ni;
+	struct ieee80211vap *vap = ni->ni_vap;
 	struct ieee80211_frame *wh;
+	struct run_softc *sc = usbwifi_softc(uw);
 #ifndef RUN_HWCRYPTO
 	struct ieee80211_key *k;
 #endif
-	struct run_tx_ring *ring;
-	struct run_tx_data *data;
 	struct rt2870_txd *txd;
 	struct rt2860_txwi *txwi;
+	struct mbuf *m = chain->uwc_mbuf;
 	uint16_t qos, dur, mcs;
 	uint16_t txwisize;
-	uint8_t type, tid, qid;
+	uint8_t type, rate;
 	int hasqos, ridx, ctl_ridx, xferlen;
 	uint8_t pad;
-	usbd_status status;
 
 	wh = mtod(m, struct ieee80211_frame *);
 
 #ifndef RUN_HWCRYPTO
-	if (wh->i_fc[1] & IEEE80211_FC1_WEP) {
-		k = ieee80211_crypto_encap(ic, ni, m);
+	if (wh->i_fc[1] & IEEE80211_FC1_PROTECTED) {
+		k = ieee80211_crypto_encap(ni, m);
 		if (k == NULL) {
 			m_freem(m);
-			return ENOBUFS;
+DPRINTF(("%s: failed to encrypt packet\n", __func__));
+			return 0;
 		}
 
 		/* packet header may have moved, reset our local pointer */
@@ -2560,16 +2556,13 @@ run_tx(struct run_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 	type = wh->i_fc[0] & IEEE80211_FC0_TYPE_MASK;
 
 	if ((hasqos = ieee80211_has_qos(wh))) {
-		qos = ((struct ieee80211_qosframe *)wh)->i_qos[0];
-		tid = qos & IEEE80211_QOS_TID;
-		qid = TID_TO_WME_AC(tid);
+		uint8_t *frm;
+
+		frm = ieee80211_getqos(wh);
+		qos = le16toh(*(const uint16_t *)frm);
 	} else {
 		qos = 0;
-		tid = 0;
-		qid = WME_AC_BE;
 	}
-	ring = &sc->txq[qid];
-	data = &ring->data[ring->cur];
 
 	/* pickup a rate index */
 	if (IEEE80211_IS_MULTICAST(wh->i_addr1) ||
@@ -2577,12 +2570,22 @@ run_tx(struct run_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 		ridx = (ic->ic_curmode == IEEE80211_MODE_11A) ?
 		    RT2860_RIDX_OFDM6 : RT2860_RIDX_CCK1;
 		ctl_ridx = rt2860_rates[ridx].ctl_ridx;
-	} else if (ic->ic_fixed_rate != IEEE80211_FIXED_RATE_NONE) {
+		rate = ni->ni_txparms->mgmtrate;
+		KASSERTMSG(rt2860_rates[ridx].rate == rate,
+		    "ridx: %d rate %d rt2860_rates[ridx].rate %d",
+		    ridx, rate, rt2860_rates[ridx].rate);
+	}
+	/* XXX fixed rate handling?
+	else if (ic->ic_fixed_rate != IEEE80211_FIXED_RATE_NONE) {
 		ridx = sc->fixed_ridx;
 		ctl_ridx = rt2860_rates[ridx].ctl_ridx;
-	} else {
-		ridx = rn->ridx[ni->ni_txrate];
-		ctl_ridx = rn->ctl_ridx[ni->ni_txrate];
+	} */
+	else {
+		if (tp->ucastrate != IEEE80211_FIXED_RATE_NONE)
+			ridx = rn->fix_ridx;
+		else
+			ridx = rn->amrr_ridx;
+		ctl_ridx = rt2860_rates[ridx].ctl_ridx;
 	}
 
 	/* get MCS code from rate index */
@@ -2596,12 +2599,12 @@ run_tx(struct run_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 	/* roundup to 32-bit alignment */
 	xferlen = (xferlen + 3) & ~3;
 
-	txd = (struct rt2870_txd *)data->buf;
+	txd = (struct rt2870_txd *)chain->uwc_buf;
 	txd->flags = RT2860_TX_QSEL_EDCA;
 	txd->len = htole16(xferlen);
 
 	/*
-	 * Ether both are true or both are false, the header
+	 * Either both are true or both are false, the header
 	 * are nicely aligned to 32-bit. So, no L2 padding.
 	 */
 	if (IEEE80211_HAS_ADDR4(wh) == IEEE80211_QOS_HAS_SEQ(wh))
@@ -2616,6 +2619,48 @@ run_tx(struct run_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 	txwi->wcid = (type == IEEE80211_FC0_TYPE_DATA) ?
 	    RUN_AID2WCID(ni->ni_associd) : 0xff;
 	txwi->len = htole16(m->m_pkthdr.len - pad);
+
+	/*
+	 * The chip keeps track of 2 kind of Tx stats,
+	 *  * TX_STAT_FIFO, for per WCID stats, and
+	 *  * TX_STA_CNT0 for all-TX-in-one stats.
+	 *
+	 * To use FIFO stats, we need to store MCS into the driver-private
+	 * PacketID field. So that, we can tell whose stats when we read them.
+	 * We add 1 to the MCS because setting the PacketID field to 0 means
+	 * that we don't want feedback in TX_STAT_FIFO.
+	 * And, that's what we want for STA mode, since TX_STA_CNT0 does the
+	 * job.
+	 *
+	 * FIFO stats doesn't count Tx with WCID 0xff, so we do this
+	 * elsewhere.
+	 */
+	if (sc->rvp_cnt > 1 || vap->iv_opmode == IEEE80211_M_HOSTAP ||
+	    vap->iv_opmode == IEEE80211_M_MBSS) {
+		uint16_t pid = (rt2860_rates[ridx].mcs + 1) & 0xf;
+		txwi->len |= htole16(pid << RT2860_TX_PID_SHIFT);
+
+		/*
+		 * Unlike PCI based devices, we don't get any interrupt from
+		 * USB devices, so we simulate FIFO-is-full interrupt here.
+		 * Ralink recommends to drain FIFO stats every 100 ms, but
+		 * 16 slots quickly get full. To prevent overflow, increment
+		 * a counter on every FIFO stat request, so we know how many
+		 * slots are left.
+		 * We do this only in HOSTAP or multiple vap mode since FIFO
+		 * stats are used only in those modes.
+		 * We just drain stats. AMRR gets updated every 1 sec by
+		 * run_ratectl_cb() via callout.
+		 * Call it early. Otherwise overflow.
+		 */
+		if (sc->fifo_cnt++ == 10) {
+			/*
+			 * drain stats fifo from thread context
+			 */
+			run_do_async(sc, run_drain_fifo, NULL, 0);
+		}
+	}
+
 	if (rt2860_rates[ridx].phy == IEEE80211_T_DS) {
 		txwi->phy = htole16(RT2860_PHY_CCK);
 		if (ridx != RT2860_RIDX_CCK1 &&
@@ -2647,183 +2692,33 @@ run_tx(struct run_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 		txwi->flags |= RT2860_TX_TS;
 #endif
 
-	if (__predict_false(sc->sc_drvbpf != NULL)) {
-		struct run_tx_radiotap_header *tap = &sc->sc_txtap;
-
-		tap->wt_flags = 0;
-		tap->wt_rate = rt2860_rates[ridx].rate;
-		tap->wt_chan_freq = htole16(ic->ic_curchan->ic_freq);
-		tap->wt_chan_flags = htole16(ic->ic_curchan->ic_flags);
-		tap->wt_hwqueue = qid;
-		if (mcs & RT2860_PHY_SHPRE)
-			tap->wt_flags |= IEEE80211_RADIOTAP_F_SHORTPRE;
-
-		bpf_mtap2(sc->sc_drvbpf, tap, sc->sc_txtap_len, m, BPF_D_OUT);
-	}
-
 	m_copydata(m, 0, m->m_pkthdr.len, ((uint8_t *)txwi) + txwisize);
-	m_freem(m);
 
-	xferlen += sizeof(*txd) + 4;
-
-	usbd_setup_xfer(data->xfer, data, data->buf, xferlen,
-	    USBD_FORCE_SHORT_XFER, RUN_TX_TIMEOUT, run_txeof);
-	status = usbd_transfer(data->xfer);
-	if (__predict_false(status != USBD_IN_PROGRESS &&
-	    status != USBD_NORMAL_COMPLETION)) {
-		device_printf(sc->sc_dev, "queuing tx failed: %s\n",
-		    usbd_errstr(status));
-		return EIO;
-	}
-
-	ieee80211_free_node(ni);
-
-	ring->cur = (ring->cur + 1) % RUN_TX_RING_COUNT;
-	if (++ring->queued >= RUN_TX_RING_COUNT)
-		sc->qfullmsk |= 1 << qid;
-
-	return 0;
+	return xferlen + sizeof(*txd) + 4;
 }
 
+#if 0
 static void
-run_start(struct ifnet *ifp)
+run_watchdog(void *arg)
 {
-	struct run_softc *sc = ifp->if_softc;
-	struct ieee80211com *ic = &sc->sc_ic;
-	struct ether_header *eh;
-	struct ieee80211_node *ni;
-	struct mbuf *m;
+	struct run_softc *sc = arg;
+	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
 
-	if ((ifp->if_flags & (IFF_RUNNING | IFF_OACTIVE)) != IFF_RUNNING)
-		return;
+// XXX - livelock? merge into calib/ratectl timeout
 
-	for (;;) {
-		if (sc->qfullmsk != 0) {
-			ifp->if_flags |= IFF_OACTIVE;
-			break;
-		}
-		/* send pending management frames first */
-		IF_DEQUEUE(&ic->ic_mgtq, m);
-		if (m != NULL) {
-			ni = M_GETCTX(m, struct ieee80211_node *);
-			M_CLEARCTX(m);
-			goto sendit;
-		}
-		if (ic->ic_state != IEEE80211_S_RUN)
-			break;
-
-		/* encapsulate and send data frames */
-		IFQ_DEQUEUE(&ifp->if_snd, m);
-		if (m == NULL)
-			break;
-		if (m->m_len < (int)sizeof(*eh) &&
-		    (m = m_pullup(m, sizeof(*eh))) == NULL) {
-			if_statinc(ifp, if_oerrors);
-			continue;
-		}
-
-		eh = mtod(m, struct ether_header *);
-		ni = ieee80211_find_txnode(ic, eh->ether_dhost);
-		if (ni == NULL) {
-			m_freem(m);
-			if_statinc(ifp, if_oerrors);
-			continue;
-		}
-
-		bpf_mtap(ifp, m, BPF_D_OUT);
-
-		if ((m = ieee80211_encap(ic, m, ni)) == NULL) {
-			ieee80211_free_node(ni);
-			if_statinc(ifp, if_oerrors);
-			continue;
-		}
-sendit:
-		bpf_mtap3(ic->ic_rawbpf, m, BPF_D_OUT);
-
-		if (run_tx(sc, m, ni) != 0) {
-			ieee80211_free_node(ni);
-			if_statinc(ifp, if_oerrors);
-			continue;
-		}
-
-		sc->sc_tx_timer = 5;
-		ifp->if_timer = 1;
-	}
-}
-
-static void
-run_watchdog(struct ifnet *ifp)
-{
-	struct run_softc *sc = ifp->if_softc;
-	struct ieee80211com *ic = &sc->sc_ic;
-
-	ifp->if_timer = 0;
+	DPRINTFN(5, ("%s: %s\n", device_xname(sc->sc_uw.uw_dev), __func__));
 
 	if (sc->sc_tx_timer > 0) {
 		if (--sc->sc_tx_timer == 0) {
-			device_printf(sc->sc_dev, "device timeout\n");
-			/* run_init(ifp); XXX needs a process context! */
-			if_statinc(ifp, if_oerrors);
+			device_printf(sc->sc_uw.uw_dev, "device timeout\n");
+			ieee80211_stat_add(&ic->ic_oerrors, 1);
+			ieee80211_restart_all(ic);
 			return;
 		}
-		ifp->if_timer = 1;
+// XXX		callout_schedule(&sc->sc_watchdog_to, hz);
 	}
-
-	ieee80211_watchdog(ic);
 }
-
-static int
-run_ioctl(struct ifnet *ifp, u_long cmd, void *data)
-{
-	struct run_softc *sc = ifp->if_softc;
-	struct ieee80211com *ic = &sc->sc_ic;
-	int s, error = 0;
-
-	s = splnet();
-
-	switch (cmd) {
-	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
-		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
-		case IFF_UP|IFF_RUNNING:
-			break;
-		case IFF_UP:
-			run_init(ifp);
-			break;
-		case IFF_RUNNING:
-			run_stop(ifp, 1);
-			break;
-		case 0:
-			break;
-		}
-		break;
-
-	case SIOCADDMULTI:
-	case SIOCDELMULTI:
-		if ((error = ether_ioctl(ifp, cmd, data)) == ENETRESET) {
-			/* setup multicast filter, etc */
-			error = 0;
-		}
-		break;
-
-	default:
-		error = ieee80211_ioctl(ic, cmd, data);
-		break;
-	}
-
-	if (error == ENETRESET) {
-		if ((ifp->if_flags & (IFF_UP | IFF_RUNNING)) ==
-		    (IFF_UP | IFF_RUNNING)) {
-			run_init(ifp);
-		}
-		error = 0;
-	}
-
-	splx(s);
-
-	return error;
-}
+#endif
 
 static void
 run_select_chan_group(struct run_softc *sc, int group)
@@ -3007,14 +2902,14 @@ run_rt2870_set_chan(struct run_softc *sc, u_int chan)
 	run_rt2870_rf_write(sc, RT2860_RF3, r3);
 	run_rt2870_rf_write(sc, RT2860_RF4, r4);
 
-	usbd_delay_ms(sc->sc_udev, 10);
+	usbd_delay_ms(sc->sc_uw.uw_udev, 10);
 
 	run_rt2870_rf_write(sc, RT2860_RF1, rfprog[i].r1);
 	run_rt2870_rf_write(sc, RT2860_RF2, r2);
 	run_rt2870_rf_write(sc, RT2860_RF3, r3 | 1);
 	run_rt2870_rf_write(sc, RT2860_RF4, r4);
 
-	usbd_delay_ms(sc->sc_udev, 10);
+	usbd_delay_ms(sc->sc_uw.uw_udev, 10);
 
 	run_rt2870_rf_write(sc, RT2860_RF1, rfprog[i].r1);
 	run_rt2870_rf_write(sc, RT2860_RF2, r2);
@@ -3232,7 +3127,7 @@ run_rt3572_set_chan(struct run_softc *sc, u_int chan)
 	run_rt3070_rf_read(sc, 7, &rf);
 	run_rt3070_rf_write(sc, 7, rf | 0x01);
 
-	usbd_delay_ms(sc->sc_udev, 2);
+	usbd_delay_ms(sc->sc_uw.uw_udev, 2);
 }
 
 static void
@@ -3441,7 +3336,7 @@ run_rt5390_set_chan(struct run_softc *sc, u_int chan)
 		run_rt3070_rf_read(sc, 2, &rf);
 		rf |= 0x80;
 		run_rt3070_rf_write(sc, 2, rf);
-		usbd_delay_ms(sc->sc_udev, 10);
+		usbd_delay_ms(sc->sc_uw.uw_udev, 10);
 		rf &= 0x7f;
 		run_rt3070_rf_write(sc, 2, rf);
 	}
@@ -3791,10 +3686,22 @@ run_set_rx_antenna(struct run_softc *sc, int aux)
 	}
 }
 
+static void
+run_set_channel(struct ieee80211com *ic)
+{
+	struct run_softc *sc = ic->ic_softc;
+
+	DPRINTFN(5, ("%s: %s\n",device_xname(sc->sc_uw.uw_dev), __func__));
+
+	usbwifi_lock_ic(&sc->sc_uw);
+	run_set_chan(sc, ic->ic_curchan);
+	usbwifi_unlock_ic(&sc->sc_uw);
+}
+
 static int
 run_set_chan(struct run_softc *sc, struct ieee80211_channel *c)
 {
-	struct ieee80211com *ic = &sc->sc_ic;
+	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
 	u_int chan, group;
 
 	chan = ieee80211_chan2ieee(ic, c);
@@ -3827,7 +3734,7 @@ run_set_chan(struct run_softc *sc, struct ieee80211_channel *c)
 	/* XXX necessary only when group has changed! */
 	run_select_chan_group(sc, group);
 
-	usbd_delay_ms(sc->sc_udev, 10);
+	usbd_delay_ms(sc->sc_uw.uw_udev, 10);
 
 	/* Perform IQ calibration. */
 	if (sc->mac_ver >= 0x5392)
@@ -3837,9 +3744,9 @@ run_set_chan(struct run_softc *sc, struct ieee80211_channel *c)
 }
 
 static void
-run_updateprot(struct run_softc *sc)
+run_updateprot_cb(struct run_softc *sc, void *dummy)
 {
-	struct ieee80211com *ic = &sc->sc_ic;
+	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
 	uint32_t tmp;
 
 	tmp = RT2860_RTSTH_EN | RT2860_PROT_NAV_SHORT | RT2860_TXOP_ALLOW_ALL;
@@ -3859,15 +3766,23 @@ run_updateprot(struct run_softc *sc)
 	run_write(sc, RT2860_OFDM_PROT_CFG, tmp);
 }
 
+
 static void
-run_enable_tsf_sync(struct run_softc *sc)
+run_updateprot(struct ieee80211com *ic)
 {
-	struct ieee80211com *ic = &sc->sc_ic;
+	run_do_async(ic->ic_softc, run_updateprot_cb, NULL, 0);
+}
+
+static void
+run_enable_tsf_sync(struct ieee80211vap *iv)
+{
+	struct ieee80211com *ic = iv->iv_ic;
+	struct run_softc *sc = ic->ic_softc;
 	uint32_t tmp;
 
 	run_read(sc, RT2860_BCN_TIME_CFG, &tmp);
 	tmp &= ~0x1fffff;
-	tmp |= ic->ic_bss->ni_intval * 16;
+	tmp |= iv->iv_bss->ni_intval * 16;
 	tmp |= RT2860_TSF_TIMER_EN | RT2860_TBTT_TIMER_EN;
 	if (ic->ic_opmode == IEEE80211_M_STA) {
 		/*
@@ -3923,7 +3838,7 @@ run_set_txpreamble(struct run_softc *sc)
 	uint32_t tmp;
 
 	run_read(sc, RT2860_AUTO_RSP_CFG, &tmp);
-	if (sc->sc_ic.ic_flags & IEEE80211_F_SHPREAMBLE)
+	if (usbwifi_ic(&sc->sc_uw)->ic_flags & IEEE80211_F_SHPREAMBLE)
 		tmp |= RT2860_CCK_SHORT_EN;
 	else
 		tmp &= ~RT2860_CCK_SHORT_EN;
@@ -3933,7 +3848,7 @@ run_set_txpreamble(struct run_softc *sc)
 static void
 run_set_basicrates(struct run_softc *sc)
 {
-	struct ieee80211com *ic = &sc->sc_ic;
+	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
 
 	/* set basic rates mask */
 	if (ic->ic_curmode == IEEE80211_MODE_11B)
@@ -3973,11 +3888,11 @@ run_set_macaddr(struct run_softc *sc, const uint8_t *addr)
 }
 
 static void
-run_updateslot(struct ifnet *ifp)
+run_updateslot(struct ieee80211com *ic)
 {
 
 	/* do it in a process context */
-	run_do_async(ifp->if_softc, run_updateslot_cb, NULL, 0);
+	run_do_async(ic->ic_softc, run_updateslot_cb, NULL, 0);
 }
 
 /* ARGSUSED */
@@ -3988,14 +3903,15 @@ run_updateslot_cb(struct run_softc *sc, void *arg)
 
 	run_read(sc, RT2860_BKOFF_SLOT_CFG, &tmp);
 	tmp &= ~0xff;
-	tmp |= (sc->sc_ic.ic_flags & IEEE80211_F_SHSLOT) ? 9 : 20;
+	tmp |= (usbwifi_ic(&sc->sc_uw)->ic_flags & IEEE80211_F_SHSLOT)
+	    ? 9 : 20;
 	run_write(sc, RT2860_BKOFF_SLOT_CFG, tmp);
 }
 
 static int8_t
 run_rssi2dbm(struct run_softc *sc, uint8_t rssi, uint8_t rxchain)
 {
-	struct ieee80211com *ic = &sc->sc_ic;
+	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
 	struct ieee80211_channel *c = ic->ic_curchan;
 	int delta;
 
@@ -4134,7 +4050,7 @@ run_rt3070_rf_init(struct run_softc *sc)
 	run_rt3070_rf_read(sc, 30, &rf);
 	/* toggle RF R30 bit 7 */
 	run_rt3070_rf_write(sc, 30, rf | 0x80);
-	usbd_delay_ms(sc->sc_udev, 10);
+	usbd_delay_ms(sc->sc_uw.uw_udev, 10);
 	run_rt3070_rf_write(sc, 30, rf & ~0x80);
 
 	/* initialize RF registers to default value */
@@ -4293,7 +4209,7 @@ run_rt3593_rf_init(struct run_softc *sc)
 	run_read(sc, RT3070_LDO_CFG0, &tmp);
 	tmp = (tmp & ~0x1f000000) | 0x0d000000;
 	run_write(sc, RT3070_LDO_CFG0, tmp);
-	usbd_delay_ms(sc->sc_udev, 1);
+	usbd_delay_ms(sc->sc_uw.uw_udev, 1);
 	tmp = (tmp & ~0x1f000000) | 0x01000000;
 	run_write(sc, RT3070_LDO_CFG0, tmp);
 
@@ -4320,11 +4236,11 @@ run_rt5390_rf_init(struct run_softc *sc)
 	if (sc->mac_ver == 0x5390) {
 		run_rt3070_rf_read(sc, 2, &rf);
 		run_rt3070_rf_write(sc, 2, rf | RT5390_RESCAL);
-		usbd_delay_ms(sc->sc_udev, 10);
+		usbd_delay_ms(sc->sc_uw.uw_udev, 10);
 		run_rt3070_rf_write(sc, 2, rf & ~RT5390_RESCAL);
 	} else {
 		run_rt3070_rf_write(sc, 2, RT5390_RESCAL);
-		usbd_delay_ms(sc->sc_udev, 10);
+		usbd_delay_ms(sc->sc_uw.uw_udev, 10);
 	}
 
 	/* Initialize RF registers to default value. */
@@ -4396,7 +4312,7 @@ run_rt3070_filter_calib(struct run_softc *sc, uint8_t init, uint8_t target,
 	for (ntries = 0; ntries < 100; ntries++) {
 		/* transmit test tone */
 		run_bbp_write(sc, 25, 0x90);
-		usbd_delay_ms(sc->sc_udev, 10);
+		usbd_delay_ms(sc->sc_uw.uw_udev, 10);
 		/* read received power */
 		run_bbp_read(sc, 55, &bbp55_pb);
 		if (bbp55_pb != 0)
@@ -4410,7 +4326,7 @@ run_rt3070_filter_calib(struct run_softc *sc, uint8_t init, uint8_t target,
 	for (ntries = 0; ntries < 100; ntries++) {
 		/* transmit test tone */
 		run_bbp_write(sc, 25, 0x90);
-		usbd_delay_ms(sc->sc_udev, 10);
+		usbd_delay_ms(sc->sc_uw.uw_udev, 10);
 		/* read received power */
 		run_bbp_read(sc, 55, &bbp55_sb);
 
@@ -4637,8 +4553,11 @@ run_rt5390_rf_setup(struct run_softc *sc)
 static int
 run_txrx_enable(struct run_softc *sc)
 {
+	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
 	uint32_t tmp;
 	int error, ntries;
+
+	DPRINTFN(5, ("%s: %s\n", device_xname(sc->sc_uw.uw_dev), __func__));
 
 	run_write(sc, RT2860_MAC_SYS_CTRL, RT2860_MAC_TX_EN);
 	for (ntries = 0; ntries < 200; ntries++) {
@@ -4646,12 +4565,12 @@ run_txrx_enable(struct run_softc *sc)
 			return error;
 		if ((tmp & (RT2860_TX_DMA_BUSY | RT2860_RX_DMA_BUSY)) == 0)
 			break;
-		usbd_delay_ms(sc->sc_udev, 50);
+		usbd_delay_ms(sc->sc_uw.uw_udev, 50);
 	}
 	if (ntries == 200)
 		return ETIMEDOUT;
 
-	usbd_delay_ms(sc->sc_udev, 50);
+	usbd_delay_ms(sc->sc_uw.uw_udev, 50);
 
 	tmp |= RT2860_RX_DMA_EN | RT2860_TX_DMA_EN | RT2860_TX_WB_DDONE;
 	run_write(sc, RT2860_WPDMA_GLO_CFG, tmp);
@@ -4663,12 +4582,12 @@ run_txrx_enable(struct run_softc *sc)
 
 	/* set Rx filter */
 	tmp = RT2860_DROP_CRC_ERR | RT2860_DROP_PHY_ERR;
-	if (sc->sc_ic.ic_opmode != IEEE80211_M_MONITOR) {
+	if (ic->ic_opmode != IEEE80211_M_MONITOR) {
 		tmp |= RT2860_DROP_UC_NOME | RT2860_DROP_DUPL |
 		    RT2860_DROP_CTS | RT2860_DROP_BA | RT2860_DROP_ACK |
 		    RT2860_DROP_VER_ERR | RT2860_DROP_CTRL_RSV |
 		    RT2860_DROP_CFACK | RT2860_DROP_CFEND;
-		if (sc->sc_ic.ic_opmode == IEEE80211_M_STA)
+		if (ic->ic_opmode == IEEE80211_M_STA)
 			tmp |= RT2860_DROP_RTS | RT2860_DROP_PSPOLL;
 	}
 	run_write(sc, RT2860_RX_FILTR_CFG, tmp);
@@ -4696,61 +4615,49 @@ run_adjust_freq_offset(struct run_softc *sc)
 }
 
 static int
-run_init(struct ifnet *ifp)
+run_init(struct usbwifi *uw)
 {
-	struct run_softc *sc = ifp->if_softc;
-	struct ieee80211com *ic = &sc->sc_ic;
+	struct run_softc *sc = usbwifi_softc(uw);
+	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
 	uint32_t tmp;
 	uint8_t bbp1, bbp3;
-	int i, error, qid, ridx, ntries;
-	usbd_status status;
+	int i, error, ridx, ntries;
+
+	usbwifi_isowned_ic(uw);
 
 	for (ntries = 0; ntries < 100; ntries++) {
 		if ((error = run_read(sc, RT2860_ASIC_VER_ID, &tmp)) != 0)
 			goto fail;
 		if (tmp != 0 && tmp != 0xffffffff)
 			break;
-		usbd_delay_ms(sc->sc_udev, 10);
+		usbd_delay_ms(sc->sc_uw.uw_udev, 10);
 	}
 	if (ntries == 100) {
 		error = ETIMEDOUT;
 		goto fail;
 	}
 
-	if ((sc->sc_flags & RUN_FWLOADED) == 0 &&
+	if ((sc->sc_uw.uw_flags & RUN_FWLOADED) == 0 &&
 	    (error = run_load_microcode(sc)) != 0) {
-		device_printf(sc->sc_dev,
+		device_printf(sc->sc_uw.uw_dev,
 		    "could not load 8051 microcode\n");
 		goto fail;
 	}
 
-	if (ifp->if_flags & IFF_RUNNING)
-		run_stop(ifp, 0);
-
 	/* init host command ring */
 	sc->cmdq.cur = sc->cmdq.next = sc->cmdq.queued = 0;
 
-	/* init Tx rings (4 EDCAs) */
-	for (qid = 0; qid < 4; qid++) {
-		if ((error = run_alloc_tx_ring(sc, qid)) != 0)
-			goto fail;
-	}
-	/* init Rx ring */
-	if ((error = run_alloc_rx_ring(sc)) != 0)
-		goto fail;
-
-	IEEE80211_ADDR_COPY(ic->ic_myaddr, CLLADDR(ifp->if_sadl));
-	run_set_macaddr(sc, ic->ic_myaddr);
+	run_set_macaddr(sc, ic->ic_macaddr);
 
 	for (ntries = 0; ntries < 100; ntries++) {
 		if ((error = run_read(sc, RT2860_WPDMA_GLO_CFG, &tmp)) != 0)
 			goto fail;
 		if ((tmp & (RT2860_TX_DMA_BUSY | RT2860_RX_DMA_BUSY)) == 0)
 			break;
-		usbd_delay_ms(sc->sc_udev, 10);
+		usbd_delay_ms(sc->sc_uw.uw_udev, 10);
 	}
 	if (ntries == 100) {
-		device_printf(sc->sc_dev,
+		device_printf(sc->sc_uw.uw_dev,
 		    "timeout waiting for DMA engine\n");
 		error = ETIMEDOUT;
 		goto fail;
@@ -4768,7 +4675,7 @@ run_init(struct ifnet *ifp)
 	run_write(sc, RT2860_USB_DMA_CFG, 0);
 
 	if ((error = run_reset(sc)) != 0) {
-		device_printf(sc->sc_dev, "could not reset chipset\n");
+		device_printf(sc->sc_uw.uw_dev, "could not reset chipset\n");
 		goto fail;
 	}
 
@@ -4825,10 +4732,10 @@ run_init(struct ifnet *ifp)
 	/* clear Host to MCU mailbox */
 	run_write(sc, RT2860_H2M_BBPAGENT, 0);
 	run_write(sc, RT2860_H2M_MAILBOX, 0);
-	usbd_delay_ms(sc->sc_udev, 10);
+	usbd_delay_ms(sc->sc_uw.uw_udev, 10);
 
 	if ((error = run_bbp_init(sc)) != 0) {
-		device_printf(sc->sc_dev, "could not initialize BBP\n");
+		device_printf(sc->sc_uw.uw_dev, "could not initialize BBP\n");
 		goto fail;
 	}
 
@@ -4917,7 +4824,7 @@ run_init(struct ifnet *ifp)
 	run_set_chan(sc, ic->ic_curchan);
 
 	/* setup initial protection mode */
-	run_updateprot(sc);
+	run_updateprot_cb(sc, NULL);
 
 	/* turn radio LED on */
 	run_set_leds(sc, RT2860_LED_RADIO);
@@ -4931,56 +4838,28 @@ run_init(struct ifnet *ifp)
 	}
 #endif
 
-	for (i = 0; i < RUN_RX_RING_COUNT; i++) {
-		struct run_rx_data *data = &sc->rxq.data[i];
-
-		usbd_setup_xfer(data->xfer, data, data->buf, RUN_MAX_RXSZ,
-		    USBD_SHORT_XFER_OK, USBD_NO_TIMEOUT, run_rxeof);
-		status = usbd_transfer(data->xfer);
-		if (status != USBD_NORMAL_COMPLETION &&
-		    status != USBD_IN_PROGRESS) {
-			device_printf(sc->sc_dev, "queuing rx failed: %s\n",
-			    usbd_errstr(status));
-			error = EIO;
-			goto fail;
-		}
-	}
-
 	if ((error = run_txrx_enable(sc)) != 0)
 		goto fail;
+	return 0;
 
-	ifp->if_flags &= ~IFF_OACTIVE;
-	ifp->if_flags |= IFF_RUNNING;
-
-	if (ic->ic_opmode == IEEE80211_M_MONITOR)
-		ieee80211_new_state(ic, IEEE80211_S_RUN, -1);
-	else
-		ieee80211_new_state(ic, IEEE80211_S_SCAN, -1);
-
-	if (error != 0)
-fail:		run_stop(ifp, 1);
+fail:
+	run_stop(uw);
 	return error;
 }
 
-static void
-run_stop(struct ifnet *ifp, int disable)
+static void __noinline
+run_stop(struct usbwifi *uw)
 {
-	struct run_softc *sc = ifp->if_softc;
-	struct ieee80211com *ic = &sc->sc_ic;
+	struct run_softc *sc = usbwifi_softc(uw);
 	uint32_t tmp;
-	int ntries, qid;
+	int ntries;
 
-	if (ifp->if_flags & IFF_RUNNING)
-		run_set_leds(sc, 0);	/* turn all LEDs off */
+	run_set_leds(sc, 0);	/* turn all LEDs off */
 
 	sc->sc_tx_timer = 0;
-	ifp->if_timer = 0;
-	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
 
-	callout_stop(&sc->scan_to);
-	callout_stop(&sc->calib_to);
+	callout_stop(&sc->ratectl_to);
 
-	ieee80211_new_state(ic, IEEE80211_S_INIT, -1);
 	/* wait for all queued asynchronous commands to complete */
 	while (sc->cmdq.queued > 0)
 		tsleep(&sc->cmdq, 0, "cmdq", 0);
@@ -5003,30 +4882,28 @@ run_stop(struct ifnet *ifp, int disable)
 	/* reset adapter */
 	run_write(sc, RT2860_MAC_SYS_CTRL, RT2860_BBP_HRST | RT2860_MAC_SRST);
 	run_write(sc, RT2860_MAC_SYS_CTRL, 0);
-
-	/* reset Tx and Rx rings */
-	sc->qfullmsk = 0;
-	for (qid = 0; qid < 4; qid++)
-		run_free_tx_ring(sc, qid);
-	run_free_rx_ring(sc);
 }
 
 #ifndef IEEE80211_STA_ONLY
-static int
-run_setup_beacon(struct run_softc *sc)
+/* actually copy the beacon mbuf to the device - always in task context */
+static void
+run_update_beacon_cb(struct run_softc *sc, void *arg)
 {
-	struct ieee80211com *ic = &sc->sc_ic;
+	struct run_vap *rvap = *(struct run_vap **)arg;
+	struct ieee80211com *ic = rvap->vap.iv_ic;
 	struct rt2860_txwi txwi;
-	struct mbuf *m;
 	uint16_t txwisize;
 	int ridx;
 
-	if ((m = ieee80211_beacon_alloc(ic, ic->ic_bss, &sc->sc_bo)) == NULL)
-		return ENOBUFS;
+	if (rvap->beacon_mbuf == NULL) {
+		rvap->beacon_mbuf = ieee80211_beacon_alloc(rvap->vap.iv_bss);
+		if (rvap->beacon_mbuf == NULL)
+			return;
+	}
 
 	memset(&txwi, 0, sizeof(txwi));
 	txwi.wcid = 0xff;
-	txwi.len = htole16(m->m_pkthdr.len);
+	txwi.len = htole16(rvap->beacon_mbuf->m_pkthdr.len);
 	/* send beacons at the lowest available rate */
 	ridx = (ic->ic_curmode == IEEE80211_MODE_11A) ?
 	    RT2860_RIDX_OFDM6 : RT2860_RIDX_CCK1;
@@ -5041,12 +4918,44 @@ run_setup_beacon(struct run_softc *sc)
 	run_write_region_1(sc, RT2860_BCN_BASE(0),
 	    (uint8_t *)&txwi, txwisize);
 	run_write_region_1(sc, RT2860_BCN_BASE(0) + txwisize,
-	    mtod(m, uint8_t *), (m->m_pkthdr.len + 1) & ~1);
-
-	m_freem(m);
-
-	return 0;
+	    mtod(rvap->beacon_mbuf, uint8_t *),
+	    (rvap->beacon_mbuf->m_pkthdr.len + 1) & ~1);
 }
+
+static void
+run_update_beacon(struct ieee80211vap *vap, int item)
+{
+	struct run_vap *rvp = (struct run_vap *)vap;
+	struct ieee80211com *ic = vap->iv_ic;
+	struct ieee80211_beacon_offsets *bo = &vap->iv_bcn_off;
+	struct ieee80211_node *ni = vap->iv_bss;
+	struct run_softc *sc = ic->ic_softc;
+	int mcast = 0;
+
+	switch (item) {
+	case IEEE80211_BEACON_ERP:
+		run_updateslot(ic);
+		break;
+	case IEEE80211_BEACON_HTINFO:
+		run_updateprot(ic);
+		break;
+	case IEEE80211_BEACON_TIM:
+		mcast = 1;
+		break;
+	default:
+		break;
+	}
+
+	setbit(bo->bo_flags, item);
+	if (rvp->beacon_mbuf == NULL) {
+		rvp->beacon_mbuf = ieee80211_beacon_alloc(ni);
+		if (rvp->beacon_mbuf == NULL)
+			return;
+	}
+	ieee80211_beacon_update(ni, rvp->beacon_mbuf, mcast);
+	run_do_async(sc, run_update_beacon_cb, &vap, sizeof(vap));
+}
+
 #endif
 
 MODULE(MODULE_CLASS_DRIVER, if_run, NULL);
@@ -5076,4 +4985,136 @@ if_run_modcmd(modcmd_t cmd, void *arg)
 	default:
 		return ENOTTY;
 	}
+}
+
+static void
+run_get_radiocaps(struct ieee80211com *ic,
+	int maxchans, int *nchans, struct ieee80211_channel chans[])
+{
+	struct run_softc *sc = ic->ic_softc;
+	uint8_t bands[IEEE80211_MODE_BYTES];
+
+	memset(bands, 0, sizeof(bands));
+
+	if (sc->rf_rev == RT2860_RF_2750 ||
+	    sc->rf_rev == RT2860_RF_2850 ||
+	    sc->rf_rev == RT3070_RF_3052 ||
+	    sc->rf_rev == RT3070_RF_3053 ||
+	    sc->rf_rev == RT5592_RF_5592) {
+
+		const uint8_t chan_list[] =
+		    { 36, 38, 40, 44, 46, 48, 52, 54, 56, 60, 62, 64, 100,
+		    102, 104, 108, 110, 112, 116, 118, 120, 124, 126,
+		    128, 132, 134, 136, 140, 149, 151, 153, 157, 159, 161,
+		    165,  167, 169, 171, 173 };
+
+		setbit(bands, IEEE80211_MODE_11A);
+		/* XXX RF_2020 check comes from FreeBSD */
+		if (sc->rf_rev != RT3070_RF_2020)
+			setbit(bands, IEEE80211_MODE_11NA);
+		ieee80211_add_channel_list_5ghz(chans, maxchans, nchans,
+		    chan_list, nitems(chan_list), bands, 0);
+		    /* XXX confirm whether or not ht40 supported. */
+	}
+
+	setbit(bands, IEEE80211_MODE_11B);
+	setbit(bands, IEEE80211_MODE_11G);
+	/* XXX RF_2020 check comes from FreeBSD */
+	if (sc->rf_rev != RT3070_RF_2020)
+		setbit(bands, IEEE80211_MODE_11NG);
+	ieee80211_add_channels_default_2ghz(chans, maxchans, nchans, bands, 0);
+}
+
+static struct ieee80211vap *
+run_vap_create(struct ieee80211com *ic,  const char name[IFNAMSIZ],
+    int  unit, enum ieee80211_opmode opmode, int flags,
+    const uint8_t bssid[IEEE80211_ADDR_LEN],
+    const uint8_t macaddr[IEEE80211_ADDR_LEN])
+{
+	struct run_softc *sc = ic->ic_softc;
+	struct run_vap *rvap;
+	int i;
+
+	if (sc->rvp_cnt >= RUN_VAP_MAX)
+		return NULL;
+
+	rvap = kmem_zalloc(sizeof(struct run_vap), KM_SLEEP);
+	if (ieee80211_vap_setup(ic, &rvap->vap, name, unit, opmode,
+        flags | IEEE80211_CLONE_NOBEACONS, bssid) != 0) {
+		kmem_free(rvap, sizeof(struct run_vap));
+		return NULL;
+	}
+
+	/* Override state transition machine. */
+	rvap->newstate = rvap->vap.iv_newstate;
+	rvap->vap.iv_newstate = run_newstate;
+	rvap->vap.iv_update_beacon = run_update_beacon;
+#ifdef RUN_HWCRYPTO
+	rvap->vap.iv_key_delete = run_key_delete;
+	rvap->vap.iv_key_set = run_key_set;
+#endif
+
+	ieee80211_ratectl_init(&rvap->vap);
+	ieee80211_ratectl_setinterval(&rvap->vap, 1000 /* 1 sec */);
+
+	ieee80211_vap_attach(&rvap->vap, run_media_change,
+            ieee80211_media_status, macaddr);
+
+	/* find a spare bit for this vap */
+	for (i = 0; i < RUN_VAP_MAX; i++) {
+		if ((sc->rvp_bmap & 1 << i) == 0) {
+			sc->rvp_bmap |= 1 << i;
+			rvap->rvp_id = i;
+			break;
+		}
+	}
+	if (sc->rvp_cnt++ == 0)
+		ic->ic_opmode = opmode;
+
+	return &rvap->vap;
+}
+
+static void
+run_vap_delete(struct ieee80211vap *vap)
+{
+	struct run_vap *rvap = (struct run_vap *)vap;
+	struct ieee80211com *ic;
+	struct run_softc *sc;
+	uint8_t rvp_id;
+
+	if (vap == NULL)
+		return;
+
+	ic = vap->iv_ic;
+	sc = ic->ic_softc;
+
+	rvp_id = rvap->rvp_id;
+	sc->ratectl_run &= ~(1 << rvp_id);
+	sc->rvp_bmap &= ~(1 << rvp_id);
+	sc->rvp_cnt--;
+	ieee80211_ratectl_deinit(vap);
+	ieee80211_vap_detach(vap);
+
+	m_freem(rvap->beacon_mbuf);
+	kmem_free(rvap, sizeof(struct run_vap));
+}
+
+static void
+run_scan_start(struct ieee80211com *ic)
+{
+	IEEE80211_LOCK(ic);
+	ic->ic_flags |= IEEE80211_F_SCAN;
+	IEEE80211_UNLOCK(ic);
+
+	#if NOTWITHSTATEMACHINEOVERRIDE
+		run_set_chan(sc, ic->ic_curchan);
+	#endif
+}
+
+static void
+run_scan_end(struct ieee80211com *ic)
+{
+	IEEE80211_LOCK(ic);
+	ic->ic_flags &= ~IEEE80211_F_SCAN;
+	IEEE80211_UNLOCK(ic);
 }

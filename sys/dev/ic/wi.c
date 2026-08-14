@@ -132,6 +132,7 @@ __KERNEL_RCSID(0, "$NetBSD: wi.c,v 1.258 2023/08/01 07:04:15 mrg Exp $");
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_ioctl.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_regdomian.h>
 #include <net80211/ieee80211_rssadapt.h>
 
 #include <sys/bus.h>

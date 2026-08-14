@@ -38,7 +38,9 @@
 
 #include <netinet/in.h>
 
+#include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <dev/firmload.h>
 

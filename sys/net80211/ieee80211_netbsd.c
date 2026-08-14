@@ -1,7 +1,9 @@
-/* $NetBSD: ieee80211_netbsd.c,v 1.34 2018/12/22 14:28:56 maxv Exp $ */
+/* $NetBSD: ieee80211_netbsd.c,v 1.31.2.10 2020/04/16 15:30:00 nat Exp $ */
 
-/*
- * Copyright (c) 2003-2005 Sam Leffler, Errno Consulting
+/*-
+ * SPDX-License-Identifier: BSD-2-Clause
+ *
+ * Copyright (c) 2003-2009 Sam Leffler, Errno Consulting
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -12,8 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,486 +28,617 @@
  */
 
 #include <sys/cdefs.h>
-#ifdef __FreeBSD__
-__FBSDID("$FreeBSD: src/sys/net80211/ieee80211_freebsd.c,v 1.8 2005/08/08 18:46:35 sam Exp $");
-#else
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_netbsd.c,v 1.34 2018/12/22 14:28:56 maxv Exp $");
+#ifdef __NetBSD__
+__KERNEL_RCSID(0, "$NetBSD: ieee80211_netbsd.c,v 1.31.2.10 2020/04/16 15:30:00 nat Exp $");
 #endif
 
 /*
  * IEEE 802.11 support (NetBSD-specific code)
  */
+
+#ifdef _KERNEL_OPT
+#include "opt_wlan.h"
+#endif
+
+#include <sys/atomic.h>
 #include <sys/param.h>
-#include <sys/kernel.h>
 #include <sys/systm.h>
+#include <sys/kernel.h>
 #include <sys/mbuf.h>
+#include <sys/module.h>
 #include <sys/proc.h>
 #include <sys/sysctl.h>
-#include <sys/once.h>
+#include <sys/syslog.h>
 
 #include <sys/socket.h>
 
-#include <sys/cprng.h>
-
+#include <net/bpf.h>
 #include <net/if.h>
-#include <net/if_media.h>
+#include <net/if_dl.h>
 #include <net/if_ether.h>
+#include <net/if_media.h>
+#include <net/if_types.h>
 #include <net/route.h>
 
-#include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
-#include <net80211/ieee80211_sysctl.h>
-
-#define	LOGICALLY_EQUAL(x, y)	(!(x) == !(y))
-
-static void ieee80211_sysctl_fill_node(struct ieee80211_node *,
-    struct ieee80211_node_sysctl *, int, const struct ieee80211_channel *,
-    uint32_t);
-static struct ieee80211_node *ieee80211_node_walknext(
-    struct ieee80211_node_walk *);
-static struct ieee80211_node *ieee80211_node_walkfirst(
-    struct ieee80211_node_walk *, u_short);
-static int ieee80211_sysctl_node(SYSCTLFN_ARGS);
-
-static void ieee80211_sysctl_setup(void);
+#include <net80211/ieee80211_input.h>
 
 #ifdef IEEE80211_DEBUG
-int	ieee80211_debug = 0;
+int ieee80211_debug = 0;
+static int ieee80211_debug_printf = 0;
 #endif
 
-typedef void (*ieee80211_setup_func)(void);
+int sysctl_ieee80211coms(SYSCTLFN_ARGS);
+int ieee80211_sysctl_msecs_ticks(SYSCTLFN_ARGS);
+static int ieee80211_sysctl_inact(SYSCTLFN_ARGS);
+static int ieee80211_sysctl_parent(SYSCTLFN_ARGS);
+static int ieee80211_sysctl_radar(SYSCTLFN_ARGS);
+static int ieee80211_sysctl_vap_restart(SYSCTLFN_ARGS);
 
-__link_set_decl(ieee80211_funcs, ieee80211_setup_func);
+static void bpf_track(struct bpf_if *, struct ifnet *, int, int);
 
-static int
+static const char wlanname[] = "wlan";
+
+static int wlan_clone_create(struct if_clone *, int, size_t, void*);
+static int wlan_clone_destroy(struct ifnet*);
+
+static struct if_clone wlan_cloner =
+	IF_CLONE_WITH_ARGS_INITIALIZER(wlanname,
+	    wlan_clone_create, wlan_clone_destroy);
+
+static void ieee80211_rx_mgmt_cb(void *, int);
+static struct ifqueue ieee80211_rx_mgmt;
+static struct task ieee80211_mgmt_input;
+
+int
+ieee80211_clone_attach(void)
+{
+	if_clone_attach(&wlan_cloner);
+	return 0;
+}
+
+/*
+ * "taskqueue" support for doing FreeBSD style taskqueue operations using
+ * NetBSD's workqueue to do the actual function calls for the work.
+ * Many features of the FreeBSD taskqueue are not implemented.   This should
+ * be enough features for the 802.11 stack to run its tasks and time delayed
+ * tasks.
+ */
+
+struct workqueue *taskqueue_thread;
+
+int
 ieee80211_init0(void)
 {
-	ieee80211_setup_func * const *ieee80211_setup, f;
+	static int run_yet = 0;
 
-	ieee80211_sysctl_setup();
-
-	if (max_linkhdr < ALIGN(sizeof(struct ieee80211_qosframe_addr4))) {
-		max_linkhdr = ALIGN(sizeof(struct ieee80211_qosframe_addr4));
+	if (!run_yet) {
+		run_yet = 1;
+		if (!workqueue_create(&taskqueue_thread, "ieee80211 wq",
+				      ieee80211_runwork, NULL,
+				      PRI_KTHREAD, IPL_NET, WQ_MPSAFE))
+			return -1;
 	}
+	return 0;
+}
 
-	__link_set_foreach(ieee80211_setup, ieee80211_funcs) {
-		f = (void*)*ieee80211_setup;
-		(*f)();
+void
+ieee80211_runwork(struct work *work2do, void *arg)
+{
+	struct task *work_task = (struct task *) work2do;
+
+	mutex_enter(&work_task->t_mutex);
+	work_task->t_onqueue = 0;
+	mutex_exit(&work_task->t_mutex);
+
+	work_task->t_func(work_task->t_arg, 0);
+}
+
+void
+taskqueue_enqueue(struct workqueue *wq, struct task *task_item)
+{
+	mutex_enter(&task_item->t_mutex);
+	if (!task_item->t_onqueue) {
+		workqueue_enqueue(wq, &task_item->t_work, NULL);
+		task_item->t_onqueue = 1;
 	}
+	mutex_exit(&task_item->t_mutex);
+}
+
+void
+taskqueue_drain(struct workqueue *wq, struct task *task_item)
+{
+
+	workqueue_wait(wq, &task_item->t_work);
+}
+
+static void
+taskqueue_callout_enqueue(void *arg)
+{
+	struct timeout_task *timeout_task = arg;
+	mutex_enter(&timeout_task->to_task.t_mutex);
+	timeout_task->to_scheduled = 0;
+	mutex_exit(&timeout_task->to_task.t_mutex);
+
+	taskqueue_enqueue(timeout_task->to_wq, (struct task*) timeout_task);
+}
+
+int
+taskqueue_enqueue_timeout(struct workqueue *queue,
+     struct timeout_task *timeout_task, int nticks)
+{
+	mutex_enter(&timeout_task->to_task.t_mutex);
+	if (timeout_task->to_scheduled == -1) {
+		/* we are draining the task queue */
+		mutex_exit(&timeout_task->to_task.t_mutex);
+		return EIO;
+	}
+	if (timeout_task->to_scheduled == 0) {
+		callout_reset(&timeout_task->to_callout, nticks,
+		    taskqueue_callout_enqueue, timeout_task);
+		timeout_task->to_scheduled = 1;
+	}
+	mutex_exit(&timeout_task->to_task.t_mutex);
+
+	return 0;
+}
+
+int
+taskqueue_cancel_timeout(struct workqueue *queue,
+    struct timeout_task *timeout_task, u_int *pendp)
+{
+	mutex_enter(&timeout_task->to_task.t_mutex);
+	callout_stop(&timeout_task->to_callout);
+	timeout_task->to_scheduled = 0;
+	mutex_exit(&timeout_task->to_task.t_mutex);
 
 	return 0;
 }
 
 void
-ieee80211_init(void)
+taskqueue_drain_timeout(struct workqueue *wq,
+    struct timeout_task *timeout_task)
 {
-	static ONCE_DECL(ieee80211_init_once);
 
-	RUN_ONCE(&ieee80211_init_once, ieee80211_init0);
+	mutex_enter(&timeout_task->to_task.t_mutex);
+	timeout_task->to_scheduled = -1;
+	callout_halt(&timeout_task->to_callout,
+	    &timeout_task->to_task.t_mutex);
+	mutex_exit(&timeout_task->to_task.t_mutex);
+	workqueue_wait(wq, &timeout_task->to_task.t_work);
+}
+
+
+static int
+wlan_clone_create(struct if_clone *ifc, int unit, size_t arg_size, void *data)
+{
+	struct ieee80211_clone_params cp;
+	struct ieee80211vap *vap;
+	struct ieee80211com *ic;
+	int error;
+
+	if (arg_size != sizeof(cp) || data == NULL)
+		return EINVAL;
+
+	error = copyin(data, &cp, sizeof(cp));
+	if (error)
+		return error;
+
+	ic = ieee80211_find_com(cp.icp_parent);
+	if (ic == NULL)
+		return ENXIO;
+	if (cp.icp_opmode >= IEEE80211_OPMODE_MAX) {
+		ic_printf(ic, "%s: invalid opmode %d\n", __func__,
+		    cp.icp_opmode);
+		return EINVAL;
+	}
+	if ((ic->ic_caps & ieee80211_opcap[cp.icp_opmode]) == 0) {
+		ic_printf(ic, "%s mode not supported\n",
+		    ieee80211_opmode_name[cp.icp_opmode]);
+		return EOPNOTSUPP;
+	}
+	if ((cp.icp_flags & IEEE80211_CLONE_TDMA) &&
+#ifdef IEEE80211_SUPPORT_TDMA
+	    (ic->ic_caps & IEEE80211_C_TDMA) == 0
+#else
+	    (1)
+#endif
+	) {
+		ic_printf(ic, "TDMA not supported\n");
+		return EOPNOTSUPP;
+	}
+	vap = ic->ic_vap_create(ic, wlanname, unit,
+			cp.icp_opmode, cp.icp_flags, cp.icp_bssid,
+			cp.icp_flags & IEEE80211_CLONE_MACADDR ?
+			    cp.icp_macaddr : ic->ic_macaddr);
+	if (vap == NULL)
+		return EIO;
+
+	ieee80211_com_vincref(vap);
+	bpf_register_track_event(&vap->iv_rawbpf, bpf_track);
+	return 0;
+}
+
+static int
+wlan_clone_destroy(struct ifnet *ifp)
+{
+	struct ieee80211vap *vap = ifp->if_softc;
+	struct ieee80211com *ic = vap->iv_ic;
+
+	ic->ic_vap_delete(vap);
+	return 0;
+}
+
+void
+ieee80211_vap_destroy(struct ieee80211vap *vap)
+{
+
+	bpf_deregister_track_event(&vap->iv_rawbpf, bpf_track);
+	wlan_clone_destroy(vap->iv_ifp);
+}
+
+int
+ieee80211_sysctl_msecs_ticks(SYSCTLFN_ARGS)
+{
+	struct sysctlnode node = *rnode;
+	int msecs = ticks_to_msecs(*(int *)node.sysctl_data);
+	int error, t;
+
+	node.sysctl_data = &msecs;
+	error = sysctl_lookup(SYSCTLFN_CALL(&node));
+	if (error || (newp == NULL))
+		return error;
+	t = msecs_to_ticks(msecs);
+	*(int *)rnode->sysctl_data = (t < 1) ? 1 : t;
+
+	return 0;
 }
 
 static int
 ieee80211_sysctl_inact(SYSCTLFN_ARGS)
 {
-	int error, t;
-	struct sysctlnode node;
+	struct sysctlnode node = *rnode;
+	int error, inact = (*(int *)node.sysctl_data) * IEEE80211_INACT_WAIT;
 
-	node = *rnode;
-
-	/*
-	 * sysctl_lookup copies the product from t.  Then, it
-	 * copies the new value onto t.
-	 */
-	t = *(int*)rnode->sysctl_data * IEEE80211_INACT_WAIT;
-	node.sysctl_data = &t;
+	node.sysctl_data = &inact;
 	error = sysctl_lookup(SYSCTLFN_CALL(&node));
-	if (error || newp == NULL)
+	if (error || (newp == NULL))
 		return error;
-
-	/*
-	 * The new value was in seconds.  Convert to inactivity-wait
-	 * intervals.  There are IEEE80211_INACT_WAIT seconds per
-	 * interval.
-	 */
-	*(int*)rnode->sysctl_data = t / IEEE80211_INACT_WAIT;
-
+	*(int *)rnode->sysctl_data = inact / IEEE80211_INACT_WAIT;
 	return 0;
 }
 
 static int
 ieee80211_sysctl_parent(SYSCTLFN_ARGS)
 {
-	struct ieee80211com *ic;
+	struct ieee80211vap *vap;
 	char pname[IFNAMSIZ];
-	struct sysctlnode node;
+	struct sysctlnode node = *rnode;
 
-	node = *rnode;
-	ic = node.sysctl_data;
-	strlcpy(pname, ic->ic_ifp->if_xname, IFNAMSIZ);
+	vap = node.sysctl_data;
+	strlcpy(pname, vap->iv_ic->ic_name, IFNAMSIZ);
 	node.sysctl_data = pname;
 	return sysctl_lookup(SYSCTLFN_CALL(&node));
 }
 
+static int
+ieee80211_sysctl_radar(SYSCTLFN_ARGS)
+{
+	struct sysctlnode node = *rnode;
+	struct ieee80211com *ic = node.sysctl_data;
+	int t = 0, error;
+
+	node.sysctl_data = &t;
+	error = sysctl_lookup(SYSCTLFN_CALL(&node));
+	if (error || (newp == NULL))
+		return error;
+
+	IEEE80211_LOCK(ic);
+	ieee80211_dfs_notify_radar(ic, ic->ic_curchan);
+	IEEE80211_UNLOCK(ic);
+
+	return 0;
+}
+
 /*
- * Create or get top of sysctl tree net.link.ieee80211.
+ * For now, just restart everything.
+ *
+ * Later on, it'd be nice to have a separate VAP restart to
+ * full-device restart.
  */
-static const struct sysctlnode *
-ieee80211_sysctl_treetop(struct sysctllog **log)
+static int
+ieee80211_sysctl_vap_restart(SYSCTLFN_ARGS)
+{
+	struct sysctlnode node = *rnode;
+	struct ieee80211vap *vap = node.sysctl_data;
+	int t = 0, error;
+
+	node.sysctl_data = &t;
+	error = sysctl_lookup(SYSCTLFN_CALL(&node));
+	if (error || (newp == NULL))
+		return error;
+
+	ieee80211_restart_all(vap->iv_ic);
+	return 0;
+}
+
+/*
+ * Setup sysctl(3) MIB, net.wlan.*
+ */
+int32_t ieee80211_sysctl_wlan;
+static struct sysctllog	*wlan_sysctl_clog;
+
+SYSCTL_SETUP(sysctl_net_wlan_setup, "sysctl net.wlan subtree setup")
 {
 	int rc;
-	const struct sysctlnode *rnode;
+	const struct sysctlnode *wlan_node;
 
-	if ((rc = sysctl_createv(log, 0, NULL, &rnode,
-	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "link",
-	    "link-layer statistics and controls",
-	    NULL, 0, NULL, 0, CTL_NET, PF_LINK, CTL_EOL)) != 0)
+	if ((rc = sysctl_createv(&wlan_sysctl_clog, 0, NULL, &wlan_node,
+	    CTLFLAG_PERMANENT|CTLFLAG_READWRITE, CTLTYPE_NODE,
+	    wlanname, SYSCTL_DESCR("ieee802.11 operation controll"),
+	    NULL, 0, NULL, 0,
+	    CTL_NET, CTL_CREATE, CTL_EOL)) != 0)
 		goto err;
 
-	if ((rc = sysctl_createv(log, 0, &rnode, &rnode,
-	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "ieee80211",
-	    "IEEE 802.11 WLAN statistics and controls",
-	    NULL, 0, NULL, 0, CTL_CREATE, CTL_EOL)) != 0)
+	/* remember the (dynamic) MIB so we can find this node later */
+	ieee80211_sysctl_wlan = wlan_node->sysctl_num;
+
+#ifdef notyet
+	if ((rc = sysctl_createv(&wlan_sysctl_clog, 0, &wlan_node, NULL,
+	    CTLFLAG_PERMANENT, CTLTYPE_NODE,
+	    "nodes", SYSCTL_DESCR("client/peer stations"),
+	    ieee80211_sysctl_node, 0, NULL, 0, CTL_CREATE, CTL_EOL)) != 0)
+		goto err;
+#endif
+
+#ifdef IEEE80211_DEBUG
+	/* control debugging printfs */
+	if ((rc = sysctl_createv(&wlan_sysctl_clog, 0, &wlan_node, NULL,
+	    CTLFLAG_PERMANENT|CTLFLAG_READWRITE, CTLTYPE_INT,
+	    "debug", SYSCTL_DESCR("control debugging printfs"),
+	    NULL, 0, &ieee80211_debug, 0, CTL_CREATE, CTL_EOL)) != 0)
 		goto err;
 
-	return rnode;
+	if ((rc = sysctl_createv(&wlan_sysctl_clog, 0, &wlan_node, NULL,
+	    CTLFLAG_PERMANENT|CTLFLAG_READWRITE, CTLTYPE_INT,
+	    "debug_console", SYSCTL_DESCR("debug output goes to kernel console"),
+	    NULL, 0, &ieee80211_debug_printf, 0, CTL_CREATE, CTL_EOL)) != 0)
+		goto err;
+#endif
+
+	/* list of devices */
+	if ((rc = sysctl_createv(&wlan_sysctl_clog, 0, &wlan_node, NULL,
+	    CTLFLAG_PERMANENT|CTLFLAG_READWRITE, CTLTYPE_STRING,
+	    "devices",
+	    SYSCTL_DESCR("names of available 802.11 devices"),
+	    sysctl_ieee80211coms, 0, NULL, 0, CTL_CREATE, CTL_EOL)) != 0)
+		goto err;
+
+	return;
 err:
-	printf("%s: sysctl_createv failed, rc = %d\n", __func__, rc);
-	return NULL;
+#ifdef IEEE80211_DEBUG
+	printf("%s: sysctl_createv failed (rc = %d)\n", __func__, rc);
+#endif
+	return;
 }
 
 void
 ieee80211_sysctl_attach(struct ieee80211com *ic)
 {
+}
+
+void
+ieee80211_sysctl_detach(struct ieee80211com *ic)
+{
+}
+
+void
+ieee80211_sysctl_vattach(struct ieee80211vap *vap)
+{
+	struct ifnet *ifp = vap->iv_ifp;
+	struct sysctllog *ctx = NULL;
+	int32_t oid;
 	int rc;
-	const struct sysctlnode *cnode, *rnode;
-	char num[sizeof("vap") + 14];		/* sufficient for 32 bits */
+	const struct sysctlnode *rnode;
 
-	if ((rnode = ieee80211_sysctl_treetop(NULL)) == NULL)
-		return;
+	if ((rc = sysctl_createv(&ctx, 0, NULL, &rnode,
+	    0, CTLTYPE_NODE, ifp->if_xname, SYSCTL_DESCR("virtual AP"),
+	    NULL, 0, NULL, 0,
+	    CTL_NET, ieee80211_sysctl_wlan, CTL_CREATE, CTL_EOL)) != 0)
+		goto err;
+	oid = rnode->sysctl_num;
 
-	snprintf(num, sizeof(num), "vap%u", ic->ic_vap);
-
-	if ((rc = sysctl_createv(&ic->ic_sysctllog, 0, &rnode, &rnode,
-	    CTLFLAG_PERMANENT, CTLTYPE_NODE, num, SYSCTL_DESCR("virtual AP"),
-	    NULL, 0, NULL, 0, CTL_CREATE, CTL_EOL)) != 0)
+	if ((rc = sysctl_createv(&ctx, 0, &rnode, NULL,
+	    CTLFLAG_READONLY, CTLTYPE_STRING,
+	    "parent", SYSCTL_DESCR("parent device"),
+	    ieee80211_sysctl_parent, 0, (void *)vap, IFNAMSIZ,
+	    CTL_CREATE, CTL_EOL)) != 0)
 		goto err;
 
-	/* control debugging printfs */
-	if ((rc = sysctl_createv(&ic->ic_sysctllog, 0, &rnode, &cnode,
-	    CTLFLAG_PERMANENT|CTLFLAG_READONLY, CTLTYPE_STRING,
-	    "parent", SYSCTL_DESCR("parent device"),
-	    ieee80211_sysctl_parent, 0, (void *)ic, IFNAMSIZ, CTL_CREATE,
-	    CTL_EOL)) != 0)
+	if ((rc = sysctl_createv(&ctx, 0, &rnode, NULL,
+	    CTLFLAG_READWRITE, CTLTYPE_INT,
+	    "driver_caps", SYSCTL_DESCR("driver capabilities"),
+	    NULL, 0, &vap->iv_caps, sizeof(vap->iv_caps),
+	    CTL_CREATE, CTL_EOL)) != 0)
 		goto err;
 
 #ifdef IEEE80211_DEBUG
-	/* control debugging printfs */
-	if ((rc = sysctl_createv(&ic->ic_sysctllog, 0, &rnode, &cnode,
-	    CTLFLAG_PERMANENT|CTLFLAG_READWRITE, CTLTYPE_INT,
+	if ((rc = sysctl_createv(&ctx, 0, &rnode, NULL,
+	    CTLFLAG_READWRITE, CTLTYPE_INT,
 	    "debug", SYSCTL_DESCR("control debugging printfs"),
-	    NULL, ieee80211_debug, &ic->ic_debug, 0,
+	    NULL, 0, &vap->iv_debug, sizeof(vap->iv_debug),
 	    CTL_CREATE, CTL_EOL)) != 0)
 		goto err;
 #endif
-	/* XXX inherit from tunables */
-	if ((rc = sysctl_createv(&ic->ic_sysctllog, 0, &rnode, &cnode,
-	    CTLFLAG_PERMANENT|CTLFLAG_READWRITE, CTLTYPE_INT,
-	    "inact_run", SYSCTL_DESCR("station inactivity timeout (sec)"),
-	    ieee80211_sysctl_inact, 0, &ic->ic_inact_run, 0,
+
+	if ((rc = sysctl_createv(&ctx, 0, &rnode, NULL,
+	    CTLFLAG_READWRITE, CTLTYPE_INT,
+	    "bmiss_max",
+	    SYSCTL_DESCR("consecutive beacon misses before scanning"),
+	    NULL, 0, &vap->iv_bmiss_max, sizeof(vap->iv_bmiss_max),
 	    CTL_CREATE, CTL_EOL)) != 0)
-		goto err;
-	if ((rc = sysctl_createv(&ic->ic_sysctllog, 0, &rnode, &cnode,
-	    CTLFLAG_PERMANENT|CTLFLAG_READWRITE, CTLTYPE_INT,
-	    "inact_probe",
-	    SYSCTL_DESCR("station inactivity probe timeout (sec)"),
-	    ieee80211_sysctl_inact, 0, &ic->ic_inact_probe, 0,
-	    CTL_CREATE, CTL_EOL)) != 0)
-		goto err;
-	if ((rc = sysctl_createv(&ic->ic_sysctllog, 0, &rnode, &cnode,
-	    CTLFLAG_PERMANENT|CTLFLAG_READWRITE, CTLTYPE_INT,
-	    "inact_auth",
-	    SYSCTL_DESCR("station authentication timeout (sec)"),
-	    ieee80211_sysctl_inact, 0, &ic->ic_inact_auth, 0,
-	    CTL_CREATE, CTL_EOL)) != 0)
-		goto err;
-	if ((rc = sysctl_createv(&ic->ic_sysctllog, 0, &rnode, &cnode,
-	    CTLFLAG_PERMANENT|CTLFLAG_READWRITE, CTLTYPE_INT,
-	    "inact_init",
-	    SYSCTL_DESCR("station initial state timeout (sec)"),
-	    ieee80211_sysctl_inact, 0, &ic->ic_inact_init, 0,
-	    CTL_CREATE, CTL_EOL)) != 0)
-		goto err;
-	if ((rc = sysctl_createv(&ic->ic_sysctllog, 0, &rnode, &cnode,
-	    CTLFLAG_PERMANENT|CTLFLAG_READWRITE, CTLTYPE_INT,
-	    "driver_caps", SYSCTL_DESCR("driver capabilities"),
-	    NULL, 0, &ic->ic_caps, 0, CTL_CREATE, CTL_EOL)) != 0)
-		goto err;
-	if ((rc = sysctl_createv(&ic->ic_sysctllog, 0, &rnode, &cnode,
-	    CTLFLAG_PERMANENT|CTLFLAG_READWRITE, CTLTYPE_INT,
-	    "bmiss_max", SYSCTL_DESCR("consecutive beacon misses before scanning"),
-	    NULL, 0, &ic->ic_bmiss_max, 0, CTL_CREATE, CTL_EOL)) != 0)
 		goto err;
 
+	/* XXX inherit from tunables */
+	if ((rc = sysctl_createv(&ctx, 0, &rnode, NULL,
+	    CTLFLAG_READWRITE, CTLTYPE_INT,
+	    "inact_run",
+	    SYSCTL_DESCR("station inactivity timeout (sec)"),
+	    ieee80211_sysctl_inact, 0,
+	    &vap->iv_inact_run, sizeof(vap->iv_inact_run),
+	    CTL_CREATE, CTL_EOL)) != 0)
+		goto err;
+
+	if ((rc = sysctl_createv(&ctx, 0, &rnode, NULL,
+	    CTLFLAG_READWRITE, CTLTYPE_INT,
+	    "inact_probe",
+	    SYSCTL_DESCR("station inactivity probe timeout (sec)"),
+	    ieee80211_sysctl_inact, 0,
+	    &vap->iv_inact_probe, sizeof(vap->iv_inact_probe),
+	    CTL_CREATE, CTL_EOL)) != 0)
+		goto err;
+
+	if ((rc = sysctl_createv(&ctx, 0, &rnode, NULL,
+	    CTLFLAG_READWRITE, CTLTYPE_INT,
+	    "inact_auth",
+	    SYSCTL_DESCR("station authentication timeout (sec)"),
+	    ieee80211_sysctl_inact, 0,
+	    &vap->iv_inact_auth, sizeof(vap->iv_inact_auth),
+	    CTL_CREATE, CTL_EOL)) != 0)
+		goto err;
+
+	if ((rc = sysctl_createv(&ctx, 0, &rnode, NULL,
+	    CTLFLAG_READWRITE, CTLTYPE_INT,
+	    "inact_init",
+	    SYSCTL_DESCR("station initial state timeout (sec)"),
+	    ieee80211_sysctl_inact, 0,
+	    &vap->iv_inact_init, sizeof(vap->iv_inact_init),
+	    CTL_CREATE, CTL_EOL)) != 0)
+		goto err;
+
+	if (vap->iv_htcaps & IEEE80211_HTC_HT) {
+		if ((rc = sysctl_createv(&ctx, 0, &rnode, NULL,
+		    CTLFLAG_READWRITE|CTLFLAG_UNSIGNED, CTLTYPE_INT,
+		    "ampdu_mintraffic_bk",
+		    SYSCTL_DESCR("BK traffic tx aggr threshold (pps)"),
+		    NULL, 0, &vap->iv_ampdu_mintraffic[WME_AC_BK],
+		    sizeof(vap->iv_ampdu_mintraffic[WME_AC_BK]),
+		    CTL_CREATE, CTL_EOL)) != 0)
+			goto err;
+
+		if ((rc = sysctl_createv(&ctx, 0, &rnode, NULL,
+		    CTLFLAG_READWRITE|CTLFLAG_UNSIGNED, CTLTYPE_INT,
+		    "ampdu_mintraffic_be",
+		    SYSCTL_DESCR("BE traffic tx aggr threshold (pps)"),
+		    NULL, 0, &vap->iv_ampdu_mintraffic[WME_AC_BE],
+		    sizeof(vap->iv_ampdu_mintraffic[WME_AC_BE]),
+		    CTL_CREATE, CTL_EOL)) != 0)
+			goto err;
+
+		if ((rc = sysctl_createv(&ctx, 0, &rnode, NULL,
+		    CTLFLAG_READWRITE|CTLFLAG_UNSIGNED, CTLTYPE_INT,
+		    "ampdu_mintraffic_vo",
+		    SYSCTL_DESCR("VO traffic tx aggr threshold (pps)"),
+		    NULL, 0, &vap->iv_ampdu_mintraffic[WME_AC_VO],
+		    sizeof(vap->iv_ampdu_mintraffic[WME_AC_VO]),
+		    CTL_CREATE, CTL_EOL)) != 0)
+			goto err;
+
+		if ((rc = sysctl_createv(&ctx, 0, &rnode, NULL,
+		    CTLFLAG_READWRITE|CTLFLAG_UNSIGNED, CTLTYPE_INT,
+		    "ampdu_mintraffic_vi",
+		    SYSCTL_DESCR("VI traffic tx aggr threshold (pps)"),
+		    NULL, 0, &vap->iv_ampdu_mintraffic[WME_AC_VI],
+		    sizeof(vap->iv_ampdu_mintraffic[WME_AC_VI]),
+		    CTL_CREATE, CTL_EOL)) != 0)
+			goto err;
+	}
+
+	if ((rc = sysctl_createv(&ctx, 0, &rnode, NULL,
+	    CTLFLAG_READWRITE, CTLTYPE_INT,
+	    "force_restart",
+	    SYSCTL_DESCR("force a VAP restart"),
+	    ieee80211_sysctl_vap_restart, 0, (void*)vap, 0,
+	    CTL_CREATE, CTL_EOL)) != 0)
+		goto err;
+
+	if (vap->iv_caps & IEEE80211_C_DFS) {
+		if ((rc = sysctl_createv(&ctx, 0, &rnode, NULL,
+		    CTLFLAG_READWRITE, CTLTYPE_INT,
+		    "radar",
+		    SYSCTL_DESCR("simulate radar even"),
+		    ieee80211_sysctl_radar, 0, (void*)vap->iv_ic, 0,
+		    CTL_CREATE, CTL_EOL)) != 0)
+			goto err;
+	}
+
+	vap->iv_sysctl = ctx;
+	vap->iv_oid = oid;
 	return;
 err:
 	printf("%s: sysctl_createv failed, rc = %d\n", __func__, rc);
 }
 
 void
-ieee80211_sysctl_detach(struct ieee80211com *ic)
+ieee80211_sysctl_vdetach(struct ieee80211vap *vap)
 {
-	sysctl_teardown(&ic->ic_sysctllog);
+	if (vap->iv_sysctl != NULL) {
+		sysctl_teardown(&vap->iv_sysctl);
+		vap->iv_sysctl = NULL;
+	}
 }
 
-/*
- * Pointers for testing:
- *
- *	If there are no interfaces, or else no 802.11 interfaces,
- *	ieee80211_node_walkfirst must return NULL.
- *
- *	If there is any single 802.11 interface, ieee80211_node_walkfirst
- *	must not return NULL.
- */
-static struct ieee80211_node *
-ieee80211_node_walkfirst(struct ieee80211_node_walk *nw, u_short if_index)
+int
+ieee80211_com_vincref(struct ieee80211vap *vap)
 {
-	memset(nw, 0, sizeof(*nw));
+	uint32_t ostate;
 
-	nw->nw_ifindex = if_index;
+	ostate = atomic_add_32_nv(&vap->iv_com_state, IEEE80211_COM_REF_ADD);
 
-	LIST_FOREACH(nw->nw_ic, &ieee80211com_head, ic_list) {
-		if (if_index != 0 && nw->nw_ic->ic_ifp->if_index != if_index)
-			continue;
-		if (!TAILQ_EMPTY(&nw->nw_ic->ic_sta.nt_node))
-			nw->nw_nt = &nw->nw_ic->ic_sta;
-		else if (!TAILQ_EMPTY(&nw->nw_ic->ic_scan.nt_node))
-			nw->nw_nt = &nw->nw_ic->ic_scan;
-		else if (nw->nw_ic->ic_bss == NULL)
-			continue;
-		break;
+	if (ostate & IEEE80211_COM_DETACHED) {
+		atomic_add_32(&vap->iv_com_state, -IEEE80211_COM_REF_ADD);
+		return (ENETDOWN);
 	}
 
-	if (nw->nw_ic == NULL)
-		return NULL;
-
-	if (nw->nw_nt == NULL)
-		nw->nw_ni = nw->nw_ic->ic_bss;
-	else
-		nw->nw_ni = TAILQ_FIRST(&nw->nw_nt->nt_node);
-
-	return nw->nw_ni;
-}
-
-static struct ieee80211_node *
-ieee80211_node_walknext(struct ieee80211_node_walk *nw)
-{
-	if (nw->nw_nt != NULL)
-		nw->nw_ni = TAILQ_NEXT(nw->nw_ni, ni_list);
-	else
-		nw->nw_ni = NULL;
-
-	while (nw->nw_ni == NULL) {
-		if (nw->nw_nt == &nw->nw_ic->ic_sta) {
-			nw->nw_nt = &nw->nw_ic->ic_scan;
-			nw->nw_ni = TAILQ_FIRST(&nw->nw_nt->nt_node);
-			continue;
-		} else if (nw->nw_nt == &nw->nw_ic->ic_scan) {
-			nw->nw_nt = NULL;
-			nw->nw_ni = nw->nw_ic->ic_bss;
-			continue;
-		}
-		KASSERT(nw->nw_nt == NULL);
-		if (nw->nw_ifindex != 0)
-			return NULL;
-
-		nw->nw_ic = LIST_NEXT(nw->nw_ic, ic_list);
-		if (nw->nw_ic == NULL)
-			return NULL;
-
-		nw->nw_nt = &nw->nw_ic->ic_sta;
-		nw->nw_ni = TAILQ_FIRST(&nw->nw_nt->nt_node);
+	if (_IEEE80211_MASKSHIFT(ostate, IEEE80211_COM_REF) ==
+             IEEE80211_COM_REF_MAX) {
+		atomic_add_32(&vap->iv_com_state, -IEEE80211_COM_REF_ADD);
+		return (EOVERFLOW);
 	}
 
-	return nw->nw_ni;
+	return (0);
 }
 
-static void
-ieee80211_sysctl_fill_node(struct ieee80211_node *ni,
-    struct ieee80211_node_sysctl *ns, int ifindex,
-    const struct ieee80211_channel *chan0, uint32_t flags)
+void
+ieee80211_com_vdecref(struct ieee80211vap *vap)
 {
-	memset(ns, 0, sizeof(*ns));
+	uint32_t ostate __diagused;
 
-	ns->ns_ifindex = ifindex;
-	ns->ns_capinfo = ni->ni_capinfo;
-	ns->ns_flags = flags;
-	memcpy(ns->ns_macaddr, ni->ni_macaddr, sizeof(ns->ns_macaddr));
-	memcpy(ns->ns_bssid, ni->ni_bssid, sizeof(ns->ns_bssid));
-	if (ni->ni_chan != IEEE80211_CHAN_ANYC) {
-		ns->ns_freq = ni->ni_chan->ic_freq;
-		ns->ns_chanflags = ni->ni_chan->ic_flags;
-		ns->ns_chanidx = ni->ni_chan - chan0;
-	} else {
-		ns->ns_freq = ns->ns_chanflags = 0;
-		ns->ns_chanidx = 0;
-	}
-	ns->ns_rssi = ni->ni_rssi;
-	ns->ns_esslen = ni->ni_esslen;
-	memcpy(ns->ns_essid, ni->ni_essid, sizeof(ns->ns_essid));
-	ns->ns_erp = ni->ni_erp;
-	ns->ns_associd = ni->ni_associd;
-	ns->ns_inact = ni->ni_inact * IEEE80211_INACT_WAIT;
-	ns->ns_rstamp = ni->ni_rstamp;
-	ns->ns_rates = ni->ni_rates;
-	ns->ns_txrate = ni->ni_txrate;
-	ns->ns_intval = ni->ni_intval;
-	memcpy(ns->ns_tstamp, &ni->ni_tstamp, sizeof(ns->ns_tstamp));
-	ns->ns_txseq = ni->ni_txseqs[0];
-	ns->ns_rxseq = ni->ni_rxseqs[0];
-	ns->ns_fhdwell = ni->ni_fhdwell;
-	ns->ns_fhindex = ni->ni_fhindex;
-	ns->ns_fails = ni->ni_fails;
+	ostate = atomic_add_32_nv(&vap->iv_com_state, -IEEE80211_COM_REF_ADD);
+
+	KASSERTMSG(_IEEE80211_MASKSHIFT(ostate, IEEE80211_COM_REF) != 0,
+	    "com reference counter underflow: %u", ostate);
 }
 
-/* Between two examinations of the sysctl tree, I expect each
- * interface to add no more than 5 nodes.
- */
-#define IEEE80211_SYSCTL_NODE_GROWTH	5
-
-static int
-ieee80211_sysctl_node(SYSCTLFN_ARGS)
+void
+ieee80211_com_vdetach(struct ieee80211vap *vap)
 {
-	struct ieee80211_node_walk nw;
-	struct ieee80211_node *ni;
-	struct ieee80211_node_sysctl ns;
-	char *dp;
-	u_int cur_ifindex, ifcount, ifindex, last_ifindex, op, arg, hdr_type;
-	uint32_t flags;
-	size_t len, needed, eltsize, out_size;
-	int error, s, saw_bss = 0, nelt;
+	int sleep_time;
 
-	if (namelen == 1 && name[0] == CTL_QUERY)
-		return (sysctl_query(SYSCTLFN_CALL(rnode)));
-
-	if (namelen != IEEE80211_SYSCTL_NODENAMELEN)
-		return (EINVAL);
-
-	/* ifindex.op.arg.header-type.eltsize.nelt */
-	dp = oldp;
-	len = (oldp != NULL) ? *oldlenp : 0;
-	ifindex = name[IEEE80211_SYSCTL_NODENAME_IF];
-	op = name[IEEE80211_SYSCTL_NODENAME_OP];
-	arg = name[IEEE80211_SYSCTL_NODENAME_ARG];
-	hdr_type = name[IEEE80211_SYSCTL_NODENAME_TYPE];
-	eltsize = name[IEEE80211_SYSCTL_NODENAME_ELTSIZE];
-	nelt = name[IEEE80211_SYSCTL_NODENAME_ELTCOUNT];
-	out_size = MIN(sizeof(ns), eltsize);
-
-	if (op != IEEE80211_SYSCTL_OP_ALL || arg != 0 ||
-	    hdr_type != IEEE80211_SYSCTL_T_NODE || eltsize < 1 || nelt < 0)
-		return (EINVAL);
-
-	error = 0;
-	needed = 0;
-	ifcount = 0;
-	last_ifindex = 0;
-
-	s = splnet();
-
-	for (ni = ieee80211_node_walkfirst(&nw, ifindex); ni != NULL;
-	     ni = ieee80211_node_walknext(&nw)) {
-		struct ieee80211com *ic;
-
-		ic = nw.nw_ic;
-		cur_ifindex = ic->ic_ifp->if_index;
-
-		if (cur_ifindex != last_ifindex) {
-			saw_bss = 0;
-			ifcount++;
-			last_ifindex = cur_ifindex;
-		}
-
-		if (nelt <= 0)
-			continue;
-
-		if (saw_bss && ni == ic->ic_bss)
-			continue;
-		else if (ni == ic->ic_bss) {
-			saw_bss = 1;
-			flags = IEEE80211_NODE_SYSCTL_F_BSS;
-		} else
-			flags = 0;
-		if (ni->ni_table == &ic->ic_scan)
-			flags |= IEEE80211_NODE_SYSCTL_F_SCAN;
-		else if (ni->ni_table == &ic->ic_sta)
-			flags |= IEEE80211_NODE_SYSCTL_F_STA;
-		if (len >= eltsize) {
-			ieee80211_sysctl_fill_node(ni, &ns, cur_ifindex,
-			    &ic->ic_channels[0], flags);
-			error = copyout(&ns, dp, out_size);
-			if (error)
-				goto cleanup;
-			dp += eltsize;
-			len -= eltsize;
-		}
-		needed += eltsize;
-		if (nelt != INT_MAX)
-			nelt--;
-	}
-cleanup:
-	splx(s);
-
-	*oldlenp = needed;
-	if (oldp == NULL)
-		*oldlenp += ifcount * IEEE80211_SYSCTL_NODE_GROWTH * eltsize;
-
-	return (error);
+	sleep_time = msecs_to_ticks(250);
+	atomic_swap_32(&vap->iv_com_state, IEEE80211_COM_DETACHED);
+	while (_IEEE80211_MASKSHIFT(atomic_load_relaxed(&vap->iv_com_state),
+                                    IEEE80211_COM_REF) != 0)
+		kpause("comref", false, sleep_time, NULL);
 }
-
-/*
- * Setup sysctl(3) MIB, net.ieee80211.*
- *
- * TBD condition CTLFLAG_PERMANENT on being a module or not
- */
-static struct sysctllog *ieee80211_sysctllog;
-static void
-ieee80211_sysctl_setup(void)
-{
-	int rc;
-	const struct sysctlnode *rnode;
-
-	if ((rnode = ieee80211_sysctl_treetop(&ieee80211_sysctllog)) == NULL)
-		return;
-
-	if ((rc = sysctl_createv(&ieee80211_sysctllog, 0, &rnode, NULL,
-	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "nodes", "client/peer stations",
-	    ieee80211_sysctl_node, 0, NULL, 0, CTL_CREATE, CTL_EOL)) != 0)
-		goto err;
-
-#ifdef IEEE80211_DEBUG
-	/* control debugging printfs */
-	if ((rc = sysctl_createv(&ieee80211_sysctllog, 0, &rnode, NULL,
-	    CTLFLAG_PERMANENT|CTLFLAG_READWRITE, CTLTYPE_INT,
-	    "debug", SYSCTL_DESCR("control debugging printfs"),
-	    NULL, 0, &ieee80211_debug, 0, CTL_CREATE, CTL_EOL)) != 0)
-		goto err;
-#endif
-
-	ieee80211_rssadapt_sysctl_setup(&ieee80211_sysctllog);
-
-	return;
-err:
-	printf("%s: sysctl_createv failed (rc = %d)\n", __func__, rc);
-}
+#undef	MS
 
 int
 ieee80211_node_dectestref(struct ieee80211_node *ni)
 {
-	if (atomic_dec_uint_nv(&ni->ni_refcnt) == 0) {
-		atomic_inc_uint(&ni->ni_refcnt);
-		return 1;
-	} else
-		return 0;
+	/* XXX need equivalent of atomic_dec_and_test */
+	atomic_subtract_int(&ni->ni_refcnt, 1);
+	return atomic_cas_uint(&ni->ni_refcnt, 0, 1) == 0;
 }
 
 void
@@ -521,27 +652,48 @@ ieee80211_drain_ifq(struct ifqueue *ifq)
 		if (m == NULL)
 			break;
 
-		ni = M_GETCTX(m, struct ieee80211_node *);
-		KASSERT(ni != NULL);
+		ni = IEEE80211_MBUF_GETNODE(m, struct ieee80211_node *);
+		KASSERTMSG(ni != NULL, "frame w/o node");
 		ieee80211_free_node(ni);
-		M_SETCTX(m, NULL);
-
-		m_freem(m);
+		ieee80211_free_mbuf(m);
 	}
 }
 
 void
-if_printf(struct ifnet *ifp, const char *fmt, ...)
+ieee80211_flush_ifq(struct ifqueue *ifq, struct ieee80211vap *vap)
 {
-	va_list ap;
-	va_start(ap, fmt);
+	struct ieee80211_node *ni;
+	struct mbuf *m, **mprev;
 
-	printf("%s: ", ifp->if_xname);
-	vprintf(fmt, ap);
+	IFQ_LOCK(ifq);
+	mprev = &ifq->ifq_head;
+	while ((m = *mprev) != NULL) {
+		ni = IEEE80211_MBUF_GETNODE(m, struct ieee80211_node *);
+		if (ni != NULL && ni->ni_vap == vap) {
+			*mprev = m->m_nextpkt;		/* remove from list */
+			ifq->ifq_len--;
 
-	va_end(ap);
-	return;
+			ieee80211_free_node(ni);	/* reclaim ref */
+			ieee80211_free_mbuf(m);
+		} else
+			mprev = &m->m_nextpkt;
+	}
+	/* recalculate tail ptr */
+	m = ifq->ifq_head;
+	for (; m != NULL && m->m_nextpkt != NULL; m = m->m_nextpkt)
+		;
+	ifq->ifq_tail = m;
+	IFQ_UNLOCK(ifq);
 }
+
+/*
+ * As above, for mbufs allocated with m_gethdr/MGETHDR
+ * or initialized by M_COPY_PKTHDR.
+ */
+#define	MC_ALIGN(m, len)						\
+do {									\
+	(m)->m_data += rounddown2(MCLBYTES - (len), sizeof(long));	\
+} while (/* CONSTCOND */ 0)
 
 /*
  * Allocate and setup a management frame of the specified
@@ -553,7 +705,7 @@ if_printf(struct ifnet *ifp, const char *fmt, ...)
  * can use this interface too.
  */
 struct mbuf *
-ieee80211_getmgtframe(u_int8_t **frm, u_int pktlen)
+ieee80211_getmgtframe(uint8_t **frm, int headroom, int pktlen)
 {
 	struct mbuf *m;
 	u_int len;
@@ -562,12 +714,19 @@ ieee80211_getmgtframe(u_int8_t **frm, u_int pktlen)
 	 * NB: we know the mbuf routines will align the data area
 	 *     so we don't need to do anything special.
 	 */
-	/* XXX 4-address frame? */
-	len = roundup(sizeof(struct ieee80211_frame) + pktlen, 4);
-	IASSERT(len <= MCLBYTES, ("802.11 mgt frame too large: %u", len));
+	len = roundup2(headroom + pktlen, 4);
+	KASSERTMSG(len <= MCLBYTES, "802.11 mgt frame too large: %u", len);
 
+	/*
+	 * XXX - recheck after next FreeBSD update!
+	 *
+	 * Upstream is reworking the interface to waste less space,
+	 * for now just do the simple thing: use a single hdr mbuf
+	 * if all data fits (it always does on MSIZE=512 architectures
+	 * like amd64) and wast a full cluster on all others.
+	 */
 	if (len <= MHLEN) {
-		m = m_gethdr(M_NOWAIT, MT_HEADER);
+		m = m_gethdr(M_NOWAIT, MT_DATA);
 		/*
 		 * Align the data in case additional headers are added.
 		 * This should only happen when a WEP header is added
@@ -577,94 +736,347 @@ ieee80211_getmgtframe(u_int8_t **frm, u_int pktlen)
 		if (m != NULL)
 			m_align(m, len);
 	} else {
-		m = m_getcl(M_NOWAIT, MT_HEADER, M_PKTHDR);
+		m = m_getcl(M_NOWAIT, MT_DATA, M_PKTHDR);
+		if (m != NULL)
+			MC_ALIGN(m, len);
 	}
-
 	if (m != NULL) {
-		m->m_data += sizeof(struct ieee80211_frame);
+		m->m_data += headroom;
 		*frm = m->m_data;
-		IASSERT((uintptr_t)*frm % 4 == 0, ("bad beacon boundary"));
 	}
-
 	return m;
 }
 
-void
-get_random_bytes(void *p, size_t n)
+#ifndef __NO_STRICT_ALIGNMENT
+/*
+ * Re-align the payload in the mbuf.  This is mainly used (right now)
+ * to handle IP header alignment requirements on certain architectures.
+ */
+struct mbuf *
+ieee80211_realign(struct ieee80211vap *vap, struct mbuf *m, size_t align)
 {
-	cprng_fast(p, n);
+	int pktlen, space;
+	struct mbuf *n;
+
+	pktlen = m->m_pkthdr.len;
+	space = pktlen + align;
+	n = m_gethdr(M_NOWAIT, MT_DATA);
+	if (space >= MINCLSIZE)
+		MCLGET(n, M_NOWAIT);
+	if (__predict_true(n != NULL)) {
+		m_move_pkthdr(n, m);
+		n->m_data = (caddr_t)(ALIGN(n->m_data + align) - align);
+		m_copydata(m, 0, pktlen, mtod(n, caddr_t));
+		n->m_len = pktlen;
+	} else {
+		IEEE80211_DISCARD(vap, IEEE80211_MSG_ANY,
+		    mtod(m, const struct ieee80211_frame *), NULL,
+		    "%s", "no mbuf to realign");
+		vap->iv_stats.is_rx_badalign++;
+	}
+	m_freem(m);
+	return n;
+}
+#endif /* !__NO_STRICT_ALIGNMENT */
+
+int
+ieee80211_add_callback(struct mbuf *m,
+	void (*func)(struct ieee80211_node *, void *, int), void *arg)
+{
+	struct m_tag *mtag;
+	struct ieee80211_cb *cb;
+
+	mtag = m_tag_get(/*MTAG_ABI_NET80211*/ NET80211_TAG_CALLBACK,
+			sizeof(struct ieee80211_cb), M_NOWAIT);
+	if (mtag == NULL)
+		return 0;
+
+	cb = (struct ieee80211_cb *)(mtag+1);
+	cb->func = func;
+	cb->arg = arg;
+	m_tag_prepend(m, mtag);
+	m->m_flags |= M_TXCB;
+	return 1;
+}
+
+int
+ieee80211_add_xmit_params(struct mbuf *m,
+    const struct ieee80211_bpf_params *params)
+{
+	struct m_tag *mtag;
+	struct ieee80211_tx_params *tx;
+
+	mtag = m_tag_get(/*MTAG_ABI_NET80211*/ NET80211_TAG_XMIT_PARAMS,
+	    sizeof(struct ieee80211_tx_params), M_NOWAIT);
+	if (mtag == NULL)
+		return (0);
+
+	tx = (struct ieee80211_tx_params *)(mtag+1);
+	memcpy(&tx->params, params, sizeof(struct ieee80211_bpf_params));
+	m_tag_prepend(m, mtag);
+	return (1);
+}
+
+int
+ieee80211_get_xmit_params(struct mbuf *m,
+    struct ieee80211_bpf_params *params)
+{
+	struct m_tag *mtag;
+	struct ieee80211_tx_params *tx;
+
+	mtag = m_tag_find(m, /*MTAG_ABI_NET80211,*/ NET80211_TAG_XMIT_PARAMS);
+	if (mtag == NULL)
+		return (-1);
+	tx = (struct ieee80211_tx_params *)(mtag + 1);
+	memcpy(params, &tx->params, sizeof(struct ieee80211_bpf_params));
+	return (0);
 }
 
 void
-ieee80211_notify_node_join(struct ieee80211com *ic, struct ieee80211_node *ni,
-    int newassoc)
+ieee80211_process_callback(struct ieee80211_node *ni,
+	struct mbuf *m, int status)
 {
-	struct ifnet *ifp = ic->ic_ifp;
-	struct ieee80211_join_event iev;
+	struct m_tag *mtag;
 
-	IEEE80211_DPRINTF(ic, IEEE80211_MSG_NODE, "%snode %s join\n",
-	    (ni == ic->ic_bss) ? "bss " : "",
-	    ether_sprintf(ni->ni_macaddr));
-
-	memset(&iev, 0, sizeof(iev));
-	if (ni == ic->ic_bss) {
-		IEEE80211_ADDR_COPY(iev.iev_addr, ni->ni_bssid);
-		rt_ieee80211msg(ifp, newassoc ?
-		    RTM_IEEE80211_ASSOC : RTM_IEEE80211_REASSOC,
-		    &iev, sizeof(iev));
-		if_link_state_change(ifp, LINK_STATE_UP);
-	} else {
-		IEEE80211_ADDR_COPY(iev.iev_addr, ni->ni_macaddr);
-		rt_ieee80211msg(ifp, newassoc ?
-		    RTM_IEEE80211_JOIN : RTM_IEEE80211_REJOIN,
-		    &iev, sizeof(iev));
+	mtag = m_tag_find(m, /*MTAG_ABI_NET80211,*/ NET80211_TAG_CALLBACK);
+	if (mtag != NULL) {
+		struct ieee80211_cb *cb = (struct ieee80211_cb *)(mtag+1);
+		cb->func(ni, cb->arg, status);
 	}
 }
 
-void
-ieee80211_notify_node_leave(struct ieee80211com *ic, struct ieee80211_node *ni)
+/*
+ * Add RX parameters to the given mbuf.
+ *
+ * Returns 1 if OK, 0 on error.
+ */
+int
+ieee80211_add_rx_params(struct mbuf *m, const struct ieee80211_rx_stats *rxs)
 {
-	struct ifnet *ifp = ic->ic_ifp;
-	struct ieee80211_leave_event iev;
+	struct m_tag *mtag;
+	struct ieee80211_rx_params *rx;
 
-	IEEE80211_DPRINTF(ic, IEEE80211_MSG_NODE, "%snode %s leave\n",
-	    (ni == ic->ic_bss) ? "bss " : "",
-	    ether_sprintf(ni->ni_macaddr));
+	mtag = m_tag_get(/*MTAG_ABI_NET80211,*/ NET80211_TAG_RECV_PARAMS,
+	    sizeof(struct ieee80211_rx_stats), M_NOWAIT);
+	if (mtag == NULL)
+		return (0);
 
-	if (ni == ic->ic_bss) {
+	rx = (struct ieee80211_rx_params *)(mtag + 1);
+	memcpy(&rx->params, rxs, sizeof(*rxs));
+	m_tag_prepend(m, mtag);
+	return (1);
+}
+
+int
+ieee80211_get_rx_params(struct mbuf *m, struct ieee80211_rx_stats *rxs)
+{
+	struct m_tag *mtag;
+	struct ieee80211_rx_params *rx;
+
+	mtag = m_tag_find(m, /*MTAG_ABI_NET80211,*/ NET80211_TAG_RECV_PARAMS);
+	if (mtag == NULL)
+		return (-1);
+	rx = (struct ieee80211_rx_params *)(mtag + 1);
+	memcpy(rxs, &rx->params, sizeof(*rxs));
+	return (0);
+}
+
+const struct ieee80211_rx_stats *
+ieee80211_get_rx_params_ptr(struct mbuf *m)
+{
+	struct m_tag *mtag;
+	struct ieee80211_rx_params *rx;
+
+	mtag = m_tag_find(m, /*MTAG_ABI_NET80211,*/ NET80211_TAG_RECV_PARAMS);
+	if (mtag == NULL)
+		return (NULL);
+	rx = (struct ieee80211_rx_params *)(mtag + 1);
+	return (&rx->params);
+}
+
+
+/*
+ * Add TOA parameters to the given mbuf.
+ */
+int
+ieee80211_add_toa_params(struct mbuf *m, const struct ieee80211_toa_params *p)
+{
+	struct m_tag *mtag;
+	struct ieee80211_toa_params *rp;
+
+	mtag = m_tag_get(/*MTAG_ABI_NET80211,*/ NET80211_TAG_TOA_PARAMS,
+	    sizeof(struct ieee80211_toa_params), M_NOWAIT);
+	if (mtag == NULL)
+		return (0);
+
+	rp = (struct ieee80211_toa_params *)(mtag + 1);
+	memcpy(rp, p, sizeof(*rp));
+	m_tag_prepend(m, mtag);
+	return (1);
+}
+
+int
+ieee80211_get_toa_params(struct mbuf *m, struct ieee80211_toa_params *p)
+{
+	struct m_tag *mtag;
+	struct ieee80211_toa_params *rp;
+
+	mtag = m_tag_find(m, /*MTAG_ABI_NET80211,*/ NET80211_TAG_TOA_PARAMS);
+	if (mtag == NULL)
+		return (0);
+	rp = (struct ieee80211_toa_params *)(mtag + 1);
+	if (p != NULL)
+		memcpy(p, rp, sizeof(*p));
+	return (1);
+}
+
+/*
+ * Transmit a frame to the parent interface.
+ */
+int
+ieee80211_parent_xmitpkt(struct ieee80211com *ic, struct mbuf *m)
+{
+	struct ieee80211_node *ni;
+	struct ifnet *ifp;
+	size_t pktlen = m->m_pkthdr.len;
+	int error;
+	bool mcast = (m->m_flags & M_MCAST) != 0;
+
+	ni = IEEE80211_MBUF_GETNODE(m, struct ieee80211_node *);
+	ifp = ni->ni_vap->iv_ifp;
+
+	/*
+	 * Assert the IC TX lock is held - this enforces the
+	 * processing -> queuing order is maintained
+	 */
+	IEEE80211_TX_LOCK_ASSERT(ic);
+	error = ic->ic_transmit(ic, m);
+	if (error) {
+		/* XXX number of fragments */
+		if_inc_counter(ifp, IFCOUNTER_OERRORS, 1);
+		ieee80211_free_node(ni);
+		ieee80211_free_mbuf(m);
+	} else {
+		net_stat_ref_t nsr = IF_STAT_GETREF(ifp);
+		if_statadd_ref(ifp, nsr, if_obytes, pktlen);
+		if (mcast)
+			if_statinc_ref(ifp, nsr, if_omcasts);
+		IF_STAT_PUTREF(ifp);
+	}
+	return (error);
+}
+
+/*
+ * Transmit a frame to the VAP interface.
+ */
+int
+ieee80211_vap_xmitpkt(struct ieee80211vap *vap, struct mbuf *m)
+{
+	struct ifnet *ifp = vap->iv_ifp;
+
+	/*
+	 * When transmitting via the VAP, we shouldn't hold
+	 * any IC TX lock as the VAP TX path will acquire it.
+	 */
+	IEEE80211_TX_UNLOCK_ASSERT(vap->iv_ic);
+
+	return (ifp->if_transmit(ifp, m));
+
+}
+
+void
+net80211_get_random_bytes(void *p, size_t n)
+{
+	uint8_t *dp = p;
+
+	while (n > 0) {
+		uint32_t v = arc4random();
+		size_t nb = n > sizeof(uint32_t) ? sizeof(uint32_t) : n;
+		bcopy(&v, dp, n > sizeof(uint32_t) ? sizeof(uint32_t) : n);
+		dp += sizeof(uint32_t), n -= nb;
+	}
+}
+
+/*
+ * Helper function for events that pass just a single mac address.
+ */
+static void
+notify_macaddr(struct ifnet *ifp, int op, const uint8_t mac[IEEE80211_ADDR_LEN])
+{
+	struct ieee80211_join_event iev;
+
+	CURVNET_SET(ifp->if_vnet);
+	memset(&iev, 0, sizeof(iev));
+	IEEE80211_ADDR_COPY(iev.iev_addr, mac);
+	rt_ieee80211msg(ifp, op, &iev, sizeof(iev));
+	CURVNET_RESTORE();
+}
+
+void
+ieee80211_notify_node_join(struct ieee80211_node *ni, int newassoc)
+{
+	struct ieee80211vap *vap = ni->ni_vap;
+	struct ifnet *ifp = vap->iv_ifp;
+
+	CURVNET_SET_QUIET(ifp->if_vnet);
+	IEEE80211_NOTE(vap, IEEE80211_MSG_NODE, ni, "%snode join",
+	    (ni == vap->iv_bss) ? "bss " : "");
+
+	if (ni == vap->iv_bss) {
+		notify_macaddr(ifp, newassoc ?
+		    RTM_IEEE80211_ASSOC : RTM_IEEE80211_REASSOC, ni->ni_bssid);
+		if_link_state_change(ifp, LINK_STATE_UP);
+	} else {
+		notify_macaddr(ifp, newassoc ?
+		    RTM_IEEE80211_JOIN : RTM_IEEE80211_REJOIN, ni->ni_macaddr);
+	}
+	CURVNET_RESTORE();
+}
+
+void
+ieee80211_notify_node_leave(struct ieee80211_node *ni)
+{
+	struct ieee80211vap *vap = ni->ni_vap;
+	struct ifnet *ifp = vap->iv_ifp;
+
+	CURVNET_SET_QUIET(ifp->if_vnet);
+	IEEE80211_NOTE(vap, IEEE80211_MSG_NODE, ni, "%snode leave",
+	    (ni == vap->iv_bss) ? "bss " : "");
+
+	if (ni == vap->iv_bss) {
 		rt_ieee80211msg(ifp, RTM_IEEE80211_DISASSOC, NULL, 0);
 		if_link_state_change(ifp, LINK_STATE_DOWN);
 	} else {
 		/* fire off wireless event station leaving */
-		memset(&iev, 0, sizeof(iev));
-		IEEE80211_ADDR_COPY(iev.iev_addr, ni->ni_macaddr);
-		rt_ieee80211msg(ifp, RTM_IEEE80211_LEAVE, &iev, sizeof(iev));
+		notify_macaddr(ifp, RTM_IEEE80211_LEAVE, ni->ni_macaddr);
 	}
+	CURVNET_RESTORE();
 }
 
 void
-ieee80211_notify_scan_done(struct ieee80211com *ic)
+ieee80211_notify_scan_done(struct ieee80211vap *vap)
 {
-	struct ifnet *ifp = ic->ic_ifp;
+	struct ifnet *ifp = vap->iv_ifp;
 
-	IEEE80211_DPRINTF(ic, IEEE80211_MSG_SCAN,
-		"%s", "notify scan done\n");
+	IEEE80211_DPRINTF(vap, IEEE80211_MSG_SCAN, "%s\n", "notify scan done");
 
 	/* dispatch wireless event indicating scan completed */
+	CURVNET_SET(ifp->if_vnet);
 	rt_ieee80211msg(ifp, RTM_IEEE80211_SCAN, NULL, 0);
+	CURVNET_RESTORE();
 }
 
 void
-ieee80211_notify_replay_failure(struct ieee80211com *ic,
+ieee80211_notify_replay_failure(struct ieee80211vap *vap,
 	const struct ieee80211_frame *wh, const struct ieee80211_key *k,
-	u_int64_t rsc)
+	u_int64_t rsc, int tid)
 {
-	struct ifnet *ifp = ic->ic_ifp;
+	struct ifnet *ifp = vap->iv_ifp;
 
-	IEEE80211_DPRINTF(ic, IEEE80211_MSG_CRYPTO,
-	    "[%s] %s replay detected <rsc %ju, csc %ju, keyix %u rxkeyix %u>\n",
-	    ether_sprintf(wh->i_addr2), k->wk_cipher->ic_name,
-	    (intmax_t) rsc, (intmax_t) k->wk_keyrsc,
+	IEEE80211_NOTE_MAC(vap, IEEE80211_MSG_CRYPTO, wh->i_addr2,
+	    "%s replay detected tid %d <rsc %ju, csc %ju, keyix %u rxkeyix %u>",
+	    k->wk_cipher->ic_name, tid, (intmax_t) rsc,
+	    (intmax_t) k->wk_keyrsc[tid],
 	    k->wk_keyix, k->wk_rxkeyix);
 
 	if (ifp != NULL) {		/* NB: for cipher test modules */
@@ -677,22 +1089,23 @@ ieee80211_notify_replay_failure(struct ieee80211com *ic,
 			iev.iev_keyix = k->wk_rxkeyix;
 		else
 			iev.iev_keyix = k->wk_keyix;
-		iev.iev_keyrsc = k->wk_keyrsc;
+		iev.iev_keyrsc = k->wk_keyrsc[tid];
 		iev.iev_rsc = rsc;
+		CURVNET_SET(ifp->if_vnet);
 		rt_ieee80211msg(ifp, RTM_IEEE80211_REPLAY, &iev, sizeof(iev));
+		CURVNET_RESTORE();
 	}
 }
 
 void
-ieee80211_notify_michael_failure(struct ieee80211com *ic,
+ieee80211_notify_michael_failure(struct ieee80211vap *vap,
 	const struct ieee80211_frame *wh, u_int keyix)
 {
-	struct ifnet *ifp = ic->ic_ifp;
+	struct ifnet *ifp = vap->iv_ifp;
 
-	IEEE80211_DPRINTF(ic, IEEE80211_MSG_CRYPTO,
-	    "[%s] michael MIC verification failed <keyix %u>\n",
-	    ether_sprintf(wh->i_addr2), keyix);
-	ic->ic_stats.is_rx_tkipmic++;
+	IEEE80211_NOTE_MAC(vap, IEEE80211_MSG_CRYPTO, wh->i_addr2,
+	    "michael MIC verification failed <keyix %u>", keyix);
+	vap->iv_stats.is_rx_tkipmic++;
 
 	if (ifp != NULL) {		/* NB: for cipher test modules */
 		struct ieee80211_michael_event iev;
@@ -701,14 +1114,143 @@ ieee80211_notify_michael_failure(struct ieee80211com *ic,
 		IEEE80211_ADDR_COPY(iev.iev_src, wh->i_addr2);
 		iev.iev_cipher = IEEE80211_CIPHER_TKIP;
 		iev.iev_keyix = keyix;
+		CURVNET_SET(ifp->if_vnet);
 		rt_ieee80211msg(ifp, RTM_IEEE80211_MICHAEL, &iev, sizeof(iev));
+		CURVNET_RESTORE();
 	}
 }
 
 void
+ieee80211_notify_wds_discover(struct ieee80211_node *ni)
+{
+	struct ieee80211vap *vap = ni->ni_vap;
+	struct ifnet *ifp = vap->iv_ifp;
+
+	notify_macaddr(ifp, RTM_IEEE80211_WDS, ni->ni_macaddr);
+}
+
+void
+ieee80211_notify_csa(struct ieee80211com *ic,
+	const struct ieee80211_channel *c, int mode, int count)
+{
+	struct ieee80211_csa_event iev;
+	struct ieee80211vap *vap;
+	struct ifnet *ifp;
+
+	memset(&iev, 0, sizeof(iev));
+	iev.iev_flags = c->ic_flags;
+	iev.iev_freq = c->ic_freq;
+	iev.iev_ieee = c->ic_ieee;
+	iev.iev_mode = mode;
+	iev.iev_count = count;
+	TAILQ_FOREACH(vap, &ic->ic_vaps, iv_next) {
+		ifp = vap->iv_ifp;
+		CURVNET_SET(ifp->if_vnet);
+		rt_ieee80211msg(ifp, RTM_IEEE80211_CSA, &iev, sizeof(iev));
+		CURVNET_RESTORE();
+	}
+}
+
+void
+ieee80211_notify_radar(struct ieee80211com *ic,
+	const struct ieee80211_channel *c)
+{
+	struct ieee80211_radar_event iev;
+	struct ieee80211vap *vap;
+	struct ifnet *ifp;
+
+	memset(&iev, 0, sizeof(iev));
+	iev.iev_flags = c->ic_flags;
+	iev.iev_freq = c->ic_freq;
+	iev.iev_ieee = c->ic_ieee;
+	TAILQ_FOREACH(vap, &ic->ic_vaps, iv_next) {
+		ifp = vap->iv_ifp;
+		CURVNET_SET(ifp->if_vnet);
+		rt_ieee80211msg(ifp, RTM_IEEE80211_RADAR, &iev, sizeof(iev));
+		CURVNET_RESTORE();
+	}
+}
+
+void
+ieee80211_notify_cac(struct ieee80211com *ic,
+	const struct ieee80211_channel *c, enum ieee80211_notify_cac_event type)
+{
+	struct ieee80211_cac_event iev;
+	struct ieee80211vap *vap;
+	struct ifnet *ifp;
+
+	memset(&iev, 0, sizeof(iev));
+	iev.iev_flags = c->ic_flags;
+	iev.iev_freq = c->ic_freq;
+	iev.iev_ieee = c->ic_ieee;
+	iev.iev_type = type;
+	TAILQ_FOREACH(vap, &ic->ic_vaps, iv_next) {
+		ifp = vap->iv_ifp;
+		CURVNET_SET(ifp->if_vnet);
+		rt_ieee80211msg(ifp, RTM_IEEE80211_CAC, &iev, sizeof(iev));
+		CURVNET_RESTORE();
+	}
+}
+
+void
+ieee80211_notify_node_deauth(struct ieee80211_node *ni)
+{
+	struct ieee80211vap *vap = ni->ni_vap;
+	struct ifnet *ifp = vap->iv_ifp;
+
+	IEEE80211_NOTE(vap, IEEE80211_MSG_NODE, ni, "%s", "node deauth");
+
+	notify_macaddr(ifp, RTM_IEEE80211_DEAUTH, ni->ni_macaddr);
+}
+
+void
+ieee80211_notify_node_auth(struct ieee80211_node *ni)
+{
+	struct ieee80211vap *vap = ni->ni_vap;
+	struct ifnet *ifp = vap->iv_ifp;
+
+	IEEE80211_NOTE(vap, IEEE80211_MSG_NODE, ni, "%s", "node auth");
+
+	notify_macaddr(ifp, RTM_IEEE80211_AUTH, ni->ni_macaddr);
+}
+
+void
+ieee80211_notify_country(struct ieee80211vap *vap,
+	const uint8_t bssid[IEEE80211_ADDR_LEN], const uint8_t cc[2])
+{
+	struct ifnet *ifp = vap->iv_ifp;
+	struct ieee80211_country_event iev;
+
+	memset(&iev, 0, sizeof(iev));
+	IEEE80211_ADDR_COPY(iev.iev_addr, bssid);
+	iev.iev_cc[0] = cc[0];
+	iev.iev_cc[1] = cc[1];
+	CURVNET_SET(ifp->if_vnet);
+	rt_ieee80211msg(ifp, RTM_IEEE80211_COUNTRY, &iev, sizeof(iev));
+	CURVNET_RESTORE();
+}
+
+void
+ieee80211_notify_radio(struct ieee80211com *ic, int state)
+{
+	struct ieee80211_radio_event iev;
+	struct ieee80211vap *vap;
+	struct ifnet *ifp;
+
+	memset(&iev, 0, sizeof(iev));
+	iev.iev_state = state;
+	TAILQ_FOREACH(vap, &ic->ic_vaps, iv_next) {
+		ifp = vap->iv_ifp;
+		CURVNET_SET(ifp->if_vnet);
+		rt_ieee80211msg(ifp, RTM_IEEE80211_RADIO, &iev, sizeof(iev));
+		CURVNET_RESTORE();
+	}
+}
+
+#ifdef notyet
+void
 ieee80211_load_module(const char *modname)
 {
-#ifdef notyet
 	struct thread *td = curthread;
 
 	if (suser(td) == 0 && securelevel_gt(td->td_ucred, 0) == 0) {
@@ -716,12 +1258,134 @@ ieee80211_load_module(const char *modname)
 		(void) linker_load_module(modname, NULL, NULL, NULL, NULL);
 		mtx_unlock(&Giant);
 	}
-#else
-	printf("%s: load the %s module by hand for now.\n", __func__, modname);
+}
 #endif
+
+static void
+bpf_track(struct bpf_if *bpf, struct ifnet *ifp, int dlt, int event)
+{
+
+	if (dlt == DLT_IEEE802_11_RADIO &&
+	    ifp->if_init == ieee80211_init) {
+		struct ieee80211vap *vap = ifp->if_softc;
+
+		/*
+		 * Track bpf radiotap listener state.  We mark the vap
+		 * to indicate if any listener is present and the com
+		 * to indicate if any listener exists on any associated
+		 * vap.  This flag is used by drivers to prepare radiotap
+		 * state only when needed.
+		 */
+		if (event == BPF_TRACK_EVENT_ATTACH) {
+			ieee80211_syncflag_ext(vap, IEEE80211_FEXT_BPF);
+			if (vap->iv_opmode == IEEE80211_M_MONITOR)
+				atomic_add_int(&vap->iv_ic->ic_montaps, 1);
+		} else if (event == BPF_TRACK_EVENT_DETACH &&
+		    !bpf_peers_present(vap->iv_rawbpf)) {
+			ieee80211_syncflag_ext(vap, -IEEE80211_FEXT_BPF);
+			if (vap->iv_opmode == IEEE80211_M_MONITOR)
+				atomic_subtract_int(&vap->iv_ic->ic_montaps, 1);
+		}
+	}
 }
 
-/* -------------------------------------------------------------------------- */
+#ifdef notyet
+/*
+ * Change MAC address on the vap (if was not started).
+ */
+static void
+wlan_iflladdr(void *arg __unused, struct ifnet *ifp)
+{
+	/* NB: identify vap's by if_init */  // NNN wont work on urtwn
+	if (ifp->if_init == ieee80211_init &&
+	    (ifp->if_flags & IFF_UP) == 0) {
+		struct ieee80211vap *vap = ifp->if_softc;
+
+		IEEE80211_ADDR_COPY(vap->iv_myaddr, IF_LLADDR(ifp));
+	}
+}
+#endif
+
+int64_t
+if_get_counter_default(struct ifnet * ifp, ift_counter cnt)
+{
+	struct if_data if_stats;
+	int64_t result;
+
+	if_stats_to_if_data(ifp, &if_stats, false);
+
+	result = (cnt == IFCOUNTER_OERRORS ? if_stats.ifi_oerrors :
+	    (cnt == IFCOUNTER_IERRORS ? if_stats.ifi_ierrors : 0 ));
+
+	return result;
+}
+
+#ifdef notyet
+/*
+ * Module glue.
+ *
+ * NB: the module name is "wlan" for compatibility with NetBSD.
+ */
+static int
+wlan_modevent(module_t mod, int type, void *unused)
+{
+	switch (type) {
+	case MOD_LOAD:
+		if (bootverbose)
+			printf("wlan: <802.11 Link Layer>\n");
+		wlan_bpfevent = EVENTHANDLER_REGISTER(bpf_track,
+		    bpf_track, 0, EVENTHANDLER_PRI_ANY);
+		wlan_ifllevent = EVENTHANDLER_REGISTER(iflladdr_event,
+		    wlan_iflladdr, NULL, EVENTHANDLER_PRI_ANY);
+		wlan_cloner = if_clone_simple(wlanname, wlan_clone_create,
+		    wlan_clone_destroy, 0);
+		return 0;
+	case MOD_UNLOAD:
+		if_clone_detach(wlan_cloner);
+		EVENTHANDLER_DEREGISTER(bpf_track, wlan_bpfevent);
+		EVENTHANDLER_DEREGISTER(iflladdr_event, wlan_ifllevent);
+		return 0;
+	}
+	return EINVAL;
+}
+
+static moduledata_t wlan_mod = {
+	wlanname,
+	wlan_modevent,
+	0
+};
+DECLARE_MODULE(wlan, wlan_mod, SI_SUB_DRIVERS, SI_ORDER_FIRST);
+MODULE_VERSION(wlan, 1);
+MODULE_DEPEND(wlan, ether, 1, 1, 1);
+#endif
+
+#ifdef	IEEE80211_ALQ
+MODULE_DEPEND(wlan, alq, 1, 1, 1);
+#endif	/* IEEE80211_ALQ */
+
+/* Missing support for if_printf in NetBSD ... */
+int
+if_printf(struct ifnet *ifp, const char *fmt, ...)
+{
+        char if_fmt[256];
+        va_list ap;
+
+        snprintf(if_fmt, sizeof(if_fmt), "%s: %s", ifp->if_xname, fmt);
+#ifdef IEEE80211_DEBUG
+	if (ieee80211_debug_printf) {
+	        va_start(ap, fmt);
+		vprintf(if_fmt, ap);
+	        va_end(ap);
+	} else {
+#else
+	{
+#endif
+	        va_start(ap, fmt);
+		vlog(LOG_INFO, if_fmt, ap);
+	        va_end(ap);
+	}
+        return 0;
+}
 
 /*
  * Append the specified data to the indicated mbuf chain,
@@ -769,4 +1433,260 @@ m_append(struct mbuf *m0, int len, const void *cpv)
 	if (m0->m_flags & M_PKTHDR)
 		m0->m_pkthdr.len += len - remainder;
 	return (remainder == 0);
+}
+
+/*
+ * Create a writable copy of the mbuf chain.  While doing this
+ * we compact the chain with a goal of producing a chain with
+ * at most two mbufs.  The second mbuf in this chain is likely
+ * to be a cluster.  The primary purpose of this work is to create
+ * a writable packet for encryption, compression, etc.  The
+ * secondary goal is to linearize the data so the data can be
+ * passed to crypto hardware in the most efficient manner possible.
+ */
+struct mbuf *
+m_unshare(struct mbuf *m0, int how)
+{
+	struct mbuf *m, *mprev;
+	struct mbuf *n, *mfirst, *mlast;
+	int len, off;
+
+	mprev = NULL;
+	for (m = m0; m != NULL; m = mprev->m_next) {
+		/*
+		 * Regular mbufs are ignored unless there's a cluster
+		 * in front of it that we can use to coalesce.  We do
+		 * the latter mainly so later clusters can be coalesced
+		 * also w/o having to handle them specially (i.e. convert
+		 * mbuf+cluster -> cluster).  This optimization is heavily
+		 * influenced by the assumption that we're running over
+		 * Ethernet where MCLBYTES is large enough that the max
+		 * packet size will permit lots of coalescing into a
+		 * single cluster.  This in turn permits efficient
+		 * crypto operations, especially when using hardware.
+		 */
+		if ((m->m_flags & M_EXT) == 0) {
+			if (mprev && (mprev->m_flags & M_EXT) &&
+			    m->m_len <= M_TRAILINGSPACE(mprev)) {
+				/* XXX: this ignores mbuf types */
+				memcpy(mtod(mprev, __uint8_t *) + mprev->m_len,
+				    mtod(m, __uint8_t *), m->m_len);
+				mprev->m_len += m->m_len;
+				mprev->m_next = m->m_next;	/* unlink from chain */
+				m_free(m);			/* reclaim mbuf */
+			} else {
+				mprev = m;
+			}
+			continue;
+		}
+		/*
+		 * Writable mbufs are left alone (for now).
+		 */
+		if (!M_READONLY(m)) {
+			mprev = m;
+			continue;
+		}
+
+		/*
+		 * Not writable, replace with a copy or coalesce with
+		 * the previous mbuf if possible (since we have to copy
+		 * it anyway, we try to reduce the number of mbufs and
+		 * clusters so that future work is easier).
+		 */
+		KASSERTMSG(m->m_flags & M_EXT, "m_flags 0x%x", m->m_flags);
+		/* NB: we only coalesce into a cluster or larger */
+		if (mprev != NULL && (mprev->m_flags & M_EXT) &&
+		    m->m_len <= M_TRAILINGSPACE(mprev)) {
+			/* XXX: this ignores mbuf types */
+			memcpy(mtod(mprev, __uint8_t *) + mprev->m_len,
+			    mtod(m, __uint8_t *), m->m_len);
+			mprev->m_len += m->m_len;
+			mprev->m_next = m->m_next;	/* unlink from chain */
+			m_free(m);			/* reclaim mbuf */
+			continue;
+		}
+
+		/*
+		 * Allocate new space to hold the copy and copy the data.
+		 * We deal with jumbo mbufs (i.e. m_len > MCLBYTES) by
+		 * splitting them into clusters.  We could just malloc a
+		 * buffer and make it external but too many device drivers
+		 * don't know how to break up the non-contiguous memory when
+		 * doing DMA.
+		 */
+		n = m_getcl(how, m->m_type, m->m_flags & M_COPYFLAGS);
+		if (n == NULL) {
+			m_freem(m0);
+			return (NULL);
+		}
+		if (mprev == NULL && m->m_flags & M_PKTHDR) {
+			KASSERTMSG(mprev == NULL, "%s: m0 %p, m %p has M_PKTHDR",
+			    __func__, m0, m);
+			m_move_pkthdr(n, m);
+		}
+		len = m->m_len;
+		off = 0;
+		mfirst = n;
+		mlast = NULL;
+		for (;;) {
+			int cc = uimin(len, MCLBYTES);
+			memcpy(mtod(n, __uint8_t *), mtod(m, __uint8_t *) + off, cc);
+			n->m_len = cc;
+			if (mlast != NULL)
+				mlast->m_next = n;
+			mlast = n;
+#if 0
+			newipsecstat.ips_clcopied++;
+#endif
+
+			len -= cc;
+			if (len <= 0)
+				break;
+			off += cc;
+
+			n = m_getcl(how, m->m_type, m->m_flags & M_COPYFLAGS);
+			if (n == NULL) {
+				m_freem(mfirst);
+				m_freem(m0);
+				return (NULL);
+			}
+		}
+		n->m_next = m->m_next;
+		if (mprev == NULL)
+			m0 = mfirst;		/* new head of chain */
+		else
+			mprev->m_next = mfirst;	/* replace old mbuf */
+		m_free(m);			/* release old mbuf */
+		mprev = mfirst;
+	}
+	return (m0);
+}
+
+
+int
+ieee80211_activate(struct ieee80211com *ic, enum devact act)
+{
+	struct ieee80211vap *vap;
+
+	switch (act) {
+	case DVACT_DEACTIVATE:
+		TAILQ_FOREACH(vap, &ic->ic_vaps, iv_next)
+			if_deactivate(vap->iv_ifp);
+		return 0;
+	default:
+		return EOPNOTSUPP;
+	}
+}
+
+/*
+ * If we have not yet initialized the ifq/task for global defered
+ * processing of mgmt/ctrl frames, do it now.
+ */
+void
+ieee80211_init_mgmt_wqueue(void)
+{
+	if (ieee80211_rx_mgmt.ifq_maxlen != 0)
+		return;	/* been here before */
+
+	IFQ_SET_MAXLEN(&ieee80211_rx_mgmt, IFQ_MAXLEN);
+	IFQ_LOCK_INIT(&ieee80211_rx_mgmt);
+	TASK_INIT(&ieee80211_mgmt_input, 0, ieee80211_rx_mgmt_cb, 0);
+}
+
+/*
+ * The last VAP is gone, free taskquee and IFQ resources
+ */
+void
+ieee80211_deinit_mgmt_wqueue(void)
+{
+
+	IFQ_LOCK_DESTROY(&ieee80211_rx_mgmt);
+	TASK_DESTROY(&ieee80211_mgmt_input);
+	memset(&ieee80211_rx_mgmt, 0, sizeof ieee80211_rx_mgmt);
+	memset(&ieee80211_mgmt_input, 0, sizeof ieee80211_mgmt_input);
+}
+
+/*
+ * utility function to handle RX mbuf:
+ *  - classifies input and uses proper API to pass it further up the stack
+ *  - may queue and process input later in thread context, if input needs
+ *    more work than we are allowed in softint context
+ */
+void
+ieee80211_rx_enqueue(struct ieee80211com *ic, struct mbuf *m, int rssi)
+{
+	struct ieee80211_frame *wh;
+	struct ieee80211_node *ni;
+
+	wh = mtod(m, struct ieee80211_frame *);
+	ni = ieee80211_find_rxnode(ic, (struct ieee80211_frame_min *)wh);
+
+	if (IEEE80211_IS_DATA(wh)) {
+		/*
+		 * Just pass it up, it will be enqueued on the VAPs ifqueue
+		*/
+		if (ni != NULL) {
+			if (ni->ni_vap == NULL) {
+				ieee80211_free_node(ni);
+				return;
+			}
+			ieee80211_input(ni, m, rssi, 0);
+			ieee80211_free_node(ni);
+		} else {
+			/* XXX will this ever happen? */
+			ieee80211_input_all(ic, m, rssi, 0);
+		}
+	} else {
+		/*
+		 * We might need to take "heavy" locks during
+		 * further processing (like the IC lock), and can
+		 * not do this from softint or callout context.
+		 */
+		M_SETCTX(m, ic);
+		m_append(m, sizeof(rssi), &rssi);
+		IF_ENQUEUE(&ieee80211_rx_mgmt, m);
+		taskqueue_enqueue(ic->ic_tq, &ieee80211_mgmt_input);
+	}
+}
+
+static void
+ieee80211_rx_mgmt_cb(void *a0, int a1)
+{
+	struct mbuf *m, *ml;
+	struct ieee80211com *ic;
+	struct ieee80211_node *ni;
+	struct ieee80211_frame *wh;
+	int rssi;
+
+	for (;;) {
+		IF_DEQUEUE(&ieee80211_rx_mgmt, m);
+		if (!m)
+			return;
+		ic = M_GETCTX(m, struct ieee80211com *);
+		M_SETCTX(m, NULL);
+		/*
+		 * usually this will be a single mbuf
+		 */
+		for (ml = m; ml->m_next != NULL; ml = ml->m_next)
+			;
+		memcpy(&rssi, mtod(m, char *) + m->m_len - sizeof(rssi),
+		    sizeof(rssi));
+		m_adj(m, -(ssize_t)sizeof(rssi));
+
+
+		wh = mtod(m, struct ieee80211_frame *);
+		ni = ieee80211_find_rxnode(ic,
+		    (struct ieee80211_frame_min *)wh);
+
+		if (ni != NULL) {
+			if (ni->ni_vap == NULL) {
+				ieee80211_free_node(ni);
+				return;
+			}
+			ieee80211_input(ni, m, rssi, 0);
+			ieee80211_free_node(ni);
+		} else {
+			ieee80211_input_all(ic, m, rssi, 0);
+		}
+	}
 }

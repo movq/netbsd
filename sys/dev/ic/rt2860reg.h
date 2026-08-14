@@ -1043,10 +1043,12 @@ struct rt2860_rxwi {
 #define RT5390_EEPROM_IQ_GAIN_CAL_TX1_CH140_TO_CH165_5GHZ	0x14e
 #define RT5390_EEPROM_IQ_PHASE_CAL_TX1_CH140_TO_CH165_5GHZ	0x14f
 
+/* These are indexes into the rt2860_rates[] array */
 #define RT2860_RIDX_CCK1	 0
 #define RT2860_RIDX_CCK11	 3
 #define RT2860_RIDX_OFDM6	 4
-#define RT2860_RIDX_MAX		11
+#define	RT2860_RIDX_MCS0	12
+#define RT2860_RIDX_MAX		36
 static const struct rt2860_rate {
 	uint8_t		rate;
 	uint8_t		mcs;
@@ -1055,10 +1057,13 @@ static const struct rt2860_rate {
 	uint16_t	sp_ack_dur;
 	uint16_t	lp_ack_dur;
 } rt2860_rates[] = {
+	/* CCK rates (11b) */
 	{   2, 0, IEEE80211_T_DS,   0, 314, 314 },
 	{   4, 1, IEEE80211_T_DS,   1, 258, 162 },
 	{  11, 2, IEEE80211_T_DS,   2, 223, 127 },
 	{  22, 3, IEEE80211_T_DS,   3, 213, 117 },
+
+	/* OFDM rates (11a / 11g) */
 	{  12, 0, IEEE80211_T_OFDM, 4,  60,  60 },
 	{  18, 1, IEEE80211_T_OFDM, 4,  52,  52 },
 	{  24, 2, IEEE80211_T_OFDM, 6,  48,  48 },
@@ -1066,7 +1071,37 @@ static const struct rt2860_rate {
 	{  48, 4, IEEE80211_T_OFDM, 8,  44,  44 },
 	{  72, 5, IEEE80211_T_OFDM, 8,  40,  40 },
 	{  96, 6, IEEE80211_T_OFDM, 8,  40,  40 },
-	{ 108, 7, IEEE80211_T_OFDM, 8,  40,  40 }
+	{ 108, 7, IEEE80211_T_OFDM, 8,  40,  40 },
+
+	/* MCS - single stream */
+	{  0x80, 0, IEEE80211_T_HT, 4, 60, 60 },
+	{  0x81, 1, IEEE80211_T_HT, 4, 60, 60 },
+	{  0x82, 2, IEEE80211_T_HT, 4, 60, 60 },
+	{  0x83, 3, IEEE80211_T_HT, 4, 60, 60 },
+	{  0x84, 4, IEEE80211_T_HT, 4, 60, 60 },
+	{  0x85, 5, IEEE80211_T_HT, 4, 60, 60 },
+	{  0x86, 6, IEEE80211_T_HT, 4, 60, 60 },
+	{  0x87, 7, IEEE80211_T_HT, 4, 60, 60 },
+
+	/* MCS - 2 streams */
+	{  0x88, 8, IEEE80211_T_HT, 4, 60, 60 },
+	{  0x89, 9, IEEE80211_T_HT, 4, 60, 60 },
+	{  0x8a, 10, IEEE80211_T_HT, 4, 60, 60 },
+	{  0x8b, 11, IEEE80211_T_HT, 4, 60, 60 },
+	{  0x8c, 12, IEEE80211_T_HT, 4, 60, 60 },
+	{  0x8d, 13, IEEE80211_T_HT, 4, 60, 60 },
+	{  0x8e, 14, IEEE80211_T_HT, 4, 60, 60 },
+	{  0x8f, 15, IEEE80211_T_HT, 4, 60, 60 },
+
+	/* MCS - 3 streams */
+	{  0x90, 16, IEEE80211_T_HT, 4, 60, 60 },
+	{  0x91, 17, IEEE80211_T_HT, 4, 60, 60 },
+	{  0x92, 18, IEEE80211_T_HT, 4, 60, 60 },
+	{  0x93, 19, IEEE80211_T_HT, 4, 60, 60 },
+	{  0x94, 20, IEEE80211_T_HT, 4, 60, 60 },
+	{  0x95, 21, IEEE80211_T_HT, 4, 60, 60 },
+	{  0x96, 22, IEEE80211_T_HT, 4, 60, 60 },
+	{  0x97, 23, IEEE80211_T_HT, 4, 60, 60 },
 };
 
 /*

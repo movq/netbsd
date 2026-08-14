@@ -53,6 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: ath_netbsd.c,v 1.23 2022/09/25 18:43:32 thorpej Exp 
 
 #include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
+#include <net80211/ieee80211_regdomain.h>
 #include <dev/ic/ath_netbsd.h>
 #include <dev/ic/athvar.h>
 

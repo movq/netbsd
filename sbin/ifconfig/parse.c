@@ -163,7 +163,16 @@ pstr_match(const struct parser *p, const struct match *im, struct match *om,
 		return -1;
 	}
 
-	o = (prop_object_t)prop_data_create_copy(buf, len);
+	if (ps->ps_as_cstring) {
+		if (len >= (int)sizeof(buf)) {
+			errno = EINVAL;
+			return -1;
+		}
+		buf[len] = 0;
+		o = (prop_object_t)prop_string_create_copy((const char*)buf);
+	} else {
+		o = (prop_object_t)prop_data_create_copy(buf, len);
+	}
 
 	if (o == NULL) {
 		errno = ENOMEM;
@@ -949,6 +958,17 @@ parse(int argc, char **argv, const struct parser *p0, struct match *matches,
 		p = m->m_nextparser;
 		lastm = m++;
 	}
+
+	if (m > matches) {
+		for (i = 0; i < (m - matches); i++) {
+			if (matches[i].m_parser->p_post_match_fixup != NULL) {
+				rc = (*matches[i].m_parser->p_post_match_fixup)
+				    (matches, i, m - matches);
+				if (rc != 0)
+					goto out;
+			}
+		}
+	}
 out:
 	*nmatch = m - matches;
 	*narg = i;
@@ -967,8 +987,10 @@ matches_exec(const struct match *matches, prop_dictionary_t oenv, size_t nmatch)
 	for (i = 0; i < nmatch; i++) {
 		m = &matches[i];
 		dbg_warnx("%s.%d: i %zu", __func__, __LINE__, i);
-		pexec = (m->m_parser->p_exec != NULL)
-		    ? m->m_parser->p_exec : m->m_exec;
+
+		pexec = m->m_parser->p_exec;
+		if (pexec == NULL || m->m_override_parser_exec)
+			pexec = m->m_exec;
 		if (pexec == NULL)
 			continue;
 		dbg_warnx("%s.%d: m->m_parser->p_name %s", __func__, __LINE__,

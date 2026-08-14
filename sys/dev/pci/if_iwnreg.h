@@ -1447,7 +1447,7 @@ struct iwn_fw_dump {
 	uint32_t	src_line;
 	uint32_t	tsf;
 	uint32_t	time[2];
-} __packed;
+};
 
 /* TLV firmware header. */
 struct iwn_fw_tlv_hdr {
@@ -1666,7 +1666,7 @@ static const struct iwn_chan_band {
 	uint8_t	chan[IWN_MAX_CHAN_PER_BAND];
 } iwn_bands[] = {
 	/* 20MHz channels, 2GHz band. */
-	{ 14, { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14 } },
+	{ 13, { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 } },
 	/* 20MHz channels, 5GHz band. */
 	{ 13, { 183, 184, 185, 187, 188, 189, 192, 196, 7, 8, 11, 12, 16 } },
 	{ 12, { 34, 36, 38, 40, 42, 44, 46, 48, 52, 56, 60, 64 } },

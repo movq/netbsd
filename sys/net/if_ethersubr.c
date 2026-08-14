@@ -182,15 +182,14 @@ const uint8_t ethermulticastaddr_slowprotocols[ETHER_ADDR_LEN] =
 
 static pktq_rps_hash_func_t ether_pktq_rps_hash_p;
 
-static int ether_output(struct ifnet *, struct mbuf *,
-    const struct sockaddr *, const struct rtentry *);
+/* if_lagg(4) support */
+struct mbuf *(*lagg_input_ethernet_p)(struct ifnet *, struct mbuf *);
 
 /*
  * Ethernet output routine.
  * Encapsulate a packet of type family for the local net.
- * Assumes that ifp is actually pointer to ethercom structure.
  */
-static int
+int
 ether_output(struct ifnet * const ifp0, struct mbuf * const m0,
     const struct sockaddr * const dst, const struct rtentry *rt)
 {
@@ -639,6 +638,7 @@ error:
  * Process a received Ethernet packet;
  * the packet is in the mbuf chain m with
  * the ether header.
+ * Assumes that ifp is actually pointer to ethercom structure.
  */
 void
 ether_input(struct ifnet *ifp, struct mbuf *m)
@@ -950,6 +950,18 @@ ether_input(struct ifnet *ifp, struct mbuf *m)
 		pktq = mpls_pktq;
 		break;
 #endif
+
+	/*
+	 * XXX - remove before merge!
+	 *
+	 * Do not count errors for 802.1x authentication frames
+	 * or random "smart home" stuff
+	 */
+	case ETHERTYPE_PAE:
+	case 0x8912:		/* mediaxtream */
+	case 0x88e1:		/* HomePlug Management (powerline) */
+		m_freem(m);
+		return;
 
 	default:
 		goto noproto;

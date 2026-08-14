@@ -53,6 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_wi_pci.c,v 1.57 2018/12/09 11:14:02 jdolecek Exp 
 #include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_regdomain.h>
 #include <net80211/ieee80211_rssadapt.h>
 
 #include <sys/bus.h>

@@ -51,9 +51,11 @@ __KERNEL_RCSID(0, "$NetBSD: arn9380.c,v 1.4 2022/09/25 18:43:32 thorpej Exp $");
 #include <netinet/in_systm.h>
 #include <netinet/in_var.h>
 
+#include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_amrr.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <dev/ic/athnreg.h>
 #include <dev/ic/athnvar.h>
@@ -129,7 +131,7 @@ ar9380_attach(struct athn_softc *sc)
 Static void
 ar9380_setup(struct athn_softc *sc)
 {
-	struct ieee80211com *ic = &sc->sc_ic;
+        //	struct ieee80211com *ic = &sc->sc_ic;
 	struct ar9380_eeprom *eep = sc->sc_eep;
 	struct ar9380_base_eep_hdr *base = &eep->baseEepHeader;
 	uint8_t type;
@@ -141,7 +143,7 @@ ar9380_setup(struct athn_softc *sc)
 	if (base->opFlags & AR_OPFLAGS_11N)
 		sc->sc_flags |= ATHN_FLAG_11N;
 
-	IEEE80211_ADDR_COPY(ic->ic_myaddr, eep->macAddr);
+	// IEEE80211_ADDR_COPY(TAILQ_FIRST(&ic->ic_vaps)->iv_myaddr, eep->macAddr);
 	sc->sc_led_pin = base->wlanLedGpio;
 
 	/* Check if we have a hardware radio switch. */

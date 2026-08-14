@@ -87,8 +87,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_atu.c,v 1.77 2024/07/05 04:31:52 rin Exp $");
 #include <netinet/if_ether.h>
 #endif
 
+#include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <dev/usb/if_atureg.h>
 

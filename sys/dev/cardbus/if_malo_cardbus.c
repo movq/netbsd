@@ -32,8 +32,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_malo_cardbus.c,v 1.1 2018/12/14 21:49:22 jakllsch
 
 #include <netinet/in.h>
 
+#include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>

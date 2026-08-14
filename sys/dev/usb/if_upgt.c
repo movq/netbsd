@@ -47,8 +47,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_upgt.c,v 1.33 2022/07/01 01:07:32 riastradh Exp $
 #include <net/if_media.h>
 #include <net/if_types.h>
 
+#include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <dev/firmload.h>
 

@@ -197,10 +197,10 @@ MODULE_HOOK(compat_vndioctl_50_hook, int, (u_long, struct lwp *, void *, int,
 /*
  * ieee80211 ioctl compatibility
  */
-struct ieee80211com;
+struct ieee80211vap;
 
 MODULE_HOOK(ieee80211_ioctl_20_hook, int,
-    (struct ieee80211com *, u_long, void *));
+    (struct ieee80211vap *, u_long, void *));
 
 /*
  * if_43 compatibility

@@ -19,6 +19,8 @@
 #ifndef _IF_URTWNVAR_H_
 #define _IF_URTWNVAR_H_
 
+#include <sys/rndsource.h>
+
 /*
  * Driver definitions.
  */
@@ -28,7 +30,7 @@
 #define URTWN_HOST_CMD_RING_COUNT	32
 
 #define URTWN_RXBUFSZ	(16 * 1024)
-#define URTWN_TXBUFSZ	(sizeof(struct r92c_tx_desc_usb) + IEEE80211_MAX_LEN + 8)
+#define URTWN_TXBUFSZ	(sizeof(struct r92e_tx_desc_usb) + IEEE80211_MAX_LEN)
 
 #define URTWN_RIDX_COUNT	28
 
@@ -78,6 +80,8 @@ struct urtwn_tx_data {
 	size_t				pidx;
 	struct usbd_xfer		*xfer;
 	uint8_t				*buf;
+	struct mbuf			*m;
+	struct ieee80211_node		*ni;
 	TAILQ_ENTRY(urtwn_tx_data)	next;
 };
 
@@ -109,38 +113,20 @@ struct urtwn_host_cmd_ring {
 #endif	/* XXX: 1 */
 
 struct urtwn_softc {
-	device_t			sc_dev;
-	struct ieee80211com		sc_ic;
-	struct ethercom			sc_ec;
-#define sc_if   sc_ec.ec_if
-	int				(*sc_newstate)(struct ieee80211com *,
-					    enum ieee80211_state, int);
+	struct usbwifi			sc_uw;
 
-	struct usbd_device *		sc_udev;
-	struct usbd_interface *		sc_iface;
-	u_int				sc_flags;
+	/* bits in sc_uw.uw_flags: */
 #define URTWN_FLAG_CCK_HIPWR	__BIT(0)
-#define	URTWN_FLAG_ATTACHED	__BIT(1)
-#define	URTWN_FLAG_FWREADY	__BIT(2)
-	int				sc_dying;
+#define	URTWN_FLAG_FWREADY	__BIT(1)
 
 	struct usb_task			sc_task;
-	callout_t			sc_scan_to;
 	callout_t			sc_calib_to;
+	callout_t			sc_watchdog_to;
 
 	kcondvar_t			sc_task_cv;
 	kmutex_t			sc_task_mtx;
-	kmutex_t			sc_fwcmd_mtx;
-	kmutex_t			sc_tx_mtx;
-	kmutex_t			sc_rx_mtx;
-	kmutex_t			sc_write_mtx;
-	kmutex_t			sc_media_mtx;	/* XXX */
 
-	struct usbd_pipe *		rx_pipe[R92C_MAX_EPIN];
-	int				rx_npipe;
-	struct usbd_pipe *		tx_pipe[R92C_MAX_EPOUT];
-	int				tx_npipe;
-	int				ac2idx[WME_NUM_AC];
+	bool				sc_running;
 
 	u_int				chip;
 #define URTWN_CHIP_92C		0x01
@@ -184,20 +170,17 @@ struct urtwn_softc {
 
 	uint32_t			rf_chnlbw[R92C_MAX_CHAINS];
 
-	struct bpf_if *			sc_drvbpf;
 	union {
 		struct urtwn_rx_radiotap_header th;
 		uint8_t	pad[64];
 	}				sc_rxtapu;
 #define sc_rxtap	sc_rxtapu.th
-	int				sc_rxtap_len;
 	union {
 		struct urtwn_tx_radiotap_header th;
 		uint8_t	pad[64];
 	}				sc_txtapu;
 #define sc_txtap	sc_txtapu.th
-	int				sc_txtap_len;
-	bool				sc_running;
+	size_t				sc_txtap_len;
 
 	struct ieee80211_beacon_offsets sc_bo;
 	krndsource_t rnd_source;	/* random source */

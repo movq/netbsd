@@ -38,7 +38,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_bwfm_pci.c,v 1.14 2024/07/05 04:31:51 rin Exp $")
 
 #include <netinet/in.h>
 
+#include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>

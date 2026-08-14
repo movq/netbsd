@@ -156,11 +156,15 @@ struct if_clone {
 	size_t ifc_namelen;		/* length of name */
 
 	int	(*ifc_create)(struct if_clone *, int);
+	int	(*ifc_create_with_args)(struct if_clone *, int, size_t, void*);
 	int	(*ifc_destroy)(struct ifnet *);
 };
 
 #define	IF_CLONE_INITIALIZER(name, create, destroy)			\
-	{ { NULL, NULL }, name, sizeof(name) - 1, create, destroy }
+	{ { NULL, NULL }, name, sizeof(name) - 1, create, NULL, destroy }
+
+#define	IF_CLONE_WITH_ARGS_INITIALIZER(name, create, destroy)		\
+	{ { NULL, NULL }, name, sizeof(name) - 1, NULL, create, destroy }
 
 /*
  * Structure used to query names of interface cloners.
@@ -735,6 +739,8 @@ do {									\
 #ifndef IFQ_MAXLEN
 #define	IFQ_MAXLEN	256
 #endif
+extern int ifqmaxlen;
+
 #define	IFNET_SLOWHZ	1		/* granularity is 1 second */
 
 /*
@@ -970,6 +976,13 @@ struct if_addrprefreq {
 	char			ifap_name[IFNAMSIZ];
 	int16_t			ifap_preference;	/* in/out */
 	struct sockaddr_storage	ifap_addr;		/* in/out */
+};
+
+/* create an interface clone with initial arguments */
+struct	if_cclonearg {
+	char	ifr_name[IFNAMSIZ];	/* if name, e.g. "en0" */
+	size_t	ifc_arg_size;		/* lenght of additional args */
+	void	*ifc_args;		/* pointer to creation arguments */
 };
 
 #include <net/if_arp.h>

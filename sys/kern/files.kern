@@ -151,6 +151,7 @@ file	kern/subr_prf.c			kern
 file	kern/subr_prof.c		kern
 file	kern/subr_pserialize.c		kern
 file	kern/subr_psref.c		kern
+file	kern/subr_sbuf.c		wlan
 file	kern/subr_specificdata.c	kern
 file	kern/subr_tftproot.c		tftproot
 file	kern/subr_time.c		kern

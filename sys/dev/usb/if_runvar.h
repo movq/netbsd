@@ -59,6 +59,8 @@ struct run_rx_radiotap_header {
 	 1 << IEEE80211_RADIOTAP_ANTENNA |		\
 	 1 << IEEE80211_RADIOTAP_DB_ANTSIGNAL)
 
+#define	RUN_VAP_MAX	8
+
 struct run_tx_radiotap_header {
 	struct ieee80211_radiotap_header wt_ihdr;
 	uint8_t		wt_flags;
@@ -75,33 +77,6 @@ struct run_tx_radiotap_header {
 	 1 << IEEE80211_RADIOTAP_HWQUEUE*/)
 
 struct run_softc;
-
-struct run_tx_data {
-	struct run_softc	*sc;
-	struct usbd_xfer	*xfer;
-	uint8_t			*buf;
-	uint8_t			qid;
-};
-
-struct run_rx_data {
-	struct run_softc	*sc;
-	struct usbd_xfer	*xfer;
-	uint8_t			*buf;
-};
-
-struct run_tx_ring {
-	struct run_tx_data	data[RUN_TX_RING_COUNT];
-	struct usbd_pipe *	pipeh;
-	int			cur;
-	volatile unsigned	queued;
-	uint8_t			pipe_no;
-};
-
-struct run_rx_ring {
-	struct run_rx_data	data[RUN_RX_RING_COUNT];
-	struct usbd_pipe *	pipeh;
-	uint8_t			pipe_no;
-};
 
 struct run_host_cmd {
 	void	(*cb)(struct run_softc *, void *);
@@ -128,34 +103,34 @@ struct run_host_cmd_ring {
 
 struct run_node {
 	struct ieee80211_node	ni;
-	uint8_t			ridx[IEEE80211_RATE_MAXSIZE];
-	uint8_t			ctl_ridx[IEEE80211_RATE_MAXSIZE];
+	uint8_t			amrr_ridx;
+	uint8_t			mgt_ridx;
+	uint8_t			fix_ridx;
 };
 
 #define	RUN_MAXEPOUT	4
 
 struct run_softc {
-	device_t			sc_dev;
-	struct ethercom			sc_ec;
-#define sc_if	sc_ec.ec_if
-	struct ieee80211com		sc_ic;
-	int				(*sc_newstate)(struct ieee80211com *,
-					    enum ieee80211_state, int);
+	struct usbwifi			sc_uw;
+	struct ieee80211_ratectl_tx_stats	 sc_txs;
+	/* bits used in sc_uw.uw_flags */
+#define RUN_FWLOADED		__BIT(0)
+#define RUN_USE_BLOCK_WRITE	__BIT(1)
+
+	uint16_t			wcid_stats[RT2870_WCID_MAX + 1][3];
+#define RUN_TXCNT	0
+#define RUN_SUCCESS	1
+#define RUN_RETRY	2
+
 	int				(*sc_srom_read)(struct run_softc *,
 					    uint16_t, uint16_t *);
-
-	kmutex_t			sc_media_mtx;	/* XXX */
-
-	struct usbd_device *		sc_udev;
-	struct usbd_interface *		sc_iface;
-
 	uint16_t			mac_ver;
 	uint16_t			mac_rev;
 	uint16_t			rf_rev;
 	uint8_t				freq;
 	uint8_t				ntxchains;
 	uint8_t				nrxchains;
-	int				fixed_ridx;
+	uint8_t				fifo_cnt;
 
 	uint8_t				bbp25;
 	uint8_t				bbp26;
@@ -187,25 +162,15 @@ struct run_softc {
 	uint32_t			txpow40mhz_5ghz[5];
 
 	struct usb_task			sc_task;
+	unsigned int			rvp_cnt;
+	uint8_t				rvp_bmap;
+	uint8_t				ratectl_run;
+#define	RUN_RATECTL_OFF	0
+	callout_t			ratectl_to;
 
-	struct ieee80211_amrr		amrr;
-	struct ieee80211_amrr_node	amn;
-
-	callout_t			scan_to;
-	callout_t			calib_to;
-
-	struct run_rx_ring		rxq;
-	struct run_tx_ring		txq[RUN_MAXEPOUT];
 	struct run_host_cmd_ring	cmdq;
-	uint8_t				qfullmsk;
 	int				sc_tx_timer;
 	struct ieee80211_beacon_offsets	sc_bo;
-	int				sc_flags;
-#define RUN_FWLOADED		(1 << 0)
-#define RUN_DETACHING		(1 << 1)
-#define RUN_USE_BLOCK_WRITE	(1 << 2)
-
-	struct bpf_if *			sc_drvbpf;
 
 	union {
 		struct run_rx_radiotap_header th;

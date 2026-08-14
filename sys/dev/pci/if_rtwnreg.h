@@ -145,10 +145,9 @@ struct rtwn_host_cmd_ring {
 
 struct rtwn_softc {
 	device_t			sc_dev;
-	struct ethercom			sc_ec;
 	struct ieee80211com		sc_ic;
-	int				(*sc_newstate)(struct ieee80211com *,
-					    enum ieee80211_state, int);
+	struct ifqueue			sc_sendq;
+	struct ieee80211_channel	*sc_curchan;
 
 	/* PCI specific goo. */
 	bus_dma_tag_t 			sc_dmat;
@@ -162,13 +161,15 @@ struct rtwn_softc {
 	int				sc_cap_off;
 	void				*sc_soft_ih;
 
-	struct callout			scan_to;
-	struct callout			calib_to;
-	void				*init_task;
+	struct callout			sc_scan_to;
+	struct callout			sc_calib_to;
+	struct callout			sc_watchdog_to;
 	int				ac2idx[WME_NUM_AC];
 	uint32_t			sc_flags;
-#define RTWN_FLAG_FW_LOADED	__BIT(0)
-#define RTWN_FLAG_CCK_HIPWR	__BIT(1)
+#define	RTWN_FLAG_ATTACHED	__BIT(0)
+#define RTWN_FLAG_FW_LOADED	__BIT(1)
+#define RTWN_FLAG_CCK_HIPWR	__BIT(2)
+#define	RTWN_FLAG_TX_RUNNING	__BIT(3)
 
 	uint32_t			chip;
 #define RTWN_CHIP_88C		__BIT(0)
@@ -196,7 +197,6 @@ struct rtwn_softc {
 	struct r92c_rom			rom;
 
 	uint32_t			rf_chnlbw[R92C_MAX_CHAINS];
-	struct bpf_if			*sc_drvbpf;
 
 	union {
 		struct rtwn_rx_radiotap_header th;
@@ -213,8 +213,8 @@ struct rtwn_softc {
 	int				sc_txtap_len;
 };
 
-#define	sc_if		sc_ec.ec_if
-#define	GET_IFP(sc)	(&(sc)->sc_if)
-#define	IC2IFP(ic)	((ic)->ic_ifp)
+// #define	sc_if		sc_ec.ec_if
+// #define	GET_IFP(sc)	(&(sc)->sc_if)
+// #define	IC2IFP(ic)	((ic)->ic_ifp)
 
 #endif /* _DEV_PCI_RTWNREG_H_ */

@@ -500,6 +500,87 @@ interface previously configured with
 .Cm cookie .
 .It Cm create
 Create the specified network pseudo-device.
+.Pp
+For
+.Em IEEE 802.11
+devices
+.Pq e.g. wlan0 ,
+the create operation takes additional arguments
+specifying operation mode and physical device for the cloned device:
+.Bl -tag -width indent
+.It Cm wlandev Ar device
+Use
+.Ar device
+as the parent for the cloned device.
+The available physical devices can be listed with:
+.Dl sysctl net.wlan.devices
+.It Cm wlanmode Ar mode
+Specify the operating mode for this cloned device.
+.Ar mode
+is one of
+.Cm sta ,
+.Cm ahdemo
+(or
+.Cm adhoc-demo ) ,
+.Cm ibss
+(or
+.Cm adhoc ) ,
+.Cm ap
+(or
+.Cm hostap ) ,
+.Cm wds ,
+.Cm tdma ,
+.Cm mesh ,
+and
+.Cm monitor .
+The operating mode of a cloned interface cannot be changed.
+The
+.Cm tdma
+mode is actually implemented as an
+.Cm adhoc-demo
+interface with special properties.
+.It Cm wlanbssid Ar bssid
+The 802.11 mac address to use for the bssid.
+This must be specified at create time for a legacy
+.Cm wds
+device.
+.It Cm wlanaddr Ar address
+The local mac address.
+If this is not specified then a mac address will automatically be assigned
+to the cloned device.
+Typically this address is the same as the address of the parent device
+but if the
+.Cm bssid
+parameter is specified then the driver will craft a unique address for
+the device (if supported).
+.It Cm wdslegacy
+Mark a
+.Cm wds
+device as operating in ``legacy mode''.
+Legacy
+.Cm wds
+devices have a fixed peer relationship and do not, for example, roam
+if their peer stops communicating.
+For completeness a Dynamic WDS (DWDS) interface may be marked as
+.Fl wdslegacy .
+.It Cm local-bssid
+Request a unique local mac address for the cloned device.
+This is only possible if the device supports multiple mac addresses.
+If this flag is not present, the parent's mac address is used.
+.It Cm beacons
+Mark the cloned interface as depending on hardware support to
+track received beacons.
+To have beacons tracked in software use
+.Fl beacons .
+For
+.Cm hostap
+mode
+.Fl beacons
+can also be used to indicate no beacons should
+be transmitted; this can be useful when creating a WDS configuration but
+.Cm wds
+interfaces can only be created as companions to an access point.
+.El
 .It Cm destroy
 Destroy the specified network pseudo-device.
 .It Cm pltime Ar n

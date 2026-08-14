@@ -56,9 +56,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_otus.c,v 1.45 2020/06/11 09:51:37 martin Exp $");
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
 
+#include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_amrr.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <dev/firmload.h>
 

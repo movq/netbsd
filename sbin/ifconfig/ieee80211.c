@@ -78,6 +78,9 @@ static void scan_and_wait(prop_dictionary_t);
 static void list_scan(prop_dictionary_t);
 static int mappsb(u_int , u_int);
 static int mapgsm(u_int , u_int);
+int clone_command(prop_dictionary_t env, prop_dictionary_t oenv);
+int wlan_clone_command(prop_dictionary_t env, prop_dictionary_t oenv);
+static int wlan_clone_fixup(struct match*, int, int);
 
 static int sethidessid(prop_dictionary_t, prop_dictionary_t);
 static int setapbridge(prop_dictionary_t, prop_dictionary_t);
@@ -92,6 +95,8 @@ static int setifpowersave(prop_dictionary_t, prop_dictionary_t);
 static int setifpowersavesleep(prop_dictionary_t, prop_dictionary_t);
 static int setifrts(prop_dictionary_t, prop_dictionary_t);
 static int scan_exec(prop_dictionary_t, prop_dictionary_t);
+static int get_mac_addr(prop_dictionary_t, const char *,
+    uint8_t ssid[IEEE80211_ADDR_LEN]);
 
 static void printies(const u_int8_t *, int, int);
 static void printwmeparam(const char *, const u_int8_t *, size_t , int);
@@ -111,8 +116,9 @@ static int iswmeparam(const u_int8_t *);
 static const char * iename(int);
 
 extern struct pinteger parse_chan, parse_frag, parse_rts;
-extern struct pstr parse_bssid, parse_ssid, parse_nwkey;
+extern struct pstr parse_bssid, parse_ssid, parse_nwkey, wlan_device;
 extern struct pinteger parse_powersavesleep;
+extern struct pbranch clone_create_branches;
 
 static const struct kwinst ieee80211boolkw[] = {
 	  {.k_word = "hidessid", .k_key = "hidessid", .k_neg = true,
@@ -132,6 +138,36 @@ static const struct kwinst listskw[] = {
 
 static struct pkw lists = PKW_INITIALIZER(&lists, "ieee80211 lists", NULL,
     "list", listskw, __arraycount(listskw), &command_root.pb_parser);
+
+static const struct kwinst kw80211modes[] = {
+	  {.k_word = "sta", .k_key = "mode",
+	   .k_type = KW_T_INT, .k_int = IEEE80211_M_STA },
+	  {.k_word = "ahdemo", .k_key = "mode",
+	   .k_type = KW_T_INT, .k_int = IEEE80211_M_AHDEMO },
+	  {.k_word = "adhoc-demo", .k_key = "mode",	// alias for previous
+	   .k_type = KW_T_INT, .k_int = IEEE80211_M_AHDEMO },
+	  {.k_word = "ibss", .k_key = "mode",
+	   .k_type = KW_T_INT, .k_int = IEEE80211_M_IBSS },
+	  {.k_word = "adhoc", .k_key = "mode",		// alias for previous
+	   .k_type = KW_T_INT, .k_int = IEEE80211_M_IBSS },
+	  {.k_word = "ap", .k_key = "mode",
+	   .k_type = KW_T_INT, .k_int = IEEE80211_M_HOSTAP },
+	  {.k_word = "hostap", .k_key = "mode",		// alias for previous
+	   .k_type = KW_T_INT, .k_int = IEEE80211_M_HOSTAP },
+	  {.k_word = "wds", .k_key = "mode",
+	   .k_type = KW_T_INT, .k_int = IEEE80211_M_WDS },
+	  {.k_word = "tdma", .k_key = "mode",
+	   .k_type = KW_T_INT, .k_int = -1 },
+	   /* -1 is special cased in wlan_clone_command, this is equivalent
+	    * to IEEE80211_M_AHDEMO and flags IEEE80211_CLONE_TDMA */
+	  {.k_word = "mesh", .k_key = "mode",
+	   .k_type = KW_T_INT, .k_int = IEEE80211_M_MBSS },
+	  {.k_word = "monitor", .k_key = "mode",
+	   .k_type = KW_T_INT, .k_int = IEEE80211_M_MONITOR },
+};
+
+struct pkw wlan_mode = PKW_INITIALIZER1(&wlan_mode, "802.11 modes", NULL, NULL,
+    kw80211modes, __arraycount(kw80211modes), NULL, wlan_clone_fixup);
 
 static const struct kwinst kw80211kw[] = {
 	  {.k_word = "bssid", .k_nextparser = &parse_bssid.ps_parser}
@@ -191,6 +227,141 @@ struct pstr parse_nwkey = PSTR_INITIALIZER1(&parse_nwkey, "nwkey", setifnwkey,
 struct pstr parse_bssid = PSTR_INITIALIZER1(&parse_bssid, "bssid", setifbssid,
     "bssid", false, &command_root.pb_parser);
 
+struct pstr wlan_device = PSTR_INITIALIZER2(&wlan_device, "wlandev", NULL,
+     "wlandev", false, &clone_create_branches.pb_parser, wlan_clone_fixup,
+     true);
+
+struct pstr wlan_bssid = PSTR_INITIALIZER2(&wlan_bssid, "wlanbssid", NULL,
+     "wlanbssid", false, &clone_create_branches.pb_parser, wlan_clone_fixup,
+     true);
+
+struct pstr wlan_addr = PSTR_INITIALIZER2(&wlan_addr, "wlanaddr", NULL,
+     "wlanaddr",  false, &clone_create_branches.pb_parser, wlan_clone_fixup,
+     true);
+
+static const struct kwinst wlan_createkw[] = {
+	  {.k_word = "wlandev", .k_key = "wlandev",
+	   .k_nextparser = &wlan_device.ps_parser}
+	, {.k_word = "wlanmode", .k_key = "wlanmode",
+	   .k_nextparser = &wlan_mode.pk_parser}
+	, {.k_word = "wlanbssid", .k_key = "wlanbssid",
+	   .k_nextparser = &wlan_bssid.ps_parser}
+	, {.k_word = "wlanaddr", .k_key = "wlanaddr",
+	   .k_nextparser = &wlan_addr.ps_parser}
+	, {.k_word = "wdslegacy", .k_key = "wdslegacy",
+	   .k_type = KW_T_BOOL, .k_bool = true,
+	   .k_nextparser = &clone_create_branches.pb_parser}
+	, {.k_word = "-wdslegacy", .k_key = "wdslegacy",
+	   .k_type = KW_T_BOOL, .k_bool = false,
+	   .k_nextparser = &clone_create_branches.pb_parser}
+	, {.k_word = "local-bssid", .k_key = "bssid",
+	   .k_type = KW_T_BOOL, .k_bool = true,
+	   .k_nextparser = &clone_create_branches.pb_parser}
+	, {.k_word = "beacons", .k_key = "beacons",
+	   .k_type = KW_T_BOOL, .k_bool = true,
+	   .k_nextparser = &clone_create_branches.pb_parser}
+	, {.k_word = "-beacons", .k_key = "beacons",
+	   .k_type = KW_T_BOOL, .k_bool = false,
+	   .k_nextparser = &clone_create_branches.pb_parser}
+};
+
+struct pkw wlan_create =
+    PKW_INITIALIZER1(&wlan_create, "wlan-create", NULL, "wlan-create",
+	wlan_createkw, __arraycount(wlan_createkw),
+	&clone_create_branches.pb_parser, wlan_clone_fixup);
+
+/*
+ * We accumlute various changes originally directed at clone_command()
+ * into a single extended call redirected to wlan_clone_command
+ * (but with the environment gathered by all previous matches).
+ */
+static int
+wlan_clone_fixup(struct match *matches, int index, int max_index)
+{
+	int i;
+
+	/*
+	 * Make every match trying to exec clone_command or
+	 * wlan_clone_command do nothing.
+	 */
+	for (i = 0; i < index; i++) {
+		if (matches[i].m_exec == clone_command ||
+		    matches[i].m_exec == wlan_clone_command) {
+			matches[i].m_exec = NULL;
+			matches[i].m_override_parser_exec = true;
+		}
+	}
+
+	/*
+	 * Now make myself exec wlan_clone_command.
+	 */
+	matches[index].m_exec = wlan_clone_command;
+	matches[index].m_override_parser_exec = true;
+
+	return 0;
+}
+
+int
+wlan_clone_command(prop_dictionary_t env, prop_dictionary_t oenv)
+{
+	struct if_cclonearg carg;
+	struct ieee80211_clone_params req;
+	const char *parent;
+	int mode;
+	bool wdslegacy = false, bssid = false, beacons = false;
+
+	if (!prop_dictionary_get_cstring_nocopy(env, "wlandev", &parent)) {
+		warn("wlandev required");
+		return -1;
+	}
+
+	memset(&carg, 0, sizeof carg);
+	memset(&req, 0, sizeof req);
+	/* set some defaults */
+	req.icp_opmode = IEEE80211_M_STA;
+
+	carg.ifc_arg_size = sizeof req;
+	carg.ifc_args = &req;
+	strlcpy(req.icp_parent, parent, sizeof req.icp_parent);
+	if (prop_dictionary_get_int(env, "mode", &mode)) {
+		if (mode == -1) {
+			req.icp_opmode = IEEE80211_M_AHDEMO;
+			req.icp_flags |= IEEE80211_CLONE_TDMA;
+		} else {
+			req.icp_opmode = mode;
+		}
+	}
+	get_mac_addr(env, "wlanbssid", req.icp_bssid);
+	if (get_mac_addr(env, "wlanaddr", req.icp_macaddr) == 0)
+		req.icp_flags |= IEEE80211_CLONE_MACADDR;
+
+	if (prop_dictionary_get_bool(env, "wdslegacy", &wdslegacy)) {
+		if (wdslegacy)
+			req.icp_flags |= IEEE80211_CLONE_WDSLEGACY;
+		else
+			req.icp_flags &= ~IEEE80211_CLONE_WDSLEGACY;
+	}
+	if (prop_dictionary_get_bool(env, "bssid", &bssid)) {
+		if (bssid)
+			req.icp_flags |= IEEE80211_CLONE_BSSID;
+		else
+			req.icp_flags &= ~IEEE80211_CLONE_BSSID;
+	}
+	if (prop_dictionary_get_bool(env, "beacons", &beacons)) {
+		if (beacons)
+			req.icp_flags &= ~IEEE80211_CLONE_NOBEACONS;
+		else
+			req.icp_flags |= IEEE80211_CLONE_NOBEACONS;
+	}
+
+	if (direct_ioctl(env, SIOCIFCREATEARGS, &carg) == -1) {
+		warn("%s", __func__);
+		return -1;
+	}
+
+	return 0;
+}
+
 static int
 set80211(prop_dictionary_t env, uint16_t type, int16_t val, int16_t len,
     u_int8_t *data)
@@ -235,14 +406,22 @@ get80211opmode(prop_dictionary_t env)
 	struct ifmediareq ifmr;
 
 	memset(&ifmr, 0, sizeof(ifmr));
-	if (direct_ioctl(env, SIOCGIFMEDIA, &ifmr) == -1)
+	if (direct_ioctl(env, SIOCGIFMEDIA, &ifmr) == -1) {
 		;
-	else if (ifmr.ifm_current & IFM_IEEE80211_ADHOC)
-		return IEEE80211_M_IBSS;        /* XXX ahdemo */
-	else if (ifmr.ifm_current & IFM_IEEE80211_HOSTAP)
+	} else if (ifmr.ifm_current & IFM_IEEE80211_ADHOC) {
+		if (ifmr.ifm_current & IFM_FLAG0)
+			return IEEE80211_M_AHDEMO;
+		else
+			return IEEE80211_M_IBSS;
+	} else if (ifmr.ifm_current & IFM_IEEE80211_HOSTAP) {
 		return IEEE80211_M_HOSTAP;
-	else if (ifmr.ifm_current & IFM_IEEE80211_MONITOR)
+	} else if (ifmr.ifm_current & IFM_IEEE80211_IBSS) {
+		return IEEE80211_M_IBSS;
+	} else if (ifmr.ifm_current & IFM_IEEE80211_MONITOR) {
 		return IEEE80211_M_MONITOR;
+	} else if (ifmr.ifm_current & IFM_IEEE80211_MBSS) {
+		return IEEE80211_M_MBSS;
+	}
 
 	return IEEE80211_M_STA;
 }
@@ -272,6 +451,25 @@ unsetifbssid(prop_dictionary_t env, prop_dictionary_t oenv)
 
 	if (direct_ioctl(env, SIOCS80211BSSID, &bssid) == -1)
 		err(EXIT_FAILURE, "SIOCS80211BSSID");
+	return 0;
+}
+
+static int
+get_mac_addr(prop_dictionary_t env, const char *key,
+    uint8_t ssid[IEEE80211_ADDR_LEN])
+{
+	struct ether_addr *ea;
+	const char *buf;
+
+	if (!prop_dictionary_get_cstring_nocopy(env, key, &buf))
+		return -1;
+
+	ea = ether_aton(buf);
+	if (ea == NULL) {
+		errx(EXIT_FAILURE, "malformed IEEE 802.11 MAC address %s", buf);
+		return -1;
+	}
+	memcpy(ssid, ea->ether_addr_octet, IEEE80211_ADDR_LEN);
 	return 0;
 }
 
@@ -494,6 +692,8 @@ ieee80211_statistics(prop_dictionary_t env)
 		return;
 #define	STAT_PRINT(_member, _desc)	\
 	printf("\t" _desc ": %" PRIu32 "\n", stats._member)
+#define	STAT_PRINT8(_member, _desc)	\
+	printf("\t" _desc ": %" PRIu8 "\n", stats._member)
 
 	STAT_PRINT(is_rx_badversion, "rx frame with bad version");
 	STAT_PRINT(is_rx_tooshort, "rx frame too short");
@@ -507,7 +707,7 @@ ieee80211_statistics(prop_dictionary_t env)
 	STAT_PRINT(is_rx_wepfail, "rx wep processing failed");
 	STAT_PRINT(is_rx_decap, "rx decapsulation failed");
 	STAT_PRINT(is_rx_mgtdiscard, "rx discard mgt frames");
-	STAT_PRINT(is_rx_ctl, "rx discard ctrl frames");
+	STAT_PRINT(is_rx_ctl, "rx ctrl frames");
 	STAT_PRINT(is_rx_beacon, "rx beacon frames");
 	STAT_PRINT(is_rx_rstoobig, "rx rate set truncated");
 	STAT_PRINT(is_rx_elem_missing, "rx required element missing");
@@ -585,6 +785,72 @@ ieee80211_statistics(prop_dictionary_t env)
 	STAT_PRINT(is_ff_decap, "fast frames decap'd");
 	STAT_PRINT(is_ff_encap, "fast frames encap'd for tx");
 	STAT_PRINT(is_rx_badbintval, "rx frame w/ bogus bintval");
+	STAT_PRINT(is_rx_demicfail, "rx demic failed");
+	STAT_PRINT(is_rx_defrag, "rx defragmentation failed");
+	STAT_PRINT(is_rx_mgmt, "rx management frames");
+	STAT_PRINT(is_rx_action, "rx action mgt frames");
+	STAT_PRINT(is_amsdu_tooshort, "A-MSDU rx decap error");
+	STAT_PRINT(is_amsdu_split, "A-MSDU rx split error");
+	STAT_PRINT(is_amsdu_decap, "A-MSDU decap'd");
+	STAT_PRINT(is_amsdu_encap, "A-MSDU encap'd for tx");
+	STAT_PRINT(is_ampdu_bar_bad, "A-MPDU BAR out of window");
+	STAT_PRINT(is_ampdu_bar_oow, "A-MPDU BAR before ADDBA");
+	STAT_PRINT(is_ampdu_bar_move, "A-MPDU BAR moved window");
+	STAT_PRINT(is_ampdu_bar_rx, "A-MPDU BAR frames handled");
+	STAT_PRINT(is_ampdu_rx_flush, "A-MPDU frames flushed");
+	STAT_PRINT(is_ampdu_rx_oor, "A-MPDU frames out-of-order");
+	STAT_PRINT(is_ampdu_rx_copy, "A-MPDU frames copied down");
+	STAT_PRINT(is_ampdu_rx_drop, "A-MPDU frames dropped");
+	STAT_PRINT(is_tx_badstate, "tx discard state != RUN");
+	STAT_PRINT(is_tx_notassoc, "tx failed, sta not assoc");
+	STAT_PRINT(is_tx_classify, "tx classification failed");
+	STAT_PRINT(is_dwds_mcast, "discard mcast over dwds");
+	STAT_PRINT(is_dwds_qdrop, "dwds pending frame q full");
+	STAT_PRINT(is_ht_assoc_nohtcap, "non-HT sta rejected");
+	STAT_PRINT(is_ht_assoc_downgrade, "HT sta forced to legacy");
+	STAT_PRINT(is_ht_assoc_norate, "HT assoc w/ rate mismatch");
+	STAT_PRINT(is_ampdu_rx_age, "A-MPDU sent up 'cuz of age");
+	STAT_PRINT(is_ampdu_rx_move, "A-MPDU MSDU moved window");
+	STAT_PRINT(is_addba_reject, "ADDBA reject 'cuz disabled");
+	STAT_PRINT(is_addba_norequest, "ADDBA response w/o ADDBA");
+	STAT_PRINT(is_addba_badtoken, "ADDBA response w/ wrong dialogtoken");
+	STAT_PRINT(is_addba_badpolicy, "ADDBA resp w/ wrong policy");
+	STAT_PRINT(is_ampdu_stop, "A-MPDU stream stopped");
+	STAT_PRINT(is_ampdu_stop_failed, "A-MPDU stream not running");
+	STAT_PRINT(is_ampdu_rx_reorder, "A-MPDU held for rx reorder");
+	STAT_PRINT(is_scan_bg, "background scans started");
+
+	STAT_PRINT8(is_rx_deauth_code, "last rx'd deauth reason");
+	STAT_PRINT8(is_rx_disassoc_code, "last rx'd disassoc reason");
+	STAT_PRINT8(is_rx_authfail_code, "last rx'd auth fail reason");
+
+	STAT_PRINT(is_beacon_miss, "beacon miss notification");
+	STAT_PRINT(is_rx_badstate, "rx discard state != RUN");
+	STAT_PRINT(is_ff_flush, "ff's flush'd from stageq");
+	STAT_PRINT(is_tx_ctl, "tx ctrl frames");
+	STAT_PRINT(is_ampdu_rexmt, "A-MPDU frames rexmt ok");
+	STAT_PRINT(is_ampdu_rexmt_fail, "A-MPDU frames rexmt fail");
+	STAT_PRINT(is_mesh_wrongmesh, "dropped 'cuz not mesh st");
+	STAT_PRINT(is_mesh_nolink, "dropped 'cuz link not esta");
+	STAT_PRINT(is_mesh_fwd_ttl, "mesh not fwd'd 'cuz ttl 0");
+	STAT_PRINT(is_mesh_fwd_nobuf, "mesh not fwd'd 'cuz no mbu");
+	STAT_PRINT(is_mesh_fwd_tooshort, "mesh not fwd'd 'cuz no hdr");
+	STAT_PRINT(is_mesh_fwd_disabled, "mesh not fwd'd 'cuz disabled");
+	STAT_PRINT(is_mesh_fwd_nopath, "mesh not fwd'd 'cuz path unknown");
+	STAT_PRINT(is_hwmp_wrongseq, "wrong hwmp seq no.");
+	STAT_PRINT(is_hwmp_rootreqs, "root PREQs sent");
+	STAT_PRINT(is_hwmp_rootrann, "root RANNs sent");
+	STAT_PRINT(is_mesh_badae, "dropped 'cuz invalid AE");
+	STAT_PRINT(is_mesh_rtaddfailed, "route add failed");
+	STAT_PRINT(is_mesh_notproxy, "dropped 'cuz not proxying");
+	STAT_PRINT(is_rx_badalign, "dropped 'cuz misaligned");
+	STAT_PRINT(is_hwmp_proxy, "PREP for proxy route");
+	STAT_PRINT(is_beacon_bad, "Number of bad beacons");
+	STAT_PRINT(is_ampdu_bar_tx, "A-MPDU BAR frames TXed");
+	STAT_PRINT(is_ampdu_bar_tx_retry, "A-MPDU BAR frames TX rtry");
+	STAT_PRINT(is_ampdu_bar_tx_fail, "A-MPDU BAR frames TX fail");
+	STAT_PRINT(is_ff_encapfail, "failed FF encap");
+	STAT_PRINT(is_amsdu_encapfail, "failed A-MSDU encap");
 #endif
 }
 
@@ -737,7 +1003,15 @@ ieee80211_status(prop_dictionary_t env, prop_dictionary_t oenv)
 static void
 scan_and_wait(prop_dictionary_t env)
 {
+	struct ieee80211_scan_req sr;
 	int sroute;
+
+	memset(&sr, 0, sizeof sr);
+	sr.sr_flags = IEEE80211_IOC_SCAN_ACTIVE
+			| IEEE80211_IOC_SCAN_BGSCAN
+			| IEEE80211_IOC_SCAN_NOPICK
+			| IEEE80211_IOC_SCAN_ONCE;
+	sr.sr_duration = IEEE80211_IOC_SCAN_FOREVER;
 
 	sroute = prog_socket(PF_ROUTE, SOCK_RAW, 0);
 	if (sroute < 0) {
@@ -745,7 +1019,8 @@ scan_and_wait(prop_dictionary_t env)
 		return;
 	}
 	/* NB: only root can trigger a scan so ignore errors */
-	if (set80211(env, IEEE80211_IOC_SCAN_REQ, 0, 0, NULL) >= 0) {
+	if (set80211(env, IEEE80211_IOC_SCAN_REQ, 0, sizeof sr,
+	    (uint8_t*)&sr) >= 0) {
 		char buf[2048];
 		struct if_announcemsghdr *ifan;
 		struct rt_msghdr *rtm;
@@ -1288,7 +1563,7 @@ iename(int elemid)
 	case IEEE80211_ELEMID_TPCREQ:	return " TPCREQ";
 	case IEEE80211_ELEMID_TPCREP:	return " TPCREP";
 	case IEEE80211_ELEMID_SUPPCHAN:	return " SUPPCHAN";
-	case IEEE80211_ELEMID_CHANSWITCHANN:return " CSA";
+	case IEEE80211_ELEMID_CSA:	return " CSA";
 	case IEEE80211_ELEMID_MEASREQ:	return " MEASREQ";
 	case IEEE80211_ELEMID_MEASREP:	return " MEASREP";
 	case IEEE80211_ELEMID_QUIET:	return " QUIET";
@@ -1370,7 +1645,7 @@ mappsb(u_int isrfreq, u_int isrflags)
 }
 
 static status_func_t status;
-static usage_func_t usage;
+static usage_func_t usage, usage_create;
 static statistics_func_t statistics;
 static cmdloop_branch_t branch[2];
 
@@ -1385,8 +1660,22 @@ ieee80211_usage(prop_dictionary_t env)
 }
 
 static void
+ieee80211_usage_create(prop_dictionary_t env)
+{
+	const char *progname = getprogname();
+
+	fprintf(stderr,
+		"     | %s interface create wlandev device\n"
+		"              [ wlanmode mode ] [ wlanbssid bssid ] [ wlanaddr address ]\n"
+		"              [ wdslegacy|-wdslegacy ] [ bssid|-bssid ] [ beacons|-beacons]\n",
+		progname);
+}
+
+static void
 ieee80211_constructor(void)
 {
+	static cmdloop_branch_t wlan_create_br = {};
+
 	cmdloop_branch_init(&branch[0], &ieee80211bool.pk_parser);
 	cmdloop_branch_init(&branch[1], &kw80211.pk_parser);
 	register_cmdloop_branch(&branch[0]);
@@ -1394,7 +1683,11 @@ ieee80211_constructor(void)
 	status_func_init(&status, ieee80211_status);
 	statistics_func_init(&statistics, ieee80211_statistics);
 	usage_func_init(&usage, ieee80211_usage);
+	usage_func_init(&usage_create, ieee80211_usage_create);
 	register_status(&status);
 	register_statistics(&statistics);
 	register_usage(&usage);
+	register_usage_create(&usage_create);
+	cmdloop_branch_init(&wlan_create_br, &wlan_create.pk_parser);
+	register_clone_parser(&wlan_create_br);
 }

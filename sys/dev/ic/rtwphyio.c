@@ -47,6 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: rtwphyio.c,v 1.19 2016/10/09 14:42:30 christos Exp $
 
 #include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_regdomain.h>
 #include <net80211/ieee80211_var.h>
 
 #include <dev/ic/rtwreg.h>

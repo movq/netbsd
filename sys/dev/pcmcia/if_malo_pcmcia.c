@@ -46,8 +46,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_malo_pcmcia.c,v 1.28 2024/02/09 22:08:36 andvar E
 #include <net/if_media.h>
 #include <net/if_llc.h>
 
+#include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <dev/firmload.h>
 

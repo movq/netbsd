@@ -55,6 +55,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_an_isapnp.c,v 1.24 2022/09/25 17:19:05 thorpej Ex
 
 #include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <sys/bus.h>
 #include <sys/intr.h>

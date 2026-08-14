@@ -228,7 +228,7 @@ static void sysctl_watchdog_setup(struct ifnet *);
 static void if_attachdomain1(struct ifnet *);
 static int ifconf(u_long, void *);
 static int if_transmit(struct ifnet *, struct mbuf *);
-static int if_clone_create(const char *);
+static int if_clone_create(const char *, size_t, void*);
 static int if_clone_destroy(const char *);
 static void if_link_state_change_work(struct work *, void *);
 static void if_up_locked(struct ifnet *);
@@ -1570,7 +1570,7 @@ if_delroute_matcher(struct rtentry *rt, void *v)
  * Create a clone network interface.
  */
 static int
-if_clone_create(const char *name)
+if_clone_create(const char *name, size_t arg_size, void *args)
 {
 	struct if_clone *ifc;
 	struct ifnet *ifp;
@@ -1589,7 +1589,10 @@ if_clone_create(const char *name)
 		return EEXIST;
 	}
 
-	return (*ifc->ifc_create)(ifc, unit);
+	if (ifc->ifc_create_with_args != NULL)
+		return (*ifc->ifc_create_with_args)(ifc, unit, arg_size, args);
+	else
+		return (*ifc->ifc_create)(ifc, unit);
 }
 
 /*
@@ -3496,6 +3499,7 @@ doifioctl(struct socket *so, u_long cmd, void *data, struct lwp *l)
 
 	switch (cmd) {
 	case SIOCIFCREATE:
+	case SIOCIFCREATEARGS:
 	case SIOCIFDESTROY: {
 		const int bound = curlwp_bind();
 		if (l != NULL) {
@@ -3513,9 +3517,25 @@ doifioctl(struct socket *so, u_long cmd, void *data, struct lwp *l)
 		}
 		KERNEL_LOCK_UNLESS_NET_MPSAFE();
 		mutex_enter(&if_clone_mtx);
-		r = (cmd == SIOCIFCREATE) ?
-			if_clone_create(ifr->ifr_name) :
-			if_clone_destroy(ifr->ifr_name);
+		switch (cmd) {
+		case SIOCIFCREATE:
+			r = if_clone_create(ifr->ifr_name, 0, NULL);
+			break;
+		case SIOCIFDESTROY:
+			r = if_clone_destroy(ifr->ifr_name);
+			break;
+		case SIOCIFCREATEARGS:
+			{
+				struct if_cclonearg *req =
+				    (struct if_cclonearg *)data;
+				r = if_clone_create(req->ifr_name,
+				    req->ifc_arg_size, req->ifc_args);
+			}
+			break;
+		default:
+			r = ENXIO;
+			break;
+		}
 		mutex_exit(&if_clone_mtx);
 		KERNEL_UNLOCK_UNLESS_NET_MPSAFE();
 		curlwp_bindx(bound);

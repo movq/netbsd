@@ -41,10 +41,13 @@ __KERNEL_RCSID(0, "$NetBSD: if_athn_cardbus.c,v 1.3 2022/09/25 17:33:19 thorpej 
 #include <net/if.h>
 #include <net/if_ether.h>
 #include <net/if_media.h>
+#include <net/route.h>
 
+#include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_amrr.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <dev/ic/athnreg.h>
 #include <dev/ic/athnvar.h>
@@ -176,7 +179,7 @@ athn_cardbus_attach(device_t parent, device_t self, void *aux)
 
 	if (pmf_device_register(self,
 	    athn_cardbus_suspend, athn_cardbus_resume)) {
-		pmf_class_network_register(self, &sc->sc_if);
+		/* pmf_class_network_register(self, &sc->sc_if); */
 		pmf_device_suspend(self, &sc->sc_qual);
 	} else
 		aprint_error_dev(self, "couldn't establish power handler\n");
