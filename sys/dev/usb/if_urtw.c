@@ -53,8 +53,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_urtw.c,v 1.27 2024/07/05 04:31:52 rin Exp $");
 #include <netinet/if_inarp.h>
 #include <netinet/ip.h>
 
+#include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>

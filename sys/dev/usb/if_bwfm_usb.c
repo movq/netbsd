@@ -41,7 +41,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_bwfm_usb.c,v 1.15 2020/07/22 17:18:10 riastradh E
 
 #include <netinet/in.h>
 
+#include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdevs.h>

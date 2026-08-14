@@ -96,7 +96,7 @@ ieee80211_get_ostats(struct ieee80211_ostats *ostats,
 }
 
 static int
-ieee80211_20_ioctl(struct ieee80211com *ic, u_long cmd, void *data)
+ieee80211_20_ioctl(struct ieee80211vap *vap, u_long cmd, void *data)
 {
 	struct ieee80211_ostats ostats;
 	struct ifreq *ifr;
@@ -107,10 +107,10 @@ ieee80211_20_ioctl(struct ieee80211com *ic, u_long cmd, void *data)
 	case OSIOCG80211ZSTATS:
 		s = splnet();
 		ifr = (struct ifreq *)data;
-		ieee80211_get_ostats(&ostats, &ic->ic_stats);
+		ieee80211_get_ostats(&ostats, &vap->iv_stats);
 		error = copyout(&ostats, ifr->ifr_data, sizeof(ostats));
 		if (error == 0 && cmd == OSIOCG80211ZSTATS)
-			(void)memset(&ic->ic_stats, 0, sizeof(ic->ic_stats));
+			(void)memset(&vap->iv_stats, 0, sizeof(vap->iv_stats));
 		splx(s);
 		return error;
 	default:

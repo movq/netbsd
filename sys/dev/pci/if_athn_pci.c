@@ -41,6 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_athn_pci.c,v 1.14 2022/09/25 17:52:25 thorpej Exp
 #include <net/if.h>
 #include <net/if_ether.h>
 #include <net/if_media.h>
+#include <net/route.h>
 
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_amrr.h>
@@ -83,8 +84,6 @@ Static int	athn_pci_activate(device_t, enum devact);
 CFATTACH_DECL_NEW(athn_pci, sizeof(struct athn_pci_softc), athn_pci_match,
     athn_pci_attach, athn_pci_detach, athn_pci_activate);
 
-Static bool	athn_pci_resume(device_t, const pmf_qual_t *);
-Static bool	athn_pci_suspend(device_t, const pmf_qual_t *);
 Static uint32_t	athn_pci_read(struct athn_softc *, uint32_t);
 Static void	athn_pci_write(struct athn_softc *, uint32_t, uint32_t);
 Static void	athn_pci_write_barrier(struct athn_softc *);
@@ -212,18 +211,23 @@ athn_pci_attach(device_t parent, device_t self, void *aux)
 		goto fail1;
 	}
 
-	ic->ic_ifp = &sc->sc_if;
+#if notyet
+	/* NNN -- Does ic_vaps have anything yet???? */
+	TAILQ_FIRST(&(sc->sc_ic.ic_vaps))->iv_ifp = &sc->sc_if;
+#endif
+
 	if (athn_attach(sc) != 0)
 		goto fail2;
 
 	aprint_verbose_dev(self, "interrupting at %s\n", intrstr);
 
-	if (pmf_device_register(self, athn_pci_suspend, athn_pci_resume)) {
-		pmf_class_network_register(self, &sc->sc_if);
-		pmf_device_suspend(self, &sc->sc_qual);
-	}
-	else
-		aprint_error_dev(self, "couldn't establish power handler\n");
+	/* XXX Unsure of how to handle pmf with multiple network interfaces */
+	// if (pmf_device_register(self, athn_pci_suspend, athn_pci_resume)) {
+	// 	pmf_class_network_register(self, &sc->sc_if);
+	// 	pmf_device_suspend(self, &sc->sc_qual);
+	// }
+	// else
+	// 	aprint_error_dev(self, "couldn't establish power handler\n");
 
 	ieee80211_announce(ic);
 	return;
@@ -264,49 +268,51 @@ athn_pci_activate(device_t self, enum devact act)
 
 	switch (act) {
 	case DVACT_DEACTIVATE:
-		if_deactivate(sc->sc_ic.ic_ifp);
+		if_deactivate(TAILQ_FIRST(&(sc->sc_ic.ic_vaps))->iv_ifp);
 		break;
 	}
 	return 0;
 }
 
-Static bool
-athn_pci_suspend(device_t self, const pmf_qual_t *qual)
-{
-	struct athn_pci_softc *psc = device_private(self);
-	struct athn_softc *sc = &psc->psc_sc;
+/* XXX disable pmf for now*/
+// Static bool
+// athn_pci_suspend(device_t self, const pmf_qual_t *qual)
+// {
+// 	struct athn_pci_softc *psc = device_private(self);
+// 	struct athn_softc *sc = &psc->psc_sc;
 
-	athn_suspend(sc);
-	if (psc->psc_ih != NULL) {
-		pci_intr_disestablish(psc->psc_pc, psc->psc_ih);
-		psc->psc_ih = NULL;
-	}
-	return true;
-}
+// 	athn_suspend(sc);
+// 	if (psc->psc_ih != NULL) {
+// 		pci_intr_disestablish(psc->psc_pc, psc->psc_ih);
+// 		psc->psc_ih = NULL;
+// 	}
+// 	return true;
+// }
 
-Static bool
-athn_pci_resume(device_t self, const pmf_qual_t *qual)
-{
-	struct athn_pci_softc *psc = device_private(self);
-	struct athn_softc *sc = &psc->psc_sc;
-	pcireg_t reg;
+/* XXX disable pmf for now */
+// Static bool
+// athn_pci_resume(device_t self, const pmf_qual_t *qual)
+// {
+// 	struct athn_pci_softc *psc = device_private(self);
+// 	struct athn_softc *sc = &psc->psc_sc;
+// 	pcireg_t reg;
 
-	/*
-	 * XXX: see comment in athn_attach().
-	 */
-	reg = pci_conf_read(psc->psc_pc, psc->psc_tag, 0x40);
-	if (reg & 0xff00)
-		pci_conf_write(psc->psc_pc, psc->psc_tag, 0x40, reg & ~0xff00);
+// 	/*
+// 	 * XXX: see comment in athn_attach().
+// 	 */
+// 	reg = pci_conf_read(psc->psc_pc, psc->psc_tag, 0x40);
+// 	if (reg & 0xff00)
+// 		pci_conf_write(psc->psc_pc, psc->psc_tag, 0x40, reg & ~0xff00);
 
-	/* XXX re-establishing interrupt shouldn't be needed */
-	psc->psc_ih = pci_intr_establish_xname(psc->psc_pc, psc->psc_pih,
-	    IPL_NET, athn_intr, sc, device_xname(self));
-	if (psc->psc_ih == NULL) {
-		aprint_error_dev(self, "couldn't map interrupt\n");
-		return false;
-	}
-	return athn_resume(sc);
-}
+// 	/* XXX re-establishing interrupt shouldn't be needed */
+// 	psc->psc_ih = pci_intr_establish_xname(psc->psc_pc, psc->psc_pih,
+// 	    IPL_NET, athn_intr, sc, device_xname(self));
+// 	if (psc->psc_ih == NULL) {
+// 		aprint_error_dev(self, "couldn't map interrupt\n");
+// 		return false;
+// 	}
+// 	return athn_resume(sc);
+// }
 
 Static uint32_t
 athn_pci_read(struct athn_softc *sc, uint32_t addr)

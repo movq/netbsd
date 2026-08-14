@@ -60,6 +60,11 @@ struct usage_func {
 	usage_cb_t			f_func;
 };
 
+struct usage_create_func {
+	SIMPLEQ_ENTRY(usage_func)	f_next;
+	usage_cb_t			f_func;
+};
+
 struct status_func {
 	SIMPLEQ_ENTRY(status_func)	f_next;
 	status_cb_t			f_func;
@@ -79,12 +84,14 @@ typedef struct cmdloop_branch cmdloop_branch_t;
 void cmdloop_branch_init(cmdloop_branch_t *, struct parser *);
 int register_family(struct afswtch *);
 int register_cmdloop_branch(cmdloop_branch_t *);
+int register_clone_parser(cmdloop_branch_t *);
 void statistics_func_init(statistics_func_t *, statistics_cb_t);
 void status_func_init(status_func_t *, status_cb_t);
 void usage_func_init(usage_func_t *, usage_cb_t);
 int register_statistics(statistics_func_t *);
 int register_status(status_func_t *);
 int register_usage(usage_func_t *);
+int register_usage_create(usage_func_t *);
 int register_flag(int);
 bool get_flag(int);
 void do_setethercaps(prop_dictionary_t);

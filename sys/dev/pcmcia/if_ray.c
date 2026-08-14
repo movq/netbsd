@@ -78,7 +78,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_ray.c,v 1.100 2024/02/11 10:36:40 andvar Exp $");
 #include <net/if_media.h>
 #include <net/if_llc.h>
 #include <net80211/ieee80211.h>
+#include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_ioctl.h>
+#include <net80211/ieee80211_var.h>
+#include <net80211/ieee80211_regdomain.h>
 #include <net/if_media.h>
 #include <net/bpf.h>
 

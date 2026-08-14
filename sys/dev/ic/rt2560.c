@@ -55,9 +55,11 @@ __KERNEL_RCSID(0, "$NetBSD: rt2560.c,v 1.41 2025/07/15 22:15:04 andvar Exp $");
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
 
+#include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_rssadapt.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <dev/ic/rt2560reg.h>
 #include <dev/ic/rt2560var.h>

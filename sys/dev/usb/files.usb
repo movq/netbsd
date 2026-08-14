@@ -76,6 +76,7 @@ defflag opt_usb.h	URTWN_DEBUG: USB_DEBUG
 defparam opt_usb.h	URTWN_DEBUG_DEFAULT: URTWN_DEBUG
 defflag opt_usb.h	URTW_DEBUG: USB_DEBUG
 defflag opt_usb.h	USBNET_DEBUG: USB_DEBUG
+defflag opt_usb.h	USBWIFI_DEBUG: USB_DEBUG
 defflag opt_usb.h	USCANNER_DEBUG: USB_DEBUG
 defflag opt_usb.h	USLSA_DEBUG: USB_DEBUG
 defflag opt_usb.h	USMSC_DEBUG: USB_DEBUG
@@ -109,6 +110,9 @@ file	dev/usb/usb_mem.c		usb_dma			needs-flag
 
 define	usbnet: usb
 file	dev/usb/usbnet.c		usbnet
+
+define	usbwifi: usb
+file	dev/usb/usbwifi.c		usbwifi
 
 file	dev/usb/usb_verbose.c		usbverbose & usb
 
@@ -536,7 +540,7 @@ attach	urndis at usbifif
 file	dev/usb/if_urndis.c		urndis
 
 # Realtek RTL8188CU/RTL8192CU
-device	urtwn: ether, ifnet, arp, wlan, firmload
+device	urtwn: ether, ifnet, arp, wlan, firmload, usbwifi
 attach	urtwn at usbdevif
 file	dev/usb/if_urtwn.c              urtwn
 

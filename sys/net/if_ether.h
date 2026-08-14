@@ -258,6 +258,8 @@ int	ether_delmulti(const struct sockaddr *, struct ethercom *);
 int	ether_multiaddr(const struct sockaddr *, uint8_t[ETHER_ADDR_LEN],
 			uint8_t[ETHER_ADDR_LEN]);
 void    ether_input(struct ifnet *, struct mbuf *);
+int	ether_output(struct ifnet *, struct mbuf *, const struct sockaddr *,
+	    const struct rtentry *);
 
 /*
  * Ethernet multicast address structure.  There is one of these for each

@@ -50,6 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_an_pcmcia.c,v 1.41 2012/10/27 17:18:36 chs Exp $"
 
 #include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <sys/cpu.h>
 #include <sys/bus.h>

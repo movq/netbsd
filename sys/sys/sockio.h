@@ -146,6 +146,10 @@
 #define SIOCSIFDESCR	_IOW('i', 142, struct ifreq)	/* set interface description */
 #define SIOCGIFDESCR	_IOWR('i', 143, struct ifreq)	/* get interface description */
 
+#define	SIOCIFCREATEARGS _IOW('i', 144, struct if_cclonearg)	/* create
+							 * clone if with
+							 * additional parameters */
+
 #define SIOCGUMBINFO	_IOWR('i', 190, struct ifreq)	/* get MBIM info */
 #define SIOCSUMBPARAM	_IOW('i', 191, struct ifreq)	/* set MBIM param */
 #define SIOCGUMBPARAM	_IOWR('i', 192, struct ifreq)	/* get MBIM param */

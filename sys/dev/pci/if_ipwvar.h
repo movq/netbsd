@@ -97,6 +97,7 @@ struct ipw_softc {
 #define IPW_FLAG_FW_INITED		(1 << 1)
 #define IPW_FLAG_HAS_RADIO_SWITCH	(1 << 2)
 #define	IPW_FLAG_FW_WARNED		(1 << 3)
+#define IPW_FLAG_TX_RUNNING		(1 << 4)
 
 	struct resource			*irq;
 	struct resource			*mem;
@@ -164,6 +165,9 @@ struct ipw_softc {
 	} sc_txtapu;
 #define sc_txtap	sc_txtapu.th
 	int				sc_txtap_len;
+	uint8_t		sc_des_essid[IEEE80211_NWID_LEN];
+	uint8_t		sc_des_bssid[IEEE80211_NWID_LEN];
+	int		sc_des_esslen;
 };
 
 #define	sc_if	sc_ec.ec_if

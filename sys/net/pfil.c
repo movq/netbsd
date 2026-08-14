@@ -138,6 +138,9 @@ pfil_head_create(int type, void *key)
 void
 pfil_head_destroy(pfil_head_t *pfh)
 {
+	if (pfh == NULL)
+		return;
+
 	LIST_REMOVE(pfh, ph_list);
 
 	psref_target_destroy(&pfh->ph_in.active->psref, pfil_psref_class);

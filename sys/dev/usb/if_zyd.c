@@ -61,6 +61,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_zyd.c,v 1.61 2024/02/09 22:08:37 andvar Exp $");
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_amrr.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <dev/firmload.h>
 

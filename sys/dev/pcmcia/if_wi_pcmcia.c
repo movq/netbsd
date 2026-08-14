@@ -50,6 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_wi_pcmcia.c,v 1.93 2019/01/08 08:47:21 msaitoh Ex
 #include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_regdomain.h>
 #include <net80211/ieee80211_rssadapt.h>
 
 #include <sys/cpu.h>

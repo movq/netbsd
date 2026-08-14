@@ -174,6 +174,8 @@ struct iwi_softc {
 	} sc_txtapu;
 #define sc_txtap	sc_txtapu.th
 	int			sc_txtap_len;
+	uint8_t		sc_des_essid[IEEE80211_NWID_LEN];
+	int		sc_des_esslen;
 };
 
 #define	sc_if	sc_ec.ec_if

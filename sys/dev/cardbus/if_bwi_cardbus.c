@@ -45,9 +45,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_bwi_cardbus.c,v 1.3 2022/09/25 17:33:19 thorpej E
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
+#include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_amrr.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>

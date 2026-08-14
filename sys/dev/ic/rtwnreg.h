@@ -1028,6 +1028,13 @@
 #define R92C_RAID_11G	5	/* "pure" 11g */
 #define R92C_RAID_11B	6
 
+#define R92E_RAID_11BGN	0  	/* XXX Guessing */
+#define R92E_RAID_11GN	1
+#define R92E_RAID_11N	3
+#define R92E_RAID_11BG	6
+#define R92E_RAID_11G	7	/* "pure" 11g */
+#define R92E_RAID_11B	8
+
 
 /* Macros to access unaligned little-endian memory. */
 #define LE_READ_2(x)	((x)[0] | ((x)[1] << 8))
@@ -1385,12 +1392,22 @@ struct r92c_tx_desc_usb {
 	uint32_t	txdw6;
 	uint16_t	txdsum;
 	uint16_t	pad;
+} __packed __aligned(4);
+
+struct r92e_tx_desc_usb {
+	uint32_t	txdw0;
+	uint32_t	txdw1;
+	uint32_t	txdw2;
+	uint32_t	txdw3;
+	uint32_t	txdw4;
+	uint32_t	txdw5;
+	uint32_t	txdw6;
+	uint16_t	txdsum;
+	uint16_t	pad;
 	uint32_t	txdw7;
 	uint16_t	txdseq2;
-#define R92E_HWSEQ_SHIFT	11
-#define R92E_HWSEQ_MASK		0x00000fffff
 	uint16_t	txdw8;
-} __packed __aligned(4);
+} __packed __attribute__((aligned(4)));
 
 #define R92C_TXDW0_PKTLEN_M	0x0000ffff
 #define R92C_TXDW0_PKTLEN_S	0
@@ -1405,6 +1422,8 @@ struct r92c_tx_desc_usb {
 #define R92C_TXDW1_MACID_S	0
 #define R88E_TXDW1_MACID_M	0x0000003f
 #define R88E_TXDW1_MACID_S	0
+#define R92E_TXDW1_MACID_M	0x0000007f
+#define R92E_TXDW1_MACID_S	0
 #define R92C_TXDW1_AGGEN	0x00000020
 #define R92C_TXDW1_AGGBK	0x00000040
 #define R92C_TXDW1_QSEL_M	0x00001f00
@@ -1430,11 +1449,11 @@ struct r92c_tx_desc_usb {
 #define R88E_TXDW2_AGGBK	0x00010000
 #define R92C_TXDW2_CCX_RPT	0x00080000
 
-#define R92E_TXDW3_AGGBK	0x00000100
+#define R92E_TXDW3_DRVRATE	0x0100
+#define R23A_TXDW3_TXRPTEN	0x4000
+#define R92C_TXDW3_HWSEQEN	0x8000
 
-#define R92C_HWSEQ_EN		0x00008000
-
-#define R92C_TXDW4_RTSRATE_M	0x0000003f
+#define R92C_TXDW4_RTSRATE_M	0x0000001f
 #define R92C_TXDW4_RTSRATE_S	0
 #define R92C_TXDW4_QOS		0x00000040
 #define R92C_TXDW4_HWSEQ	0x00000080
@@ -1446,7 +1465,21 @@ struct r92c_tx_desc_usb {
 #define R92C_TXDW4_SCO_S	20
 #define R92C_TXDW4_SCO_SCA	1
 #define R92C_TXDW4_SCO_SCB	2
+#define R92C_TXDW4_SHORTPRE	0x01000000
 #define R92C_TXDW4_40MHZ	0x02000000
+#define R92C_TXDW4_RTS_SHORT	0x04000000
+
+#define R92E_TXDW4_DATARATE_M	0x0000007f
+#define R92E_TXDW4_DATARATE_S	0
+#define R92E_TXDW4_DATARATEFB_M 0x00001f00
+#define R92E_TXDW4_DATARATEFB_S 8
+#define R92E_TXDW4_RTSRATEFB_M  0x0001e000
+#define R92E_TXDW4_RTSRATEFB_S  13
+#define R92E_TXDW4_RETRYLMT_ENA 0x00020000
+#define R92E_TXDW4_RETRYLMT_M   0x00fc0000
+#define R92E_TXDW4_RETRYLMT_S   18
+#define R92E_TXDW4_RTSRATE_M	0x1f000000
+#define R92E_TXDW4_RTSRATE_S	24
 
 #define R92C_TXDW5_DATARATE_M		0x0000003f
 #define R92C_TXDW5_DATARATE_S		0
@@ -1460,6 +1493,9 @@ struct r92c_tx_desc_usb {
 #define R92C_TXDW5_DATA_RETRY_LIMIT_S	18
 #define R92C_TXDW5_AGGNUM_M		0xff000000
 #define R92C_TXDW5_AGGNUM_S		24
+
+#define R92E_TXDSEQ2_HWSEQ_S		11
+#define R92E_TXDSEQ2_HWSEQ_M		0x0000ffff
 
 /* Tx report (type 1). */
 struct r88e_tx_rpt_ccx {

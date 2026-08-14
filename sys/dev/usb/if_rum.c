@@ -62,6 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_rum.c,v 1.71 2024/07/05 04:31:52 rin Exp $");
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_amrr.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <dev/firmload.h>
 

@@ -64,7 +64,7 @@ MAN+=	secmodel_suser.9 \
 	tcp_congctl.9 thmap.9 threadpool.9 timecounter.9 time_second.9 todr.9 \
 	ts2timo.9 tvtohz.9 \
 	ubc.9 ucas.9 ucom.9 ufetch.9 uiomove.9 \
-	usbd_status.9 usbdi.9 usbnet.9 \
+	usbd_status.9 usbdi.9 usbnet.9 usbwifi.9 \
 	userret.9 ustore.9 \
 	uvm.9 uvm_hotplug.9 uvm_km.9 uvm_map.9 uvm_obj_wirepages.9 \
 	vattr.9 veriexec.9 vcons.9 versioningsyscalls.9 \

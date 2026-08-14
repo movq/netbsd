@@ -13505,6 +13505,7 @@
 ./usr/share/man/cat9/usbd_status.0		comp-sys-catman		.cat
 ./usr/share/man/cat9/usbdi.0			comp-sys-catman		.cat
 ./usr/share/man/cat9/usbnet.0			comp-sys-catman		.cat
+./usr/share/man/cat9/usbwifi.0			comp-sys-catman		.cat
 ./usr/share/man/cat9/useracc.0			comp-obsolete		obsolete
 ./usr/share/man/cat9/userret.0			comp-sys-catman		.cat
 ./usr/share/man/cat9/ustore.0			comp-sys-catman		.cat
@@ -22345,6 +22346,7 @@
 ./usr/share/man/html9/usbd_status.html		comp-sys-htmlman	html
 ./usr/share/man/html9/usbdi.html		comp-sys-htmlman	html
 ./usr/share/man/html9/usbnet.html		comp-sys-htmlman	html
+./usr/share/man/html9/usbwifi.html		comp-sys-htmlman	html
 ./usr/share/man/html9/userret.html		comp-sys-htmlman	html
 ./usr/share/man/html9/ustore.html		comp-sys-htmlman	html
 ./usr/share/man/html9/ustore_16.html		comp-sys-htmlman	html
@@ -31390,6 +31392,7 @@
 ./usr/share/man/man9/usbd_status.9		comp-sys-man		.man
 ./usr/share/man/man9/usbdi.9			comp-sys-man		.man
 ./usr/share/man/man9/usbnet.9			comp-sys-man		.man
+./usr/share/man/man9/usbwifi.9			comp-sys-man		.man
 ./usr/share/man/man9/useracc.9			comp-obsolete		obsolete
 ./usr/share/man/man9/userret.9			comp-sys-man		.man
 ./usr/share/man/man9/ustore.9			comp-sys-man		.man

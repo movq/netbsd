@@ -109,6 +109,7 @@ __KERNEL_RCSID(0, "$NetBSD: an.c,v 1.76 2021/09/21 14:40:14 christos Exp $");
 #include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <dev/ic/anreg.h>
 #include <dev/ic/anvar.h>

@@ -87,6 +87,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_rtw_pci.c,v 1.25 2022/09/25 17:52:25 thorpej Exp 
 #include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_radiotap.h>
 #include <net80211/ieee80211_var.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <sys/bus.h>
 #include <sys/intr.h>

@@ -1,3 +1,48 @@
+*** Changes in 2024 for WiFi refresh.
+
+2024-07-29 12:30 Phil
+
+Update to FreeBSD HEAD on 2024-07-29
+  git sha 4113ea3403fc6abc5e3c51eb027ccef714c89270
+  (diffs from 81a7ce44047f02049760d70c0cdc74c2751e9bad)
+
+  Notes:  ieee80211_crypto.c -- revied for full suplicant support.
+          Also in several other places including ioctl.  crypto caps.
+
+*** Changes in 2023 for WiFi refresh.
+
+2023-07-28 12:00 Phil
+
+Update to FreeBSD HEAD on 2023-07-27.
+  git sha 81a7ce44047f02049760d70c0cdc74c2751e9bad
+  (diffs from sha 8379e8db7a92aa536a4103bfe8993c660ddcba0c)
+
+  Notes:
+  *check out ieee80211_priv vs changes here.  ieee80211_ioctl.c
+
+*** Changes in 2020 for WiFi refresh.
+
+2020-07-04 12:00 Martin
+
+Remove FBSDKASSERT, convert all calls to native (NetBSD) usage:
+ - MPASS -> KASSERT
+ - KASSERT(cond, (printf-args)) -> KASSERTMSG(cond, printf-args)
+
+2020-06-25 12:00 Martin
+
+Update to FreeBSD HEAD on 2020-06-21: highest rev 362210
+
+
+*** Changes in 2018 for WiFi refresh.
+
+2018-06-28 13:47 Phil
+
+Copy FreeBSD version in total, git repo mirror had commit Id of
+09e3123164ec345822e00465039503686efde455.  Moved ieee80211_freebsd.[ch]
+to ieee80211_netbsd.[ch].
+This is subversion revision 335773: ssh://svn.freebsd.org/base/head@335773
+
+
 ***
 *** Summary of changes between 2005-05-18 and 2005-11-01.
 ***

@@ -78,10 +78,12 @@ __KERNEL_RCSID(0, "$NetBSD: bwi.c,v 1.43 2025/02/16 10:38:55 jmcneill Exp $");
 
 #include <net/bpf.h>
 
+#include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
 /* [TRC: XXX amrr] */
 #include <net80211/ieee80211_amrr.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <dev/ic/bwireg.h>
 #include <dev/ic/bwivar.h>

@@ -114,7 +114,8 @@ bool gflagset[10 + 26 * 2];
 static int link_state(prop_dictionary_t);
 static const char *link_state_str(int);
 static int carrier(prop_dictionary_t);
-static int clone_command(prop_dictionary_t, prop_dictionary_t);
+int clone_command(prop_dictionary_t, prop_dictionary_t);
+int wlan_clone_command(prop_dictionary_t, prop_dictionary_t);
 static void do_setifpreference(prop_dictionary_t);
 static int flag_index(int);
 static void init_afs(void);
@@ -173,7 +174,7 @@ static const struct kwinst ifcapskw[] = {
 
 extern struct pbranch command_root;
 extern struct pbranch opt_command;
-extern struct pbranch opt_family, opt_silent_family;
+extern struct pbranch opt_family, clone_create_branches;
 extern struct pkw cloning, silent_family, family, ifcaps, ifflags, misc;
 extern struct pstr parse_linkstr;
 
@@ -231,7 +232,7 @@ static const struct kwinst misckw[] = {
 /* key: clonecmd */
 static const struct kwinst clonekw[] = {
 	{.k_word = "create", .k_type = KW_T_INT, .k_int = SIOCIFCREATE,
-	 .k_nextparser = &opt_silent_family.pb_parser},
+	 .k_nextparser = &clone_create_branches.pb_parser},
 	{.k_word = "destroy", .k_type = KW_T_INT, .k_int = SIOCIFDESTROY}
 };
 
@@ -271,19 +272,20 @@ static SIMPLEQ_HEAD(, afswtch) aflist = SIMPLEQ_HEAD_INITIALIZER(aflist);
 
 static SIMPLEQ_HEAD(, usage_func) usage_funcs =
     SIMPLEQ_HEAD_INITIALIZER(usage_funcs);
+static SIMPLEQ_HEAD(, usage_func) usage_create_funcs =
+    SIMPLEQ_HEAD_INITIALIZER(usage_create_funcs);
 static SIMPLEQ_HEAD(, status_func) status_funcs =
     SIMPLEQ_HEAD_INITIALIZER(status_funcs);
 static SIMPLEQ_HEAD(, statistics_func) statistics_funcs =
     SIMPLEQ_HEAD_INITIALIZER(statistics_funcs);
 static SIMPLEQ_HEAD(, cmdloop_branch) cmdloop_branches =
     SIMPLEQ_HEAD_INITIALIZER(cmdloop_branches);
+static SIMPLEQ_HEAD(, cmdloop_branch) clone_parser_branches =
+    SIMPLEQ_HEAD_INITIALIZER(clone_parser_branches);
 
 struct branch opt_clone_brs[] = {
 	  {.b_nextparser = &cloning.pk_parser}
 	, {.b_nextparser = &opt_family.pb_parser}
-}, opt_silent_family_brs[] = {
-	  {.b_nextparser = &silent_family.pk_parser}
-	, {.b_nextparser = &command_root.pb_parser}
 }, opt_family_brs[] = {
 	  {.b_nextparser = &family.pk_parser}
 	, {.b_nextparser = &opt_command.pb_parser}
@@ -342,9 +344,8 @@ struct pkw misc = PKW_INITIALIZER(&misc, "misc", NULL, NULL,
 struct pbranch opt_clone = PBRANCH_INITIALIZER(&opt_clone,
     "opt-clone", opt_clone_brs, __arraycount(opt_clone_brs), true);
 
-struct pbranch opt_silent_family = PBRANCH_INITIALIZER(&opt_silent_family,
-    "optional silent family", opt_silent_family_brs,
-    __arraycount(opt_silent_family_brs), true);
+struct pbranch clone_create_branches = PBRANCH_INITIALIZER(
+    &clone_create_branches, "branches after create", NULL, 0, true);
 
 struct pbranch opt_family = PBRANCH_INITIALIZER(&opt_family,
     "opt-family", opt_family_brs, __arraycount(opt_family_brs), true);
@@ -412,6 +413,13 @@ register_cmdloop_branch(cmdloop_branch_t *b)
 }
 
 int
+register_clone_parser(cmdloop_branch_t *b)
+{
+	SIMPLEQ_INSERT_TAIL(&clone_parser_branches, b, b_next);
+	return 0;
+}
+
+int
 register_statistics(statistics_func_t *f)
 {
 	SIMPLEQ_INSERT_TAIL(&statistics_funcs, f, f_next);
@@ -429,6 +437,13 @@ int
 register_usage(usage_func_t *f)
 {
 	SIMPLEQ_INSERT_TAIL(&usage_funcs, f, f_next);
+	return 0;
+}
+
+int
+register_usage_create(usage_func_t *f)
+{
+	SIMPLEQ_INSERT_TAIL(&usage_create_funcs, f, f_next);
 	return 0;
 }
 
@@ -502,6 +517,13 @@ init_parser(void)
 		err(EXIT_FAILURE, "parser_init(iface_only)");
 	if (parser_init(&iface_start.pif_parser) == -1)
 		err(EXIT_FAILURE, "parser_init(iface_start)");
+
+	/* add the fixed "create" keyword parsers and the optionally
+	 * registered by now */
+	SIMPLEQ_FOREACH(b, &clone_parser_branches, b_next)
+		pbranch_addbranch(&clone_create_branches, b->b_parser);
+	pbranch_addbranch(&clone_create_branches, &silent_family.pk_parser);
+	pbranch_addbranch(&clone_create_branches, &command_root.pb_parser);
 
 	SIMPLEQ_FOREACH(b, &cmdloop_branches, b_next)
 		pbranch_addbranch(&command_root, b->b_parser);
@@ -949,7 +971,7 @@ list_cloners(prop_dictionary_t env, prop_dictionary_t oenv)
 	exit(EXIT_SUCCESS);
 }
 
-static int
+int
 clone_command(prop_dictionary_t env, prop_dictionary_t oenv)
 {
 	int64_t cmd;
@@ -958,7 +980,6 @@ clone_command(prop_dictionary_t env, prop_dictionary_t oenv)
 		errno = ENOENT;
 		return -1;
 	}
-
 	if (indirect_ioctl(env, (unsigned long)cmd, NULL) == -1) {
 		warn("%s", __func__);
 		return -1;
@@ -1562,10 +1583,16 @@ usage(void)
 		"       %s -l [-b] [-d] [-s] [-u]\n"
 		"       %s -C\n"
 		"       %s -w n\n"
-		"       %s interface create\n"
-		"       %s interface destroy\n",
+		"       %s interface create\n",
 		progname, flag_is_registered(gflags, 'm') ? "[-m] " : "",
-		progname, progname, progname, progname, progname);
+		progname, progname, progname, progname);
+
+	SIMPLEQ_FOREACH(usage_f, &usage_create_funcs, f_next)
+		(*usage_f->f_func)(env);
+
+	fprintf(stderr,
+		"       %s interface destroy\n",
+		progname);
 
 	prop_object_release((prop_object_t)env);
 	exit(EXIT_FAILURE);

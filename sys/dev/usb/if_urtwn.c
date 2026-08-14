@@ -19,6 +19,23 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+/* Some code taken from FreeBSD dev/usb/wlan/if_urtw.c with copyright */
+/*-
+ * Copyright (c) 2008 Weongyo Jeong <weongyo@FreeBSD.org>
+ *
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
 /*-
  * Driver for Realtek RTL8188CE-VAU/RTL8188CUS/RTL8188EU/RTL8188RU/RTL8192CU
  * RTL8192EU.
@@ -37,18 +54,17 @@ __KERNEL_RCSID(0, "$NetBSD: if_urtwn.c,v 1.120 2025/08/24 09:45:29 nat Exp $");
 #include <sys/sysctl.h>
 #include <sys/mbuf.h>
 #include <sys/kernel.h>
+#include <sys/kmem.h>
 #include <sys/socket.h>
 #include <sys/systm.h>
 #include <sys/module.h>
 #include <sys/conf.h>
 #include <sys/device.h>
-#include <sys/rndsource.h>
 
 #include <sys/bus.h>
 #include <machine/endian.h>
 #include <sys/intr.h>
 
-#include <net/bpf.h>
 #include <net/if.h>
 #include <net/if_arp.h>
 #include <net/if_dl.h>
@@ -62,17 +78,12 @@ __KERNEL_RCSID(0, "$NetBSD: if_urtwn.c,v 1.120 2025/08/24 09:45:29 nat Exp $");
 #include <netinet/ip.h>
 #include <netinet/if_inarp.h>
 
-#include <net80211/ieee80211_netbsd.h>
-#include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <dev/firmload.h>
 
-#include <dev/usb/usb.h>
-#include <dev/usb/usbdi.h>
-#include <dev/usb/usbdivar.h>
-#include <dev/usb/usbdi_util.h>
-#include <dev/usb/usbdevs.h>
+#include <dev/usb/usbwifi.h>
 #include <dev/usb/usbhist.h>
 
 #include <dev/ic/rtwnreg.h>
@@ -80,24 +91,18 @@ __KERNEL_RCSID(0, "$NetBSD: if_urtwn.c,v 1.120 2025/08/24 09:45:29 nat Exp $");
 #include <dev/usb/if_urtwnreg.h>
 #include <dev/usb/if_urtwnvar.h>
 
-/*
- * The sc_write_mtx locking is to prevent sequences of writes from
- * being intermingled with each other.  I don't know if this is really
- * needed.  I have added it just to be on the safe side.
- */
-
 #ifdef URTWN_DEBUG
-#define	DBG_INIT	__BIT(0)
-#define	DBG_FN		__BIT(1)
-#define	DBG_TX		__BIT(2)
-#define	DBG_RX		__BIT(3)
-#define	DBG_STM		__BIT(4)
-#define	DBG_RF		__BIT(5)
-#define	DBG_REG		__BIT(6)
-#define	DBG_ALL		0xffffffffU
+#define DBG_INIT	__BIT(0)
+#define DBG_FN		__BIT(1)
+#define DBG_TX		__BIT(2)
+#define DBG_RX		__BIT(3)
+#define DBG_STM 	__BIT(4)
+#define DBG_RF		__BIT(5)
+#define DBG_REG 	__BIT(6)
+#define DBG_ALL 	0xffffffffU
 
-#ifndef URTWN_DEBUG_DEFAULT
-#define URTWN_DEBUG_DEFAULT 0
+#ifndef	URTWN_DEBUG_DEFAULT
+#define	URTWN_DEBUG_DEFAULT	0
 #endif
 
 u_int urtwn_debug = URTWN_DEBUG_DEFAULT;
@@ -133,8 +138,8 @@ u_int urtwn_debug = URTWN_DEBUG_DEFAULT;
 static const struct urtwn_dev {
 	struct usb_devno	dev;
 	uint32_t		flags;
-#define	FLAG_RTL8188E	__BIT(0)
-#define	FLAG_RTL8192E	__BIT(1)
+#define FLAG_RTL8188E	__BIT(0)
+#define FLAG_RTL8192E	__BIT(1)
 } urtwn_devs[] = {
 	URTWN_DEV(ABOCOM,	RTL8188CU_1),
 	URTWN_DEV(ABOCOM,	RTL8188CU_2),
@@ -237,20 +242,29 @@ static const struct urtwn_dev {
 static int	urtwn_match(device_t, cfdata_t, void *);
 static void	urtwn_attach(device_t, device_t, void *);
 static int	urtwn_detach(device_t, int);
-static int	urtwn_activate(device_t, enum devact);
+static void	urtwn_rx_loop(struct usbwifi *, struct usbwifi_chain *,
+		    uint32_t);
+static unsigned	urtwn_tx_prepare(struct usbwifi *,
+				struct usbwifi_chain *,
+				uint8_t qid);
+static int	urtwn_init(struct usbwifi *);
+static void	urtwn_stop(struct usbwifi *);
+
 
 CFATTACH_DECL_NEW(urtwn, sizeof(struct urtwn_softc), urtwn_match,
-    urtwn_attach, urtwn_detach, urtwn_activate);
+    urtwn_attach, urtwn_detach, usbwifi_activate);
 
-static int	urtwn_open_pipes(struct urtwn_softc *);
-static void	urtwn_close_pipes(struct urtwn_softc *);
-static int	urtwn_alloc_rx_list(struct urtwn_softc *);
-static void	urtwn_free_rx_list(struct urtwn_softc *);
-static int	urtwn_alloc_tx_list(struct urtwn_softc *);
-static void	urtwn_free_tx_list(struct urtwn_softc *);
+static const struct usbwifi_ops urtwn_ops = {
+	.uwo_rx_loop = urtwn_rx_loop,
+	.uwo_tx_prepare = urtwn_tx_prepare,
+	.uwo_init = urtwn_init,
+	.uwo_stop = urtwn_stop,
+};
+
+static int	urtwn_configure_pipes(struct urtwn_softc*, int*, int*);
 static void	urtwn_task(void *);
 static void	urtwn_do_async(struct urtwn_softc *,
-		    void (*)(struct urtwn_softc *, void *), void *, int);
+			void (*)(struct urtwn_softc *, void *), void *, int);
 static void	urtwn_wait_async(struct urtwn_softc *);
 static int	urtwn_write_region_1(struct urtwn_softc *, uint16_t, uint8_t *,
 		    int);
@@ -262,8 +276,8 @@ static int	urtwn_write_region(struct urtwn_softc *, uint16_t, uint8_t *,
 static int	urtwn_read_region_1(struct urtwn_softc *, uint16_t, uint8_t *,
 		    int);
 static uint8_t	urtwn_read_1(struct urtwn_softc *, uint16_t);
-static uint16_t	urtwn_read_2(struct urtwn_softc *, uint16_t);
-static uint32_t	urtwn_read_4(struct urtwn_softc *, uint16_t);
+static uint16_t urtwn_read_2(struct urtwn_softc *, uint16_t);
+static uint32_t urtwn_read_4(struct urtwn_softc *, uint16_t);
 static int	urtwn_fw_cmd(struct urtwn_softc *, uint8_t, const void *, int);
 static void	urtwn_r92c_rf_write(struct urtwn_softc *, int, uint8_t,
 		    uint32_t);
@@ -271,7 +285,7 @@ static void	urtwn_r88e_rf_write(struct urtwn_softc *, int, uint8_t,
 		    uint32_t);
 static void	urtwn_r92e_rf_write(struct urtwn_softc *, int, uint8_t,
 		    uint32_t);
-static uint32_t	urtwn_rf_read(struct urtwn_softc *, int, uint8_t);
+static uint32_t urtwn_rf_read(struct urtwn_softc *, int, uint8_t);
 static int	urtwn_llt_write(struct urtwn_softc *, uint32_t, uint32_t);
 static uint8_t	urtwn_efuse_read_1(struct urtwn_softc *, uint16_t);
 static void	urtwn_efuse_read(struct urtwn_softc *);
@@ -282,33 +296,22 @@ static void	urtwn_dump_rom(struct urtwn_softc *, struct r92c_rom *);
 #endif
 static void	urtwn_read_rom(struct urtwn_softc *);
 static void	urtwn_r88e_read_rom(struct urtwn_softc *);
-static int	urtwn_media_change(struct ifnet *);
-static int	urtwn_ra_init(struct urtwn_softc *);
+static int	urtwn_ra_init(struct ieee80211vap *);
 static int	urtwn_get_nettype(struct urtwn_softc *);
 static void	urtwn_set_nettype0_msr(struct urtwn_softc *, uint8_t);
-static void	urtwn_tsf_sync_enable(struct urtwn_softc *);
+static void	urtwn_tsf_sync_enable(struct urtwn_softc *, struct ieee80211_node *);
 static void	urtwn_set_led(struct urtwn_softc *, int, int);
 static void	urtwn_calib_to(void *);
 static void	urtwn_calib_to_cb(struct urtwn_softc *, void *);
-static void	urtwn_next_scan(void *);
-static int	urtwn_newstate(struct ieee80211com *, enum ieee80211_state,
+static int	urtwn_newstate(struct ieee80211vap *, enum ieee80211_state,
 		    int);
-static void	urtwn_newstate_cb(struct urtwn_softc *, void *);
 static int	urtwn_wme_update(struct ieee80211com *);
 static void	urtwn_wme_update_cb(struct urtwn_softc *, void *);
 static void	urtwn_update_avgrssi(struct urtwn_softc *, int, int8_t);
 static int8_t	urtwn_get_rssi(struct urtwn_softc *, int, void *);
 static int8_t	urtwn_r88e_get_rssi(struct urtwn_softc *, int, void *);
 static void	urtwn_rx_frame(struct urtwn_softc *, uint8_t *, int);
-static void	urtwn_rxeof(struct usbd_xfer *, void *, usbd_status);
-static void	urtwn_txeof(struct usbd_xfer *, void *, usbd_status);
-static int	urtwn_tx(struct urtwn_softc *, struct mbuf *,
-		    struct ieee80211_node *, struct urtwn_tx_data *);
-static struct urtwn_tx_data *
-		urtwn_get_tx_data(struct urtwn_softc *, size_t);
-static void	urtwn_start(struct ifnet *);
-static void	urtwn_watchdog(struct ifnet *);
-static int	urtwn_ioctl(struct ifnet *, u_long, void *);
+static void	urtwn_watchdog(void*);
 static int	urtwn_r92c_power_on(struct urtwn_softc *);
 static int	urtwn_r92e_power_on(struct urtwn_softc *);
 static int	urtwn_r88e_power_on(struct urtwn_softc *);
@@ -333,23 +336,40 @@ static void	urtwn_get_txpower(struct urtwn_softc *, size_t, u_int, u_int,
 static void	urtwn_r88e_get_txpower(struct urtwn_softc *, size_t, u_int,
 		    u_int, uint16_t[URTWN_RIDX_COUNT]);
 static void	urtwn_set_txpower(struct urtwn_softc *, u_int, u_int);
-static void	urtwn_set_chan(struct urtwn_softc *, struct ieee80211_channel *,
-		    u_int);
+static void	urtwn_set_chan(struct urtwn_softc *, struct ieee80211_channel *);
 static void	urtwn_iq_calib(struct urtwn_softc *, bool);
 static void	urtwn_lc_calib(struct urtwn_softc *);
 static void	urtwn_temp_calib(struct urtwn_softc *);
-static int	urtwn_init(struct ifnet *);
-static void	urtwn_stop(struct ifnet *, int);
-static int	urtwn_reset(struct ifnet *);
-static void	urtwn_chip_stop(struct urtwn_softc *);
 static void	urtwn_newassoc(struct ieee80211_node *, int);
 static void	urtwn_delay_ms(struct urtwn_softc *, int ms);
 
+static void	 urtwn_tx_fill_desc(struct urtwn_softc *, uint8_t **,
+		    struct mbuf *, struct ieee80211_frame *, uint8_t,
+		    struct ieee80211_key *, struct ieee80211_node *);
+static void	 urtwn_tx_fill_desc_gen2(struct urtwn_softc *, uint8_t **,
+		    struct mbuf *, struct ieee80211_frame *, uint8_t,
+		    struct ieee80211_key *, struct ieee80211_node *);
+
+/* Functions for wifi refresh */
+static struct ieee80211vap *
+		urtwn_vap_create(struct ieee80211com *,
+		    const char [IFNAMSIZ], int, enum ieee80211_opmode, int,
+		    const uint8_t [IEEE80211_ADDR_LEN],
+		    const uint8_t [IEEE80211_ADDR_LEN]);
+static void	urtwn_vap_delete(struct ieee80211vap *);
+static void	urtwn_get_radiocaps(struct ieee80211com *, int, int *,
+		    struct ieee80211_channel chans[]);
+static void	urtwn_scan_start(struct ieee80211com *);
+static void	urtwn_scan_end(struct ieee80211com *);
+static void	urtwn_set_channel(struct ieee80211com *);
+static void	urtwn_update_mcast(struct ieee80211com *);
+
+static void	power_control(struct urtwn_softc *, bool);
 /* Aliases. */
 #define	urtwn_bb_write	urtwn_write_4
 #define	urtwn_bb_read	urtwn_read_4
 
-#define	urtwn_lookup(d,v,p)	((const struct urtwn_dev *)usb_lookup(d,v,p))
+#define urtwn_lookup(d,v,p)	((const struct urtwn_dev *)usb_lookup(d,v,p))
 
 static const uint16_t addaReg[] = {
 	R92C_FPGA0_XCD_SWITCHCTL, R92C_BLUETOOTH, R92C_RX_WAIT_CCA,
@@ -357,6 +377,15 @@ static const uint16_t addaReg[] = {
 	R92C_TX_OFDM_BBON, R92C_TX_TO_RX, R92C_TX_TO_TX, R92C_RX_CCK,
 	R92C_RX_OFDM, R92C_RX_WAIT_RIFS, R92C_RX_TO_RX,
 	R92C_STANDBY, R92C_SLEEP, R92C_PMPD_ANAEN
+};
+
+/*
+ * We ovveride the VAP's newstate method, so need to save the old
+ * function pointer for each VAP.
+ */
+struct urtwn_vap {
+	struct ieee80211vap vap;
+	int (*newstate)(struct ieee80211vap *, enum ieee80211_state, int);
 };
 
 static int
@@ -369,24 +398,31 @@ urtwn_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-urtwn_attach(device_t parent, device_t self, void *aux)
+urtwn_attach( device_t parent, device_t self, void *aux)
 {
 	struct urtwn_softc *sc = device_private(self);
-	struct ieee80211com *ic = &sc->sc_ic;
-	struct ifnet *ifp = &sc->sc_if;
+	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
 	struct usb_attach_arg *uaa = aux;
 	char *devinfop;
 	const struct urtwn_dev *dev;
 	usb_device_request_t req;
-	size_t i;
-	int error;
+	// NNN loop below size_t i;
+	int error, num_rx, num_tx;
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	sc->sc_dev = self;
-	sc->sc_udev = uaa->uaa_device;
+	/*
+	 * Generic usbwifi(9) setup
+	 */
+	sc->sc_uw.uw_sc = sc;
+	sc->sc_uw.uw_dev = self;
+	sc->sc_uw.uw_udev = uaa->uaa_device;
+	sc->sc_uw.uw_ops = &urtwn_ops;
+	sc->sc_uw.uw_rx_bufsz = URTWN_RXBUFSZ;	/* size of a single buffer */
+	sc->sc_uw.uw_tx_bufsz = URTWN_TXBUFSZ;	/* for RX/TX */
+	sc->sc_uw.uw_tx_list_cnt = URTWN_TX_LIST_COUNT;	/* max RX/TX buffers */
+	sc->sc_uw.uw_rx_list_cnt = URTWN_RX_LIST_COUNT;	/* in the rings */
 
-	sc->chip = 0;
 	dev = urtwn_lookup(urtwn_devs, uaa->uaa_vendor, uaa->uaa_product);
 	if (dev != NULL && ISSET(dev->flags, FLAG_RTL8188E))
 		SET(sc->chip, URTWN_CHIP_88E);
@@ -396,7 +432,7 @@ urtwn_attach(device_t parent, device_t self, void *aux)
 	aprint_naive("\n");
 	aprint_normal("\n");
 
-	devinfop = usbd_devinfo_alloc(sc->sc_udev, 0);
+	devinfop = usbd_devinfo_alloc(sc->sc_uw.uw_udev, 0);
 	aprint_normal_dev(self, "%s\n", devinfop);
 	usbd_devinfo_free(devinfop);
 
@@ -406,26 +442,23 @@ urtwn_attach(device_t parent, device_t self, void *aux)
 	USETW(req.wIndex, UHF_PORT_SUSPEND);
 	USETW(req.wLength, 0);
 
-	(void) usbd_do_request(sc->sc_udev, &req, 0);
+	(void) usbd_do_request(sc->sc_uw.uw_udev, &req, 0);
 
 	cv_init(&sc->sc_task_cv, "urtwntsk");
 	mutex_init(&sc->sc_task_mtx, MUTEX_DEFAULT, IPL_NET);
-	mutex_init(&sc->sc_tx_mtx, MUTEX_DEFAULT, IPL_NONE);
-	mutex_init(&sc->sc_rx_mtx, MUTEX_DEFAULT, IPL_NONE);
-	mutex_init(&sc->sc_fwcmd_mtx, MUTEX_DEFAULT, IPL_NONE);
-	mutex_init(&sc->sc_write_mtx, MUTEX_DEFAULT, IPL_NONE);
 
-	usb_init_task(&sc->sc_task, urtwn_task, sc, 0);
+	usbwifi_attach(&sc->sc_uw);
 
-	callout_init(&sc->sc_scan_to, 0);
-	callout_setfunc(&sc->sc_scan_to, urtwn_next_scan, sc);
-	callout_init(&sc->sc_calib_to, 0);
+	/* Override default settings */
+	sc->sc_uw.uw_tx_xfer_timeout = URTWN_TX_TIMEOUT;
+
+	/* NNN make these callouts use a vap ... in vap create??? */
+	callout_init(&sc->sc_calib_to, CALLOUT_MPSAFE);
 	callout_setfunc(&sc->sc_calib_to, urtwn_calib_to, sc);
+	callout_init(&sc->sc_watchdog_to, CALLOUT_MPSAFE);
+	callout_setfunc(&sc->sc_watchdog_to, urtwn_watchdog, sc);
 
-	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
-	    RND_TYPE_NET, RND_FLAG_DEFAULT);
-
-	error = usbd_set_config_no(sc->sc_udev, 1, 0);
+	error = usbd_set_config_no(sc->sc_uw.uw_udev, 1, 0);
 	if (error != 0) {
 		aprint_error_dev(self, "failed to set configuration"
 		    ", err=%s\n", usbd_errstr(error));
@@ -433,7 +466,8 @@ urtwn_attach(device_t parent, device_t self, void *aux)
 	}
 
 	/* Get the first interface handle. */
-	error = usbd_device2interface_handle(sc->sc_udev, 0, &sc->sc_iface);
+	error = usbd_device2interface_handle(sc->sc_uw.uw_udev, 0,
+	    &sc->sc_uw.uw_iface);
 	if (error != 0) {
 		aprint_error_dev(self, "could not get interface handle\n");
 		goto fail;
@@ -450,11 +484,11 @@ urtwn_attach(device_t parent, device_t self, void *aux)
 		sc->ntxchains = (sc->chip & URTWN_CHIP_92C_1T2R) ? 1 : 2;
 		sc->nrxchains = 2;
 	} else if (sc->chip & URTWN_CHIP_92EU) {
-		sc->ntxchains = 2;
+		sc->ntxchains = 3;
 		sc->nrxchains = 2;
 	} else {
 		sc->ntxchains = 1;
-		sc->nrxchains = 1;
+		sc->nrxchains = 2;
 	}
 
 	if (ISSET(sc->chip, URTWN_CHIP_88E) ||
@@ -470,101 +504,95 @@ urtwn_attach(device_t parent, device_t self, void *aux)
 	    (sc->board_type == R92C_BOARD_TYPE_HIGHPA) ? "8188RU" :
 	    (sc->board_type == R92C_BOARD_TYPE_MINICARD) ? "8188CE-VAU" :
 	    "8188CUS", sc->ntxchains, sc->nrxchains,
-	    ether_sprintf(ic->ic_myaddr));
+	    ether_sprintf(ic->ic_macaddr));
 
-	error = urtwn_open_pipes(sc);
+	error = urtwn_configure_pipes(sc, &num_tx, &num_rx);
 	if (error != 0) {
-		aprint_error_dev(sc->sc_dev, "could not open pipes\n");
+		aprint_error_dev(sc->sc_uw.uw_dev,
+		    "could not confiugre pipes\n");
 		goto fail;
 	}
 	aprint_normal_dev(self, "%d rx pipe%s, %d tx pipe%s\n",
-	    sc->rx_npipe, sc->rx_npipe > 1 ? "s" : "",
-	    sc->tx_npipe, sc->tx_npipe > 1 ? "s" : "");
+	    num_rx, num_rx > 1 ? "s" : "",
+	    num_tx, num_tx > 1 ? "s" : "");
 
-	/*
-	 * Setup the 802.11 device.
-	 */
-	ic->ic_ifp = ifp;
-	ic->ic_phytype = IEEE80211_T_OFDM;	/* Not only, but not used. */
-	ic->ic_opmode = IEEE80211_M_STA;	/* Default to BSS mode. */
-	ic->ic_state = IEEE80211_S_INIT;
+	/* use usbwifi tick instead? */
+	usb_init_task(&sc->sc_task, urtwn_task, sc, 0);
 
 	/* Set device capabilities. */
 	ic->ic_caps =
+	    IEEE80211_C_STA |		/* station mode */
 	    IEEE80211_C_MONITOR |	/* Monitor mode supported. */
 	    IEEE80211_C_IBSS |		/* IBSS mode supported */
 	    IEEE80211_C_HOSTAP |	/* HostAp mode supported */
 	    IEEE80211_C_SHPREAMBLE |	/* Short preamble supported. */
 	    IEEE80211_C_SHSLOT |	/* Short slot time supported. */
 	    IEEE80211_C_WME |		/* 802.11e */
-	    IEEE80211_C_WPA;		/* 802.11i */
+	    IEEE80211_C_WPA |		/* 802.11i */
+	    IEEE80211_C_SWAMSDUTX;	/* Do software A-MSDU TX */
 
-	/* Set supported .11b and .11g rates. */
-	ic->ic_sup_rates[IEEE80211_MODE_11B] = ieee80211_std_rateset_11b;
-	ic->ic_sup_rates[IEEE80211_MODE_11G] = ieee80211_std_rateset_11g;
-
-	/* Set supported .11b and .11g channels (1 through 14). */
-	for (i = 1; i <= 14; i++) {
-		ic->ic_channels[i].ic_freq =
-		    ieee80211_ieee2mhz(i, IEEE80211_CHAN_2GHZ);
-		ic->ic_channels[i].ic_flags =
-		    IEEE80211_CHAN_CCK | IEEE80211_CHAN_OFDM |
-		    IEEE80211_CHAN_DYN | IEEE80211_CHAN_2GHZ;
+	if (ISSET(sc->chip, URTWN_CHIP_92C) ||
+	    ISSET(sc->chip, URTWN_CHIP_92EU)) {
+		ic->ic_caps |=
+		    IEEE80211_C_SWSLEEP;	/* handle sleeps */
 	}
 
-	ifp->if_softc = sc;
-	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
-	ifp->if_init = urtwn_init;
-	ifp->if_ioctl = urtwn_ioctl;
-	ifp->if_start = urtwn_start;
-	ifp->if_watchdog = urtwn_watchdog;
-	IFQ_SET_READY(&ifp->if_snd);
-	memcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
+	ic->ic_htcaps =
+	    IEEE80211_HTC_HT |
+	    IEEE80211_HTCAP_SHORTGI20 | 	/* short GI in 20MHz */
+	    IEEE80211_HTCAP_MAXAMSDU_3839 |	/* max A-MSDU length */
+//	    IEEE80211_HTC_AMPDU |		/* A-MPDU tx */
+	    IEEE80211_HTC_AMSDU |		/* A-MSDU tx */
+	    IEEE80211_HTCAP_SMPS_OFF |		/* SM PS mode disabled */
+	    IEEE80211_HTCAP_CHWIDTH40 | 	/* 40 MHz channel width */
+	    IEEE80211_HTCAP_SHORTGI40;		/* short GI in 40MHz */
 
-	if_initialize(ifp);
-	ieee80211_ifattach(ic);
+#ifdef notyet
+	ic->ic_cryptocaps =
+		IEEE80211_CRYPTO_WEP |
+		IEEE80211_CRYPTO_TKIP |
+		IEEE80211_CRYPTO_AES_CCM;
+#else
+	ic->ic_cryptocaps = 0;
+#endif
+
+	/* XXX TODO: setup regdomain if URTW_EPROM_CHANPLAN_BY_HW bit is set.*/
+	urtwn_get_radiocaps(ic, IEEE80211_CHAN_MAX, &ic->ic_nchans,
+	    ic->ic_channels);
+
+	/*
+	 * Initialize the global (non-VAP specific) structures and create
+	 * the VAP list.
+	 */
+	usbwifi_ic_attach(&sc->sc_uw, sc->ntxchains, sc->nrxchains, num_tx,
+	   num_rx, IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST);
 
 	/* override default methods */
 	ic->ic_newassoc = urtwn_newassoc;
-	ic->ic_reset = urtwn_reset;
 	ic->ic_wme.wme_update = urtwn_wme_update;
+	ic->ic_vap_create = urtwn_vap_create;
+	ic->ic_vap_delete = urtwn_vap_delete;
+	ic->ic_scan_start = urtwn_scan_start;
+	ic->ic_scan_end = urtwn_scan_end;
+	ic->ic_getradiocaps = urtwn_get_radiocaps;
+	ic->ic_set_channel = urtwn_set_channel;
+	ic->ic_update_mcast = urtwn_update_mcast;
 
-	/* Override state transition machine. */
-	sc->sc_newstate = ic->ic_newstate;
-	ic->ic_newstate = urtwn_newstate;
-
-	/* XXX media locking needs revisiting */
-	mutex_init(&sc->sc_media_mtx, MUTEX_DEFAULT, IPL_SOFTUSB);
-	ieee80211_media_init_with_lock(ic,
-	    urtwn_media_change, ieee80211_media_status, &sc->sc_media_mtx);
-
-	bpf_attach2(ifp, DLT_IEEE802_11_RADIO,
-	    sizeof(struct ieee80211_frame) + IEEE80211_RADIOTAP_HDRLEN,
-	    &sc->sc_drvbpf);
-
-	sc->sc_rxtap_len = sizeof(sc->sc_rxtapu);
-	sc->sc_rxtap.wr_ihdr.it_len = htole16(sc->sc_rxtap_len);
+	sc->sc_rxtap.wr_ihdr.it_len = htole16(sizeof(sc->sc_rxtapu));
 	sc->sc_rxtap.wr_ihdr.it_present = htole32(URTWN_RX_RADIOTAP_PRESENT);
 
 	sc->sc_txtap_len = sizeof(sc->sc_txtapu);
 	sc->sc_txtap.wt_ihdr.it_len = htole16(sc->sc_txtap_len);
 	sc->sc_txtap.wt_ihdr.it_present = htole32(URTWN_TX_RADIOTAP_PRESENT);
 
-	ifp->if_percpuq = if_percpuq_create(ifp);
-	if_register(ifp);
+	/* let the stack know we support radiotap */
+	ic->ic_rh = &sc->sc_rxtapu.th.wr_ihdr;
+	ic->ic_th = &sc->sc_txtapu.th.wt_ihdr;
 
-	ieee80211_announce(ic);
-
-	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev, sc->sc_dev);
-
-	if (!pmf_device_register(self, NULL, NULL))
-		aprint_error_dev(self, "couldn't establish power handler\n");
-
-	SET(sc->sc_flags, URTWN_FLAG_ATTACHED);
+	usbwifi_attach_finalize(&sc->sc_uw);
 	return;
 
- fail:
-	sc->sc_dying = 1;
+fail:
 	aprint_error_dev(self, "attach failed\n");
 }
 
@@ -572,73 +600,26 @@ static int
 urtwn_detach(device_t self, int flags)
 {
 	struct urtwn_softc *sc = device_private(self);
-	struct ifnet *ifp = &sc->sc_if;
-	int s;
+	int err;
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	pmf_device_deregister(self);
+	err = usbwifi_detach(self, flags);
+	if (err)
+		return err;
 
-	s = splusb();
-
-	sc->sc_dying = 1;
-
-	callout_halt(&sc->sc_scan_to, NULL);
 	callout_halt(&sc->sc_calib_to, NULL);
-
-	if (ISSET(sc->sc_flags, URTWN_FLAG_ATTACHED)) {
-		urtwn_stop(ifp, 0);
-		usb_rem_task_wait(sc->sc_udev, &sc->sc_task, USB_TASKQ_DRIVER,
-		    NULL);
-
-		ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
-		bpf_detach(ifp);
-		ieee80211_ifdetach(&sc->sc_ic);
-		if_detach(ifp);
-
-		mutex_destroy(&sc->sc_media_mtx);
-
-		/* Close Tx/Rx pipes.  Abort done by urtwn_stop. */
-		urtwn_close_pipes(sc);
-	}
-
-	splx(s);
-
-	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev, sc->sc_dev);
-
-	rnd_detach_source(&sc->rnd_source);
-
-	callout_destroy(&sc->sc_scan_to);
+	if (sc->sc_uw.uw_pri != NULL)
+		usb_rem_task_wait(sc->sc_uw.uw_udev, &sc->sc_task,
+		    USB_TASKQ_DRIVER, NULL);
 	callout_destroy(&sc->sc_calib_to);
-
 	cv_destroy(&sc->sc_task_cv);
-	mutex_destroy(&sc->sc_write_mtx);
-	mutex_destroy(&sc->sc_fwcmd_mtx);
-	mutex_destroy(&sc->sc_tx_mtx);
-	mutex_destroy(&sc->sc_rx_mtx);
 	mutex_destroy(&sc->sc_task_mtx);
-
 	return 0;
 }
 
 static int
-urtwn_activate(device_t self, enum devact act)
-{
-	struct urtwn_softc *sc = device_private(self);
-
-	URTWNHIST_FUNC(); URTWNHIST_CALLED();
-
-	switch (act) {
-	case DVACT_DEACTIVATE:
-		if_deactivate(sc->sc_ic.ic_ifp);
-		return 0;
-	default:
-		return EOPNOTSUPP;
-	}
-}
-
-static int
-urtwn_open_pipes(struct urtwn_softc *sc)
+urtwn_configure_pipes(struct urtwn_softc *sc, int *num_tx, int *num_rx)
 {
 	/* Bulk-out endpoints addresses (from highest to lowest prio). */
 	static uint8_t epaddr[R92C_MAX_EPOUT];
@@ -646,15 +627,15 @@ urtwn_open_pipes(struct urtwn_softc *sc)
 	usb_interface_descriptor_t *id;
 	usb_endpoint_descriptor_t *ed;
 	size_t i, ntx = 0, nrx = 0;
-	int error;
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
 	/* Determine the number of bulk-out pipes. */
-	id = usbd_get_interface_descriptor(sc->sc_iface);
+	id = usbd_get_interface_descriptor(sc->sc_uw.uw_iface);
 	for (i = 0; i < id->bNumEndpoints; i++) {
-		ed = usbd_interface2endpoint_descriptor(sc->sc_iface, i);
-		if (ed == NULL || UE_GET_XFERTYPE(ed->bmAttributes) != UE_BULK) {
+		ed = usbd_interface2endpoint_descriptor(sc->sc_uw.uw_iface, i);
+		if (ed == NULL ||
+		    UE_GET_XFERTYPE(ed->bmAttributes) != UE_BULK) {
 			continue;
 		}
 		if (UE_GET_DIR(ed->bEndpointAddress) == UE_DIR_OUT) {
@@ -669,207 +650,69 @@ urtwn_open_pipes(struct urtwn_softc *sc)
 		}
 	}
 	if (nrx == 0 || nrx > R92C_MAX_EPIN) {
-		aprint_error_dev(sc->sc_dev,
+		aprint_error_dev(sc->sc_uw.uw_dev,
 		    "%zd: invalid number of Rx bulk pipes\n", nrx);
 		return EIO;
 	}
 	if (ntx == 0 || ntx > R92C_MAX_EPOUT) {
-		aprint_error_dev(sc->sc_dev,
+		aprint_error_dev(sc->sc_uw.uw_dev,
 		    "%zd: invalid number of Tx bulk pipes\n", ntx);
 		return EIO;
 	}
+	if ((nrx + ntx) >= USBWIFI_ENDPT_MAX) {
+		aprint_error_dev(sc->sc_uw.uw_dev,
+		    "%zd: too many bulk pipes\n", ntx+nrx);
+		return EIO;
+	}
+
 	DPRINTFN(DBG_INIT, "found %jd/%jd bulk-in/out pipes",
 	    nrx, ntx, 0, 0);
-	sc->rx_npipe = nrx;
-	sc->tx_npipe = ntx;
-
-	/* Open bulk-in pipe at address 0x81. */
-	for (i = 0; i < nrx; i++) {
-		error = usbd_open_pipe(sc->sc_iface, rxepaddr[i],
-		    USBD_EXCLUSIVE_USE, &sc->rx_pipe[i]);
-		if (error != 0) {
-			aprint_error_dev(sc->sc_dev,
-			    "could not open Rx bulk pipe 0x%02x: %d\n",
-			    rxepaddr[i], error);
-			goto fail;
-		}
-	}
-
-	/* Open bulk-out pipes (up to 3). */
-	for (i = 0; i < ntx; i++) {
-		error = usbd_open_pipe(sc->sc_iface, epaddr[i],
-		    USBD_EXCLUSIVE_USE, &sc->tx_pipe[i]);
-		if (error != 0) {
-			aprint_error_dev(sc->sc_dev,
-			    "could not open Tx bulk pipe 0x%02x: %d\n",
-			    epaddr[i], error);
-			goto fail;
-		}
-	}
+	*num_rx = nrx;
+	*num_tx = ntx;
+	memcpy(&sc->sc_uw.uw_ed[0], epaddr, sizeof(epaddr[0])*ntx);
+	memcpy(&sc->sc_uw.uw_ed[ntx], rxepaddr, sizeof(rxepaddr[0])*nrx);
 
 	/* Map 802.11 access categories to USB pipes. */
-	sc->ac2idx[WME_AC_BK] =
-	sc->ac2idx[WME_AC_BE] = (ntx == 3) ? 2 : ((ntx == 2) ? 1 : 0);
-	sc->ac2idx[WME_AC_VI] = (ntx == 3) ? 1 : 0;
-	sc->ac2idx[WME_AC_VO] = 0;	/* Always use highest prio. */
+	sc->sc_uw.uw_ac2idx[WME_AC_BK] =
+	sc->sc_uw.uw_ac2idx[WME_AC_BE] = (ntx == 3) ? 2 : ((ntx == 2) ? 1 : 0);
+	sc->sc_uw.uw_ac2idx[WME_AC_VI] = (ntx == 3) ? 1 : 0;
+	sc->sc_uw.uw_ac2idx[WME_AC_VO] = 0;	/* Always use highest prio. */
 
- fail:
-	if (error != 0)
-		urtwn_close_pipes(sc);
-	return error;
-}
-
-static void
-urtwn_close_pipes(struct urtwn_softc *sc)
-{
-	struct usbd_pipe *pipe;
-	size_t i;
-
-	URTWNHIST_FUNC(); URTWNHIST_CALLED();
-
-	/* Close Rx pipes. */
-	CTASSERT(sizeof(pipe) == sizeof(void *));
-	for (i = 0; i < sc->rx_npipe; i++) {
-		pipe = atomic_swap_ptr(&sc->rx_pipe[i], NULL);
-		if (pipe != NULL) {
-			usbd_close_pipe(pipe);
-		}
-	}
-
-	/* Close Tx pipes. */
-	for (i = 0; i < sc->tx_npipe; i++) {
-		pipe = atomic_swap_ptr(&sc->tx_pipe[i], NULL);
-		if (pipe != NULL) {
-			usbd_close_pipe(pipe);
-		}
-	}
-}
-
-static int __noinline
-urtwn_alloc_rx_list(struct urtwn_softc *sc)
-{
-	struct urtwn_rx_data *data;
-	size_t i;
-	int error = 0;
-
-	URTWNHIST_FUNC(); URTWNHIST_CALLED();
-
-	for (size_t j = 0; j < sc->rx_npipe; j++) {
-		TAILQ_INIT(&sc->rx_free_list[j]);
-		for (i = 0; i < URTWN_RX_LIST_COUNT; i++) {
-			data = &sc->rx_data[j][i];
-
-			data->sc = sc;	/* Backpointer for callbacks. */
-			data->pidx = j;
-
-			error = usbd_create_xfer(sc->rx_pipe[j], URTWN_RXBUFSZ,
-			    0, 0, &data->xfer);
-			if (error) {
-				aprint_error_dev(sc->sc_dev,
-				    "could not allocate xfer\n");
-				break;
-			}
-
-			data->buf = usbd_get_buffer(data->xfer);
-			TAILQ_INSERT_TAIL(&sc->rx_free_list[j], data, next);
-		}
-	}
-	if (error != 0)
-		urtwn_free_rx_list(sc);
-	return error;
-}
-
-static void
-urtwn_free_rx_list(struct urtwn_softc *sc)
-{
-	struct usbd_xfer *xfer;
-	size_t i;
-
-	URTWNHIST_FUNC(); URTWNHIST_CALLED();
-
-	/* NB: Caller must abort pipe first. */
-	for (size_t j = 0; j < sc->rx_npipe; j++) {
-		for (i = 0; i < URTWN_RX_LIST_COUNT; i++) {
-			CTASSERT(sizeof(xfer) == sizeof(void *));
-			xfer = atomic_swap_ptr(&sc->rx_data[j][i].xfer, NULL);
-			if (xfer != NULL)
-				usbd_destroy_xfer(xfer);
-		}
-	}
-}
-
-static int __noinline
-urtwn_alloc_tx_list(struct urtwn_softc *sc)
-{
-	struct urtwn_tx_data *data;
-	size_t i;
-	int error = 0;
-
-	URTWNHIST_FUNC(); URTWNHIST_CALLED();
-
-	mutex_enter(&sc->sc_tx_mtx);
-	for (size_t j = 0; j < sc->tx_npipe; j++) {
-		TAILQ_INIT(&sc->tx_free_list[j]);
-		for (i = 0; i < URTWN_TX_LIST_COUNT; i++) {
-			data = &sc->tx_data[j][i];
-
-			data->sc = sc;	/* Backpointer for callbacks. */
-			data->pidx = j;
-
-			error = usbd_create_xfer(sc->tx_pipe[j],
-			    URTWN_TXBUFSZ, USBD_FORCE_SHORT_XFER, 0,
-			    &data->xfer);
-			if (error) {
-				aprint_error_dev(sc->sc_dev,
-				    "could not allocate xfer\n");
-				goto fail;
-			}
-
-			data->buf = usbd_get_buffer(data->xfer);
-
-			/* Append this Tx buffer to our free list. */
-			TAILQ_INSERT_TAIL(&sc->tx_free_list[j], data, next);
-		}
-	}
-	mutex_exit(&sc->sc_tx_mtx);
 	return 0;
-
- fail:
-	urtwn_free_tx_list(sc);
-	mutex_exit(&sc->sc_tx_mtx);
-	return error;
 }
 
 static void
-urtwn_free_tx_list(struct urtwn_softc *sc)
+urtwn_update_mcast(struct ieee80211com *ic)
 {
-	struct usbd_xfer *xfer;
-	size_t i;
+/*
+ * XXX this driver does not use any MCAST filter currently.
+ */
+#if 0
+	struct ether_multi *enm;
+	struct ether_multistep step;
+	struct ethercom *ec;
+	struct ieee80211vap *vap;
+	char adr_from[3*ETHER_ADDR_LEN], adr_to[3*ETHER_ADDR_LEN];
 
-	URTWNHIST_FUNC(); URTWNHIST_CALLED();
-
-	/* NB: Caller must abort pipe first. */
-	for (size_t j = 0; j < sc->tx_npipe; j++) {
-		for (i = 0; i < URTWN_TX_LIST_COUNT; i++) {
-			CTASSERT(sizeof(xfer) == sizeof(void *));
-			xfer = atomic_swap_ptr(&sc->tx_data[j][i].xfer, NULL);
-			if (xfer != NULL)
-				usbd_destroy_xfer(xfer);
+	IEEE80211_LOCK(ic);
+	printf("urtwn_update_mcast: need to program the HW MCAST filter\n");
+	TAILQ_FOREACH(vap, &ic->ic_vaps, iv_next) {
+		ec = &vap->iv_ethercom;
+		ETHER_LOCK(ec);
+		ETHER_FIRST_MULTI(step, ec, enm);
+		while (enm != NULL) {
+			ether_snprintf(adr_from, sizeof(adr_from),
+			    enm->enm_addrlo);
+			ether_snprintf(adr_to, sizeof(adr_to),
+			    enm->enm_addrhi);
+			printf("%s: mcast from %s to %s\n",
+			    vap->iv_ifp->if_xname, adr_from, adr_to);
+			ETHER_NEXT_MULTI(step, enm);
 		}
+		ETHER_UNLOCK(ec);
 	}
-}
-
-static int
-urtwn_tx_beacon(struct urtwn_softc *sc, struct mbuf *m,
-    struct ieee80211_node *ni)
-{
-	struct urtwn_tx_data *data =
-	    urtwn_get_tx_data(sc, sc->ac2idx[WME_AC_VO]);
-
-	if (data == NULL)
-		return ENOBUFS;
-
-	return urtwn_tx(sc, m, ni, data);
+	IEEE80211_UNLOCK(ic);
+#endif
 }
 
 static void
@@ -880,86 +723,86 @@ urtwn_cmdq_invariants(struct urtwn_softc *sc)
 	KASSERT(mutex_owned(&sc->sc_task_mtx));
 	KASSERTMSG((ring->cur >= 0 && ring->cur < URTWN_HOST_CMD_RING_COUNT),
 	    "%s: cur=%d next=%d queued=%d",
-	    device_xname(sc->sc_dev), ring->cur, ring->next, ring->queued);
+	    device_xname(sc->sc_uw.uw_dev), ring->cur, ring->next,
+	    ring->queued);
 	KASSERTMSG((ring->next >= 0 && ring->next < URTWN_HOST_CMD_RING_COUNT),
 	    "%s: cur=%d next=%d queued=%d",
-	    device_xname(sc->sc_dev), ring->cur, ring->next, ring->queued);
+	    device_xname(sc->sc_uw.uw_dev), ring->cur, ring->next,
+	    ring->queued);
 	KASSERTMSG((ring->queued >= 0 &&
 		ring->queued <= URTWN_HOST_CMD_RING_COUNT),
 	    "%s: %d commands queued",
-	    device_xname(sc->sc_dev), ring->queued);
+	    device_xname(sc->sc_uw.uw_dev), ring->queued);
 }
 
 static void
 urtwn_task(void *arg)
 {
 	struct urtwn_softc *sc = arg;
-	struct ieee80211com *ic = &sc->sc_ic;
+	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
+	struct ieee80211vap *vap;
 	struct urtwn_host_cmd_ring *ring = &sc->cmdq;
 	struct urtwn_host_cmd *cmd;
-	int s;
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
-	if (ic->ic_state == IEEE80211_S_RUN &&
-	    (ic->ic_opmode == IEEE80211_M_HOSTAP ||
-	    ic->ic_opmode == IEEE80211_M_IBSS)) {
 
-		struct mbuf *m = ieee80211_beacon_alloc(ic, ic->ic_bss,
-		    &sc->sc_bo);
+	usbwifi_lock_ic(&sc->sc_uw);
+	/* handling beacon frames here is way too expensive! */
+	TAILQ_FOREACH(vap, &ic->ic_vaps, iv_next) {
+		if (vap->iv_state != IEEE80211_S_RUN ||
+		    (vap->iv_opmode != IEEE80211_M_HOSTAP &&
+		    vap->iv_opmode != IEEE80211_M_IBSS &&
+		    vap->iv_opmode != IEEE80211_M_MBSS))
+			continue;
+
+		/* Send a beacon frame. */
+		struct mbuf *m = ieee80211_beacon_alloc(vap->iv_bss);
 		if (m == NULL) {
-			aprint_error_dev(sc->sc_dev,
+			aprint_error_dev(sc->sc_uw.uw_dev,
 			    "could not allocate beacon");
 		}
-
-		if (urtwn_tx_beacon(sc, m, ic->ic_bss) != 0) {
-			aprint_error_dev(sc->sc_dev, "could not send beacon\n");
-		}
-
-		/* beacon is no longer needed */
-		m_freem(m);
+		if (ic->ic_raw_xmit(vap->iv_bss, m, NULL) != 0)
+			aprint_error_dev(sc->sc_uw.uw_dev,
+			    "could not send beacon\n");
 	}
+	usbwifi_unlock_ic(&sc->sc_uw);
 
 	/* Process host commands. */
-	s = splusb();
 	mutex_spin_enter(&sc->sc_task_mtx);
 	urtwn_cmdq_invariants(sc);
 	while (ring->next != ring->cur) {
 		KASSERTMSG(ring->queued > 0, "%s: cur=%d next=%d queued=%d",
-		    device_xname(sc->sc_dev),
+		    device_xname(sc->sc_uw.uw_dev),
 		    ring->cur, ring->next, ring->queued);
 		cmd = &ring->cmd[ring->next];
 		mutex_spin_exit(&sc->sc_task_mtx);
-		splx(s);
 		/* Invoke callback with kernel lock held. */
 		cmd->cb(sc, cmd->data);
-		s = splusb();
 		mutex_spin_enter(&sc->sc_task_mtx);
 		urtwn_cmdq_invariants(sc);
 		KASSERTMSG(ring->queued > 0, "%s: cur=%d next=%d queued=%d",
-		    device_xname(sc->sc_dev),
+		    device_xname(sc->sc_uw.uw_dev),
 		    ring->cur, ring->next, ring->queued);
 		ring->queued--;
 		ring->next = (ring->next + 1) % URTWN_HOST_CMD_RING_COUNT;
 	}
 	cv_broadcast(&sc->sc_task_cv);
 	mutex_spin_exit(&sc->sc_task_mtx);
-	splx(s);
 }
 
 static void
-urtwn_do_async(struct urtwn_softc *sc, void (*cb)(struct urtwn_softc *, void *),
+urtwn_do_async(struct urtwn_softc *sc,
+    void (*cb)(struct urtwn_softc*, void *),
     void *arg, int len)
 {
 	struct urtwn_host_cmd_ring *ring = &sc->cmdq;
 	struct urtwn_host_cmd *cmd;
 	bool schedtask = false;
-	int s;
 
-	URTWNHIST_FUNC();
-	URTWNHIST_CALLARGS("cb=%#jx, arg=%#jx, len=%jd",
-	    (uintptr_t)cb, (uintptr_t)arg, len, 0);
+	URTWNHIST_FUNC(); URTWNHIST_CALLED();
+	DPRINTFN(DBG_FN, "cb=%jd, arg=%jd, len=%jd", (intptr_t)cb,
+	    (intptr_t)arg, len, 0);
 
-	s = splusb();
 	mutex_spin_enter(&sc->sc_task_mtx);
 	urtwn_cmdq_invariants(sc);
 	cmd = &ring->cmd[ring->cur];
@@ -971,17 +814,18 @@ urtwn_do_async(struct urtwn_softc *sc, void (*cb)(struct urtwn_softc *, void *),
 	/*
 	 * Schedule a task to process the command if need be.
 	 */
-	if (!sc->sc_dying) {
+	if (!usbwifi_isdying(&sc->sc_uw)) {
 		if (ring->queued == URTWN_HOST_CMD_RING_COUNT)
-			device_printf(sc->sc_dev, "command queue overflow\n");
+			device_printf(sc->sc_uw.uw_dev,
+			"command queue overflow\n");
 		else if (ring->queued++ == 0)
 			schedtask = true;
 	}
 	mutex_spin_exit(&sc->sc_task_mtx);
-	splx(s);
 
 	if (schedtask)
-		usb_add_task(sc->sc_udev, &sc->sc_task, USB_TASKQ_DRIVER);
+		usb_add_task(sc->sc_uw.uw_udev,
+		&sc->sc_task, USB_TASKQ_DRIVER);
 }
 
 static void
@@ -1005,17 +849,17 @@ urtwn_write_region_1(struct urtwn_softc *sc, uint16_t addr, uint8_t *buf,
 	usbd_status error;
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	req.bmRequestType = UT_WRITE_VENDOR_DEVICE;
 	req.bRequest = R92C_REQ_REGS;
 	USETW(req.wValue, addr);
 	USETW(req.wIndex, 0);
 	USETW(req.wLength, len);
-	error = usbd_do_request(sc->sc_udev, &req, buf);
+	error = usbd_do_request(sc->sc_uw.uw_udev, &req, buf);
 	if (error != USBD_NORMAL_COMPLETION) {
 		DPRINTFN(DBG_REG, "error=%jd: addr=%#jx, len=%jd",
-		    error, addr, len, 0);
+		    error, (intptr_t)addr, len, 0);
 	}
 	return error;
 }
@@ -1025,7 +869,7 @@ urtwn_write_1(struct urtwn_softc *sc, uint16_t addr, uint8_t val)
 {
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
-	DPRINTFN(DBG_REG, "addr=%#jx, val=%#jx", addr, val, 0, 0);
+	DPRINTFN(DBG_REG, "addr=%#jx, val=%#jx", (intptr_t)addr, val, 0, 0);
 
 	urtwn_write_region_1(sc, addr, &val, 1);
 }
@@ -1036,7 +880,7 @@ urtwn_write_2(struct urtwn_softc *sc, uint16_t addr, uint16_t val)
 	uint8_t buf[2];
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
-	DPRINTFN(DBG_REG, "addr=%#jx, val=%#jx", addr, val, 0, 0);
+	DPRINTFN(DBG_REG, "addr=%#jx, val=%#jx", (intptr_t)addr, val, 0, 0);
 
 	buf[0] = (uint8_t)val;
 	buf[1] = (uint8_t)(val >> 8);
@@ -1049,7 +893,7 @@ urtwn_write_4(struct urtwn_softc *sc, uint16_t addr, uint32_t val)
 	uint8_t buf[4];
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
-	DPRINTFN(DBG_REG, "addr=%#jx, val=%#jx", addr, val, 0, 0);
+	DPRINTFN(DBG_REG, "addr=%#jx, val=%#jx", (intptr_t)addr, val, 0, 0);
 
 	buf[0] = (uint8_t)val;
 	buf[1] = (uint8_t)(val >> 8);
@@ -1059,11 +903,12 @@ urtwn_write_4(struct urtwn_softc *sc, uint16_t addr, uint32_t val)
 }
 
 static int
-urtwn_write_region(struct urtwn_softc *sc, uint16_t addr, uint8_t *buf, int len)
+urtwn_write_region(struct urtwn_softc *sc, uint16_t addr, uint8_t *buf,
+    int len)
 {
 
-	URTWNHIST_FUNC();
-	URTWNHIST_CALLARGS("addr=%#jx, len=%#jx", addr, len, 0, 0);
+	URTWNHIST_FUNC(); URTWNHIST_CALLED();
+	DPRINTFN(DBG_REG, "addr=%#jx, len=%#jx", (intptr_t)addr, len, 0, 0);
 
 	return urtwn_write_region_1(sc, addr, buf, len);
 }
@@ -1076,16 +921,17 @@ urtwn_read_region_1(struct urtwn_softc *sc, uint16_t addr, uint8_t *buf,
 	usbd_status error;
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	req.bmRequestType = UT_READ_VENDOR_DEVICE;
 	req.bRequest = R92C_REQ_REGS;
 	USETW(req.wValue, addr);
 	USETW(req.wIndex, 0);
 	USETW(req.wLength, len);
-	error = usbd_do_request(sc->sc_udev, &req, buf);
+	error = usbd_do_request(sc->sc_uw.uw_udev, &req, buf);
 	if (error != USBD_NORMAL_COMPLETION) {
 		DPRINTFN(DBG_REG, "error=%jd: addr=%#jx, len=%jd",
-		    error, addr, len, 0);
+		    error, (intptr_t)addr, len, 0);
 	}
 	return error;
 }
@@ -1100,7 +946,8 @@ urtwn_read_1(struct urtwn_softc *sc, uint16_t addr)
 	if (urtwn_read_region_1(sc, addr, &val, 1) != USBD_NORMAL_COMPLETION)
 		return 0xff;
 
-	DPRINTFN(DBG_REG, "addr=%#jx, val=%#jx", addr, val, 0, 0);
+	DPRINTFN(DBG_REG, "addr=%#jx, val=%#jx",
+	    (intptr_t)addr, val, 0, 0);
 	return val;
 }
 
@@ -1116,7 +963,7 @@ urtwn_read_2(struct urtwn_softc *sc, uint16_t addr)
 		return 0xffff;
 
 	val = LE_READ_2(&buf[0]);
-	DPRINTFN(DBG_REG, "addr=%#jx, val=%#jx", addr, val, 0, 0);
+	DPRINTFN(DBG_REG, "addr=%#jx, val=%#jx", (intptr_t)addr, val, 0, 0);
 	return val;
 }
 
@@ -1132,7 +979,7 @@ urtwn_read_4(struct urtwn_softc *sc, uint16_t addr)
 		return 0xffffffff;
 
 	val = LE_READ_4(&buf[0]);
-	DPRINTFN(DBG_REG, "addr=%#jx, val=%#jx", addr, val, 0, 0);
+	DPRINTFN(DBG_REG, "addr=%#jx, val=%#jx", (intptr_t)addr, val, 0, 0);
 	return val;
 }
 
@@ -1145,11 +992,16 @@ urtwn_fw_cmd(struct urtwn_softc *sc, uint8_t id, const void *buf, int len)
 	int ntries;
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
-	DPRINTFN(DBG_REG, "id=%jd, buf=%#jx, len=%jd", id, (uintptr_t)buf, len, 0);
+	DPRINTFN(DBG_REG, "id=%jd, buf=%#jx, len=%jd", id, (intptr_t)buf,
+	    len, 0);
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
+	if (!ISSET(sc->sc_uw.uw_flags, URTWN_FLAG_FWREADY)) {
+		DPRINTFN(DBG_INIT, "fw not running, uw_flags=%jx",
+		    sc->sc_uw.uw_flags, 0, 0, 0);
+		return EAGAIN;
+	}
 
-	mutex_enter(&sc->sc_fwcmd_mtx);
 	fwcur = sc->fwcur;
 	sc->fwcur = (sc->fwcur + 1) % R92C_H2C_NBOX;
 
@@ -1160,9 +1012,8 @@ urtwn_fw_cmd(struct urtwn_softc *sc, uint8_t id, const void *buf, int len)
 		urtwn_delay_ms(sc, 2);
 	}
 	if (ntries == 100) {
-		aprint_error_dev(sc->sc_dev,
+		aprint_error_dev(sc->sc_uw.uw_dev,
 		    "could not send firmware command %d\n", id);
-		mutex_exit(&sc->sc_fwcmd_mtx);
 		return ETIMEDOUT;
 	}
 
@@ -1191,7 +1042,6 @@ urtwn_fw_cmd(struct urtwn_softc *sc, uint8_t id, const void *buf, int len)
 	} else {
 		urtwn_write_region(sc, R92C_HMEBOX(fwcur), cp, len);
 	}
-	mutex_exit(&sc->sc_fwcmd_mtx);
 
 	return 0;
 }
@@ -1266,7 +1116,7 @@ urtwn_llt_write(struct urtwn_softc *sc, uint32_t addr, uint32_t data)
 {
 	int ntries;
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	urtwn_write_4(sc, R92C_LLT_INIT,
 	    SM(R92C_LLT_INIT_OP, R92C_LLT_INIT_OP_WRITE) |
@@ -1290,7 +1140,7 @@ urtwn_efuse_read_1(struct urtwn_softc *sc, uint16_t addr)
 	uint32_t reg;
 	int ntries;
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	reg = urtwn_read_4(sc, R92C_EFUSE_CTRL);
 	reg = RW(reg, R92C_EFUSE_CTRL_ADDR, addr);
@@ -1306,7 +1156,7 @@ urtwn_efuse_read_1(struct urtwn_softc *sc, uint16_t addr)
 		}
 		DELAY(5);
 	}
-	aprint_error_dev(sc->sc_dev,
+	aprint_error_dev(sc->sc_uw.uw_dev,
 	    "could not read efuse byte at address 0x%04x\n", addr);
 	return 0xff;
 }
@@ -1322,7 +1172,7 @@ urtwn_efuse_read(struct urtwn_softc *sc)
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	urtwn_efuse_switch_power(sc);
 
@@ -1345,9 +1195,13 @@ urtwn_efuse_read(struct urtwn_softc *sc)
 		}
 	}
 #ifdef URTWN_DEBUG
-	/* Dump ROM content. */
-	for (i = 0; i < (int)sizeof(sc->rom); i++)
-		DPRINTFN(DBG_INIT, "%04jx: %02jx", i, rom[i], 0, 0);
+	if (urtwn_debug & DBG_INIT) {
+		/* Dump ROM content. */
+		printf("%s: %s", device_xname(sc->sc_uw.uw_dev), __func__);
+		for (i = 0; i < (int)sizeof(sc->rom); i++)
+			printf(":%02x", rom[i]);
+		printf("\n");
+	}
 #endif
 }
 
@@ -1413,78 +1267,80 @@ static void
 urtwn_dump_rom(struct urtwn_softc *sc, struct r92c_rom *rp)
 {
 
-	aprint_normal_dev(sc->sc_dev,
+	aprint_normal_dev(sc->sc_uw.uw_dev,
 	    "id 0x%04x, dbg_sel %#x, vid %#x, pid %#x\n",
 	    rp->id, rp->dbg_sel, rp->vid, rp->pid);
 
-	aprint_normal_dev(sc->sc_dev,
+	aprint_normal_dev(sc->sc_uw.uw_dev,
 	    "usb_opt %#x, ep_setting %#x, usb_phy %#x\n",
 	    rp->usb_opt, rp->ep_setting, rp->usb_phy);
 
-	aprint_normal_dev(sc->sc_dev,
-	    "macaddr %s\n",
-	    ether_sprintf(rp->macaddr));
+	aprint_normal_dev(sc->sc_uw.uw_dev,
+	    "macaddr %02x:%02x:%02x:%02x:%02x:%02x\n",
+	    rp->macaddr[0], rp->macaddr[1],
+	    rp->macaddr[2], rp->macaddr[3],
+	    rp->macaddr[4], rp->macaddr[5]);
 
-	aprint_normal_dev(sc->sc_dev,
+	aprint_normal_dev(sc->sc_uw.uw_dev,
 	    "string %s, subcustomer_id %#x\n",
 	    rp->string, rp->subcustomer_id);
 
-	aprint_normal_dev(sc->sc_dev,
+	aprint_normal_dev(sc->sc_uw.uw_dev,
 	    "cck_tx_pwr c0: %d %d %d, c1: %d %d %d\n",
 	    rp->cck_tx_pwr[0][0], rp->cck_tx_pwr[0][1], rp->cck_tx_pwr[0][2],
 	    rp->cck_tx_pwr[1][0], rp->cck_tx_pwr[1][1], rp->cck_tx_pwr[1][2]);
 
-	aprint_normal_dev(sc->sc_dev,
+	aprint_normal_dev(sc->sc_uw.uw_dev,
 	    "ht40_1s_tx_pwr c0 %d %d %d, c1 %d %d %d\n",
 	    rp->ht40_1s_tx_pwr[0][0], rp->ht40_1s_tx_pwr[0][1],
 	    rp->ht40_1s_tx_pwr[0][2],
 	    rp->ht40_1s_tx_pwr[1][0], rp->ht40_1s_tx_pwr[1][1],
 	    rp->ht40_1s_tx_pwr[1][2]);
 
-	aprint_normal_dev(sc->sc_dev,
+	aprint_normal_dev(sc->sc_uw.uw_dev,
 	    "ht40_2s_tx_pwr_diff c0: %d %d %d, c1: %d %d %d\n",
 	    rp->ht40_2s_tx_pwr_diff[0] & 0xf, rp->ht40_2s_tx_pwr_diff[1] & 0xf,
 	    rp->ht40_2s_tx_pwr_diff[2] & 0xf,
 	    rp->ht40_2s_tx_pwr_diff[0] >> 4, rp->ht40_2s_tx_pwr_diff[1] & 0xf,
 	    rp->ht40_2s_tx_pwr_diff[2] >> 4);
 
-	aprint_normal_dev(sc->sc_dev,
+	aprint_normal_dev(sc->sc_uw.uw_dev,
 	    "ht20_tx_pwr_diff c0: %d %d %d, c1: %d %d %d\n",
 	    rp->ht20_tx_pwr_diff[0] & 0xf, rp->ht20_tx_pwr_diff[1] & 0xf,
 	    rp->ht20_tx_pwr_diff[2] & 0xf,
 	    rp->ht20_tx_pwr_diff[0] >> 4, rp->ht20_tx_pwr_diff[1] >> 4,
 	    rp->ht20_tx_pwr_diff[2] >> 4);
 
-	aprint_normal_dev(sc->sc_dev,
+	aprint_normal_dev(sc->sc_uw.uw_dev,
 	    "ofdm_tx_pwr_diff c0: %d %d %d, c1: %d %d %d\n",
 	    rp->ofdm_tx_pwr_diff[0] & 0xf, rp->ofdm_tx_pwr_diff[1] & 0xf,
 	    rp->ofdm_tx_pwr_diff[2] & 0xf,
 	    rp->ofdm_tx_pwr_diff[0] >> 4, rp->ofdm_tx_pwr_diff[1] >> 4,
 	    rp->ofdm_tx_pwr_diff[2] >> 4);
 
-	aprint_normal_dev(sc->sc_dev,
+	aprint_normal_dev(sc->sc_uw.uw_dev,
 	    "ht40_max_pwr_offset c0: %d %d %d, c1: %d %d %d\n",
 	    rp->ht40_max_pwr[0] & 0xf, rp->ht40_max_pwr[1] & 0xf,
 	    rp->ht40_max_pwr[2] & 0xf,
 	    rp->ht40_max_pwr[0] >> 4, rp->ht40_max_pwr[1] >> 4,
 	    rp->ht40_max_pwr[2] >> 4);
 
-	aprint_normal_dev(sc->sc_dev,
+	aprint_normal_dev(sc->sc_uw.uw_dev,
 	    "ht20_max_pwr_offset c0: %d %d %d, c1: %d %d %d\n",
 	    rp->ht20_max_pwr[0] & 0xf, rp->ht20_max_pwr[1] & 0xf,
 	    rp->ht20_max_pwr[2] & 0xf,
 	    rp->ht20_max_pwr[0] >> 4, rp->ht20_max_pwr[1] >> 4,
 	    rp->ht20_max_pwr[2] >> 4);
 
-	aprint_normal_dev(sc->sc_dev,
+	aprint_normal_dev(sc->sc_uw.uw_dev,
 	    "xtal_calib %d, tssi %d %d, thermal %d\n",
 	    rp->xtal_calib, rp->tssi[0], rp->tssi[1], rp->thermal_meter);
 
-	aprint_normal_dev(sc->sc_dev,
+	aprint_normal_dev(sc->sc_uw.uw_dev,
 	    "rf_opt1 %#x, rf_opt2 %#x, rf_opt3 %#x, rf_opt4 %#x\n",
 	    rp->rf_opt1, rp->rf_opt2, rp->rf_opt3, rp->rf_opt4);
 
-	aprint_normal_dev(sc->sc_dev,
+	aprint_normal_dev(sc->sc_uw.uw_dev,
 	    "channnel_plan %d, version %d customer_id %#x\n",
 	    rp->channel_plan, rp->version, rp->curstomer_id);
 }
@@ -1493,12 +1349,12 @@ urtwn_dump_rom(struct urtwn_softc *sc, struct r92c_rom *rp)
 static void
 urtwn_read_rom(struct urtwn_softc *sc)
 {
-	struct ieee80211com *ic = &sc->sc_ic;
+	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
 	struct r92c_rom *rom = &sc->rom;
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	mutex_enter(&sc->sc_write_mtx);
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	/* Read full ROM image. */
 	urtwn_efuse_read(sc);
@@ -1516,19 +1372,16 @@ urtwn_read_rom(struct urtwn_softc *sc)
 	    "PA setting=%#jx, board=%#jx, regulatory=%jd",
 	    sc->pa_setting, sc->board_type, sc->regulatory, 0);
 
-	IEEE80211_ADDR_COPY(ic->ic_myaddr, rom->macaddr);
-
+	IEEE80211_ADDR_COPY(ic->ic_macaddr, rom->macaddr);
 	sc->sc_rf_write = urtwn_r92c_rf_write;
 	sc->sc_power_on = urtwn_r92c_power_on;
 	sc->sc_dma_init = urtwn_r92c_dma_init;
-
-	mutex_exit(&sc->sc_write_mtx);
 }
 
 static void
 urtwn_r88e_read_rom(struct urtwn_softc *sc)
 {
-	struct ieee80211com *ic = &sc->sc_ic;
+	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
 	uint8_t *rom = sc->r88e_rom;
 	uint32_t reg;
 	uint16_t addr = 0;
@@ -1537,7 +1390,7 @@ urtwn_r88e_read_rom(struct urtwn_softc *sc)
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	mutex_enter(&sc->sc_write_mtx);
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	off = 0;
 	urtwn_efuse_switch_power(sc);
@@ -1567,10 +1420,6 @@ urtwn_r88e_read_rom(struct urtwn_softc *sc)
 			addr++;
 		}
 	}
-#ifdef URTWN_DEBUG
-	if (urtwn_debug & DBG_REG) {
-	}
-#endif
 
 	addr = 0x10;
 	for (i = 0; i < 6; i++)
@@ -1585,7 +1434,7 @@ urtwn_r88e_read_rom(struct urtwn_softc *sc)
 		sc->ofdm_tx_pwr_diff |= 0xf0;
 	sc->regulatory = MS(sc->r88e_rom[0xc1], R92C_ROM_RF1_REGULATORY);
 
-	IEEE80211_ADDR_COPY(ic->ic_myaddr, &sc->r88e_rom[0xd7]);
+	IEEE80211_ADDR_COPY(ic->ic_macaddr, &sc->r88e_rom[0xd7]);
 
 	if (ISSET(sc->chip, URTWN_CHIP_92EU)) {
 		sc->sc_power_on = urtwn_r92e_power_on;
@@ -1596,38 +1445,22 @@ urtwn_r88e_read_rom(struct urtwn_softc *sc)
 	}
 	sc->sc_dma_init = urtwn_r88e_dma_init;
 
-	mutex_exit(&sc->sc_write_mtx);
-}
-
-static int
-urtwn_media_change(struct ifnet *ifp)
-{
-	int error;
-
-	URTWNHIST_FUNC(); URTWNHIST_CALLED();
-
-	if ((error = ieee80211_media_change(ifp)) != ENETRESET)
-		return error;
-
-	if ((ifp->if_flags & (IFF_UP | IFF_RUNNING)) ==
-	    (IFF_UP | IFF_RUNNING)) {
-		urtwn_init(ifp);
-	}
-	return 0;
 }
 
 /*
  * Initialize rate adaptation in firmware.
  */
-static int __noinline
-urtwn_ra_init(struct urtwn_softc *sc)
+static int
+urtwn_ra_init(struct ieee80211vap *vap)
 {
 	static const uint8_t map[] = {
 		2, 4, 11, 22, 12, 18, 24, 36, 48, 72, 96, 108
 	};
-	struct ieee80211com *ic = &sc->sc_ic;
-	struct ieee80211_node *ni = ic->ic_bss;
+	struct ieee80211com *ic = vap->iv_ic;
+	struct urtwn_softc *sc = ic->ic_softc;
+	struct ieee80211_node *ni = vap->iv_bss;
 	struct ieee80211_rateset *rs = &ni->ni_rates;
+
 	struct r92c_fw_cmd_macid_cfg cmd;
 	uint32_t rates, basicrates;
 	uint32_t rrsr_mask, rrsr_rate;
@@ -1637,7 +1470,7 @@ urtwn_ra_init(struct urtwn_softc *sc)
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	/* Get normal and basic rates mask. */
 	rates = basicrates = 1;
@@ -1668,8 +1501,13 @@ urtwn_ra_init(struct urtwn_softc *sc)
 	}
 	if (ic->ic_curmode == IEEE80211_MODE_11B) {
 		mode = R92C_RAID_11B;
-	} else {
+	} else if (ic->ic_curmode == IEEE80211_MODE_11G) {
 		mode = R92C_RAID_11BG;
+	} else { /* mode = IEEE80211_MODE_11NG */
+		if (vap->iv_flags_ht & IEEE80211_FHT_PUREN)
+                        mode = R92C_RAID_11N;
+		else
+			mode = R92C_RAID_11BGN;
 	}
 	DPRINTFN(DBG_INIT, "mode=%#jx", mode, 0, 0, 0);
 	DPRINTFN(DBG_INIT, "rates=%#jx, basicrates=%#jx, "
@@ -1688,7 +1526,7 @@ urtwn_ra_init(struct urtwn_softc *sc)
 	cmd.mask = htole32((mode << 28) | basicrates);
 	error = urtwn_fw_cmd(sc, R92C_CMD_MACID_CONFIG, &cmd, sizeof(cmd));
 	if (error != 0) {
-		aprint_error_dev(sc->sc_dev,
+		aprint_error_dev(sc->sc_uw.uw_dev,
 		    "could not add broadcast station\n");
 		return error;
 	}
@@ -1703,22 +1541,21 @@ urtwn_ra_init(struct urtwn_softc *sc)
 	cmd.mask = htole32((mode << 28) | rates);
 	error = urtwn_fw_cmd(sc, R92C_CMD_MACID_CONFIG, &cmd, sizeof(cmd));
 	if (error != 0) {
-		aprint_error_dev(sc->sc_dev, "could not add BSS station\n");
+		aprint_error_dev(sc->sc_uw.uw_dev, "could not add BSS station\n");
 		return error;
 	}
 	/* Set initial MRR rate. */
 	DPRINTFN(DBG_INIT, "maxrate=%jd", maxrate, 0, 0, 0);
 	urtwn_write_1(sc, R92C_INIDATA_RATE_SEL(RTWN_MACID_BSS), maxrate);
 
-	rrsr_rate = ic->ic_fixed_rate;
+	rrsr_rate = vap->iv_txparms[mode].mgmtrate;
 	if (rrsr_rate == -1)
 		rrsr_rate = 11;
 
 	rrsr_mask = 0xffff >> (15 - rrsr_rate);
 	urtwn_write_2(sc, R92C_RRSR, rrsr_mask);
 
-	/* Indicate highest supported rate. */
-	ni->ni_txrate = rs->rs_nrates - 1;
+	ni->ni_txrate = ni->ni_rates.rs_nrates - 1;
 
 	return 0;
 }
@@ -1726,7 +1563,7 @@ urtwn_ra_init(struct urtwn_softc *sc)
 static int
 urtwn_get_nettype(struct urtwn_softc *sc)
 {
-	struct ieee80211com *ic = &sc->sc_ic;
+	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
 	int type;
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
@@ -1751,26 +1588,25 @@ urtwn_get_nettype(struct urtwn_softc *sc)
 static void
 urtwn_set_nettype0_msr(struct urtwn_softc *sc, uint8_t type)
 {
-	uint8_t	reg;
+	uint8_t reg;
 
 	URTWNHIST_FUNC();
 	URTWNHIST_CALLARGS("type=%jd", type, 0, 0, 0);
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	reg = urtwn_read_1(sc, R92C_CR + 2) & 0x0c;
 	urtwn_write_1(sc, R92C_CR + 2, reg | type);
 }
 
 static void
-urtwn_tsf_sync_enable(struct urtwn_softc *sc)
+urtwn_tsf_sync_enable(struct urtwn_softc *sc, struct ieee80211_node *ni)
 {
-	struct ieee80211_node *ni = sc->sc_ic.ic_bss;
 	uint64_t tsf;
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	/* Enable TSF synchronization. */
 	urtwn_write_1(sc, R92C_BCN_CTRL,
@@ -1800,7 +1636,7 @@ urtwn_set_led(struct urtwn_softc *sc, int led, int on)
 	URTWNHIST_FUNC();
 	URTWNHIST_CALLARGS("led=%jd, on=%jd", led, on, 0, 0);
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	if (led == URTWN_LED_LINK) {
 		if (ISSET(sc->chip, URTWN_CHIP_92EU)) {
@@ -1842,7 +1678,7 @@ urtwn_calib_to(void *arg)
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	if (sc->sc_dying)
+	if (usbwifi_isdying(&sc->sc_uw))
 		return;
 
 	/* Do it in a process context. */
@@ -1858,16 +1694,21 @@ urtwn_calib_to_cb(struct urtwn_softc *sc, void *arg)
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	if (sc->sc_ic.ic_state != IEEE80211_S_RUN)
+	usbwifi_lock_ic(&sc->sc_uw);
+	if (!sc->sc_uw.uw_ic.ic_nrunning) {
+		usbwifi_unlock_ic(&sc->sc_uw);
+		return;
+	}
+	if (!ISSET(sc->sc_uw.uw_flags, URTWN_FLAG_FWREADY)) {
+		usbwifi_unlock_ic(&sc->sc_uw);
 		goto restart_timer;
-
-	mutex_enter(&sc->sc_write_mtx);
+	}
 	if (sc->avg_pwdb != -1) {
 		/* Indicate Rx signal strength to FW for rate adaptation. */
 		memset(&cmd, 0, sizeof(cmd));
 		memset(&cmde, 0, sizeof(cmde));
 		cmd.macid = 0;	/* BSS. */
-		cmde.macid = 0;	/* BSS. */
+		cmde.macid = 0; /* BSS. */
 		cmd.pwdb = sc->avg_pwdb;
 		cmde.pwdb = sc->avg_pwdb;
 		DPRINTFN(DBG_RF, "sending RSSI command avg=%jd",
@@ -1883,30 +1724,47 @@ urtwn_calib_to_cb(struct urtwn_softc *sc, void *arg)
 
 	/* Do temperature compensation. */
 	urtwn_temp_calib(sc);
-	mutex_exit(&sc->sc_write_mtx);
+	usbwifi_unlock_ic(&sc->sc_uw);
 
  restart_timer:
-	if (!sc->sc_dying) {
+	if (!usbwifi_isdying(&sc->sc_uw)) {
 		/* Restart calibration timer. */
 		callout_schedule(&sc->sc_calib_to, hz);
 	}
 }
 
 static void
-urtwn_next_scan(void *arg)
+power_control(struct urtwn_softc *sc, bool lowpower)
 {
-	struct urtwn_softc *sc = arg;
-	int s;
 
-	URTWNHIST_FUNC(); URTWNHIST_CALLED();
-
-	if (sc->sc_dying)
-		return;
-
-	s = splnet();
-	if (sc->sc_ic.ic_state == IEEE80211_S_SCAN)
-		ieee80211_next_scan(&sc->sc_ic);
-	splx(s);
+	if (ISSET(sc->chip, URTWN_CHIP_92EU)) {
+		struct r92e_fw_cmd_setpwrmode cmd;
+		memset(&cmd, 0, sizeof cmd);
+		if (lowpower) {
+			cmd.mode = FWMODE_LOW_POWER;
+			cmd.smartps = SRTPS_LOW_POWER;
+			cmd.pwr_state = PS_RFON;
+		} else {
+			cmd.mode = FWMODE_ACTIVE;
+			cmd.smartps = SRTPS_LOW_POWER;
+		}
+		cmd.awake_int = 1;
+		urtwn_fw_cmd(sc, R92E_CMD_SET_PWRMODE, &cmd, sizeof(cmd));
+	} else if (ISSET(sc->chip, URTWN_CHIP_92C)) {
+		struct r92c_fw_cmd_setpwrmode cmd;
+		memset(&cmd, 0, sizeof cmd);
+		if (lowpower) {
+			cmd.mode = FWMODE_LOW_POWER;
+			cmd.smartps = SRTPS_LOW_POWER;
+		} else {
+			cmd.mode = FWMODE_ACTIVE;
+			cmd.smartps = SRTPS_LOW_POWER;
+		}
+		cmd.bcn_time = 0;
+		urtwn_fw_cmd(sc, R92C_CMD_SET_PWRMODE, &cmd, sizeof(cmd));
+	} else
+		return;  /* not currently supported for sleeps. */
+	DELAY(200000);
 }
 
 static void
@@ -1921,74 +1779,61 @@ urtwn_newassoc(struct ieee80211_node *ni, int isnew)
 	    ni->ni_macaddr[4] << 1 |
 	    ni->ni_macaddr[5],
 	    0, 0);
+
 	/* start with lowest Tx rate */
 	ni->ni_txrate = 0;
 }
 
+/*
+ * A VAP changes state.
+ * This is called with thread context and the 'ic' lock held.
+ */
 static int
-urtwn_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int arg)
+urtwn_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 {
-	struct urtwn_softc *sc = ic->ic_ifp->if_softc;
-	struct urtwn_cmd_newstate cmd;
-
-	URTWNHIST_FUNC();
-	URTWNHIST_CALLARGS("nstate=%jd, arg=%jd", nstate, arg, 0, 0);
-
-	callout_stop(&sc->sc_scan_to);
-	callout_stop(&sc->sc_calib_to);
-
-	/* Do it in a process context. */
-	cmd.state = nstate;
-	cmd.arg = arg;
-	urtwn_do_async(sc, urtwn_newstate_cb, &cmd, sizeof(cmd));
-	return 0;
-}
-
-static void
-urtwn_newstate_cb(struct urtwn_softc *sc, void *arg)
-{
-	struct urtwn_cmd_newstate *cmd = arg;
-	struct ieee80211com *ic = &sc->sc_ic;
+	struct urtwn_vap *uvap = (struct urtwn_vap*)vap;
+	struct urtwn_softc *sc = vap->iv_ic->ic_softc;
+	struct ieee80211com *ic = vap->iv_ic;
 	struct ieee80211_node *ni;
-	enum ieee80211_state ostate = ic->ic_state;
-	enum ieee80211_state nstate = cmd->state;
+	enum ieee80211_state ostate = vap->iv_state;
 	uint32_t reg;
 	uint8_t sifs_time, msr;
-	int s;
+	int result;
 
-	URTWNHIST_FUNC(); URTWNHIST_CALLED();
-	DPRINTFN(DBG_STM, "%jd->%jd", ostate, nstate, 0, 0);
+	URTWNHIST_FUNC();
+	URTWNHIST_CALLARGS("nstate=%jd, arg=%jd, ostate=%jd",
+	    nstate, arg, ostate, 0);
 
-	s = splnet();
-	mutex_enter(&sc->sc_write_mtx);
-
-	callout_stop(&sc->sc_scan_to);
 	callout_stop(&sc->sc_calib_to);
+	if (sc->sc_uw.uw_pri != NULL)
+		usb_rem_task_wait(sc->sc_uw.uw_udev, &sc->sc_task,
+		    USB_TASKQ_DRIVER, usbwifi_mutex_ic(&sc->sc_uw));
+
+	urtwn_wait_async(sc);
 
 	switch (ostate) {
 	case IEEE80211_S_INIT:
 		break;
 
 	case IEEE80211_S_SCAN:
-		if (nstate != IEEE80211_S_SCAN) {
-			/*
-			 * End of scanning
-			 */
-			/* flush 4-AC Queue after site_survey */
-			urtwn_write_1(sc, R92C_TXPAUSE, 0x0);
-
-			/* Allow Rx from our BSSID only. */
-			urtwn_write_4(sc, R92C_RCR,
-			    urtwn_read_4(sc, R92C_RCR) |
-			      R92C_RCR_CBSSID_DATA | R92C_RCR_CBSSID_BCN);
-		}
 		break;
 
 	case IEEE80211_S_AUTH:
 	case IEEE80211_S_ASSOC:
+		/* Re-perform calibrations. */
+		/* Perform LO and IQ calibrations. */
+		urtwn_iq_calib(sc, sc->iqk_inited);
+		sc->iqk_inited = true;
+
+		/* Perform LC calibration. */
+		urtwn_lc_calib(sc);
 		break;
 
 	case IEEE80211_S_RUN:
+		if (nstate == IEEE80211_S_RUN || nstate == IEEE80211_S_SLEEP)
+			break;
+		sc->sc_running = false;
+
 		/* Turn link LED off. */
 		urtwn_set_led(sc, URTWN_LED_LINK, 0);
 
@@ -2006,10 +1851,11 @@ urtwn_newstate_cb(struct urtwn_softc *sc, void *arg)
 		    urtwn_read_1(sc, R92C_BCN_CTRL) |
 		      R92C_BCN_CTRL_DIS_TSF_UDT0);
 
+#if 0
 		/* Back to 20MHz mode */
 		urtwn_set_chan(sc, ic->ic_curchan,
 		    IEEE80211_HTINFO_2NDCHAN_NONE);
-
+#endif
 		if (ic->ic_opmode == IEEE80211_M_IBSS ||
 		    ic->ic_opmode == IEEE80211_M_HOSTAP) {
 			/* Stop BCN */
@@ -2027,6 +1873,16 @@ urtwn_newstate_cb(struct urtwn_softc *sc, void *arg)
 		/* flush all cam entries */
 		urtwn_cam_init(sc);
 		break;
+	case IEEE80211_S_SLEEP:
+		if (nstate == IEEE80211_S_SLEEP)
+			break;
+		power_control(sc, false);
+		break;
+	case IEEE80211_S_CAC:
+	case IEEE80211_S_CSA:
+		printf ("URTWN UNKNOWN oSTATE: %d\n", ostate);
+		/* NNN what do we do in these states? XXX */
+		break;
 	}
 
 	switch (nstate) {
@@ -2036,55 +1892,11 @@ urtwn_newstate_cb(struct urtwn_softc *sc, void *arg)
 		break;
 
 	case IEEE80211_S_SCAN:
-		if (ostate != IEEE80211_S_SCAN) {
-			/*
-			 * Begin of scanning
-			 */
-
-			/* Set gain for scanning. */
-			reg = urtwn_bb_read(sc, R92C_OFDM0_AGCCORE1(0));
-			reg = RW(reg, R92C_OFDM0_AGCCORE1_GAIN, 0x20);
-			urtwn_bb_write(sc, R92C_OFDM0_AGCCORE1(0), reg);
-
-			if (!ISSET(sc->chip, URTWN_CHIP_88E)) {
-				reg = urtwn_bb_read(sc, R92C_OFDM0_AGCCORE1(1));
-				reg = RW(reg, R92C_OFDM0_AGCCORE1_GAIN, 0x20);
-				urtwn_bb_write(sc, R92C_OFDM0_AGCCORE1(1), reg);
-			}
-
-			/* Set media status to 'No Link'. */
-			urtwn_set_nettype0_msr(sc, R92C_CR_NETTYPE_NOLINK);
-
-			/* Allow Rx from any BSSID. */
-			urtwn_write_4(sc, R92C_RCR,
-			    urtwn_read_4(sc, R92C_RCR) &
-			    ~(R92C_RCR_CBSSID_DATA | R92C_RCR_CBSSID_BCN));
-
-			/* Stop Rx of data frames. */
-			urtwn_write_2(sc, R92C_RXFLTMAP2, 0);
-
-			/* Disable update TSF */
-			urtwn_write_1(sc, R92C_BCN_CTRL,
-			    urtwn_read_1(sc, R92C_BCN_CTRL) |
-			      R92C_BCN_CTRL_DIS_TSF_UDT0);
-		}
-
-		/* Make link LED blink during scan. */
-		urtwn_set_led(sc, URTWN_LED_LINK, !sc->ledlink);
-
-		/* Pause AC Tx queues. */
-		urtwn_write_1(sc, R92C_TXPAUSE,
-		    urtwn_read_1(sc, R92C_TXPAUSE) | 0x0f);
-
-		urtwn_set_chan(sc, ic->ic_curchan,
-		    IEEE80211_HTINFO_2NDCHAN_NONE);
-
-		/* Start periodic scan. */
-		if (!sc->sc_dying)
-			callout_schedule(&sc->sc_scan_to, hz / 5);
 		break;
 
 	case IEEE80211_S_AUTH:
+		if (ostate == IEEE80211_S_AUTH)
+			break;
 		/* Set initial gain under link. */
 		reg = urtwn_bb_read(sc, R92C_OFDM0_AGCCORE1(0));
 		reg = RW(reg, R92C_OFDM0_AGCCORE1_GAIN, 0x32);
@@ -2104,24 +1916,38 @@ urtwn_newstate_cb(struct urtwn_softc *sc, void *arg)
 		    urtwn_read_4(sc, R92C_RCR) &
 		      ~(R92C_RCR_CBSSID_DATA | R92C_RCR_CBSSID_BCN));
 
+#if 0
 		urtwn_set_chan(sc, ic->ic_curchan,
 		    IEEE80211_HTINFO_2NDCHAN_NONE);
+#endif
 		break;
 
 	case IEEE80211_S_ASSOC:
 		break;
 
 	case IEEE80211_S_RUN:
-		ni = ic->ic_bss;
+		if (ostate == IEEE80211_S_RUN)
+			break;
+		if (ostate == IEEE80211_S_SLEEP)
+			goto restart_calib;
 
+		sc->sc_running = true;
+
+		ni = vap->iv_bss;
+		ni->ni_vap = vap;
+
+#if 0
 		/* XXX: Set 20MHz mode */
 		urtwn_set_chan(sc, ic->ic_curchan,
 		    IEEE80211_HTINFO_2NDCHAN_NONE);
+#endif
 
 		if (ic->ic_opmode == IEEE80211_M_MONITOR) {
+#if 0
 			/* Back to 20MHz mode */
 			urtwn_set_chan(sc, ic->ic_curchan,
 			    IEEE80211_HTINFO_2NDCHAN_NONE);
+#endif
 
 			/* Set media status to 'No Link'. */
 			urtwn_set_nettype0_msr(sc, R92C_CR_NETTYPE_NOLINK);
@@ -2153,9 +1979,17 @@ urtwn_newstate_cb(struct urtwn_softc *sc, void *arg)
 
 		if (ic->ic_curmode == IEEE80211_MODE_11B) {
 			urtwn_write_1(sc, R92C_INIRTS_RATE_SEL, 0);
-		} else {
+		} else if (ic->ic_curmode == IEEE80211_MODE_11G) {
 			/* 802.11b/g */
 			urtwn_write_1(sc, R92C_INIRTS_RATE_SEL, 3);
+		} else { /* IEEE_MODE_11NG */
+			if (sc->ntxchains == 1) {
+				/* MCS 0 */
+				urtwn_write_1(sc, R92C_INIRTS_RATE_SEL, 19);
+			} else {
+				/* MCS 15 */
+				urtwn_write_1(sc, R92C_INIRTS_RATE_SEL, 27);
+			}
 		}
 
 		/* Enable Rx of data frames. */
@@ -2174,7 +2008,7 @@ urtwn_newstate_cb(struct urtwn_softc *sc, void *arg)
 			      R92C_RCR_CBSSID_DATA | R92C_RCR_CBSSID_BCN);
 
 			/* Enable TSF synchronization. */
-			urtwn_tsf_sync_enable(sc);
+			urtwn_tsf_sync_enable(sc, ni);
 
 			msr |= R92C_MSR_INFRA;
 			break;
@@ -2213,8 +2047,10 @@ urtwn_newstate_cb(struct urtwn_softc *sc, void *arg)
 		if (ISSET(sc->chip, URTWN_CHIP_88E) ||
 		    ISSET(sc->chip, URTWN_CHIP_92EU))
 			ni->ni_txrate = ni->ni_rates.rs_nrates - 1;
+		else if (sc->iqk_inited)
+			ni->ni_txrate = ni->ni_rates.rs_nrates - 1;
 		else
-			urtwn_ra_init(sc);
+			urtwn_ra_init(vap);
 
 		/* Turn link LED on. */
 		urtwn_set_led(sc, URTWN_LED_LINK, 1);
@@ -2226,22 +2062,31 @@ urtwn_newstate_cb(struct urtwn_softc *sc, void *arg)
 		sc->thcal_state = 0;
 		sc->thcal_lctemp = 0;
 
+restart_calib:
 		/* Start periodic calibration. */
-		if (!sc->sc_dying)
+		if (!usbwifi_isdying(&sc->sc_uw))
 			callout_schedule(&sc->sc_calib_to, hz);
+		break;
+	case IEEE80211_S_SLEEP:
+		if (ostate != IEEE80211_S_SLEEP)
+			power_control(sc, true);
+		break;
+	case IEEE80211_S_CAC:
+	case IEEE80211_S_CSA:
+		/* NNN what do we do in these states? XXX */
+		printf ("URTWN UNKNOWN nSTATE: %d\n", nstate);
 		break;
 	}
 
-	(*sc->sc_newstate)(ic, nstate, cmd->arg);
+	result = (*uvap->newstate)(vap, nstate, arg);
 
-	mutex_exit(&sc->sc_write_mtx);
-	splx(s);
+	return result;
 }
 
 static int
 urtwn_wme_update(struct ieee80211com *ic)
 {
-	struct urtwn_softc *sc = ic->ic_ifp->if_softc;
+	struct urtwn_softc *sc = ic->ic_softc;
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
@@ -2263,16 +2108,13 @@ urtwn_wme_update_cb(struct urtwn_softc *sc, void *arg)
 		R92C_EDCA_VI_PARAM,
 		R92C_EDCA_VO_PARAM
 	};
-	struct ieee80211com *ic = &sc->sc_ic;
+	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
 	const struct wmeParams *wmep;
 	int ac, aifs, slottime;
-	int s;
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
-	DPRINTFN(DBG_STM, "called", 0, 0, 0, 0);
 
-	s = splnet();
-	mutex_enter(&sc->sc_write_mtx);
+	usbwifi_lock_ic(&sc->sc_uw);
 	slottime = (ic->ic_flags & IEEE80211_F_SHSLOT) ? 9 : 20;
 	for (ac = 0; ac < WME_NUM_AC; ac++) {
 		wmep = &ic->ic_wme.wme_chanParams.cap_wmeParams[ac];
@@ -2284,8 +2126,7 @@ urtwn_wme_update_cb(struct urtwn_softc *sc, void *arg)
 		    SM(R92C_EDCA_PARAM_ECWMAX, wmep->wmep_logcwmax) |
 		    SM(R92C_EDCA_PARAM_AIFS, aifs));
 	}
-	mutex_exit(&sc->sc_write_mtx);
-	splx(s);
+	usbwifi_unlock_ic(&sc->sc_uw);
 }
 
 static void
@@ -2319,7 +2160,7 @@ urtwn_update_avgrssi(struct urtwn_softc *sc, int rate, int8_t rssi)
 				pwdb -= 2;
 		}
 	}
-	if (sc->avg_pwdb == -1)	/* Init. */
+	if (sc->avg_pwdb == -1) /* Init. */
 		sc->avg_pwdb = pwdb;
 	else if (sc->avg_pwdb < pwdb)
 		sc->avg_pwdb = ((sc->avg_pwdb * 19 + pwdb) / 20) + 1;
@@ -2327,7 +2168,7 @@ urtwn_update_avgrssi(struct urtwn_softc *sc, int rate, int8_t rssi)
 		sc->avg_pwdb = ((sc->avg_pwdb * 19 + pwdb) / 20);
 
 	DPRINTFN(DBG_RF, "rate=%jd rssi=%jd PWDB=%jd EMA=%jd",
-	    rate, rssi, pwdb, sc->avg_pwdb);
+		     rate, rssi, pwdb, sc->avg_pwdb);
 }
 
 static int8_t
@@ -2344,7 +2185,7 @@ urtwn_get_rssi(struct urtwn_softc *sc, int rate, void *physt)
 
 	if (rate <= 3) {
 		cck = (struct r92c_rx_cck *)physt;
-		if (ISSET(sc->sc_flags, URTWN_FLAG_CCK_HIPWR)) {
+		if (ISSET(sc->sc_uw.uw_flags, URTWN_FLAG_CCK_HIPWR)) {
 			rpt = (cck->agc_rpt >> 5) & 0x3;
 			rssi = (cck->agc_rpt & 0x1f) << 1;
 		} else {
@@ -2362,73 +2203,46 @@ urtwn_get_rssi(struct urtwn_softc *sc, int rate, void *physt)
 static int8_t
 urtwn_r88e_get_rssi(struct urtwn_softc *sc, int rate, void *physt)
 {
-	struct r92c_rx_phystat *phy;
-	struct r88e_rx_cck *cck;
-	uint8_t cck_agc_rpt, lna_idx, vga_idx;
+	static const int8_t cckoff[] = { 20, 14, 10, -4, -16, -22, -38, -40 };
+	struct r88e_rx_phystat *phy;
+	uint8_t rpt;
 	int8_t rssi;
 
 	URTWNHIST_FUNC();
 	URTWNHIST_CALLARGS("rate=%jd", rate, 0, 0, 0);
 
-	rssi = 0;
+	phy = (struct r88e_rx_phystat *)physt;
+
 	if (rate <= 3) {
-		cck = (struct r88e_rx_cck *)physt;
-		cck_agc_rpt = cck->agc_rpt;
-		lna_idx = (cck_agc_rpt & 0xe0) >> 5;
-		vga_idx = cck_agc_rpt & 0x1f;
-		switch (lna_idx) {
-		case 7:
-			if (vga_idx <= 27)
-				rssi = -100 + 2* (27 - vga_idx);
-			else
-				rssi = -100;
-			break;
-		case 6:
-			rssi = -48 + 2 * (2 - vga_idx);
-			break;
-		case 5:
-			rssi = -42 + 2 * (7 - vga_idx);
-			break;
-		case 4:
-			rssi = -36 + 2 * (7 - vga_idx);
-			break;
-		case 3:
-			rssi = -24 + 2 * (7 - vga_idx);
-			break;
-		case 2:
-			rssi = -12 + 2 * (5 - vga_idx);
-			break;
-		case 1:
-			rssi = 8 - (2 * vga_idx);
-			break;
-		case 0:
-			rssi = 14 - (2 * vga_idx);
-			break;
+		rpt = (phy->agc_rpt >> 5) & 0x7;
+		rssi = (phy->agc_rpt & 0x1f) << 1;
+		if (sc->sc_uw.uw_flags & URTWN_FLAG_CCK_HIPWR) {
+			if (rpt == 2)
+				rssi -= 6;
 		}
-		rssi += 6;
-	} else {	/* OFDM/HT. */
-		phy = (struct r92c_rx_phystat *)physt;
-		rssi = ((le32toh(phy->phydw1) >> 1) & 0x7f) - 110;
+		rssi = (phy->agc_rpt & 0x1f) > 27 ? -94 : cckoff[rpt] - rssi;
+	} else {        /* OFDM/HT. */
+		rssi = ((le32toh(phy->sq_rpt) >> 1) & 0x7f) - 110;
 	}
 	return rssi;
 }
 
+/*
+ * Handle a single frame during reception, pass on to usbwifi_enqueue()
+ * for processing.
+ */
 static void
 urtwn_rx_frame(struct urtwn_softc *sc, uint8_t *buf, int pktlen)
 {
-	struct ieee80211com *ic = &sc->sc_ic;
-	struct ifnet *ifp = ic->ic_ifp;
-	struct ieee80211_frame *wh;
-	struct ieee80211_node *ni;
+	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
 	struct r92c_rx_desc_usb *stat;
 	uint32_t rxdw0, rxdw3;
-	struct mbuf *m;
 	uint8_t rate;
 	int8_t rssi = 0;
-	int s, infosz;
+	int infosz;
 
 	URTWNHIST_FUNC();
-	URTWNHIST_CALLARGS("buf=%jp, pktlen=%#jd", (uintptr_t)buf, pktlen, 0, 0);
+	URTWNHIST_CALLARGS("buf=%#jx, pktlen=%jd", (intptr_t)buf, pktlen, 0, 0);
 
 	stat = (struct r92c_rx_desc_usb *)buf;
 	rxdw0 = le32toh(stat->rxdw0);
@@ -2440,23 +2254,22 @@ urtwn_rx_frame(struct urtwn_softc *sc, uint8_t *buf, int pktlen)
 		 * to not receive these frames.
 		 */
 		DPRINTFN(DBG_RX, "CRC error", 0, 0, 0, 0);
-		if_statinc(ifp, if_ierrors);
+		ieee80211_stat_add(&ic->ic_ierrors, 1);
 		return;
 	}
+
 	/*
 	 * XXX: This will drop most control packets.  Do we really
 	 * want this in IEEE80211_M_MONITOR mode?
 	 */
-//	if (__predict_false(pktlen < (int)sizeof(*wh))) {
 	if (__predict_false(pktlen < (int)sizeof(struct ieee80211_frame_ack))) {
 		DPRINTFN(DBG_RX, "packet too short %jd", pktlen, 0, 0, 0);
-		ic->ic_stats.is_rx_tooshort++;
-		if_statinc(ifp, if_ierrors);
+		ieee80211_stat_add(&ic->ic_ierrors, 1);
 		return;
 	}
 	if (__predict_false(pktlen > MCLBYTES)) {
 		DPRINTFN(DBG_RX, "packet too big %jd", pktlen, 0, 0, 0);
-		if_statinc(ifp, if_ierrors);
+		ieee80211_stat_add(&ic->ic_ierrors, 1);
 		return;
 	}
 
@@ -2476,34 +2289,8 @@ urtwn_rx_frame(struct urtwn_softc *sc, uint8_t *buf, int pktlen)
 	DPRINTFN(DBG_RX, "Rx frame len=%jd rate=%jd infosz=%jd rssi=%jd",
 	    pktlen, rate, infosz, rssi);
 
-	MGETHDR(m, M_DONTWAIT, MT_DATA);
-	if (__predict_false(m == NULL)) {
-		aprint_error_dev(sc->sc_dev, "couldn't allocate rx mbuf\n");
-		ic->ic_stats.is_rx_nobuf++;
-		if_statinc(ifp, if_ierrors);
-		return;
-	}
-	MCLAIM(m, &sc->sc_ec.ec_rx_mowner);
-	if (pktlen > (int)MHLEN) {
-		MCLGET(m, M_DONTWAIT);
-		if (__predict_false(!(m->m_flags & M_EXT))) {
-			aprint_error_dev(sc->sc_dev,
-			    "couldn't allocate rx mbuf cluster\n");
-			m_freem(m);
-			ic->ic_stats.is_rx_nobuf++;
-			if_statinc(ifp, if_ierrors);
-			return;
-		}
-	}
-
-	/* Finalize mbuf. */
-	m_set_rcvif(m, ifp);
-	wh = (struct ieee80211_frame *)((uint8_t *)&stat[1] + infosz);
-	memcpy(mtod(m, uint8_t *), wh, pktlen);
-	m->m_pkthdr.len = m->m_len = pktlen;
-
-	s = splnet();
-	if (__predict_false(sc->sc_drvbpf != NULL)) {
+	/* update radiotap data if needed */
+	if (__predict_false(ic->ic_flags_ext & IEEE80211_FEXT_BPF)) {
 		struct urtwn_rx_radiotap_header *tap = &sc->sc_rxtap;
 
 		tap->wr_flags = 0;
@@ -2531,55 +2318,25 @@ urtwn_rx_frame(struct urtwn_softc *sc, uint8_t *buf, int pktlen)
 		tap->wr_dbm_antsignal = rssi;
 		tap->wr_chan_freq = htole16(ic->ic_curchan->ic_freq);
 		tap->wr_chan_flags = htole16(ic->ic_curchan->ic_flags);
-
-		bpf_mtap2(sc->sc_drvbpf, tap, sc->sc_rxtap_len, m, BPF_D_IN);
 	}
 
-	ni = ieee80211_find_rxnode(ic, (struct ieee80211_frame_min *)wh);
-
-	/* push the frame up to the 802.11 stack */
-	ieee80211_input(ic, m, ni, rssi, 0);
-
-	/* Node is no longer needed. */
-	ieee80211_free_node(ni);
-
-	splx(s);
+	/* pass net load up the stack */
+	usbwifi_enqueue(&sc->sc_uw, (uint8_t *)&stat[1] + infosz,
+	    pktlen, rssi + 150, 0, 0, 0);
 }
 
 static void
-urtwn_rxeof(struct usbd_xfer *xfer, void *priv, usbd_status status)
+urtwn_rx_loop(struct usbwifi *uw, struct usbwifi_chain *c,
+    uint32_t len)
 {
-	struct urtwn_rx_data *data = priv;
-	struct urtwn_softc *sc = data->sc;
+	struct urtwn_softc *sc = usbwifi_softc(c->uwc_uw);
+	uint8_t *buf = c->uwc_buf;
 	struct r92c_rx_desc_usb *stat;
-	size_t pidx = data->pidx;
 	uint32_t rxdw0;
-	uint8_t *buf;
-	int len, totlen, pktlen, infosz, npkts, pktspacing;
+	uint32_t totlen, pktlen, infosz, npkts, pktspacing;
 
-	URTWNHIST_FUNC(); URTWNHIST_CALLED();
-	DPRINTFN(DBG_RX, "status=%jd", status, 0, 0, 0);
-
-	mutex_enter(&sc->sc_rx_mtx);
-	TAILQ_REMOVE(&sc->rx_free_list[pidx], data, next);
-	TAILQ_INSERT_TAIL(&sc->rx_free_list[pidx], data, next);
-	/* Put this Rx buffer back to our free list. */
-	mutex_exit(&sc->sc_rx_mtx);
-
-	if (__predict_false(status != USBD_NORMAL_COMPLETION)) {
-		if (status == USBD_STALLED)
-			usbd_clear_endpoint_stall_async(sc->rx_pipe[pidx]);
-		else if (status != USBD_CANCELLED)
-			goto resubmit;
-		return;
-	}
-	usbd_get_xfer_status(xfer, NULL, NULL, &len, NULL);
-
-	if (__predict_false(len < (int)sizeof(*stat))) {
-		DPRINTFN(DBG_RX, "xfer too short %jd", len, 0, 0, 0);
-		goto resubmit;
-	}
-	buf = data->buf;
+	URTWNHIST_FUNC();
+	URTWNHIST_CALLARGS("chain=%#jx, len=%jd", (intptr_t)c, len, 0, 0);
 
 	/* Get the number of encapsulated frames. */
 	stat = (struct r92c_rx_desc_usb *)buf;
@@ -2589,18 +2346,15 @@ urtwn_rxeof(struct usbd_xfer *xfer, void *priv, usbd_status status)
 		npkts = MS(le32toh(stat->rxdw2), R92C_RXDW2_PKTCNT);
 	DPRINTFN(DBG_RX, "Rx %jd frames in one chunk", npkts, 0, 0, 0);
 
-	if (npkts != 0)
-		rnd_add_uint32(&sc->rnd_source, npkts);
-
 	if (ISSET(sc->chip, URTWN_CHIP_92EU))
 		pktspacing = 8;
 	else
 		pktspacing = 128;
 
 	/* Process all of them. */
-	while (npkts-- > 0 && len > 0) {
+	while (npkts-- > 0 && (int)len > 0) {
 		if (__predict_false(len < (int)sizeof(*stat))) {
-			DPRINTFN(DBG_RX, "len(%jd) is short than header",
+			DPRINTFN(DBG_RX, "len(%d) is shorter than header",
 			    len, 0, 0, 0);
 			break;
 		}
@@ -2618,8 +2372,8 @@ urtwn_rxeof(struct usbd_xfer *xfer, void *priv, usbd_status status)
 		/* Make sure everything fits in xfer. */
 		totlen = sizeof(*stat) + infosz + pktlen;
 		if (__predict_false(totlen > len)) {
-			DPRINTFN(DBG_RX, "pktlen (%jd+%jd+%jd) > %jd",
-			    (int)sizeof(*stat), infosz, pktlen, len);
+			DPRINTFN(DBG_RX, "pktlen %jd(stat+%jd+%jd) > %jd",
+			    totlen, infosz, pktlen, len);
 			break;
 		}
 
@@ -2630,183 +2384,391 @@ urtwn_rxeof(struct usbd_xfer *xfer, void *priv, usbd_status status)
 		buf += totlen;
 		len -= totlen;
 	}
-
- resubmit:
-	/* Setup a new transfer. */
-	usbd_setup_xfer(xfer, data, data->buf, URTWN_RXBUFSZ,
-	    USBD_SHORT_XFER_OK, USBD_NO_TIMEOUT, urtwn_rxeof);
-	(void)usbd_transfer(xfer);
 }
 
-static void
-urtwn_put_tx_data(struct urtwn_softc *sc, struct urtwn_tx_data *data)
+/* Copy packet into a USB transfer and return length used */
+static unsigned
+urtwn_tx_prepare(struct usbwifi *uw, struct usbwifi_chain *chain,
+    uint8_t qid)
 {
-	size_t pidx = data->pidx;
-
-	mutex_enter(&sc->sc_tx_mtx);
-	/* Put this Tx buffer back to our free list. */
-	TAILQ_INSERT_TAIL(&sc->tx_free_list[pidx], data, next);
-	mutex_exit(&sc->sc_tx_mtx);
-}
-
-static void
-urtwn_txeof(struct usbd_xfer *xfer, void *priv, usbd_status status)
-{
-	struct urtwn_tx_data *data = priv;
-	struct urtwn_softc *sc = data->sc;
-	struct ifnet *ifp = &sc->sc_if;
-	size_t pidx = data->pidx;
-	int s;
-
-	URTWNHIST_FUNC(); URTWNHIST_CALLED();
-	DPRINTFN(DBG_TX, "status=%jd", status, 0, 0, 0);
-
-	urtwn_put_tx_data(sc, data);
-
-	s = splnet();
-	sc->tx_timer = 0;
-	ifp->if_flags &= ~IFF_OACTIVE;
-
-	if (__predict_false(status != USBD_NORMAL_COMPLETION)) {
-		if (status != USBD_NOT_STARTED && status != USBD_CANCELLED) {
-			if (status == USBD_STALLED) {
-				struct usbd_pipe *pipe = sc->tx_pipe[pidx];
-				usbd_clear_endpoint_stall_async(pipe);
-			}
-			device_printf(sc->sc_dev, "transmit failed, %s\n",
-			    usbd_errstr(status));
-			if_statinc(ifp, if_oerrors);
-		}
-		splx(s);
-		return;
-	}
-
-	if_statinc(ifp, if_opackets);
-	urtwn_start(ifp);
-	splx(s);
-
-}
-
-static int
-urtwn_tx(struct urtwn_softc *sc, struct mbuf *m, struct ieee80211_node *ni,
-    struct urtwn_tx_data *data)
-{
-	struct ieee80211com *ic = &sc->sc_ic;
+	struct ieee80211_node *ni = chain->uwc_ni;
+	struct mbuf *m = chain->uwc_mbuf;
+	struct urtwn_softc *sc = usbwifi_softc(uw);
 	struct ieee80211_frame *wh;
-	struct ieee80211_key *k = NULL;
-	struct r92c_tx_desc_usb *txd;
-	size_t i, padsize, xferlen, txd_len;
-	uint16_t seq, sum;
-	uint8_t raid, type, tid;
-	int s, hasqos, error;
+	size_t i;
+	uint16_t sum;
+	uint8_t tid, type;
+	int hasqos;
+	uint8_t *txdp;
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
+
+	if (m == NULL || ni == NULL)
+		return 0;
+
+	if (m->m_pkthdr.len > IEEE80211_MAX_LEN) {
+		DPRINTFN(DBG_TX, "packet too big", 0, 0, 0, 0);
+		return 0;
+	}
 
 	wh = mtod(m, struct ieee80211_frame *);
 	type = wh->i_fc[0] & IEEE80211_FC0_TYPE_MASK;
-	txd_len = sizeof(*txd);
 
-	if (!ISSET(sc->chip, URTWN_CHIP_92EU))
-		txd_len = 32;
-
-	if (wh->i_fc[1] & IEEE80211_FC1_WEP) {
-		k = ieee80211_crypto_encap(ic, ni, m);
-		if (k == NULL) {
-			urtwn_put_tx_data(sc, data);
-			m_free(m);
-			return ENOBUFS;
+	if (wh->i_fc[1] & IEEE80211_FC1_PROTECTED) {
+		if (ieee80211_crypto_encap(ni, m) == NULL) {
+			DPRINTFN(DBG_TX, "failed to encrypt packet",
+			    0, 0, 0, 0);
+			return 0;
 		}
 
 		/* packet header may have moved, reset our local pointer */
 		wh = mtod(m, struct ieee80211_frame *);
 	}
 
-	if (__predict_false(sc->sc_drvbpf != NULL)) {
-		struct urtwn_tx_radiotap_header *tap = &sc->sc_txtap;
-
-		tap->wt_flags = 0;
-		tap->wt_chan_freq = htole16(ic->ic_curchan->ic_freq);
-		tap->wt_chan_flags = htole16(ic->ic_curchan->ic_flags);
-		if (wh->i_fc[1] & IEEE80211_FC1_WEP)
-			tap->wt_flags |= IEEE80211_RADIOTAP_F_WEP;
-
-		/* XXX: set tap->wt_rate? */
-
-		bpf_mtap2(sc->sc_drvbpf, tap, sc->sc_txtap_len, m, BPF_D_OUT);
-	}
-
 	/* non-qos data frames */
 	tid = R92C_TXDW1_QSEL_BE;
-	if ((hasqos = ieee80211_has_qos(wh))) {
+	if ((hasqos = IEEE80211_QOS_HAS_SEQ(wh))) {
 		/* data frames in 11n mode */
-		struct ieee80211_qosframe *qwh = (void *)wh;
-		tid = qwh->i_qos[0] & IEEE80211_QOS_TID;
+		uint8_t *frm;
+		uint16_t qos;
+
+		frm = ieee80211_getqos(wh);
+		qos = le16toh(*(const uint16_t *)frm);
+		tid = qos & IEEE80211_QOS_TID;
 	} else if (type != IEEE80211_FC0_TYPE_DATA) {
 		tid = R92C_TXDW1_QSEL_MGNT;
 	}
 
-	if (((txd_len + m->m_pkthdr.len) % 64) == 0) /* XXX: 64 */
-		padsize = 8;
-	else
-		padsize = 0;
-
-	if (ISSET(sc->chip, URTWN_CHIP_92EU))
-		padsize = 0;
-
 	/* Fill Tx descriptor. */
-	txd = (struct r92c_tx_desc_usb *)data->buf;
-	memset(txd, 0, txd_len + padsize);
+	txdp = (uint8_t *)chain->uwc_buf;
+	if (sc->chip & URTWN_CHIP_92EU)
+		urtwn_tx_fill_desc_gen2(sc, &txdp, m, wh, tid, NULL, ni);
+	else
+		urtwn_tx_fill_desc(sc, &txdp, m, wh, tid, NULL, ni);
 
-	txd->txdw0 |= htole32(
-	    SM(R92C_TXDW0_PKTLEN, m->m_pkthdr.len) |
-	    SM(R92C_TXDW0_OFFSET, txd_len));
-	if (!ISSET(sc->chip, URTWN_CHIP_92EU)) {
-		txd->txdw0 |= htole32(
-		    R92C_TXDW0_OWN | R92C_TXDW0_FSG | R92C_TXDW0_LSG);
+	sc->tx_timer = 25;
+
+	/* Compute Tx descriptor checksum. */
+	sum = 0;
+	for (i = 0; i < R92C_TXDESC_SUMSIZE / 2; i++)
+		sum ^= ((uint16_t *)chain->uwc_buf)[i];
+	((uint16_t *)chain->uwc_buf)[R92C_TXDESC_SUMOFFSET] = sum;
+
+	m_copydata(m, 0, m->m_pkthdr.len, txdp);
+
+	return (txdp - chain->uwc_buf) + m->m_pkthdr.len;
+}
+
+static void
+urtwn_watchdog(void *arg)
+{
+	struct urtwn_softc *sc = arg;
+	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
+
+	URTWNHIST_FUNC(); URTWNHIST_CALLED();
+
+	if (sc->tx_timer > 0) {
+		if (--sc->tx_timer == 0) {
+			device_printf(sc->sc_uw.uw_dev, "device timeout\n");
+			ieee80211_stat_add(&ic->ic_oerrors, 1);
+			ieee80211_restart_all(ic);
+			return;
+		}
+		callout_schedule(&sc->sc_watchdog_to, 5 * hz);
+	}
+}
+
+/*
+ * Create a VAP node for use with the urtwn driver.
+ * We do not use the common struct ieee80211vap, but a derived
+ * structure so we can hook the newstate function by our own
+ * version (and update some LED states on transitions).
+ */
+static struct ieee80211vap *
+urtwn_vap_create(struct ieee80211com *ic,  const char name[IFNAMSIZ],
+    int unit, enum ieee80211_opmode opmode, int flags,
+    const uint8_t bssid[IEEE80211_ADDR_LEN],
+    const uint8_t macaddr[IEEE80211_ADDR_LEN])
+{
+	struct urtwn_vap *vap;
+
+	URTWNHIST_FUNC(); URTWNHIST_CALLED();
+
+	/* Allocate the vap and setup. */
+	vap = kmem_zalloc(sizeof(*vap), KM_SLEEP);
+	if (ieee80211_vap_setup(ic, &vap->vap, name, unit, opmode,
+	    flags | IEEE80211_CLONE_NOBEACONS, bssid) != 0) {
+		kmem_free(vap, sizeof(*vap));
+		return NULL;
 	}
 
+	/* Override state transition machine. */
+	vap->newstate = vap->vap.iv_newstate;
+	vap->vap.iv_newstate = urtwn_newstate;
+
+	/* Finish setup */
+	ieee80211_vap_attach(&vap->vap, ieee80211_media_change,
+	    ieee80211_media_status, macaddr);
+
+	ic->ic_opmode = opmode;
+
+	return &vap->vap;
+}
+
+static void
+urtwn_vap_delete(struct ieee80211vap *vap)
+{
+	struct urtwn_vap *my_vap = (struct urtwn_vap *)vap;
+
+	URTWNHIST_FUNC(); URTWNHIST_CALLED();
+
+	ieee80211_vap_detach(vap);
+	kmem_free(my_vap, sizeof(*my_vap));
+}
+
+static void
+urtwn_scan_start(struct ieee80211com *ic)
+{
+	struct urtwn_softc *sc = ic->ic_softc;
+	uint32_t reg;
+
+	URTWNHIST_FUNC(); URTWNHIST_CALLED();
+
+	if (usbwifi_isdying(&sc->sc_uw))
+		return;
+
+	IEEE80211_LOCK(ic);
+
+	/*
+	 * Begin of scanning
+	 */
+
+	/* Set gain for scanning. */
+	reg = urtwn_bb_read(sc, R92C_OFDM0_AGCCORE1(0));
+	reg = RW(reg, R92C_OFDM0_AGCCORE1_GAIN, 0x20);
+	urtwn_bb_write(sc, R92C_OFDM0_AGCCORE1(0), reg);
+
+	if (!ISSET(sc->chip, URTWN_CHIP_88E)) {
+		reg = urtwn_bb_read(sc, R92C_OFDM0_AGCCORE1(1));
+		reg = RW(reg, R92C_OFDM0_AGCCORE1_GAIN, 0x20);
+		urtwn_bb_write(sc, R92C_OFDM0_AGCCORE1(1), reg);
+	}
+
+	/* Set media status to 'No Link'. */
+	urtwn_set_nettype0_msr(sc, R92C_CR_NETTYPE_NOLINK);
+
+	/* Allow Rx from any BSSID. */
+	urtwn_write_4(sc, R92C_RCR, urtwn_read_4(sc, R92C_RCR) &
+	    ~(R92C_RCR_CBSSID_DATA | R92C_RCR_CBSSID_BCN));
+
+	/* Stop Rx of data frames. */
+	urtwn_write_2(sc, R92C_RXFLTMAP2, 0);
+
+	/* Disable update TSF */
+	urtwn_write_1(sc, R92C_BCN_CTRL,
+	    urtwn_read_1(sc, R92C_BCN_CTRL) | R92C_BCN_CTRL_DIS_TSF_UDT0);
+
+	/* Make link LED blink during scan. */
+	urtwn_set_led(sc, URTWN_LED_LINK, !sc->ledlink);
+
+	/* Pause AC Tx queues. */
+	urtwn_write_1(sc, R92C_TXPAUSE, urtwn_read_1(sc, R92C_TXPAUSE) | 0x0f);
+
+	urtwn_set_chan(sc, ic->ic_curchan);
+
+	IEEE80211_UNLOCK(ic);
+}
+
+static void
+urtwn_scan_end(struct ieee80211com *ic)
+{
+	struct urtwn_softc *sc = ic->ic_softc;
+	uint32_t reg;
+	uint8_t  msr;
+
+	URTWNHIST_FUNC(); URTWNHIST_CALLED();
+
+	/*
+	 * End of scanning
+	 */
+
+	IEEE80211_LOCK(ic);
+
+	/* flush 4-AC Queue after site_survey */
+	urtwn_write_1(sc, R92C_TXPAUSE, 0x0);
+
+	/* Turn link LED off. */
+	urtwn_set_led(sc, URTWN_LED_LINK, 0);
+
+	if (sc->sc_running) {
+		/* Set initial gain under link. */
+		reg = urtwn_bb_read(sc, R92C_OFDM0_AGCCORE1(0));
+		reg = RW(reg, R92C_OFDM0_AGCCORE1_GAIN, 0x32);
+		urtwn_bb_write(sc, R92C_OFDM0_AGCCORE1(0), reg);
+
+		if (!ISSET(sc->chip, URTWN_CHIP_88E)) {
+			reg = urtwn_bb_read(sc, R92C_OFDM0_AGCCORE1(1));
+			reg = RW(reg, R92C_OFDM0_AGCCORE1_GAIN, 0x32);
+			urtwn_bb_write(sc, R92C_OFDM0_AGCCORE1(1), reg);
+		}
+
+		/* Set media status to 'Associated'. */
+		urtwn_set_nettype0_msr(sc, urtwn_get_nettype(sc));
+
+		/* Enable Rx of data frames. */
+		urtwn_write_2(sc, R92C_RXFLTMAP2, 0xffff);
+
+		msr = urtwn_read_1(sc, R92C_MSR);
+		msr &= R92C_MSR_MASK;
+		switch (ic->ic_opmode) {
+		case IEEE80211_M_STA:
+			/* Allow Rx from our BSSID only. */
+			urtwn_write_4(sc, R92C_RCR,
+			    urtwn_read_4(sc, R92C_RCR) |
+			      R92C_RCR_CBSSID_DATA | R92C_RCR_CBSSID_BCN);
+
+			msr |= R92C_MSR_INFRA;
+			break;
+		case IEEE80211_M_HOSTAP:
+			urtwn_write_2(sc, R92C_BCNTCFG, 0x000f);
+
+			/* Allow Rx from any BSSID. */
+			urtwn_write_4(sc, R92C_RCR,
+			    urtwn_read_4(sc, R92C_RCR) &
+			    ~(R92C_RCR_CBSSID_DATA | R92C_RCR_CBSSID_BCN));
+
+			/* Reset TSF timer to zero. */
+			reg = urtwn_read_4(sc, R92C_TCR);
+			reg &= ~0x01;
+			urtwn_write_4(sc, R92C_TCR, reg);
+			reg |= 0x01;
+			urtwn_write_4(sc, R92C_TCR, reg);
+
+			msr |= R92C_MSR_AP;
+			break;
+		default:
+			msr |= R92C_MSR_ADHOC;
+			break;
+		}
+		urtwn_write_1(sc, R92C_MSR, msr);
+
+		/* Turn link LED on. */
+		urtwn_set_led(sc, URTWN_LED_LINK, 1);
+	}
+
+	IEEE80211_UNLOCK(ic);
+
+}
+
+static void
+urtwn_set_channel(struct ieee80211com *ic)
+{
+	struct urtwn_softc *sc = ic->ic_softc;
+
+	URTWNHIST_FUNC(); URTWNHIST_CALLED();
+
+	usbwifi_lock_ic(&sc->sc_uw);
+	urtwn_set_chan(sc, ic->ic_curchan);
+	usbwifi_unlock_ic(&sc->sc_uw);
+}
+
+static void
+urtwn_get_radiocaps(struct ieee80211com *ic,
+    int maxchans, int *nchans, struct ieee80211_channel chans[])
+{
+	uint8_t bands[IEEE80211_MODE_BYTES];
+
+	memset(bands, 0, sizeof(bands));
+	setbit(bands, IEEE80211_MODE_11B);
+	setbit(bands, IEEE80211_MODE_11G);
+	setbit(bands, IEEE80211_MODE_11NG);
+	ieee80211_add_channels_default_2ghz(chans, maxchans, nchans, bands, 0);
+}
+
+static __inline int
+urtwn_power_on(struct urtwn_softc *sc)
+{
+
+	return sc->sc_power_on(sc);
+}
+
+static void
+urtwn_tx_fill_desc(struct urtwn_softc *sc, uint8_t **txdp, struct mbuf *m,
+    struct ieee80211_frame *wh, uint8_t tid, struct ieee80211_key *k,
+    struct ieee80211_node *ni)
+{
+	struct r92c_tx_desc_usb *txd;
+	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
+	uint8_t raid, type, rtsrate;
+	uint32_t pktlen;
+
+	txd = (struct r92c_tx_desc_usb *)*txdp;
+	(*txdp) += sizeof(*txd);
+	memset(txd, 0, sizeof(*txd));
+
+	pktlen = m->m_pkthdr.len;
+#if 0
+	if (k != NULL && k->k_cipher == IEEE80211_CIPHER_CCMP) {
+		txd->txdw1 |= htole32(SM(R92C_TXDW1_CIPHER,
+		    R92C_TXDW1_CIPHER_AES));
+		pktlen += IEEE80211_CCMP_HDRLEN;
+	}
+#endif
+
+	type = wh->i_fc[0] & IEEE80211_FC0_TYPE_MASK;
+
+	txd->txdw0 |= htole32(
+	    SM(R92C_TXDW0_PKTLEN, pktlen) |
+	    SM(R92C_TXDW0_OFFSET, sizeof(*txd)) |
+	    R92C_TXDW0_OWN | R92C_TXDW0_FSG | R92C_TXDW0_LSG);
 	if (IEEE80211_IS_MULTICAST(wh->i_addr1))
 		txd->txdw0 |= htole32(R92C_TXDW0_BMCAST);
 
-	/* fix pad field */
-	if (padsize > 0) {
-		DPRINTFN(DBG_TX, "padding: size=%jd", padsize, 0, 0, 0);
-		txd->txdw1 |= htole32(SM(R92C_TXDW1_PKTOFF, (padsize / 8)));
-	}
-
 	if (!IEEE80211_IS_MULTICAST(wh->i_addr1) &&
 	    type == IEEE80211_FC0_TYPE_DATA) {
-		if (ic->ic_curmode == IEEE80211_MODE_11B)
+		if (ic->ic_curmode == IEEE80211_MODE_11B) {
 			raid = R92C_RAID_11B;
-		else
+			txd->txdw5 |= htole32(SM(R92C_TXDW5_DATARATE, 0));
+		} else if (ic->ic_curmode == IEEE80211_MODE_11G) {
 			raid = R92C_RAID_11BG;
-		DPRINTFN(DBG_TX, "data packet: tid=%jd, raid=%jd",
-		    tid, raid, 0, 0);
+			txd->txdw5 |= htole32(SM(R92C_TXDW5_DATARATE, 11));
+		} else {	/* IEEE80211_MODE_11NG */
+			if (ni->ni_vap->iv_flags_ht & IEEE80211_FHT_PUREN)
+				raid = R92C_RAID_11N;
+			else
+				raid = R92C_RAID_11BGN;
 
-		if (!ISSET(sc->chip, URTWN_CHIP_92C)) {
+			if (sc->ntxchains == 1) {
+				txd->txdw5 |=
+				    htole32(SM(R92C_TXDW5_DATARATE, 19));
+			} else {
+				txd->txdw5 |=
+				    htole32(SM(R92C_TXDW5_DATARATE, 27));
+			}
+			txd->txdw5 |= htole32(R92C_TXDW5_SGI);
+		}
+
+		if (sc->chip & URTWN_CHIP_88E) {
 			txd->txdw1 |= htole32(
 			    SM(R88E_TXDW1_MACID, RTWN_MACID_BSS) |
 			    SM(R92C_TXDW1_QSEL, tid) |
-			    SM(R92C_TXDW1_RAID, raid) |
-			    R92C_TXDW1_AGGBK);
-		} else
+			    SM(R92C_TXDW1_RAID, raid));
+			txd->txdw2 |= htole32(R88E_TXDW2_AGGBK);
+			/* Request TX status report for AMRR */
+			txd->txdw2 |= htole32(R92C_TXDW2_CCX_RPT);
+		} else {
 			txd->txdw1 |= htole32(
 			    SM(R92C_TXDW1_MACID, RTWN_MACID_BSS) |
 			    SM(R92C_TXDW1_QSEL, tid) |
-			    SM(R92C_TXDW1_RAID, raid) |
-			    R92C_TXDW1_AGGBK);
-
-		if (ISSET(sc->chip, URTWN_CHIP_88E))
-			txd->txdw2 |= htole32(R88E_TXDW2_AGGBK);
-		if (ISSET(sc->chip, URTWN_CHIP_92EU))
-			txd->txdw3 |= htole32(R92E_TXDW3_AGGBK);
-
-		if (hasqos) {
-			txd->txdw4 |= htole32(R92C_TXDW4_QOS);
+			    SM(R92C_TXDW1_RAID, raid) | R92C_TXDW1_AGGBK);
 		}
 
+#if 0
+		if (pktlen + IEEE80211_CRC_LEN > ic->ic_rtsthreshold) {
+			txd->txdw4 |= htole32(R92C_TXDW4_RTSEN |
+			    R92C_TXDW4_HWRTSEN);
+#endif
 		if (ic->ic_flags & IEEE80211_F_USEPROT) {
-			/* for 11g */
 			if (ic->ic_protmode == IEEE80211_PROT_CTSONLY) {
 				txd->txdw4 |= htole32(R92C_TXDW4_CTS2SELF |
 				    R92C_TXDW4_HWRTSEN);
@@ -2815,306 +2777,147 @@ urtwn_tx(struct urtwn_softc *sc, struct mbuf *m, struct ieee80211_node *ni,
 				    R92C_TXDW4_HWRTSEN);
 			}
 		}
-		/* Send RTS at OFDM24. */
+		txd->txdw5 |= htole32(0x0001ff00);
+
+		if (ic->ic_curmode == IEEE80211_MODE_11B)
+			rtsrate = 0; /* CCK1 */
+		else
+			rtsrate = 8; /* OFDM24 */
+
+		if (sc->chip & URTWN_CHIP_88E) {
+			/* Use AMRR */
+			txd->txdw4 |= htole32(R92C_TXDW4_DRVRATE);
+			txd->txdw4 |= htole32(SM(R92C_TXDW4_RTSRATE, rtsrate));
+		} else {
+			txd->txdw4 |= htole32(SM(R92C_TXDW4_RTSRATE, rtsrate));
+		}
+	} else {
+		txd->txdw1 |= htole32(
+		    SM(R92C_TXDW1_MACID, 0) |
+		    SM(R92C_TXDW1_QSEL, tid) |
+		    SM(R92C_TXDW1_RAID, R92C_RAID_11B));
+
+		/* Force CCK1. */
+		txd->txdw4 |= htole32(R92C_TXDW4_DRVRATE);
+		txd->txdw5 |= htole32(SM(R92C_TXDW5_DATARATE, 0));
+	}
+	/* Set sequence number (already little endian). */
+	txd->txdseq |= (*(uint16_t *)wh->i_seq) >> IEEE80211_SEQ_SEQ_SHIFT;
+
+	if (!ieee80211_has_qos(wh)) {
+		/* Use HW sequence numbering for non-QoS frames. */
+		txd->txdw4  |= htole32(R92C_TXDW4_HWSEQ);
+		txd->txdseq |= htole16(R92C_TXDW3_HWSEQEN);
+	} else
+		txd->txdw4 |= htole32(R92C_TXDW4_QOS);
+}
+
+static void
+urtwn_tx_fill_desc_gen2(struct urtwn_softc *sc, uint8_t **txdp, struct mbuf *m,
+    struct ieee80211_frame *wh, uint8_t tid, struct ieee80211_key *k,
+    struct ieee80211_node *ni)
+{
+	struct r92e_tx_desc_usb *txd;
+	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
+	uint8_t raid, type;
+	uint32_t pktlen;
+
+	txd = (struct r92e_tx_desc_usb *)*txdp;
+	(*txdp) += sizeof(*txd);
+	memset(txd, 0, sizeof(*txd));
+
+	type = wh->i_fc[0] & IEEE80211_FC0_TYPE_MASK;
+
+	pktlen = m->m_pkthdr.len;
+#if 0
+	if (k != NULL && k->k_cipher == IEEE80211_CIPHER_CCMP) {
+		txd->txdw1 |= htole32(SM(R92C_TXDW1_CIPHER,
+		    R92C_TXDW1_CIPHER_AES));
+		pktlen += IEEE80211_CCMP_HDRLEN;
+	}
+#endif
+
+	txd->txdw0 |= htole32(
+	    SM(R92C_TXDW0_PKTLEN, pktlen) |
+	    SM(R92C_TXDW0_OFFSET, sizeof(*txd)) |
+	    R92C_TXDW0_OWN | R92C_TXDW0_FSG | R92C_TXDW0_LSG);
+	if (IEEE80211_IS_MULTICAST(wh->i_addr1))
+		txd->txdw0 |= htole32(R92C_TXDW0_BMCAST);
+
+	if (!IEEE80211_IS_MULTICAST(wh->i_addr1) &&
+	    type == IEEE80211_FC0_TYPE_DATA) {
+		if (ic->ic_curmode == IEEE80211_MODE_11B) {
+			raid = R92E_RAID_11B;
+			txd->txdw4 |= htole32(SM(R92E_TXDW4_DATARATE, 0));
+		} else if (ic->ic_curmode == IEEE80211_MODE_11G) {
+			raid = R92E_RAID_11BG;
+			txd->txdw4 |= htole32(SM(R92E_TXDW4_DATARATE, 11));
+		} else {	/* IEEE80211_MODE_11NG */
+			if (ni->ni_vap->iv_flags_ht & IEEE80211_FHT_PUREN)
+				raid = R92E_RAID_11N;
+			else
+				raid = R92E_RAID_11BGN;
+			if (sc->ntxchains == 1) {
+				txd->txdw5 |=
+				    htole32(SM(R92C_TXDW5_DATARATE, 19));
+			} else {
+				txd->txdw5 |=
+				    htole32(SM(R92C_TXDW5_DATARATE, 27));
+			}
+			txd->txdw5 |= htole32(R92C_TXDW5_SGI);
+		}
+
+		txd->txdw1 |= htole32(
+		    SM(R92E_TXDW1_MACID, RTWN_MACID_BSS) |
+		    SM(R92C_TXDW1_QSEL, tid) |
+		    SM(R92C_TXDW1_RAID, raid));
+#if 1
+		/* Request TX status report for AMRR */
+		txd->txdw2 |= htole32(R92C_TXDW2_CCX_RPT | R88E_TXDW2_AGGBK);
+#else
+		txd->txdw2 |= htole32(R88E_TXDW2_AGGBK);
+#endif
+
+		if (ieee80211_has_qos(wh)) {
+			txd->txdw4 |= htole32(R92C_TXDW4_QOS);
+		}
+#if 0
+		if (pktlen + IEEE80211_CRC_LEN > ic->ic_rtsthreshold) {
+			txd->txdw4 |= htole32(R92C_TXDW4_RTSEN |
+			    R92C_TXDW4_HWRTSEN);
+#endif
+		if (ic->ic_flags & IEEE80211_F_USEPROT) {
+			if (ic->ic_protmode == IEEE80211_PROT_CTSONLY) {
+				txd->txdw4 |= htole32(R92C_TXDW4_CTS2SELF |
+				    R92C_TXDW4_HWRTSEN);
+			} else if (ic->ic_protmode == IEEE80211_PROT_RTSCTS) {
+				txd->txdw4 |= htole32(R92C_TXDW4_RTSEN |
+				    R92C_TXDW4_HWRTSEN);
+			}
+		}
 		txd->txdw4 |= htole32(SM(R92C_TXDW4_RTSRATE, 8));
 		txd->txdw5 |= htole32(0x0001ff00);
-		/* Send data at OFDM54. */
-		if (ISSET(sc->chip, URTWN_CHIP_88E))
-			txd->txdw5 |= htole32(0x13 & 0x3f);
-		else
-			txd->txdw5 |= htole32(SM(R92C_TXDW5_DATARATE, 11));
-	} else if (type == IEEE80211_FC0_TYPE_MGT) {
-		DPRINTFN(DBG_TX, "mgmt packet", 0, 0, 0, 0);
+
+		/* Use AMRR */
+		txd->txdw3 |= htole32(R92E_TXDW3_DRVRATE);
+	} else {
 		txd->txdw1 |= htole32(
-		    SM(R92C_TXDW1_MACID, RTWN_MACID_BSS) |
-		    SM(R92C_TXDW1_QSEL, R92C_TXDW1_QSEL_MGNT) |
-		    SM(R92C_TXDW1_RAID, R92C_RAID_11B));
+		    SM(R92E_TXDW1_MACID, 0) |
+		    SM(R92C_TXDW1_QSEL, tid) |
+		    SM(R92C_TXDW1_RAID, R92E_RAID_11B));
 
 		/* Force CCK1. */
-		txd->txdw4 |= htole32(R92C_TXDW4_DRVRATE);
-		/* Use 1Mbps */
-		txd->txdw5 |= htole32(SM(R92C_TXDW5_DATARATE, 0));
-	} else {
-		/* broadcast or multicast packets */
-		DPRINTFN(DBG_TX, "bc or mc packet", 0, 0, 0, 0);
-		txd->txdw1 |= htole32(
-		    SM(R92C_TXDW1_MACID, RTWN_MACID_BC) |
-		    SM(R92C_TXDW1_RAID, R92C_RAID_11B));
-
-		/* Force CCK1. */
-		txd->txdw4 |= htole32(R92C_TXDW4_DRVRATE);
-		/* Use 1Mbps */
-		txd->txdw5 |= htole32(SM(R92C_TXDW5_DATARATE, 0));
+		txd->txdw3 |= htole32(R92E_TXDW3_DRVRATE);
+		txd->txdw4 |= htole32(SM(R92E_TXDW4_DATARATE, 0));
 	}
-	/* Set sequence number */
-	seq = LE_READ_2(&wh->i_seq[0]) >> IEEE80211_SEQ_SEQ_SHIFT;
-	if (!ISSET(sc->chip, URTWN_CHIP_92EU)) {
-		txd->txdseq |= htole16(seq);
+	txd->txdw4 |= htole32(SM(R92E_TXDW4_DATARATEFB, 0x1f));
 
-		if (!hasqos) {
-			/* Use HW sequence numbering for non-QoS frames. */
-			txd->txdw4  |= htole32(R92C_TXDW4_HWSEQ);
-			txd->txdseq |= htole16(R92C_HWSEQ_EN);
-		}
-	} else {
-		txd->txdseq2 |= htole16((seq & R92E_HWSEQ_MASK) <<
-		    R92E_HWSEQ_SHIFT);
-		if (!hasqos) {
-			/* Use HW sequence numbering for non-QoS frames. */
-			txd->txdw4  |= htole32(R92C_TXDW4_HWSEQ);
-			txd->txdw7 |= htole16(R92C_HWSEQ_EN);
-		}
+	txd->txdseq2 |= htole16(SM(R92E_TXDSEQ2_HWSEQ, *(uint16_t *)wh->i_seq));
+
+	if (!ieee80211_has_qos(wh)) {
+		/* Use HW sequence numbering for non-QoS frames. */
+		txd->txdw7 |= htole16(R92C_TXDW3_HWSEQEN);
 	}
-
-	/* Compute Tx descriptor checksum. */
-	sum = 0;
-	for (i = 0; i < R92C_TXDESC_SUMSIZE / 2; i++)
-		sum ^= ((uint16_t *)txd)[i];
-	txd->txdsum = sum;	/* NB: already little endian. */
-
-	xferlen = txd_len + m->m_pkthdr.len + padsize;
-	m_copydata(m, 0, m->m_pkthdr.len, (char *)&txd[0] + txd_len + padsize);
-
-	s = splnet();
-	usbd_setup_xfer(data->xfer, data, data->buf, xferlen,
-	    USBD_FORCE_SHORT_XFER, URTWN_TX_TIMEOUT,
-	    urtwn_txeof);
-	error = usbd_transfer(data->xfer);
-	if (__predict_false(error != USBD_NORMAL_COMPLETION &&
-	    error != USBD_IN_PROGRESS)) {
-		splx(s);
-		DPRINTFN(DBG_TX, "transfer failed %jd", error, 0, 0, 0);
-		return error;
-	}
-	splx(s);
-	return 0;
-}
-
-struct urtwn_tx_data *
-urtwn_get_tx_data(struct urtwn_softc *sc, size_t pidx)
-{
-	struct urtwn_tx_data *data = NULL;
-
-	mutex_enter(&sc->sc_tx_mtx);
-	if (!TAILQ_EMPTY(&sc->tx_free_list[pidx])) {
-		data = TAILQ_FIRST(&sc->tx_free_list[pidx]);
-		TAILQ_REMOVE(&sc->tx_free_list[pidx], data, next);
-	}
-	mutex_exit(&sc->sc_tx_mtx);
-
-	return data;
-}
-
-static void
-urtwn_start(struct ifnet *ifp)
-{
-	struct urtwn_softc *sc = ifp->if_softc;
-	struct ieee80211com *ic = &sc->sc_ic;
-	struct urtwn_tx_data *data;
-	struct ether_header *eh;
-	struct ieee80211_node *ni;
-	struct mbuf *m;
-
-	URTWNHIST_FUNC(); URTWNHIST_CALLED();
-
-	if ((ifp->if_flags & (IFF_RUNNING | IFF_OACTIVE)) != IFF_RUNNING)
-		return;
-
-	data = NULL;
-	for (;;) {
-		/* Send pending management frames first. */
-		IF_POLL(&ic->ic_mgtq, m);
-		if (m != NULL) {
-			/* Use AC_VO for management frames. */
-
-			data = urtwn_get_tx_data(sc, sc->ac2idx[WME_AC_VO]);
-
-			if (data == NULL) {
-				ifp->if_flags |= IFF_OACTIVE;
-				DPRINTFN(DBG_TX, "empty tx_free_list",
-				    0, 0, 0, 0);
-				return;
-			}
-			IF_DEQUEUE(&ic->ic_mgtq, m);
-			ni = M_GETCTX(m, struct ieee80211_node *);
-			M_CLEARCTX(m);
-			goto sendit;
-		}
-		if (ic->ic_state != IEEE80211_S_RUN)
-			break;
-
-		/* Encapsulate and send data frames. */
-		IFQ_POLL(&ifp->if_snd, m);
-		if (m == NULL)
-			break;
-
-		struct ieee80211_frame *wh = mtod(m, struct ieee80211_frame *);
-		uint8_t type = wh->i_fc[0] & IEEE80211_FC0_TYPE_MASK;
-		uint8_t qid = WME_AC_BE;
-		if (ieee80211_has_qos(wh)) {
-			/* data frames in 11n mode */
-			struct ieee80211_qosframe *qwh = (void *)wh;
-			uint8_t tid = qwh->i_qos[0] & IEEE80211_QOS_TID;
-			qid = TID_TO_WME_AC(tid);
-		} else if (type != IEEE80211_FC0_TYPE_DATA) {
-			qid = WME_AC_VO;
-		}
-		data = urtwn_get_tx_data(sc, sc->ac2idx[qid]);
-
-		if (data == NULL) {
-			ifp->if_flags |= IFF_OACTIVE;
-			DPRINTFN(DBG_TX, "empty tx_free_list", 0, 0, 0, 0);
-			return;
-		}
-		IFQ_DEQUEUE(&ifp->if_snd, m);
-
-		if (m->m_len < (int)sizeof(*eh) &&
-		    (m = m_pullup(m, sizeof(*eh))) == NULL) {
-			device_printf(sc->sc_dev, "m_pullup failed\n");
-			if_statinc(ifp, if_oerrors);
-			urtwn_put_tx_data(sc, data);
-			m_freem(m);
-			continue;
-		}
-		eh = mtod(m, struct ether_header *);
-		ni = ieee80211_find_txnode(ic, eh->ether_dhost);
-		if (ni == NULL) {
-			device_printf(sc->sc_dev,
-			    "unable to find transmit node\n");
-			if_statinc(ifp, if_oerrors);
-			urtwn_put_tx_data(sc, data);
-			m_freem(m);
-			continue;
-		}
-
-		bpf_mtap(ifp, m, BPF_D_OUT);
-
-		if ((m = ieee80211_encap(ic, m, ni)) == NULL) {
-			ieee80211_free_node(ni);
-			device_printf(sc->sc_dev,
-			    "unable to encapsulate packet\n");
-			if_statinc(ifp, if_oerrors);
-			urtwn_put_tx_data(sc, data);
-			m_freem(m);
-			continue;
-		}
- sendit:
-		bpf_mtap3(ic->ic_rawbpf, m, BPF_D_OUT);
-
-		if (urtwn_tx(sc, m, ni, data) != 0) {
-			m_freem(m);
-			ieee80211_free_node(ni);
-			device_printf(sc->sc_dev,
-			    "unable to transmit packet\n");
-			if_statinc(ifp, if_oerrors);
-			urtwn_put_tx_data(sc, data);
-			continue;
-		}
-		m_freem(m);
-		ieee80211_free_node(ni);
-		sc->tx_timer = 5;
-		ifp->if_timer = 1;
-	}
-}
-
-static void
-urtwn_watchdog(struct ifnet *ifp)
-{
-	struct urtwn_softc *sc = ifp->if_softc;
-
-	URTWNHIST_FUNC(); URTWNHIST_CALLED();
-
-	ifp->if_timer = 0;
-
-	if (sc->tx_timer > 0) {
-		if (--sc->tx_timer == 0) {
-			device_printf(sc->sc_dev, "device timeout\n");
-			/* urtwn_init(ifp); XXX needs a process context! */
-			if_statinc(ifp, if_oerrors);
-			return;
-		}
-		ifp->if_timer = 1;
-	}
-	ieee80211_watchdog(&sc->sc_ic);
-}
-
-static int
-urtwn_ioctl(struct ifnet *ifp, u_long cmd, void *data)
-{
-	struct urtwn_softc *sc = ifp->if_softc;
-	struct ieee80211com *ic = &sc->sc_ic;
-	int s, error = 0;
-
-	URTWNHIST_FUNC();
-	URTWNHIST_CALLARGS("cmd=0x%08jx, data=%#jx", cmd, (uintptr_t)data,
-	    0, 0);
-
-	s = splnet();
-
-	switch (cmd) {
-	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
-		switch (ifp->if_flags & (IFF_UP | IFF_RUNNING)) {
-		case IFF_UP | IFF_RUNNING:
-			break;
-		case IFF_UP:
-			urtwn_init(ifp);
-			break;
-		case IFF_RUNNING:
-			urtwn_stop(ifp, 1);
-			break;
-		case 0:
-			break;
-		}
-		break;
-
-	case SIOCADDMULTI:
-	case SIOCDELMULTI:
-		if ((error = ether_ioctl(ifp, cmd, data)) == ENETRESET) {
-			/* setup multicast filter, etc */
-			error = 0;
-		}
-		break;
-
-	case SIOCS80211CHANNEL:
-		/*
-		 * This allows for fast channel switching in monitor mode
-		 * (used by kismet). In IBSS mode, we must explicitly reset
-		 * the interface to generate a new beacon frame.
-		 */
-		error = ieee80211_ioctl(ic, cmd, data);
-		if (error == ENETRESET &&
-		    ic->ic_opmode == IEEE80211_M_MONITOR) {
-			urtwn_set_chan(sc, ic->ic_curchan,
-			    IEEE80211_HTINFO_2NDCHAN_NONE);
-			error = 0;
-		}
-		break;
-
-	default:
-		error = ieee80211_ioctl(ic, cmd, data);
-		break;
-	}
-	if (error == ENETRESET) {
-		if ((ifp->if_flags & (IFF_UP | IFF_RUNNING)) ==
-		    (IFF_UP | IFF_RUNNING) &&
-		    ic->ic_roaming != IEEE80211_ROAMING_MANUAL) {
-			urtwn_init(ifp);
-		}
-		error = 0;
-	}
-
-	splx(s);
-
-	return error;
-}
-
-static __inline int
-urtwn_power_on(struct urtwn_softc *sc)
-{
-
-	return sc->sc_power_on(sc);
 }
 
 static int
@@ -3125,7 +2928,7 @@ urtwn_r92c_power_on(struct urtwn_softc *sc)
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	/* Wait for autoload done bit. */
 	for (ntries = 0; ntries < 1000; ntries++) {
@@ -3134,7 +2937,7 @@ urtwn_r92c_power_on(struct urtwn_softc *sc)
 		DELAY(5);
 	}
 	if (ntries == 1000) {
-		aprint_error_dev(sc->sc_dev,
+		aprint_error_dev(sc->sc_uw.uw_dev,
 		    "timeout waiting for chip autoload\n");
 		return ETIMEDOUT;
 	}
@@ -3166,7 +2969,7 @@ urtwn_r92c_power_on(struct urtwn_softc *sc)
 		DELAY(100);
 	}
 	if (ntries == 1000) {
-		aprint_error_dev(sc->sc_dev,
+		aprint_error_dev(sc->sc_uw.uw_dev,
 		    "timeout waiting for MAC auto ON\n");
 		return ETIMEDOUT;
 	}
@@ -3193,7 +2996,7 @@ urtwn_r92c_power_on(struct urtwn_softc *sc)
 		DELAY(5);
 	}
 	if (ntries == 200) {
-		aprint_error_dev(sc->sc_dev,
+		aprint_error_dev(sc->sc_uw.uw_dev,
 		    "timeout waiting for MAC initialization\n");
 		return ETIMEDOUT;
 	}
@@ -3222,7 +3025,7 @@ urtwn_r92e_power_on(struct urtwn_softc *sc)
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	/* Enable radio, GPIO and LED functions. */
 	KASSERT((R92C_APS_FSMCO_AFSM_HSUS | R92C_APS_FSMCO_PDN_EN |
@@ -3232,11 +3035,10 @@ urtwn_r92e_power_on(struct urtwn_softc *sc)
 	    R92C_APS_FSMCO_PDN_EN |
 	    R92C_APS_FSMCO_PFM_ALDN);
 
-	if (urtwn_read_4(sc, R92E_SYS_CFG1_8192E) & R92E_SPSLDO_SEL){
+	if (urtwn_read_4(sc, R92E_SYS_CFG1_8192E) & R92E_SPSLDO_SEL) {
 		/* LDO. */
 		urtwn_write_1(sc, R92E_LDO_SWR_CTRL, 0xc3);
-	}
-	else	{
+	} else {
 		urtwn_write_2(sc, R92C_SYS_SWR_CTRL2, urtwn_read_2(sc,
 		    R92C_SYS_SWR_CTRL2) & 0xffff);
 		urtwn_write_1(sc, R92E_LDO_SWR_CTRL, 0x83);
@@ -3245,40 +3047,40 @@ urtwn_r92e_power_on(struct urtwn_softc *sc)
 	for (ntries = 0; ntries < 2; ntries++) {
 		urtwn_write_1(sc, R92C_AFE_PLL_CTRL,
 		    urtwn_read_1(sc, R92C_AFE_PLL_CTRL));
-		urtwn_write_2(sc, R92C_AFE_CTRL4, urtwn_read_2(sc,
-		    R92C_AFE_CTRL4));
+		urtwn_write_2(sc, R92C_AFE_CTRL4,
+		    urtwn_read_2(sc, R92C_AFE_CTRL4));
 	}
 
 	/* Reset BB. */
 	urtwn_write_1(sc, R92C_SYS_FUNC_EN,
-	urtwn_read_1(sc, R92C_SYS_FUNC_EN) & ~(R92C_SYS_FUNC_EN_BBRSTB |
-	    R92C_SYS_FUNC_EN_BB_GLB_RST));
+	    urtwn_read_1(sc, R92C_SYS_FUNC_EN) & ~(R92C_SYS_FUNC_EN_BBRSTB |
+		R92C_SYS_FUNC_EN_BB_GLB_RST));
 
 	urtwn_write_1(sc, R92C_AFE_XTAL_CTRL + 2, urtwn_read_1(sc,
 	    R92C_AFE_XTAL_CTRL + 2) | 0x80);
 
 	/* Disable HWPDN. */
-	urtwn_write_2(sc, R92C_APS_FSMCO, urtwn_read_2(sc,
-	    R92C_APS_FSMCO) & ~R92C_APS_FSMCO_APDM_HPDN);
+	urtwn_write_2(sc, R92C_APS_FSMCO,
+	    urtwn_read_2(sc, R92C_APS_FSMCO) & ~R92C_APS_FSMCO_APDM_HPDN);
 
 	/* Disable WL suspend. */
-	urtwn_write_2(sc, R92C_APS_FSMCO, urtwn_read_2(sc,
-	    R92C_APS_FSMCO) & ~(R92C_APS_FSMCO_AFSM_PCIE |
-	    R92C_APS_FSMCO_AFSM_HSUS));
+	urtwn_write_2(sc, R92C_APS_FSMCO,
+	    urtwn_read_2(sc, R92C_APS_FSMCO) & ~(R92C_APS_FSMCO_AFSM_PCIE |
+		R92C_APS_FSMCO_AFSM_HSUS));
 
-	urtwn_write_4(sc, R92C_APS_FSMCO, urtwn_read_4(sc,
-	    R92C_APS_FSMCO) | R92C_APS_FSMCO_RDY_MACON);
-	urtwn_write_2(sc, R92C_APS_FSMCO, urtwn_read_2(sc,
-	    R92C_APS_FSMCO) | R92C_APS_FSMCO_APFM_ONMAC);
+	urtwn_write_4(sc, R92C_APS_FSMCO,
+	    urtwn_read_4(sc, R92C_APS_FSMCO) | R92C_APS_FSMCO_RDY_MACON);
+	urtwn_write_2(sc, R92C_APS_FSMCO,
+	    urtwn_read_2(sc, R92C_APS_FSMCO) | R92C_APS_FSMCO_APFM_ONMAC);
 	for (ntries = 0; ntries < 10000; ntries++) {
 		val = urtwn_read_2(sc, R92C_APS_FSMCO) &
-		 R92C_APS_FSMCO_APFM_ONMAC;
+		    R92C_APS_FSMCO_APFM_ONMAC;
 		if (val == 0x0)
 			break;
-		DELAY(10);
+		DELAY(260);
 	}
 	if (ntries == 10000) {
-		aprint_error_dev(sc->sc_dev,
+		aprint_error_dev(sc->sc_uw.uw_dev,
 		    "timeout waiting for chip power up\n");
 		return ETIMEDOUT;
 	}
@@ -3289,6 +3091,10 @@ urtwn_r92e_power_on(struct urtwn_softc *sc)
 	    R92C_CR_TXDMA_EN | R92C_CR_RXDMA_EN | R92C_CR_PROTOCOL_EN |
 	    R92C_CR_SCHEDULE_EN | R92C_CR_ENSEC;
 	urtwn_write_2(sc, R92C_CR, reg);
+
+	urtwn_write_1(sc, 0xfe10, 0x19);
+
+	urtwn_delay_ms(sc, 1);
 
 	return 0;
 }
@@ -3302,7 +3108,7 @@ urtwn_r88e_power_on(struct urtwn_softc *sc)
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	/* Wait for power ready bit. */
 	for (ntries = 0; ntries < 5000; ntries++) {
@@ -3312,7 +3118,7 @@ urtwn_r88e_power_on(struct urtwn_softc *sc)
 		DELAY(10);
 	}
 	if (ntries == 5000) {
-		aprint_error_dev(sc->sc_dev,
+		aprint_error_dev(sc->sc_uw.uw_dev,
 		    "timeout waiting for chip power up\n");
 		return ETIMEDOUT;
 	}
@@ -3362,7 +3168,7 @@ urtwn_llt_init(struct urtwn_softc *sc)
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	if (sc->chip & URTWN_CHIP_88E)
 		page_count = R88E_TX_PAGE_COUNT;
@@ -3416,13 +3222,12 @@ urtwn_fw_reset(struct urtwn_softc *sc)
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	/* Tell 8051 to reset itself. */
-	mutex_enter(&sc->sc_fwcmd_mtx);
 	urtwn_write_1(sc, R92C_HMETFR + 3, 0x20);
+	/* Init firmware commands ring. */
 	sc->fwcur = 0;
-	mutex_exit(&sc->sc_fwcmd_mtx);
 
 	/* Wait until 8051 resets by itself. */
 	for (ntries = 0; ntries < 100; ntries++) {
@@ -3443,13 +3248,13 @@ urtwn_r88e_fw_reset(struct urtwn_softc *sc)
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	if (ISSET(sc->chip, URTWN_CHIP_92EU)) {
 		reg = urtwn_read_2(sc, R92C_RSV_CTRL) & ~R92E_RSV_MIO_EN;
 		urtwn_write_2(sc,R92C_RSV_CTRL, reg);
+		DELAY(50);
 	}
-	DELAY(50);
 
 	reg = urtwn_read_2(sc, R92C_SYS_FUNC_EN);
 	urtwn_write_2(sc, R92C_SYS_FUNC_EN, reg & ~R92C_SYS_FUNC_EN_CPUEN);
@@ -3461,14 +3266,11 @@ urtwn_r88e_fw_reset(struct urtwn_softc *sc)
 	if (ISSET(sc->chip, URTWN_CHIP_92EU)) {
 		reg = urtwn_read_2(sc, R92C_RSV_CTRL) | R92E_RSV_MIO_EN;
 		urtwn_write_2(sc,R92C_RSV_CTRL, reg);
+		DELAY(50);
 	}
-	DELAY(50);
 
-	mutex_enter(&sc->sc_fwcmd_mtx);
 	/* Init firmware commands ring. */
 	sc->fwcur = 0;
-	mutex_exit(&sc->sc_fwcmd_mtx);
-
 }
 
 static int
@@ -3478,8 +3280,8 @@ urtwn_fw_loadpage(struct urtwn_softc *sc, int page, uint8_t *buf, int len)
 	int off, mlen, error = 0;
 
 	URTWNHIST_FUNC();
-	URTWNHIST_CALLARGS("page=%jd, buf=%#jx, len=%jd",
-	    page, (uintptr_t)buf, len, 0);
+	URTWNHIST_CALLARGS("page=%jd, buf=%#jx, len=%jd", page,
+	    (uintptr_t)buf, len, 0);
 
 	reg = urtwn_read_4(sc, R92C_MCUFWDL);
 	reg = RW(reg, R92C_MCUFWDL_PAGE, page);
@@ -3516,7 +3318,7 @@ urtwn_load_firmware(struct urtwn_softc *sc)
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	/* Read firmware image from the filesystem. */
 	if (ISSET(sc->chip, URTWN_CHIP_88E))
@@ -3529,15 +3331,16 @@ urtwn_load_firmware(struct urtwn_softc *sc)
 	else
 		name = "rtl8192cfw.bin";
 	if ((error = firmware_open("if_urtwn", name, &fwh)) != 0) {
-		aprint_error_dev(sc->sc_dev,
+		aprint_error_dev(sc->sc_uw.uw_dev,
 		    "failed load firmware of file %s (error %d)\n", name,
 		    error);
 		return error;
 	}
 	const size_t fwlen = len = firmware_get_size(fwh);
+	aprint_debug_dev(sc->sc_uw.uw_dev, "firmware: %s\n", name);
 	fw = firmware_malloc(len);
 	if (fw == NULL) {
-		aprint_error_dev(sc->sc_dev,
+		aprint_error_dev(sc->sc_uw.uw_dev,
 		    "failed to allocate firmware memory\n");
 		firmware_close(fwh);
 		return ENOMEM;
@@ -3545,7 +3348,7 @@ urtwn_load_firmware(struct urtwn_softc *sc)
 	error = firmware_read(fwh, 0, fw, len);
 	firmware_close(fwh);
 	if (error != 0) {
-		aprint_error_dev(sc->sc_dev,
+		aprint_error_dev(sc->sc_uw.uw_dev,
 		    "failed to read firmware (error %d)\n", error);
 		firmware_free(fw, fwlen);
 		return error;
@@ -3591,7 +3394,7 @@ urtwn_load_firmware(struct urtwn_softc *sc)
 
 	/* Reset the FWDL checksum. */
 	urtwn_write_1(sc, R92C_MCUFWDL,
-	urtwn_read_1(sc, R92C_MCUFWDL) | R92C_MCUFWDL_CHKSUM_RPT);
+	    urtwn_read_1(sc, R92C_MCUFWDL) | R92C_MCUFWDL_CHKSUM_RPT);
 
 	DELAY(50);
 	/* download firmware */
@@ -3599,7 +3402,7 @@ urtwn_load_firmware(struct urtwn_softc *sc)
 		mlen = MIN(len, R92C_FW_PAGE_SIZE);
 		error = urtwn_fw_loadpage(sc, page, ptr, mlen);
 		if (error != 0) {
-			aprint_error_dev(sc->sc_dev,
+			aprint_error_dev(sc->sc_uw.uw_dev,
 			    "could not load firmware page %d\n", page);
 			goto fail;
 		}
@@ -3619,7 +3422,7 @@ urtwn_load_firmware(struct urtwn_softc *sc)
 		DELAY(5);
 	}
 	if (ntries == 1000) {
-		aprint_error_dev(sc->sc_dev,
+		aprint_error_dev(sc->sc_uw.uw_dev,
 		    "timeout waiting for checksum report\n");
 		error = ETIMEDOUT;
 		goto fail;
@@ -3638,11 +3441,14 @@ urtwn_load_firmware(struct urtwn_softc *sc)
 		DELAY(5);
 	}
 	if (ntries == 6000) {
-		aprint_error_dev(sc->sc_dev,
+		aprint_error_dev(sc->sc_uw.uw_dev,
 		    "timeout waiting for firmware readiness\n");
 		error = ETIMEDOUT;
 		goto fail;
 	}
+
+	DPRINTFN(DBG_INIT, "firmware up and running", 0, 0, 0, 0);
+
  fail:
 	firmware_free(fw, fwlen);
 	return error;
@@ -3664,7 +3470,7 @@ urtwn_r92c_dma_init(struct urtwn_softc *sc)
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	/* Initialize LLT table. */
 	error = urtwn_llt_init(sc);
@@ -3752,7 +3558,7 @@ urtwn_r88e_dma_init(struct urtwn_softc *sc)
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	/* Initialize LLT table. */
 	error = urtwn_llt_init(sc);
@@ -3760,7 +3566,7 @@ urtwn_r88e_dma_init(struct urtwn_softc *sc)
 		return error;
 
 	/* Get Tx queues to USB endpoints mapping. */
-	id = usbd_get_interface_descriptor(sc->sc_iface);
+	id = usbd_get_interface_descriptor(sc->sc_uw.uw_iface);
 	nqueues = id->bNumEndpoints - 1;
 	if (nqueues == 0)
 		return EIO;
@@ -3804,7 +3610,7 @@ urtwn_mac_init(struct urtwn_softc *sc)
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	/* Write MAC initialization values. */
 	if (ISSET(sc->chip, URTWN_CHIP_88E)) {
@@ -3832,7 +3638,7 @@ urtwn_bb_init(struct urtwn_softc *sc)
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	/* Enable BB and RF. */
 	urtwn_write_2(sc, R92C_SYS_FUNC_EN,
@@ -3981,7 +3787,7 @@ urtwn_bb_init(struct urtwn_softc *sc)
 	} else {
 		if (urtwn_bb_read(sc, R92C_HSSI_PARAM2(0)) &
 		    R92C_HSSI_PARAM2_CCK_HIPWR) {
-			SET(sc->sc_flags, URTWN_FLAG_CCK_HIPWR);
+			SET(sc->sc_uw.uw_flags, URTWN_FLAG_CCK_HIPWR);
 		}
 	}
 }
@@ -4081,7 +3887,7 @@ urtwn_cam_init(struct urtwn_softc *sc)
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 	if (ISSET(sc->chip, URTWN_CHIP_92EU))
 		return;
 
@@ -4130,7 +3936,7 @@ urtwn_pa_bias_init(struct urtwn_softc *sc)
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	for (i = 0; i < sc->nrxchains; i++) {
 		if (sc->pa_setting & (1U << i))
@@ -4154,7 +3960,7 @@ urtwn_rxfilter_init(struct urtwn_softc *sc)
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	/* Initialize Rx filter. */
 	/* TODO: use better filter for monitor mode. */
@@ -4179,7 +3985,7 @@ urtwn_edca_init(struct urtwn_softc *sc)
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	/* set spec SIFS (used in NAV) */
 	urtwn_write_2(sc, R92C_SPEC_SIFS, 0x100a);
@@ -4262,8 +4068,8 @@ urtwn_write_txpower(struct urtwn_softc *sc, int chain,
 }
 
 static void
-urtwn_get_txpower(struct urtwn_softc *sc, size_t chain, u_int chan, u_int ht40m,
-    uint16_t power[URTWN_RIDX_COUNT])
+urtwn_get_txpower(struct urtwn_softc *sc, size_t chain, u_int chan,
+     u_int ht40m, uint16_t power[URTWN_RIDX_COUNT])
 {
 	struct r92c_rom *rom = &sc->rom;
 	uint16_t cckpow, ofdmpow, htpow, diff, maxpow;
@@ -4303,7 +4109,7 @@ urtwn_get_txpower(struct urtwn_softc *sc, size_t chain, u_int chan, u_int ht40m,
 		if (sc->regulatory == 3) {
 			power[ridx] = base->pwr[0][ridx];
 			/* Apply vendor limits. */
-			if (ht40m != IEEE80211_HTINFO_2NDCHAN_NONE) {
+			if (ht40m) {
 				maxpow = rom->ht40_max_pwr[group];
 			} else {
 				maxpow = rom->ht20_max_pwr[group];
@@ -4313,7 +4119,7 @@ urtwn_get_txpower(struct urtwn_softc *sc, size_t chain, u_int chan, u_int ht40m,
 				power[ridx] = maxpow;
 			}
 		} else if (sc->regulatory == 1) {
-			if (ht40m == IEEE80211_HTINFO_2NDCHAN_NONE) {
+			if (!ht40m) {
 				power[ridx] = base->pwr[group][ridx];
 			}
 		} else if (sc->regulatory != 2) {
@@ -4341,7 +4147,7 @@ urtwn_get_txpower(struct urtwn_softc *sc, size_t chain, u_int chan, u_int ht40m,
 	/* Compute per-OFDM rate Tx power. */
 	diff = rom->ofdm_tx_pwr_diff[group];
 	diff = (diff >> (chain * 4)) & 0xf;
-	ofdmpow = htpow + diff;	/* HT->OFDM correction. */
+	ofdmpow = htpow + diff; /* HT->OFDM correction. */
 	for (ridx = 4; ridx <= 11; ridx++) {
 		power[ridx] += ofdmpow;
 		if (power[ridx] > R92C_MAX_TX_PWR) {
@@ -4350,7 +4156,7 @@ urtwn_get_txpower(struct urtwn_softc *sc, size_t chain, u_int chan, u_int ht40m,
 	}
 
 	/* Compute per-MCS Tx power. */
-	if (ht40m == IEEE80211_HTINFO_2NDCHAN_NONE) {
+	if (!ht40m) {
 		diff = rom->ht20_tx_pwr_diff[group];
 		diff = (diff >> (chain * 4)) & 0xf;
 		htpow += diff;	/* HT40->HT20 correction. */
@@ -4364,9 +4170,13 @@ urtwn_get_txpower(struct urtwn_softc *sc, size_t chain, u_int chan, u_int ht40m,
 #ifdef URTWN_DEBUG
 	if (urtwn_debug & DBG_RF) {
 		/* Dump per-rate Tx power values. */
-		DPRINTFN(DBG_RF, "Tx power for chain %jd:", chain, 0, 0, 0);
-		for (ridx = 0; ridx < URTWN_RIDX_COUNT; ridx++)
-			DPRINTFN(DBG_RF, "Rate %jd = %ju", ridx, power[ridx], 0, 0);
+		printf("%s: %s: Tx power for chain %zd:\n",
+		    device_xname(sc->sc_uw.uw_dev), __func__, chain);
+		for (ridx = 0; ridx < URTWN_RIDX_COUNT; ridx++) {
+			printf("%s: %s: Rate %d = %u\n",
+			    device_xname(sc->sc_uw.uw_dev), __func__, ridx,
+			    power[ridx]);
+		}
 	}
 #endif
 }
@@ -4408,7 +4218,7 @@ urtwn_r88e_get_txpower(struct urtwn_softc *sc, size_t chain, u_int chan,
 		if (sc->regulatory == 3)
 			power[ridx] = base->pwr[0][ridx];
 		else if (sc->regulatory == 1) {
-			if (ht40m == IEEE80211_HTINFO_2NDCHAN_NONE)
+			if (!ht40m)
 				power[ridx] = base->pwr[group][ridx];
 		} else if (sc->regulatory != 2)
 			power[ridx] = base->pwr[0][ridx];
@@ -4460,23 +4270,24 @@ urtwn_set_txpower(struct urtwn_softc *sc, u_int chan, u_int ht40m)
 	}
 }
 
-static void __noinline
-urtwn_set_chan(struct urtwn_softc *sc, struct ieee80211_channel *c, u_int ht40m)
+static void
+urtwn_set_chan(struct urtwn_softc *sc, struct ieee80211_channel *c)
 {
-	struct ieee80211com *ic = &sc->sc_ic;
-	u_int chan;
+	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
+	u_int chan, ht40m;
 	size_t i;
 
 	chan = ieee80211_chan2ieee(ic, c);	/* XXX center freq! */
+	ht40m = c->ic_flags & IEEE80211_CHAN_HT40;
 
 	URTWNHIST_FUNC();
 	URTWNHIST_CALLARGS("chan=%jd", chan, 0, 0, 0);
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 
-	if (ht40m == IEEE80211_HTINFO_2NDCHAN_ABOVE) {
+	if (ht40m == IEEE80211_CHAN_HT40U) {
 		chan += 2;
-	} else if (ht40m == IEEE80211_HTINFO_2NDCHAN_BELOW){
+	} else if (ht40m == IEEE80211_CHAN_HT40D){
 		chan -= 2;
 	}
 
@@ -4490,7 +4301,7 @@ urtwn_set_chan(struct urtwn_softc *sc, struct ieee80211_channel *c, u_int ht40m)
 
 	if (ht40m) {
 		/* Is secondary channel below or above primary? */
-		int prichlo = (ht40m == IEEE80211_HTINFO_2NDCHAN_ABOVE);
+		int prichlo = (ht40m == IEEE80211_CHAN_HT40U);
 		uint32_t reg;
 
 		urtwn_write_1(sc, R92C_BWOPMODE,
@@ -4707,7 +4518,7 @@ urtwn_lc_calib(struct urtwn_softc *sc)
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	txmode = urtwn_read_1(sc, R92C_OFDM1_LSTF + 3);
 	if ((txmode & 0x70) != 0) {
@@ -4753,7 +4564,7 @@ urtwn_temp_calib(struct urtwn_softc *sc)
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	KASSERT(mutex_owned(&sc->sc_write_mtx));
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	if (!ISSET(sc->chip, URTWN_CHIP_92EU))
 		t_meter_reg = R92C_RF_T_METER;
@@ -4783,8 +4594,9 @@ urtwn_temp_calib(struct urtwn_softc *sc)
 		/* First LC calibration is performed in urtwn_init(). */
 		sc->thcal_lctemp = temp;
 	} else if (abs(temp - sc->thcal_lctemp) > 1) {
-		DPRINTFN(DBG_RF, "LC calib triggered by temp: %jd -> %jd",
-		    sc->thcal_lctemp, temp, 0, 0);
+		DPRINTFN(DBG_RF,
+		    "LC calib triggered by temp: %jd -> %jd", sc->thcal_lctemp,
+		    temp, 0, 0);
 		urtwn_lc_calib(sc);
 		/* Record temperature of last LC calibration. */
 		sc->thcal_lctemp = temp;
@@ -4792,44 +4604,24 @@ urtwn_temp_calib(struct urtwn_softc *sc)
 }
 
 static int
-urtwn_init(struct ifnet *ifp)
+urtwn_init(struct usbwifi *uw)
 {
-	struct urtwn_softc *sc = ifp->if_softc;
-	struct ieee80211com *ic = &sc->sc_ic;
-	struct urtwn_rx_data *data;
+	struct urtwn_softc *sc = usbwifi_softc(uw);
+	struct ieee80211com *ic = usbwifi_ic(&sc->sc_uw);
 	uint32_t reg;
-	size_t i;
 	int error;
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
 
-	urtwn_stop(ifp, 0);
-
-	mutex_enter(&sc->sc_write_mtx);
+	usbwifi_isowned_ic(&sc->sc_uw);
 
 	mutex_enter(&sc->sc_task_mtx);
 	/* Init host async commands ring. */
 	sc->cmdq.cur = sc->cmdq.next = sc->cmdq.queued = 0;
 	mutex_exit(&sc->sc_task_mtx);
 
-	mutex_enter(&sc->sc_fwcmd_mtx);
 	/* Init firmware commands ring. */
 	sc->fwcur = 0;
-	mutex_exit(&sc->sc_fwcmd_mtx);
-
-	/* Allocate Tx/Rx buffers. */
-	error = urtwn_alloc_rx_list(sc);
-	if (error != 0) {
-		aprint_error_dev(sc->sc_dev,
-		    "could not allocate Rx buffers\n");
-		goto fail;
-	}
-	error = urtwn_alloc_tx_list(sc);
-	if (error != 0) {
-		aprint_error_dev(sc->sc_dev,
-		    "could not allocate Tx buffers\n");
-		goto fail;
-	}
 
 	/* Power on adapter. */
 	error = urtwn_power_on(sc);
@@ -4865,8 +4657,7 @@ urtwn_init(struct ifnet *ifp)
 	}
 
 	/* Set MAC address. */
-	IEEE80211_ADDR_COPY(ic->ic_myaddr, CLLADDR(ifp->if_sadl));
-	urtwn_write_region(sc, R92C_MACID, ic->ic_myaddr, IEEE80211_ADDR_LEN);
+	urtwn_write_region(sc, R92C_MACID, ic->ic_macaddr, IEEE80211_ADDR_LEN);
 
 	/* Set initial network type. */
 	reg = urtwn_read_4(sc, R92C_CR);
@@ -4907,9 +4698,12 @@ urtwn_init(struct ifnet *ifp)
 		urtwn_write_4(sc, R92C_RARFRC + 4, 0x08070605);
 	}
 
+#ifdef notyet
 	urtwn_write_1(sc, R92C_FWHW_TXQ_CTRL,
 	    urtwn_read_1(sc, R92C_FWHW_TXQ_CTRL) |
 	    R92C_FWHW_TXQ_CTRL_AMPDU_RTY_NEW);
+#endif
+
 	/* Set ACK timeout. */
 	urtwn_write_1(sc, R92C_ACKTO, 0x40);
 
@@ -4939,22 +4733,24 @@ urtwn_init(struct ifnet *ifp)
 	urtwn_write_1(sc, R92C_BCNDMATIM, R92C_BCNDMATIM_INIT_TIME);
 	urtwn_write_2(sc, R92C_BCNTCFG, 0x660f);
 
+#ifdef notyet
 	if (!ISSET(sc->chip, URTWN_CHIP_88E) &&
 	    !ISSET(sc->chip, URTWN_CHIP_92EU)) {
 		/* Setup AMPDU aggregation. */
-		urtwn_write_4(sc, R92C_AGGLEN_LMT, 0x99997631);	/* MCS7~0 */
+		urtwn_write_4(sc, R92C_AGGLEN_LMT, 0x99997631); /* MCS7~0 */
 		urtwn_write_1(sc, R92C_AGGR_BREAK_TIME, 0x16);
 		urtwn_write_2(sc, 0x4ca, 0x0708);
 
 		urtwn_write_1(sc, R92C_BCN_MAX_ERR, 0xff);
 		urtwn_write_1(sc, R92C_BCN_CTRL, R92C_BCN_CTRL_DIS_TSF_UDT0);
 	}
+#endif
 
 	/* Load 8051 microcode. */
 	error = urtwn_load_firmware(sc);
 	if (error != 0)
 		goto fail;
-	SET(sc->sc_flags, URTWN_FLAG_FWREADY);
+	SET(sc->sc_uw.uw_flags, URTWN_FLAG_FWREADY);
 
 	/* Initialize MAC/BB/RF blocks. */
 	/*
@@ -4990,7 +4786,7 @@ urtwn_init(struct ifnet *ifp)
 
 	/* Perform LO and IQ calibrations. */
 	urtwn_iq_calib(sc, sc->iqk_inited);
-	sc->iqk_inited = true;
+	sc->iqk_inited = false;
 
 	/* Perform LC calibration. */
 	urtwn_lc_calib(sc);
@@ -5023,114 +4819,41 @@ urtwn_init(struct ifnet *ifp)
 		urtwn_write_1(sc, 0x15, 0xe9);
 
 	/* Set default channel. */
-	urtwn_set_chan(sc, ic->ic_curchan, IEEE80211_HTINFO_2NDCHAN_NONE);
+	urtwn_set_chan(sc, ic->ic_curchan);
 
-	/* Queue Rx xfers. */
-	for (size_t j = 0; j < sc->rx_npipe; j++) {
-		for (i = 0; i < URTWN_RX_LIST_COUNT; i++) {
-			data = &sc->rx_data[j][i];
-			usbd_setup_xfer(data->xfer, data, data->buf,
-			    URTWN_RXBUFSZ, USBD_SHORT_XFER_OK, USBD_NO_TIMEOUT,
-			    urtwn_rxeof);
-			error = usbd_transfer(data->xfer);
-			if (__predict_false(error != USBD_NORMAL_COMPLETION &&
-			    error != USBD_IN_PROGRESS))
-				goto fail;
-		}
-	}
-
-	/* We're ready to go. */
-	ifp->if_flags &= ~IFF_OACTIVE;
-	ifp->if_flags |= IFF_RUNNING;
-	sc->sc_running = true;
-
-	mutex_exit(&sc->sc_write_mtx);
-
-	if (ic->ic_opmode == IEEE80211_M_MONITOR)
-		ieee80211_new_state(ic, IEEE80211_S_RUN, -1);
-	else if (ic->ic_roaming != IEEE80211_ROAMING_MANUAL)
-		ieee80211_new_state(ic, IEEE80211_S_SCAN, -1);
+	power_control(sc, false);
+#if 0
+	// XXXX can't do that here while core is locked?
 	urtwn_wait_async(sc);
+#endif
 
 	return 0;
 
  fail:
-	mutex_exit(&sc->sc_write_mtx);
-
-	urtwn_stop(ifp, 1);
+	urtwn_stop(&sc->sc_uw);
 	return error;
 }
 
 static void __noinline
-urtwn_stop(struct ifnet *ifp, int disable)
+urtwn_stop(struct usbwifi *uw)
 {
-	struct urtwn_softc *sc = ifp->if_softc;
-	struct ieee80211com *ic = &sc->sc_ic;
-	size_t i;
-	int s;
+	struct urtwn_softc *sc = usbwifi_softc(uw);
+	uint32_t reg;
+	const bool disable = true;
 
 	URTWNHIST_FUNC(); URTWNHIST_CALLED();
-
-	s = splusb();
-	ieee80211_new_state(ic, IEEE80211_S_INIT, -1);
-	urtwn_wait_async(sc);
-	splx(s);
 
 	sc->tx_timer = 0;
-	ifp->if_timer = 0;
-	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
 
-	callout_stop(&sc->sc_scan_to);
 	callout_stop(&sc->sc_calib_to);
 
-	/* Abort Tx. */
-	for (i = 0; i < sc->tx_npipe; i++) {
-		if (sc->tx_pipe[i] != NULL)
-			usbd_abort_pipe(sc->tx_pipe[i]);
-	}
-
-	/* Stop Rx pipe. */
-	for (i = 0; i < sc->rx_npipe; i++) {
-		if (sc->rx_pipe[i] != NULL)
-			usbd_abort_pipe(sc->rx_pipe[i]);
-	}
-
-	/* Free Tx/Rx buffers. */
-	urtwn_free_tx_list(sc);
-	urtwn_free_rx_list(sc);
-
-	sc->sc_running = false;
-	if (disable)
-		urtwn_chip_stop(sc);
-}
-
-static int
-urtwn_reset(struct ifnet *ifp)
-{
-	struct urtwn_softc *sc = ifp->if_softc;
-	struct ieee80211com *ic = &sc->sc_ic;
-
-	if (ic->ic_opmode != IEEE80211_M_MONITOR)
-		return ENETRESET;
-
-	urtwn_set_chan(sc, ic->ic_curchan, IEEE80211_HTINFO_2NDCHAN_NONE);
-
-	return 0;
-}
-
-static void
-urtwn_chip_stop(struct urtwn_softc *sc)
-{
-	uint32_t reg;
-	bool disabled = true;
-
-	URTWNHIST_FUNC(); URTWNHIST_CALLED();
-
 	if (ISSET(sc->chip, URTWN_CHIP_88E) ||
-	    ISSET(sc->chip, URTWN_CHIP_92EU))
+	    ISSET(sc->chip, URTWN_CHIP_92EU)) {
+		DPRINTFN(DBG_INIT, "not powering down, 88E: %jd 92EU: %jd",
+		    ISSET(sc->chip, URTWN_CHIP_88E),
+		    ISSET(sc->chip, URTWN_CHIP_92EU), 0, 0);
 		return;
-
-	mutex_enter(&sc->sc_write_mtx);
+	}
 
 	/*
 	 * RF Off Sequence
@@ -5158,13 +4881,13 @@ urtwn_chip_stop(struct urtwn_softc *sc)
 		/* Reset MCU ready status */
 		urtwn_write_1(sc, R92C_MCUFWDL, 0);
 		/* If firmware in ram code, do reset */
-		if (ISSET(sc->sc_flags, URTWN_FLAG_FWREADY)) {
+		if (ISSET(sc->sc_uw.uw_flags, URTWN_FLAG_FWREADY)) {
 			if (ISSET(sc->chip, URTWN_CHIP_88E) ||
 			    ISSET(sc->chip, URTWN_CHIP_92EU))
 				urtwn_r88e_fw_reset(sc);
 			else
 				urtwn_fw_reset(sc);
-			CLR(sc->sc_flags, URTWN_FLAG_FWREADY);
+			CLR(sc->sc_uw.uw_flags, URTWN_FLAG_FWREADY);
 		}
 	}
 
@@ -5174,7 +4897,7 @@ urtwn_chip_stop(struct urtwn_softc *sc)
 	/* Reset MCU ready status */
 	urtwn_write_1(sc, R92C_MCUFWDL, 0);
 
-	if (disabled) {
+	if (disable) {
 		/* Disable MAC clock */
 		urtwn_write_2(sc, R92C_SYS_CLKR, 0x70A3);
 		/* Disable AFE PLL */
@@ -5208,7 +4931,7 @@ urtwn_chip_stop(struct urtwn_softc *sc)
 	/*
 	 * Reset digital sequence
 	 */
-	if (disabled) {
+	if (disable) {
 		/* Disable ELDR clock */
 		urtwn_write_2(sc, R92C_SYS_CLKR, 0x70A3);
 		/* Isolated ELDR to PON */
@@ -5218,7 +4941,7 @@ urtwn_chip_stop(struct urtwn_softc *sc)
 	/*
 	 * Disable analog sequence
 	 */
-	if (disabled) {
+	if (disable) {
 		/* Disable A15 power */
 		urtwn_write_1(sc, R92C_LDOA15_CTRL, 0x04);
 		/* Disable digital core power */
@@ -5237,17 +4960,16 @@ urtwn_chip_stop(struct urtwn_softc *sc)
 	    R92C_APS_FSMCO_PFM_ALDN);
 
 	urtwn_write_1(sc, R92C_RSV_CTRL, 0x0E);
-
-	mutex_exit(&sc->sc_write_mtx);
 }
 
 static void
 urtwn_delay_ms(struct urtwn_softc *sc, int ms)
 {
-	if (sc->sc_running == false)
+
+	if (sc->sc_uw.uw_udev == NULL)
 		DELAY(ms * 1000);
 	else
-		usbd_delay_ms(sc->sc_udev, ms);
+		usbd_delay_ms(sc->sc_uw.uw_udev, ms);
 }
 
 MODULE(MODULE_CLASS_DRIVER, if_urtwn, NULL);

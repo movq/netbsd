@@ -46,8 +46,10 @@ __KERNEL_RCSID(0, "$NetBSD: malo.c,v 1.21 2024/09/07 06:17:37 andvar Exp $");
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 
+#include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <dev/firmload.h>
 

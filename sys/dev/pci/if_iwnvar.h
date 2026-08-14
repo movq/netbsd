@@ -1,4 +1,4 @@
-/*	$NetBSD: if_iwnvar.h,v 1.22 2020/03/20 16:35:41 sevan Exp $	*/
+/*	$NetBSD: if_iwnvar.h,v 1.20.4.2 2020/04/13 08:04:26 martin Exp $	*/
 /*	$OpenBSD: if_iwnvar.h,v 1.28 2014/09/09 18:55:08 sthen Exp $	*/
 
 /*-
@@ -17,9 +17,6 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-
-/* XXX Added for NetBSD */
-#define IEEE80211_NO_HT
 
 struct iwn_rx_radiotap_header {
 	struct ieee80211_radiotap_header wr_ihdr;
@@ -204,8 +201,7 @@ struct iwn_softc {
 
 	struct ethercom		sc_ec;
 	struct ieee80211com	sc_ic;
-	int			(*sc_newstate)(struct ieee80211com *,
-				    enum ieee80211_state, int);
+	struct ifqueue		sc_sendq;
 
 	struct ieee80211_amrr	amrr;
 	uint8_t			fixed_ridx;
@@ -226,6 +222,7 @@ struct iwn_softc {
 #define IWN_FLAG_SCANNING_5GHZ	(1 << 10)
 #define IWN_FLAG_SCANNING	(IWN_FLAG_SCANNING_2GHZ|IWN_FLAG_SCANNING_5GHZ)
 #define IWN_FLAG_ATTACHED	(1 << 11)
+#define IWN_FLAG_STARTED	(1 << 12)
 
 	uint8_t 		hw_type;
 
@@ -274,6 +271,7 @@ struct iwn_softc {
 	int			sc_cap_off;	/* PCIe Capabilities. */
 	struct sysmon_envsys	*sc_sme;
 	envsys_data_t		sc_sensor;
+	callout_t		scan_to;
 	callout_t		calib_to;
 	int			calib_cnt;
 	struct iwn_calib_state	calib;
@@ -322,8 +320,6 @@ struct iwn_softc {
 	int			sc_tx_timer;
 	void			*powerhook;
 
-	struct bpf_if *		sc_drvbpf;
-
 	kmutex_t 		sc_media_mtx;	/* XXX */
 
 	union {
@@ -344,7 +340,9 @@ struct iwn_softc {
 	uint32_t		ucode_rev;
 
 	kmutex_t		sc_mtx;         /* mutex for init/stop */
+	kcondvar_t		t_event;
 
 	int			sc_beacon_wait;	/* defer/skip sending */
+	struct iwn_eeprom_chan  eeprom_channels[IWN_MAX_CHAN_PER_BAND];
 };
 

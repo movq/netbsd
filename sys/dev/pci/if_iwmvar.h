@@ -158,6 +158,8 @@ enum iwm_ucode_type {
 	IWM_UCODE_TYPE_MAX
 };
 
+#define	IWM_MAX_CHANNELS		52
+
 struct iwm_fw_info {
 	void *fw_rawdata;
 	size_t fw_rawsize;
@@ -208,6 +210,8 @@ struct iwm_nvm_data {
 	uint8_t max_tx_pwr_half_dbm;
 
 	bool lar_enabled;
+
+	uint16_t nvm_ch_flags[IWM_MAX_CHANNELS];
 };
 
 /* max bufs per tfd the driver will use */
@@ -301,6 +305,7 @@ struct iwm_rx_ring {
 #define IWM_FLAG_SCANNING	__BIT(4)
 #define IWM_FLAG_ATTACHED	__BIT(5)
 #define IWM_FLAG_FW_LOADED	__BIT(6)
+#define	IWM_FLAG_TX_RUNNING	__BIT(7)
 
 struct iwm_ucode_status {
 	uint32_t uc_error_event_table;
@@ -364,12 +369,12 @@ struct iwm_bf_data {
 
 struct iwm_softc {
 	device_t sc_dev;
-	struct ethercom sc_ec;
 	struct ieee80211com sc_ic;
+	struct ifqueue sc_sendq;
 
-	int (*sc_newstate)(struct ieee80211com *, enum ieee80211_state, int);
-
+#if 0	// XXX ratectl, see if_iwm.c comments about amrr -> ratectl
 	struct ieee80211_amrr sc_amrr;
+#endif
 	struct callout sc_calib_to;
 	struct callout sc_led_blink_to;
 
@@ -409,6 +414,7 @@ struct iwm_softc {
 	int sc_device_family;
 #define IWM_DEVICE_FAMILY_7000	1
 #define IWM_DEVICE_FAMILY_8000	2
+	int sc_nvm_sdp;
 
 	struct iwm_dma_info kw_dma;
 	struct iwm_dma_info fw_dma;
@@ -497,14 +503,16 @@ struct iwm_softc {
 
 	struct sysctllog *sc_clog;
 
-	struct bpf_if *sc_drvbpf;
+	/* XXX */
+	kmutex_t	sc_media_mtx __aligned(CACHE_LINE_SIZE);
+	/* hardware and softc */
+	kmutex_t	sc_lock __aligned(CACHE_LINE_SIZE);
 
-	kmutex_t	sc_media_mtx;	/* XXX */
-
+	/* align next member on cache line too, so sc_lock is alone */
 	union {
 		struct iwm_rx_radiotap_header th;
 		uint8_t	pad[IEEE80211_RADIOTAP_HDRLEN];
-	} sc_rxtapu;
+	} sc_rxtapu __aligned(CACHE_LINE_SIZE);
 #define sc_rxtap	sc_rxtapu.th
 	int			sc_rxtap_len;
 
@@ -514,6 +522,8 @@ struct iwm_softc {
 	} sc_txtapu;
 #define sc_txtap	sc_txtapu.th
 	int			sc_txtap_len;
+	uint8_t		sc_des_essid[IEEE80211_NWID_LEN];
+	int		sc_des_esslen;
 };
 
 struct iwm_node {
@@ -524,7 +534,9 @@ struct iwm_node {
 	uint16_t in_color;
 
 	struct iwm_lq_cmd in_lq;
+#if 0	// XXX ratectl, see if_iwm.c comments about amrr -> ratectl
 	struct ieee80211_amrr_node in_amn;
+#endif
 };
 #define IWM_STATION_ID 0
 #define IWM_AUX_STA_ID 1

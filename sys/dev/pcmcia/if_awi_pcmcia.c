@@ -57,6 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_awi_pcmcia.c,v 1.47 2019/01/08 08:47:21 msaitoh E
 
 #include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <sys/cpu.h>
 #include <sys/bus.h>

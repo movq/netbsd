@@ -58,6 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: rtw.c,v 1.137 2021/11/10 16:17:34 msaitoh Exp $");
 #include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <net80211/ieee80211_regdomain.h>
 
 #include <net/bpf.h>
 
