@@ -462,6 +462,7 @@
 ./usr/libdata/debug/sbin/tunefs.debug		comp-sysutil-debug	debug
 ./usr/libdata/debug/sbin/umbctl.debug		comp-netutil-debug	usb,debug
 ./usr/libdata/debug/sbin/umount.debug		comp-sysutil-debug	debug
+./usr/libdata/debug/sbin/vcconfig.debug	comp-sysutil-debug	debug
 ./usr/libdata/debug/sbin/veriexecctl.debug	comp-sysutil-debug	debug
 ./usr/libdata/debug/sbin/wdogctl.debug		comp-sysutil-debug	debug
 ./usr/libdata/debug/sbin/wsconsctl.debug	comp-sysutil-debug	debug

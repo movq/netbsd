@@ -14,7 +14,7 @@ SUBDIR=	apmlabel atactl badsect blkdiscard brconfig \
 	newbtconf nologin nvmectl \
 	ping pppoectl reboot rcorder rndctl route routed \
 	savecore scsictl shutdown slattach svhlabel swapctl sysctl \
-	ttyflags umount veriexecctl wdogctl wsconsctl
+	ttyflags umount vcconfig veriexecctl wdogctl wsconsctl
 
 .if ${HAVE_EFI_RT} == "yes"
 SUBDIR+= efi
