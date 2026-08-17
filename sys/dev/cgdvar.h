@@ -47,6 +47,28 @@ struct cgd_ioctl {
 	size_t		 ci_blocksize;
 };
 
+/*
+ * ioctl(2) code: used by CGDIOCSET2.
+ *
+ * The mapped interface currently requires a backing disk with 512-byte
+ * sectors.  ci_iv_offset is added to each logical sector number before IV
+ * generation; it is independent of ci_data_offset.
+ */
+struct cgd_ioctl2 {
+	const char	*ci_disk;
+	int		 ci_flags;
+	int		 ci_unit;
+	size_t		 ci_size;
+	const char	*ci_alg;
+	const char	*ci_ivmethod;
+	size_t		 ci_keylen;
+	const char	*ci_key;
+	size_t		 ci_blocksize;
+	uint64_t	 ci_data_offset;	/* byte offset in backing disk */
+	uint64_t	 ci_data_length;	/* mapped length in bytes */
+	uint64_t	 ci_iv_offset;	/* offset in 512-byte sectors */
+};
+
 /* ioctl(2) code: used by CGDIOCGET */
 struct cgd_user {
 	int		cgu_unit;	/* which cgd unit */
@@ -110,6 +132,8 @@ struct cgd_softc {
 	void			*sc_data;	/* emergency buffer */
 	bool			 sc_data_used;	/* Really lame, we'll change */
 	size_t			 sc_tpathlen;	/* length of prior string */
+	daddr_t			 sc_data_offset;	/* DEV_BSIZE blocks */
+	uint64_t		 sc_iv_offset;	/* cipher data units */
 	struct cryptdata	 sc_cdata;	/* crypto data */
 	const struct cryptfuncs	*sc_cfuncs;	/* encryption functions */
 	kmutex_t		 sc_lock;
@@ -123,6 +147,7 @@ struct cgd_softc {
 #define CGDIOCSET	_IOWR('F', 18, struct cgd_ioctl)
 #define CGDIOCCLR	_IOW('F', 19, struct cgd_ioctl)
 #define CGDIOCGET	_IOWR('F', 20, struct cgd_user)
+#define CGDIOCSET2	_IOWR('F', 21, struct cgd_ioctl2)
 
 /* Maximum block sized to be used by the ciphers */
 #define CGD_MAXBLOCKSIZE	128

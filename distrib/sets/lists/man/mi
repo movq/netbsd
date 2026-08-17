@@ -3555,6 +3555,7 @@
 ./usr/share/man/cat8/vax/format.0		man-sys-catman		.cat
 ./usr/share/man/cat8/vax/installboot.0		man-obsolete		obsolete
 ./usr/share/man/cat8/vax/makedev.0		man-obsolete		obsolete
+./usr/share/man/cat8/vcconfig.0			man-sysutil-catman	.cat
 ./usr/share/man/cat8/veriexec.0			man-sys-catman		.cat
 ./usr/share/man/cat8/veriexecctl.0		man-sysutil-catman	.cat
 ./usr/share/man/cat8/veriexecgen.0		man-sysutil-catman	.cat
@@ -7159,6 +7160,7 @@
 ./usr/share/man/man8/vax/format.8		man-sys-man		.man
 ./usr/share/man/man8/vax/installboot.8		man-obsolete		obsolete
 ./usr/share/man/man8/vax/makedev.8		man-obsolete		obsolete
+./usr/share/man/man8/vcconfig.8			man-sysutil-man		.man
 ./usr/share/man/man8/veriexec.8			man-sys-man		.man
 ./usr/share/man/man8/veriexecctl.8		man-sysutil-man		.man
 ./usr/share/man/man8/veriexecgen.8		man-sysutil-man		.man

@@ -509,6 +509,7 @@
 ./sbin/tunefs					base-sysutil-root
 ./sbin/umbctl					base-netutil-root	usb
 ./sbin/umount					base-sysutil-root
+./sbin/vcconfig				base-sysutil-root
 ./sbin/veriexecctl				base-sysutil-root
 ./sbin/verifiedexec_load			base-obsolete		obsolete
 ./sbin/vinum					base-obsolete		obsolete
