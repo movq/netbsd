@@ -1,4 +1,5 @@
 /* $NetBSD$
+ * MediaTek MT7922 802.11ax
  * Based on Linux mt76 driver.
  *
  * Copyright (C) 2026 Michael Jones <mike@mjones.org>
@@ -78,15 +79,15 @@
 
 #include <net80211/ieee80211_var.h>
 
-#include <dev/pci/if_mtxreg.h>
-#include <dev/pci/if_mtxvar.h>
+#include <dev/pci/if_mtaxreg.h>
+#include <dev/pci/if_mtaxvar.h>
 
 #define ARRAY_SIZE(x) (sizeof x / sizeof x[0])
-#define MTX_MCU_TIMEOUT_MS 3000
+#define MTAX_MCU_TIMEOUT_MS 3000
 
-CTASSERT(MTX_RX_BUF_SIZE <= MCLBYTES);
-CTASSERT(sizeof(struct mtx_mcu_txd) == 64);
-CTASSERT(sizeof(struct mtx_mcu_rxd) == 36);
+CTASSERT(MTAX_RX_BUF_SIZE <= MCLBYTES);
+CTASSERT(sizeof(struct mtax_mcu_txd) == 64);
+CTASSERT(sizeof(struct mtax_mcu_rxd) == 36);
 
 struct reg_map {
     uint32_t phys;
@@ -141,36 +142,36 @@ static struct reg_map fixed_map[] = {
     {0x820fd000, 0xa4800, 0x00800}, /* WF_LMAC_TOP BN1 (WF_MIB) */
 };
 
-static uint32_t mtx_reg_map_l1(struct mtx_softc *sc, uint32_t addr);
-static uint32_t mtx_reg_addr(struct mtx_softc *sc, uint32_t addr);
-static void mtx_rmw(struct mtx_softc *sc, uint32_t addr, uint32_t val, uint32_t mask);
-static uint32_t mtx_read(struct mtx_softc *sc, uint32_t addr);
-static void mtx_write(struct mtx_softc *sc, uint32_t addr, uint32_t val);
-static int mtx_mcu_fw_pmctrl(struct mtx_softc *sc);
-static int mtx_mcu_drv_pmctrl(struct mtx_softc *sc);
-static int mtx_dma_alloc(struct mtx_softc *sc, struct mtx_dma_info *dma,
+static uint32_t mtax_reg_map_l1(struct mtax_softc *sc, uint32_t addr);
+static uint32_t mtax_reg_addr(struct mtax_softc *sc, uint32_t addr);
+static void mtax_rmw(struct mtax_softc *sc, uint32_t addr, uint32_t val, uint32_t mask);
+static uint32_t mtax_read(struct mtax_softc *sc, uint32_t addr);
+static void mtax_write(struct mtax_softc *sc, uint32_t addr, uint32_t val);
+static int mtax_mcu_fw_pmctrl(struct mtax_softc *sc);
+static int mtax_mcu_drv_pmctrl(struct mtax_softc *sc);
+static int mtax_dma_alloc(struct mtax_softc *sc, struct mtax_dma_info *dma,
     bus_size_t size, bus_size_t alignment);
-static int mtx_tx_ring_reclaim(struct mtx_softc *sc,
-    struct mtx_tx_ring *tx_ring);
-static void mtx_rx_ring_process(struct mtx_softc *sc,
-    struct mtx_rx_ring *rx_ring);
-static void mtx_mcu_rx(struct mtx_softc *sc, struct mbuf *m);
+static int mtax_tx_ring_reclaim(struct mtax_softc *sc,
+    struct mtax_tx_ring *tx_ring);
+static void mtax_rx_ring_process(struct mtax_softc *sc,
+    struct mtax_rx_ring *rx_ring);
+static void mtax_mcu_rx(struct mtax_softc *sc, struct mbuf *m);
 
 static uint32_t
-mtx_reg_map_l1(struct mtx_softc *sc, uint32_t addr)
+mtax_reg_map_l1(struct mtax_softc *sc, uint32_t addr)
 {
 	uint32_t offset = addr & 0xFFFF;
 	uint32_t base = addr >> 16;
 
-	mtx_rmw(sc, MTX_REMAP_L1, base, 0xFFFF);
+	mtax_rmw(sc, MTAX_REMAP_L1, base, 0xFFFF);
 	/* use read to push write */
-	mtx_read(sc, MTX_REMAP_L1);
+	mtax_read(sc, MTAX_REMAP_L1);
 
-	return MTX_REMAP_BASE_L1 + offset;
+	return MTAX_REMAP_BASE_L1 + offset;
 }
 
 static uint32_t
-mtx_reg_addr(struct mtx_softc *sc, uint32_t addr)
+mtax_reg_addr(struct mtax_softc *sc, uint32_t addr)
 {
 	if (addr < 0x100000)
 		return addr;
@@ -191,16 +192,16 @@ mtx_reg_addr(struct mtx_softc *sc, uint32_t addr)
 	if ((addr >= 0x18000000 && addr < 0x18c00000) ||
 	    (addr >= 0x70000000 && addr < 0x78000000) ||
 	    (addr >= 0x7c000000 && addr < 0x7c400000))
-		return mtx_reg_map_l1(sc, addr);
+		return mtax_reg_map_l1(sc, addr);
 
 	device_printf(sc->sc_dev, "Access to unsupported address: %08x\n", addr);
 	return 0;
 }
 
 static void
-mtx_rmw(struct mtx_softc *sc, uint32_t addr, uint32_t val, uint32_t mask)
+mtax_rmw(struct mtax_softc *sc, uint32_t addr, uint32_t val, uint32_t mask)
 {
-	uint32_t bus_addr = mtx_reg_addr(sc, addr);
+	uint32_t bus_addr = mtax_reg_addr(sc, addr);
 
 	uint32_t prev = bus_space_read_4(sc->sc_st, sc->sc_sh, bus_addr);
 
@@ -209,33 +210,33 @@ mtx_rmw(struct mtx_softc *sc, uint32_t addr, uint32_t val, uint32_t mask)
 }
 
 static uint32_t
-mtx_read(struct mtx_softc *sc, uint32_t addr)
+mtax_read(struct mtax_softc *sc, uint32_t addr)
 {
-	uint32_t bus_addr = mtx_reg_addr(sc, addr);
+	uint32_t bus_addr = mtax_reg_addr(sc, addr);
 	return bus_space_read_4(sc->sc_st, sc->sc_sh, bus_addr);
 }
 
 static void
-mtx_write(struct mtx_softc *sc, uint32_t addr, uint32_t val)
+mtax_write(struct mtax_softc *sc, uint32_t addr, uint32_t val)
 {
-	uint32_t bus_addr = mtx_reg_addr(sc, addr);
+	uint32_t bus_addr = mtax_reg_addr(sc, addr);
 	bus_space_write_4(sc->sc_st, sc->sc_sh, bus_addr, val);
 }
 
 static void
-mtx_clear(struct mtx_softc *sc, uint32_t addr, uint32_t mask)
+mtax_clear(struct mtax_softc *sc, uint32_t addr, uint32_t mask)
 {
-	mtx_rmw(sc, addr, 0, mask);
+	mtax_rmw(sc, addr, 0, mask);
 }
 
 static void
-mtx_set(struct mtx_softc *sc, uint32_t addr, uint32_t mask)
+mtax_set(struct mtax_softc *sc, uint32_t addr, uint32_t mask)
 {
-	mtx_rmw(sc, addr, mask, 0);
+	mtax_rmw(sc, addr, mask, 0);
 }
 
 static bool
-mtx_poll_msec(struct mtx_softc *sc, uint32_t addr, uint32_t mask,
+mtax_poll_msec(struct mtax_softc *sc, uint32_t addr, uint32_t mask,
 	      uint32_t val, int timeout, int tick)
 {
 	int count, pause_ticks;
@@ -247,58 +248,58 @@ mtx_poll_msec(struct mtx_softc *sc, uint32_t addr, uint32_t mask,
 	count = timeout / tick;
 
 	do {
-		cur = mtx_read(sc, addr) & mask;
+		cur = mtax_read(sc, addr) & mask;
 		if (cur == val) return true;
-		kpause("mtxpoll", false, pause_ticks, NULL);
+		kpause("mtaxpoll", false, pause_ticks, NULL);
 	} while (count-- > 0);
 
 	return false;
 }
 
 static int
-mtx_intr(void *arg)
+mtax_intr(void *arg)
 {
-	struct mtx_softc *sc = arg;
+	struct mtax_softc *sc = arg;
 	uint32_t intr;
 
-	intr = mtx_read(sc, MTX_WFDMA0_HOST_INT_STA) & sc->sc_intr_mask;
+	intr = mtax_read(sc, MTAX_WFDMA0_HOST_INT_STA) & sc->sc_intr_mask;
 	if (intr == 0)
 		return 0;
 
-	mtx_write(sc, MTX_WFDMA0_HOST_INT_ENA, 0);
+	mtax_write(sc, MTAX_WFDMA0_HOST_INT_ENA, 0);
 	softint_schedule(sc->sc_soft_ih);
 
 	return 1;
 }
 
 static void
-mtx_softintr(void *arg)
+mtax_softintr(void *arg)
 {
-	struct mtx_softc *sc = arg;
+	struct mtax_softc *sc = arg;
 	uint32_t intr;
 
-	intr = mtx_read(sc, MTX_WFDMA0_HOST_INT_STA) & sc->sc_intr_mask;
+	intr = mtax_read(sc, MTAX_WFDMA0_HOST_INT_STA) & sc->sc_intr_mask;
 	if (intr != 0)
-		mtx_write(sc, MTX_WFDMA0_HOST_INT_STA, intr);
+		mtax_write(sc, MTAX_WFDMA0_HOST_INT_STA, intr);
 
-	if (intr & MTX_INT_TX_DONE_FWDL) {
-		mtx_tx_ring_reclaim(sc,
-		    &sc->sc_tx_rings[MTX_TX_RING_MCU_FWDL]);
+	if (intr & MTAX_INT_TX_DONE_FWDL) {
+		mtax_tx_ring_reclaim(sc,
+		    &sc->sc_tx_rings[MTAX_TX_RING_MCU_FWDL]);
 	}
-	if (intr & MTX_INT_TX_DONE_MCU)
-		mtx_tx_ring_reclaim(sc, &sc->sc_tx_rings[MTX_TX_RING_MCU]);
-	if (intr & MTX_INT_RX_DONE_MCU_BOOT) {
-		mtx_rx_ring_process(sc,
-		    &sc->sc_rx_rings[MTX_RX_RING_MCU_BOOT]);
+	if (intr & MTAX_INT_TX_DONE_MCU)
+		mtax_tx_ring_reclaim(sc, &sc->sc_tx_rings[MTAX_TX_RING_MCU]);
+	if (intr & MTAX_INT_RX_DONE_MCU_BOOT) {
+		mtax_rx_ring_process(sc,
+		    &sc->sc_rx_rings[MTAX_RX_RING_MCU_BOOT]);
 	}
-	if (intr & MTX_INT_RX_DONE_MCU)
-		mtx_rx_ring_process(sc, &sc->sc_rx_rings[MTX_RX_RING_MCU]);
+	if (intr & MTAX_INT_RX_DONE_MCU)
+		mtax_rx_ring_process(sc, &sc->sc_rx_rings[MTAX_RX_RING_MCU]);
 
-	mtx_write(sc, MTX_WFDMA0_HOST_INT_ENA, sc->sc_intr_mask);
+	mtax_write(sc, MTAX_WFDMA0_HOST_INT_ENA, sc->sc_intr_mask);
 }
 
 static int
-mtx_match(device_t parent, cfdata_t match, void *aux)
+mtax_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -312,15 +313,15 @@ mtx_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static int
-mtx_mcu_fw_pmctrl(struct mtx_softc *sc)
+mtax_mcu_fw_pmctrl(struct mtax_softc *sc)
 {
 	const size_t retry_count = 10;
 	int i;
 
 	for (i = 0; i < retry_count; i++) {
-		mtx_write(sc, MTX_CONN_ON_LPCTL, MTX_LPCR_HOST_SET_OWN);
+		mtax_write(sc, MTAX_CONN_ON_LPCTL, MTAX_LPCR_HOST_SET_OWN);
 
-		if (mtx_poll_msec(sc, MTX_CONN_ON_LPCTL, MTX_LPCR_HOST_OWN_SYNC,
+		if (mtax_poll_msec(sc, MTAX_CONN_ON_LPCTL, MTAX_LPCR_HOST_OWN_SYNC,
 				  4, 50, 10))
 			break;
 	}
@@ -333,17 +334,17 @@ mtx_mcu_fw_pmctrl(struct mtx_softc *sc)
 }
 
 static int
-mtx_mcu_drv_pmctrl(struct mtx_softc *sc)
+mtax_mcu_drv_pmctrl(struct mtax_softc *sc)
 {
 	const size_t retry_count = 10;
 	int i;
 
 	for (i = 0; i < retry_count; i++) {
-		mtx_write(sc, MTX_CONN_ON_LPCTL, MTX_LPCR_HOST_CLR_OWN);
+		mtax_write(sc, MTAX_CONN_ON_LPCTL, MTAX_LPCR_HOST_CLR_OWN);
 
 		delay(3000);
 
-		if (mtx_poll_msec(sc, MTX_CONN_ON_LPCTL, MTX_LPCR_HOST_OWN_SYNC,
+		if (mtax_poll_msec(sc, MTAX_CONN_ON_LPCTL, MTAX_LPCR_HOST_OWN_SYNC,
 				  0, 50, 10))
 			break;
 	}
@@ -356,122 +357,122 @@ mtx_mcu_drv_pmctrl(struct mtx_softc *sc)
 }
 
 static int
-mtx_wfsys_reset(struct mtx_softc *sc)
+mtax_wfsys_reset(struct mtax_softc *sc)
 {
-	mtx_clear(sc, MTX_WFSYS_RESET, MTX_WFSYS_SW_RST_B);
-	kpause("mtxpause", false, mstohz(50), NULL);
-	mtx_set(sc, MTX_WFSYS_RESET, MTX_WFSYS_SW_RST_B);
+	mtax_clear(sc, MTAX_WFSYS_RESET, MTAX_WFSYS_SW_RST_B);
+	kpause("mtaxpause", false, mstohz(50), NULL);
+	mtax_set(sc, MTAX_WFSYS_RESET, MTAX_WFSYS_SW_RST_B);
 
-	if (!mtx_poll_msec(sc, MTX_WFSYS_RESET, MTX_WFSYS_SW_INIT_DONE,
-			MTX_WFSYS_SW_INIT_DONE, 500, 10))
+	if (!mtax_poll_msec(sc, MTAX_WFSYS_RESET, MTAX_WFSYS_SW_INIT_DONE,
+			MTAX_WFSYS_SW_INIT_DONE, 500, 10))
 		return ETIMEDOUT;
 
 	return 0;
 }
 
 static int
-mtx_wfdma_disable(struct mtx_softc *sc, bool reset)
+mtax_wfdma_disable(struct mtax_softc *sc, bool reset)
 {
 	uint32_t busy_mask, disable_mask, reset_mask;
 
-	disable_mask = MTX_WFDMA0_GLO_CFG_TX_DMA_EN |
-	    MTX_WFDMA0_GLO_CFG_RX_DMA_EN |
-	    MTX_WFDMA0_GLO_CFG_CSR_DISP_BASE_PTR_CHAIN_EN |
-	    MTX_WFDMA0_GLO_CFG_OMIT_TX_INFO |
-	    MTX_WFDMA0_GLO_CFG_OMIT_RX_INFO |
-	    MTX_WFDMA0_GLO_CFG_OMIT_RX_INFO_PFET2;
-	mtx_clear(sc, MTX_WFDMA0_GLO_CFG, disable_mask);
+	disable_mask = MTAX_WFDMA0_GLO_CFG_TX_DMA_EN |
+	    MTAX_WFDMA0_GLO_CFG_RX_DMA_EN |
+	    MTAX_WFDMA0_GLO_CFG_CSR_DISP_BASE_PTR_CHAIN_EN |
+	    MTAX_WFDMA0_GLO_CFG_OMIT_TX_INFO |
+	    MTAX_WFDMA0_GLO_CFG_OMIT_RX_INFO |
+	    MTAX_WFDMA0_GLO_CFG_OMIT_RX_INFO_PFET2;
+	mtax_clear(sc, MTAX_WFDMA0_GLO_CFG, disable_mask);
 
-	busy_mask = MTX_WFDMA0_GLO_CFG_TX_DMA_BUSY |
-	    MTX_WFDMA0_GLO_CFG_RX_DMA_BUSY;
-	if (!mtx_poll_msec(sc, MTX_WFDMA0_GLO_CFG, busy_mask, 0, 100, 10))
+	busy_mask = MTAX_WFDMA0_GLO_CFG_TX_DMA_BUSY |
+	    MTAX_WFDMA0_GLO_CFG_RX_DMA_BUSY;
+	if (!mtax_poll_msec(sc, MTAX_WFDMA0_GLO_CFG, busy_mask, 0, 100, 10))
 		return ETIMEDOUT;
 
-	mtx_clear(sc, MTX_WFDMA0_GLO_CFG_EXT0,
-	    MTX_WFDMA0_CSR_TX_DMASHDL_ENABLE);
-	mtx_set(sc, MTX_DMASHDL_SW_CONTROL, MTX_DMASHDL_DMASHDL_BYPASS);
+	mtax_clear(sc, MTAX_WFDMA0_GLO_CFG_EXT0,
+	    MTAX_WFDMA0_CSR_TX_DMASHDL_ENABLE);
+	mtax_set(sc, MTAX_DMASHDL_SW_CONTROL, MTAX_DMASHDL_DMASHDL_BYPASS);
 
 	if (reset) {
-		reset_mask = MTX_WFDMA0_RST_DMASHDL_ALL_RST |
-		    MTX_WFDMA0_RST_LOGIC_RST;
-		mtx_clear(sc, MTX_WFDMA0_RST, reset_mask);
-		mtx_set(sc, MTX_WFDMA0_RST, reset_mask);
+		reset_mask = MTAX_WFDMA0_RST_DMASHDL_ALL_RST |
+		    MTAX_WFDMA0_RST_LOGIC_RST;
+		mtax_clear(sc, MTAX_WFDMA0_RST, reset_mask);
+		mtax_set(sc, MTAX_WFDMA0_RST, reset_mask);
 	}
 
 	return 0;
 }
 
 static void
-mtx_wfdma_prefetch(struct mtx_softc *sc)
+mtax_wfdma_prefetch(struct mtax_softc *sc)
 {
 	/* RX rings */
-	mtx_write(sc, MTX_WFDMA0_RX_RING_EXT_CTRL(0),
-	    MTX_WFDMA0_PREFETCH(0x000, 0x4));
-	mtx_write(sc, MTX_WFDMA0_RX_RING_EXT_CTRL(2),
-	    MTX_WFDMA0_PREFETCH(0x040, 0x4));
-	mtx_write(sc, MTX_WFDMA0_RX_RING_EXT_CTRL(3),
-	    MTX_WFDMA0_PREFETCH(0x080, 0x4));
-	mtx_write(sc, MTX_WFDMA0_RX_RING_EXT_CTRL(4),
-	    MTX_WFDMA0_PREFETCH(0x0c0, 0x4));
-	mtx_write(sc, MTX_WFDMA0_RX_RING_EXT_CTRL(5),
-	    MTX_WFDMA0_PREFETCH(0x100, 0x4));
+	mtax_write(sc, MTAX_WFDMA0_RX_RING_EXT_CTRL(0),
+	    MTAX_WFDMA0_PREFETCH(0x000, 0x4));
+	mtax_write(sc, MTAX_WFDMA0_RX_RING_EXT_CTRL(2),
+	    MTAX_WFDMA0_PREFETCH(0x040, 0x4));
+	mtax_write(sc, MTAX_WFDMA0_RX_RING_EXT_CTRL(3),
+	    MTAX_WFDMA0_PREFETCH(0x080, 0x4));
+	mtax_write(sc, MTAX_WFDMA0_RX_RING_EXT_CTRL(4),
+	    MTAX_WFDMA0_PREFETCH(0x0c0, 0x4));
+	mtax_write(sc, MTAX_WFDMA0_RX_RING_EXT_CTRL(5),
+	    MTAX_WFDMA0_PREFETCH(0x100, 0x4));
 
 	/* TX rings */
-	mtx_write(sc, MTX_WFDMA0_TX_RING_EXT_CTRL(0),
-	    MTX_WFDMA0_PREFETCH(0x140, 0x4));
-	mtx_write(sc, MTX_WFDMA0_TX_RING_EXT_CTRL(1),
-	    MTX_WFDMA0_PREFETCH(0x180, 0x4));
-	mtx_write(sc, MTX_WFDMA0_TX_RING_EXT_CTRL(2),
-	    MTX_WFDMA0_PREFETCH(0x1c0, 0x4));
-	mtx_write(sc, MTX_WFDMA0_TX_RING_EXT_CTRL(3),
-	    MTX_WFDMA0_PREFETCH(0x200, 0x4));
-	mtx_write(sc, MTX_WFDMA0_TX_RING_EXT_CTRL(4),
-	    MTX_WFDMA0_PREFETCH(0x240, 0x4));
-	mtx_write(sc, MTX_WFDMA0_TX_RING_EXT_CTRL(5),
-	    MTX_WFDMA0_PREFETCH(0x280, 0x4));
-	mtx_write(sc, MTX_WFDMA0_TX_RING_EXT_CTRL(6),
-	    MTX_WFDMA0_PREFETCH(0x2c0, 0x4));
-	mtx_write(sc, MTX_WFDMA0_TX_RING_EXT_CTRL(16),
-	    MTX_WFDMA0_PREFETCH(0x340, 0x4));
-	mtx_write(sc, MTX_WFDMA0_TX_RING_EXT_CTRL(17),
-	    MTX_WFDMA0_PREFETCH(0x380, 0x4));
+	mtax_write(sc, MTAX_WFDMA0_TX_RING_EXT_CTRL(0),
+	    MTAX_WFDMA0_PREFETCH(0x140, 0x4));
+	mtax_write(sc, MTAX_WFDMA0_TX_RING_EXT_CTRL(1),
+	    MTAX_WFDMA0_PREFETCH(0x180, 0x4));
+	mtax_write(sc, MTAX_WFDMA0_TX_RING_EXT_CTRL(2),
+	    MTAX_WFDMA0_PREFETCH(0x1c0, 0x4));
+	mtax_write(sc, MTAX_WFDMA0_TX_RING_EXT_CTRL(3),
+	    MTAX_WFDMA0_PREFETCH(0x200, 0x4));
+	mtax_write(sc, MTAX_WFDMA0_TX_RING_EXT_CTRL(4),
+	    MTAX_WFDMA0_PREFETCH(0x240, 0x4));
+	mtax_write(sc, MTAX_WFDMA0_TX_RING_EXT_CTRL(5),
+	    MTAX_WFDMA0_PREFETCH(0x280, 0x4));
+	mtax_write(sc, MTAX_WFDMA0_TX_RING_EXT_CTRL(6),
+	    MTAX_WFDMA0_PREFETCH(0x2c0, 0x4));
+	mtax_write(sc, MTAX_WFDMA0_TX_RING_EXT_CTRL(16),
+	    MTAX_WFDMA0_PREFETCH(0x340, 0x4));
+	mtax_write(sc, MTAX_WFDMA0_TX_RING_EXT_CTRL(17),
+	    MTAX_WFDMA0_PREFETCH(0x380, 0x4));
 }
 
 static void
-mtx_wfdma_enable(struct mtx_softc *sc)
+mtax_wfdma_enable(struct mtax_softc *sc)
 {
 	uint32_t config;
 
-	mtx_wfdma_prefetch(sc);
+	mtax_wfdma_prefetch(sc);
 
-	mtx_write(sc, MTX_WFDMA0_RST_DTX_PTR, UINT32_MAX);
-	mtx_write(sc, MTX_WFDMA0_PRI_DLY_INT_CFG0, 0);
+	mtax_write(sc, MTAX_WFDMA0_RST_DTX_PTR, UINT32_MAX);
+	mtax_write(sc, MTAX_WFDMA0_PRI_DLY_INT_CFG0, 0);
 
-	config = MTX_WFDMA0_GLO_CFG_TX_WB_DDONE |
-	    MTX_WFDMA0_GLO_CFG_FIFO_LITTLE_ENDIAN |
-	    MTX_WFDMA0_GLO_CFG_CLK_GAT_DIS |
-	    MTX_WFDMA0_GLO_CFG_OMIT_TX_INFO |
-	    __SHIFTIN(3, MTX_WFDMA0_GLO_CFG_DMA_SIZE) |
-	    MTX_WFDMA0_GLO_CFG_FIFO_DIS_CHECK |
-	    MTX_WFDMA0_GLO_CFG_RX_WB_DDONE |
-	    MTX_WFDMA0_GLO_CFG_CSR_DISP_BASE_PTR_CHAIN_EN |
-	    MTX_WFDMA0_GLO_CFG_OMIT_RX_INFO_PFET2;
-	mtx_set(sc, MTX_WFDMA0_GLO_CFG, config);
+	config = MTAX_WFDMA0_GLO_CFG_TX_WB_DDONE |
+	    MTAX_WFDMA0_GLO_CFG_FIFO_LITTLE_ENDIAN |
+	    MTAX_WFDMA0_GLO_CFG_CLK_GAT_DIS |
+	    MTAX_WFDMA0_GLO_CFG_OMIT_TX_INFO |
+	    __SHIFTIN(3, MTAX_WFDMA0_GLO_CFG_DMA_SIZE) |
+	    MTAX_WFDMA0_GLO_CFG_FIFO_DIS_CHECK |
+	    MTAX_WFDMA0_GLO_CFG_RX_WB_DDONE |
+	    MTAX_WFDMA0_GLO_CFG_CSR_DISP_BASE_PTR_CHAIN_EN |
+	    MTAX_WFDMA0_GLO_CFG_OMIT_RX_INFO_PFET2;
+	mtax_set(sc, MTAX_WFDMA0_GLO_CFG, config);
 
-	mtx_set(sc, MTX_WFDMA0_GLO_CFG,
-	    MTX_WFDMA0_GLO_CFG_TX_DMA_EN |
-	    MTX_WFDMA0_GLO_CFG_RX_DMA_EN);
-	mtx_set(sc, MTX_WFDMA_DUMMY_CR, MTX_WFDMA_NEED_REINIT);
+	mtax_set(sc, MTAX_WFDMA0_GLO_CFG,
+	    MTAX_WFDMA0_GLO_CFG_TX_DMA_EN |
+	    MTAX_WFDMA0_GLO_CFG_RX_DMA_EN);
+	mtax_set(sc, MTAX_WFDMA_DUMMY_CR, MTAX_WFDMA_NEED_REINIT);
 
-	sc->sc_intr_mask = MTX_INT_RX_DONE_MCU_BOOT |
-	    MTX_INT_RX_DONE_MCU |
-	    MTX_INT_TX_DONE_FWDL |
-	    MTX_INT_TX_DONE_MCU;
-	mtx_write(sc, MTX_WFDMA0_HOST_INT_ENA, sc->sc_intr_mask);
+	sc->sc_intr_mask = MTAX_INT_RX_DONE_MCU_BOOT |
+	    MTAX_INT_RX_DONE_MCU |
+	    MTAX_INT_TX_DONE_FWDL |
+	    MTAX_INT_TX_DONE_MCU;
+	mtax_write(sc, MTAX_WFDMA0_HOST_INT_ENA, sc->sc_intr_mask);
 }
 
 static int __unused
-mtx_dma_alloc(struct mtx_softc *sc, struct mtx_dma_info *dma,
+mtax_dma_alloc(struct mtax_softc *sc, struct mtax_dma_info *dma,
     bus_size_t size, bus_size_t alignment)
 {
 	bus_dma_tag_t tag = sc->sc_dmat;
@@ -520,7 +521,7 @@ destroy:
 }
 
 static void
-mtx_dma_free(struct mtx_dma_info *dma)
+mtax_dma_free(struct mtax_dma_info *dma)
 {
 	bus_dma_tag_t tag;
 
@@ -541,7 +542,7 @@ mtx_dma_free(struct mtx_dma_info *dma)
 }
 
 static int
-mtx_ring_init(struct mtx_softc *sc, struct mtx_ring *ring, int size,
+mtax_ring_init(struct mtax_softc *sc, struct mtax_ring *ring, int size,
     uint32_t reg_base)
 {
 	bus_size_t desc_size;
@@ -551,7 +552,7 @@ mtx_ring_init(struct mtx_softc *sc, struct mtx_ring *ring, int size,
 	ring->reg_base = reg_base;
 
 	desc_size = size * sizeof(*ring->desc);
-	error = mtx_dma_alloc(sc, &ring->desc_dma, desc_size, PAGE_SIZE);
+	error = mtax_dma_alloc(sc, &ring->desc_dma, desc_size, PAGE_SIZE);
 	if (error) {
 		aprint_error_dev(sc->sc_dev,
 		    "could not allocate descriptor ring: %d\n", error);
@@ -560,12 +561,12 @@ mtx_ring_init(struct mtx_softc *sc, struct mtx_ring *ring, int size,
 	ring->desc = ring->desc_dma.vaddr;
 
 	for (i = 0; i < size; i++)
-		ring->desc[i].ctrl = htole32(MTX_DMA_CTL_DMA_DONE);
+		ring->desc[i].ctrl = htole32(MTAX_DMA_CTL_DMA_DONE);
 
-	mtx_write(sc, ring->reg_base + MTX_RING_CPU_IDX_OFS, 0);
-	mtx_write(sc, ring->reg_base + MTX_RING_DMA_IDX_OFS, 0);
-	mtx_write(sc, ring->reg_base + MTX_RING_SIZE_OFS, size);
-	mtx_write(sc, ring->reg_base + MTX_RING_DESC_BASE_OFS,
+	mtax_write(sc, ring->reg_base + MTAX_RING_CPU_IDX_OFS, 0);
+	mtax_write(sc, ring->reg_base + MTAX_RING_DMA_IDX_OFS, 0);
+	mtax_write(sc, ring->reg_base + MTAX_RING_SIZE_OFS, size);
+	mtax_write(sc, ring->reg_base + MTAX_RING_DESC_BASE_OFS,
 	    (uint32_t)ring->desc_dma.paddr);
 
 	ring->head = 0;
@@ -577,7 +578,7 @@ mtx_ring_init(struct mtx_softc *sc, struct mtx_ring *ring, int size,
 
 /* Synchronize the half-open descriptor range [first, last). */
 static void
-mtx_ring_descs_sync(struct mtx_softc *sc, struct mtx_ring *ring, int first,
+mtax_ring_descs_sync(struct mtax_softc *sc, struct mtax_ring *ring, int first,
     int last, int ops)
 {
 	int ndescs, nfirst;
@@ -602,24 +603,24 @@ mtx_ring_descs_sync(struct mtx_softc *sc, struct mtx_ring *ring, int first,
 }
 
 static void
-mtx_free_ring(struct mtx_softc *sc, struct mtx_ring *ring)
+mtax_free_ring(struct mtax_softc *sc, struct mtax_ring *ring)
 {
 	if (ring->desc_dma.map != NULL) {
 		KASSERT(ring->size > 0);
 		KASSERT(ring->tail >= 0 && ring->tail < ring->size);
 		KASSERT(ring->published >= 0 && ring->published < ring->size);
 
-		mtx_ring_descs_sync(sc, ring, ring->tail, ring->published,
+		mtax_ring_descs_sync(sc, ring, ring->tail, ring->published,
 		    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
 
-		mtx_write(sc, ring->reg_base + MTX_RING_CPU_IDX_OFS, 0);
-		mtx_write(sc, ring->reg_base + MTX_RING_DMA_IDX_OFS, 0);
-		mtx_write(sc, ring->reg_base + MTX_RING_SIZE_OFS, 0);
-		mtx_write(sc, ring->reg_base + MTX_RING_DESC_BASE_OFS, 0);
+		mtax_write(sc, ring->reg_base + MTAX_RING_CPU_IDX_OFS, 0);
+		mtax_write(sc, ring->reg_base + MTAX_RING_DMA_IDX_OFS, 0);
+		mtax_write(sc, ring->reg_base + MTAX_RING_SIZE_OFS, 0);
+		mtax_write(sc, ring->reg_base + MTAX_RING_DESC_BASE_OFS, 0);
 	}
 
 	ring->desc = NULL;
-	mtx_dma_free(&ring->desc_dma);
+	mtax_dma_free(&ring->desc_dma);
 	ring->reg_base = 0;
 	ring->head = 0;
 	ring->published = 0;
@@ -628,13 +629,13 @@ mtx_free_ring(struct mtx_softc *sc, struct mtx_ring *ring)
 }
 
 static int
-mtx_tx_ring_init(struct mtx_softc *sc, enum mtx_tx_ring_idx idx, int size,
+mtax_tx_ring_init(struct mtax_softc *sc, enum mtax_tx_ring_idx idx, int size,
     uint32_t reg_base)
 {
-	struct mtx_tx_ring *tx_ring = &sc->sc_tx_rings[idx];
+	struct mtax_tx_ring *tx_ring = &sc->sc_tx_rings[idx];
 	int error;
 
-	error = mtx_ring_init(sc, &tx_ring->base, size, reg_base);
+	error = mtax_ring_init(sc, &tx_ring->base, size, reg_base);
 	if (error)
 		return error;
 
@@ -646,12 +647,12 @@ mtx_tx_ring_init(struct mtx_softc *sc, enum mtx_tx_ring_idx idx, int size,
 }
 
 static int
-mtx_tx_addbuf(struct mtx_softc *sc, struct mtx_tx_ring *tx_ring,
+mtax_tx_addbuf(struct mtax_softc *sc, struct mtax_tx_ring *tx_ring,
     struct mbuf *m)
 {
-	struct mtx_ring *ring = &tx_ring->base;
-	struct mtx_tx_data *data;
-	struct mtx_ring_desc *desc;
+	struct mtax_ring *ring = &tx_ring->base;
+	struct mtax_tx_data *data;
+	struct mtax_ring_desc *desc;
 	bus_addr_t addr;
 	bus_size_t len, max_len;
 	uint32_t ctrl, info;
@@ -671,7 +672,7 @@ mtx_tx_addbuf(struct mtx_softc *sc, struct mtx_tx_ring *tx_ring,
 	KASSERT(data->m == NULL);
 
 	len = m->m_pkthdr.len;
-	max_len = __SHIFTOUT_MASK(MTX_DMA_CTL_SD_LEN0);
+	max_len = __SHIFTOUT_MASK(MTAX_DMA_CTL_SD_LEN0);
 	if (len == 0 || len > max_len)
 		return EFBIG;
 
@@ -695,9 +696,9 @@ mtx_tx_addbuf(struct mtx_softc *sc, struct mtx_tx_ring *tx_ring,
 		goto unload_map;
 	}
 
-	info = __SHIFTIN((uint64_t)addr >> 32, MTX_DMA_CTL_SDP0_H);
-	ctrl = __SHIFTIN(len, MTX_DMA_CTL_SD_LEN0) |
-	    MTX_DMA_CTL_LAST_SEC0;
+	info = __SHIFTIN((uint64_t)addr >> 32, MTAX_DMA_CTL_SDP0_H);
+	ctrl = __SHIFTIN(len, MTAX_DMA_CTL_SD_LEN0) |
+	    MTAX_DMA_CTL_LAST_SEC0;
 	desc->buf0 = htole32((uint32_t)addr);
 	desc->buf1 = 0;
 	desc->ctrl = htole32(ctrl);
@@ -719,10 +720,10 @@ destroy_map:
 }
 
 static void
-mtx_tx_ring_kick(struct mtx_softc *sc, struct mtx_tx_ring *tx_ring)
+mtax_tx_ring_kick(struct mtax_softc *sc, struct mtax_tx_ring *tx_ring)
 {
-	struct mtx_ring *ring = &tx_ring->base;
-	struct mtx_tx_data *data;
+	struct mtax_ring *ring = &tx_ring->base;
+	struct mtax_tx_data *data;
 	int first, idx;
 
 	KASSERT(ring->published >= 0 && ring->published < ring->size);
@@ -743,18 +744,18 @@ mtx_tx_ring_kick(struct mtx_softc *sc, struct mtx_tx_ring *tx_ring)
 		idx = (idx + 1) % ring->size;
 	}
 
-	mtx_ring_descs_sync(sc, ring, first, ring->head,
+	mtax_ring_descs_sync(sc, ring, first, ring->head,
 	    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 
-	mtx_write(sc, ring->reg_base + MTX_RING_CPU_IDX_OFS, ring->head);
+	mtax_write(sc, ring->reg_base + MTAX_RING_CPU_IDX_OFS, ring->head);
 	ring->published = ring->head;
 }
 
 static int
-mtx_tx_ring_reclaim(struct mtx_softc *sc, struct mtx_tx_ring *tx_ring)
+mtax_tx_ring_reclaim(struct mtax_softc *sc, struct mtax_tx_ring *tx_ring)
 {
-	struct mtx_ring *ring = &tx_ring->base;
-	struct mtx_tx_data *data;
+	struct mtax_ring *ring = &tx_ring->base;
+	struct mtax_tx_data *data;
 	struct mbuf *m;
 	uint32_t hw_idx;
 	int active, completed, dma_idx, idx, reclaimed;
@@ -766,8 +767,8 @@ mtx_tx_ring_reclaim(struct mtx_softc *sc, struct mtx_tx_ring *tx_ring)
 
 	reclaimed = 0;
 	while (ring->tail != ring->published) {
-		hw_idx = mtx_read(sc,
-		    ring->reg_base + MTX_RING_DMA_IDX_OFS);
+		hw_idx = mtax_read(sc,
+		    ring->reg_base + MTAX_RING_DMA_IDX_OFS);
 		if (hw_idx >= (uint32_t)ring->size) {
 			aprint_error_dev(sc->sc_dev,
 			    "TX ring %#x has invalid DMA index %u\n",
@@ -789,7 +790,7 @@ mtx_tx_ring_reclaim(struct mtx_softc *sc, struct mtx_tx_ring *tx_ring)
 		if (completed == 0)
 			break;
 
-		mtx_ring_descs_sync(sc, ring, ring->tail, dma_idx,
+		mtax_ring_descs_sync(sc, ring, ring->tail, dma_idx,
 		    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
 
 		while (completed-- > 0) {
@@ -814,11 +815,11 @@ mtx_tx_ring_reclaim(struct mtx_softc *sc, struct mtx_tx_ring *tx_ring)
 }
 
 static int
-mtx_rx_addbuf(struct mtx_softc *sc, struct mtx_rx_ring *rx_ring, int idx)
+mtax_rx_addbuf(struct mtax_softc *sc, struct mtax_rx_ring *rx_ring, int idx)
 {
-	struct mtx_ring *ring = &rx_ring->base;
-	struct mtx_rx_data *data;
-	struct mtx_ring_desc *desc;
+	struct mtax_ring *ring = &rx_ring->base;
+	struct mtax_rx_data *data;
+	struct mtax_ring_desc *desc;
 	bus_addr_t addr;
 	struct mbuf *m;
 	uint32_t buf1, ctrl;
@@ -839,11 +840,11 @@ mtx_rx_addbuf(struct mtx_softc *sc, struct mtx_rx_ring *rx_ring, int idx)
 		m_freem(m);
 		return ENOBUFS;
 	}
-	m->m_len = m->m_pkthdr.len = MTX_RX_BUF_SIZE;
+	m->m_len = m->m_pkthdr.len = MTAX_RX_BUF_SIZE;
 
 	if (data->map == NULL) {
-		error = bus_dmamap_create(sc->sc_dmat, MTX_RX_BUF_SIZE, 1,
-		    MTX_RX_BUF_SIZE, 0, BUS_DMA_NOWAIT | BUS_DMA_ALLOCNOW,
+		error = bus_dmamap_create(sc->sc_dmat, MTAX_RX_BUF_SIZE, 1,
+		    MTAX_RX_BUF_SIZE, 0, BUS_DMA_NOWAIT | BUS_DMA_ALLOCNOW,
 		    &data->map);
 		if (error)
 			goto free_mbuf;
@@ -862,8 +863,8 @@ mtx_rx_addbuf(struct mtx_softc *sc, struct mtx_rx_ring *rx_ring, int idx)
 		goto unload_map;
 	}
 
-	buf1 = __SHIFTIN((uint64_t)addr >> 32, MTX_DMA_CTL_SDP0_H);
-	ctrl = __SHIFTIN(MTX_RX_BUF_SIZE, MTX_DMA_CTL_SD_LEN0);
+	buf1 = __SHIFTIN((uint64_t)addr >> 32, MTAX_DMA_CTL_SDP0_H);
+	ctrl = __SHIFTIN(MTAX_RX_BUF_SIZE, MTAX_DMA_CTL_SD_LEN0);
 	desc->buf0 = htole32((uint32_t)addr);
 	desc->buf1 = htole32(buf1);
 	desc->ctrl = htole32(ctrl);
@@ -885,10 +886,10 @@ free_mbuf:
 }
 
 static void
-mtx_rx_ring_kick(struct mtx_softc *sc, struct mtx_rx_ring *rx_ring)
+mtax_rx_ring_kick(struct mtax_softc *sc, struct mtax_rx_ring *rx_ring)
 {
-	struct mtx_ring *ring = &rx_ring->base;
-	struct mtx_rx_data *data;
+	struct mtax_ring *ring = &rx_ring->base;
+	struct mtax_rx_data *data;
 	int first, idx;
 
 	KASSERT(ring->published >= 0 && ring->published < ring->size);
@@ -909,19 +910,19 @@ mtx_rx_ring_kick(struct mtx_softc *sc, struct mtx_rx_ring *rx_ring)
 		idx = (idx + 1) % ring->size;
 	}
 
-	mtx_ring_descs_sync(sc, ring, first, ring->head,
+	mtax_ring_descs_sync(sc, ring, first, ring->head,
 	    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 
-	mtx_write(sc, ring->reg_base + MTX_RING_CPU_IDX_OFS, ring->head);
+	mtax_write(sc, ring->reg_base + MTAX_RING_CPU_IDX_OFS, ring->head);
 	ring->published = ring->head;
 }
 
 static struct mbuf *
-mtx_rx_ring_dequeue(struct mtx_softc *sc, struct mtx_rx_ring *rx_ring)
+mtax_rx_ring_dequeue(struct mtax_softc *sc, struct mtax_rx_ring *rx_ring)
 {
-	struct mtx_ring *ring = &rx_ring->base;
-	struct mtx_rx_data *data;
-	struct mtx_ring_desc *desc;
+	struct mtax_ring *ring = &rx_ring->base;
+	struct mtax_rx_data *data;
+	struct mtax_ring_desc *desc;
 	struct mbuf *m;
 	uint32_t ctrl;
 	int idx, len;
@@ -940,11 +941,11 @@ mtx_rx_ring_dequeue(struct mtx_softc *sc, struct mtx_rx_ring *rx_ring)
 	KASSERT(data->m != NULL);
 	KASSERT(data->map != NULL);
 
-	mtx_ring_descs_sync(sc, ring, idx, (idx + 1) % ring->size,
+	mtax_ring_descs_sync(sc, ring, idx, (idx + 1) % ring->size,
 	    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
 	ctrl = le32toh(desc->ctrl);
-	if ((ctrl & MTX_DMA_CTL_DMA_DONE) == 0) {
-		mtx_ring_descs_sync(sc, ring, idx, (idx + 1) % ring->size,
+	if ((ctrl & MTAX_DMA_CTL_DMA_DONE) == 0) {
+		mtax_ring_descs_sync(sc, ring, idx, (idx + 1) % ring->size,
 		    BUS_DMASYNC_PREREAD);
 		return NULL;
 	}
@@ -953,7 +954,7 @@ mtx_rx_ring_dequeue(struct mtx_softc *sc, struct mtx_rx_ring *rx_ring)
 	    data->map->dm_mapsize, BUS_DMASYNC_POSTREAD);
 	bus_dmamap_unload(sc->sc_dmat, data->map);
 
-	len = __SHIFTOUT(ctrl, MTX_DMA_CTL_SD_LEN0);
+	len = __SHIFTOUT(ctrl, MTAX_DMA_CTL_SD_LEN0);
 	m = data->m;
 	m->m_len = m->m_pkthdr.len = len;
 	data->m = NULL;
@@ -963,36 +964,36 @@ mtx_rx_ring_dequeue(struct mtx_softc *sc, struct mtx_rx_ring *rx_ring)
 }
 
 static int
-mtx_rx_ring_fill(struct mtx_softc *sc, struct mtx_rx_ring *rx_ring)
+mtax_rx_ring_fill(struct mtax_softc *sc, struct mtax_rx_ring *rx_ring)
 {
-	struct mtx_ring *ring = &rx_ring->base;
+	struct mtax_ring *ring = &rx_ring->base;
 	int error;
 
 	error = 0;
 
 	while ((ring->head + 1) % ring->size != ring->tail) {
-		error = mtx_rx_addbuf(sc, rx_ring, ring->head);
+		error = mtax_rx_addbuf(sc, rx_ring, ring->head);
 		if (error)
 			break;
 
 		ring->head = (ring->head + 1) % ring->size;
 	}
 
-	mtx_rx_ring_kick(sc, rx_ring);
+	mtax_rx_ring_kick(sc, rx_ring);
 
 	return error;
 }
 
 static void
-mtx_rx_ring_process(struct mtx_softc *sc, struct mtx_rx_ring *rx_ring)
+mtax_rx_ring_process(struct mtax_softc *sc, struct mtax_rx_ring *rx_ring)
 {
 	struct mbuf *m;
 	int error;
 
-	while ((m = mtx_rx_ring_dequeue(sc, rx_ring)) != NULL)
-		mtx_mcu_rx(sc, m);
+	while ((m = mtax_rx_ring_dequeue(sc, rx_ring)) != NULL)
+		mtax_mcu_rx(sc, m);
 
-	error = mtx_rx_ring_fill(sc, rx_ring);
+	error = mtax_rx_ring_fill(sc, rx_ring);
 	if (error) {
 		aprint_error_dev(sc->sc_dev,
 		    "could not refill RX ring %#x: %d\n",
@@ -1001,13 +1002,13 @@ mtx_rx_ring_process(struct mtx_softc *sc, struct mtx_rx_ring *rx_ring)
 }
 
 static int
-mtx_rx_ring_init(struct mtx_softc *sc, enum mtx_rx_ring_idx idx, int size,
+mtax_rx_ring_init(struct mtax_softc *sc, enum mtax_rx_ring_idx idx, int size,
     uint32_t reg_base)
 {
-	struct mtx_rx_ring *rx_ring = &sc->sc_rx_rings[idx];
+	struct mtax_rx_ring *rx_ring = &sc->sc_rx_rings[idx];
 	int error;
 
-	error = mtx_ring_init(sc, &rx_ring->base, size, reg_base);
+	error = mtax_ring_init(sc, &rx_ring->base, size, reg_base);
 	if (error)
 		return error;
 
@@ -1015,15 +1016,15 @@ mtx_rx_ring_init(struct mtx_softc *sc, enum mtx_rx_ring_idx idx, int size,
 	rx_ring->entries = kmem_zalloc(size * sizeof(*rx_ring->entries),
 	    KM_SLEEP);
 
-	return mtx_rx_ring_fill(sc, rx_ring);
+	return mtax_rx_ring_fill(sc, rx_ring);
 }
 
 static void
-mtx_free_tx_ring(struct mtx_softc *sc, enum mtx_tx_ring_idx idx)
+mtax_free_tx_ring(struct mtax_softc *sc, enum mtax_tx_ring_idx idx)
 {
-	struct mtx_tx_ring *tx_ring = &sc->sc_tx_rings[idx];
-	struct mtx_ring *ring = &tx_ring->base;
-	struct mtx_tx_data *data;
+	struct mtax_tx_ring *tx_ring = &sc->sc_tx_rings[idx];
+	struct mtax_ring *ring = &tx_ring->base;
+	struct mtax_tx_data *data;
 	int i;
 
 	if (tx_ring->entries != NULL) {
@@ -1057,15 +1058,15 @@ mtx_free_tx_ring(struct mtx_softc *sc, enum mtx_tx_ring_idx idx)
 		tx_ring->entries = NULL;
 	}
 
-	mtx_free_ring(sc, ring);
+	mtax_free_ring(sc, ring);
 }
 
 static void
-mtx_free_rx_ring(struct mtx_softc *sc, enum mtx_rx_ring_idx idx)
+mtax_free_rx_ring(struct mtax_softc *sc, enum mtax_rx_ring_idx idx)
 {
-	struct mtx_rx_ring *rx_ring = &sc->sc_rx_rings[idx];
-	struct mtx_ring *ring = &rx_ring->base;
-	struct mtx_rx_data *data;
+	struct mtax_rx_ring *rx_ring = &sc->sc_rx_rings[idx];
+	struct mtax_ring *ring = &rx_ring->base;
+	struct mtax_rx_data *data;
 	int i;
 
 	if (rx_ring->entries != NULL) {
@@ -1099,22 +1100,22 @@ mtx_free_rx_ring(struct mtx_softc *sc, enum mtx_rx_ring_idx idx)
 		rx_ring->entries = NULL;
 	}
 
-	mtx_free_ring(sc, ring);
+	mtax_free_ring(sc, ring);
 }
 
 static void __unused
-mtx_free_rings(struct mtx_softc *sc)
+mtax_free_rings(struct mtax_softc *sc)
 {
 	int i;
 
-	for (i = MTX_NUM_RX_RINGS - 1; i >= 0; i--)
-		mtx_free_rx_ring(sc, i);
-	for (i = MTX_NUM_TX_RINGS - 1; i >= 0; i--)
-		mtx_free_tx_ring(sc, i);
+	for (i = MTAX_NUM_RX_RINGS - 1; i >= 0; i--)
+		mtax_free_rx_ring(sc, i);
+	for (i = MTAX_NUM_TX_RINGS - 1; i >= 0; i--)
+		mtax_free_tx_ring(sc, i);
 }
 
 static void
-mtx_pci_enable(struct mtx_softc *sc)
+mtax_pci_enable(struct mtax_softc *sc)
 {
 	pcireg_t reg;
 
@@ -1128,52 +1129,52 @@ mtx_pci_enable(struct mtx_softc *sc)
 	pci_conf_write(sc->sc_pct, sc->sc_pcitag,
 	    PCI_COMMAND_STATUS_REG, reg);
 
-	mtx_write(sc, MTX_PCIE_MAC_INT_ENABLE, 0xff);
+	mtax_write(sc, MTAX_PCIE_MAC_INT_ENABLE, 0xff);
 }
 
 static int
-mtx_init_dma(struct mtx_softc *sc)
+mtax_init_dma(struct mtax_softc *sc)
 {
 	int error;
 
 	sc->sc_intr_mask = 0;
-	mtx_write(sc, MTX_WFDMA0_HOST_INT_ENA, 0);
+	mtax_write(sc, MTAX_WFDMA0_HOST_INT_ENA, 0);
 
-	error = mtx_wfdma_disable(sc, true);
+	error = mtax_wfdma_disable(sc, true);
 	if (error)
 		return error;
 
-	error = mtx_tx_ring_init(sc, MTX_TX_RING_MCU,
-	    MTX_TX_MCU_RING_SIZE, MTX_TX_RING_MCU_BASE);
+	error = mtax_tx_ring_init(sc, MTAX_TX_RING_MCU,
+	    MTAX_TX_MCU_RING_SIZE, MTAX_TX_RING_MCU_BASE);
 	if (error)
 		return error;
 
-	error = mtx_tx_ring_init(sc, MTX_TX_RING_MCU_FWDL,
-	    MTX_TX_FWDL_RING_SIZE, MTX_TX_RING_FWDL_BASE);
+	error = mtax_tx_ring_init(sc, MTAX_TX_RING_MCU_FWDL,
+	    MTAX_TX_FWDL_RING_SIZE, MTAX_TX_RING_FWDL_BASE);
 	if (error)
 		return error;
 
-	error = mtx_rx_ring_init(sc, MTX_RX_RING_MCU_BOOT,
-	    MTX_RX_MCU_BOOT_RING_SIZE, MTX_RX_RING_MCU_BOOT_BASE);
+	error = mtax_rx_ring_init(sc, MTAX_RX_RING_MCU_BOOT,
+	    MTAX_RX_MCU_BOOT_RING_SIZE, MTAX_RX_RING_MCU_BOOT_BASE);
 	if (error)
 		return error;
 
-	error = mtx_rx_ring_init(sc, MTX_RX_RING_MCU,
-	    MTX_RX_MCU_RING_SIZE, MTX_RX_RING_MCU_BASE);
+	error = mtax_rx_ring_init(sc, MTAX_RX_RING_MCU,
+	    MTAX_RX_MCU_RING_SIZE, MTAX_RX_RING_MCU_BASE);
 	if (error)
 		return error;
 
-	mtx_pci_enable(sc);
-	mtx_wfdma_enable(sc);
+	mtax_pci_enable(sc);
+	mtax_wfdma_enable(sc);
 
 	return 0;
 }
 
 static int
-mtx_mcu_msg_alloc(uint8_t cid, uint8_t seq, const void *payload,
+mtax_mcu_msg_alloc(uint8_t cid, uint8_t seq, const void *payload,
     size_t payload_len, struct mbuf **mp)
 {
-	struct mtx_mcu_txd *txd;
+	struct mtax_mcu_txd *txd;
 	struct mbuf *m;
 	size_t msg_len;
 	uint32_t val;
@@ -1197,28 +1198,28 @@ mtx_mcu_msg_alloc(uint8_t cid, uint8_t seq, const void *payload,
 		}
 	}
 
-	txd = mtod(m, struct mtx_mcu_txd *);
+	txd = mtod(m, struct mtax_mcu_txd *);
 	memset(txd, 0, sizeof(*txd));
 	if (payload_len != 0)
 		memcpy(txd + 1, payload, payload_len);
 
-	val = __SHIFTIN((uint32_t)msg_len, MTX_TXD0_TX_BYTES) |
-	    __SHIFTIN(MTX_TX_TYPE_CMD, MTX_TXD0_PKT_FMT) |
-	    __SHIFTIN(MTX_TX_MCU_PORT_RX_Q0, MTX_TXD0_Q_IDX);
+	val = __SHIFTIN((uint32_t)msg_len, MTAX_TXD0_TX_BYTES) |
+	    __SHIFTIN(MTAX_TX_TYPE_CMD, MTAX_TXD0_PKT_FMT) |
+	    __SHIFTIN(MTAX_TX_MCU_PORT_RX_Q0, MTAX_TXD0_Q_IDX);
 	txd->txd[0] = htole32(val);
 
-	val = MTX_TXD1_LONG_FORMAT |
-	    __SHIFTIN(MTX_HDR_FORMAT_CMD, MTX_TXD1_HDR_FORMAT);
+	val = MTAX_TXD1_LONG_FORMAT |
+	    __SHIFTIN(MTAX_HDR_FORMAT_CMD, MTAX_TXD1_HDR_FORMAT);
 	txd->txd[1] = htole32(val);
 
 	txd->len = htole16((uint16_t)(msg_len - sizeof(txd->txd)));
-	txd->pq_id = htole16(MTX_MCU_PQ_ID(MTX_TX_PORT_IDX_MCU,
-	    MTX_TX_MCU_PORT_RX_Q0));
+	txd->pq_id = htole16(MTAX_MCU_PQ_ID(MTAX_TX_PORT_IDX_MCU,
+	    MTAX_TX_MCU_PORT_RX_Q0));
 	txd->cid = cid;
-	txd->pkt_type = MTX_MCU_PKT_ID;
-	txd->set_query = MTX_MCU_Q_NA;
+	txd->pkt_type = MTAX_MCU_PKT_ID;
+	txd->set_query = MTAX_MCU_Q_NA;
 	txd->seq = seq;
-	txd->s2d_index = MTX_MCU_S2D_H2N;
+	txd->s2d_index = MTAX_MCU_S2D_H2N;
 
 	m->m_len = m->m_pkthdr.len = (int)msg_len;
 	*mp = m;
@@ -1227,9 +1228,9 @@ mtx_mcu_msg_alloc(uint8_t cid, uint8_t seq, const void *payload,
 }
 
 static void
-mtx_mcu_rx(struct mtx_softc *sc, struct mbuf *m)
+mtax_mcu_rx(struct mtax_softc *sc, struct mbuf *m)
 {
-	struct mtx_mcu_rxd *rxd;
+	struct mtax_mcu_rxd *rxd;
 
 	KASSERT(m != NULL);
 	KASSERT(m->m_flags & M_PKTHDR);
@@ -1241,9 +1242,9 @@ mtx_mcu_rx(struct mtx_softc *sc, struct mbuf *m)
 		return;
 	}
 
-	rxd = mtod(m, struct mtx_mcu_rxd *);
+	rxd = mtod(m, struct mtax_mcu_rxd *);
 
-	mutex_enter(&sc->sc_mcu_resp_mtx);
+	mutex_enter(&sc->sc_mcu_resp_mtax);
 	if (sc->sc_mcu_wait_seq != 0 &&
 	    sc->sc_mcu_response == NULL &&
 	    rxd->seq == sc->sc_mcu_wait_seq) {
@@ -1251,16 +1252,16 @@ mtx_mcu_rx(struct mtx_softc *sc, struct mbuf *m)
 		m = NULL;
 		cv_signal(&sc->sc_mcu_cv);
 	}
-	mutex_exit(&sc->sc_mcu_resp_mtx);
+	mutex_exit(&sc->sc_mcu_resp_mtax);
 
 	if (m != NULL)
 		m_freem(m);
 }
 
 static uint8_t
-mtx_mcu_next_seq(struct mtx_softc *sc)
+mtax_mcu_next_seq(struct mtax_softc *sc)
 {
-	KASSERT(mutex_owned(&sc->sc_mcu_send_mtx));
+	KASSERT(mutex_owned(&sc->sc_mcu_send_mtax));
 
 	sc->sc_mcu_seq++;
 	if (sc->sc_mcu_seq > 0xf)
@@ -1270,48 +1271,48 @@ mtx_mcu_next_seq(struct mtx_softc *sc)
 }
 
 static int
-mtx_mcu_enqueue_legacy(struct mtx_softc *sc, uint8_t cid, uint8_t seq,
+mtax_mcu_enqueue_legacy(struct mtax_softc *sc, uint8_t cid, uint8_t seq,
     const void *payload, size_t payload_len)
 {
-	struct mtx_tx_ring *ring = &sc->sc_tx_rings[MTX_TX_RING_MCU];
+	struct mtax_tx_ring *ring = &sc->sc_tx_rings[MTAX_TX_RING_MCU];
 	struct mbuf *m;
 	int error;
 
-	KASSERT(mutex_owned(&sc->sc_mcu_send_mtx));
+	KASSERT(mutex_owned(&sc->sc_mcu_send_mtax));
 
-	error = mtx_mcu_msg_alloc(cid, seq, payload, payload_len, &m);
+	error = mtax_mcu_msg_alloc(cid, seq, payload, payload_len, &m);
 	if (error)
 		return error;
 
-	error = mtx_tx_addbuf(sc, ring, m);
+	error = mtax_tx_addbuf(sc, ring, m);
 	if (error) {
 		m_freem(m);
 		return error;
 	}
 
-	mtx_tx_ring_kick(sc, ring);
+	mtax_tx_ring_kick(sc, ring);
 
 	return 0;
 }
 
 static int
-mtx_mcu_send_legacy(struct mtx_softc *sc, uint8_t cid,
+mtax_mcu_send_legacy(struct mtax_softc *sc, uint8_t cid,
     const void *payload, size_t payload_len)
 {
 	uint8_t seq;
 	int error;
 
-	mutex_enter(&sc->sc_mcu_send_mtx);
-	seq = mtx_mcu_next_seq(sc);
-	error = mtx_mcu_enqueue_legacy(sc, cid, seq, payload, payload_len);
-	mutex_exit(&sc->sc_mcu_send_mtx);
+	mutex_enter(&sc->sc_mcu_send_mtax);
+	seq = mtax_mcu_next_seq(sc);
+	error = mtax_mcu_enqueue_legacy(sc, cid, seq, payload, payload_len);
+	mutex_exit(&sc->sc_mcu_send_mtax);
 
 	return error;
 }
 
 /* On success, the caller owns the mbuf returned in responsep. */
 static int __unused
-mtx_mcu_send_legacy_wait(struct mtx_softc *sc, uint8_t cid,
+mtax_mcu_send_legacy_wait(struct mtax_softc *sc, uint8_t cid,
     const void *payload, size_t payload_len, struct mbuf **responsep)
 {
 	struct mbuf *response;
@@ -1320,26 +1321,26 @@ mtx_mcu_send_legacy_wait(struct mtx_softc *sc, uint8_t cid,
 
 	KASSERT(responsep != NULL);
 	*responsep = NULL;
-	timeout = mstohz(MTX_MCU_TIMEOUT_MS);
+	timeout = mstohz(MTAX_MCU_TIMEOUT_MS);
 	KASSERT(timeout > 0);
 
-	mutex_enter(&sc->sc_mcu_send_mtx);
-	seq = mtx_mcu_next_seq(sc);
+	mutex_enter(&sc->sc_mcu_send_mtax);
+	seq = mtax_mcu_next_seq(sc);
 
-	mutex_enter(&sc->sc_mcu_resp_mtx);
+	mutex_enter(&sc->sc_mcu_resp_mtax);
 	KASSERT(sc->sc_mcu_wait_seq == 0);
 	KASSERT(sc->sc_mcu_response == NULL);
 	sc->sc_mcu_wait_seq = seq;
 
-	error = mtx_mcu_enqueue_legacy(sc, cid, seq, payload, payload_len);
+	error = mtax_mcu_enqueue_legacy(sc, cid, seq, payload, payload_len);
 	while (error == 0 && sc->sc_mcu_response == NULL)
 		error = cv_timedwait(&sc->sc_mcu_cv,
-		    &sc->sc_mcu_resp_mtx, timeout);
+		    &sc->sc_mcu_resp_mtax, timeout);
 
 	response = sc->sc_mcu_response;
 	sc->sc_mcu_response = NULL;
 	sc->sc_mcu_wait_seq = 0;
-	mutex_exit(&sc->sc_mcu_resp_mtx);
+	mutex_exit(&sc->sc_mcu_resp_mtax);
 
 	if (response != NULL) {
 		*responsep = response;
@@ -1348,13 +1349,13 @@ mtx_mcu_send_legacy_wait(struct mtx_softc *sc, uint8_t cid,
 		error = ETIMEDOUT;
 	}
 
-	mutex_exit(&sc->sc_mcu_send_mtx);
+	mutex_exit(&sc->sc_mcu_send_mtax);
 
 	return error;
 }
 
 static int
-mtx_mcu_restart(struct mtx_softc *sc)
+mtax_mcu_restart(struct mtax_softc *sc)
 {
 	struct {
 		uint8_t power_mode;
@@ -1363,25 +1364,25 @@ mtx_mcu_restart(struct mtx_softc *sc)
 		.power_mode = 1,
 	};
 
-	return mtx_mcu_send_legacy(sc, MTX_MCU_CMD_NIC_POWER_CTRL,
+	return mtax_mcu_send_legacy(sc, MTAX_MCU_CMD_NIC_POWER_CTRL,
 	    &req, sizeof(req));
 }
 
 static int
-mtx_init_mcu(struct mtx_softc *sc)
+mtax_init_mcu(struct mtax_softc *sc)
 {
-	return mtx_mcu_restart(sc);
+	return mtax_mcu_restart(sc);
 }
 
 static void
-mtx_attach_hook(device_t self)
+mtax_attach_hook(device_t self)
 {
-	struct mtx_softc *sc = device_private(self);
+	struct mtax_softc *sc = device_private(self);
 	char intrbuf[PCI_INTRSTR_LEN];
 	const char *intrstr;
 	int err, chipid, rev;
 
-	sc->sc_soft_ih = softint_establish(SOFTINT_NET, mtx_softintr, sc);
+	sc->sc_soft_ih = softint_establish(SOFTINT_NET, mtax_softintr, sc);
 	if (sc->sc_soft_ih == NULL) {
 		aprint_error_dev(self, "can't establish soft interrupt\n");
 		return;
@@ -1390,7 +1391,7 @@ mtx_attach_hook(device_t self)
 	intrstr = pci_intr_string(sc->sc_pct, sc->sc_pihp[0], intrbuf,
 	    sizeof(intrbuf));
 	sc->sc_ih = pci_intr_establish_xname(sc->sc_pct, sc->sc_pihp[0],
-	    IPL_NET, mtx_intr, sc, device_xname(self));
+	    IPL_NET, mtax_intr, sc, device_xname(self));
 	if (sc->sc_ih == NULL) {
 		aprint_error_dev(self, "can't establish interrupt");
 		if (intrstr != NULL)
@@ -1403,31 +1404,31 @@ mtx_attach_hook(device_t self)
 	}
 	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
-	err = mtx_mcu_fw_pmctrl(sc);
+	err = mtax_mcu_fw_pmctrl(sc);
 	if (err)
 		return;
 
-	err = mtx_mcu_drv_pmctrl(sc);
+	err = mtax_mcu_drv_pmctrl(sc);
 	if (err)
 		return;
 
-	chipid = mtx_read(sc, MTX_HW_CHIPID);
-	rev = mtx_read(sc, MTX_HW_REV);
+	chipid = mtax_read(sc, MTAX_HW_CHIPID);
+	rev = mtax_read(sc, MTAX_HW_REV);
 	device_printf(sc->sc_dev, "chip ID: %04x, rev %04x\n", chipid, rev);
 
-	err = mtx_wfsys_reset(sc);
+	err = mtax_wfsys_reset(sc);
 	if (err) {
 		device_printf(sc->sc_dev, "wfsys reset failed");
 		return;
 	}
 
-	err = mtx_init_dma(sc);
+	err = mtax_init_dma(sc);
 	if (err) {
 		aprint_error_dev(self, "DMA initialization failed: %d\n", err);
 		return;
 	}
 
-	err = mtx_init_mcu(sc);
+	err = mtax_init_mcu(sc);
 	if (err) {
 		aprint_error_dev(self, "MCU initialization failed: %d\n", err);
 		return;
@@ -1435,9 +1436,9 @@ mtx_attach_hook(device_t self)
 }
 
 static void
-mtx_attach(device_t parent, device_t self, void *aux)
+mtax_attach(device_t parent, device_t self, void *aux)
 {
-	struct mtx_softc *sc = device_private(self);
+	struct mtax_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
 	pcireg_t reg, memtype;
 	int err;
@@ -1447,9 +1448,9 @@ mtx_attach(device_t parent, device_t self, void *aux)
 	sc->sc_pcitag = pa->pa_tag;
 	sc->sc_dmat = pa->pa_dmat;
 	sc->sc_intr_mask = 0;
-	mutex_init(&sc->sc_mcu_send_mtx, MUTEX_DEFAULT, IPL_NONE);
-	mutex_init(&sc->sc_mcu_resp_mtx, MUTEX_DEFAULT, IPL_SOFTNET);
-	cv_init(&sc->sc_mcu_cv, "mtxmcu");
+	mutex_init(&sc->sc_mcu_send_mtax, MUTEX_DEFAULT, IPL_NONE);
+	mutex_init(&sc->sc_mcu_resp_mtax, MUTEX_DEFAULT, IPL_SOFTNET);
+	cv_init(&sc->sc_mcu_cv, "mtaxmcu");
 	sc->sc_mcu_response = NULL;
 	sc->sc_mcu_seq = 0;
 	sc->sc_mcu_wait_seq = 0;
@@ -1478,8 +1479,8 @@ mtx_attach(device_t parent, device_t self, void *aux)
 
 	/* Resetting needs register polls with delays, so defer it so we
 	 * don't hold up boot */
-	config_mountroot(self, &mtx_attach_hook);
+	config_mountroot(self, &mtax_attach_hook);
 }
 
-CFATTACH_DECL_NEW(mtx, sizeof(struct mtx_softc), mtx_match, mtx_attach,
+CFATTACH_DECL_NEW(mtax, sizeof(struct mtax_softc), mtax_match, mtax_attach,
 	NULL, NULL);
