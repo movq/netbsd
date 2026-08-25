@@ -28,6 +28,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,7 +38,11 @@
 
 #include "veracrypt.h"
 
+#define AES_XTS_128_KEY_SIZE	32
+#define AES_XTS_256_KEY_SIZE	64
+
 static int	backing_open(const char *, char *, size_t, uint64_t *);
+static ssize_t	keyfile_read(const char *, uint8_t[VC_VOLUME_KEY_SIZE]);
 static void	usage(void) __dead;
 
 static int
@@ -95,6 +100,49 @@ fail:
 	return -1;
 }
 
+static ssize_t
+keyfile_read(const char *path, uint8_t key[VC_VOLUME_KEY_SIZE])
+{
+	uint8_t input[VC_VOLUME_KEY_SIZE + 1];
+	size_t done;
+	ssize_t n, result;
+	int fd, saved_errno;
+
+	memset(input, 0, sizeof(input));
+	fd = open(path, O_RDONLY | O_CLOEXEC);
+	if (fd == -1)
+		return -1;
+
+	done = 0;
+	while (done < sizeof(input)) {
+		n = read(fd, input + done, sizeof(input) - done);
+		if (n == -1) {
+			if (errno == EINTR)
+				continue;
+			result = -1;
+			goto out;
+		}
+		if (n == 0)
+			break;
+		done += (size_t)n;
+	}
+
+	if (done != AES_XTS_128_KEY_SIZE &&
+	    done != AES_XTS_256_KEY_SIZE) {
+		result = 0;
+		goto out;
+	}
+	memcpy(key, input, done);
+	result = (ssize_t)done;
+
+out:
+	saved_errno = errno;
+	explicit_memset(input, 0, sizeof(input));
+	close(fd);
+	errno = saved_errno;
+	return result;
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -104,14 +152,30 @@ main(int argc, char *argv[])
 	uint8_t volume_key[VC_VOLUME_KEY_SIZE];
 	char backing_path[MAXPATHLEN], cgd_path[MAXPATHLEN];
 	char passphrase[VC_PASSWORD_MAX + 1], why[160];
+	const char *keyfile = NULL;
 	char *end;
-	uint64_t device_size;
-	intmax_t pim_value = 0;
+	uint64_t data_offset, device_size, raw_offset = 0;
+	uintmax_t offset_value;
+	intmax_t pim_value;
+	ssize_t key_size;
 	uint32_t pim = 0;
 	int backing_fd = -1, cgd_fd = -1, ch, error = 1, parse_error;
+	bool offset_set = false, pim_set = false;
 
-	while ((ch = getopt(argc, argv, "p:")) != -1) {
+	while ((ch = getopt(argc, argv, "k:o:p:")) != -1) {
 		switch (ch) {
+		case 'k':
+			keyfile = optarg;
+			break;
+		case 'o':
+			end = NULL;
+			offset_value = strtou(optarg, &end, 10, 0,
+			    UINT64_MAX / DEV_BSIZE, &parse_error);
+			if (parse_error != 0 || end == optarg || *end != '\0')
+				errx(1, "invalid sector offset: %s", optarg);
+			raw_offset = (uint64_t)offset_value;
+			offset_set = true;
+			break;
 		case 'p':
 			end = NULL;
 			pim_value = strtoi(optarg, &end, 10, 0, VC_PIM_MAX,
@@ -119,6 +183,7 @@ main(int argc, char *argv[])
 			if (parse_error != 0 || end == optarg || *end != '\0')
 				errx(1, "invalid PIM: %s", optarg);
 			pim = (uint32_t)pim_value;
+			pim_set = true;
 			break;
 		default:
 			usage();
@@ -128,6 +193,12 @@ main(int argc, char *argv[])
 	argv += optind;
 	if (argc != 2)
 		usage();
+	if (keyfile != NULL && !offset_set)
+		errx(1, "-k requires -o");
+	if (keyfile == NULL && offset_set)
+		errx(1, "-o requires -k");
+	if (keyfile != NULL && pim_set)
+		errx(1, "-p cannot be used with -k");
 
 	memset(&ci, 0, sizeof(ci));
 	memset(&cgu, 0, sizeof(cgu));
@@ -148,23 +219,44 @@ main(int argc, char *argv[])
 	if (cgu.cgu_dev != 0)
 		errx(1, "%s is already in use", cgd_path);
 
-	if (getpassfd("Passphrase: ", passphrase, sizeof(passphrase), NULL,
-	    GETPASS_NEED_TTY, 0) == NULL) {
-		warn("could not read passphrase");
-		goto out;
-	}
-	if (vc_read_unlock(backing_fd, device_size, passphrase,
-	    strlen(passphrase), pim, &mapping, volume_key, why,
-	    sizeof(why)) == -1) {
-		warnx("%s", why);
-		goto out;
+	if (keyfile != NULL) {
+		key_size = keyfile_read(keyfile, volume_key);
+		if (key_size == -1) {
+			warn("%s", keyfile);
+			goto out;
+		}
+		if (key_size == 0) {
+			warnx("%s must contain exactly 32 or 64 bytes", keyfile);
+			goto out;
+		}
+		data_offset = raw_offset * DEV_BSIZE;
+		if (data_offset >= device_size) {
+			warnx("sector offset extends beyond %s", backing_path);
+			goto out;
+		}
+		mapping.data_offset = data_offset;
+		mapping.data_length = device_size - data_offset;
+		mapping.iv_offset = raw_offset;
+	} else {
+		if (getpassfd("Passphrase: ", passphrase, sizeof(passphrase),
+		    NULL, GETPASS_NEED_TTY, 0) == NULL) {
+			warn("could not read passphrase");
+			goto out;
+		}
+		if (vc_read_unlock(backing_fd, device_size, passphrase,
+		    strlen(passphrase), pim, &mapping, volume_key, why,
+		    sizeof(why)) == -1) {
+			warnx("%s", why);
+			goto out;
+		}
+		key_size = VC_VOLUME_KEY_SIZE;
 	}
 	explicit_memset(passphrase, 0, sizeof(passphrase));
 
 	ci.ci_disk = backing_path;
 	ci.ci_alg = "aes-xts";
 	ci.ci_ivmethod = "encblkno1";
-	ci.ci_keylen = VC_VOLUME_KEY_SIZE * NBBY;
+	ci.ci_keylen = (size_t)key_size * NBBY;
 	ci.ci_key = (const char *)volume_key;
 	ci.ci_blocksize = 128;
 	ci.ci_data_offset = mapping.data_offset;
@@ -192,6 +284,8 @@ out:
 static void
 usage(void)
 {
-	fprintf(stderr, "usage: vcconfig [-p pim] cgd device\n");
+	fprintf(stderr,
+	    "usage: vcconfig [-p pim] cgd device\n"
+	    "       vcconfig -k keyfile -o sectors cgd device\n");
 	exit(1);
 }

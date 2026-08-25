@@ -19,14 +19,19 @@
 .Os
 .Sh NAME
 .Nm vcconfig
-.Nd configure a cgd device from a VeraCrypt volume
+.Nd configure a VeraCrypt or raw AES-XTS cgd device
 .Sh SYNOPSIS
 .Nm
 .Op Fl p Ar pim
 .Ar cgd
 .Ar device
+.Nm
+.Fl k Ar keyfile
+.Fl o Ar sectors
+.Ar cgd
+.Ar device
 .Sh DESCRIPTION
-The
+By default, the
 .Nm
 utility reads a VeraCrypt header from the disk partition
 .Ar device ,
@@ -38,8 +43,35 @@ as an AES-XTS mapping of the encrypted data area.
 No cgd metadata is stored on the backing partition.
 The backing device must use 512-byte logical sectors.
 .Pp
+Alternatively,
+.Fl k
+and
+.Fl o
+configure a raw AES-XTS mapping compatible with the dm-crypt
+.Sq aes-xts-plain64
+mode.
+The raw binary key file must contain exactly 32 or 64 bytes.
+The first half is the AES data key and the second half is the AES tweak key.
+The offset is specified in 512-byte sectors and applies both to the start of
+the encrypted data on the backing device and to the XTS IV sector number.
+The mapping extends from the offset to the end of the backing device.
+.Pp
 The options are as follows:
 .Bl -tag -width Ds
+.It Fl k Ar keyfile
+Read a raw AES-XTS master key from
+.Ar keyfile .
+This option must be used with
+.Fl o
+and cannot be used with
+.Fl p .
+.It Fl o Ar sectors
+Start the raw mapping at
+.Ar sectors
+512-byte sectors into the backing device, and use the same value as the
+initial XTS IV sector number.
+This option must be used with
+.Fl k .
 .It Fl p Ar pim
 Use the VeraCrypt Personal Iterations Multiplier
 .Ar pim .
@@ -68,6 +100,17 @@ from a VeraCrypt volume in
 .Pa /dev/dk0 :
 .Bd -literal -offset indent
 vcconfig cgd0 /dev/dk0
+.Ed
+.Pp
+Configure a raw AES-XTS mapping of
+.Pa /dev/nvme0n1p3
+using a 64-byte master key and an offset of 256 sectors for both data and IV:
+.Bd -literal -offset indent
+vcconfig -k master.key -o 256 cgd0 /dev/nvme0n1p3
+.Ed
+This corresponds to the relevant dm-crypt table fields:
+.Bd -literal -offset indent
+crypt aes-xts-plain64 <key> 256 <device> 256
 .Ed
 .Sh SEE ALSO
 .Xr cgd 4 ,
