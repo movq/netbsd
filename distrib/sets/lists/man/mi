@@ -7160,6 +7160,7 @@
 ./usr/share/man/man8/vax/format.8		man-sys-man		.man
 ./usr/share/man/man8/vax/installboot.8		man-obsolete		obsolete
 ./usr/share/man/man8/vax/makedev.8		man-obsolete		obsolete
+./usr/share/man/html8/vcconfig.html		man-sysutil-htmlman	html
 ./usr/share/man/man8/vcconfig.8			man-sysutil-man		.man
 ./usr/share/man/man8/veriexec.8			man-sys-man		.man
 ./usr/share/man/man8/veriexecctl.8		man-sysutil-man		.man
