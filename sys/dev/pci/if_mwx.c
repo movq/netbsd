@@ -450,6 +450,7 @@ struct mwx_setkey_task_arg {
 };
 
 #define MWX_MAX_TID_COUNT	8
+#define MWX_MAX_CHAINS		4
 
 struct mwx_ba_task_data {
 	uint16_t		start_tidmask;
@@ -620,6 +621,7 @@ const struct mwx_rate {
 	{	108,	(MT_PHY_TYPE_OFDM << 8) | 12 },
 };
 CTASSERT(nitems(mt76_rates) == MWX_NLEGACY_RATES);
+CTASSERT(sizeof(struct mwx_mcu_txd) >= sizeof(struct mwx_uni_txd));
 
 #define MWX_NUM_6GHZ_CHANNELS   nitems(mwx_channels_6ghz)
 
@@ -631,6 +633,56 @@ CTASSERT(nitems(mt76_rates) == MWX_NLEGACY_RATES);
 #else
 #define	DPRINTF(x...)
 #endif
+
+/* Prepend into headroom deliberately reserved by an mwx allocator. */
+static void
+mwx_mbuf_prepend_reserved(struct mbuf *m, int len)
+{
+
+	KASSERT(m->m_flags & M_PKTHDR);
+	KASSERT(len >= 0 && M_LEADINGSPACE(m) >= len);
+	m->m_data -= len;
+	m->m_len += len;
+	m->m_pkthdr.len += len;
+}
+
+/*
+ * Ensure driver-generated RX events are contiguous.  NetBSD's m_pullup()
+ * cannot pull more than MHLEN bytes from an external cluster.
+ */
+static struct mbuf *
+mwx_mbuf_ensure_contiguous(struct mbuf *m, int len)
+{
+	struct mbuf *mnew;
+
+	KASSERT(m->m_flags & M_PKTHDR);
+	if (len < 0 || len > m->m_pkthdr.len) {
+		m_freem(m);
+		return NULL;
+	}
+	if (m->m_len >= len)
+		return m;
+	if (len <= MHLEN) {
+		if (!m_ensure_contig(&m, len)) {
+			m_freem(m);
+			return NULL;
+		}
+		return m;
+	}
+	if (len != m->m_pkthdr.len || len > MCLBYTES) {
+		m_freem(m);
+		return NULL;
+	}
+
+	mnew = m_gethdr_n(M_DONTWAIT, MT_DATA, 0, len);
+	if (mnew == NULL) {
+		m_freem(m);
+		return NULL;
+	}
+	m_copydata(m, 0, len, mtod(mnew, void *));
+	m_freem(m);
+	return mnew;
+}
 
 __unused static void
 pkt_hex_dump(struct mbuf *m)
@@ -783,6 +835,7 @@ void		mwx_mac_init(struct mwx_softc *);
 int		mwx_mcu_patch_sem_ctrl(struct mwx_softc *, int);
 int		mwx_mcu_init_download(struct mwx_softc *, uint32_t,
 		    uint32_t, uint32_t);
+int		mwx_mcu_restart(struct mwx_softc *);
 int		mwx_mcu_send_firmware(struct mwx_softc *, int,
 		    u_char *, size_t, size_t);
 int		mwx_mcu_start_patch(struct mwx_softc *);
@@ -1247,6 +1300,9 @@ mwx_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		ifp->if_flags |= IFF_UP;
 		/* FALLTHROUGH */
 	case SIOCSIFFLAGS:
+		err = ifioctl_common(ifp, cmd, data);
+		if (err != 0)
+			break;
 		if (ifp->if_flags & IFF_UP) {
 			if (!(ifp->if_flags & IFF_RUNNING)) {
 				mwx_stop(ifp, 0);
@@ -3470,6 +3526,12 @@ mwx_dma_rx_process(struct mwx_softc *sc, struct mbuf_list *ml)
 	uint32_t *data, rxd, type, flag;
 
 	while ((m = ml_dequeue(ml)) != NULL) {
+		if (m->m_len < sizeof(uint32_t)) {
+			sc->sc_rx_stats.parse_errors++;
+			if_statinc(sc->sc_ic.ic_ifp, if_ierrors);
+			m_freem(m);
+			continue;
+		}
 		data = mtod(m, uint32_t *);
 		rxd = le32toh(data[0]);
 
@@ -3491,8 +3553,11 @@ mwx_dma_rx_process(struct mwx_softc *sc, struct mbuf_list *ml)
 			int i, nwords;
 
 			sc->sc_rx_stats.txs++;
-			if ((m = m_pullup(m, m->m_pkthdr.len)) == NULL)
+			if ((m = mwx_mbuf_ensure_contiguous(m,
+			    m->m_pkthdr.len)) == NULL) {
+				sc->sc_rx_stats.parse_errors++;
 				break;
+			}
 			txs = mtod(m, uint32_t *);
 			nwords = m->m_len / sizeof(*txs);
 			for (i = 2; i + 8 <= nwords; i += 8)
@@ -3527,7 +3592,8 @@ mwx_dma_rx_dequeue(struct mwx_softc *sc, struct mwx_queue *q,
 	struct mwx_queue_data *md;
 	struct mwx_desc *desc;
 	struct mbuf *m, *m0 = NULL, *mtail = NULL;
-	int idx, last;
+	uint32_t len;
+	int discarding = 0, idx, last;
 
 	KASSERT(q->mq_rx);
 	idx = q->mq_cons;
@@ -3556,12 +3622,33 @@ mwx_dma_rx_dequeue(struct mwx_softc *sc, struct mwx_queue *q,
 
 		/* only buf0 is used on RX rings */
 		ctrl = le32toh(desc->ctrl);
-		m->m_len = MT_DNA_CTL_SD_GET_LEN0(ctrl);
+		len = MT_DNA_CTL_SD_GET_LEN0(ctrl);
+		if (len == 0 || len > MT_RX_BUF_SIZE) {
+			if (!discarding) {
+				sc->sc_rx_stats.parse_errors++;
+				if_statinc(sc->sc_ic.ic_ifp, if_ierrors);
+			}
+			discarding = 1;
+			if (m0 != NULL) {
+				m_freem(m0);
+				m0 = NULL;
+				mtail = NULL;
+			}
+		}
+		if (discarding) {
+			m_freem(m);
+			if (ctrl & MT_DMA_CTL_LAST_SEC0)
+				discarding = 0;
+			goto next;
+		}
+		m->m_len = len;
 
 		if (m0 == NULL) {
 			m0 = mtail = m;
 			m0->m_pkthdr.len = m->m_len;
 		} else {
+			if (m->m_flags & M_PKTHDR)
+				m_remove_pkthdr(m);
 			mtail->m_next = m;
 			mtail = m;
 			m0->m_pkthdr.len += m->m_len;
@@ -3576,6 +3663,7 @@ mwx_dma_rx_dequeue(struct mwx_softc *sc, struct mwx_queue *q,
 			mtail = NULL;
 		}
 
+next:
 		idx = (idx + 1) % q->mq_count;
 
 		/* check if more data made it in */
@@ -3585,7 +3673,7 @@ mwx_dma_rx_dequeue(struct mwx_softc *sc, struct mwx_queue *q,
 	}
 
 	/* XXX make sure we don't have half processed data */
-	KASSERT(m0 == NULL);
+	KASSERT(m0 == NULL && !discarding);
 
 	q->mq_cons = idx;
 }
@@ -3605,32 +3693,35 @@ mwx_dma_rx_done(struct mwx_softc *sc, struct mwx_queue *q)
 	mwx_dma_rx_process(sc, &ml);
 }
 
+static struct mbuf *
+mwx_mcu_alloc_msg_headroom(size_t len, size_t headspace)
+{
+	struct mbuf *m;
+
+	if (headspace > MCLBYTES || len > MCLBYTES - headspace)
+		return NULL;
+
+	/*
+	 * m_gethdr_n() uses m_adj() to reserve alignbytes.  When nbytes is
+	 * zero, m_adj() consumes the entire mbuf without advancing m_data.
+	 * Allocate the combined region and position the payload explicitly.
+	 */
+	m = m_gethdr_n(M_DONTWAIT, MT_DATA, 0, headspace + len);
+	if (m == NULL)
+		return NULL;
+	m->m_data += headspace;
+	m->m_len = m->m_pkthdr.len = len;
+	return m;
+}
+
 struct mbuf *
 mwx_mcu_alloc_msg(size_t len)
 {
-	const int headspace = sizeof(struct mwx_mcu_txd);
 	struct mbuf *m;
 
-	/* Allocate mbuf with enough space */
-	m = m_gethdr(M_DONTWAIT, MT_DATA);
-	if (m == NULL)
-		return NULL;
-	if (len + headspace > MHLEN) {
-		if (len + headspace > MCLBYTES) {
-			m_freem(m);
-			return NULL;
-		}
-		m_clget(m, M_DONTWAIT);
-		if (!ISSET(m->m_flags, M_EXT)) {
-			m_freem(m);
-			return NULL;
-		}
-	}
-
-	m_align(m, len + headspace);
-	m->m_pkthdr.len = m->m_len = len + headspace;
-	m_adj(m, headspace);
-
+	m = mwx_mcu_alloc_msg_headroom(len, sizeof(struct mwx_mcu_txd));
+	if (m != NULL)
+		memset(mtod(m, void *), 0, len);
 	return m;
 }
 
@@ -3671,8 +3762,7 @@ mwx_mcu_send_mbuf(struct mwx_softc *sc, uint32_t cmd, struct mbuf *m, int *seqp)
 
 	txd_len = cmd & MCU_CMD_FIELD_UNI ? sizeof(*uni_txd) : sizeof(*mcu_txd);
 	tot_len = txd_len + len;
-	KASSERT(M_LEADINGSPACE(m) >= txd_len);
-	m = m_prepend(m, txd_len, M_DONTWAIT);
+	mwx_mbuf_prepend_reserved(m, txd_len);
 	txd = mtod(m, uint32_t *);
 	memset(txd, 0, txd_len);
 
@@ -3764,7 +3854,10 @@ mwx_mcu_send_msg(struct mwx_softc *sc, uint32_t cmd, void *data, size_t len,
 {
 	struct mbuf *m;
 
-	m = mwx_mcu_alloc_msg(len);
+	if (cmd == MCU_CMD_FW_SCATTER)
+		m = mwx_mcu_alloc_msg_headroom(len, 0);
+	else
+		m = mwx_mcu_alloc_msg(len);
 	if (m == NULL)
 		return ENOMEM;
 
@@ -3801,14 +3894,17 @@ mwx_mcu_rx_event(struct mwx_softc *sc, struct mbuf *m)
 {
 	struct mwx_mcu_rxd *rxd;
 	uint32_t cmd, mcu_int = 0;
-	int len, rxd_size;
+	int len, packet_len, rxd_size;
+	uint16_t rxd_pkt_type;
+	uint8_t rxd_eid, rxd_ext_eid, rxd_option, rxd_s2d_index, rxd_seq;
 
 	rxd_size = (sc->sc_hwtype == MWX_HW_MT7925) ?
 	    MT7925_MCU_RXD_SIZE : MT7921_MCU_RXD_SIZE;
 	sc->sc_mcu_events++;
 	sc->sc_last_mcu_event = getuptime();
 
-	if ((m = m_pullup(m, sizeof(*rxd) + rxd_size)) == NULL)
+	if ((m = mwx_mbuf_ensure_contiguous(m,
+	    sizeof(*rxd) + rxd_size)) == NULL)
 		return;
 	m_adj(m, rxd_size);
 	rxd = mtod(m, struct mwx_mcu_rxd *);
@@ -3820,16 +3916,32 @@ mwx_mcu_rx_event(struct mwx_softc *sc, struct mbuf *m)
 	}
 
 	len = le16toh(rxd->len);
+	packet_len = m->m_pkthdr.len;
+	if (len < (int)sizeof(*rxd) || len > packet_len) {
+		printf("%s: invalid MCU response length %d (packet %d)\n",
+		    DEVNAME(sc), len, packet_len);
+		m_freem(m);
+		return;
+	}
+	if (len < packet_len)
+		m_adj(m, len - packet_len);
 	/* make sure all the data is in one mbuf */
-	if ((m = m_pullup(m, len)) == NULL) {
-		printf("%s: mwx_mcu_rx_event m_pullup failed\n", DEVNAME(sc));
+	if ((m = mwx_mbuf_ensure_contiguous(m, len)) == NULL) {
+		printf("%s: could not linearize %d-byte MCU response\n",
+		    DEVNAME(sc), len);
 		return;
 	}
 	/* refetch after pullup */
 	rxd = mtod(m, struct mwx_mcu_rxd *);
+	rxd_pkt_type = le16toh(rxd->pkt_type_id);
+	rxd_eid = rxd->eid;
+	rxd_ext_eid = rxd->ext_eid;
+	rxd_option = rxd->option;
+	rxd_s2d_index = rxd->s2d_index;
+	rxd_seq = rxd->seq;
 	m_adj(m, sizeof(*rxd));
 
-	switch (rxd->eid) {
+	switch (rxd_eid) {
 	case MCU_EVENT_SCHED_SCAN_DONE:
 	case MCU_EVENT_SCAN_DONE:
 		mt7921_mcu_scan_event(sc, m);
@@ -3910,24 +4022,22 @@ mwx_mcu_rx_event(struct mwx_softc *sc, struct mbuf *m)
 		printf("%s: MAGIC COMMAND\n", DEVNAME(sc));
 		/* FALLTHROUGH */
 	default:
-		if (rxd->seq == 0 || rxd->seq >= nitems(sc->sc_mcu_wait)) {
+		if (rxd_seq == 0 || rxd_seq >= nitems(sc->sc_mcu_wait)) {
 			printf("%s: mcu rx bad seq %x, eid %x ext_eid %x, "
-			    "opt %x len %u\n",
-			    DEVNAME(sc), rxd->seq, rxd->eid, rxd->ext_eid,
-			    rxd->option, le16toh(rxd->len));
+			    "opt %x len %u packet %d type %x s2d %x\n",
+			    DEVNAME(sc), rxd_seq, rxd_eid, rxd_ext_eid,
+			    rxd_option, len, packet_len, rxd_pkt_type,
+			    rxd_s2d_index);
 			break;
 		}
 
-		cmd = sc->sc_mcu_wait[rxd->seq].mcu_cmd;
+		cmd = sc->sc_mcu_wait[rxd_seq].mcu_cmd;
 		if (cmd == 0)
 			break;
 
 		if (cmd == MCU_CMD_PATCH_SEM_CONTROL ||
 		    cmd == MCU_CMD_PATCH_FINISH_REQ) {
-			/* XXX this is a terrible abuse */
-			KASSERT(M_LEADINGSPACE(m) >= sizeof(uint32_t));
-			m = m_prepend(m, sizeof(uint32_t), M_DONTWAIT);
-			mcu_int = *mtod(m, uint8_t *);
+			mcu_int = rxd_ext_eid;
 		} else if (cmd == MCU_EXT_CMD_THERMAL_CTRL) {
 			if (m->m_len < sizeof(uint32_t) * 2)
 				break;
@@ -3956,9 +4066,9 @@ mwx_mcu_rx_event(struct mwx_softc *sc, struct mbuf *m)
 			mcu_int = le32toh(event->val);
 		}
 
-		sc->sc_mcu_wait[rxd->seq].mcu_int = mcu_int;
-		sc->sc_mcu_wait[rxd->seq].mcu_m = m;
-		wakeup(&sc->sc_mcu_wait[rxd->seq]);
+		sc->sc_mcu_wait[rxd_seq].mcu_int = mcu_int;
+		sc->sc_mcu_wait[rxd_seq].mcu_m = m;
+		wakeup(&sc->sc_mcu_wait[rxd_seq]);
 		return;
 	}
 
@@ -4384,7 +4494,7 @@ mwx_load_firmware(struct mwx_softc *sc)
 	int i, rv, sem;
 
 	reg = mwx_read(sc, MT_CONN_ON_MISC) & MT_TOP_MISC2_FW_N9_RDY;
-	if (reg != 0) {
+	if (reg == MT_TOP_MISC2_FW_N9_RDY) {
 		DPRINTF("%s: firmware already downloaded\n", DEVNAME(sc));
 		return 0;
 	}
@@ -4402,6 +4512,23 @@ mwx_load_firmware(struct mwx_softc *sc)
 
 	/* Disable PCIe L0s to prevent the link from entering low-power state */
 	mwx_set(sc, MT_PCIE_MAC_PM, MT_PCIE_MAC_PM_L0S_DIS);
+
+	rv = mwx_mcu_restart(sc);
+	if (rv != 0)
+		return rv;
+	if (mwx_poll(sc, MT_CONN_ON_MISC, MT_TOP_MISC2_FW_PWR_ON,
+	    MT_TOP_MISC_FW_STATE, 1000) != 0) {
+		DPRINTF("%s: MCU is not ready for firmware download\n",
+		    DEVNAME(sc));
+	}
+
+	/*
+	 * The MCU restart can restore the scheduler state.  Firmware download
+	 * ring 16 is not assigned a DMASHDL group, so keep scheduling bypassed.
+	 */
+	mwx_clear(sc, MT_WFDMA0_GLO_CFG_EXT0,
+	    MT_WFDMA0_CSR_TX_DMASHDL_ENABLE);
+	mwx_set(sc, MT_DMASHDL_SW_CONTROL, MT_DMASHDL_DMASHDL_BYPASS);
 
 	switch (sc->sc_hwtype) {
 	case MWX_HW_MT7920:
@@ -4777,12 +4904,29 @@ mwx_mcu_init_download(struct mwx_softc *sc, uint32_t addr,
 }
 
 int
+mwx_mcu_restart(struct mwx_softc *sc)
+{
+	struct {
+		uint8_t power_mode;
+		uint8_t reserved[3];
+	} req = {
+		.power_mode = 1,
+	};
+
+	return mwx_mcu_send_msg(sc, MCU_CMD_NIC_POWER_CTRL, &req,
+	    sizeof(req), NULL);
+}
+
+int
 mwx_mcu_send_firmware(struct mwx_softc *sc, int cmd, u_char *data,
     size_t len, size_t max_len)
 {
 	size_t cur_len;
 	int rv;
 
+	if (max_len == 0)
+		return EINVAL;
+	max_len = MIN(max_len, (size_t)MCLBYTES);
 	while (len > 0) {
 		cur_len = len;
 		if (cur_len > max_len)
@@ -4897,6 +5041,12 @@ mt7921_mcu_get_nic_capability(struct mwx_softc *sc)
 			if (len < sizeof(*cap))
 				break;
 			cap = mtod(m, struct mwx_connac_phy_cap *);
+			if (cap->nss == 0 || cap->nss > MWX_MAX_CHAINS) {
+				printf("%s: invalid firmware stream count %u\n",
+				    DEVNAME(sc), cap->nss);
+				m_freem(m);
+				return EINVAL;
+			}
 
 			sc->sc_capa.num_streams = cap->nss;
 			sc->sc_capa.antenna_mask = (1U << cap->nss) - 1;
@@ -4995,6 +5145,12 @@ mt7925_mcu_get_nic_capability(struct mwx_softc *sc)
 			if (len < sizeof(*cap))
 				break;
 			cap = mtod(m, struct mwx_connac_phy_cap *);
+			if (cap->nss == 0 || cap->nss > MWX_MAX_CHAINS) {
+				printf("%s: invalid firmware stream count %u\n",
+				    DEVNAME(sc), cap->nss);
+				m_freem(m);
+				return EINVAL;
+			}
 
 			sc->sc_capa.num_streams = cap->nss;
 			sc->sc_capa.antenna_mask = (1U << cap->nss) - 1;
@@ -5490,14 +5646,31 @@ mt7921_mcu_set_channel_domain(struct mwx_softc *sc)
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ieee80211_channel *chan;
 	struct mbuf *m;
-	int i, len, rv;
+	size_t len;
+	int i, rv;
 	int n_2ch = 0, n_5ch = 0, n_6ch = 0;
 
-	len = sizeof(*hdr) + IEEE80211_CHAN_MAX * sizeof(channel);
+	for (i = 0; i <= IEEE80211_CHAN_MAX; i++) {
+		chan = &ic->ic_channels[i];
+		if (IEEE80211_IS_CHAN_2GHZ(chan))
+			n_2ch++;
+		else if (IEEE80211_IS_CHAN_5GHZ(chan))
+			n_5ch++;
+#ifdef NOTYET
+		else if (IEEE80211_IS_CHAN_6GHZ(chan))
+			n_6ch++;
+#endif
+	}
+	if (n_2ch > UINT8_MAX || n_5ch > UINT8_MAX || n_6ch > UINT8_MAX)
+		return EOVERFLOW;
+
+	len = sizeof(*hdr) +
+	    (n_2ch + n_5ch + n_6ch) * sizeof(*channel);
 	m = mwx_mcu_alloc_msg(len);
 	if (m == NULL)
 		return ENOMEM;
 	hdr = mtod(m, void *);
+	memset(hdr, 0, len);
 
 	hdr->alpha2[0] = '0';
 	hdr->alpha2[1] = '0';
@@ -5514,7 +5687,6 @@ mt7921_mcu_set_channel_domain(struct mwx_softc *sc)
 		channel->flags = htole32(0);	/* XXX */
 
 		channel++;
-		n_2ch++;
 	}
 	hdr->bw_5g = 3; /* BW_20_40_80_160M */
 	for (i = 0; i <= IEEE80211_CHAN_MAX; i++) {
@@ -5526,7 +5698,6 @@ mt7921_mcu_set_channel_domain(struct mwx_softc *sc)
 		channel->flags = htole32(0);	/* XXX */
 
 		channel++;
-		n_5ch++;
 	}
 #ifdef NOTYET
 	/* 6GHz handling */
@@ -5540,7 +5711,6 @@ mt7921_mcu_set_channel_domain(struct mwx_softc *sc)
 		channel->flags = htole32(0);	/* XXX */
 
 		channel++;
-		n_6ch++;
 	}
 #endif
 
@@ -5685,6 +5855,8 @@ mt7921_mcu_rate_txpower_band(struct mwx_softc *sc, int band,
 	for (idx = 0; idx < n_chans; ) {
 		int num_ch = batch_size;
 
+		if (n_chans - idx < batch_size)
+			num_ch = n_chans - idx;
 		m = mwx_mcu_alloc_msg(len);
 		if (m == NULL)
 			return ENOMEM;
@@ -5693,12 +5865,8 @@ mt7921_mcu_rate_txpower_band(struct mwx_softc *sc, int band,
 		tx_power_tlv->band = band;
 		memcpy(tx_power_tlv->alpha2, sc->sc_alpha2,
 		    sizeof(sc->sc_alpha2));
-
-		if (n_chans - idx < batch_size) {
-			num_ch = n_chans - idx;
-			if (is_last)
-				tx_power_tlv->last_msg = 1;
-		}
+		if (is_last && idx + num_ch == n_chans)
+			tx_power_tlv->last_msg = 1;
 
 		sku_tlv = (struct mt76_connac_sku_tlv *)(tx_power_tlv + 1);
 
@@ -6221,7 +6389,7 @@ mt7921_mac_fill_rx(struct mwx_softc *sc, struct mbuf *m,
 //	uint32_t mode = 0;
 	uint16_t hdr_gap /*, seq_ctrl = 0, fc = 0 */;
 	uint8_t chfnum, remove_pad /*, qos_ctl = 0, amsdu_info */;
-	int num_rxd = 6;
+	int num_rxd = 6, required_rxd;
 	int i;
 //	bool insert_ccmp_hdr = false;
 
@@ -6285,6 +6453,22 @@ mt7921_mac_fill_rx(struct mwx_softc *sc, struct mbuf *m,
 	if (rxd2 & MT_RXD2_NORMAL_MAX_LEN_ERROR)
 		return -EINVAL;
 
+	required_rxd = num_rxd;
+	if (rxd1 & MT_RXD1_NORMAL_GROUP_4)
+		required_rxd += 4;
+	if (rxd1 & MT_RXD1_NORMAL_GROUP_1)
+		required_rxd += 4;
+	if (rxd1 & MT_RXD1_NORMAL_GROUP_2)
+		required_rxd += 2;
+	if (rxd1 & MT_RXD1_NORMAL_GROUP_3)
+		required_rxd += 2;
+	else if (rxd1 & MT_RXD1_NORMAL_GROUP_5)
+		return -EINVAL;
+	if (rxd1 & MT_RXD1_NORMAL_GROUP_5)
+		required_rxd += 18;
+	if (m->m_len < required_rxd * sizeof(uint32_t))
+		return -EINVAL;
+
 	rxd += 6;
 
 	if (rxd1 & MT_RXD1_NORMAL_GROUP_4) {
@@ -6333,8 +6517,7 @@ mt7921_mac_fill_rx(struct mwx_softc *sc, struct mbuf *m,
 		*rssi = signal;
 	}
 
-	if (m->m_len < num_rxd * sizeof(uint32_t))
-		return -1;
+	KASSERT(num_rxd == required_rxd);
 
 #if 0
 	if (rxd1 & MT_RXD1_NORMAL_GROUP_4) {
@@ -6515,7 +6698,11 @@ mt7921_mac_fill_rx(struct mwx_softc *sc, struct mbuf *m,
 #endif
 
 	hdr_gap = num_rxd * sizeof(uint32_t) + 2 * remove_pad;
+	if (hdr_gap > m->m_len)
+		return -EINVAL;
 	m_adj(m, hdr_gap);
+	if (m->m_len < sizeof(struct ieee80211_frame_min))
+		return -EINVAL;
 #if 0
 	if (status->amsdu) {
 		memmove(skb->data + 2, skb->data,
@@ -6809,8 +6996,16 @@ mwx_mac_tx_free(struct mwx_softc *sc, struct mbuf *m)
 	sc->sc_tx_free_events++;
 	sc->sc_last_tx_free = getuptime();
 
-	if ((m = m_pullup(m, m->m_pkthdr.len)) == NULL)
+	if ((m = mwx_mbuf_ensure_contiguous(m,
+	    m->m_pkthdr.len)) == NULL) {
+		sc->sc_rx_stats.parse_errors++;
 		return;
+	}
+	if (m->m_len < 2 * sizeof(*txfree)) {
+		sc->sc_rx_stats.parse_errors++;
+		m_freem(m);
+		return;
+	}
 
 	txfree = mtod(m, uint32_t *);
 	txval = le32toh(txfree[0]);
@@ -6933,6 +7128,9 @@ mwx_alloc_sta_req_tlv(int len)
 {
 	struct mbuf *m;
 
+	if (len < 0 || sizeof(struct mwx_mcu_txd) + len > MCLBYTES)
+		return NULL;
+
 	/* Allocate mbuf cluster with enough space */
 	m = m_getcl(M_DONTWAIT, MT_DATA, M_PKTHDR);
 	if (m == NULL)
@@ -6951,8 +7149,7 @@ mwx_fill_sta_req_hdr(struct mbuf *m, struct mwx_vif *mvif,
 {
 	struct sta_req_hdr *hdr;
 
-	KASSERT(M_LEADINGSPACE(m) >= sizeof(*hdr));
-	m = m_prepend(m, sizeof(*hdr), M_DONTWAIT);
+	mwx_mbuf_prepend_reserved(m, sizeof(*hdr));
 	hdr = mtod(m, struct sta_req_hdr *);
 	memset(hdr, 0, sizeof(*hdr));
 
@@ -6969,6 +7166,7 @@ mwx_append_len(struct mbuf *m, int len)
 {
 	caddr_t p;
 
+	KASSERT(len >= 0);
 	KASSERT(M_TRAILINGSPACE(m) >= len);
 
 	p = mtod(m, char *) + m->m_len;
