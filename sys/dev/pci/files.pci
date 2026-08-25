@@ -947,9 +947,9 @@ attach	iwm at pci
 file	dev/pci/if_iwm.c		iwm
 
 # MediaTek MT7922 802.11ax Adapter
-device	mtx: ifnet, arp, wlan, firmload
-attach	mtx at pci
-file	dev/pci/if_mtx.c		mtx
+#device	mtx: ifnet, arp, wlan, firmload
+#attach	mtx at pci
+#file	dev/pci/if_mtx.c		mtx
 
 # Workbit NinjaSCSI-32 controllers
 # device declaration in sys/conf/files
