@@ -336,6 +336,8 @@ struct mwx_txwi_desc {
 	u_int				mt_nfree;
 	bus_dmamap_t			mt_map;
 	bus_dma_segment_t		mt_seg;
+	int				mt_map_loaded;
+	int				mt_nsegs;
 	LIST_HEAD(, mwx_txwi)		mt_freelist;
 };
 
@@ -384,6 +386,7 @@ struct mwx_queue_data {
 	struct mbuf			*md_mbuf;
 	struct mwx_txwi			*md_txwi;
 	bus_dmamap_t			md_map;
+	int				md_map_loaded;
 };
 
 struct mwx_queue {
@@ -397,6 +400,9 @@ struct mwx_queue {
 
 	bus_dmamap_t			mq_map;
 	bus_dma_segment_t		mq_seg;
+	int				mq_map_loaded;
+	int				mq_nsegs;
+	int				mq_rx;
 	int				mq_wakeme;
 };
 
@@ -720,7 +726,7 @@ void		mwx_txwi_drain(struct mwx_softc *);
 int		mwx_txwi_enqueue(struct mwx_softc *, struct mwx_txwi *,
 		    struct mbuf *);
 int		mwx_queue_alloc(struct mwx_softc *, struct mwx_queue *, int,
-		    uint32_t);
+		    uint32_t, int);
 void		mwx_queue_free(struct mwx_softc *, struct mwx_queue *);
 void		mwx_queue_reset(struct mwx_softc *, struct mwx_queue *);
 int		mwx_buf_fill(struct mwx_softc *, struct mwx_queue_data *,
@@ -1971,7 +1977,6 @@ mwx_tx(struct mwx_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 	mt->mt_ni = ni;
 	mt->mt_timestamp = getuptime();
 
-	/* XXX DMA memory access without BUS_DMASYNC_PREWRITE */
 	txp = mt->mt_desc;
 	memset(txp, 0, sizeof(*txp));
 	mt7921_mac_write_txwi(sc, m, ni, txp);
@@ -2257,7 +2262,7 @@ mwx_attach(device_t parent, device_t self, void *aux)
 	struct ifnet *ifp = &sc->sc_ec.ec_if;
 	struct pci_attach_args *pa = aux;
 	pci_intr_handle_t ih;
-	pcireg_t memtype;
+	pcireg_t csr, memtype;
 	char intrbuf[PCI_INTRSTR_LEN];
 	const char *intrstr;
 	uint32_t hwid, hwrev;
@@ -2299,6 +2304,11 @@ mwx_attach(device_t parent, device_t self, void *aux)
 		printf("%s: can't map mem space\n", DEVNAME(sc));
 		return;
 	}
+
+	/* Enable PCI bus mastering. */
+	csr = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG);
+	csr |= PCI_COMMAND_MASTER_ENABLE;
+	pci_conf_write(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG, csr);
 
 	if (pci_intr_alloc(pa, &sc->sc_pihp, NULL, 0) != 0) {
 		printf("%s: can't map interrupt\n", DEVNAME(sc));
@@ -2427,8 +2437,10 @@ mwx_attach(device_t parent, device_t self, void *aux)
 	return;
 
 fail:
-	mwx_txwi_free(sc);
+	if (sc->sc_txq.mq_desc != NULL)
+		(void)mwx_dma_disable(sc, 1);
 	mwx_dma_free(sc);
+	mwx_txwi_free(sc);
 	if (sc->sc_ih != NULL)
 		pci_intr_disestablish(pa->pa_pc, sc->sc_ih);
 	bus_space_unmap(sc->sc_st, sc->sc_memh, sc->sc_mems);
@@ -2578,7 +2590,7 @@ mwx_dump_status(struct mwx_softc *sc, const char *reason, uint32_t cmd, int seq)
 int
 mwx_txwi_alloc(struct mwx_softc *sc, int count)
 {
-	int error, nsegs, i;
+	int error, i;
 	struct mwx_txwi_desc *q = &sc->sc_txwi;
 	bus_size_t size = count * sizeof(*q->mt_desc);
 	uint32_t addr;
@@ -2594,13 +2606,13 @@ mwx_txwi_alloc(struct mwx_softc *sc, int count)
 	}
 
 	error = bus_dmamem_alloc(sc->sc_dmat, size, PAGE_SIZE, 0, &q->mt_seg,
-	    1, &nsegs, BUS_DMA_NOWAIT);
+	    1, &q->mt_nsegs, BUS_DMA_NOWAIT);
 	if (error != 0) {
 		printf("%s: could not allocate TWXI memory\n", DEVNAME(sc));
 		goto fail;
 	}
 
-	error = bus_dmamem_map(sc->sc_dmat, &q->mt_seg, nsegs, size,
+	error = bus_dmamem_map(sc->sc_dmat, &q->mt_seg, q->mt_nsegs, size,
 	    (void **)&q->mt_desc, BUS_DMA_NOWAIT);
 	if (error != 0) {
 		printf("%s: can't map desc DMA memory\n", DEVNAME(sc));
@@ -2614,7 +2626,10 @@ mwx_txwi_alloc(struct mwx_softc *sc, int count)
 		printf("%s: could not load desc DMA map\n", DEVNAME(sc));
 		goto fail;
 	}
+	q->mt_map_loaded = 1;
 
+	KASSERT(q->mt_map->dm_nsegs == 1);
+	KASSERT(q->mt_map->dm_segs[0].ds_addr <= UINT32_MAX);
 	addr = q->mt_map->dm_segs[0].ds_addr;
 
 	q->mt_data = mallocarray(count, sizeof(*q->mt_data),
@@ -2664,6 +2679,14 @@ mwx_txwi_free(struct mwx_softc *sc)
 			if (mt->mt_busy)
 				mwx_txwi_put(sc, mt);
 			if (mt->mt_map != NULL) {
+				if (mt->mt_map_loaded) {
+					bus_dmamap_sync(sc->sc_dmat, mt->mt_map,
+					    0, mt->mt_map->dm_mapsize,
+					    BUS_DMASYNC_POSTWRITE);
+					bus_dmamap_unload(sc->sc_dmat,
+					    mt->mt_map);
+					mt->mt_map_loaded = 0;
+				}
 				if (i >= MT_PACKET_ID_FIRST)
 					LIST_REMOVE(mt, mt_entry);
 				bus_dmamap_destroy(sc->sc_dmat, mt->mt_map);
@@ -2672,21 +2695,22 @@ mwx_txwi_free(struct mwx_softc *sc)
 		free(q->mt_data, M_DEVBUF);
 	}
 
-	if (q->mt_desc != NULL) {
+	if (q->mt_map_loaded) {
 		bus_dmamap_sync(sc->sc_dmat, q->mt_map, 0,
 			q->mt_map->dm_mapsize, BUS_DMASYNC_POSTWRITE);
 		bus_dmamap_unload(sc->sc_dmat, q->mt_map);
+		q->mt_map_loaded = 0;
+	}
+	if (q->mt_map != NULL) {
+		bus_dmamap_destroy(sc->sc_dmat, q->mt_map);
+		q->mt_map = NULL;
 	}
 
-	/*
-	 * XXX TODO this is probably not correct as a check, should use
-	 * some state variable bitfield to decide which steps need to be run.
-	 */
-	if (q->mt_seg.ds_len != 0)
+	if (q->mt_desc != NULL)
 		bus_dmamem_unmap(sc->sc_dmat, q->mt_desc,
 			q->mt_count * sizeof(*q->mt_desc));
-	if (q->mt_map != NULL)
-		bus_dmamem_free(sc->sc_dmat, &q->mt_seg, 1);
+	if (q->mt_nsegs != 0)
+		bus_dmamem_free(sc->sc_dmat, &q->mt_seg, q->mt_nsegs);
 
 	memset(q, 0, sizeof(*q));
 }
@@ -2712,6 +2736,9 @@ mwx_txwi_get(struct mwx_softc *sc)
 void
 mwx_txwi_put(struct mwx_softc *sc, struct mwx_txwi *mt)
 {
+	struct mwx_txwi_desc *q = &sc->sc_txwi;
+	bus_size_t offset;
+
 	if (mt->mt_busy == 0)
 		return;
 
@@ -2731,6 +2758,9 @@ mwx_txwi_put(struct mwx_softc *sc, struct mwx_txwi *mt)
 	}
 	mt->mt_timestamp = 0;
 
+	offset = mt->mt_idx * sizeof(*mt->mt_desc);
+	bus_dmamap_sync(sc->sc_dmat, q->mt_map, offset,
+	    sizeof(*mt->mt_desc), BUS_DMASYNC_POSTWRITE);
 	memset(mt->mt_desc, 0, sizeof(*mt->mt_desc));
 	mt->mt_busy = 0;
 
@@ -2769,7 +2799,7 @@ mwx_txwi_enqueue(struct mwx_softc *sc, struct mwx_txwi *mt, struct mbuf *m)
 
 	rv = bus_dmamap_load_mbuf(sc->sc_dmat, mt->mt_map, m,
 	    BUS_DMA_WRITE | BUS_DMA_NOWAIT);
-	if (rv == EFBIG && m_defrag(m, M_DONTWAIT) == 0)
+	if (rv == EFBIG && m_defrag(m, M_DONTWAIT) != NULL)
 		rv = bus_dmamap_load_mbuf(sc->sc_dmat, mt->mt_map, m,
 		    BUS_DMA_WRITE | BUS_DMA_NOWAIT);
 	if (rv != 0)
@@ -2783,8 +2813,6 @@ mwx_txwi_enqueue(struct mwx_softc *sc, struct mwx_txwi *mt, struct mbuf *m)
 
 	txp->msdu_id[0] = htole16(mt->mt_idx | MT_MSDU_ID_VALID);
 
-	bus_dmamap_sync(sc->sc_dmat, q->mt_map, 0, q->mt_map->dm_mapsize,
-	    BUS_DMASYNC_PREWRITE);
 	for (i = 0; i < nsegs; i++) {
 		KASSERT(mt->mt_map->dm_segs[i].ds_addr <= UINT32_MAX);
 		KASSERT(mt->mt_map->dm_segs[i].ds_len <= MT_TXD_LEN_MASK);
@@ -2803,21 +2831,41 @@ mwx_txwi_enqueue(struct mwx_softc *sc, struct mwx_txwi *mt, struct mbuf *m)
 			ptr++;
 		}
 	}
-	bus_dmamap_sync(sc->sc_dmat, q->mt_map, 0, q->mt_map->dm_mapsize,
-	    BUS_DMASYNC_POSTWRITE);
+	bus_dmamap_sync(sc->sc_dmat, q->mt_map,
+	    mt->mt_idx * sizeof(*mt->mt_desc), sizeof(*mt->mt_desc),
+	    BUS_DMASYNC_PREWRITE);
 
 	return 0;
 }
 
+static void
+mwx_queue_sync(struct mwx_softc *sc, struct mwx_queue *q, u_int idx,
+    u_int count, int ops)
+{
+	u_int n;
+
+	KASSERT(idx < q->mq_count);
+	KASSERT(count <= q->mq_count);
+
+	while (count != 0) {
+		n = MIN(count, q->mq_count - idx);
+		bus_dmamap_sync(sc->sc_dmat, q->mq_map,
+		    idx * sizeof(*q->mq_desc), n * sizeof(*q->mq_desc), ops);
+		count -= n;
+		idx = 0;
+	}
+}
+
 int
 mwx_queue_alloc(struct mwx_softc *sc, struct mwx_queue *q, int count,
-    uint32_t regbase)
+    uint32_t regbase, int rx)
 {
-	int error, nsegs, i;
+	int error, i;
 	bus_size_t size = count * sizeof(*q->mq_desc);
 
 	q->mq_regbase = regbase;
 	q->mq_count = count;
+	q->mq_rx = rx;
 
 	error = bus_dmamap_create(sc->sc_dmat, size, 1, size, 0,
 	    BUS_DMA_NOWAIT, &q->mq_map);
@@ -2827,13 +2875,13 @@ mwx_queue_alloc(struct mwx_softc *sc, struct mwx_queue *q, int count,
 	}
 
 	error = bus_dmamem_alloc(sc->sc_dmat, size, PAGE_SIZE, 0, &q->mq_seg,
-	    1, &nsegs, BUS_DMA_NOWAIT);
+	    1, &q->mq_nsegs, BUS_DMA_NOWAIT);
 	if (error != 0) {
 		printf("%s: could not allocate DMA memory\n", DEVNAME(sc));
 		goto fail;
 	}
 
-	error = bus_dmamem_map(sc->sc_dmat, &q->mq_seg, nsegs, size,
+	error = bus_dmamem_map(sc->sc_dmat, &q->mq_seg, q->mq_nsegs, size,
 	    (void **)&q->mq_desc, BUS_DMA_NOWAIT);
 	if (error != 0) {
 		printf("%s: can't map desc DMA memory\n", DEVNAME(sc));
@@ -2847,6 +2895,7 @@ mwx_queue_alloc(struct mwx_softc *sc, struct mwx_queue *q, int count,
 		printf("%s: could not load desc DMA map\n", DEVNAME(sc));
 		goto fail;
 	}
+	q->mq_map_loaded = 1;
 
 	q->mq_data = mallocarray(count, sizeof(*q->mq_data),
 	    M_DEVBUF, M_NOWAIT | M_ZERO);
@@ -2882,27 +2931,38 @@ mwx_queue_free(struct mwx_softc *sc, struct mwx_queue *q)
 		int i;
 		for (i = 0; i < q->mq_count; i++) {
 			struct mwx_queue_data  *md = &q->mq_data[i];
-			bus_dmamap_destroy(sc->sc_dmat, md->md_map);
+
+			if (md->md_map_loaded) {
+				bus_dmamap_sync(sc->sc_dmat, md->md_map, 0,
+				    md->md_map->dm_mapsize, q->mq_rx ?
+				    BUS_DMASYNC_POSTREAD :
+				    BUS_DMASYNC_POSTWRITE);
+				bus_dmamap_unload(sc->sc_dmat, md->md_map);
+				md->md_map_loaded = 0;
+			}
 			m_freem(md->md_mbuf);
+			if (md->md_map != NULL)
+				bus_dmamap_destroy(sc->sc_dmat, md->md_map);
 		}
 		free(q->mq_data, M_DEVBUF);
 	}
 
-	if (q->mq_desc != NULL) {
-		bus_dmamap_sync(sc->sc_dmat, q->mq_map, 0,
-			q->mq_map->dm_mapsize, BUS_DMASYNC_POSTWRITE);
+	if (q->mq_map_loaded) {
+		mwx_queue_sync(sc, q, 0, q->mq_count,
+		    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
 		bus_dmamap_unload(sc->sc_dmat, q->mq_map);
+		q->mq_map_loaded = 0;
+	}
+	if (q->mq_map != NULL) {
+		bus_dmamap_destroy(sc->sc_dmat, q->mq_map);
+		q->mq_map = NULL;
 	}
 
-	/*
-	 * XXX TODO this is probably not correct as a check, should use
-	 * some state variable bitfield to decide which steps need to be run.
-	 */
-	if (q->mq_seg.ds_len != 0)
+	if (q->mq_desc != NULL)
 		bus_dmamem_unmap(sc->sc_dmat, q->mq_desc,
 			q->mq_count * sizeof(*q->mq_desc));
-	if (q->mq_map != NULL)
-		bus_dmamem_free(sc->sc_dmat, &q->mq_seg, 1);
+	if (q->mq_nsegs != 0)
+		bus_dmamem_free(sc->sc_dmat, &q->mq_seg, q->mq_nsegs);
 
 	memset(q, 0, sizeof(*q));
 }
@@ -2917,9 +2977,24 @@ mwx_queue_reset(struct mwx_softc *sc, struct mwx_queue *q)
 	if (q->mq_desc == NULL)
 		return;
 
-	/* clear descriptors */
-	bus_dmamap_sync(sc->sc_dmat, q->mq_map, 0, q->mq_map->dm_mapsize,
-	    BUS_DMASYNC_PREWRITE);
+	/* DMA is stopped, so reclaim all ring slots and attached buffers. */
+	mwx_queue_sync(sc, q, 0, q->mq_count,
+	    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
+	for (i = 0; i < q->mq_count; i++) {
+		md = &q->mq_data[i];
+		md->md_txwi = NULL;
+		if (md->md_map_loaded) {
+			bus_dmamap_sync(sc->sc_dmat, md->md_map, 0,
+			    md->md_map->dm_mapsize, q->mq_rx ?
+			    BUS_DMASYNC_POSTREAD : BUS_DMASYNC_POSTWRITE);
+			bus_dmamap_unload(sc->sc_dmat, md->md_map);
+			md->md_map_loaded = 0;
+		}
+		if (md->md_mbuf != NULL) {
+			m_freem(md->md_mbuf);
+			md->md_mbuf = NULL;
+		}
+	}
 
 	for (i = 0; i < q->mq_count; i++) {
 		q->mq_desc[i].buf0 = 0;
@@ -2928,8 +3003,8 @@ mwx_queue_reset(struct mwx_softc *sc, struct mwx_queue *q)
 		q->mq_desc[i].ctrl = htole32(MT_DMA_CTL_DMA_DONE);
 	}
 
-	bus_dmamap_sync(sc->sc_dmat, q->mq_map, 0, q->mq_map->dm_mapsize,
-	    BUS_DMASYNC_POSTWRITE);
+	mwx_queue_sync(sc, q, 0, q->mq_count,
+	    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 
 	/* reset DMA registers */
 	KASSERT(q->mq_map->dm_nsegs == 1);
@@ -2941,20 +3016,6 @@ mwx_queue_reset(struct mwx_softc *sc, struct mwx_queue *q)
 	mwx_write(sc, q->mq_regbase + MT_DMA_DMA_IDX, 0);
 	q->mq_cons = 0;
 	q->mq_prod = 0;
-
-	/* free buffers */
-	for (i = 0; i < q->mq_count; i++) {
-		md = &q->mq_data[i];
-		md->md_txwi = NULL;
-		if (md->md_mbuf != NULL) {
-			bus_dmamap_sync(sc->sc_dmat, md->md_map, 0,
-			    md->md_map->dm_mapsize,
-			    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
-			bus_dmamap_unload(sc->sc_dmat, md->md_map);
-			m_freem(md->md_mbuf);
-			md->md_mbuf = NULL;
-		}
-	}
 }
 
 int
@@ -2970,6 +3031,8 @@ mwx_buf_fill(struct mwx_softc *sc, struct mwx_queue_data *md,
 		return (ENOMEM);
 
 	m->m_pkthdr.len = m->m_len = MT_RX_BUF_SIZE;
+	KASSERT(md->md_mbuf == NULL);
+	KASSERT(md->md_map_loaded == 0);
 
 	rv = bus_dmamap_load_mbuf(sc->sc_dmat, md->md_map, m,
 	     BUS_DMA_READ | BUS_DMA_NOWAIT);
@@ -2978,6 +3041,7 @@ mwx_buf_fill(struct mwx_softc *sc, struct mwx_queue_data *md,
 		m_freem(m);
 		return (rv);
 	}
+	md->md_map_loaded = 1;
 
 	bus_dmamap_sync(sc->sc_dmat, md->md_map, 0,
 	    md->md_map->dm_mapsize, BUS_DMASYNC_PREREAD);
@@ -3003,35 +3067,35 @@ mwx_buf_fill(struct mwx_softc *sc, struct mwx_queue_data *md,
 int
 mwx_queue_fill(struct mwx_softc *sc, struct mwx_queue *q)
 {
-	u_int idx, last;
-	int rv;
+	u_int first, idx, last;
+	int rv = 0;
 
 	if (q->mq_desc == NULL)
 		return 0;
 
+	KASSERT(q->mq_rx);
 	last = (q->mq_count + q->mq_cons - 1) % q->mq_count;
-	idx = q->mq_prod;
-
-	bus_dmamap_sync(sc->sc_dmat, q->mq_map, 0, q->mq_map->dm_mapsize,
-	    BUS_DMASYNC_PREWRITE);
+	first = idx = q->mq_prod;
 
 	while (idx != last) {
+		mwx_queue_sync(sc, q, idx, 1,
+		    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
 		rv = mwx_buf_fill(sc, &q->mq_data[idx], &q->mq_desc[idx]);
 		if (rv != 0) {
 			printf("%s: could not fill data, slot %d err %d\n",
 			    DEVNAME(sc), idx, rv);
-			return rv;
+			break;
 		}
+		mwx_queue_sync(sc, q, idx, 1,
+		    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 		idx = (idx + 1) % q->mq_count;
 	}
 
-	bus_dmamap_sync(sc->sc_dmat, q->mq_map, 0, q->mq_map->dm_mapsize,
-	    BUS_DMASYNC_POSTWRITE);
-
 	q->mq_prod = idx;
-	mwx_write(sc, q->mq_regbase + MT_DMA_CPU_IDX, q->mq_prod);
+	if (idx != first)
+		mwx_write(sc, q->mq_regbase + MT_DMA_CPU_IDX, q->mq_prod);
 
-	return 0;
+	return rv;
 }
 
 int
@@ -3045,28 +3109,28 @@ mwx_dma_alloc(struct mwx_softc *sc)
 
 	/* TX queues */
 	if ((rv = mwx_queue_alloc(sc, &sc->sc_txq, 256,
-	    MT_TX_DATA_RING_BASE)) != 0)
+	    MT_TX_DATA_RING_BASE, 0)) != 0)
 		return rv;
 	if ((rv = mwx_queue_alloc(sc, &sc->sc_txmcuq, 256,
-	    txq_mcu_regbase)) != 0)
+	    txq_mcu_regbase, 0)) != 0)
 		return rv;
 	if ((rv = mwx_queue_alloc(sc, &sc->sc_txfwdlq, 16 /* XXX */,
-	    MT_TX_FWDL_RING_BASE)) != 0)
+	    MT_TX_FWDL_RING_BASE, 0)) != 0)
 		return rv;
 
 	/* RX queues */
 	if ((rv = mwx_queue_alloc(sc, &sc->sc_rxq, 256,
-	    MT_RX_DATA_RING_BASE)) != 0 ||
+	    MT_RX_DATA_RING_BASE, 1)) != 0 ||
 	    (rv = mwx_queue_fill(sc, &sc->sc_rxq)) != 0)
 		return rv;
 	if (sc->sc_hwtype != MWX_HW_MT7925) {
 		if ((rv = mwx_queue_alloc(sc, &sc->sc_rxmcuq, 256,
-		    MT_RX_MCU_RING_BASE)) != 0 ||
+		    MT_RX_MCU_RING_BASE, 1)) != 0 ||
 		    (rv = mwx_queue_fill(sc, &sc->sc_rxmcuq)) != 0)
 			return rv;
 	}
 	if ((rv = mwx_queue_alloc(sc, &sc->sc_rxfwdlq, 16 /* XXX */,
-	    MT_RX_FWDL_RING_BASE)) != 0 ||
+	    MT_RX_FWDL_RING_BASE, 1)) != 0 ||
 	    (rv = mwx_queue_fill(sc, &sc->sc_rxfwdlq)) != 0)
 		return rv;
 
@@ -3201,51 +3265,58 @@ mwx_tx_restart(struct mwx_softc *sc)
 int
 mwx_dma_tx_enqueue(struct mwx_softc *sc, struct mwx_queue *q, struct mbuf *m)
 {
+	bus_dmamap_t map;
 	struct mwx_queue_data *md;
 	struct mwx_desc *desc;
-	int i, nsegs, idx, rv;
+	int i, ndesc, nsegs, start, idx, rv;
 
-	idx = q->mq_prod;
+	KASSERT(!q->mq_rx);
+	start = idx = q->mq_prod;
 	md = &q->mq_data[idx];
 	desc = &q->mq_desc[idx];
+	KASSERT(md->md_mbuf == NULL);
+	KASSERT(md->md_map_loaded == 0);
+	map = md->md_map;
 
-	rv = bus_dmamap_load_mbuf(sc->sc_dmat, md->md_map, m,
+	rv = bus_dmamap_load_mbuf(sc->sc_dmat, map, m,
 	    BUS_DMA_WRITE | BUS_DMA_NOWAIT);
-	if (rv == EFBIG && m_defrag(m, M_DONTWAIT) == 0)
-		rv = bus_dmamap_load_mbuf(sc->sc_dmat, md->md_map, m,
+	if (rv == EFBIG && m_defrag(m, M_DONTWAIT) != NULL)
+		rv = bus_dmamap_load_mbuf(sc->sc_dmat, map, m,
 		    BUS_DMA_WRITE | BUS_DMA_NOWAIT);
 	if (rv != 0)
 		return rv;
 
-	nsegs = md->md_map->dm_nsegs;
+	md->md_map_loaded = 1;
+	nsegs = map->dm_nsegs;
+	ndesc = (nsegs + 1) / 2;
 
 	/* check if there is enough space */
-	if ((nsegs + 1)/2 > mwx_dma_free_slots(q)) {
-		bus_dmamap_unload(sc->sc_dmat, md->md_map);
+	if (ndesc > mwx_dma_free_slots(q)) {
+		bus_dmamap_unload(sc->sc_dmat, map);
+		md->md_map_loaded = 0;
 		return EBUSY;
 	}
 
-	bus_dmamap_sync(sc->sc_dmat, md->md_map, 0, md->md_map->dm_mapsize,
+	bus_dmamap_sync(sc->sc_dmat, map, 0, map->dm_mapsize,
 	    BUS_DMASYNC_PREWRITE);
 	md->md_mbuf = m;
 	md->md_txwi = NULL;
 
-	bus_dmamap_sync(sc->sc_dmat, q->mq_map, 0, q->mq_map->dm_mapsize,
-	    BUS_DMASYNC_PREWRITE);
 	for (i = 0; i < nsegs; i += 2) {
 		uint32_t	buf0, buf1 = 0;
 		uint32_t	len0, len1 = 0, ctrl;
 
-		KASSERT(md->md_map->dm_segs[i].ds_addr <= UINT32_MAX);
-		buf0 = md->md_map->dm_segs[i].ds_addr;
-		len0 = md->md_map->dm_segs[i].ds_len;
+		mwx_queue_sync(sc, q, idx, 1,
+		    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
+		KASSERT(map->dm_segs[i].ds_addr <= UINT32_MAX);
+		buf0 = map->dm_segs[i].ds_addr;
+		len0 = map->dm_segs[i].ds_len;
 		ctrl = MT_DMA_CTL_SD_LEN0(len0);
 
 		if (i < nsegs - 1) {
-			KASSERT(md->md_map->dm_segs[i + 1].ds_addr <=
-			    UINT32_MAX);
-			buf1 = md->md_map->dm_segs[i + 1].ds_addr;
-			len1 = md->md_map->dm_segs[i + 1].ds_len;
+			KASSERT(map->dm_segs[i + 1].ds_addr <= UINT32_MAX);
+			buf1 = map->dm_segs[i + 1].ds_addr;
+			len1 = map->dm_segs[i + 1].ds_len;
 			ctrl |= MT_DMA_CTL_SD_LEN1(len1);
 		}
 
@@ -3264,8 +3335,8 @@ mwx_dma_tx_enqueue(struct mwx_softc *sc, struct mwx_queue *q, struct mbuf *m)
 		md = &q->mq_data[idx];
 		desc = &q->mq_desc[idx];
 	}
-	bus_dmamap_sync(sc->sc_dmat, q->mq_map, 0, q->mq_map->dm_mapsize,
-	    BUS_DMASYNC_POSTWRITE);
+	mwx_queue_sync(sc, q, start, ndesc,
+	    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 
 	q->mq_prod = idx;
 
@@ -3283,6 +3354,7 @@ mwx_dma_txwi_enqueue(struct mwx_softc *sc, struct mwx_queue *q,
 	uint32_t buf0, len0, ctrl;
 	int idx;
 
+	KASSERT(!q->mq_rx);
 	idx = q->mq_prod;
 	md = &q->mq_data[idx];
 	desc = &q->mq_desc[idx];
@@ -3296,8 +3368,8 @@ mwx_dma_txwi_enqueue(struct mwx_softc *sc, struct mwx_queue *q,
 	md->md_txwi = mt;
 	md->md_mbuf = NULL;
 
-	bus_dmamap_sync(sc->sc_dmat, q->mq_map, 0, q->mq_map->dm_mapsize,
-	    BUS_DMASYNC_PREWRITE);
+	mwx_queue_sync(sc, q, idx, 1,
+	    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
 
 	buf0 = mt->mt_addr;
 	len0 = sizeof(*mt->mt_desc);
@@ -3312,8 +3384,8 @@ mwx_dma_txwi_enqueue(struct mwx_softc *sc, struct mwx_queue *q,
 	idx = (idx + 1) % q->mq_count;
 	KASSERT(idx != q->mq_cons);
 
-	bus_dmamap_sync(sc->sc_dmat, q->mq_map, 0, q->mq_map->dm_mapsize,
-	    BUS_DMASYNC_POSTWRITE);
+	mwx_queue_sync(sc, q, q->mq_prod, 1,
+	    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 
 	q->mq_prod = idx;
 
@@ -3329,23 +3401,25 @@ mwx_dma_tx_cleanup(struct mwx_softc *sc, struct mwx_queue *q)
 	struct mwx_desc *desc;
 	int idx, last;
 
+	KASSERT(!q->mq_rx);
 	idx = q->mq_cons;
 	last = mwx_read(sc, q->mq_regbase + MT_DMA_DMA_IDX);
 
 	if (idx == last)
 		return;
 
-	bus_dmamap_sync(sc->sc_dmat, q->mq_map, 0, q->mq_map->dm_mapsize,
-	     BUS_DMASYNC_PREWRITE);
-
 	while (idx != last) {
 		md = &q->mq_data[idx];
 		desc = &q->mq_desc[idx];
+		mwx_queue_sync(sc, q, idx, 1,
+		    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
 
 		if (md->md_mbuf != NULL) {
+			KASSERT(md->md_map_loaded);
 			bus_dmamap_sync(sc->sc_dmat, md->md_map, 0,
 			    md->md_map->dm_mapsize, BUS_DMASYNC_POSTWRITE);
 			bus_dmamap_unload(sc->sc_dmat, md->md_map);
+			md->md_map_loaded = 0;
 			m_freem(md->md_mbuf);
 			md->md_mbuf = NULL;
 		}
@@ -3367,9 +3441,6 @@ mwx_dma_tx_cleanup(struct mwx_softc *sc, struct mwx_queue *q)
 		if (idx == last)
 			last = mwx_read(sc, q->mq_regbase + MT_DMA_DMA_IDX);
 	}
-
-	bus_dmamap_sync(sc->sc_dmat, q->mq_map, 0, q->mq_map->dm_mapsize,
-	    BUS_DMASYNC_POSTWRITE);
 
 	q->mq_cons = idx;
 	if (q->mq_wakeme) {
@@ -3458,24 +3529,26 @@ mwx_dma_rx_dequeue(struct mwx_softc *sc, struct mwx_queue *q,
 	struct mbuf *m, *m0 = NULL, *mtail = NULL;
 	int idx, last;
 
+	KASSERT(q->mq_rx);
 	idx = q->mq_cons;
 	last = mwx_read(sc, q->mq_regbase + MT_DMA_DMA_IDX);
 
 	if (idx == last)
 		return;
 
-	bus_dmamap_sync(sc->sc_dmat, q->mq_map, 0, q->mq_map->dm_mapsize,
-	     BUS_DMASYNC_PREREAD);
-
 	while (idx != last) {
 		uint32_t ctrl;
 
 		md = &q->mq_data[idx];
 		desc = &q->mq_desc[idx];
+		mwx_queue_sync(sc, q, idx, 1,
+		    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
 
+		KASSERT(md->md_map_loaded);
 		bus_dmamap_sync(sc->sc_dmat, md->md_map, 0,
 		    md->md_map->dm_mapsize, BUS_DMASYNC_POSTREAD);
 		bus_dmamap_unload(sc->sc_dmat, md->md_map);
+		md->md_map_loaded = 0;
 
 		/* dequeue mbuf */
 		m = md->md_mbuf;
@@ -3513,9 +3586,6 @@ mwx_dma_rx_dequeue(struct mwx_softc *sc, struct mwx_queue *q,
 
 	/* XXX make sure we don't have half processed data */
 	KASSERT(m0 == NULL);
-
-	bus_dmamap_sync(sc->sc_dmat, q->mq_map, 0, q->mq_map->dm_mapsize,
-	    BUS_DMASYNC_POSTREAD);
 
 	q->mq_cons = idx;
 }
