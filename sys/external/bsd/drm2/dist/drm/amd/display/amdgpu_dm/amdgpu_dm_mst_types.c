@@ -1669,7 +1669,9 @@ int pre_validate_dsc(struct drm_atomic_state *state,
 	int ret = 0;
 
 	if (!is_dsc_precompute_needed(state)) {
+#ifndef __NetBSD__
 		DRM_INFO_ONCE("%s:%d MST_DSC dsc precompute is not needed\n", __func__, __LINE__);
+#endif
 		return 0;
 	}
 	ret = dm_atomic_get_state(state, dm_state_ptr);
