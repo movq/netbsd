@@ -34,12 +34,11 @@ __KERNEL_RCSID(0, "$NetBSD: acpi_cpu_cstate.c,v 1.64 2025/12/11 07:25:12 andvar 
 #include <sys/device.h>
 #include <sys/kernel.h>
 #include <sys/mutex.h>
-#include <sys/timetc.h>
+#include <sys/timevar.h>
 
 #include <dev/acpi/acpireg.h>
 #include <dev/acpi/acpivar.h>
 #include <dev/acpi/acpi_cpu.h>
-#include <dev/acpi/acpi_timer.h>
 
 #include <machine/acpi_machdep.h>
 
@@ -746,15 +745,12 @@ acpicpu_cstate_idle_enter(struct acpicpu_softc *sc, int state)
 	struct acpicpu_cstate *cs = &sc->sc_cstate[state];
 	uint32_t val;
 
-#ifdef notyet
-	/*
-	 * XXX This has a significant performance impact because the ACPI
-	 * timer seems very slow and with many CPUs becomes a chokepoint.
-	 * Better to use the TSC (if invariant) or APIC timer instead.
-	 * Probably even getbintime().  Disabled for now as no functional
-	 * change - only C1 sleep is enabled.
-	 */
-	start = acpitimer_read_fast(NULL);
+#ifdef ACPICPU_ENABLE_C3
+	struct bintime end, start;
+	struct timeval elapsed;
+	uint64_t usec;
+
+	getbinuptime(&start);
 #endif
 
 	switch (cs->cs_method) {
@@ -771,13 +767,13 @@ acpicpu_cstate_idle_enter(struct acpicpu_softc *sc, int state)
 
 	cs->cs_evcnt.ev_count++;
 
-#ifdef notyet
-	/*
-	 * XXX As above.  Also, hztoms() seems incorrect as the ACPI timer
-	 * is running the MHz region.
-	 */
-	end = acpitimer_read_fast(NULL);
-	sc->sc_cstate_sleep = hztoms(acpitimer_delta(end, start)) * 1000;
+#ifdef ACPICPU_ENABLE_C3
+	getbinuptime(&end);
+	bintime_sub(&end, &start);
+	bintime2timeval(&end, &elapsed);
+
+	usec = (uint64_t)elapsed.tv_sec * 1000000U + elapsed.tv_usec;
+	sc->sc_cstate_sleep = (uint32_t)MIN(usec, UINT32_MAX);
 #endif
 }
 
