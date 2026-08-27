@@ -496,6 +496,7 @@ struct mwx_softc {
 				    enum ieee80211_state, int);
 
 	struct workqueue	*sc_nswq;
+	kmutex_t		sc_media_mtx;
 	struct task		sc_newstate_task;
 	struct task		sc_bgscan_done_task;
 	struct task		sc_setkey_task;
@@ -2390,7 +2391,9 @@ mwx_attach_hook(device_t self)
 
 	ifp->if_percpuq = if_percpuq_create(ifp);
 	if_register(ifp);
-	ieee80211_media_init(ic, mwx_media_change, ieee80211_media_status);
+	mutex_init(&sc->sc_media_mtx, MUTEX_DEFAULT, IPL_SOFTNET);
+	ieee80211_media_init_with_lock(ic, mwx_media_change,
+	    ieee80211_media_status, &sc->sc_media_mtx);
 	mwx_radiotap_attach(sc);
 	ieee80211_announce(ic);
 }
