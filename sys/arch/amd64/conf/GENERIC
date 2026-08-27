@@ -1255,6 +1255,7 @@ options 	PAX_ASLR=1		# PaX Address Space Layout Randomization
 options 	PAX_ASLR_DEBUG=1	# PaX ASLR debug
 
 options		ACPICPU_ENABLE_C3
+options		ACPICPU_C3_NO_CACHE_FLUSH
 
 # Pull in optional local configuration - always at end
 cinclude	"arch/amd64/conf/GENERIC.local"

@@ -709,8 +709,10 @@ acpicpu_cstate_idle(void)
 	 * keep these coherent while in C3. Flushing the
 	 * CPU caches is only the last resort.
 	 */
+#ifndef ACPICPU_C3_NO_CACHE_FLUSH
 	if ((sc->sc_flags & ACPICPU_FLAG_C_BM) == 0)
 		ACPI_FLUSH_CPU_CACHE();
+#endif
 
 	/*
 	 * Allow the bus master to request that any given
