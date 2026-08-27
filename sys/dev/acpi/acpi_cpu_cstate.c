@@ -29,9 +29,11 @@
 #include <sys/cdefs.h>
 __KERNEL_RCSID(0, "$NetBSD: acpi_cpu_cstate.c,v 1.64 2025/12/11 07:25:12 andvar Exp $");
 
+#include <sys/atomic.h>
 #include <sys/param.h>
 #include <sys/cpu.h>
 #include <sys/device.h>
+#include <sys/errno.h>
 #include <sys/kernel.h>
 #include <sys/mutex.h>
 #include <sys/timevar.h>
@@ -60,16 +62,34 @@ static void		 acpicpu_cstate_idle_enter(struct acpicpu_softc *,int);
 extern struct acpicpu_softc **acpicpu_sc;
 
 /*
- * XXX:	The local APIC timer (as well as TSC) is typically stopped in C3.
- *	For now, we cannot but disable C3. But there appears to be timer-
- *	related interrupt issues also in C2. The only entirely safe option
- *	at the moment is to use C1.
+ * C2 and C3 remain compile-time opt-ins.  The compiled maximum is both
+ * the runtime default and the upper bound accepted by the sysctl.
  */
 #ifdef ACPICPU_ENABLE_C3
-static int cs_state_max = ACPI_STATE_C3;
+#define ACPICPU_CSTATE_COMPILED_MAX	ACPI_STATE_C3
+#elif defined(ACPICPU_ENABLE_C2)
+#define ACPICPU_CSTATE_COMPILED_MAX	ACPI_STATE_C2
 #else
-static int cs_state_max = ACPI_STATE_C1;
+#define ACPICPU_CSTATE_COMPILED_MAX	ACPI_STATE_C1
 #endif
+
+static unsigned int cs_state_max = ACPICPU_CSTATE_COMPILED_MAX;
+
+int
+acpicpu_cstate_get_max(void)
+{
+	return atomic_load_relaxed(&cs_state_max);
+}
+
+int
+acpicpu_cstate_set_max(int state)
+{
+	if (state < ACPI_STATE_C1 || state > ACPICPU_CSTATE_COMPILED_MAX)
+		return EINVAL;
+
+	atomic_store_relaxed(&cs_state_max, state);
+	return 0;
+}
 
 void
 acpicpu_cstate_attach(device_t self)
@@ -622,7 +642,7 @@ acpicpu_cstate_latency(struct acpicpu_softc *sc)
 
 	KASSERT(mutex_owned(&sc->sc_mtx) != 0);
 
-	for (i = cs_state_max; i > 0; i--) {
+	for (i = atomic_load_relaxed(&cs_state_max); i > 0; i--) {
 
 		cs = &sc->sc_cstate[i];
 
@@ -745,9 +765,8 @@ static void
 acpicpu_cstate_idle_enter(struct acpicpu_softc *sc, int state)
 {
 	struct acpicpu_cstate *cs = &sc->sc_cstate[state];
-	uint32_t val;
 
-#ifdef ACPICPU_ENABLE_C3
+#if defined(ACPICPU_ENABLE_C2) || defined(ACPICPU_ENABLE_C3)
 	struct bintime end, start;
 	struct timeval elapsed;
 	uint64_t usec;
@@ -755,21 +774,10 @@ acpicpu_cstate_idle_enter(struct acpicpu_softc *sc, int state)
 	getbinuptime(&start);
 #endif
 
-	switch (cs->cs_method) {
+	if (acpicpu_md_cstate_enter(cs->cs_method, state, cs->cs_addr))
+		cs->cs_evcnt.ev_count++;
 
-	case ACPICPU_C_STATE_FFH:
-	case ACPICPU_C_STATE_HALT:
-		acpicpu_md_cstate_enter(cs->cs_method, state);
-		break;
-
-	case ACPICPU_C_STATE_SYSIO:
-		(void)AcpiOsReadPort(cs->cs_addr, &val, 8);
-		break;
-	}
-
-	cs->cs_evcnt.ev_count++;
-
-#ifdef ACPICPU_ENABLE_C3
+#if defined(ACPICPU_ENABLE_C2) || defined(ACPICPU_ENABLE_C3)
 	getbinuptime(&end);
 	bintime_sub(&end, &start);
 	bintime2timeval(&end, &elapsed);

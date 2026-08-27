@@ -116,9 +116,10 @@ acpicpu_md_cstate_stop(void)
  * 	Not implemented.
  *
  */
-void
-acpicpu_md_cstate_enter(int method, int state)
+bool
+acpicpu_md_cstate_enter(int method, int state, uint64_t addr)
 {
+	return false;
 }
 
 /*

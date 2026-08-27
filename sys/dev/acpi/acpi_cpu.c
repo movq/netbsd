@@ -72,6 +72,7 @@ static void		  acpicpu_debug_print(device_t);
 static const char	 *acpicpu_debug_print_method_c(uint8_t);
 static const char	 *acpicpu_debug_print_method_pt(uint8_t);
 static const char	 *acpicpu_debug_print_dep(uint32_t);
+static int		  acpicpu_sysctl_cstate_max(SYSCTLFN_ARGS);
 
 static uint32_t		  acpicpu_count = 0;
 struct acpicpu_softc	**acpicpu_sc = NULL;
@@ -89,6 +90,24 @@ static const struct {
 
 CFATTACH_DECL_NEW(acpicpu, sizeof(struct acpicpu_softc),
     acpicpu_match, acpicpu_attach, acpicpu_detach, NULL);
+
+static int
+acpicpu_sysctl_cstate_max(SYSCTLFN_ARGS)
+{
+	struct sysctlnode node;
+	int error, state;
+
+	state = acpicpu_cstate_get_max();
+
+	node = *rnode;
+	node.sysctl_data = &state;
+
+	error = sysctl_lookup(SYSCTLFN_CALL(&node));
+	if (error != 0 || newp == NULL)
+		return error;
+
+	return acpicpu_cstate_set_max(state);
+}
 
 static int
 acpicpu_match(device_t parent, cfdata_t match, void *aux)
@@ -341,6 +360,14 @@ SYSCTL_SETUP(acpicpu_sysctl, "acpi_cpu sysctls")
 	err = sysctl_createv(clog, 0, &node, &node,
 	    0, CTLTYPE_NODE, "cpu", SYSCTL_DESCR("ACPI CPU"),
 	    NULL, 0, NULL, 0, CTL_CREATE, CTL_EOL);
+
+	if (err != 0)
+		goto fail;
+
+	err = sysctl_createv(clog, 0, &node, NULL,
+	    CTLFLAG_READWRITE, CTLTYPE_INT, "cstate_max",
+	    SYSCTL_DESCR("Maximum ACPI CPU idle state"),
+	    acpicpu_sysctl_cstate_max, 0, NULL, 0, CTL_CREATE, CTL_EOL);
 
 	if (err != 0)
 		goto fail;
