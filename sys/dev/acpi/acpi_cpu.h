@@ -236,6 +236,8 @@ void		 acpicpu_cstate_suspend(void *);
 void		 acpicpu_cstate_resume(void *);
 void		 acpicpu_cstate_callback(void *);
 void		 acpicpu_cstate_idle(void);
+int		 acpicpu_cstate_get_max(void);
+int		 acpicpu_cstate_set_max(int);
 
 void		 acpicpu_pstate_attach(device_t);
 void		 acpicpu_pstate_detach(device_t);
@@ -261,7 +263,7 @@ struct cpu_info *acpicpu_md_attach(device_t, device_t, void *);
 uint32_t	 acpicpu_md_flags(void);
 int		 acpicpu_md_cstate_start(struct acpicpu_softc *);
 int		 acpicpu_md_cstate_stop(void);
-void		 acpicpu_md_cstate_enter(int, int);
+bool		 acpicpu_md_cstate_enter(int, int, uint64_t);
 int		 acpicpu_md_pstate_start(struct acpicpu_softc *);
 int		 acpicpu_md_pstate_stop(void);
 int		 acpicpu_md_pstate_init(struct acpicpu_softc *);

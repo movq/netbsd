@@ -353,16 +353,25 @@ acpicpu_md_cstate_start(struct acpicpu_softc *sc)
 	bool ipi = false;
 	int i;
 
+#ifdef ACPICPU_ENABLE_C3
+	const int state_max = ACPI_STATE_C3;
+#elif defined(ACPICPU_ENABLE_C2)
+	const int state_max = ACPI_STATE_C2;
+#else
+	const int state_max = ACPI_STATE_C1;
+#endif
+
 	/*
 	 * Save the cpu_idle(9) loop used by default.
 	 */
 	x86_cpu_idle_get(&native_idle, native_idle_text, size);
 
-	for (i = 0; i < ACPI_C_STATE_COUNT; i++) {
+	for (i = ACPI_STATE_C1; i <= state_max; i++) {
 
 		cs = &sc->sc_cstate[i];
 
-		if (cs->cs_method == ACPICPU_C_STATE_HALT) {
+		if (cs->cs_method == ACPICPU_C_STATE_HALT ||
+		    cs->cs_method == ACPICPU_C_STATE_SYSIO) {
 			ipi = true;
 			break;
 		}
@@ -400,10 +409,11 @@ acpicpu_md_cstate_stop(void)
 /*
  * Called with interrupts enabled.
  */
-void __nocsan
-acpicpu_md_cstate_enter(int method, int state)
+bool __nocsan
+acpicpu_md_cstate_enter(int method, int state, uint64_t addr)
 {
 	struct cpu_info *ci = curcpu();
+	uint8_t val;
 
 	KASSERT(ci->ci_ilevel == IPL_NONE);
 
@@ -414,7 +424,7 @@ acpicpu_md_cstate_enter(int method, int state)
 		x86_monitor(&ci->ci_want_resched, 0, 0);
 
 		if (__predict_false(ci->ci_want_resched != 0))
-			return;
+			return false;
 
 		x86_mwait((state - 1) << 4, 0);
 		break;
@@ -425,12 +435,39 @@ acpicpu_md_cstate_enter(int method, int state)
 
 		if (__predict_false(ci->ci_want_resched != 0)) {
 			x86_enable_intr();
-			return;
+			return false;
 		}
 
 		x86_stihlt();
 		break;
+
+	case ACPICPU_C_STATE_SYSIO:
+
+		x86_disable_intr();
+
+		if (__predict_false(ci->ci_want_resched != 0)) {
+			x86_enable_intr();
+			return false;
+		}
+
+		/*
+		 * Keep STI adjacent to the sleeping I/O instruction.  The
+		 * interrupt shadow prevents an interrupt from being serviced
+		 * between the reschedule check and C-state entry, while IF
+		 * remains set so a maskable interrupt can wake the processor.
+		 */
+		KASSERT(addr <= UINT16_MAX);
+		__asm volatile("sti; inb %%dx, %%al"
+		    : "=a" (val)
+		    : "d" ((uint16_t)addr)
+		    : "memory");
+		break;
+
+	default:
+		return false;
 	}
+
+	return true;
 }
 
 int
@@ -1150,4 +1187,3 @@ acpicpu_md_pstate_sysctl_all(SYSCTLFN_ARGS)
 
 	return 0;
 }
-
