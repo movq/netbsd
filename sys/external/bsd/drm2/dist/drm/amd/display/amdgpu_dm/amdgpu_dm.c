@@ -10017,7 +10017,7 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 	} else if (cursor_update && acrtc_state->active_planes > 0) {
 		spin_lock_irqsave(&pcrtc->dev->event_lock, flags);
 		if (acrtc_attach->base.state->event) {
-			drm_crtc_vblank_get(pcrtc);
+			drm_crtc_vblank_get_locked(pcrtc);
 			acrtc_attach->event = acrtc_attach->base.state->event;
 			acrtc_attach->base.state->event = NULL;
 		}
