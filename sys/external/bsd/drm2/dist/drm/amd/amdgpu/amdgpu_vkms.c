@@ -146,7 +146,7 @@ static void amdgpu_vkms_crtc_atomic_flush(struct drm_crtc *crtc,
 	if (crtc->state->event) {
 		spin_lock_irqsave(&crtc->dev->event_lock, flags);
 
-		if (drm_crtc_vblank_get(crtc) != 0)
+		if (drm_crtc_vblank_get_locked(crtc) != 0)
 			drm_crtc_send_vblank_event(crtc, crtc->state->event);
 		else
 			drm_crtc_arm_vblank_event(crtc, crtc->state->event);
