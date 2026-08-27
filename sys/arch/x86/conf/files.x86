@@ -10,6 +10,9 @@ defflag                 MTRR
 # Interrupt debug
 defflag opt_intrdebug.h	INTRDEBUG
 
+# Align per-CPU local APIC timer interrupts.
+defflag opt_lapic.h	LAPIC_ALIGN_TIMERS
+
 # PCI fixup options
 defflag opt_pcifixup.h	PCI_BUS_FIXUP PCI_INTR_FIXUP PCI_INTR_FIXUP_FORCE
 defflag opt_pcifixup.h	PCI_ADDR_FIXUP : PCI_BUS_FIXUP

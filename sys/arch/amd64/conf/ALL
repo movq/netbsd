@@ -1850,6 +1850,7 @@ options CISS_DEBUG
 options CKSUMDEBUG
 options CLOCKDEBUG
 options CLOCK_DEBUG
+options LAPIC_ALIGN_TIMERS
 options CMALO_DEBUG
 options CNW_DEBUG
 options COMDEBUG
