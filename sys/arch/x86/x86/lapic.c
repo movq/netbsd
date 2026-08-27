@@ -38,6 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: lapic.c,v 1.94 2026/02/07 01:52:33 riastradh Exp $")
 #include "ioapic.h"
 #include "opt_acpi.h"
 #include "opt_ddb.h"
+#include "opt_lapic.h"
 #include "opt_mpbios.h"		/* for MPDEBUG */
 #include "opt_multiprocessor.h"
 #include "opt_ntp.h"
@@ -599,6 +600,38 @@ lapic_reset(void)
 	lapic_writereg(LAPIC_EOI, 0);
 }
 
+void
+lapic_reset_aligned(void)
+{
+#ifdef LAPIC_ALIGN_TIMERS
+	struct cpu_info *ci = curcpu();
+	uint64_t period, target;
+	u_long psl;
+
+	/*
+	 * cpu_counter() includes ci_cc_skew, so its phase is common to all
+	 * CPUs after TSC synchronization.  Arm each periodic timer just
+	 * after a common TSC boundary.  Keep interrupts blocked between
+	 * reaching the boundary and programming the LAPIC.
+	 */
+	if (vm_guest == VM_GUEST_NO && cpu_hascounter() &&
+	    tsc_is_invariant() && cpu_frequency(ci) >= (uint64_t)hz) {
+		period = cpu_frequency(ci) / hz;
+		psl = x86_read_psl();
+		x86_disable_intr();
+		target = cpu_counter();
+		target += period - target % period;
+		while ((int64_t)(cpu_counter() - target) < 0)
+			x86_pause();
+		lapic_reset();
+		x86_write_psl(psl);
+		return;
+	}
+#endif
+
+	lapic_reset();
+}
+
 static void
 lapic_initclock(void)
 {
@@ -621,7 +654,7 @@ lapic_initclock(void)
 	}
 
 	/* Start local apic countdown timer running, in repeated mode. */
-	lapic_reset();
+	lapic_reset_aligned();
 }
 
 /*

@@ -282,12 +282,14 @@ acpi_cpu_sleep(struct cpu_info *ci)
 #if NLAPIC > 0
 	lapic_enable();
 	lapic_set_lvt();
-	lapic_reset();
 #endif
 
 	atomic_or_32(&ci->ci_flags, CPUF_RUNNING);
 	kcpuset_atomic_set(kcpuset_running, cpu_index(ci));
 	tsc_sync_ap(ci);
+#if NLAPIC > 0
+	lapic_reset_aligned();
+#endif
 
 out:
 	x86_enable_intr();
@@ -357,7 +359,7 @@ acpi_md_sleep(int state)
 #if NLAPIC > 0
 	lapic_enable();
 	lapic_set_lvt();
-	lapic_reset();
+	lapic_reset_aligned();
 #endif
 #if NIOAPIC > 0
 	ioapic_reenable();

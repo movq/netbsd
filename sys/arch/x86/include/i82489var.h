@@ -90,6 +90,7 @@ extern void lapic_set_lvt(void);
 extern void lapic_enable(void);
 extern void lapic_calibrate_timer(bool);
 extern void lapic_reset(void);
+extern void lapic_reset_aligned(void);
 
 extern uint32_t lapic_readreg(u_int);
 extern void lapic_writereg(u_int, uint32_t);
