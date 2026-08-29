@@ -1,4 +1,4 @@
-/*	$NetBSD: url_test.c,v 1.1 2026/08/29 14:32:15 christos Exp $	*/
+/*	$NetBSD: url_test.c,v 1.1.1.1 2026/08/29 14:32:15 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
