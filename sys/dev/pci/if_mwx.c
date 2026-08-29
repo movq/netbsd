@@ -881,6 +881,8 @@ int		mt7921_mcu_uni_add_dev(struct mwx_softc *, struct mwx_vif *,
 		    struct mwx_node *, int);
 int		mt7921_mcu_uni_add_bss(struct mwx_softc *, int);
 int		mt7921_mcu_set_sniffer(struct mwx_softc *, int);
+int		mt7921_mcu_uni_bss_ps(struct mwx_softc *, int);
+int		mt7921_mcu_uni_bss_bcnft(struct mwx_softc *);
 int		mt7921_mcu_set_beacon_filter(struct mwx_softc *, int);
 int		mt7921_mcu_set_bss_pm(struct mwx_softc *, int);
 int		mt7921_mcu_set_tx(struct mwx_softc *, struct mwx_vif *);
@@ -1763,8 +1765,13 @@ mwx_newstate_task(void *ptr)
 
 	switch (ostate) {
 	case IEEE80211_S_RUN:
-		if (nstate != ostate)
+		if (nstate != ostate) {
+			if (ic->ic_opmode == IEEE80211_M_STA) {
+				mt7921_mcu_uni_bss_ps(sc, 0);
+				mt7921_mcu_set_beacon_filter(sc, 0);
+			}
 			mwx_mcu_set_deep_sleep(sc, 1);
+		}
 		break;
 	case IEEE80211_S_SCAN:
 		if (nstate == ostate) {
@@ -1823,6 +1830,19 @@ mwx_newstate_task(void *ptr)
 		memset(&sc->sc_rx_stats, 0, sizeof(sc->sc_rx_stats));
 		sc->sc_last_rx_packet = 0;
 		mt7921_mcu_set_rts_thresh(sc, 0x92b, 0);
+
+		if (ic->ic_opmode == IEEE80211_M_STA) {
+			int enable = (ic->ic_flags & IEEE80211_F_PMGTON) != 0;
+
+			rv = mt7921_mcu_set_beacon_filter(sc, enable);
+			if (rv)
+				break;
+			rv = mt7921_mcu_uni_bss_ps(sc, enable);
+			if (rv)
+				break;
+			if (enable)
+				rv = mwx_mcu_set_deep_sleep(sc, 1);
+		}
 		break;
 	}
 
@@ -2544,6 +2564,7 @@ mwx_attach(device_t parent, device_t self, void *aux)
 	ic->ic_caps =
 	    IEEE80211_C_WEP |		/* WEP */
 	    IEEE80211_C_WPA |		/* WPA/RSN */
+	    IEEE80211_C_PMGT |		/* station power management */
 	    IEEE80211_C_SHSLOT |	/* short slot time supported */
 	    IEEE80211_C_SHPREAMBLE;	/* short preamble supported */
 
@@ -6273,16 +6294,77 @@ mt7921_mcu_set_sniffer(struct mwx_softc *sc, int enable)
 }
 
 int
+mt7921_mcu_uni_bss_ps(struct mwx_softc *sc, int enable)
+{
+	struct {
+		struct {
+			uint8_t		bss_idx;
+			uint8_t		pad[3];
+		} __packed hdr;
+		struct {
+			uint16_t	tag;
+			uint16_t	len;
+			uint8_t		ps_state;
+			uint8_t		pad[3];
+		} __packed ps;
+	} req = {
+		.hdr = {
+			.bss_idx = sc->sc_vif.idx,
+		},
+		.ps = {
+			.tag = htole16(UNI_BSS_INFO_PS),
+			.len = htole16(sizeof(req.ps)),
+			/* Dynamic PS lets firmware wake the radio for traffic. */
+			.ps_state = enable ? 2 : 0,
+		},
+	};
+
+	return mwx_mcu_send_wait(sc, MCU_UNI_CMD_BSS_INFO_UPDATE,
+	    &req, sizeof(req));
+}
+
+int
+mt7921_mcu_uni_bss_bcnft(struct mwx_softc *sc)
+{
+	struct ieee80211_node *ni = sc->sc_ic.ic_bss;
+	struct {
+		struct {
+			uint8_t		bss_idx;
+			uint8_t		pad[3];
+		} __packed hdr;
+		struct {
+			uint16_t	tag;
+			uint16_t	len;
+			uint16_t	bcn_interval;
+			uint8_t		dtim_period;
+			uint8_t		pad;
+		} __packed bcnft;
+	} req = {
+		.hdr = {
+			.bss_idx = sc->sc_vif.idx,
+		},
+		.bcnft = {
+			.tag = htole16(UNI_BSS_INFO_BCNFT),
+			.len = htole16(sizeof(req.bcnft)),
+			.bcn_interval = htole16(ni->ni_intval),
+			.dtim_period = ni->ni_dtim_period ?
+			    ni->ni_dtim_period : 1,
+		},
+	};
+
+	return mwx_mcu_send_wait(sc, MCU_UNI_CMD_BSS_INFO_UPDATE,
+	    &req, sizeof(req));
+}
+
+int
 mt7921_mcu_set_beacon_filter(struct mwx_softc *sc, int enable)
 {
 	int rv;
 
 	if (enable) {
-#ifdef NOTYET
-		rv = mt7921_mcu_uni_bss_bcnft(dev, vif, true);
+		rv = mt7921_mcu_uni_bss_bcnft(sc);
 		if (rv)
 			return rv;
-#endif
 		mwx_set(sc, MT_WF_RFCR(0), MT_WF_RFCR_DROP_OTHER_BEACON);
 	} else {
 		rv = mt7921_mcu_set_bss_pm(sc, 0);
@@ -6296,7 +6378,7 @@ mt7921_mcu_set_beacon_filter(struct mwx_softc *sc, int enable)
 int
 mt7921_mcu_set_bss_pm(struct mwx_softc *sc, int enable)
 {
-#ifdef NOTYET
+	struct ieee80211_node *ni = sc->sc_ic.ic_bss;
 	struct {
 		uint8_t		bss_idx;
 		uint8_t		dtim_period;
@@ -6308,29 +6390,26 @@ mt7921_mcu_set_bss_pm(struct mwx_softc *sc, int enable)
 		uint8_t		bmc_triggered_ac;
 		uint8_t		pad;
 	} req = {
-		.bss_idx = mvif->mt76.idx,
-		.aid = htole16(vif->cfg.aid),
-		.dtim_period = vif->bss_conf.dtim_period,
-		.bcn_interval = htole16(vif->bss_conf.beacon_int),
+		.bss_idx = sc->sc_vif.idx,
+		.aid = htole16(IEEE80211_AID(ni->ni_associd)),
+		.dtim_period = ni->ni_dtim_period ?
+		    ni->ni_dtim_period : 1,
+		.bcn_interval = htole16(ni->ni_intval),
 	};
-#endif
 	struct {
 		uint8_t		bss_idx;
 		uint8_t		pad[3];
 	} req_hdr = {
-		.bss_idx = /* mvif->mt76.idx XXX */ 0,
+		.bss_idx = sc->sc_vif.idx,
 	};
 	int rv;
 
 	rv = mwx_mcu_send_msg(sc, MCU_CE_CMD_SET_BSS_ABORT,
 		&req_hdr, sizeof(req_hdr), NULL);
-#ifdef NOTYET
 	if (rv != 0 || !enable)
 		return rv;
-	rv = mwx_mcu_send_msg(sc, MCU_CE_CMD_SET_BSS_CONNECTED,
-		&req, sizeof(req), NULL);
-#endif
-	return rv;
+	return mwx_mcu_send_msg(sc, MCU_CE_CMD_SET_BSS_CONNECTED,
+	    &req, sizeof(req), NULL);
 }
 
 int
