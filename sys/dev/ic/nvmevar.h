@@ -232,7 +232,9 @@ void	nvme_dmamem_sync(struct nvme_softc *, struct nvme_dmamem *, int);
 int	nvme_ns_identify(struct nvme_softc *, uint16_t);
 void	nvme_ns_free(struct nvme_softc *, uint16_t);
 int	nvme_ns_dobio(struct nvme_softc *, uint16_t, void *,
-    struct buf *, void *, size_t, int, daddr_t, int, nvme_nnc_done);
+	    struct buf *, void *, size_t, int, daddr_t, int, nvme_nnc_done);
+int	nvme_ns_deallocate(struct nvme_softc *, uint16_t, void *,
+	    struct buf *, uint64_t, uint32_t, nvme_nnc_done);
 int	nvme_ns_sync(struct nvme_softc *, uint16_t, int);
 int	nvme_admin_getcache(struct nvme_softc *, int *);
 int	nvme_admin_setcache(struct nvme_softc *, int);

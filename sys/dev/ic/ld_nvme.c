@@ -59,12 +59,14 @@ CFATTACH_DECL_NEW(ld_nvme, sizeof(struct ld_nvme_softc),
     ld_nvme_match, ld_nvme_attach, ld_nvme_detach, NULL);
 
 static int	ld_nvme_start(struct ld_softc *, struct buf *);
+static int	ld_nvme_discard(struct ld_softc *, struct buf *);
 static int	ld_nvme_dump(struct ld_softc *, void *, daddr_t, int);
 static int	ld_nvme_flush(struct ld_softc *, bool);
 static int	ld_nvme_getcache(struct ld_softc *, int *);
 static int	ld_nvme_ioctl(struct ld_softc *, u_long, void *, int32_t, bool);
 
 static void	ld_nvme_biodone(void *, struct buf *, uint16_t, uint32_t);
+static void	ld_nvme_discard_done(void *, struct buf *, uint16_t, uint32_t);
 
 static int
 ld_nvme_match(device_t parent, cfdata_t match, void *aux)
@@ -105,6 +107,8 @@ ld_nvme_attach(device_t parent, device_t self, void *aux)
 	ld->sc_maxxfer = naa->naa_maxphys;
 	ld->sc_maxqueuecnt = naa->naa_qentries;
 	ld->sc_start = ld_nvme_start;
+	if (ISSET(nsc->sc_identify.oncs, NVME_ID_CTRLR_ONCS_DSM))
+		ld->sc_discard = ld_nvme_discard;
 	ld->sc_dump = ld_nvme_dump;
 	ld->sc_ioctl = ld_nvme_ioctl;
 	ld->sc_flags = LDF_ENABLED | LDF_NO_RND | LDF_MPSAFE;
@@ -147,6 +151,24 @@ ld_nvme_start(struct ld_softc *ld, struct buf *bp)
 }
 
 static int
+ld_nvme_discard(struct ld_softc *ld, struct buf *bp)
+{
+	struct ld_nvme_softc *sc = device_private(ld->sc_dv);
+	uint64_t nlb;
+
+	KASSERT(bp->b_rawblkno >= 0);
+	KASSERT(bp->b_bcount > 0);
+	KASSERT((bp->b_bcount % ld->sc_secsize) == 0);
+
+	nlb = bp->b_bcount / ld->sc_secsize;
+	if (nlb > UINT32_MAX)
+		return EINVAL;
+
+	return nvme_ns_deallocate(sc->sc_nvme, sc->sc_nsid, sc, bp,
+	    bp->b_rawblkno, (uint32_t)nlb, ld_nvme_discard_done);
+}
+
+static int
 ld_nvme_dump(struct ld_softc *ld, void *data, daddr_t blkno, int blkcnt)
 {
 	struct ld_nvme_softc *sc = device_private(ld->sc_dv);
@@ -178,6 +200,23 @@ ld_nvme_biodone(void *xc, struct buf *bp, uint16_t cmd_status, uint32_t cdw0)
 			device_printf(sc->sc_ld.sc_dv, "I/O error\n");
 		}
 	}
+}
+
+static void
+ld_nvme_discard_done(void *xc, struct buf *bp, uint16_t cmd_status,
+    uint32_t cdw0)
+{
+	struct ld_nvme_softc *sc = xc;
+	uint16_t status = NVME_CQE_SC(cmd_status);
+
+	if (status != NVME_CQE_SC_SUCCESS) {
+		bp->b_error = EIO;
+		bp->b_resid = bp->b_bcount;
+		device_printf(sc->sc_ld.sc_dv, "discard error\n");
+	} else {
+		bp->b_resid = 0;
+	}
+	lddiscardend(&sc->sc_ld, bp);
 }
 
 static int

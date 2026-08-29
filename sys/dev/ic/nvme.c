@@ -120,6 +120,10 @@ static void	nvme_ns_io_fill(struct nvme_queue *, struct nvme_ccb *,
 		    void *);
 static void	nvme_ns_io_done(struct nvme_queue *, struct nvme_ccb *,
 		    struct nvme_cqe *);
+static void	nvme_ns_dsm_fill(struct nvme_queue *, struct nvme_ccb *,
+		    void *);
+static void	nvme_ns_dsm_done(struct nvme_queue *, struct nvme_ccb *,
+		    struct nvme_cqe *);
 static void	nvme_ns_sync_fill(struct nvme_queue *, struct nvme_ccb *,
 		    void *);
 static void	nvme_ns_sync_done(struct nvme_queue *, struct nvme_ccb *,
@@ -880,6 +884,133 @@ nvme_ns_io_done(struct nvme_queue *q, struct nvme_ccb *ccb,
 	nvme_ccb_put(q, ccb);
 
 	nnc_done(nnc_cookie, bp, lemtoh16(&cqe->flags), lemtoh32(&cqe->cdw0));
+}
+
+int
+nvme_ns_deallocate(struct nvme_softc *sc, uint16_t nsid, void *cookie,
+    struct buf *bp, uint64_t slba, uint32_t nlb, nvme_nnc_done nnc_done)
+{
+	const size_t payload_size =
+	    sizeof(struct nvm_dsm_range) * NVM_DSM_MAX_RANGES;
+	struct nvm_dsm_range *range;
+	struct nvme_namespace *ns;
+	struct nvme_queue *q;
+	struct nvme_ccb *ccb;
+	bus_dmamap_t dmap;
+	int i, error;
+
+	if (!ISSET(sc->sc_identify.oncs, NVME_ID_CTRLR_ONCS_DSM))
+		return ENODEV;
+	ns = nvme_ns_get(sc, nsid);
+	if (ns == NULL || ns->ident == NULL || nlb == 0)
+		return EINVAL;
+	if (slba >= ns->ident->nsze || nlb > ns->ident->nsze - slba)
+		return EINVAL;
+
+	/*
+	 * Some controllers ignore the Number of Ranges field when deciding
+	 * how much descriptor data to fetch, so provide the maximum payload.
+	 */
+	range = kmem_zalloc(payload_size, KM_SLEEP);
+	range[0].cattr = htole32(0);
+	range[0].nlb = htole32(nlb);
+	range[0].slba = htole64(slba);
+
+	ccb = nvme_ccb_get_bio(sc, bp, &q);
+	if (ccb == NULL) {
+		kmem_free(range, payload_size);
+		return EAGAIN;
+	}
+
+	ccb->ccb_done = nvme_ns_dsm_done;
+	ccb->ccb_cookie = range;
+
+	ccb->nnc_cookie = cookie;
+	ccb->nnc_done = nnc_done;
+	ccb->nnc_nsid = nsid;
+	ccb->nnc_buf = bp;
+	ccb->nnc_datasize = payload_size;
+
+	dmap = ccb->ccb_dmamap;
+	error = bus_dmamap_load(sc->sc_dmat, dmap, range, payload_size, NULL,
+	    BUS_DMA_WAITOK | BUS_DMA_WRITE);
+	if (error) {
+		nvme_ccb_put(q, ccb);
+		kmem_free(range, payload_size);
+		return error;
+	}
+
+	bus_dmamap_sync(sc->sc_dmat, dmap, 0, dmap->dm_mapsize,
+	    BUS_DMASYNC_PREWRITE);
+
+	if (dmap->dm_nsegs > 2) {
+		for (i = 1; i < dmap->dm_nsegs; i++)
+			htolem64(&ccb->ccb_prpl[i - 1],
+			    dmap->dm_segs[i].ds_addr);
+		bus_dmamap_sync(sc->sc_dmat,
+		    NVME_DMA_MAP(q->q_ccb_prpls), ccb->ccb_prpl_off,
+		    sizeof(*ccb->ccb_prpl) * (dmap->dm_nsegs - 1),
+		    BUS_DMASYNC_PREWRITE);
+	}
+
+	nvme_q_submit(sc, q, ccb, nvme_ns_dsm_fill);
+	return 0;
+}
+
+static void
+nvme_ns_dsm_fill(struct nvme_queue *q, struct nvme_ccb *ccb, void *slot)
+{
+	struct nvme_sqe *sqe = slot;
+	bus_dmamap_t dmap = ccb->ccb_dmamap;
+
+	sqe->opcode = NVM_CMD_DSM;
+	htolem32(&sqe->nsid, ccb->nnc_nsid);
+
+	htolem64(&sqe->entry.prp[0], dmap->dm_segs[0].ds_addr);
+	switch (dmap->dm_nsegs) {
+	case 1:
+		break;
+	case 2:
+		htolem64(&sqe->entry.prp[1], dmap->dm_segs[1].ds_addr);
+		break;
+	default:
+		htolem64(&sqe->entry.prp[1], ccb->ccb_prpl_dva);
+		break;
+	}
+
+	/* One zero-based range in CDW10, with deallocation requested in CDW11. */
+	htolem32(&sqe->cdw10, 0);
+	htolem32(&sqe->cdw11, NVM_SQE_DSM_ATTR_AD);
+}
+
+static void
+nvme_ns_dsm_done(struct nvme_queue *q, struct nvme_ccb *ccb,
+    struct nvme_cqe *cqe)
+{
+	struct nvme_softc *sc = q->q_sc;
+	struct nvm_dsm_range *range = ccb->ccb_cookie;
+	void *nnc_cookie = ccb->nnc_cookie;
+	nvme_nnc_done nnc_done = ccb->nnc_done;
+	struct buf *bp = ccb->nnc_buf;
+	bus_dmamap_t dmap = ccb->ccb_dmamap;
+	size_t payload_size = ccb->nnc_datasize;
+	uint16_t status = lemtoh16(&cqe->flags);
+	uint32_t cdw0 = lemtoh32(&cqe->cdw0);
+
+	if (dmap->dm_nsegs > 2) {
+		bus_dmamap_sync(sc->sc_dmat,
+		    NVME_DMA_MAP(q->q_ccb_prpls), ccb->ccb_prpl_off,
+		    sizeof(*ccb->ccb_prpl) * (dmap->dm_nsegs - 1),
+		    BUS_DMASYNC_POSTWRITE);
+	}
+
+	bus_dmamap_sync(sc->sc_dmat, dmap, 0, dmap->dm_mapsize,
+	    BUS_DMASYNC_POSTWRITE);
+	bus_dmamap_unload(sc->sc_dmat, dmap);
+	kmem_free(range, payload_size);
+	nvme_ccb_put(q, ccb);
+
+	nnc_done(nnc_cookie, bp, status, cdw0);
 }
 
 /*

@@ -228,6 +228,19 @@ struct nvme_sqe_io {
 } __packed __aligned(8);
 NVME_CTASSERT(sizeof(struct nvme_sqe_io) == 64, "bad size for nvme_sqe_io");
 
+#define NVM_DSM_MAX_RANGES	256
+
+struct nvm_dsm_range {
+	uint32_t	cattr;	/* Context Attributes */
+	uint32_t	nlb;	/* Number of Logical Blocks */
+	uint64_t	slba;	/* Starting LBA */
+} __packed __aligned(8);
+NVME_CTASSERT(sizeof(struct nvm_dsm_range) == 16, "bad size for nvm_dsm_range");
+
+#define NVM_SQE_DSM_ATTR_IDR	__BIT(0)	/* Integral Dataset for Read */
+#define NVM_SQE_DSM_ATTR_IDW	__BIT(1)	/* Integral Dataset for Write */
+#define NVM_SQE_DSM_ATTR_AD	__BIT(2)	/* Deallocate */
+
 struct nvme_cqe {
 	uint32_t	cdw0;
 
