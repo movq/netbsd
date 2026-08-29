@@ -217,6 +217,7 @@
 #endif
 #if defined(_NETBSD_SOURCE)
 #define	F_DUPFD_CLOBOTH	19		/* close on exec/fork duplicated fd */
+#define	F_DUPFD_QUERY	20		/* query shared open file description */
 #endif
 
 /* file descriptor flags (F_GETFD, F_SETFD) */

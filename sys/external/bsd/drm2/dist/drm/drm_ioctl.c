@@ -650,6 +650,32 @@ static int drm_ioctl_permit(u32 flags, struct drm_file *file_priv)
 	return 0;
 }
 
+#ifdef __NetBSD__
+static int
+drm_getpciinfo(struct drm_device *dev, void *data,
+    struct drm_file *file_priv)
+{
+	struct drm_pciinfo *info = data;
+	struct pci_dev *pdev = dev->pdev;
+
+	if (pdev == NULL)
+		return -ENODEV;
+
+	memset(info, 0, sizeof(*info));
+	info->domain = pci_domain_nr(pdev->bus);
+	info->bus = pdev->pd_pa.pa_bus;
+	info->dev = pdev->pd_pa.pa_device;
+	info->func = pdev->pd_pa.pa_function;
+	info->vendor_id = pdev->vendor;
+	info->device_id = pdev->device;
+	info->subvendor_id = pdev->subsystem_vendor;
+	info->subdevice_id = pdev->subsystem_device;
+	info->revision_id = pdev->revision;
+
+	return 0;
+}
+#endif
+
 #define DRM_IOCTL_DEF(ioctl, _func, _flags)	\
 	[DRM_IOCTL_NR(ioctl)] = {		\
 		.cmd = ioctl,			\
@@ -669,6 +695,9 @@ static const struct drm_ioctl_desc drm_ioctls[] = {
 	DRM_IOCTL_DEF(DRM_IOCTL_GET_CAP, drm_getcap, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF(DRM_IOCTL_SET_CLIENT_CAP, drm_setclientcap, 0),
 	DRM_IOCTL_DEF(DRM_IOCTL_SET_VERSION, drm_setversion, DRM_MASTER),
+#ifdef __NetBSD__
+	DRM_IOCTL_DEF(DRM_IOCTL_GET_PCIINFO, drm_getpciinfo, DRM_RENDER_ALLOW),
+#endif
 
 	DRM_IOCTL_DEF(DRM_IOCTL_SET_UNIQUE, drm_invalid_op, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),
 	DRM_IOCTL_DEF(DRM_IOCTL_BLOCK, drm_noop, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY),

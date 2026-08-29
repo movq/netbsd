@@ -100,6 +100,20 @@ Same as
 .Dv F_DUPFD ,
 but sets both the close-on-exec and close-on-fork properties on the file
 descriptor created.
+.It Dv F_DUPFD_QUERY
+Test whether
+.Fa fd
+and the file descriptor specified by
+.Fa arg
+refer to the same open file description.
+The descriptors refer to the same open file description if one was duplicated
+from the other by
+.Xr dup 2 ,
+.Xr dup2 2 ,
+.Xr dup3 2 ,
+or one of the
+.Dv F_DUPFD
+operations.
 .It Dv F_GETFD
 Get the flags associated with the file descriptor
 .Fa fd
@@ -439,6 +453,9 @@ as follows:
 .Bl -tag -width F_GET_SEALS -offset indent
 .It Dv F_DUPFD
 A new file descriptor.
+.It Dv F_DUPFD_QUERY
+One if the descriptors refer to the same open file description, or zero
+otherwise.
 .It Dv F_GETFD
 Value of flag (one or both of the bits
 .Dv FD_CLOEXEC
@@ -724,6 +741,10 @@ The
 .Fn fcntl
 function call appeared in
 .Bx 4.2 .
+The
+.Dv F_DUPFD_QUERY
+operation first appeared in
+.Nx 11.0 .
 The
 .Dv F_DUPFD_CLOBOTH
 operation first appeared in

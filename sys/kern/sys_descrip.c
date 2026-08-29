@@ -334,7 +334,7 @@ sys_fcntl(struct lwp *l, const struct sys_fcntl_args *uap, register_t *retval)
 	int fd, i, tmp, error, cmd, newmin;
 	filedesc_t *fdp;
 	fdtab_t *dt;
-	file_t *fp;
+	file_t *fp, *fp2;
 	char *kpath;
 	struct flock fl;
 	bool cloexec = false;
@@ -388,6 +388,16 @@ sys_fcntl(struct lwp *l, const struct sys_fcntl_args *uap, register_t *retval)
 	}
 
 	switch (cmd) {
+	case F_DUPFD_QUERY:
+		tmp = (intptr_t)SCARG(uap, arg);
+		if ((fp2 = fd_getfile(tmp)) == NULL) {
+			error = SET_ERROR(EBADF);
+			break;
+		}
+		*retval = (fp == fp2);
+		fd_putfile(tmp);
+		break;
+
 	case F_DUPFD_CLOFORK:
 		clofork = true;
 		goto f_dupfd;
