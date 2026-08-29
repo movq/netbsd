@@ -250,11 +250,9 @@ static void handle_hpd_irq_helper(struct amdgpu_dm_connector *aconnector);
 static void handle_hpd_rx_irq(void *param);
 
 #if IS_ENABLED(CONFIG_BACKLIGHT_CLASS_DEVICE) || \
-    IS_ENABLED(CONFIG_BACKLIGHT_CLASS_DEVICE_MODULE)
+    IS_ENABLED(CONFIG_BACKLIGHT_CLASS_DEVICE_MODULE) || defined(__NetBSD__)
 static void amdgpu_dm_backlight_set_level(struct amdgpu_display_manager *,
     int, u32);
-static void amdgpu_dm_register_backlight_device(
-    struct amdgpu_dm_connector *);
 #else
 static void
 amdgpu_dm_backlight_set_level(struct amdgpu_display_manager *dm, int bl_idx,
@@ -265,7 +263,13 @@ amdgpu_dm_backlight_set_level(struct amdgpu_display_manager *dm, int bl_idx,
 	__USE(bl_idx);
 	__USE(user_brightness);
 }
+#endif
 
+#if IS_ENABLED(CONFIG_BACKLIGHT_CLASS_DEVICE) || \
+    IS_ENABLED(CONFIG_BACKLIGHT_CLASS_DEVICE_MODULE)
+static void amdgpu_dm_register_backlight_device(
+    struct amdgpu_dm_connector *);
+#else
 static void
 amdgpu_dm_register_backlight_device(struct amdgpu_dm_connector *aconnector)
 {
@@ -4977,7 +4981,7 @@ static void amdgpu_dm_update_backlight_caps(struct amdgpu_display_manager *dm,
 }
 
 #if IS_ENABLED(CONFIG_BACKLIGHT_CLASS_DEVICE) || \
-    IS_ENABLED(CONFIG_BACKLIGHT_CLASS_DEVICE_MODULE)
+    IS_ENABLED(CONFIG_BACKLIGHT_CLASS_DEVICE_MODULE) || defined(__NetBSD__)
 static int get_brightness_range(const struct amdgpu_dm_backlight_caps *caps,
 				unsigned int *min, unsigned int *max)
 {
@@ -5179,6 +5183,8 @@ static void amdgpu_dm_backlight_set_level(struct amdgpu_display_manager *dm,
 		dm->actual_brightness[bl_idx] = user_brightness;
 }
 
+#if IS_ENABLED(CONFIG_BACKLIGHT_CLASS_DEVICE) || \
+    IS_ENABLED(CONFIG_BACKLIGHT_CLASS_DEVICE_MODULE)
 static int amdgpu_dm_backlight_update_status(struct backlight_device *bd)
 {
 	struct amdgpu_display_manager *dm = bl_get_data(bd);
@@ -5194,6 +5200,7 @@ static int amdgpu_dm_backlight_update_status(struct backlight_device *bd)
 
 	return 0;
 }
+#endif
 
 static u32 amdgpu_dm_backlight_get_level(struct amdgpu_display_manager *dm,
 					 int bl_idx)
@@ -5222,6 +5229,66 @@ static u32 amdgpu_dm_backlight_get_level(struct amdgpu_display_manager *dm,
 	return convert_brightness_to_user(&caps, ret);
 }
 
+#ifdef __NetBSD__
+unsigned int
+amdgpu_dm_backlight_count(struct amdgpu_device *adev)
+{
+	struct amdgpu_display_manager *dm = &adev->dm;
+
+	if (dm->dc == NULL)
+		return 0;
+
+	return dm->num_of_edps;
+}
+
+bool
+amdgpu_dm_backlight_get_percent(struct amdgpu_device *adev,
+    unsigned int bl_idx, unsigned int *percentp)
+{
+	struct amdgpu_display_manager *dm = &adev->dm;
+	struct amdgpu_dm_backlight_caps *caps;
+	unsigned int min, max;
+	u32 brightness;
+
+	if (dm->dc == NULL || bl_idx >= dm->num_of_edps ||
+	    dm->backlight_link[bl_idx] == NULL)
+		return false;
+
+	caps = &dm->backlight_caps[bl_idx];
+	if (!get_brightness_range(caps, &min, &max) || max == 0)
+		return false;
+
+	brightness = amdgpu_dm_backlight_get_level(dm, bl_idx);
+	*percentp = min_t(u64,
+	    DIV_ROUND_CLOSEST_ULL((u64)brightness * 100, max), 100);
+	return true;
+}
+
+bool
+amdgpu_dm_backlight_set_percent(struct amdgpu_device *adev,
+    unsigned int bl_idx, unsigned int percent)
+{
+	struct amdgpu_display_manager *dm = &adev->dm;
+	struct amdgpu_dm_backlight_caps *caps;
+	unsigned int min, max;
+	u32 brightness;
+
+	if (dm->dc == NULL || bl_idx >= dm->num_of_edps || percent > 100 ||
+	    dm->backlight_link[bl_idx] == NULL)
+		return false;
+
+	caps = &dm->backlight_caps[bl_idx];
+	if (!get_brightness_range(caps, &min, &max) || max == 0)
+		return false;
+
+	brightness = DIV_ROUND_CLOSEST_ULL((u64)max * percent, 100);
+	amdgpu_dm_backlight_set_level(dm, bl_idx, brightness);
+	return true;
+}
+#endif
+
+#if IS_ENABLED(CONFIG_BACKLIGHT_CLASS_DEVICE) || \
+    IS_ENABLED(CONFIG_BACKLIGHT_CLASS_DEVICE_MODULE)
 static int amdgpu_dm_backlight_get_brightness(struct backlight_device *bd)
 {
 	struct amdgpu_display_manager *dm = bl_get_data(bd);
@@ -5312,6 +5379,7 @@ amdgpu_dm_register_backlight_device(struct amdgpu_dm_connector *aconnector)
 		drm_dbg_driver(drm, "DM: Registered Backlight device: %s\n", bl_name);
 	}
 }
+#endif
 #endif
 
 static int initialize_plane(struct amdgpu_display_manager *dm,
