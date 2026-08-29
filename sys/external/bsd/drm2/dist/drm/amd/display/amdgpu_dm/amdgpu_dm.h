@@ -1116,4 +1116,12 @@ int amdgpu_dm_initialize_hdmi_connector(struct amdgpu_dm_connector *aconnector);
 
 void retrieve_dmi_info(struct amdgpu_display_manager *dm);
 
+#ifdef __NetBSD__
+unsigned int amdgpu_dm_backlight_count(struct amdgpu_device *);
+bool amdgpu_dm_backlight_get_percent(struct amdgpu_device *, unsigned int,
+    unsigned int *);
+bool amdgpu_dm_backlight_set_percent(struct amdgpu_device *, unsigned int,
+    unsigned int);
+#endif
+
 #endif /* __AMDGPU_DM_H__ */

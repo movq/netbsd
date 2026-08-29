@@ -23,7 +23,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd October 21, 2023
+.Dd August 29, 2026
 .Dt DRM 4
 .Os
 .Sh NAME
@@ -135,6 +135,23 @@ The options
 and
 .Dv DRM_MAX_RESOLUTION_VERTICAL
 allow limiting the maximum resolution in X and Y direction.
+.Sh SYSCTL VARIABLES
+The
+.Nm amdgpu
+driver provides the following
+.Xr sysctl 7
+variables when supported by the hardware:
+.Bl -tag -width "hw.amdgpu0.backlight1"
+.It Va hw.amdgpu Ns Ar N Ns Va .backlight
+Brightness of the first internal panel, as a percentage from 0 to 100.
+.It Va hw.amdgpu Ns Ar N Ns Va .backlight1
+Brightness of the second internal panel, if present, as a percentage from
+0 to 100.
+.El
+.Pp
+These variables are read/write and are created only for internal
+eDP or LVDS panels whose backlight is controlled by
+.Nm amdgpu .
 .Pp
 .Xr X 7
 will attempt to create the device nodes automatically and use

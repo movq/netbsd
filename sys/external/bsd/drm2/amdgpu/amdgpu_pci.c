@@ -36,6 +36,7 @@ __KERNEL_RCSID(0, "$NetBSD: amdgpu_pci.c,v 1.12 2023/08/07 16:34:47 riastradh Ex
 #include <sys/atomic.h>
 #include <sys/device.h>
 #include <sys/queue.h>
+#include <sys/sysctl.h>
 #include <sys/systm.h>
 #include <sys/workqueue.h>
 
@@ -68,6 +69,13 @@ struct drm_device;
 
 SIMPLEQ_HEAD(amdgpu_task_head, amdgpu_task);
 
+struct amdgpu_softc;
+
+struct amdgpu_backlight_sysctl {
+	struct amdgpu_softc	*abs_sc;
+	unsigned int		abs_index;
+};
+
 struct amdgpu_softc {
 	device_t			sc_dev;
 	struct pci_attach_args		sc_pa;
@@ -78,6 +86,8 @@ struct amdgpu_softc {
 	struct drm_device		*sc_drm_dev;
 	struct pci_dev			sc_pci_dev;
 	struct drm_pci_irq		*sc_irq;
+	struct sysctllog		*sc_sysctllog;
+	struct amdgpu_backlight_sysctl	sc_backlight[AMDGPU_DM_MAX_NUM_EDP];
 	bool				sc_pci_attached;
 	bool				sc_kms_loaded;
 	bool				sc_dev_registered;
@@ -95,6 +105,8 @@ static bool	amdgpu_do_resume(device_t, const pmf_qual_t *);
 
 static void	amdgpu_task_work(struct work *, void *);
 static void	amdgpu_attach_framebuffer(struct amdgpu_softc *);
+static void	amdgpu_sysctl_setup(struct amdgpu_softc *);
+static int	amdgpu_sysctl_backlight(SYSCTLFN_PROTO);
 
 CFATTACH_DECL_NEW(amdgpu, sizeof(struct amdgpu_softc),
     amdgpu_match, amdgpu_attach, amdgpu_detach, NULL);
@@ -175,6 +187,7 @@ amdgpu_attach(device_t parent, device_t self, void *aux)
 	sc->sc_pa = *pa;
 	sc->sc_task_thread = NULL;
 	sc->sc_irq = NULL;
+	sc->sc_sysctllog = NULL;
 	sc->sc_adev = NULL;
 	sc->sc_drm_dev = NULL;
 	sc->sc_pci_attached = false;
@@ -272,6 +285,8 @@ amdgpu_attach_real(device_t self)
 		goto out;
 	}
 
+	amdgpu_sysctl_setup(sc);
+
 	/*
 	 * Set up the generic 6.18 DRM client and TTM framebuffer.  The
 	 * amdgpufb child pins and maps the resulting buffer for wsdisplay.
@@ -325,6 +340,7 @@ amdgpu_detach(device_t self, int flags)
 	KASSERT(SIMPLEQ_EMPTY(&sc->sc_tasks));
 
 	pmf_device_deregister(self);
+	sysctl_teardown(&sc->sc_sysctllog);
 	if (sc->sc_dev_registered) {
 		amdgpu_xcp_dev_unplug(sc->sc_adev);
 		drm_dev_unregister(sc->sc_drm_dev);
@@ -349,6 +365,82 @@ amdgpu_detach(device_t self, int flags)
 		sc->sc_task_wq = NULL;
 	}
 	linux_pci_dev_destroy(&sc->sc_pci_dev);
+
+	return 0;
+}
+
+static void
+amdgpu_sysctl_setup(struct amdgpu_softc *sc)
+{
+	static const char *const names[AMDGPU_DM_MAX_NUM_EDP] = {
+		"backlight",
+		"backlight1",
+	};
+	const struct sysctlnode *rnode;
+	unsigned int count, i;
+	int error;
+
+	count = amdgpu_dm_backlight_count(sc->sc_adev);
+	if (count == 0)
+		return;
+	KASSERT(count <= __arraycount(sc->sc_backlight));
+
+	error = sysctl_createv(&sc->sc_sysctllog, 0, NULL, &rnode,
+	    0, CTLTYPE_NODE, device_xname(sc->sc_dev),
+	    SYSCTL_DESCR("AMD GPU controls"), NULL, 0, NULL, 0,
+	    CTL_HW, CTL_CREATE, CTL_EOL);
+	if (error) {
+		aprint_error_dev(sc->sc_dev,
+		    "unable to create sysctl node: %d\n", error);
+		goto fail;
+	}
+
+	for (i = 0; i < count; i++) {
+		sc->sc_backlight[i].abs_sc = sc;
+		sc->sc_backlight[i].abs_index = i;
+		error = sysctl_createv(&sc->sc_sysctllog, 0, &rnode, NULL,
+		    CTLFLAG_READWRITE, CTLTYPE_INT, names[i],
+		    SYSCTL_DESCR("Panel brightness percentage"),
+		    amdgpu_sysctl_backlight, 0,
+		    (void *)&sc->sc_backlight[i], 0,
+		    CTL_CREATE, CTL_EOL);
+		if (error) {
+			aprint_error_dev(sc->sc_dev,
+			    "unable to create %s sysctl: %d\n", names[i],
+			    error);
+			goto fail;
+		}
+	}
+
+	return;
+
+fail:
+	sysctl_teardown(&sc->sc_sysctllog);
+}
+
+static int
+amdgpu_sysctl_backlight(SYSCTLFN_ARGS)
+{
+	struct sysctlnode node = *rnode;
+	struct amdgpu_backlight_sysctl *abs = node.sysctl_data;
+	unsigned int percent;
+	int error, value;
+
+	if (!amdgpu_dm_backlight_get_percent(abs->abs_sc->sc_adev,
+		abs->abs_index, &percent))
+		return ENXIO;
+
+	value = percent;
+	node.sysctl_data = &value;
+	error = sysctl_lookup(SYSCTLFN_CALL(&node));
+	if (error || newp == NULL)
+		return error;
+	if (value < 0 || value > 100)
+		return EINVAL;
+
+	if (!amdgpu_dm_backlight_set_percent(abs->abs_sc->sc_adev,
+		abs->abs_index, value))
+		return ENXIO;
 
 	return 0;
 }
