@@ -123,10 +123,44 @@ next:		close(fd);
 	}
 }
 
+ATF_TC(dupfd_query);
+ATF_TC_HEAD(dupfd_query, tc)
+{
+
+	atf_tc_set_md_var(tc, "descr",
+	    "Checks fcntl(2) F_DUPFD_QUERY for shared open file descriptions");
+}
+
+ATF_TC_BODY(dupfd_query, tc)
+{
+	int dupfd, fd, other;
+
+	ATF_REQUIRE((fd = open("file", O_RDWR|O_CREAT, 0600)) != -1);
+	ATF_REQUIRE((dupfd = dup(fd)) != -1);
+	ATF_REQUIRE((other = open("file", O_RDWR)) != -1);
+
+	ATF_CHECK_EQ(fcntl(fd, F_DUPFD_QUERY, fd), 1);
+	ATF_CHECK_EQ(fcntl(fd, F_DUPFD_QUERY, dupfd), 1);
+	ATF_CHECK_EQ(fcntl(fd, F_DUPFD_QUERY, other), 0);
+
+	errno = 0;
+	ATF_CHECK_EQ(fcntl(-1, F_DUPFD_QUERY, fd), -1);
+	ATF_CHECK_EQ(errno, EBADF);
+
+	errno = 0;
+	ATF_CHECK_EQ(fcntl(fd, F_DUPFD_QUERY, -1), -1);
+	ATF_CHECK_EQ(errno, EBADF);
+
+	close(other);
+	close(dupfd);
+	close(fd);
+}
+
 ATF_TP_ADD_TCS(tp)
 {
 	ATF_TP_ADD_TC(tp, getpath_vnode);
 	ATF_TP_ADD_TC(tp, getpath_memfd);
+	ATF_TP_ADD_TC(tp, dupfd_query);
 
 	return atf_no_error();
 }

@@ -1132,6 +1132,26 @@ extern "C" {
 #define DRM_IOCTL_GET_CAP		DRM_IOWR(0x0c, struct drm_get_cap)
 #define DRM_IOCTL_SET_CLIENT_CAP	DRM_IOW( 0x0d, struct drm_set_client_cap)
 
+#ifdef __NetBSD__
+/*
+ * NetBSD has no sysfs equivalent from which libdrm can obtain the PCI
+ * identity of a DRM device without privileged access to /dev/pciN.
+ */
+struct drm_pciinfo {
+	__u16 domain;
+	__u8 bus;
+	__u8 dev;
+	__u8 func;
+	__u16 vendor_id;
+	__u16 device_id;
+	__u16 subvendor_id;
+	__u16 subdevice_id;
+	__u8 revision_id;
+};
+
+#define DRM_IOCTL_GET_PCIINFO		DRM_IOR( 0x0e, struct drm_pciinfo)
+#endif
+
 #define DRM_IOCTL_SET_UNIQUE		DRM_IOW( 0x10, struct drm_unique)
 #define DRM_IOCTL_AUTH_MAGIC		DRM_IOW( 0x11, struct drm_auth)
 #define DRM_IOCTL_BLOCK			DRM_IOWR(0x12, struct drm_block)
