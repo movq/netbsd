@@ -118,6 +118,9 @@ static int hdafg_debug = 0;
 #define HDAUDIO_UNSOLTAG_EVENT_HP	0x01
 #define HDAUDIO_UNSOLTAG_EVENT_DD	0x02
 
+#define HDAFG_PRODUCT_REALTEK_ALC295		0x0295
+#define HDAFG_SUBSYSTEM_FRAMEWORK_LAPTOP	0x0006f111
+
 #define HDAUDIO_HP_SENSE_PERIOD		hz
 
 const u_int hdafg_possible_rates[] = {
@@ -2042,9 +2045,14 @@ hdafg_prepare_pin_controls(struct hdafg_softc *sc)
 			/* Output pin, configure for output */
 			if (pincap & COP_PINCAP_OUTPUT_CAPABLE)
 				w->w_pin.ctrl |= COP_PWC_OUT_ENABLE;
+			/* Framework's ALC295 uses the ordinary output driver. */
 			if ((pincap & COP_PINCAP_HEADPHONE_DRIVE_CAPABLE) &&
 			    (COP_CFG_DEFAULT_DEVICE(w->w_pin.config) ==
-			    COP_DEVICE_HP_OUT))
+			    COP_DEVICE_HP_OUT) &&
+			    !(sc->sc_vendor == HDAUDIO_VENDOR_REALTEK &&
+			    sc->sc_product == HDAFG_PRODUCT_REALTEK_ALC295 &&
+			    sc->sc_host->sc_subsystem ==
+			    HDAFG_SUBSYSTEM_FRAMEWORK_LAPTOP))
 				w->w_pin.ctrl |= COP_PWC_HPHN_ENABLE;
 			/* XXX VREF */
 			hda_debug(sc, "pin %02X out ctrl 0x%x\n", w->w_nid,
@@ -3652,9 +3660,7 @@ hdafg_hp_switch_init(struct hdafg_softc *sc)
 	int error;
 
 	for (i = 0; i < sc->sc_nassocs; i++) {
-		if (as[i].as_hpredir < 0 && as[i].as_displaydev == false)
-			continue;
-		if (as[i].as_displaydev == false)
+		if (as[i].as_hpredir >= 0)
 			w = hdafg_widget_lookup(sc, as[i].as_pins[15]);
 		else {
 			w = NULL;
@@ -3663,7 +3669,10 @@ hdafg_hp_switch_init(struct hdafg_softc *sc)
 					continue;
 				w = hdafg_widget_lookup(sc, as[i].as_pins[j]);
 				if (w && w->w_enable &&
-				    w->w_type == COP_AWCAP_TYPE_PIN_COMPLEX)
+				    w->w_type == COP_AWCAP_TYPE_PIN_COMPLEX &&
+				    (as[i].as_displaydev ||
+				    COP_CFG_DEFAULT_DEVICE(w->w_pin.config) ==
+				    COP_DEVICE_HP_OUT))
 					break;
 				w = NULL;
 			}
@@ -4095,7 +4104,9 @@ hdafg_halt_output(void *opaque)
 	uint16_t dfmt;
 	int i, j;
 
-	/* Disable digital outputs */
+	hdaudio_stream_stop(ad->ad_playback);
+
+	/* Disconnect playback converters from the stopped stream. */
 	for (i = 0; i < sc->sc_nassocs; i++) {
 		if (as[i].as_enable == false)
 			continue;
@@ -4107,6 +4118,8 @@ hdafg_halt_output(void *opaque)
 			w = hdafg_widget_lookup(sc, as[i].as_dacs[j]);
 			if (w == NULL || w->w_enable == false)
 				continue;
+			hdaudio_command(sc->sc_codec, w->w_nid,
+			    CORB_SET_CONVERTER_STREAM_CHANNEL, 0);
 			if (w->w_p.aw_cap & COP_AWCAP_DIGITAL) {
 				dfmt = hdaudio_command(sc->sc_codec, w->w_nid,
 				    CORB_GET_DIGITAL_CONVERTER_CONTROL, 0) &
@@ -4117,8 +4130,6 @@ hdafg_halt_output(void *opaque)
 			}
 		}
 	}
-
-	hdaudio_stream_stop(ad->ad_playback);
 
 	return 0;
 }
@@ -4423,7 +4434,7 @@ hdafg_widget_info(void *opaque, prop_dictionary_t request,
 	struct hdafg_softc *sc = opaque;
 	struct hdaudio_widget *w;
 	prop_array_t connlist;
-	uint32_t config, wcap;
+	uint32_t config, value, wcap;
 	uint16_t index;
 	int nid;
 	int i;
@@ -4447,6 +4458,34 @@ hdafg_widget_info(void *opaque, prop_dictionary_t request,
 	prop_dictionary_set_uint8(response, "type", w->w_type);
 	prop_dictionary_set_uint32(response, "config", config);
 	prop_dictionary_set_uint32(response, "cap", wcap);
+	value = hdaudio_command(sc->sc_codec, w->w_nid,
+	    CORB_GET_POWER_STATE, 0);
+	prop_dictionary_set_uint32(response, "power-state", value);
+	if (w->w_type == COP_AWCAP_TYPE_PIN_COMPLEX) {
+		value = hdaudio_command(sc->sc_codec, w->w_nid,
+		    CORB_GET_PIN_WIDGET_CONTROL, 0);
+		prop_dictionary_set_uint32(response, "pin-ctrl", value);
+		value = hdaudio_command(sc->sc_codec, w->w_nid,
+		    CORB_GET_PIN_SENSE, 0);
+		prop_dictionary_set_uint32(response, "pin-sense", value);
+	}
+	if (w->w_p.aw_cap & COP_AWCAP_OUTAMP_PRESENT) {
+		value = hdaudio_command(sc->sc_codec, w->w_nid,
+		    CORB_GET_AMPLIFIER_GAIN_MUTE, 0xa000);
+		prop_dictionary_set_uint32(response, "outamp-left", value);
+		value = hdaudio_command(sc->sc_codec, w->w_nid,
+		    CORB_GET_AMPLIFIER_GAIN_MUTE, 0x9000);
+		prop_dictionary_set_uint32(response, "outamp-right", value);
+	}
+	if (w->w_type == COP_AWCAP_TYPE_AUDIO_OUTPUT ||
+	    w->w_type == COP_AWCAP_TYPE_AUDIO_INPUT) {
+		value = hdaudio_command(sc->sc_codec, w->w_nid,
+		    CORB_GET_CONVERTER_STREAM_CHANNEL, 0);
+		prop_dictionary_set_uint32(response, "stream-channel", value);
+		value = hdaudio_command(sc->sc_codec, w->w_nid,
+		    CORB_GET_CONVERTER_FORMAT, 0);
+		prop_dictionary_set_uint32(response, "converter-format", value);
+	}
 	if (w->w_nconns == 0)
 		return 0;
 	connlist = prop_array_create();

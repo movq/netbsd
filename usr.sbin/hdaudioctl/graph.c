@@ -53,8 +53,12 @@ hdaudioctl_graph(int fd, int argc, char *argv[])
 	prop_number_t nnid;
 	prop_array_t connlist;
 	const char *name;
+	bool have_converter_format, have_outamp_left, have_outamp_right;
+	bool have_pin_ctrl, have_pin_sense, have_power_state;
+	bool have_stream_channel;
 	int error, index;
-	uint32_t cap, config;
+	uint32_t cap, config, converter_format, outamp_left, outamp_right;
+	uint32_t pin_ctrl, pin_sense, power_state, stream_channel;
 	uint16_t reqnid, reqcodecid;
 	uint16_t vendor, product;
 	uint8_t type, nid;
@@ -100,6 +104,38 @@ hdaudioctl_graph(int fd, int argc, char *argv[])
 		prop_dictionary_get_uint32(response, "config", &config);
 		prop_dictionary_get_uint8(response, "type", &type);
 		prop_dictionary_get_uint8(response, "nid", &nid);
+
+		have_converter_format = prop_dictionary_get_uint32(response,
+		    "converter-format", &converter_format);
+		have_outamp_left = prop_dictionary_get_uint32(response,
+		    "outamp-left", &outamp_left);
+		have_outamp_right = prop_dictionary_get_uint32(response,
+		    "outamp-right", &outamp_right);
+		have_pin_ctrl = prop_dictionary_get_uint32(response,
+		    "pin-ctrl", &pin_ctrl);
+		have_pin_sense = prop_dictionary_get_uint32(response,
+		    "pin-sense", &pin_sense);
+		have_power_state = prop_dictionary_get_uint32(response,
+		    "power-state", &power_state);
+		have_stream_channel = prop_dictionary_get_uint32(response,
+		    "stream-channel", &stream_channel);
+
+		fprintf(stderr, "nid %02X", nid);
+		if (have_power_state)
+			fprintf(stderr, " power=%08X", power_state);
+		if (have_pin_ctrl)
+			fprintf(stderr, " pin-ctrl=%02X", pin_ctrl);
+		if (have_pin_sense)
+			fprintf(stderr, " pin-sense=%08X", pin_sense);
+		if (have_outamp_left)
+			fprintf(stderr, " outamp-l=%02X", outamp_left);
+		if (have_outamp_right)
+			fprintf(stderr, " outamp-r=%02X", outamp_right);
+		if (have_stream_channel)
+			fprintf(stderr, " stream=%02X", stream_channel);
+		if (have_converter_format)
+			fprintf(stderr, " format=%04X", converter_format);
+		fputc('\n', stderr);
 
 		sprintf(buf, "widget%02Xh", nid);
 
