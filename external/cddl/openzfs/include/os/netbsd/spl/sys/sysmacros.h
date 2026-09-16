@@ -5,5 +5,26 @@
 #include_next <sys/sysmacros.h>
 
 #define	ARRAY_SIZE(a)	__arraycount(a)
+#define	____cacheline_aligned	__aligned(COHERENCY_UNIT)
+#define	boot_ncpus	ncpu
+
+/*
+ * The old wrapper uses NetBSD's fls64(), but OpenZFS's sys/bitops.h shadows
+ * the native header. Keep the one-based result, including zero for zero.
+ */
+#undef	highbit
+#undef	highbit64
+static inline int
+highbit(ulong_t value)
+{
+	return (value == 0 ? 0 :
+	    sizeof (value) * NBBY - __builtin_clzl(value));
+}
+
+static inline int
+highbit64(uint64_t value)
+{
+	return (value == 0 ? 0 : 64 - __builtin_clzll(value));
+}
 
 #endif
