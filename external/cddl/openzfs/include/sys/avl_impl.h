@@ -35,7 +35,6 @@
  */
 
 #include <sys/types.h>
-#include <sys/sysmacros.h>
 
 #ifdef	__cplusplus
 extern "C" {
