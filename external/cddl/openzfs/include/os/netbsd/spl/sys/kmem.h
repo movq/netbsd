@@ -8,6 +8,9 @@
 /* NetBSD pool caches already participate in memory reclamation. */
 #define	KMC_RECLAIMABLE	0
 
+#undef kmem_strdup
+#define	kmem_strdup(s)	kmem_strdupsize((s), NULL, KM_SLEEP)
+
 /* snprintf returns the required length; scnprintf returns bytes stored. */
 static inline int __printflike(3, 4)
 kmem_scnprintf(char *buf, size_t size, const char *fmt, ...)

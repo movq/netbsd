@@ -9,12 +9,13 @@
 
 #include <sys/list.h>
 #include <sys/mutex.h>
+#include <sys/kstat.h>
 
-struct seq_file;
 typedef struct procfs_list procfs_list_t;
 struct procfs_list {
 	void		*pl_private;
 	void		*pl_next_data;
+	kstat_t		*pl_kstat;
 	kmutex_t	pl_lock;
 	list_t		pl_list;
 	uint64_t	pl_next_id;
@@ -28,6 +29,11 @@ typedef struct procfs_list_node {
 	list_node_t	pln_link;
 	uint64_t	pln_id;
 } procfs_list_node_t;
+
+#define	procfs_list_install	openzfs_procfs_list_install
+#define	procfs_list_uninstall	openzfs_procfs_list_uninstall
+#define	procfs_list_destroy	openzfs_procfs_list_destroy
+#define	procfs_list_add		openzfs_procfs_list_add
 
 void procfs_list_install(const char *, const char *, const char *, mode_t,
     procfs_list_t *, int (*)(struct seq_file *, void *),

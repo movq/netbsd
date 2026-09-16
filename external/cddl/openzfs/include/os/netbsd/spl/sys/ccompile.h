@@ -9,6 +9,7 @@
 #define	unlikely(x)	__predict_false(x)
 #define	noinline	__noinline
 #define	__maybe_unused	__unused
+#define	__must_check	__attribute__((__warn_unused_result__))
 #define	__init
 #define	__exit
 #define	zfs_fallthrough	__attribute__((__fallthrough__))

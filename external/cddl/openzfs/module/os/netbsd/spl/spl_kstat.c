@@ -427,7 +427,8 @@ kstat_node(kstat_t *ksp, int *path, u_int depth, const char *name,
 	path[depth] = CTL_CREATE;
 	/* The type is selected at runtime, so bypass the type-check macro. */
 	error = (sysctl_createv)(&ksp->ks_log, 0, NULL, NULL,
-	    CTLFLAG_READONLY, type, name, NULL, func, 0, data, 0,
+	    CTLFLAG_READONLY | (func != NULL ? ksp->ks_sysctl_flags : 0),
+	    type, name, NULL, func, 0, data, 0,
 	    path[0], path[1], path[2], path[3],
 	    path[4], path[5], path[6], path[7], CTL_EOL);
 	if (error != 0)
