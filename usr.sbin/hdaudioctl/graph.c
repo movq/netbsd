@@ -50,18 +50,25 @@ hdaudioctl_graph(int fd, int argc, char *argv[])
 {
 	prop_dictionary_t request, response;
 	prop_object_iterator_t iter;
+	prop_dictionary_t stream;
 	prop_number_t nnid;
-	prop_array_t connlist;
+	prop_array_t connlist, stream_state;
 	const char *name;
 	bool have_converter_format, have_outamp_left, have_outamp_right;
+	bool have_connection_select, have_eapd;
 	bool have_pin_ctrl, have_pin_sense, have_power_state;
 	bool have_stream_channel;
 	int error, index;
+	uint32_t bdpl, bdpu, cbl, ctl, lpib;
 	uint32_t cap, config, converter_format, outamp_left, outamp_right;
-	uint32_t pin_ctrl, pin_sense, power_state, stream_channel;
+	uint32_t connection_select, eapd, pin_ctrl, pin_sense, power_state;
+	uint32_t stream_channel;
+	uint16_t fifos, format, lvi;
 	uint16_t reqnid, reqcodecid;
 	uint16_t vendor, product;
+	uint8_t stream_index, stream_sts, stream_tag, stream_type;
 	uint8_t type, nid;
+	bool allocated;
 	char buf[10] = "??h";
 
 	if (argc != 2)
@@ -89,6 +96,44 @@ hdaudioctl_graph(int fd, int argc, char *argv[])
 	
 	prop_dictionary_get_uint16(response, "vendor-id", &vendor);
 	prop_dictionary_get_uint16(response, "product-id", &product);
+	if (prop_dictionary_get_uint32(response, "power-state",
+	    &power_state))
+		fprintf(stderr, "afg power=%08X\n", power_state);
+	stream_state = prop_dictionary_get(response, "stream-state");
+	if (stream_state != NULL) {
+		iter = prop_array_iterator(stream_state);
+		while ((stream = prop_object_iterator_next(iter)) != NULL) {
+			prop_dictionary_get_uint8(stream, "index",
+			    &stream_index);
+			prop_dictionary_get_bool(stream, "allocated",
+			    &allocated);
+			prop_dictionary_get_uint8(stream, "type",
+			    &stream_type);
+			prop_dictionary_get_uint8(stream, "tag", &stream_tag);
+			prop_dictionary_get_uint32(stream, "ctl", &ctl);
+			prop_dictionary_get_uint8(stream, "sts", &stream_sts);
+			prop_dictionary_get_uint32(stream, "lpib", &lpib);
+			prop_dictionary_get_uint32(stream, "cbl", &cbl);
+			prop_dictionary_get_uint16(stream, "lvi", &lvi);
+			prop_dictionary_get_uint16(stream, "fifos", &fifos);
+			prop_dictionary_get_uint16(stream, "format", &format);
+			prop_dictionary_get_uint32(stream, "bdpl", &bdpl);
+			prop_dictionary_get_uint32(stream, "bdpu", &bdpu);
+			fprintf(stderr,
+			    "stream %u allocated=%u type=%u tag=%u "
+			    "ctl=%06X sts=%02X lpib=%u cbl=%u lvi=%u "
+			    "fifos=%u format=%04X bdl=%08X:%08X\n",
+			    (unsigned int)stream_index,
+			    (unsigned int)allocated,
+			    (unsigned int)stream_type,
+			    (unsigned int)stream_tag, ctl,
+			    (unsigned int)stream_sts, lpib, cbl,
+			    (unsigned int)lvi, (unsigned int)fifos,
+			    (unsigned int)format, bdpu, bdpl);
+		}
+		prop_object_iterator_release(iter);
+	}
+	prop_object_release(response);
 
 	printf("digraph \"HD Audio %04X:%04X\" {\n",
 	    vendor, product);
@@ -107,6 +152,10 @@ hdaudioctl_graph(int fd, int argc, char *argv[])
 
 		have_converter_format = prop_dictionary_get_uint32(response,
 		    "converter-format", &converter_format);
+		have_connection_select = prop_dictionary_get_uint32(response,
+		    "connection-select", &connection_select);
+		have_eapd = prop_dictionary_get_uint32(response,
+		    "eapd", &eapd);
 		have_outamp_left = prop_dictionary_get_uint32(response,
 		    "outamp-left", &outamp_left);
 		have_outamp_right = prop_dictionary_get_uint32(response,
@@ -127,6 +176,10 @@ hdaudioctl_graph(int fd, int argc, char *argv[])
 			fprintf(stderr, " pin-ctrl=%02X", pin_ctrl);
 		if (have_pin_sense)
 			fprintf(stderr, " pin-sense=%08X", pin_sense);
+		if (have_eapd)
+			fprintf(stderr, " eapd=%02X", eapd);
+		if (have_connection_select)
+			fprintf(stderr, " conn=%02X", connection_select);
 		if (have_outamp_left)
 			fprintf(stderr, " outamp-l=%02X", outamp_left);
 		if (have_outamp_right)

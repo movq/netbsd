@@ -1344,6 +1344,89 @@ hdaudioioctl_fgrp_lookup(struct hdaudio_softc *sc, int codecid, int nid)
 }
 
 static int
+hdaudio_stream_info(struct hdaudio_softc *sc, prop_dictionary_t response)
+{
+	struct hdaudio_stream_snapshot {
+		bool		allocated;
+		uint8_t		index;
+		int		type;
+		int		tag;
+		uint32_t	ctl;
+		uint32_t	lpib;
+		uint32_t	cbl;
+		uint32_t	bdpl;
+		uint32_t	bdpu;
+		uint16_t	lvi;
+		uint16_t	fifos;
+		uint16_t	fmt;
+		uint8_t		sts;
+	} snapshot[HDAUDIO_MAX_STREAMS];
+	struct hdaudio_stream *st;
+	prop_array_t array;
+	prop_dictionary_t dict;
+	int i, nstreams;
+
+	nstreams = 0;
+	mutex_enter(&sc->sc_stream_mtx);
+	for (i = 0; i < HDAUDIO_MAX_STREAMS; i++) {
+		st = &sc->sc_stream[i];
+		if (!st->st_enable)
+			continue;
+		snapshot[nstreams].index = i;
+		snapshot[nstreams].allocated =
+		    (sc->sc_stream_mask & __BIT(i)) != 0;
+		snapshot[nstreams].type = st->st_type;
+		snapshot[nstreams].tag = hdaudio_stream_tag(st);
+		snapshot[nstreams].ctl =
+		    hda_read1(sc, HDAUDIO_SD_CTL0(i)) |
+		    (hda_read1(sc, HDAUDIO_SD_CTL1(i)) << 8) |
+		    (hda_read1(sc, HDAUDIO_SD_CTL2(i)) << 16);
+		snapshot[nstreams].sts = hda_read1(sc, HDAUDIO_SD_STS(i));
+		snapshot[nstreams].lpib = hda_read4(sc, HDAUDIO_SD_LPIB(i));
+		snapshot[nstreams].cbl = hda_read4(sc, HDAUDIO_SD_CBL(i));
+		snapshot[nstreams].lvi = hda_read2(sc, HDAUDIO_SD_LVI(i));
+		snapshot[nstreams].fifos = hda_read2(sc, HDAUDIO_SD_FIFOS(i));
+		snapshot[nstreams].fmt = hda_read2(sc, HDAUDIO_SD_FMT(i));
+		snapshot[nstreams].bdpl = hda_read4(sc, HDAUDIO_SD_BDPL(i));
+		snapshot[nstreams].bdpu = hda_read4(sc, HDAUDIO_SD_BDPU(i));
+		nstreams++;
+	}
+	mutex_exit(&sc->sc_stream_mtx);
+
+	array = prop_array_create();
+	if (array == NULL)
+		return ENOMEM;
+	for (i = 0; i < nstreams; i++) {
+		dict = prop_dictionary_create();
+		if (dict == NULL) {
+			prop_object_release(array);
+			return ENOMEM;
+		}
+		prop_dictionary_set_uint8(dict, "index",
+		    snapshot[i].index);
+		prop_dictionary_set_bool(dict, "allocated",
+		    snapshot[i].allocated);
+		prop_dictionary_set_uint8(dict, "type", snapshot[i].type);
+		prop_dictionary_set_uint8(dict, "tag", snapshot[i].tag);
+		prop_dictionary_set_uint32(dict, "ctl", snapshot[i].ctl);
+		prop_dictionary_set_uint8(dict, "sts", snapshot[i].sts);
+		prop_dictionary_set_uint32(dict, "lpib", snapshot[i].lpib);
+		prop_dictionary_set_uint32(dict, "cbl", snapshot[i].cbl);
+		prop_dictionary_set_uint16(dict, "lvi", snapshot[i].lvi);
+		prop_dictionary_set_uint16(dict, "fifos",
+		    snapshot[i].fifos);
+		prop_dictionary_set_uint16(dict, "format", snapshot[i].fmt);
+		prop_dictionary_set_uint32(dict, "bdpl", snapshot[i].bdpl);
+		prop_dictionary_set_uint32(dict, "bdpu", snapshot[i].bdpu);
+		prop_array_add(array, dict);
+		prop_object_release(dict);
+	}
+	prop_dictionary_set(response, "stream-state", array);
+	prop_object_release(array);
+	return 0;
+}
+
+static int
 hdaudioioctl_fgrp_info(struct hdaudio_softc *sc, prop_dictionary_t request,
     prop_dictionary_t response)
 {
@@ -1510,6 +1593,8 @@ hdaudio_dispatch_fgrp_ioctl(struct hdaudio_softc *sc, u_long cmd,
 				return ENXIO;
 			infocb = (void *)(uintptr_t)info_fn;
 			err = infocb(fgrp_sc, request, response);
+			if (err == 0)
+				err = hdaudio_stream_info(sc, response);
 			break;
 		case HDAUDIO_FGRP_WIDGET_INFO:
 			rv = prop_dictionary_get_uint64(fgrp_dict,

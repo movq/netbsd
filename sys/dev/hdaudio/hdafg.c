@@ -630,6 +630,15 @@ hdafg_widget_pin_parse(struct hdaudio_widget *w)
 	w->w_pin.ctrl = hdaudio_command(sc->sc_codec, w->w_nid,
 	    CORB_GET_PIN_WIDGET_CONTROL, 0);
 
+	if (sc->sc_vendor == HDAUDIO_VENDOR_REALTEK &&
+	    sc->sc_product == HDAFG_PRODUCT_REALTEK_ALC295 &&
+	    sc->sc_host->sc_subsystem == HDAFG_SUBSYSTEM_FRAMEWORK_LAPTOP &&
+	    w->w_nid == 0x21) {
+		/* Share the speaker association, using HP redirection. */
+		w->w_pin.config &= ~0xff;
+		w->w_pin.config |= 0x1f;
+	}
+
 	/* treat line-out as speaker, unless connection type is RCA */
 	if (COP_CFG_DEFAULT_DEVICE(w->w_pin.config) == COP_DEVICE_LINE_OUT &&
 	    COP_CFG_CONNECTION_TYPE(w->w_pin.config) != COP_CONN_TYPE_RCA) {
@@ -4468,6 +4477,17 @@ hdafg_widget_info(void *opaque, prop_dictionary_t request,
 		value = hdaudio_command(sc->sc_codec, w->w_nid,
 		    CORB_GET_PIN_SENSE, 0);
 		prop_dictionary_set_uint32(response, "pin-sense", value);
+		if (wcap & COP_PINCAP_EAPD_CAPABLE) {
+			value = hdaudio_command(sc->sc_codec, w->w_nid,
+			    CORB_GET_EAPD_BTL_ENABLE, 0);
+			prop_dictionary_set_uint32(response, "eapd", value);
+		}
+		if (w->w_nconns > 1) {
+			value = hdaudio_command(sc->sc_codec, w->w_nid,
+			    CORB_GET_CONNECTION_SELECT_CONTROL, 0);
+			prop_dictionary_set_uint32(response,
+			    "connection-select", value);
+		}
 	}
 	if (w->w_p.aw_cap & COP_AWCAP_OUTAMP_PRESENT) {
 		value = hdaudio_command(sc->sc_codec, w->w_nid,
@@ -4505,10 +4525,15 @@ hdafg_codec_info(void *opaque, prop_dictionary_t request,
     prop_dictionary_t response)
 {
 	struct hdafg_softc *sc = opaque;
+	uint32_t value;
+
 	prop_dictionary_set_uint16(response, "vendor-id",
 	    sc->sc_vendor);
 	prop_dictionary_set_uint16(response, "product-id",
 	    sc->sc_product);
+	value = hdaudio_command(sc->sc_codec, sc->sc_nid,
+	    CORB_GET_POWER_STATE, 0);
+	prop_dictionary_set_uint32(response, "power-state", value);
 	return 0;
 }
 
