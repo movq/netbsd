@@ -5,4 +5,7 @@
 #include <sys/proc.h>
 #include <sys/sched.h>
 
+/* Native kpreempt's argument records the call site, not a scheduling mode. */
+#define	KPREEMPT_SYNC	0
+
 #endif

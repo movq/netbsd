@@ -6,6 +6,7 @@
 
 #define	getcomm()	(curproc->p_comm)
 #define	getpid()	(curproc->p_pid)
+#define	defclsyspri	minclsyspri
 
 #define	thread_create_named(name, stk, stksz, func, arg, len, pp, state, pri) \
 	solaris__thread_create((stk), (stksz), (func), (arg), (len), (pp), \
