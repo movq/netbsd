@@ -9,7 +9,7 @@ ZFSOSNET=	${S}/../external/cddl/osnet
 .PATH:	${ZFSDIR}/module/os/netbsd/zfs
 
 # OS interfaces are being brought up separately from the common sources.
-SRCS+=	zio_crypt.c
+SRCS+=	abd_os.c zio_crypt.c
 
 # Common OpenZFS sources.
 SRCS+=	cityhash.c zfeature_common.c zfs_comutil.c zfs_deleg.c

@@ -5,6 +5,7 @@
 #include_next <sys/sysmacros.h>
 
 #define	ARRAY_SIZE(a)	__arraycount(a)
+#define	DIV_ROUND_UP(n, d)	howmany((n), (d))
 #define	____cacheline_aligned	__aligned(COHERENCY_UNIT)
 #define	boot_ncpus	ncpu
 
