@@ -12,6 +12,7 @@
 #include <sys/pathname.h>
 #include <sys/policy.h>
 #include <sys/refstr.h>
+#include <sys/tsd.h>
 #include <sys/vfs.h>
 
 #define	CPU_SEQID	(curcpu()->ci_data.cpu_index)
