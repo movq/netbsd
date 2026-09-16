@@ -11,6 +11,7 @@
 #define	__maybe_unused	__unused
 #define	__init
 #define	__exit
+#define	zfs_fallthrough	__attribute__((__fallthrough__))
 
 /* NetBSD's module loader uses the ELF symbol table. */
 #define	EXPORT_SYMBOL(x)
