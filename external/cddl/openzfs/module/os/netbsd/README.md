@@ -30,3 +30,11 @@ The wrapper must be on `PATH`, or invoked by its absolute path. Compile
 individual object targets during bring-up; defer linking until the source
 inventory and OS interfaces are complete. The rump build also includes
 `Makefile.zfsmod` and will need verification after kernel integration.
+
+Compiled so far with the amd64 kernel toolchain and `-Werror`:
+`cityhash.o`, `zfs_valstr.o`, `objlist.o`, `aggsum.o`, and `btree.o`.
+This checks compilation only, not runtime behavior or module symbol
+resolution. The context adapters still use the old allocation and locking
+implementation. In particular, the old condition-variable timeout and signal
+return conventions need review before compiling their new callers. The UIO
+adapter currently covers only the old buffered-I/O representation.
