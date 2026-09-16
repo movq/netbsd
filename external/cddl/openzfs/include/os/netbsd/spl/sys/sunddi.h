@@ -3,6 +3,7 @@
 #define	_NETBSD_SPL_SUNDDI_H_
 
 #include <sys/systm.h>
+#include <sys/u8_textprep.h>
 
 /*
  * These conversions are supplied by the existing NetBSD Solaris layer.
