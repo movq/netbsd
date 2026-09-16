@@ -11,6 +11,8 @@
 #define	ZMOD_RW	0
 #define	ZMOD_RD	0
 #define	ZFS_MODULE_PARAM(scope, prefix, name, type, perm, desc)
+#define	ZFS_MODULE_PARAM_CALL(scope, prefix, name, set, get, perm, desc)
+#define	ZFS_MODULE_VIRTUAL_PARAM_CALL(scope, prefix, name, set, get, perm, desc)
 #define	ZFS_MODULE_PARAM_ARGS	SYSCTLFN_ARGS
 
 #endif

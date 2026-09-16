@@ -10,7 +10,7 @@ ZFSOSNET=	${S}/../external/cddl/osnet
 
 # OS interfaces are being brought up separately from the common sources.
 SRCS+=	abd_os.c zio_crypt.c
-SRCS+=	spl_condvar.c
+SRCS+=	spl_condvar.c spl_kstat.c
 
 # Common OpenZFS sources.
 SRCS+=	cityhash.c zfeature_common.c zfs_comutil.c zfs_deleg.c
