@@ -9,7 +9,7 @@ ZFSOSNET=	${S}/../external/cddl/osnet
 .PATH:	${ZFSDIR}/module/os/netbsd/zfs
 
 # OS interfaces are being brought up separately from the common sources.
-SRCS+=	abd_os.c dmu_os.c zio_crypt.c
+SRCS+=	abd_os.c dmu_os.c zfs_vnops_os.c zio_crypt.c
 SRCS+=	spl_condvar.c spl_kstat.c spl_procfs_list.c spl_uio.c
 
 # Common OpenZFS sources.
@@ -58,6 +58,8 @@ CPPFLAGS+=	-I${ZFSDIR}/include/os/netbsd/spl
 CPPFLAGS+=	-I${ZFSDIR}/include/os/netbsd/zfs
 CPPFLAGS+=	-I${ZFSDIR}/include
 CPPFLAGS+=	-I${ZFSDIR}/module/icp/include
+# Allow SPL replacements to reach native headers without the osnet wrappers.
+CPPFLAGS+=	-I${S}/..
 
 # Temporary fallback for interfaces supplied by the existing solaris module.
 # OpenZFS headers must precede these so we never use old ZFS core definitions.

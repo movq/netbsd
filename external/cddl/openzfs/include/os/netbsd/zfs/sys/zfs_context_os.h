@@ -15,6 +15,7 @@
 #include <sys/sig.h>
 #include <sys/tsd.h>
 #include <sys/vfs.h>
+#include <util/qsort.h>
 
 #define	CPU_SEQID	(curcpu()->ci_data.cpu_index)
 #define	CPU_SEQID_UNSTABLE	CPU_SEQID
