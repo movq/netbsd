@@ -86,7 +86,10 @@ int zfs_bclone_wait_dirty = 1;
  * Disabled by default on FreeBSD until a potential range locking issue in
  * zfs_getpages() can be resolved.
  */
-#ifdef __FreeBSD__
+#if defined(__NetBSD__)
+/* The NetBSD port has no user-page pinning backend; always use the ARC. */
+static const int zfs_dio_enabled = 0;
+#elif defined(__FreeBSD__)
 static int zfs_dio_enabled = 0;
 #else
 static int zfs_dio_enabled = 1;

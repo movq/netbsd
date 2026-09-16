@@ -7,3 +7,4 @@ headers to the include path.
 
 Encryption is deliberately unsupported during bring-up. The NetBSD
 `zio_crypt.c` returns errors or panics if encryption operations are attempted.
+Page-backed direct I/O is disabled; requests use the upstream ARC fallback.
