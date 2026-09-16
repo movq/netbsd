@@ -82,6 +82,7 @@ struct kstat {
 	char		ks_name[KSTAT_STRLEN];
 	char		ks_class[KSTAT_STRLEN];
 	struct sysctllog	*ks_log;
+	int		ks_sysctl_flags;
 	struct openzfs_kstat_entry *ks_entries;
 	size_t		ks_entries_size;
 	size_t		ks_alloc_size;
