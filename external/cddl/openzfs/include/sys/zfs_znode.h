@@ -182,6 +182,10 @@ typedef struct zfs_dirlock {
 } zfs_dirlock_t;
 
 typedef struct znode {
+#ifdef __NetBSD__
+	/* Native genfs casts v_data to genfs_node, so this must be first. */
+	struct genfs_node z_gnode;
+#endif
 	uint64_t	z_id;		/* object ID for this znode */
 	kmutex_t	z_lock;		/* znode modification lock */
 	krwlock_t	z_parent_lock;	/* parent lock for directories */

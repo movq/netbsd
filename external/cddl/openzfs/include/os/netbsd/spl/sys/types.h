@@ -6,5 +6,7 @@
 
 typedef off_t		loff_t;
 typedef struct timespec	inode_timespec_t;
+typedef mode_t		umode_t;
+typedef void		zidmap_t;
 
 #endif
