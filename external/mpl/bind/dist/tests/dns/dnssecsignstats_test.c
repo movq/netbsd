@@ -1,4 +1,4 @@
-/*	$NetBSD: dnssecsignstats_test.c,v 1.1 2026/09/17 17:45:09 christos Exp $	*/
+/*	$NetBSD: dnssecsignstats_test.c,v 1.1.1.1 2026/09/17 17:45:09 christos Exp $	*/
 
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
