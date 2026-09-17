@@ -412,7 +412,7 @@ zfs_create(znode_t *dzp, const char *name, vattr_t *vap, int excl, int mode,
 	dmu_tx_commit(tx);
 
 out:
-	KASSERT(ZTOV(dzp)->v_usecount > 0);
+	KASSERT(vrefcnt(ZTOV(dzp)) > 0);
 	if (error == 0) {
 		*zpp = zp;
 	}
