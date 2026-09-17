@@ -1,0 +1,8 @@
+#	$NetBSD$
+#
+# Native OpenZFS stress testing.  Build loadable modules with matching
+# LOCKDEBUG and DEBUG options (see tests/fs/zfs/README).
+include "arch/amd64/conf/GENERIC"
+
+options 	LOCKDEBUG
+options 	DEBUG

@@ -1,0 +1,153 @@
+Native OpenZFS correctness and stress tests
+=========================================
+
+These tests exercise a real mounted filesystem through NetBSD system calls.
+The older t_zpool test uses rump; it does not exercise the new native adapter.
+The manual runner requires root, a securelevel of zero or less for the system
+file-flag tests, and an existing disposable pool with at least 1 GiB free.
+It creates and destroys only a uniquely named child of that pool.  It does
+not partition disks or create or destroy pools.
+
+Build h_zfs_stress with the NetBSD makefile in this directory, or natively:
+
+    cc -O2 -g -Wall -Wextra -Werror -o h_zfs_stress h_zfs_stress.c
+    sh ./run_native.sh scratchpool 1000
+
+Keep the helper and script together.  Run from outside the test dataset.
+The script uses /var/tmp for control files and a temporary mountpoint.
+Each C process has a ten-minute alarm; this cannot recover a kernel deadlock.
+Keep a console and a working debugger available for diagnostic testing.
+
+CASES selects a space-separated subset.  Iterations apply to looped tests,
+not to the fixed syscall checks or the 15 administrative-operation cases:
+
+    CASES="coherence contention namespace" sh ./run_native.sh scratchpool 10000
+    CASES="paging readonly lifecycle" sh ./run_native.sh scratchpool 1000
+
+PRESSURE_MIB optionally holds that many MiB of touched, pageable anonymous
+memory while the tests run, then verifies the anonymous pages before release.
+Choose this explicitly for the machine's RAM and swap; it is disabled by
+default.  For example, on a machine with 8 GiB RAM and adequate swap:
+
+    PRESSURE_MIB=7168 CASES="paging contention namespace" \
+        sh ./run_native.sh scratchpool 1000
+
+Diagnostic build
+----------------
+
+The amd64 ZFSDEBUG kernel configuration includes GENERIC and enables DEBUG
+and LOCKDEBUG; GENERIC already enables DIAGNOSTIC.  Build and boot that kernel
+using build.sh's kernel=ZFSDEBUG target.
+
+Build BOTH loadable modules in fresh object directories with matching kernel
+options.  For example, from the source root on NetBSD:
+
+    mkdir -p /var/obj/zfs-diagnostic/zfs /var/obj/zfs-diagnostic/solaris
+    make -C sys/modules/solaris MAKEOBJDIR=/var/obj/zfs-diagnostic/solaris \
+        COPTS="-O2 -g -DLOCKDEBUG -DDEBUG" dependall
+    make -C sys/modules/zfs MAKEOBJDIR=/var/obj/zfs-diagnostic/zfs \
+        COPTS="-O2 -g -DLOCKDEBUG -DDEBUG -DZFS_DEBUG" dependall
+
+Install these together with the diagnostic kernel and the new zfs/zpool
+commands.  Do not reuse release module objects: compiler flags are not make
+dependencies, and ZFS_DEBUG changes internal structure layouts.
+
+DEBUG enables ASSERT, ASSERT0 and ASSERT3* in the retained assertion headers.
+ZFS_DEBUG additionally enables OpenZFS debug paths and debug refcounts.
+The upstream debug default for zfs_flags enables the dbuf, dnode, metaslab
+and other verification flags, except the logging/remap/reconstruction flags
+excluded by spa_misc.c.  Global reference-holder tracking retains its
+upstream disabled default; explicitly tracked refcounts still work.
+
+Coverage and oracles
+-------------------
+
+* permissions: ownership, owner/group/other access, supplementary groups,
+  denied chmod/chown, umask, sticky unlink and replacement, group inheritance,
+  and clearing set-id bits after an unprivileged write.
+* metadata: nanosecond timestamps, atime/mtime/ctime updates, hard/symbolic
+  links, O_NOFOLLOW, pathconf/statvfs, maximum-length names, FIFOs, Unix
+  sockets, directory moves and parent lookup, and invalid rename/rmdir.
+* sparse: a 64 MiB hole checked byte-for-byte, allocation accounting, and
+  zero filling after truncate/re-extension.
+* holes: native FIOSEEKDATA/FIOSEEKHOLE ioctls, data and virtual EOF holes,
+  and ENXIO at/beyond EOF.  Hole reporting is allowed to be conservative
+  while transaction groups are dirty.
+* flags: UF_NODUMP, SF_IMMUTABLE, SF_APPEND, denied mutation and flag clearing.
+  ZFS represents immutable/append-only with system flags; the user variants
+  UF_IMMUTABLE and UF_APPEND are not implemented by the current adapter.
+* append: four independently opened append writers; every fixed-size record
+  must appear intact exactly once and in each writer's sequence order.
+* locking: fcntl range conflict/owner reporting, disjoint ranges, and flock
+  conflicts across independent opens.
+* coherence: pipe-synchronized processes alternate mmap stores and buffered
+  writes to the same page.  Checks dirty mapping visibility before msync,
+  msync/fsync, cached-page updates, partial-page truncation, zero extension,
+  and MAP_PRIVATE isolation.
+* lifetime: rename over a live file, hard links, unlink while open/mapped,
+  access with only a mapping retaining the vnode, and SIGBUS beyond new EOF.
+* contention: six processes mix buffered I/O and shared mmap/msync/fsync on
+  disjoint pages of one file while the parent repeatedly truncates its tail.
+  The disjoint ranges give exact data oracles without ambiguous write races.
+* directories: enumeration during four workers' create/link/rename-over/
+  unlink operations, with bounded iteration and a final empty-directory check.
+* namespace: competing writers replace one pathname while readers open,
+  hard-link, map, unlink and close it.  Opening the replacement pathname must
+  never see a gap, and all bytes must belong to one complete version.
+  A link source may become unlinked after source lookup and before the
+  destination lock is acquired; ZFS rejects resurrection with ENOENT.
+  These outcomes are counted separately, and each reader must successfully
+  link and verify at least one version.
+* paging: 256 MiB of deterministic mapped data, MS_SYNC|MS_INVALIDATE,
+  buffered verification/rewrite, remapping, and a SHA256 comparison across
+  dataset unmount/remount.
+* readonly: mutation rejection in an automounted snapshot and a read-only
+  dataset.  Mount updates are unsupported, so readonly is set while unmounted.
+* lifecycle: separately retain an fd, a mapping without an fd, or a working
+  directory.  Ordinary unmount/destruction must fail busy and leave access
+  intact; rollback must restore data through retained fds/mappings.  Forced
+  unmount/destruction must complete, followed by reference release.  This
+  does not dereference revoked mappings after forced teardown.
+
+The runner waits for a scrub and requires a healthy pool, then checks that
+its dataset can be destroyed.  Failures stop the run and trigger cleanup.
+Use the individual C cases in empty directories on FFS to check assumptions
+about native syscall semantics.
+
+These are bounded regression/stress tests, not an exhaustive VOP suite or
+durability qualification.  NFS/filehandles, ACL/xattr interfaces, quotas,
+zvols, device-node I/O, kqueue, crash/ZIL replay and long-duration low-memory
+operation need separate coverage.
+
+Recorded diagnostic run
+-----------------------
+
+Tested NetBSD/amd64 11.99.8 with eight CPUs, 8 GiB RAM, OpenZFS 2.4.4,
+the ZFSDEBUG kernel, and both modules built with the options above:
+
+* All default cases passed on a single-disk pool and a three-disk RAIDZ1
+  pool, using 1,000 iterations for looped cases.  The hole-ioctl case was
+  added and run separately on both pools.
+* Append, coherence, contention and directory enumeration also passed
+  10,000 iterations on the single-disk pool.
+* RAIDZ1 paging, contention, namespace and all 15 lifecycle cases passed
+  with 7,168 MiB of anonymous-memory pressure.  The pagedaemon freed over
+  850,000 pages during this run; this exercised actual pageout.  The
+  anonymous-memory verification also passed.
+* Every pool scrub finished with zero errors.  Test datasets were removed,
+  and both pools remained healthy.
+* The filesystem-independent cases were also checked on native FFS.
+
+Two adapter defects were found and corrected:
+
+* Repeated dataset creation tripped LOCKDEBUG's "already initialized" panic
+  in zfs_create_fs.  Its temporary zfsvfs was freed without destroying
+  z_znodes_lock.  The temporary list and mutex are now both destroyed.
+* Immutable-file open/truncate returned EACCES because zfs_netbsd_access
+  translated every EPERM.  It now preserves EPERM for immutable writes,
+  matching FFS.  The flag tests passed after the fix.
+
+No further kernel assertions or LOCKDEBUG failures occurred in the completed
+runs.  Setting readonly on an already mounted dataset still fails its mount
+update and prints a misleading version-upgrade diagnostic; unmount/set/mount
+works and is the sequence covered here.
