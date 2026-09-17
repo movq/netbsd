@@ -67,6 +67,7 @@
 #include <sys/fs/zfs.h>
 #include <sys/systeminfo.h>
 #include <sys/types.h>
+#include <sys/sysmacros.h>
 #include <time.h>
 #include <sys/zfs_project.h>
 

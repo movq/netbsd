@@ -22,7 +22,6 @@
 #define	ZFSEXECDIR	"/usr/libexec/zfs"
 #define	SYSCONFDIR	"/etc"
 #define	PKGDATADIR	"/usr/share/zfs"
-#define	ZPOOL_SCRIPTS_DIR	"/etc/zfs/zpool.d"
 #define	ZPOOL_COMPAT_SYSCONF_DIR	"/etc/zfs/compatibility.d"
 #define	ZPOOL_COMPAT_DATA_DIR	"/usr/share/zfs/compatibility.d"
 
