@@ -47,7 +47,7 @@ static inline boolean_t sha2_is_supported(void)
 }
 #endif
 
-#if defined(__x86_64)
+#if defined(__x86_64) && !defined(__NetBSD__)
 
 /* Users of ASMABI requires all calls to be from wrappers */
 extern void ASMABI
@@ -183,7 +183,7 @@ extern const sha256_ops_t sha256_generic_impl;
 /* array with all sha256 implementations */
 static const sha256_ops_t *const sha256_impls[] = {
 	&sha256_generic_impl,
-#if defined(__x86_64)
+#if defined(__x86_64) && !defined(__NetBSD__)
 	&sha256_x64_impl,
 #endif
 #if defined(__x86_64) && defined(HAVE_SSSE3)

@@ -10,6 +10,7 @@
  */
 /* Copyright 2013 Doug Whiting. This code is released to the public domain. */
 
+#include <sys/zfs_context.h>
 #include <sys/skein.h>
 #include "skein_impl.h"
 #include <sys/isa_defs.h>	/* for _ILP32 */
