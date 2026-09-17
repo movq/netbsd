@@ -6,5 +6,6 @@
 
 /* Preserve the old NetBSD ZFS port's internal checksum error number. */
 #define	ECKSUM	122
+#define	EREMOTEIO	EREMOTE
 
 #endif

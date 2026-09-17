@@ -1318,7 +1318,7 @@ spa_taskqs_fini(spa_t *spa, zio_type_t t, zio_taskq_type_t q)
 	tqs->stqs_taskq = NULL;
 }
 
-#ifdef _KERNEL
+#if defined(_KERNEL) && !defined(__NetBSD__)
 /*
  * The READ and WRITE rows of zio_taskqs are configurable at module load time
  * by setting zio_taskq_read or zio_taskq_write.
@@ -1934,7 +1934,7 @@ spa_deactivate(spa_t *spa)
 	list_destroy(&spa->spa_evicting_os_list);
 	list_destroy(&spa->spa_state_dirty_list);
 
-	taskq_cancel_id(system_delay_taskq, spa->spa_deadman_tqid, B_TRUE);
+	spa_deadman_stop(spa);
 
 	for (int t = 0; t < ZIO_TYPES; t++) {
 		for (int q = 0; q < ZIO_TASKQ_TYPES; q++) {
@@ -8421,9 +8421,9 @@ spa_vdev_attach(spa_t *spa, uint64_t guid, nvlist_t *nvroot, int replacing,
 	 */
 	if (strcmp(oldvdpath, newvdpath) == 0) {
 		spa_strfree(oldvd->vdev_path);
-		oldvd->vdev_path = kmem_alloc(strlen(newvdpath) + 5,
-		    KM_SLEEP);
-		(void) sprintf(oldvd->vdev_path, "%s/old",
+		size_t pathsize = strlen(newvdpath) + 5;
+		oldvd->vdev_path = kmem_alloc(pathsize, KM_SLEEP);
+		(void) snprintf(oldvd->vdev_path, pathsize, "%s/old",
 		    newvdpath);
 		if (oldvd->vdev_devid != NULL) {
 			spa_strfree(oldvd->vdev_devid);
@@ -10901,10 +10901,7 @@ spa_sync(spa_t *spa, uint64_t txg)
 
 	spa->spa_sync_starttime = getlrtime();
 
-	taskq_cancel_id(system_delay_taskq, spa->spa_deadman_tqid, B_TRUE);
-	spa->spa_deadman_tqid = taskq_dispatch_delay(system_delay_taskq,
-	    spa_deadman, spa, TQ_SLEEP, ddi_get_lbolt() +
-	    NSEC_TO_TICK(spa->spa_deadman_synctime));
+	spa_deadman_start(spa);
 
 	/*
 	 * If we are upgrading to SPA_VERSION_RAIDZ_DEFLATE this txg,
@@ -10958,8 +10955,7 @@ spa_sync(spa_t *spa, uint64_t txg)
 	spa_sync_rewrite_vdev_config(spa, tx);
 	dmu_tx_commit(tx);
 
-	taskq_cancel_id(system_delay_taskq, spa->spa_deadman_tqid, B_TRUE);
-	spa->spa_deadman_tqid = 0;
+	spa_deadman_stop(spa);
 
 	/*
 	 * Clear the dirty config list.

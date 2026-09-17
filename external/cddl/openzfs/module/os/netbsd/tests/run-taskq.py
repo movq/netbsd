@@ -2,6 +2,7 @@
 """Compile the real taskq implementation with host pthread/callout substitutes."""
 import os
 from pathlib import Path
+import re
 import shlex
 import subprocess
 import tempfile
@@ -24,6 +25,23 @@ with tempfile.TemporaryDirectory(prefix="openzfs-taskq-") as tmp:
             zfs / "include/sys" / (name + ".h"))
     # Host pthread headers still need the host's actual sys/types.h.
     (tmp / "sys/types.h").write_text("#include_next <sys/types.h>\n")
+    # Compile the actual recurring-task functions as well. Their surrounding
+    # pool/FMA machinery is supplied by the test, so a failed shutdown hangs
+    # or leaves a live task just as it would in the kernel.
+    callers = []
+    for source, names in (
+        ("spa_misc.c", ("spa_deadman", "spa_deadman_stop", "spa_deadman_start")),
+        ("zfs_fm.c", ("zfs_ereport_schedule_cleaner", "zfs_ereport_taskq_fini")),
+    ):
+        text = (zfs / "module/zfs" / source).read_text()
+        for name in names:
+            match = re.search(
+                r"^(?:static )?void\n" + name + r"\([^;]*?\n\{.*?^\}",
+                text, re.MULTILINE | re.DOTALL)
+            if match is None:
+                raise RuntimeError("Cannot locate " + name)
+            callers.append(match.group())
+    (tmp / "taskq_callers.h").write_text("\n\n".join(callers) + "\n")
     cc = shlex.split(os.environ.get("CC", "cc"))
     flags = shlex.split(os.environ.get(
         "TASKQ_TEST_CFLAGS", "-fsanitize=address,undefined -fno-omit-frame-pointer"))

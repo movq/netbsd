@@ -11,6 +11,9 @@
 #undef kmem_strdup
 #define	kmem_strdup(s)	kmem_strdupsize((s), NULL, KM_SLEEP)
 
+#define	kmem_vasprintf	openzfs_kmem_vasprintf
+char *kmem_vasprintf(const char *, va_list) __printflike(1, 0);
+
 /* snprintf returns the required length; scnprintf returns bytes stored. */
 static inline int __printflike(3, 4)
 kmem_scnprintf(char *buf, size_t size, const char *fmt, ...)

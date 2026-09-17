@@ -66,9 +66,53 @@ queue(int n)
 static void increment(void *p) { __atomic_add_fetch((int *)p, 1, __ATOMIC_RELAXED); }
 static void forbidden(void *p) { assert(!"cancelled callback ran"); }
 
-enum wait_op { WAIT_ID, WAIT_ALL, WAIT_OUTSTANDING, CANCEL, DESTROY };
+/*
+ * Minimal pool/FMA environment for the real recurring-task functions.
+ * Stalling the callback forces stop/fini to handle an executing task.
+ */
+typedef struct {
+	kmutex_t spa_deadman_lock;
+	bool spa_deadman_armed;
+	taskqid_t spa_deadman_tqid;
+	uint64_t spa_deadman_synctime;
+	struct gate *spa_root_vdev;
+} spa_t;
+static int zfs_deadman_enabled = 1;
+static uint64_t zfs_deadman_checktime_ms = 1000;
+static bool spa_suspended(spa_t *spa) { return (false); }
+static void vdev_deadman(struct gate *g, const void *tag) { block(g); }
+#define	NANOSEC	1000000000ULL
+#define	SEC2NSEC(s)	((s) * NANOSEC)
+#define	NSEC_TO_TICK(ns)	((ns) / NANOSEC)
+#define	MSEC_TO_TICK(ms)	((ms) / 1000)
+#define	zfs_dbgmsg(...)	((void)0)
+#define	FTAG	"test"
+
+static kmutex_t recent_events_lock;
+static bool recent_events_shutdown;
+static taskqid_t recent_events_cleaner_tqid;
+static uint64_t zfs_zevent_retain_expire_secs;
+static struct gate cleaner_gate;
+static void zfs_ereport_schedule_cleaner(void);
+static void
+zfs_ereport_cleaner(void *unused)
+{
+	block(&cleaner_gate);
+	mutex_enter(&recent_events_lock);
+	recent_events_cleaner_tqid = 0;
+	zfs_ereport_schedule_cleaner();
+	mutex_exit(&recent_events_lock);
+}
+
+#include "taskq_callers.h"
+
+enum wait_op {
+	WAIT_ID, WAIT_ALL, WAIT_OUTSTANDING, CANCEL, DESTROY,
+	STOP_DEADMAN, CLEANER_FINI
+};
 struct waiter {
 	taskq_t *tq;
+	void *context;
 	taskqid_t id;
 	enum wait_op op;
 	int result;
@@ -88,15 +132,18 @@ waiter_run(void *arg)
 	case WAIT_OUTSTANDING: taskq_wait_outstanding(w->tq, w->id); break;
 	case CANCEL: w->result = taskq_cancel_id(w->tq, w->id, B_TRUE); break;
 	case DESTROY: taskq_destroy(w->tq); break;
+	case STOP_DEADMAN: spa_deadman_stop(w->context); break;
+	case CLEANER_FINI: zfs_ereport_taskq_fini(); break;
 	}
 	__atomic_store_n(&w->done, true, __ATOMIC_RELEASE);
 	return (NULL);
 }
 
 static void
-waiter_start(struct waiter *w, taskq_t *tq, taskqid_t id, enum wait_op op)
+waiter_start(struct waiter *w, void *context, taskqid_t id, enum wait_op op)
 {
-	*w = (struct waiter){ .tq = tq, .id = id, .op = op };
+	*w = (struct waiter){ .tq = context, .context = context,
+	    .id = id, .op = op };
 	VERIFY0(pthread_create(&w->thread, NULL, waiter_run, w));
 	while (!__atomic_load_n(&w->waiting, __ATOMIC_ACQUIRE)) {
 		assert(!__atomic_load_n(&w->done, __ATOMIC_ACQUIRE));
@@ -385,6 +432,48 @@ test_delayed_stress(void)
 	taskq_destroy(tq);
 }
 
+static void
+test_recurring_shutdown(void)
+{
+	spa_t spa = { .spa_deadman_synctime = NANOSEC };
+	struct gate deadman;
+	gate_init(&deadman);
+	spa.spa_root_vdev = &deadman;
+	mutex_init(&spa.spa_deadman_lock, 0, 0, 0);
+	spa_deadman_start(&spa);
+	test_clock_advance(1);
+	gate_entered(&deadman);
+	struct waiter stop;
+	waiter_start(&stop, &spa, 0, STOP_DEADMAN);
+	gate_release(&deadman);
+	waiter_join(&stop);
+	taskq_wait(system_delay_taskq);
+	assert(!spa.spa_deadman_armed && spa.spa_deadman_tqid == 0);
+	/* Restart and stop before expiration too. */
+	spa_deadman_start(&spa);
+	assert(spa.spa_deadman_tqid != 0);
+	spa_deadman_stop(&spa);
+	taskq_wait(system_delay_taskq);
+	mutex_destroy(&spa.spa_deadman_lock);
+	gate_fini(&deadman);
+
+	gate_init(&cleaner_gate);
+	mutex_init(&recent_events_lock, 0, 0, 0);
+	mutex_enter(&recent_events_lock);
+	zfs_ereport_schedule_cleaner();
+	mutex_exit(&recent_events_lock);
+	test_clock_advance(1);
+	gate_entered(&cleaner_gate);
+	struct waiter fini;
+	waiter_start(&fini, NULL, 0, CLEANER_FINI);
+	gate_release(&cleaner_gate);
+	waiter_join(&fini);
+	taskq_wait(system_delay_taskq);
+	assert(recent_events_shutdown && recent_events_cleaner_tqid == 0);
+	mutex_destroy(&recent_events_lock);
+	gate_fini(&cleaner_gate);
+}
+
 int
 main(void)
 {
@@ -399,11 +488,12 @@ main(void)
 	test_synced();
 	test_stress();
 	test_delayed_stress();
+	test_recurring_shutdown();
 	test_workers_drain();
 	taskq_fini();
 	test_workers_drain();
 	assert(test_allocations == 0);
 	puts("taskq: ordering, cancellation, waits, timers, entry lifetime, "
-	    "synced workers and stress tests passed");
+	    "synced workers, stress and recurring shutdown tests passed");
 	return (0);
 }
