@@ -66,12 +66,22 @@
 #include "zfs_prop.h"
 #include "zfs_comutil.h"
 
+#ifdef __NetBSD__
+#include <sys/zfs_vcache.h>
+#include <miscfs/specfs/specdev.h>
+#include <uvm/uvm_extern.h>
+#define	vfs_timestamp(ts)	gethrestime(ts)
+#define	vnode_pager_setsize(vp, size)	zfs_netbsd_setsize(vp, size)
+#endif
+
 /* Used by fstat(1). */
+#ifndef __NetBSD__
 #ifdef SYSCTL_SIZEOF
 SYSCTL_SIZEOF(znode, znode_t);
 #else
 SYSCTL_INT(_debug_sizeof, OID_AUTO, znode, CTLFLAG_RD,
 	SYSCTL_NULL_INT_PTR, sizeof (znode_t), "sizeof(znode_t)");
+#endif
 #endif
 
 /*
@@ -88,16 +98,18 @@ SYSCTL_INT(_debug_sizeof, OID_AUTO, znode, CTLFLAG_RD,
 #define	ZNODE_STAT_ADD(stat)			/* nothing */
 #endif	/* ZNODE_STATS */
 
-#if !defined(KMEM_DEBUG)
+#if !defined(KMEM_DEBUG) && !defined(__NetBSD__)
 #define	_ZFS_USE_SMR
 static uma_zone_t znode_uma_zone;
 #else
 static kmem_cache_t *znode_cache = NULL;
 #endif
 
+#ifndef __NetBSD__
 extern struct vop_vector zfs_vnodeops;
 extern struct vop_vector zfs_fifoops;
 extern struct vop_vector zfs_shareops;
+#endif
 
 
 /*
@@ -137,6 +149,9 @@ zfs_znode_cache_constructor(void *buf, void *arg, int kmflags)
 {
 	znode_t *zp = buf;
 
+#ifdef __NetBSD__
+	memset(zp, 0, sizeof (*zp));
+#endif
 	POINTER_INVALIDATE(&zp->z_zfsvfs);
 
 	list_link_init(&zp->z_link_node);
@@ -384,6 +399,7 @@ zfs_znode_dmu_fini(znode_t *zp)
 	zp->z_sa_hdl = NULL;
 }
 
+#ifndef __NetBSD__
 static void
 zfs_vnode_forget(vnode_t *vp)
 {
@@ -394,6 +410,7 @@ zfs_vnode_forget(vnode_t *vp)
 	vgone(vp);
 	vput(vp);
 }
+#endif
 
 /*
  * Construct a new znode/vnode and initialize.
@@ -402,12 +419,20 @@ zfs_vnode_forget(vnode_t *vp)
  * up to the caller to do, in case you don't want to
  * return the znode
  */
+#ifdef __NetBSD__
+znode_t *
+zfs_znode_alloc(zfsvfs_t *zfsvfs, dmu_buf_t *db, int blksz,
+    dmu_object_type_t obj_type, sa_handle_t *hdl, vnode_t *vp)
+#else
 static znode_t *
 zfs_znode_alloc(zfsvfs_t *zfsvfs, dmu_buf_t *db, int blksz,
     dmu_object_type_t obj_type, sa_handle_t *hdl)
+#endif
 {
 	znode_t	*zp;
+#ifndef __NetBSD__
 	vnode_t *vp;
+#endif
 	uint64_t mode;
 	uint64_t parent;
 #ifdef notyet
@@ -420,6 +445,7 @@ zfs_znode_alloc(zfsvfs_t *zfsvfs, dmu_buf_t *db, int blksz,
 
 	zp = zfs_znode_alloc_kmem(KM_SLEEP);
 
+#ifndef __NetBSD__
 #ifndef _ZFS_USE_SMR
 	KASSERT((zfsvfs->z_parent->z_vfs->mnt_kern_flag & MNTK_FPLOOKUP) == 0,
 	    ("%s: fast path lookup enabled without smr", __func__));
@@ -432,15 +458,22 @@ zfs_znode_alloc(zfsvfs_t *zfsvfs, dmu_buf_t *db, int blksz,
 		zfs_znode_free_kmem(zp);
 		return (NULL);
 	}
+#endif
 	zp->z_vnode = vp;
 	vp->v_data = zp;
 
+#ifndef __NetBSD__
 	/*
 	 * Acquire the vnode lock before any possible interaction with the
 	 * outside world.  Specifically, there is an error path that calls
 	 * zfs_vnode_forget() and the vnode should be exclusively locked.
 	 */
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+#else
+	vp->v_op = zfs_vnodeop_p;
+	vp->v_tag = VT_ZFS;
+	zp->z_lockf = NULL;
+#endif
 
 	ASSERT(!POINTER_IS_VALID(zp->z_zfsvfs));
 
@@ -452,7 +485,9 @@ zfs_znode_alloc(zfsvfs_t *zfsvfs, dmu_buf_t *db, int blksz,
 	zp->z_blksz = blksz;
 	zp->z_seq = 0x7A4653;
 	zp->z_sync_cnt = 0;
+#ifndef __NetBSD__
 	atomic_store_ptr(&zp->z_cached_symlink, NULL);
+#endif
 
 	zfs_znode_sa_init(zfsvfs, zp, db, obj_type, hdl);
 
@@ -484,7 +519,12 @@ zfs_znode_alloc(zfsvfs_t *zfsvfs, dmu_buf_t *db, int blksz,
 	    sa_lookup(zp->z_sa_hdl, SA_ZPL_PROJID(zfsvfs), &projid, 8) != 0)) {
 		if (hdl == NULL)
 			sa_handle_destroy(zp->z_sa_hdl);
+#ifdef __NetBSD__
+		vp->v_data = NULL;
+		zp->z_sa_hdl = NULL;
+#else
 		zfs_vnode_forget(vp);
+#endif
 		zp->z_vnode = NULL;
 		zfs_znode_free_kmem(zp);
 		return (NULL);
@@ -504,6 +544,19 @@ zfs_znode_alloc(zfsvfs_t *zfsvfs, dmu_buf_t *db, int blksz,
 		zp->z_zn_prefetch = B_TRUE; /* z_prefetch default is enabled */
 		break;
 	case VFIFO:
+#ifdef __NetBSD__
+		vp->v_op = zfs_fifoop_p;
+		break;
+	case VBLK:
+	case VCHR: {
+		uint64_t rdev;
+		VERIFY0(sa_lookup(zp->z_sa_hdl, SA_ZPL_RDEV(zfsvfs),
+		    &rdev, sizeof (rdev)));
+		vp->v_op = zfs_specop_p;
+		spec_node_init(vp, zfs_cmpldev(rdev));
+		break;
+	}
+#else
 		vp->v_op = &zfs_fifoops;
 		break;
 	case VREG:
@@ -513,21 +566,28 @@ zfs_znode_alloc(zfsvfs_t *zfsvfs, dmu_buf_t *db, int blksz,
 			vp->v_op = &zfs_shareops;
 		}
 		break;
+#endif
 	default:
 			break;
 	}
 
+#ifdef __NetBSD__
+	genfs_node_init(vp, &zfs_genfsops);
+	uvm_vnp_setsize(vp, zp->z_size);
+#endif
 	mutex_enter(&zfsvfs->z_znodes_lock);
 	list_insert_tail(&zfsvfs->z_all_znodes, zp);
 	zp->z_zfsvfs = zfsvfs;
 	mutex_exit(&zfsvfs->z_znodes_lock);
 
+#ifndef __NetBSD__
 #if __FreeBSD_version >= 1400077
 	vn_set_state(vp, VSTATE_CONSTRUCTED);
 #endif
 	VN_LOCK_AREC(vp);
 	if (vp->v_type != VFIFO)
 		VN_LOCK_ASHARE(vp);
+#endif
 
 	return (zp);
 }
@@ -552,9 +612,15 @@ static zfs_acl_phys_t acl_phys;
  *	OUT:	zpp	- allocated znode
  *
  */
+#ifdef __NetBSD__
+void
+zfs_mknode_impl(znode_t *dzp, vattr_t *vap, dmu_tx_t *tx, cred_t *cr,
+    uint_t flag, znode_t **zpp, zfs_acl_ids_t *acl_ids, vnode_t *vp)
+#else
 void
 zfs_mknode(znode_t *dzp, vattr_t *vap, dmu_tx_t *tx, cred_t *cr,
     uint_t flag, znode_t **zpp, zfs_acl_ids_t *acl_ids)
+#endif
 {
 	uint64_t	crtime[2], atime[2], mtime[2], ctime[2];
 	uint64_t	mode, size, links, parent, pflags;
@@ -801,7 +867,11 @@ zfs_mknode(znode_t *dzp, vattr_t *vap, dmu_tx_t *tx, cred_t *cr,
 	VERIFY0(sa_replace_all_by_template(sa_hdl, sa_attrs, cnt, tx));
 
 	if (!(flag & IS_ROOT_NODE)) {
+#ifdef __NetBSD__
+		*zpp = zfs_znode_alloc(zfsvfs, db, 0, obj_type, sa_hdl, vp);
+#else
 		*zpp = zfs_znode_alloc(zfsvfs, db, 0, obj_type, sa_hdl);
+#endif
 		ASSERT3P(*zpp, !=, NULL);
 	} else {
 		/*
@@ -818,9 +888,11 @@ zfs_mknode(znode_t *dzp, vattr_t *vap, dmu_tx_t *tx, cred_t *cr,
 	(*zpp)->z_dnodesize = dnodesize;
 	(*zpp)->z_projid = projid;
 
+#ifndef __NetBSD__
 	vnode_t *vp = ZTOV(*zpp);
 	if (!(flag & IS_ROOT_NODE))
 		vn_seqc_write_begin(vp);
+#endif
 
 	if (vap->va_mask & AT_XVATTR)
 		zfs_xvattr_set(*zpp, (xvattr_t *)vap, tx);
@@ -829,6 +901,7 @@ zfs_mknode(znode_t *dzp, vattr_t *vap, dmu_tx_t *tx, cred_t *cr,
 	    acl_ids->z_aclp->z_version < ZFS_ACL_VERSION_FUID) {
 		VERIFY0(zfs_aclset_common(*zpp, acl_ids->z_aclp, cr, tx));
 	}
+#ifndef __NetBSD__
 	if (!(flag & IS_ROOT_NODE)) {
 		vn_seqc_write_end(vp);
 		vp->v_vflag |= VV_FORCEINSMQ;
@@ -837,6 +910,7 @@ zfs_mknode(znode_t *dzp, vattr_t *vap, dmu_tx_t *tx, cred_t *cr,
 		(void) err;
 		KASSERT(err == 0, ("insmntque() failed: error %d", err));
 	}
+#endif
 	kmem_free(sa_attrs, sizeof (sa_bulk_attr_t) * ZPL_END);
 	ZFS_OBJ_HOLD_EXIT(zfsvfs, obj);
 }
@@ -853,9 +927,11 @@ zfs_xvattr_set(znode_t *zp, xvattr_t *xvap, dmu_tx_t *tx)
 	xoap = xva_getxoptattr(xvap);
 	ASSERT3P(xoap, !=, NULL);
 
+#ifndef __NetBSD__
 	if (zp->z_zfsvfs->z_replay == B_FALSE) {
 		ASSERT_VOP_IN_SEQC(ZTOV(zp));
 	}
+#endif
 
 	if (XVA_ISSET_REQ(xvap, XAT_CREATETIME)) {
 		uint64_t times[2];
@@ -945,6 +1021,7 @@ zfs_xvattr_set(znode_t *zp, xvattr_t *xvap, dmu_tx_t *tx)
 	}
 }
 
+#ifndef __NetBSD__
 int
 zfs_zget(zfsvfs_t *zfsvfs, uint64_t obj_num, znode_t **zpp)
 {
@@ -1081,6 +1158,7 @@ again:
 	getnewvnode_drop_reserve();
 	return (err);
 }
+#endif
 
 int
 zfs_rezget(znode_t *zp)
@@ -1110,7 +1188,13 @@ zfs_rezget(znode_t *zp)
 	 * Such pages will be invalid and can safely be skipped here.
 	 */
 	vp = ZTOV(zp);
-#if __FreeBSD_version >= 1400042
+#ifdef __NetBSD__
+	/*
+	 * The suspend path flushes pages before detaching SA handles.
+	 * Follow osnet here: UVM invalidation cannot wait for busy pages
+	 * while the teardown writer excludes their filesystem operations.
+	 */
+#elif __FreeBSD_version >= 1400042
 	vn_pages_remove_valid(vp, 0, 0);
 #else
 	vn_pages_remove(vp, 0, 0);
@@ -1301,7 +1385,17 @@ void
 zfs_znode_free(znode_t *zp)
 {
 	zfsvfs_t *zfsvfs = zp->z_zfsvfs;
+#ifdef __NetBSD__
+	vnode_t *vp = ZTOV(zp);
+
+	genfs_node_destroy(vp);
+	/* Interlock with the mount's sync traversal. */
+	mutex_enter(vp->v_interlock);
+	vp->v_data = NULL;
+	mutex_exit(vp->v_interlock);
+#else
 	char *symlink;
+#endif
 
 	ASSERT0P(zp->z_sa_hdl);
 	zp->z_vnode = NULL;
@@ -1310,12 +1404,14 @@ zfs_znode_free(znode_t *zp)
 	list_remove(&zfsvfs->z_all_znodes, zp);
 	mutex_exit(&zfsvfs->z_znodes_lock);
 
+#ifndef __NetBSD__
 	symlink = atomic_load_ptr(&zp->z_cached_symlink);
 	if (symlink != NULL) {
 		atomic_store_rel_ptr((uintptr_t *)&zp->z_cached_symlink,
 		    (uintptr_t)NULL);
 		cache_symlink_free(symlink, strlen(symlink) + 1);
 	}
+#endif
 
 	if (zp->z_acl_cached) {
 		zfs_acl_free(zp->z_acl_cached);
@@ -1511,6 +1607,14 @@ zfs_free_range(znode_t *zp, uint64_t off, uint64_t len)
 	if (off + len > zp->z_size)
 		len = zp->z_size - off;
 
+#ifdef __NetBSD__
+	/*
+	 * osnet only supported truncation.  Do not shorten the VM object
+	 * when asked to punch an interior hole.
+	 */
+	zfs_rangelock_exit(lr);
+	return (SET_ERROR(EOPNOTSUPP));
+#endif
 	error = dmu_free_long_range(zfsvfs->z_os, zp->z_id, off, len);
 
 	if (error == 0) {
@@ -1825,6 +1929,10 @@ zfs_create_fs(objset_t *os, cred_t *cr, nvlist_t *zplprops, dmu_tx_t *tx)
 void
 zfs_znode_update_vfs(znode_t *zp)
 {
+#ifdef __NetBSD__
+	if (ZTOV(zp)->v_size != zp->z_size)
+		zfs_netbsd_setsize(ZTOV(zp), zp->z_size);
+#else
 	vm_object_t object;
 
 	if ((object = ZTOV(zp)->v_object) == NULL ||
@@ -1832,6 +1940,7 @@ zfs_znode_update_vfs(znode_t *zp)
 		return;
 
 	vnode_pager_setsize(ZTOV(zp), zp->z_size);
+#endif
 }
 
 int
@@ -1865,6 +1974,7 @@ zfs_znode_parent_and_name(znode_t *zp, znode_t **dzpp, char *buf,
 	return (err);
 }
 
+#ifndef __NetBSD__
 int
 zfs_rlimit_fsize(off_t fsize)
 {
@@ -1887,3 +1997,4 @@ zfs_rlimit_fsize(off_t fsize)
 
 	return (EFBIG);
 }
+#endif

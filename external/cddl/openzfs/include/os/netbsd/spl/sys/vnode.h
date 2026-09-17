@@ -41,6 +41,7 @@ typedef struct vnode vnode_t;
 typedef struct vattr vattr_t;
 typedef enum vtype vtype_t;
 typedef int (**vnodeops_t)(void *);
+#define	VATTR_NULL(vap)	vattr_null(vap)
 
 enum symfollow { NO_FOLLOW = NOFOLLOW };
 enum rm { RMFILE, RMDIRECTORY };
