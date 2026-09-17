@@ -42,6 +42,9 @@ typedef struct vattr vattr_t;
 typedef enum vtype vtype_t;
 typedef int (**vnodeops_t)(void *);
 #define	VATTR_NULL(vap)	vattr_null(vap)
+#define	ASSERT_VOP_LOCKED(vp, where)	KASSERT(VOP_ISLOCKED(vp) != 0)
+#define	ASSERT_VOP_ELOCKED(vp, where)	\
+	KASSERT(VOP_ISLOCKED(vp) == LK_EXCLUSIVE)
 
 enum symfollow { NO_FOLLOW = NOFOLLOW };
 enum rm { RMFILE, RMDIRECTORY };
