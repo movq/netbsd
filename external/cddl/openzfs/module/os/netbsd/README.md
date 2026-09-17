@@ -8,7 +8,7 @@ headers to the include path.
 Pass `MAKEOBJDIR=/absolute/path` on the make wrapper's command line to use
 an isolated object directory; the wrapper overrides the environment setting.
 Run `depend` after adding sources, then request individual `.o` targets.
-The current source list has 207 objects, individually cross-compiled for amd64.
+The current source list has 208 objects, individually cross-compiled for amd64.
 No module link has been attempted.
 
 Native disk vdevs use NetBSD buffer I/O and a workqueue for cache flushes.
@@ -21,15 +21,17 @@ and uses uninstalled file objects for path-based I/O.
 The control device, zvol attachment and I/O, and module lifecycle compile.
 Volume strategy I/O is synchronous, as in osnet; block and raw device opens
 retain NetBSD's final-close accounting. Pool hooks and LWP I/O accounting
-are integrated, and the debug log uses the portable FreeBSD implementation.
+are integrated, along with a native copy of the OpenZFS debug log.
 
-Znode metadata, ACLs, and directory routines use current OpenZFS code from
-the FreeBSD directory with NetBSD branches. Native `zfs_vcache.c` supplies
+All OS-specific ZFS sources live in `module/os/netbsd/zfs`. Metadata, ACL,
+directory, mount, and debug routines were copied and adapted from OpenZFS
+2.4.4, with native interfaces based on osnet. The module neither compiles
+nor includes sources from another OS port. Native `zfs_vcache.c` supplies
 vcache construction and lookup, genfs initialization, and UVM size updates.
 Extended-attribute directory deletion retains osnet's synchronous handling.
 The mount adapter retains native mount arguments, vcache, filesystem
 suspension, and unmount flushing. Current OpenZFS dataset setup, quotas,
-and property callbacks are shared with the FreeBSD source. Filesystem
+and property callbacks live in the native `zfs_vfsops.c`. Filesystem
 initialization belongs to the module lifecycle, avoiding duplicate calls
 from VFS attach/detach.
 

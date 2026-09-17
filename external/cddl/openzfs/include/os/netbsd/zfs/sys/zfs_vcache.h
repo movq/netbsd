@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: CDDL-1.0 */
 /*
- * NetBSD vnode construction interface for the shared ZFS metadata code.
+ * NetBSD vnode construction interface for ZFS metadata operations.
  */
 #ifndef _NETBSD_ZFS_VCACHE_H_
 #define	_NETBSD_ZFS_VCACHE_H_

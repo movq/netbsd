@@ -150,7 +150,7 @@ extern int zfs_get_temporary_prop(struct dsl_dataset *, zfs_prop_t,
 extern int zfs_busy(void);
 extern int zfs_set_default_quota(zfsvfs_t *, zfs_prop_t, uint64_t);
 
-/* Current metadata services shared with the FreeBSD implementation. */
+/* Metadata services used by the native mount and suspension adapter. */
 int zfsvfs_init(zfsvfs_t *, objset_t *);
 int zfsvfs_setup(zfsvfs_t *, boolean_t);
 int zfsvfs_teardown(zfsvfs_t *, boolean_t);

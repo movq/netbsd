@@ -3,8 +3,8 @@
  * Copyright (c) 2005, 2010, Oracle and/or its affiliates. All rights reserved.
  *
  * Native mount and suspension operations, adapted from NetBSD's osnet port.
- * Dataset metadata initialization and property callbacks are shared with
- * the current FreeBSD implementation.
+ * Dataset metadata initialization and property callbacks are implemented
+ * in the native zfs_vfsops.c.
  */
 #include <sys/zfs_context.h>
 #include <sys/zfs_vfsops.h>
