@@ -4,6 +4,7 @@
 #include <sys/dkio.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
+#include <sys/sysctl.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -13,6 +14,36 @@
 #include <sys/vdev_impl.h>
 #include <libzutil.h>
 #include "zutil_import.h"
+
+int
+zpool_find_import_scan_disks(libpc_handle_t *hdl, pthread_mutex_t *lock,
+    avl_tree_t *cache, int order)
+{
+	char *disks, *name, *last;
+	size_t len;
+	int error;
+
+	/*
+	 * /dev contains nodes for unattached devices and every partition.
+	 * As in osnet, probe only disks registered with the kernel.  Opening
+	 * all the vnd nodes concurrently can race their dynamic detach.
+	 */
+	if (sysctlbyname("hw.disknames", NULL, &len, NULL, 0) == -1)
+		return (errno);
+	disks = zutil_alloc(hdl, len + 1);
+	if (sysctlbyname("hw.disknames", disks, &len, NULL, 0) == -1) {
+		error = errno;
+		free(disks);
+		return (error);
+	}
+	disks[len] = '\0';
+	for (name = strtok_r(disks, " ", &last); name != NULL;
+	    name = strtok_r(NULL, " ", &last))
+		zpool_find_import_scan_add_slice(hdl, lock, cache, "/dev",
+		    name, order);
+	free(disks);
+	return (0);
+}
 
 void
 zpool_open_func(void *arg)
