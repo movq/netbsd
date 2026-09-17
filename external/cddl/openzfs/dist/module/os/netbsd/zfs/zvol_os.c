@@ -369,6 +369,10 @@ zvol_os_is_zvol(const char *path)
 	struct stat st;
 	int error;
 
+	/* Interior vdevs have no device path. */
+	if (path == NULL)
+		return (B_FALSE);
+
 	error = namei_simple_kernel(path, NSM_FOLLOW_NOEMULROOT, &vp);
 	if (error != 0)
 		return (B_FALSE);
