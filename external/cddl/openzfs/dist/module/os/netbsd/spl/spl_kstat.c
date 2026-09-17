@@ -366,6 +366,14 @@ kstat_create(const char *module, int instance, const char *name,
 		return (NULL);
 	if (class == NULL)
 		class = "misc";
+	/*
+	 * Import probes use temporary pool names such as $import-<ptr>-<name>.
+	 * They are not sysctl names and disappear when the probe completes.
+	 * The real pool publishes its statistics when it is opened.
+	 */
+	if (strstr(module, "/$import") != NULL ||
+	    strncmp(class, "$import", 7) == 0)
+		return (NULL);
 	if (strlen(module) >= KSTAT_STRLEN || strlen(name) >= KSTAT_STRLEN ||
 	    strlen(class) >= KSTAT_STRLEN)
 		return (NULL);
