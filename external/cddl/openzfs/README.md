@@ -47,3 +47,6 @@ machinery.
 
 The kernel bring-up limitations still apply, including unsupported encryption,
 channel programs, and local use of long filenames.
+
+See [BRINGUP.md](BRINGUP.md) for the runtime fixes, verified smoke tests,
+and the test VM handoff.
