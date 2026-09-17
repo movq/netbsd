@@ -84,7 +84,12 @@ The control device requires new OpenZFS binaries; there is
 no compatibility with osnet command numbers or layouts. Its indirect ioctl
 envelope is defined in `sys/zfs_ioctl_os.h`, uses ABI version 15 and the
 current `zfs_cmd_t` size, and returns command data even on ioctl errors.
-Porting userland is deferred until the kernel module builds.
+The new `zfs` and `zpool` commands and nine supporting libraries now compile
+and link for amd64. Their build instructions and verification results are in
+`../../../netbsd/README.md`. The userspace ioctl envelope and command layouts
+match the kernel's sizes and member offsets. The native module also exports
+`vfs.zfs.version.module` for the new version commands. Runtime testing of
+the commands and ioctl behavior has not been performed.
 
 The agreed filename-length policy retains NetBSD's native limits.
 OpenZFS's `longname` feature permits 1,023-byte
