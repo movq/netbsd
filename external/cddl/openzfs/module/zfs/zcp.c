@@ -260,10 +260,11 @@ zcp_table_to_nvlist(lua_State *state, int index, int depth)
 			key = lua_tostring(state, -2);
 
 			/* check if this could collide with a number or bool */
-			long long tmp;
-			int parselen;
-			if ((sscanf(key, "%lld%n", &tmp, &parselen) > 0 &&
-			    parselen == strlen(key)) ||
+			const char *num = key + strspn(key, " \t\n\r\f\v");
+			if (*num == '+' || *num == '-')
+				num++;
+			size_t digits = strspn(num, "0123456789");
+			if ((digits != 0 && num[digits] == '\0') ||
 			    strcmp(key, "true") == 0 ||
 			    strcmp(key, "false") == 0) {
 				key_could_collide = B_TRUE;

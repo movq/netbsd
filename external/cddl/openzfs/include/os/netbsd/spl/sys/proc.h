@@ -9,6 +9,12 @@
 #define	defclsyspri	minclsyspri
 #define	wtqclsyspri	minclsyspri
 
+static inline boolean_t
+zfs_proc_is_caller(proc_t *proc)
+{
+	return (proc == curproc);
+}
+
 #define	thread_create_named(name, stk, stksz, func, arg, len, pp, state, pri) \
 	solaris__thread_create((stk), (stksz), (func), (arg), (len), (pp), \
 	    (state), (pri), (name))

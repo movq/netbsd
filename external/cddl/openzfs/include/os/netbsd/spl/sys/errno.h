@@ -8,5 +8,7 @@
 #define	ECKSUM	122
 #define	EREMOTEIO	EREMOTE
 #define	ENOTACTIVE	ECANCELED
+/* Channel-program execution failure, as in the FreeBSD port. */
+#define	ECHRNG	ENXIO
 
 #endif

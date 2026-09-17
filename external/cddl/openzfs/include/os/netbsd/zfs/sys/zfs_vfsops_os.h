@@ -53,6 +53,7 @@ struct zfsvfs {
 	uint_t		z_show_ctldir;
 	boolean_t	z_issnap;
 	boolean_t	z_use_fuids;
+	boolean_t	z_use_hold;	/* opened with dmu_objset_hold */
 	boolean_t	z_replay;
 	boolean_t	z_use_sa;
 	boolean_t	z_xattr_sa;

@@ -8,6 +8,7 @@
 #define	DIV_ROUND_UP(n, d)	howmany((n), (d))
 #define	____cacheline_aligned	__aligned(COHERENCY_UNIT)
 #define	boot_ncpus	ncpu
+#define	is_system_labeled()	0
 
 /*
  * The old wrapper uses NetBSD's fls64(), but OpenZFS's sys/bitops.h shadows
