@@ -134,11 +134,13 @@ taskq_timer_update(taskq_t *tq)
 {
 	taskq_ent_t *ent = TAILQ_FIRST(&tq->tq_delayed);
 
-	if (ent == NULL)
+	if (ent == NULL) {
 		(void) callout_stop(&tq->tq_timer);
-	else
-		callout_schedule(&tq->tq_timer,
-		    MAX(1, taskq_ticks(ent->tqent_expire)));
+	} else {
+		/* MAX may evaluate its argument twice; sample the clock once. */
+		int ticks = taskq_ticks(ent->tqent_expire);
+		callout_schedule(&tq->tq_timer, MAX(1, ticks));
+	}
 }
 
 /* Only make work runnable in softclock context; callbacks run in workers. */
