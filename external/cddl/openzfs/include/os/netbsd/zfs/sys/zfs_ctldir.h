@@ -30,6 +30,7 @@ int zfsctl_snapshot_unmount(const char *, int);
 int zfsctl_rename_snapshot(const char *, const char *);
 int zfsctl_destroy_snapshot(const char *, int);
 int zfsctl_umount_snapshots(vfs_t *, int, cred_t *);
+/* Success returns a busy mount reference, released with zfs_vfs_rele(). */
 int zfsctl_lookup_objset(vfs_t *, uint64_t, zfsvfs_t **);
 
 #define	ZFSCTL_INO_ROOT		0x1

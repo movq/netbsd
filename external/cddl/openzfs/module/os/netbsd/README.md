@@ -8,7 +8,7 @@ headers to the include path.
 Pass `MAKEOBJDIR=/absolute/path` on the make wrapper's command line to use
 an isolated object directory; the wrapper overrides the environment setting.
 Run `depend` after adding sources, then request individual `.o` targets.
-The current source list has 205 objects, all cross-compiled for amd64.
+The current source list has 206 objects, individually cross-compiled for amd64.
 No module link has been attempted.
 
 Native disk vdevs use NetBSD buffer I/O and a workqueue for cache flushes.
@@ -33,9 +33,15 @@ and property callbacks are shared with the FreeBSD source. Filesystem
 initialization belongs to the module lifecycle, avoiding duplicate calls
 from VFS attach/detach.
 
-Vnode operations (including paging), filehandle operations, and the control
-directory still need integration. Module loading and native concurrency
-have not been tested.
+Native filehandles use the existing object/generation fields, with corrected
+12/20-byte lengths that include the length field as required by NetBSD.
+The osnet 10/18-byte lengths underreported the storage written and are
+rejected. Snapshot lookup holds a busy mount reference while resolving the
+filehandle. `tests/run-fid.py` checks exact-buffer bounds, round trips,
+generations, malformed lengths, and reference cleanup under ASan/UBSan.
+
+Vnode operations (including paging) and the control directory still need
+integration. Module loading and native concurrency have not been tested.
 
 The control device requires new OpenZFS binaries; there is
 no compatibility with osnet command numbers or layouts. Its indirect ioctl

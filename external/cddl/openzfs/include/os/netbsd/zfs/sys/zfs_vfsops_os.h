@@ -116,7 +116,7 @@ struct zfsvfs {
 
 #define	ZSB_XATTR	0x0001
 
-/* Preserve NetBSD's existing on-wire filehandle formats. */
+/* ZFS filehandle fields, with native lengths including the length field. */
 typedef struct zfid_short {
 	uint16_t	zf_len;
 	uint8_t		zf_object[6];
@@ -129,8 +129,8 @@ typedef struct zfid_long {
 	uint8_t		zf_setgen[2];
 } zfid_long_t;
 
-#define	SHORT_FID_LEN	(sizeof (zfid_short_t) - sizeof (uint16_t))
-#define	LONG_FID_LEN	(sizeof (zfid_long_t) - sizeof (uint16_t))
+#define	SHORT_FID_LEN	sizeof (zfid_short_t)
+#define	LONG_FID_LEN	sizeof (zfid_long_t)
 
 extern int zfs_super_owner;
 extern void zfs_init(void);
