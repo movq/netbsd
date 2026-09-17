@@ -10,6 +10,7 @@ ZFSOSNET=	${S}/../external/cddl/osnet
 
 # OS interfaces are being brought up separately from the common sources.
 SRCS+=	abd_os.c dmu_os.c dsl_destroy_os.c zfs_vnops_os.c zio_crypt.c
+SRCS+=	vdev_disk.c
 SRCS+=	spl_condvar.c spl_kstat.c spl_procfs_list.c spl_uio.c
 SRCS+=	spl_taskq.c
 SRCS+=	spl_misc.c
