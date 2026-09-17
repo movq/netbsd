@@ -32,6 +32,13 @@
 
 #include <sys/ioctl.h>
 
+#ifdef __NetBSD__
+#define	pread64	pread
+#define	pwrite64	pwrite
+#define	lseek64	lseek
+#define	ftruncate64	ftruncate
+#endif
+
 #if !defined(HAVE_ISSETUGID)
 #include <sys/types.h>
 #define	issetugid() (geteuid() == 0 || getegid() == 0)

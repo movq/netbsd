@@ -28,8 +28,8 @@
 #ifndef _LIBSPL_SYS_TIME_H
 #define	_LIBSPL_SYS_TIME_H
 
-#include <time.h>
 #include <sys/types.h>
+#include <time.h>
 #include_next <sys/time.h>
 
 #ifndef SEC

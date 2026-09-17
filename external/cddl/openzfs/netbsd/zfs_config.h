@@ -19,6 +19,7 @@
 #define	HAVE_XDR_BYTESREC	1
 
 #define	SBINDIR		"/sbin"
+#define	ZFSEXECDIR	"/usr/libexec/zfs"
 #define	SYSCONFDIR	"/etc"
 #define	PKGDATADIR	"/usr/share/zfs"
 #define	ZPOOL_SCRIPTS_DIR	"/etc/zfs/zpool.d"

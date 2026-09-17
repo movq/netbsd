@@ -1379,7 +1379,7 @@ out:
 /*
  * Scan a list of directories for zfs devices.
  */
-static int
+int
 zpool_find_import_scan(libpc_handle_t *hdl, pthread_mutex_t *lock,
     avl_tree_t **slice_cache, const char * const *dir, size_t dirs)
 {
