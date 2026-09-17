@@ -4,6 +4,13 @@
 
 #include_next <sys/atomic.h>
 
+static inline void
+atomic_sub_64(volatile uint64_t *p, uint64_t value)
+{
+	/* Unsigned negation also handles values greater than INT64_MAX. */
+	atomic_add_64(p, (int64_t)(0 - value));
+}
+
 /*
  * OpenZFS's plain atomic loads/stores do not imply a memory barrier.
  * Use the native accessors so NetBSD's race instrumentation sees them.
