@@ -3160,8 +3160,12 @@ zfs_netbsd_access(void *v)
 		error = EACCES;
 	}
 
-	/* We expect EACCES as common error. */
-	if (error == EPERM)
+	/*
+	 * Permission checks use EACCES, but an immutable file rejects writes
+	 * with EPERM, as required by the native VOP_ACCESS contract.
+	 */
+	if (error == EPERM &&
+	    !((ap->a_accmode & VWRITE) && (zp->z_pflags & ZFS_IMMUTABLE)))
 		error = EACCES;
 
 	return error;
