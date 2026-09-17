@@ -7,6 +7,8 @@ ZFSOSNET=	${S}/../external/cddl/osnet
 .PATH:	${ZFSDIR}/module/zfs
 .PATH:	${ZFSDIR}/module/os/netbsd/spl
 .PATH:	${ZFSDIR}/module/os/netbsd/zfs
+# Selected shared metadata/debug implementations, after the native sources.
+.PATH:	${ZFSDIR}/module/os/freebsd/zfs
 
 # OS interfaces are being brought up separately from the common sources.
 SRCS+=	abd_os.c dmu_os.c dsl_destroy_os.c zfs_vnops_os.c zio_crypt.c
@@ -17,7 +19,11 @@ SRCS+=	zvol_os.c zvol_io.c
 SRCS+=	kmod_core.c
 SRCS+=	spa_os.c zfs_racct.c
 # This upstream debug-log implementation uses only common SPL interfaces.
-SRCS+=	${ZFSDIR}/module/os/freebsd/zfs/zfs_debug.c
+SRCS+=	zfs_debug.c
+# Share current SA metadata logic with the FreeBSD port; construction and
+# reclamation use NetBSD vcache/genfs branches and the native adapter.
+SRCS+=	zfs_znode_os.c
+SRCS+=	zfs_vcache.c
 SRCS+=	spl_condvar.c spl_kstat.c spl_procfs_list.c spl_uio.c
 SRCS+=	spl_taskq.c
 SRCS+=	spl_misc.c
