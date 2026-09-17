@@ -45,6 +45,7 @@ struct zfsvfs {
 	int		z_norm;
 	boolean_t	z_atime;
 	boolean_t	z_unmounted;
+	boolean_t	z_unmount_pending; /* finish failed resume at VFS release */
 	zfs_teardown_lock_t z_teardown_lock;
 	zfs_teardown_inactive_lock_t z_teardown_inactive_lock;
 	list_t		z_all_znodes;
@@ -148,5 +149,13 @@ extern int zfs_get_temporary_prop(struct dsl_dataset *, zfs_prop_t,
     uint64_t *, char *);
 extern int zfs_busy(void);
 extern int zfs_set_default_quota(zfsvfs_t *, zfs_prop_t, uint64_t);
+
+/* Current metadata services shared with the FreeBSD implementation. */
+int zfsvfs_init(zfsvfs_t *, objset_t *);
+int zfsvfs_setup(zfsvfs_t *, boolean_t);
+int zfsvfs_teardown(zfsvfs_t *, boolean_t);
+int zfs_register_callbacks(vfs_t *);
+void zfs_unregister_callbacks(zfsvfs_t *);
+int zfs_netbsd_check_mount(objset_t *);
 
 #endif
