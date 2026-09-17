@@ -1,0 +1,2 @@
+# $NetBSD$
+.include "../Makefile.inc"
