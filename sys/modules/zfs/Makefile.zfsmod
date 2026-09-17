@@ -24,6 +24,7 @@ SRCS+=	zfs_debug.c
 # reclamation use NetBSD vcache/genfs branches and the native adapter.
 SRCS+=	zfs_znode_os.c
 SRCS+=	zfs_vcache.c
+SRCS+=	zfs_acl.c
 SRCS+=	spl_condvar.c spl_kstat.c spl_procfs_list.c spl_uio.c
 SRCS+=	spl_taskq.c
 SRCS+=	spl_misc.c
