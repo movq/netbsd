@@ -118,6 +118,7 @@ static list_t recent_events_list;
 static avl_tree_t recent_events_tree;
 static kmutex_t recent_events_lock;
 static taskqid_t recent_events_cleaner_tqid;
+static boolean_t recent_events_shutdown;
 
 /*
  * Each node is about 128 bytes so 2,000 would consume 1/4 MiB.
@@ -284,6 +285,9 @@ static void
 zfs_ereport_schedule_cleaner(void)
 {
 	ASSERT(MUTEX_HELD(&recent_events_lock));
+
+	if (recent_events_shutdown)
+		return;
 
 	uint64_t timeout = SEC2NSEC(zfs_zevent_retain_expire_secs + 1);
 
@@ -1514,6 +1518,8 @@ zfs_post_state_change(spa_t *spa, vdev_t *vd, uint64_t laststate)
 void
 zfs_ereport_init(void)
 {
+	recent_events_shutdown = B_FALSE;
+	recent_events_cleaner_tqid = TASKQID_INVALID;
 	mutex_init(&recent_events_lock, NULL, MUTEX_DEFAULT, NULL);
 	list_create(&recent_events_list, sizeof (recent_events_node_t),
 	    offsetof(recent_events_node_t, re_list_link));
@@ -1530,12 +1536,14 @@ void
 zfs_ereport_taskq_fini(void)
 {
 	mutex_enter(&recent_events_lock);
-	if (recent_events_cleaner_tqid != 0) {
-		taskq_cancel_id(system_delay_taskq, recent_events_cleaner_tqid,
-		    B_TRUE);
-		recent_events_cleaner_tqid = 0;
-	}
+	recent_events_shutdown = B_TRUE;
+	taskqid_t id = recent_events_cleaner_tqid;
+	recent_events_cleaner_tqid = TASKQID_INVALID;
 	mutex_exit(&recent_events_lock);
+
+	/* A running cleaner takes recent_events_lock; wait without holding it. */
+	if (id != TASKQID_INVALID)
+		taskq_cancel_id(system_delay_taskq, id, B_TRUE);
 }
 
 void

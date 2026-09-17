@@ -1065,7 +1065,8 @@ extern int spa_reset_logs(spa_t *spa);
 
 /* Log claim callback */
 extern void spa_claim_notify(zio_t *zio);
-extern void spa_deadman(void *);
+extern void spa_deadman_start(spa_t *);
+extern void spa_deadman_stop(spa_t *);
 
 /* Accessor functions */
 extern boolean_t spa_shutting_down(spa_t *spa);

@@ -710,7 +710,7 @@ retry:
  * If the zfs_deadman_enabled flag is set then it inspects all vdev queues
  * looking for potentially hung I/Os.
  */
-void
+static void
 spa_deadman(void *arg)
 {
 	spa_t *spa = arg;
@@ -725,9 +725,39 @@ spa_deadman(void *arg)
 	if (zfs_deadman_enabled)
 		vdev_deadman(spa->spa_root_vdev, FTAG);
 
+	mutex_enter(&spa->spa_deadman_lock);
+	if (spa->spa_deadman_armed) {
+		spa->spa_deadman_tqid = taskq_dispatch_delay(system_delay_taskq,
+		    spa_deadman, spa, TQ_SLEEP, ddi_get_lbolt() +
+		    MSEC_TO_TICK(zfs_deadman_checktime_ms));
+	}
+	mutex_exit(&spa->spa_deadman_lock);
+}
+
+void
+spa_deadman_stop(spa_t *spa)
+{
+	mutex_enter(&spa->spa_deadman_lock);
+	spa->spa_deadman_armed = B_FALSE;
+	taskqid_t id = spa->spa_deadman_tqid;
+	spa->spa_deadman_tqid = TASKQID_INVALID;
+	mutex_exit(&spa->spa_deadman_lock);
+
+	/* A running callback must not rearm itself while we wait for it. */
+	if (id != TASKQID_INVALID)
+		taskq_cancel_id(system_delay_taskq, id, B_TRUE);
+}
+
+void
+spa_deadman_start(spa_t *spa)
+{
+	spa_deadman_stop(spa);
+	mutex_enter(&spa->spa_deadman_lock);
+	spa->spa_deadman_armed = B_TRUE;
 	spa->spa_deadman_tqid = taskq_dispatch_delay(system_delay_taskq,
 	    spa_deadman, spa, TQ_SLEEP, ddi_get_lbolt() +
-	    MSEC_TO_TICK(zfs_deadman_checktime_ms));
+	    NSEC_TO_TICK(spa->spa_deadman_synctime));
+	mutex_exit(&spa->spa_deadman_lock);
 }
 
 static int
@@ -755,6 +785,7 @@ spa_add(const char *name, nvlist_t *config, const char *altroot)
 	spa = kmem_zalloc(sizeof (spa_t), KM_SLEEP);
 
 	mutex_init(&spa->spa_async_lock, NULL, MUTEX_DEFAULT, NULL);
+	mutex_init(&spa->spa_deadman_lock, NULL, MUTEX_DEFAULT, NULL);
 	mutex_init(&spa->spa_errlist_lock, NULL, MUTEX_DEFAULT, NULL);
 	mutex_init(&spa->spa_errlog_lock, NULL, MUTEX_DEFAULT, NULL);
 	mutex_init(&spa->spa_evicting_os_lock, NULL, MUTEX_DEFAULT, NULL);
@@ -948,6 +979,7 @@ spa_remove(spa_t *spa)
 
 	mutex_destroy(&spa->spa_flushed_ms_lock);
 	mutex_destroy(&spa->spa_async_lock);
+	mutex_destroy(&spa->spa_deadman_lock);
 	mutex_destroy(&spa->spa_errlist_lock);
 	mutex_destroy(&spa->spa_errlog_lock);
 	mutex_destroy(&spa->spa_evicting_os_lock);

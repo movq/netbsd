@@ -439,7 +439,9 @@ struct spa {
 	nvlist_t	*spa_feat_stats;	/* Cache of enabled features */
 	/* cache feature refcounts */
 	uint64_t	spa_feat_refcount_cache[SPA_FEATURES];
-	taskqid_t	spa_deadman_tqid;	/* Task id */
+	kmutex_t	spa_deadman_lock;
+	boolean_t	spa_deadman_armed;
+	taskqid_t	spa_deadman_tqid;	/* Protected by spa_deadman_lock */
 	uint64_t	spa_deadman_calls;	/* number of deadman calls */
 	hrtime_t	spa_sync_starttime;	/* starting time of spa_sync */
 	uint64_t	spa_deadman_synctime;	/* deadman sync expiration */

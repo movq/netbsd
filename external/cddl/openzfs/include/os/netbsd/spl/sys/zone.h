@@ -9,4 +9,7 @@
 #endif
 #define	crgetzoneid(cr)	GLOBAL_ZONEID
 
+#define	zone_get_hostid	openzfs_zone_get_hostid
+uint32_t zone_get_hostid(void *);
+
 #endif
