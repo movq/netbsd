@@ -3,9 +3,17 @@
 #include <sys/debug.h>
 #include <sys/kernel.h>
 #include <sys/kmem.h>
+#include <sys/misc.h>
 #include <sys/mutex.h>
 #include <sys/systm.h>
 #include <sys/zone.h>
+#include <uvm/uvm.h>
+
+int
+current_is_reclaim_thread(void)
+{
+	return (uvm_lwp_is_pagedaemon(curlwp));
+}
 
 int
 mutex_enter_interruptible(kmutex_t *lock)

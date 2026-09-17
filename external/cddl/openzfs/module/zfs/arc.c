@@ -1266,7 +1266,7 @@ buf_dest(void *vbuf, void *unused)
 }
 
 static void
-buf_init(void)
+arc_buf_hash_init(void)
 {
 	uint64_t *ct = NULL;
 	uint64_t hsize = 1ULL << 12;
@@ -8055,7 +8055,7 @@ arc_init(void)
 
 	arc_state_init();
 
-	buf_init();
+	arc_buf_hash_init();
 
 	list_create(&arc_prune_list, sizeof (arc_prune_t),
 	    offsetof(arc_prune_t, p_node));
