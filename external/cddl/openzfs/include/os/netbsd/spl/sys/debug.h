@@ -14,5 +14,7 @@
 /* Retain the invariant checks; native panic lacks OpenZFS's %px format. */
 #define	ASSERTF(expr, fmt, ...)	ASSERT(expr)
 #define	ASSERT3PF(a, op, b, fmt, ...)	ASSERT3P(a, op, b)
+#define	ASSERT3UF(a, op, b, fmt, ...)	ASSERT3U(a, op, b)
+#define	ASSERT3SF(a, op, b, fmt, ...)	ASSERT3S(a, op, b)
 
 #endif

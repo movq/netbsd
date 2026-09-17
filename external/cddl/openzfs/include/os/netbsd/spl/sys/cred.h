@@ -10,4 +10,8 @@
 #define	SUID_TO_KUID(id)	(id)
 #define	SGID_TO_KGID(id)	(id)
 
+/* Preserve the old port's fallback identities for unmapped FUIDs. */
+#define	UID_NOBODY	32767
+#define	GID_NOBODY	39
+
 #endif
