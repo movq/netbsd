@@ -9,7 +9,7 @@ ZFSOSNET=	${S}/../external/cddl/osnet
 .PATH:	${ZFSDIR}/module/os/netbsd/zfs
 
 # OS interfaces are being brought up separately from the common sources.
-SRCS+=	abd_os.c dmu_os.c zfs_vnops_os.c zio_crypt.c
+SRCS+=	abd_os.c dmu_os.c dsl_destroy_os.c zfs_vnops_os.c zio_crypt.c
 SRCS+=	spl_condvar.c spl_kstat.c spl_procfs_list.c spl_uio.c
 SRCS+=	spl_taskq.c
 SRCS+=	spl_misc.c
@@ -42,7 +42,7 @@ SRCS+=	vdev_raidz_math_scalar.c vdev_raidz_math_sse2.c vdev_raidz_math_ssse3.c
 SRCS+=	vdev_raidz_math_avx2.c vdev_raidz_math_avx512f.c
 SRCS+=	vdev_raidz_math_avx512bw.c vdev_rebuild.c vdev_removal.c vdev_root.c
 SRCS+=	vdev_trim.c zap.c zap_leaf.c zap_micro.c
-SRCS+=	zcp.c zcp_get.c zcp_global.c zcp_iter.c zcp_set.c zcp_synctask.c
+# Channel programs and the Lua runtime are unsupported on NetBSD.
 SRCS+=	zfeature.c zfs_byteswap.c zfs_chksum.c zfs_fm.c zfs_fuid.c
 SRCS+=	zfs_impl.c zfs_ioctl.c zfs_log.c zfs_onexit.c zfs_quota.c
 SRCS+=	zfs_ratelimit.c zfs_replay.c zfs_rlock.c zfs_sa.c zfs_vnops.c
@@ -57,14 +57,6 @@ SRCS+=	zle.c zrlock.c zthr.c zvol.c
 SRCS+=	blake3.c blake3_generic.c blake3_impl.c edonr.c
 SRCS+=	sha2_generic.c sha256_impl.c sha512_impl.c
 SRCS+=	skein.c skein_block.c skein_iv.c
-
-.PATH:	${ZFSDIR}/module/lua
-LUA_SRCS=	lapi.c lauxlib.c lbaselib.c lcode.c lcompat.c lcorolib.c
-LUA_SRCS+=	lctype.c ldebug.c ldo.c lfunc.c lgc.c llex.c lmem.c
-LUA_SRCS+=	lobject.c lopcodes.c lparser.c lstate.c lstring.c lstrlib.c
-LUA_SRCS+=	ltable.c ltablib.c ltm.c lvm.c lzio.c
-SRCS+=	${LUA_SRCS}
-CPPFLAGS.ldo.c+=	-DHAVE_KERNEL_INFINITE_RECURSION -DHAVE_INFINITE_RECURSION
 
 .PATH:	${ZFSDIR}/module/nvpair
 SRCS+=	fnvpair.c nvpair.c nvpair_alloc_fixed.c nvpair_alloc_spl.c

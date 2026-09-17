@@ -44,12 +44,6 @@ static intptr_t stack_remaining(void) {
   local = (intptr_t)&local - (intptr_t)curthread->td_kstack;
   return local;
 }
-#elif defined (_KERNEL) && defined(__NetBSD__)
-#include <machine/pcb.h>
-static intptr_t stack_remaining(void) {
-  intptr_t local;
-  return (intptr_t)&local - (intptr_t)KSTACK_LOWEST_ADDR(curlwp);
-}
 #else
 static intptr_t stack_remaining(void) {
   return INTPTR_MAX;
@@ -116,10 +110,6 @@ void longjmp (label_t * buf) {
 	for (;;);
 }
 #endif
-#elif defined(__NetBSD__)
-#define LUAI_THROW(L,c)		longjmp(&(c)->b)
-#define LUAI_TRY(L,c,a)		if (setjmp(&(c)->b) == 0) { a }
-#define luai_jmpbuf		label_t
 #else
 #define LUAI_THROW(L,c)		longjmp((c)->b, 1)
 #define LUAI_TRY(L,c,a)		if (setjmp((c)->b) == 0) { a }

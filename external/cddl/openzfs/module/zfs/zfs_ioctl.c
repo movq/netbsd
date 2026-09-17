@@ -206,7 +206,9 @@
 #include <sys/dsl_bookmark.h>
 #include <sys/dsl_userhold.h>
 #include <sys/zfeature.h>
+#ifndef __NetBSD__
 #include <sys/zcp.h>
+#endif
 #include <sys/zio_checksum.h>
 #include <sys/vdev_removal.h>
 #include <sys/vdev_impl.h>
@@ -220,8 +222,6 @@
 #include "zfs_deleg.h"
 #include "zfs_comutil.h"
 
-#include <sys/lua/lua.h>
-#include <sys/lua/lauxlib.h>
 #include <sys/zfs_ioctl_impl.h>
 
 kmutex_t zfsdev_state_lock;
@@ -4286,6 +4286,10 @@ static int
 zfs_ioc_channel_program(const char *poolname, nvlist_t *innvl,
     nvlist_t *outnvl)
 {
+#ifdef __NetBSD__
+	/* NetBSD does not embed a Lua interpreter in ZFS. */
+	return (SET_ERROR(ENOTSUP));
+#else
 	const char *program;
 	uint64_t instrlimit, memlimit;
 	boolean_t sync_flag;
@@ -4310,6 +4314,7 @@ zfs_ioc_channel_program(const char *poolname, nvlist_t *innvl,
 
 	return (zcp_eval(poolname, program, sync_flag, instrlimit, memlimit,
 	    nvarg, outnvl));
+#endif
 }
 
 /*
