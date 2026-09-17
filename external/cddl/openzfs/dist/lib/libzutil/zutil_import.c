@@ -1249,7 +1249,7 @@ label_paths(libpc_handle_t *hdl, nvlist_t *label, const char **path,
 	    devid));
 }
 
-static void
+void
 zpool_find_import_scan_add_slice(libpc_handle_t *hdl, pthread_mutex_t *lock,
     avl_tree_t *cache, const char *path, const char *name, int order)
 {
@@ -1297,6 +1297,11 @@ zpool_find_import_scan_dir(libpc_handle_t *hdl, pthread_mutex_t *lock,
 		    "cannot resolve path '%s'"), dir);
 		return (error);
 	}
+
+#ifdef __NetBSD__
+	if (strcmp(path, "/dev") == 0)
+		return (zpool_find_import_scan_disks(hdl, lock, cache, order));
+#endif
 
 	dirp = opendir(path);
 	if (dirp == NULL) {
