@@ -7,6 +7,9 @@
 /* The current common zvol header supplies its own device offset limit. */
 #undef SPEC_MAXOFFSET_T
 
+#define	F_SEEK_DATA	FIOSEEKDATA
+#define	F_SEEK_HOLE	FIOSEEKHOLE
+
 #define	current_is_reclaim_thread	openzfs_current_is_reclaim_thread
 int current_is_reclaim_thread(void);
 

@@ -8,7 +8,7 @@ headers to the include path.
 Pass `MAKEOBJDIR=/absolute/path` on the make wrapper's command line to use
 an isolated object directory; the wrapper overrides the environment setting.
 Run `depend` after adding sources, then request individual `.o` targets.
-The current source list has 208 objects, individually cross-compiled for amd64.
+The current source list has 210 objects, individually cross-compiled for amd64.
 No module link has been attempted.
 
 Native disk vdevs use NetBSD buffer I/O and a workqueue for cache flushes.
@@ -50,7 +50,19 @@ a busy reference. Readdir uses resumable ZAP cookies; `tests/run-ctldir.py`
 checks short buffers, long snapshot names, offsets, EOF, padding, and errors
 against the actual readdir function under ASan/UBSan.
 
-Vnode operations (including paging) still need integration.
+Native vnode dispatch and UVM paging are integrated. Read/write, attributes,
+directory operations, rename, file locking, and reclaim use NetBSD vnode
+contracts. Rename retains osnet's nonblocking relock/relookup approach;
+`tests/run-rename.py` checks lock and reference cleanup, aliasing, failed
+lookups, and replacement during retries with host substitutes under ASan/UBSan.
+Page faults read through the DMU, mapped reads consult UVM, and writes update
+cached pages. Pageout copies busy pages to the ARC synchronously and defers
+allocation from the pagedaemon, as in osnet.
+
+The module also builds the common txg-rate history implementation and checks
+for FreeBSD BTX boot code in imported vdevs before RAIDZ expansion reuses the
+boot reserve. Native seek-hole/data ioctls use the common OpenZFS implementation.
+
 Module loading and native concurrency have not been tested.
 
 The control device requires new OpenZFS binaries; there is
