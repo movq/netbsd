@@ -9,7 +9,22 @@ Pass `MAKEOBJDIR=/absolute/path` on the make wrapper's command line to use
 an isolated object directory; the wrapper overrides the environment setting.
 Run `depend` after adding sources, then request individual `.o` targets.
 The current source list has 210 objects, individually cross-compiled for amd64.
-No module link has been attempted.
+The first kernel-module compile/link milestone is complete. The module links
+as an amd64 ELF relocatable object. All 457 remaining imports have providers
+in the built GENERIC kernel (368) or the existing `solaris` module (89).
+This checks symbol availability, not runtime ABI or locking correctness.
+
+The verified build used:
+
+```
+/home/mike/obj/netbsd/zfs/tooldir.Linux-7.2.5-gentoo-x86_64/bin/nbmake-amd64 \
+    MAKEOBJDIR=/home/mike/obj/netbsd/zfs-openzfs-continue zfs.kmod
+```
+
+Run this from `sys/modules/zfs`, after `depend` and individual object builds.
+The resulting module and verification logs are in that object directory:
+`zfs.kmod`, `verify-prelink.log`, `link.log`, and `symbol-audit.txt`.
+The source dependency files contain no inputs from another OS port.
 
 Native disk vdevs use NetBSD buffer I/O and a workqueue for cache flushes.
 ABD buffers are returned from the ZIO taskq, outside interrupt context.
