@@ -198,6 +198,8 @@ ichsmb_attach(device_t parent, device_t self, void *aux)
 
 	mutex_init(&sc->sc_exec_lock, MUTEX_DEFAULT, IPL_BIO);
 	cv_init(&sc->sc_exec_wait, device_xname(self));
+	/* Detach finalizes the tag even when the controller is disabled. */
+	iic_tag_init(&sc->sc_i2c_tag);
 
 	/* Read configuration */
 	conf = pci_conf_read(pa->pa_pc, pa->pa_tag, SMB_HOSTC);
@@ -244,7 +246,6 @@ ichsmb_attach(device_t parent, device_t self, void *aux)
 	}
 
 	/* Attach I2C bus */
-	iic_tag_init(&sc->sc_i2c_tag);
 	sc->sc_i2c_tag.ic_cookie = sc;
 	sc->sc_i2c_tag.ic_exec = ichsmb_i2c_exec;
 
