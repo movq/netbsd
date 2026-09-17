@@ -47,7 +47,7 @@ static inline boolean_t sha2_is_supported(void)
 }
 #endif
 
-#if defined(__x86_64)
+#if defined(__x86_64) && !defined(__NetBSD__)
 
 /* Users of ASMABI requires all calls to be from wrappers */
 extern void ASMABI
@@ -155,7 +155,7 @@ extern const sha512_ops_t sha512_generic_impl;
 /* array with all sha512 implementations */
 static const sha512_ops_t *const sha512_impls[] = {
 	&sha512_generic_impl,
-#if defined(__x86_64)
+#if defined(__x86_64) && !defined(__NetBSD__)
 	&sha512_x64_impl,
 #endif
 #if defined(__x86_64) && defined(HAVE_AVX)

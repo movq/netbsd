@@ -49,6 +49,15 @@ SRCS+=	zfs_ratelimit.c zfs_replay.c zfs_rlock.c zfs_sa.c zfs_vnops.c
 SRCS+=	zfs_znode.c zil.c zio.c zio_checksum.c zio_compress.c zio_inject.c
 SRCS+=	zle.c zrlock.c zthr.c zvol.c
 
+# Portable checksum backends. Encryption does not require the ICP framework.
+.PATH:	${ZFSDIR}/module/icp/algs/blake3
+.PATH:	${ZFSDIR}/module/icp/algs/edonr
+.PATH:	${ZFSDIR}/module/icp/algs/sha2
+.PATH:	${ZFSDIR}/module/icp/algs/skein
+SRCS+=	blake3.c blake3_generic.c blake3_impl.c edonr.c
+SRCS+=	sha2_generic.c sha256_impl.c sha512_impl.c
+SRCS+=	skein.c skein_block.c skein_iv.c
+
 WARNS=		0
 CWARNFLAGS+=	-Wall -Wno-unknown-pragmas -Wno-missing-braces
 CWARNFLAGS+=	-Wno-parentheses -Wno-unused -Wno-switch
