@@ -14,6 +14,7 @@ SRCS+=	arc_os.c vdev_disk.c
 SRCS+=	zfs_file_os.c
 SRCS+=	zfs_ioctl_os.c zfsdev_os.c
 SRCS+=	zvol_os.c zvol_io.c
+SRCS+=	kmod_core.c
 SRCS+=	spl_condvar.c spl_kstat.c spl_procfs_list.c spl_uio.c
 SRCS+=	spl_taskq.c
 SRCS+=	spl_misc.c
