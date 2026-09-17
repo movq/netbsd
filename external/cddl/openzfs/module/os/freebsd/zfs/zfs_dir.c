@@ -46,7 +46,9 @@
 #include <sys/policy.h>
 #include <sys/condvar.h>
 #include <sys/callb.h>
+#ifndef __NetBSD__
 #include <sys/smp.h>
+#endif
 #include <sys/zfs_dir.h>
 #include <sys/zfs_acl.h>
 #include <sys/fs/zfs.h>
@@ -423,7 +425,9 @@ zfs_purgedir(znode_t *dzp)
 	return (skipped);
 }
 
+#ifndef __NetBSD__
 extern taskq_t *zfsvfs_taskq;
+#endif
 
 void
 zfs_rmnode(znode_t *zp)
@@ -436,10 +440,15 @@ zfs_rmnode(znode_t *zp)
 	uint64_t	xattr_obj;
 	uint64_t	count;
 	int		error;
+#ifdef __NetBSD__
+	znode_t		*xzp = NULL;
+#endif
 
 	ASSERT0(zp->z_links);
+#ifndef __NetBSD__
 	if (zfsvfs->z_replay == B_FALSE)
 		ASSERT_VOP_ELOCKED(ZTOV(zp), __func__);
+#endif
 
 	/*
 	 * If this is an attribute directory, purge its contents.
@@ -489,6 +498,25 @@ zfs_rmnode(znode_t *zp)
 	if (error)
 		xattr_obj = 0;
 
+#ifdef __NetBSD__
+	/*
+	 * Retain osnet's synchronous xattr-directory unlink under NetBSD
+	 * vcache.  Mark the directory in the same transaction as removing
+	 * its parent.
+	 */
+	if (xattr_obj != 0) {
+		error = zfs_zget(zfsvfs, xattr_obj, &xzp);
+		if (error != 0) {
+			ZFS_OBJ_HOLD_ENTER(zfsvfs, z_id);
+			zfs_znode_dmu_fini(zp);
+			zfs_znode_free(zp);
+			ZFS_OBJ_HOLD_EXIT(zfsvfs, z_id);
+			return;
+		}
+		vn_lock(ZTOV(xzp), LK_EXCLUSIVE | LK_RETRY);
+	}
+#endif
+
 	acl_obj = zfs_external_acl(zp);
 
 	/*
@@ -499,6 +527,10 @@ zfs_rmnode(znode_t *zp)
 	dmu_tx_hold_zap(tx, zfsvfs->z_unlinkedobj, FALSE, NULL);
 	if (xattr_obj)
 		dmu_tx_hold_zap(tx, zfsvfs->z_unlinkedobj, TRUE, NULL);
+#ifdef __NetBSD__
+	if (xzp != NULL)
+		dmu_tx_hold_sa(tx, xzp->z_sa_hdl, B_FALSE);
+#endif
 	if (acl_obj)
 		dmu_tx_hold_free(tx, acl_obj, 0, DMU_OBJECT_END);
 
@@ -515,9 +547,22 @@ zfs_rmnode(znode_t *zp)
 		zfs_znode_dmu_fini(zp);
 		zfs_znode_free(zp);
 		ZFS_OBJ_HOLD_EXIT(zfsvfs, z_id);
+#ifdef __NetBSD__
+		if (xzp != NULL)
+			vput(ZTOV(xzp));
+#endif
 		return;
 	}
 
+#ifdef __NetBSD__
+	if (xzp != NULL) {
+		xzp->z_unlinked = B_TRUE;
+		xzp->z_links = 0;
+		VERIFY0(sa_update(xzp->z_sa_hdl, SA_ZPL_LINKS(zfsvfs),
+		    &xzp->z_links, sizeof (xzp->z_links), tx));
+		zfs_unlinked_add(xzp, tx);
+	}
+#else
 	/*
 	 * FreeBSD's implementation of zfs_zget requires a vnode to back it.
 	 * This means that we could end up calling into getnewvnode while
@@ -532,6 +577,7 @@ zfs_rmnode(znode_t *zp)
 		VERIFY3U(0, ==,
 		    zap_add_int(os, zfsvfs->z_unlinkedobj, xattr_obj, tx));
 	}
+#endif
 
 	mutex_enter(&os->os_dsl_dataset->ds_dir->dd_activity_lock);
 
@@ -552,6 +598,10 @@ zfs_rmnode(znode_t *zp)
 
 	dmu_tx_commit(tx);
 
+#ifdef __NetBSD__
+	if (xzp != NULL)
+		vput(ZTOV(xzp));
+#else
 	if (xattr_obj) {
 		/*
 		 * We're using the FreeBSD taskqueue API here instead of
@@ -561,6 +611,7 @@ zfs_rmnode(znode_t *zp)
 		taskqueue_enqueue(zfsvfs_taskq->tq_queue,
 		    &zfsvfs->z_unlinked_drain_task);
 	}
+#endif
 }
 
 static uint64_t
@@ -735,6 +786,10 @@ zfs_link_destroy(znode_t *dzp, const char *name, znode_t *zp, dmu_tx_t *tx,
 	int error;
 
 	if (zfsvfs->z_replay == B_FALSE) {
+#ifdef __NetBSD__
+		/* Reclaim purges an unlinked xattr directory without its lock. */
+		if (!dzp->z_unlinked)
+#endif
 		ASSERT_VOP_ELOCKED(ZTOV(dzp), __func__);
 		ASSERT_VOP_ELOCKED(ZTOV(zp), __func__);
 	}
@@ -838,7 +893,9 @@ zfs_make_xattrdir(znode_t *zp, vattr_t *vap, znode_t **xvpp, cred_t *cr)
 		return (SET_ERROR(EDQUOT));
 	}
 
+#ifndef __NetBSD__
 	getnewvnode_reserve();
+#endif
 
 	tx = dmu_tx_create(zfsvfs->z_os);
 	dmu_tx_hold_sa_create(tx, acl_ids.z_aclp->z_acl_bytes +
@@ -852,7 +909,9 @@ zfs_make_xattrdir(znode_t *zp, vattr_t *vap, znode_t **xvpp, cred_t *cr)
 	if (error) {
 		zfs_acl_ids_free(&acl_ids);
 		dmu_tx_abort(tx);
+#ifndef __NetBSD__
 		getnewvnode_drop_reserve();
+#endif
 		return (error);
 	}
 	zfs_mknode(zp, vap, tx, cr, IS_XATTR, &xzp, &acl_ids);
@@ -873,7 +932,9 @@ zfs_make_xattrdir(znode_t *zp, vattr_t *vap, znode_t **xvpp, cred_t *cr)
 	zfs_acl_ids_free(&acl_ids);
 	dmu_tx_commit(tx);
 
+#ifndef __NetBSD__
 	getnewvnode_drop_reserve();
+#endif
 
 	*xvpp = xzp;
 
