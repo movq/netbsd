@@ -6,6 +6,7 @@ SRCS=	libzfs_changelist.c libzfs_config.c libzfs_crypto.c
 SRCS+=	libzfs_dataset.c libzfs_diff.c libzfs_import.c libzfs_iter.c
 SRCS+=	libzfs_mount.c libzfs_pool.c libzfs_sendrecv.c libzfs_status.c
 SRCS+=	libzfs_util.c
+SRCS+=	libzfs_util_os.c libzfs_mount_os.c
 SRCS+=	cityhash.c zfeature_common.c zfs_comutil.c zfs_deleg.c
 SRCS+=	zfs_fletcher.c zfs_fletcher_aarch64_neon.c zfs_fletcher_avx512.c
 SRCS+=	zfs_fletcher_intel.c zfs_fletcher_sse.c zfs_fletcher_superscalar.c
