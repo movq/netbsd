@@ -4,6 +4,7 @@
 
 #include <sys/buf.h>
 #include <sys/conf.h>
+#include <sys/ccompat.h>
 #include <sys/cred.h>
 #include <sys/file.h>
 #include <sys/kernel.h>
@@ -14,6 +15,7 @@
 #include <sys/refstr.h>
 #include <sys/sig.h>
 #include <sys/tsd.h>
+#include <sys/utsname.h>
 #include <sys/vfs.h>
 #include <util/qsort.h>
 
