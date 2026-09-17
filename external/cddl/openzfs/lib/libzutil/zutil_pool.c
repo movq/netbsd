@@ -32,6 +32,7 @@
 #include <math.h>
 
 #include <libzutil.h>
+#include <sys/sysmacros.h>
 
 static void
 dump_ddt_stat(const ddt_stat_t *dds, int h)

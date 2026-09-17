@@ -205,6 +205,13 @@ dir_is_empty_readdir(const char *dirname)
 static boolean_t
 dir_is_empty(const char *dirname)
 {
+#ifdef __NetBSD__
+	struct statvfs st;
+
+	if (statvfs(dirname, &st) != 0 ||
+	    strcmp(st.f_fstypename, MNTTYPE_ZFS) != 0)
+		return (dir_is_empty_readdir(dirname));
+#else
 	struct statfs64 st;
 
 	/*
@@ -215,6 +222,7 @@ dir_is_empty(const char *dirname)
 	    (st.f_type != ZFS_SUPER_MAGIC)) {
 		return (dir_is_empty_readdir(dirname));
 	}
+#endif
 
 	/*
 	 * At this point, we know the provided path is on a ZFS

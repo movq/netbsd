@@ -27,6 +27,10 @@
 #ifndef _SYS_DKIO_H
 #define	_SYS_DKIO_H
 
+#ifdef __NetBSD__
+#include_next <sys/dkio.h>
+#endif
+
 
 
 #include <sys/dklabel.h>	/* Needed for NDKMAP define */

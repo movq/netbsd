@@ -56,6 +56,8 @@ typedef struct rdsk_node {
 } rdsk_node_t;
 
 int slice_cache_compare(const void *, const void *);
+int zpool_find_import_scan(libpc_handle_t *, pthread_mutex_t *, avl_tree_t **,
+    const char * const *, size_t);
 
 void zpool_open_func(void *);
 

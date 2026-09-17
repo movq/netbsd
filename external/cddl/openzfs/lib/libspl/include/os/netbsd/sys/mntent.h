@@ -1,0 +1,26 @@
+/* SPDX-License-Identifier: BSD-2-Clause */
+#ifndef _LIBSPL_NETBSD_MNTENT_H_
+#define	_LIBSPL_NETBSD_MNTENT_H_
+#define	MNTTYPE_ZFS	"zfs"
+#define	MNTOPT_RO	"ro"
+#define	MNTOPT_RW	"rw"
+#define	MNTOPT_REMOUNT	"remount"
+#define	MNTOPT_NOATIME	"noatime"
+#define	MNTOPT_ATIME	"atime"
+#define	MNTOPT_RELATIME	"relatime"
+#define	MNTOPT_NORELATIME "norelatime"
+#define	MNTOPT_STRICTATIME "strictatime"
+#define	MNTOPT_NOSUID	"nosuid"
+#define	MNTOPT_SETUID	"setuid"
+#define	MNTOPT_NOSETUID	"nosetuid"
+#define	MNTOPT_DEVICES	"devices"
+#define	MNTOPT_NODEVICES	"nodevices"
+#define	MNTOPT_EXEC	"exec"
+#define	MNTOPT_NOEXEC	"noexec"
+#define	MNTOPT_XATTR	"xattr"
+#define	MNTOPT_NOXATTR	"noxattr"
+#define	MNTOPT_NBMAND	"nbmand"
+#define	MNTOPT_NONBMAND	"nonbmand"
+#define	MNTOPT_ZFSUTIL	"zfsutil"
+#define	MNTOPT_DEFAULTS	"defaults"
+#endif
