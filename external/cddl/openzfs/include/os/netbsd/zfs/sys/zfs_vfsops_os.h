@@ -157,5 +157,6 @@ int zfsvfs_teardown(zfsvfs_t *, boolean_t);
 int zfs_register_callbacks(vfs_t *);
 void zfs_unregister_callbacks(zfsvfs_t *);
 int zfs_netbsd_check_mount(objset_t *);
+int zfs_domount_snapshot(vfs_t *, const char *, uint64_t);
 
 #endif
