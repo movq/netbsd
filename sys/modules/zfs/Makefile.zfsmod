@@ -15,6 +15,9 @@ SRCS+=	zfs_file_os.c
 SRCS+=	zfs_ioctl_os.c zfsdev_os.c
 SRCS+=	zvol_os.c zvol_io.c
 SRCS+=	kmod_core.c
+SRCS+=	spa_os.c zfs_racct.c
+# This upstream debug-log implementation uses only common SPL interfaces.
+SRCS+=	${ZFSDIR}/module/os/freebsd/zfs/zfs_debug.c
 SRCS+=	spl_condvar.c spl_kstat.c spl_procfs_list.c spl_uio.c
 SRCS+=	spl_taskq.c
 SRCS+=	spl_misc.c
