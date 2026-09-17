@@ -3314,6 +3314,16 @@ nvs_xdr_nvp_##type(XDR *xdrs, void *ptr)	\
 	return (xdr_##type(xdrs, ptr));		\
 }
 
+#elif defined(__NetBSD__)
+
+/* Native xdrproc_t is const-qualified even for decode operations. */
+#define	NVS_BUILD_XDRPROC_T(type)				\
+static bool_t							\
+nvs_xdr_nvp_##type(XDR *xdrs, const void *ptr)		\
+{								\
+	return (xdr_##type(xdrs, __UNCONST(ptr)));		\
+}
+
 #elif !defined(_KERNEL) && defined(XDR_CONTROL) /* tirpc, FreeBSD < 16 */
 
 #define	NVS_BUILD_XDRPROC_T(type)		\
