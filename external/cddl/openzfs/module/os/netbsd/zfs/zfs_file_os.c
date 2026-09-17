@@ -7,6 +7,7 @@
 
 #include <sys/zfs_context.h>
 #include <sys/zfs_file.h>
+#include <sys/zfs_ioctl_os.h>
 #include <sys/filedesc.h>
 #include <sys/stat.h>
 #include <sys/vfs_syscalls.h>
@@ -15,9 +16,6 @@ struct zfs_file {
 	file_t		*zf_file;
 	boolean_t	zf_uninstalled;
 };
-
-/* Defined by the native control-device integration. */
-extern const struct fileops zfsdev_fileops;
 
 int
 zfs_file_open(const char *path, int flags, int mode, cred_t *cr,
