@@ -80,6 +80,13 @@ typedef	long long		hrtime_t;
 typedef	struct timespec		timespec_t;
 typedef struct timespec		inode_timespec_t;
 
+#ifdef __NetBSD__
+/* Native time.h includes sys/time.h before declaring clock_gettime(). */
+__BEGIN_DECLS
+int clock_gettime(clockid_t, struct timespec *) __RENAME(__clock_gettime50);
+__END_DECLS
+#endif
+
 static inline void
 gethrestime(inode_timespec_t *ts)
 {

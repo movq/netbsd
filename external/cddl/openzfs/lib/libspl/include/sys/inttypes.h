@@ -28,6 +28,9 @@
 #ifndef _SOL_SYS_INTTYPES_H
 #define	_SOL_SYS_INTTYPES_H
 
+#ifdef __NetBSD__
+#include_next <sys/inttypes.h>
+#endif
 #include <inttypes.h>
 
 #define	_INT64_TYPE

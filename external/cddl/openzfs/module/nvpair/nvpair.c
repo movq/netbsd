@@ -45,10 +45,10 @@
 #include <rpc/types.h>
 #include <rpc/xdr.h>
 #include <sys/mod.h>
+#include <sys/sysmacros.h>
 
 #if defined(_KERNEL)
 #include <sys/sunddi.h>
-#include <sys/sysmacros.h>
 #else
 #include <stdarg.h>
 #include <stdlib.h>
