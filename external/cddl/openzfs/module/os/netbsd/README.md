@@ -8,7 +8,7 @@ headers to the include path.
 Pass `MAKEOBJDIR=/absolute/path` on the make wrapper's command line to use
 an isolated object directory; the wrapper overrides the environment setting.
 Run `depend` after adding sources, then request individual `.o` targets.
-The current source list has 203 objects, all cross-compiled for amd64.
+The current source list has 205 objects, all cross-compiled for amd64.
 No module link has been attempted.
 
 Native disk vdevs use NetBSD buffer I/O and a workqueue for cache flushes.
@@ -27,7 +27,13 @@ Znode metadata, ACLs, and directory routines use current OpenZFS code from
 the FreeBSD directory with NetBSD branches. Native `zfs_vcache.c` supplies
 vcache construction and lookup, genfs initialization, and UVM size updates.
 Extended-attribute directory deletion retains osnet's synchronous handling.
-VFS/mount operations, vnode operations (including paging), and the control
+The mount adapter retains native mount arguments, vcache, filesystem
+suspension, and unmount flushing. Current OpenZFS dataset setup, quotas,
+and property callbacks are shared with the FreeBSD source. Filesystem
+initialization belongs to the module lifecycle, avoiding duplicate calls
+from VFS attach/detach.
+
+Vnode operations (including paging), filehandle operations, and the control
 directory still need integration. Module loading and native concurrency
 have not been tested.
 
@@ -37,15 +43,19 @@ envelope is defined in `sys/zfs_ioctl_os.h`, uses ABI version 15 and the
 current `zfs_cmd_t` size, and returns command data even on ioctl errors.
 Porting userland is deferred until the kernel module builds.
 
-The filename-length policy needs a decision before completing the
-filesystem interfaces. OpenZFS's `longname` feature permits 1,023-byte
+The agreed filename-length policy retains NetBSD's native limits.
+OpenZFS's `longname` feature permits 1,023-byte
 names; NetBSD's `KERNEL_NAME_MAX` restricts pathname lookup to 255 bytes,
 and native `struct dirent` has a 512-byte name array. Setting `longname=off`
 does not remove existing long names from an imported/received dataset.
-No feature gate or mount policy has been implemented yet. Options include
-rejecting affected dataset mounts while retaining pool/send/receive support,
-disabling the pool feature entirely, or expanding NetBSD's native filename
-interfaces. This requires agreement with the user.
+Local `longname=on` requests return `ENOTSUP`. Mount and resume reject
+datasets (including snapshots) with active longname feature state.
+Administrative holds, pool import, and send/receive retain feature support.
+If an online receive or rollback introduces longname use, resume fails and
+requests forced unmount when the ioctl releases its filesystem reference.
+The host test `tests/run-vfs-policy.py` exercises the actual property arm,
+mount predicate, resume function, and VFS release under ASan/UBSan; it does
+not simulate native vnode or suspension concurrency.
 
 Encryption is deliberately unsupported during bring-up. The NetBSD
 `zio_crypt.c` returns errors or panics if encryption operations are attempted.

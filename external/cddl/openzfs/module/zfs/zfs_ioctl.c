@@ -2762,6 +2762,19 @@ zfs_prop_set_special(const char *dsname, zprop_source_t source,
 			break;
 		}
 
+#ifdef __NetBSD__
+		/*
+		 * namei cannot address long filenames.  Keep received property
+		 * metadata for send/receive, but do not enable local creation.
+		 * Mount checks use the dataset feature state, not this property:
+		 * switching it off does not remove existing long names.
+		 */
+		if (source == ZPROP_SRC_LOCAL && intval != 0) {
+			err = SET_ERROR(ENOTSUP);
+			break;
+		}
+#endif
+
 		if ((err = zfsvfs_hold(dsname, FTAG, &zfsvfs, B_FALSE)) != 0) {
 			cmn_err(CE_WARN, "%s:%d Failed to hold for dsname=%s "
 			    "err=%d\n", __FILE__, __LINE__, dsname, err);

@@ -63,14 +63,24 @@
 #include <sys/sunddi.h>
 #include <sys/dmu_objset.h>
 #include <sys/dsl_dir.h>
+#ifndef __NetBSD__
 #include <sys/jail.h>
 #include <sys/osd.h>
 #include <ufs/ufs/quota.h>
+#endif
 #include <sys/zfs_quota.h>
 
 #include "zfs_comutil.h"
 #include "zfs_crrd.h"
 
+#ifdef __NetBSD__
+/* Metadata services used by the native mount and suspension adapter. */
+#define	ZFS_VFS_PRIVATE
+#else
+#define	ZFS_VFS_PRIVATE	static
+#endif
+
+#ifndef __NetBSD__
 #ifndef	MNTK_VMSETSIZE_BUG
 #define	MNTK_VMSETSIZE_BUG	0
 #endif
@@ -161,6 +171,7 @@ VFS_SET(zfs_vfsops, zfs, VFCF_DELEGADMIN | VFCF_JAIL
  * from being unloaded after a umount -f
  */
 static uint32_t	zfs_active_fs_count = 0;
+#endif
 
 int
 zfs_get_temporary_prop(dsl_dataset_t *ds, zfs_prop_t zfs_prop, uint64_t *val,
@@ -237,6 +248,7 @@ zfs_get_temporary_prop(dsl_dataset_t *ds, zfs_prop_t zfs_prop, uint64_t *val,
 	return (0);
 }
 
+#ifndef __NetBSD__
 static int
 zfs_getquota(zfsvfs_t *zfsvfs, uid_t id, int isgroup, struct dqblk64 *dqp)
 {
@@ -411,12 +423,14 @@ done:
 }
 
 
+#endif
 boolean_t
 zfs_is_readonly(zfsvfs_t *zfsvfs)
 {
 	return (!!(zfsvfs->z_vfs->vfs_flag & VFS_RDONLY));
 }
 
+#ifndef __NetBSD__
 static int
 zfs_sync(vfs_t *vfsp, int waitfor)
 {
@@ -477,6 +491,7 @@ zfs_sync(vfs_t *vfsp, int waitfor)
 	return (0);
 }
 
+#endif
 static void
 atime_changed_cb(void *arg, uint64_t newval)
 {
@@ -635,7 +650,7 @@ longname_changed_cb(void *arg, uint64_t newval)
 	zfsvfs->z_longname = newval;
 }
 
-static int
+ZFS_VFS_PRIVATE int
 zfs_register_callbacks(vfs_t *vfsp)
 {
 	struct dsl_dataset *ds = NULL;
@@ -806,7 +821,7 @@ unregister:
  * This will cache a bunch of on-disk state from the objset in the
  * zfsvfs.
  */
-static int
+ZFS_VFS_PRIVATE int
 zfsvfs_init(zfsvfs_t *zfsvfs, objset_t *os)
 {
 	int error;
@@ -997,6 +1012,7 @@ zfsvfs_init(zfsvfs_t *zfsvfs, objset_t *os)
 	return (0);
 }
 
+#ifndef __NetBSD__
 taskq_t *zfsvfs_taskq;
 
 static void
@@ -1005,6 +1021,7 @@ zfsvfs_task_unlinked_drain(void *context, int pending __unused)
 
 	zfs_unlinked_drain((zfsvfs_t *)context);
 }
+#endif
 
 int
 zfsvfs_create(const char *osname, boolean_t readonly, zfsvfs_t **zfvp)
@@ -1078,8 +1095,10 @@ zfsvfs_create_impl(zfsvfs_t **zfvp, zfsvfs_t *zfsvfs, objset_t *os)
 	mutex_init(&zfsvfs->z_lock, NULL, MUTEX_DEFAULT, NULL);
 	list_create(&zfsvfs->z_all_znodes, sizeof (znode_t),
 	    offsetof(znode_t, z_link_node));
+#ifndef __NetBSD__
 	TASK_INIT(&zfsvfs->z_unlinked_drain_task, 0,
 	    zfsvfs_task_unlinked_drain, zfsvfs);
+#endif
 	ZFS_TEARDOWN_INIT(zfsvfs);
 	ZFS_TEARDOWN_INACTIVE_INIT(zfsvfs);
 	rw_init(&zfsvfs->z_fuid_lock, NULL, RW_DEFAULT, NULL);
@@ -1093,7 +1112,7 @@ zfsvfs_create_impl(zfsvfs_t **zfvp, zfsvfs_t *zfsvfs, objset_t *os)
 		else
 			dmu_objset_disown(os, B_TRUE, zfsvfs);
 		*zfvp = NULL;
-		kmem_free(zfsvfs, sizeof (zfsvfs_t));
+		zfsvfs_free(zfsvfs);
 		return (error);
 	}
 
@@ -1101,7 +1120,7 @@ zfsvfs_create_impl(zfsvfs_t **zfvp, zfsvfs_t *zfsvfs, objset_t *os)
 	return (0);
 }
 
-static int
+ZFS_VFS_PRIVATE int
 zfsvfs_setup(zfsvfs_t *zfsvfs, boolean_t mounting)
 {
 	int error;
@@ -1246,6 +1265,7 @@ zfs_set_fuid_feature(zfsvfs_t *zfsvfs)
 
 extern int zfs_xattr_compat;
 
+#ifndef __NetBSD__
 static int
 zfs_domount(vfs_t *vfsp, char *osname)
 {
@@ -1356,7 +1376,8 @@ out:
 	return (error);
 }
 
-static void
+#endif
+ZFS_VFS_PRIVATE void
 zfs_unregister_callbacks(zfsvfs_t *zfsvfs)
 {
 	objset_t *os = zfsvfs->z_os;
@@ -1365,6 +1386,7 @@ zfs_unregister_callbacks(zfsvfs_t *zfsvfs)
 		dsl_prop_unregister_all(dmu_objset_ds(os), zfsvfs);
 }
 
+#ifndef __NetBSD__
 static int
 getpoolname(const char *osname, char *poolname)
 {
@@ -1627,7 +1649,9 @@ zfs_root(vfs_t *vfsp, int flags, vnode_t **vpp)
  * Note, if 'unmounting' is FALSE, we return with the 'z_teardown_lock'
  * and 'z_teardown_inactive_lock' held.
  */
-static int
+/* NetBSD supplies its own mount, statvfs and root operations. */
+#endif
+ZFS_VFS_PRIVATE int
 zfsvfs_teardown(zfsvfs_t *zfsvfs, boolean_t unmounting)
 {
 	znode_t	*zp;
@@ -1638,6 +1662,7 @@ zfsvfs_teardown(zfsvfs_t *zfsvfs, boolean_t unmounting)
 	 * drain the zrele_taskq to ensure all active references to the
 	 * zfsvfs_t have been handled only then can it be safely destroyed.
 	 */
+#ifndef __NetBSD__
 	if (zfsvfs->z_os) {
 		/*
 		 * If we're unmounting we have to wait for the list to
@@ -1659,6 +1684,7 @@ zfsvfs_teardown(zfsvfs_t *zfsvfs, boolean_t unmounting)
 				break;
 		}
 	}
+#endif
 	ZFS_TEARDOWN_ENTER_WRITE(zfsvfs, FTAG);
 
 	if (!unmounting) {
@@ -1668,7 +1694,7 @@ zfsvfs_teardown(zfsvfs_t *zfsvfs, boolean_t unmounting)
 		 * v_vfsp set to the parent's filesystem's vfsp.  Note,
 		 * 'z_parent' is self referential for non-snapshots.
 		 */
-#ifdef FREEBSD_NAMECACHE
+#if defined(FREEBSD_NAMECACHE) || defined(__NetBSD__)
 		cache_purgevfs(zfsvfs->z_parent->z_vfs);
 #endif
 	}
@@ -1756,6 +1782,7 @@ zfsvfs_teardown(zfsvfs_t *zfsvfs, boolean_t unmounting)
 	return (0);
 }
 
+#ifndef __NetBSD__
 static int
 zfs_umount(vfs_t *vfsp, int fflag)
 {
@@ -2276,6 +2303,7 @@ zfs_end_fs(zfsvfs_t *zfsvfs, dsl_dataset_t *ds)
 	return (0);
 }
 
+#endif
 int
 zfs_set_version(zfsvfs_t *zfsvfs, uint64_t newvers)
 {
@@ -2415,14 +2443,18 @@ zfs_get_vfs_flag_unmounted(objset_t *os)
 	mutex_enter(&os->os_user_ptr_lock);
 	zfvp = dmu_objset_get_user(os);
 	if (zfvp != NULL && zfvp->z_vfs != NULL &&
+#ifdef __NetBSD__
+	    (zfvp->z_vfs->mnt_iflag & IMNT_UNMOUNT))
+#else
 	    (zfvp->z_vfs->mnt_kern_flag & MNTK_UNMOUNT))
+#endif
 		unmounted = B_TRUE;
 	mutex_exit(&os->os_user_ptr_lock);
 
 	return (unmounted);
 }
 
-#ifdef _KERNEL
+#if defined(_KERNEL) && !defined(__NetBSD__)
 void
 zfsvfs_update_fromname(const char *oldname, const char *newname)
 {
@@ -2458,6 +2490,7 @@ zfsvfs_update_fromname(const char *oldname, const char *newname)
  * Find a prison with ZFS info.
  * Return the ZFS info and the (locked) prison.
  */
+#ifndef __NetBSD__
 static struct zfs_jailparam *
 zfs_jailparam_find(struct prison *spr, struct prison **prp)
 {
@@ -2698,3 +2731,4 @@ SYSINIT(zfs_jailparam_sysinit, SI_SUB_DRIVERS, SI_ORDER_ANY,
 	zfs_jailparam_sysinit, NULL);
 SYSUNINIT(zfs_jailparam_sysuninit, SI_SUB_DRIVERS, SI_ORDER_ANY,
 	zfs_jailparam_sysuninit, NULL);
+#endif

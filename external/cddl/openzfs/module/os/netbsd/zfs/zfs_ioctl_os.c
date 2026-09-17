@@ -30,7 +30,29 @@ zfs_vfs_held(zfsvfs_t *zfsvfs)
 void
 zfs_vfs_rele(zfsvfs_t *zfsvfs)
 {
-	vfs_unbusy(zfsvfs->z_vfs);
+	vfs_t *mp = zfsvfs->z_vfs;
+	boolean_t unmount;
+
+	/*
+	 * A failed resume (or receive of redacted/longname data) must remove
+	 * the mount.  Wait until the ioctl has finished using zfsvfs: unmount
+	 * frees it.  Take a native mount reference across the busy release.
+	 */
+	mutex_enter(&zfsvfs->z_lock);
+	unmount = zfsvfs->z_unmount_pending;
+	zfsvfs->z_unmount_pending = B_FALSE;
+	if (unmount)
+		vfs_ref(mp);
+	mutex_exit(&zfsvfs->z_lock);
+	vfs_unbusy(mp);
+	if (unmount) {
+		int error = dounmount(mp, MNT_FORCE, curlwp);
+		if (error != 0)
+			cmn_err(CE_WARN, "ZFS: cannot unmount %s after failed "
+			    "resume: error %d", mp->mnt_stat.f_mntfromname,
+			    error);
+		vfs_rele(mp);
+	}
 }
 
 void
