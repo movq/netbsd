@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: CDDL-1.0
+/* NetBSD directory operations, adapted from OpenZFS 2.4.4 and osnet. */
 /*
  * CDDL HEADER START
  *
@@ -46,7 +47,6 @@
 #include <sys/policy.h>
 #include <sys/condvar.h>
 #include <sys/callb.h>
-#include <sys/smp.h>
 #include <sys/zfs_dir.h>
 #include <sys/zfs_acl.h>
 #include <sys/fs/zfs.h>
@@ -423,7 +423,6 @@ zfs_purgedir(znode_t *dzp)
 	return (skipped);
 }
 
-extern taskq_t *zfsvfs_taskq;
 
 void
 zfs_rmnode(znode_t *zp)
@@ -436,10 +435,9 @@ zfs_rmnode(znode_t *zp)
 	uint64_t	xattr_obj;
 	uint64_t	count;
 	int		error;
+	znode_t		*xzp = NULL;
 
 	ASSERT0(zp->z_links);
-	if (zfsvfs->z_replay == B_FALSE)
-		ASSERT_VOP_ELOCKED(ZTOV(zp), __func__);
 
 	/*
 	 * If this is an attribute directory, purge its contents.
@@ -489,6 +487,23 @@ zfs_rmnode(znode_t *zp)
 	if (error)
 		xattr_obj = 0;
 
+	/*
+	 * Retain osnet's synchronous xattr-directory unlink under NetBSD
+	 * vcache.  Mark the directory in the same transaction as removing
+	 * its parent.
+	 */
+	if (xattr_obj != 0) {
+		error = zfs_zget(zfsvfs, xattr_obj, &xzp);
+		if (error != 0) {
+			ZFS_OBJ_HOLD_ENTER(zfsvfs, z_id);
+			zfs_znode_dmu_fini(zp);
+			zfs_znode_free(zp);
+			ZFS_OBJ_HOLD_EXIT(zfsvfs, z_id);
+			return;
+		}
+		vn_lock(ZTOV(xzp), LK_EXCLUSIVE | LK_RETRY);
+	}
+
 	acl_obj = zfs_external_acl(zp);
 
 	/*
@@ -499,6 +514,8 @@ zfs_rmnode(znode_t *zp)
 	dmu_tx_hold_zap(tx, zfsvfs->z_unlinkedobj, FALSE, NULL);
 	if (xattr_obj)
 		dmu_tx_hold_zap(tx, zfsvfs->z_unlinkedobj, TRUE, NULL);
+	if (xzp != NULL)
+		dmu_tx_hold_sa(tx, xzp->z_sa_hdl, B_FALSE);
 	if (acl_obj)
 		dmu_tx_hold_free(tx, acl_obj, 0, DMU_OBJECT_END);
 
@@ -515,22 +532,17 @@ zfs_rmnode(znode_t *zp)
 		zfs_znode_dmu_fini(zp);
 		zfs_znode_free(zp);
 		ZFS_OBJ_HOLD_EXIT(zfsvfs, z_id);
+		if (xzp != NULL)
+			vput(ZTOV(xzp));
 		return;
 	}
 
-	/*
-	 * FreeBSD's implementation of zfs_zget requires a vnode to back it.
-	 * This means that we could end up calling into getnewvnode while
-	 * calling zfs_rmnode as a result of a prior call to getnewvnode
-	 * trying to clear vnodes out of the cache. If this repeats we can
-	 * recurse enough that we overflow our stack. To avoid this, we
-	 * avoid calling zfs_zget on the xattr znode and instead simply add
-	 * it to the unlinked set and schedule a call to zfs_unlinked_drain.
-	 */
-	if (xattr_obj) {
-		/* Add extended attribute directory to the unlinked set. */
-		VERIFY3U(0, ==,
-		    zap_add_int(os, zfsvfs->z_unlinkedobj, xattr_obj, tx));
+	if (xzp != NULL) {
+		xzp->z_unlinked = B_TRUE;
+		xzp->z_links = 0;
+		VERIFY0(sa_update(xzp->z_sa_hdl, SA_ZPL_LINKS(zfsvfs),
+		    &xzp->z_links, sizeof (xzp->z_links), tx));
+		zfs_unlinked_add(xzp, tx);
 	}
 
 	mutex_enter(&os->os_dsl_dataset->ds_dir->dd_activity_lock);
@@ -552,15 +564,8 @@ zfs_rmnode(znode_t *zp)
 
 	dmu_tx_commit(tx);
 
-	if (xattr_obj) {
-		/*
-		 * We're using the FreeBSD taskqueue API here instead of
-		 * the Solaris taskq API since the FreeBSD API allows for a
-		 * task to be enqueued multiple times but executed once.
-		 */
-		taskqueue_enqueue(zfsvfs_taskq->tq_queue,
-		    &zfsvfs->z_unlinked_drain_task);
-	}
+	if (xzp != NULL)
+		vput(ZTOV(xzp));
 }
 
 static uint64_t
@@ -735,6 +740,8 @@ zfs_link_destroy(znode_t *dzp, const char *name, znode_t *zp, dmu_tx_t *tx,
 	int error;
 
 	if (zfsvfs->z_replay == B_FALSE) {
+		/* Reclaim purges an unlinked xattr directory without its lock. */
+		if (!dzp->z_unlinked)
 		ASSERT_VOP_ELOCKED(ZTOV(dzp), __func__);
 		ASSERT_VOP_ELOCKED(ZTOV(zp), __func__);
 	}
@@ -838,7 +845,6 @@ zfs_make_xattrdir(znode_t *zp, vattr_t *vap, znode_t **xvpp, cred_t *cr)
 		return (SET_ERROR(EDQUOT));
 	}
 
-	getnewvnode_reserve();
 
 	tx = dmu_tx_create(zfsvfs->z_os);
 	dmu_tx_hold_sa_create(tx, acl_ids.z_aclp->z_acl_bytes +
@@ -852,7 +858,6 @@ zfs_make_xattrdir(znode_t *zp, vattr_t *vap, znode_t **xvpp, cred_t *cr)
 	if (error) {
 		zfs_acl_ids_free(&acl_ids);
 		dmu_tx_abort(tx);
-		getnewvnode_drop_reserve();
 		return (error);
 	}
 	zfs_mknode(zp, vap, tx, cr, IS_XATTR, &xzp, &acl_ids);
@@ -873,7 +878,6 @@ zfs_make_xattrdir(znode_t *zp, vattr_t *vap, znode_t **xvpp, cred_t *cr)
 	zfs_acl_ids_free(&acl_ids);
 	dmu_tx_commit(tx);
 
-	getnewvnode_drop_reserve();
 
 	*xvpp = xzp;
 

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: CDDL-1.0
+/* NetBSD ACL operations, adapted from OpenZFS 2.4.4. */
 /*
  * CDDL HEADER START
  *
@@ -1145,7 +1146,6 @@ zfs_acl_chown_setattr(znode_t *zp)
 
 	if (zp->z_zfsvfs->z_replay == B_FALSE) {
 		ASSERT_VOP_ELOCKED(ZTOV(zp), __func__);
-		ASSERT_VOP_IN_SEQC(ZTOV(zp));
 	}
 	ASSERT(MUTEX_HELD(&zp->z_acl_lock));
 
@@ -1175,9 +1175,6 @@ zfs_aclset_common(znode_t *zp, zfs_acl_t *aclp, cred_t *cr, dmu_tx_t *tx)
 	int			count = 0;
 	zfs_acl_phys_t		acl_phys;
 
-	if (ZTOV(zp) != NULL && zp->z_zfsvfs->z_replay == B_FALSE) {
-		ASSERT_VOP_IN_SEQC(ZTOV(zp));
-	}
 
 	mode = zp->z_mode;
 
@@ -2361,11 +2358,7 @@ zfs_zaccess(znode_t *zp, int mode, int flags, boolean_t skipaclchk, cred_t *cr,
 	 *
 	 * If this is a named attribute lookup, do the checks.
 	 */
-#if __FreeBSD_version >= 1500040
-	if ((zp->z_pflags & ZFS_XATTR) && (flags & V_NAMEDATTR) == 0)
-#else
 	if (zp->z_pflags & ZFS_XATTR)
-#endif
 		return (0);
 
 	/*
