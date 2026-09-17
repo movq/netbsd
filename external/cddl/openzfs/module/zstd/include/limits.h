@@ -44,7 +44,10 @@ extern "C" {
 
 #ifdef _KERNEL
 
-#if defined(__FreeBSD__)
+#if defined(__NetBSD__)
+#include <sys/syslimits.h>
+#include <machine/limits.h>
+#elif defined(__FreeBSD__)
 #include <sys/limits.h>
 #elif defined(__linux__)
 #include <linux/limits.h>

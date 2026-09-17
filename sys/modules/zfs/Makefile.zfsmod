@@ -58,6 +58,29 @@ SRCS+=	blake3.c blake3_generic.c blake3_impl.c edonr.c
 SRCS+=	sha2_generic.c sha256_impl.c sha512_impl.c
 SRCS+=	skein.c skein_block.c skein_iv.c
 
+.PATH:	${ZFSDIR}/module/zstd
+.PATH:	${ZFSDIR}/module/zstd/lib/common
+.PATH:	${ZFSDIR}/module/zstd/lib/compress
+.PATH:	${ZFSDIR}/module/zstd/lib/decompress
+ZSTD_SRCS=	zfs_zstd.c entropy_common.c error_private.c fse_decompress.c
+ZSTD_SRCS+=	pool.c zstd_common.c fse_compress.c hist.c huf_compress.c
+ZSTD_SRCS+=	zstd_compress.c zstd_compress_literals.c
+ZSTD_SRCS+=	zstd_compress_sequences.c zstd_compress_superblock.c
+ZSTD_SRCS+=	zstd_double_fast.c zstd_fast.c zstd_lazy.c zstd_ldm.c zstd_opt.c
+ZSTD_SRCS+=	huf_decompress.c zstd_ddict.c zstd_decompress.c
+ZSTD_SRCS+=	zstd_decompress_block.c
+SRCS+=	${ZSTD_SRCS}
+.for src in ${ZSTD_SRCS}
+CPPFLAGS.${src}+= -I${ZFSDIR}/module/zstd/include
+CPPFLAGS.${src}+= -include ${ZFSDIR}/module/zstd/include/zstd_compat_wrapper.h
+COPTS.${src}+=	-O3 -fno-tree-vectorize -U__BMI__
+.endfor
+
+# Upstream remaps public error helpers, then defines local inline versions.
+.for src in ${ZSTD_SRCS:Nzfs_zstd.c}
+CPPFLAGS.${src}+= -Wp,-w
+.endfor
+
 WARNS=		0
 CWARNFLAGS+=	-Wall -Wno-unknown-pragmas -Wno-missing-braces
 CWARNFLAGS+=	-Wno-parentheses -Wno-unused -Wno-switch
