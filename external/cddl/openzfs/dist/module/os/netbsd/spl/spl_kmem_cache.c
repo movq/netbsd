@@ -137,9 +137,9 @@ spl_kmem_cache_inuse(kmem_cache_t *km)
 	uint64_t count;
 
 	/* Include objects retained in CPU caches, as well as active objects. */
-	mutex_spin_enter(&pool->pr_lock);
+	mutex_enter(&pool->pr_lock);
 	count = pool->pr_nout;
-	mutex_spin_exit(&pool->pr_lock);
+	mutex_exit(&pool->pr_lock);
 	return (count);
 }
 
