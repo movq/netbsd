@@ -11,7 +11,9 @@ TESTS_SUBDIRS=	awk basename bzip2 cc cmp compress config cpio col cut \
 		nbperf netpgpkeys netpgpverify patch pkill pr printf pwhash \
 		realpath rump_server \
 		shmif_dumpbus shmif_pcapin sdiff sed sort stat \
-		tar tmux tr unifdef uniq vmstat xlint ztest
+		tar tmux tr unifdef uniq vmstat xlint
+
+# ztest is deferred until it is integrated with OpenZFS.
 
 .if ${MKCXX} != "no"
 TESTS_SUBDIRS+=	c++

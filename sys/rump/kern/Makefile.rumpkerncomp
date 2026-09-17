@@ -14,9 +14,7 @@ RUMPKERNCOMPS+=	${RUMPSYSEMUS}
 RUMPKERNCOMPS+=	sljit
 .endif
 
-.if ${MKZFS} != "no" || make(rumpdescribe)
-RUMPKERNCOMPS+=    solaris
-.endif
+# The Solaris component is deferred along with ZFS rump support.
 
 .for var in ${RUMPKERNCOMPS}
 RUMPKERNLIBS+=lib${var}

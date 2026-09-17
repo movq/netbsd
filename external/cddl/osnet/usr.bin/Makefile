@@ -6,8 +6,6 @@
 SUBDIR+=	ctfconvert ctfmerge ctfdump
 .endif
 
-.if ${MKZFS} != "no"
-SUBDIR+=	ztest
-.endif
+# ztest is deferred until it is integrated with OpenZFS.
 
 .include <bsd.subdir.mk>

@@ -2,11 +2,11 @@
 
 .include <bsd.own.mk>
 
-ZFSDIR=	${NETBSDSRCDIR}/external/cddl/openzfs
-ZFSNETBSD=	${ZFSDIR}/netbsd
+ZFSNETBSD=	${NETBSDSRCDIR}/external/cddl/openzfs
+ZFSDIR=		${ZFSNETBSD}/dist
 
-# Keep the bring-up libraries private until the remaining osnet consumers
-# have been converted. In particular, do not mix the two libnvpair ABIs.
+# Keep the libraries private until public library integration is ready.
+# In particular, do not mix the OpenZFS and osnet libnvpair ABIs.
 LIBISPRIVATE=	yes
 MKPIC=		no
 MKPROFILE=	no

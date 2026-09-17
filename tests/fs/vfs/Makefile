@@ -51,9 +51,6 @@ LDADD+=-lrumpnet						# static linking
 
 LDADD+=-lutil
 
-.if (${MKZFS} != "no")
-LDADD+=-lrumpfs_zfs -lrumpkern_solaris -lrumpdev_rnd -lrumpkern_sysproxy
-CPPFLAGS+=-DWANT_ZFS_TESTS
-.endif
+# ZFS tests are deferred until OpenZFS has rump support.
 
 .include <bsd.test.mk>

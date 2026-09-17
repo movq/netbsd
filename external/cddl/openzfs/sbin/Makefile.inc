@@ -2,7 +2,9 @@
 .include "../Makefile.inc"
 
 BINDIR=	/sbin
-MAN=	# Manual installation follows base-system integration.
+MAN=	# Each command lists its manual pages.
+
+.PATH:	${ZFSDIR}/man/man7 ${ZFSDIR}/man/man8
 
 # Resolve only libraries built from this import, never the installed osnet
 # libraries. The libraries have mutual references (as upstream's shared

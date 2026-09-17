@@ -1,71 +1,49 @@
-![img](https://openzfs.github.io/openzfs-docs/_static/img/logo/480px-Open-ZFS-Secondary-Logo-Colour-halfsize.png)
+# NetBSD OpenZFS userspace build
 
-OpenZFS is an advanced file system and volume manager which was originally
-developed for Solaris and is now maintained by the OpenZFS community.
-This repository contains the code for running OpenZFS on Linux and FreeBSD.
+## Build organization
 
-[![codecov](https://codecov.io/gh/openzfs/zfs/branch/master/graph/badge.svg)](https://codecov.io/gh/openzfs/zfs)
-[![coverity](https://scan.coverity.com/projects/1973/badge.svg)](https://scan.coverity.com/projects/openzfs-zfs)
+The libraries are private archives built from this import: libspl, libavl,
+libnvpair, libuutil, libtpool, libzfs_core, libzutil, libshare, and libzfs.
+The commands link those archives directly, plus the native crypto, zlib,
+math, util, pthread, gettext, and C libraries. They do not link the installed
+osnet ZFS libraries. OpenZFS's administrative commands do not need libzpool.
 
-# Official Resources
+The base-system build selects this tree with `MKZFS`. The imported sources
+live in `dist`, with NetBSD build files and `zfs_config.h` alongside it.
+The kernel module build in `sys/modules/zfs` also uses `dist`.
 
-  * [Documentation](https://openzfs.github.io/openzfs-docs/) - for using and developing this repo
-  * [ZoL site](https://zfsonlinux.org) - Linux release info & links
-  * [Mailing lists](https://openzfs.github.io/openzfs-docs/Project%20and%20Community/Mailing%20Lists.html)
-  * [OpenZFS site](https://openzfs.org/) - for conference videos and info on other platforms (illumos, OSX, Windows, etc)
+Only `zfs`, `zpool`, their main manual pages, and private libraries are built
+here. Public libraries and headers, additional manual pages, `mount_zfs`,
+`zdb`, `ztest`, rump support and its tests, ZFS support in `fstyp`, `fstat`,
+and `cgdconfig`, and the ZFS-root ramdisk are deferred. The old osnet ZFS
+targets are no longer part of the base-system build; osnet still supplies
+DTrace, CTF, and kernel Solaris compatibility.
 
-# Installation
+Platform sources live in the respective `os/netbsd` directories under `dist`.
+Userspace SPL headers live in `dist/lib/libspl/include/os/netbsd`; kernel
+SPL headers are not used for this build. `zfs_config.h` records the native
+build configuration without running upstream's Linux/FreeBSD configure
+machinery.
 
-Full documentation for installing OpenZFS on your favorite operating system can
-be found at the [Getting Started Page](https://openzfs.github.io/openzfs-docs/Getting%20Started/index.html).
+## Native interfaces
 
-# Contribute & Develop
+* The ioctl adapter uses the kernel's shared version-15 indirect envelope.
+  The driver copies command results back even when an ioctl returns an error,
+  including the buffer-size update needed for nvlist retries. There is no
+  translation to the old osnet ioctl ABI.
+* Pool discovery retains osnet's directory scanning, block-device enumeration,
+  preference for raw-device reads, and exclusion of parent disks with wedges.
+  Device sizes and cache flushes use native disk ioctls. Disks and wedges are
+  supplied already partitioned; automatic disk partitioning is not provided.
+* Mount-table access uses `getvfsstat` and `statvfs`, with per-thread storage.
+  Mount and unmount use native calls and the kernel's retained osnet mount
+  argument layout. The kernel's existing restrictions on mount updates still
+  apply; lazy unmount is unsupported.
+* Module loading and host IDs follow the old native integration. The module
+  exports `vfs.zfs.version.module` for the version commands.
+* NFS sharing uses `/etc/zfs/exports`, the common OpenZFS export-file helpers,
+  and SIGHUP to mountd, following the old integration's policy. SMB sharing
+  remains unsupported.
 
-We have a separate document with [contribution guidelines](./.github/CONTRIBUTING.md).
-
-We have a [Code of Conduct](./CODE_OF_CONDUCT.md).
-
-# Release
-
-OpenZFS is released under a CDDL license.
-For more details see the NOTICE, LICENSE and COPYRIGHT files; `UCRL-CODE-235197`
-
-# Supported Kernels and Distributions
-
-## Linux
-
-Given the wide variety of Linux environments, we prioritize development and testing on stable, supported kernels and distributions.
-
-### Kernel ([kernel.org](https://kernel.org))
-
-All **longterm** kernels from [kernel.org](https://kernel.org) are supported. **stable** kernels are usually supported in the next OpenZFS release.
-
-**Supported longterm kernels**: **6.18**, **6.12**, **6.6**, **6.1**, **5.15**, **5.10**.
-
-### Red Hat Enterprise Linux (RHEL)
-
-All RHEL (and compatible systems: AlmaLinux OS, Rocky Linux, etc) on the **full** or **maintenance** support tracks are supported.
-
-**Supported RHEL releases**: **8.10**, **9.7**, **10.1**.
-
-### Ubuntu
-
-All Ubuntu **LTS** releases are supported.
-
-**Supported Ubuntu releases**: **26.04 “Resolute”**, **24.04 “Noble”**, **22.04 “Jammy”**.
-
-### Debian
-
-All Debian **stable** and **LTS** releases are supported.
-
-**Supported Debian releases**: **13 “Trixie”**, **12 “Bookworm”**, **11 “Bullseye”**.
-
-### Other Distributions
-
-Generally, if a distribution is following an LTS kernel, it should work well with OpenZFS.
-
-## FreeBSD
-
-All FreeBSD releases receiving **security support** are supported by OpenZFS.
-
-**Supported FreeBSD releases**: **15.1**, **14.4**.
+The kernel bring-up limitations still apply, including unsupported encryption,
+channel programs, and local use of long filenames.

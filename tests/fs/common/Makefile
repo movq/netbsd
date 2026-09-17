@@ -8,10 +8,7 @@ SRCS=	fstest_ext2fs.c fstest_ffs.c fstest_lfs.c fstest_msdosfs.c	\
 	fstest_nfs.c fstest_puffs.c fstest_rumpfs.c fstest_sysvbfs.c	\
 	fstest_tmpfs.c fstest_udf.c fstest_v7fs.c
 
-.if (${MKZFS} != "no")
-SRCS+=	fstest_zfs.c
-CPPFLAGS+=-DWANT_ZFS_TESTS
-.endif
+# ZFS tests are deferred until OpenZFS has rump support.
 
 WARNS=	3
 

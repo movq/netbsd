@@ -1,6 +1,6 @@
 #	$NetBSD$
 
-ZFSDIR=		${S}/../external/cddl/openzfs
+ZFSDIR=		${S}/../external/cddl/openzfs/dist
 ZFSOSNET=	${S}/../external/cddl/osnet
 
 .PATH:	${ZFSDIR}/module/zcommon

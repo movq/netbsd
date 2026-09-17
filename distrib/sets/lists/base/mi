@@ -444,7 +444,7 @@
 ./sbin/mount_umap				base-miscfs-root	umapfs
 ./sbin/mount_union				base-miscfs-root	unionfs
 ./sbin/mount_v7fs				base-sysutil-root	v7fs
-./sbin/mount_zfs				base-zfs-root		zfs
+./sbin/mount_zfs				base-obsolete		obsolete
 ./sbin/mountd					base-obsolete		obsolete
 ./sbin/newbtconf				base-sysutil-root
 ./sbin/newfs					base-sysutil-root
@@ -966,7 +966,7 @@
 ./usr/bin/zstdgrep				base-util-bin
 ./usr/bin/zstdless				base-util-bin
 ./usr/bin/zstdmt				base-util-bin
-./usr/bin/ztest					base-zfs-bin		zfs
+./usr/bin/ztest					base-obsolete		obsolete
 ./usr/games					base-games-usr
 ./usr/games/hide				base-games-usr
 ./usr/include					base-c-usr
@@ -1887,7 +1887,7 @@
 ./usr/sbin/ypset				base-nis-bin		yp
 ./usr/sbin/yptest				base-nis-bin		yp
 ./usr/sbin/ypxfr				base-nis-bin		yp
-./usr/sbin/zdb					base-zfs-bin		zfs
+./usr/sbin/zdb					base-obsolete		obsolete
 ./usr/sbin/zdump				base-sysutil-bin
 ./usr/sbin/zic					base-sysutil-bin
 ./usr/share					base-sys-share

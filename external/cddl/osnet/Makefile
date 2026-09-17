@@ -2,6 +2,6 @@
 
 SUBDIR+= lib .WAIT
 
-SUBDIR+= sbin usr.bin usr.sbin
+SUBDIR+= usr.bin usr.sbin
 
 .include <bsd.subdir.mk>

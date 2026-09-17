@@ -697,7 +697,7 @@
 ./usr/share/man/html1/zstdgrep.html		man-util-htmlman	html
 ./usr/share/man/html1/zstdless.html		man-util-htmlman	html
 ./usr/share/man/html1/zstdmt.html		man-util-htmlman	html
-./usr/share/man/html1/ztest.html		man-zfs-htmlman		zfs,html
+./usr/share/man/html1/ztest.html		man-obsolete		obsolete
 ./usr/share/man/html3/eddsa_pk_new.html			man-util-htmlman	fido2,html
 ./usr/share/man/html3/es256_pk_new.html			man-util-htmlman	fido2,html
 ./usr/share/man/html3/es384_pk_new.html			man-util-htmlman	fido2,html
@@ -2818,7 +2818,7 @@
 ./usr/share/man/html8/mount_umap.html		man-miscfs-htmlman	umapfs,html
 ./usr/share/man/html8/mount_union.html		man-miscfs-htmlman	unionfs,html
 ./usr/share/man/html8/mount_v7fs.html		man-sysutil-htmlman	v7fs,html
-./usr/share/man/html8/mount_zfs.html		man-sysutil-htmlman	zfs,html
+./usr/share/man/html8/mount_zfs.html		man-obsolete		obsolete
 ./usr/share/man/html8/mountd.html		man-nfsserver-htmlman	nfs,html
 ./usr/share/man/html8/moused.html		man-sysutil-htmlman	html
 ./usr/share/man/html8/mrinfo.html		man-netutil-htmlman	html
@@ -3211,7 +3211,7 @@
 ./usr/share/man/html8/ypset.html		man-nis-htmlman		yp,html
 ./usr/share/man/html8/yptest.html		man-nis-htmlman		yp,html
 ./usr/share/man/html8/ypxfr.html		man-nis-htmlman		yp,html
-./usr/share/man/html8/zdb.html			man-zfs-htmlman		zfs,html
+./usr/share/man/html8/zdb.html			man-obsolete		obsolete
 ./usr/share/man/html8/zdump.html		man-sysutil-htmlman	html
 ./usr/share/man/html8/zfs.html			man-zfs-htmlman		zfs,html
 ./usr/share/man/html8/zic.html			man-sysutil-htmlman	html

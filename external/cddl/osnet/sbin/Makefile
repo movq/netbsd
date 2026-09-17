@@ -2,8 +2,6 @@
 
 .include <bsd.own.mk>
 
-.if !defined(MKZFS) || ${MKZFS} != "no"
-SUBDIR+=	zpool zfs
-.endif
+# ZFS commands are built in external/cddl/openzfs.
 
 .include <bsd.subdir.mk>
