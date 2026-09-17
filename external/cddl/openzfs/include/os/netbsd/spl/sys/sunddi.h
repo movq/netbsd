@@ -14,6 +14,15 @@ int ddi_strtol(const char *, char **, int, long *);
 int ddi_strtoul(const char *, char **, int, unsigned long *);
 int ddi_strtoull(const char *, char **, int, unsigned long long *);
 
+/* Native /dev/zvol node creation supplied by the existing Solaris module. */
+typedef struct dev_info {
+	int di_cmajor;
+	int di_bmajor;
+} dev_info_t;
+int ddi_create_minor_node(dev_info_t *, char *, int, minor_t, char *, int);
+void ddi_remove_minor_node(dev_info_t *, char *);
+#define	DDI_PSEUDO	""
+
 /* Match the FreeBSD adapter; native strtoll supplies saturation and endptr. */
 static inline int
 ddi_strtoll(const char *str, char **endptr, int base, long long *result)
