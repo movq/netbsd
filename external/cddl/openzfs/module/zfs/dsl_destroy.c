@@ -45,7 +45,9 @@
 #include <sys/dsl_deleg.h>
 #include <sys/dmu_impl.h>
 #include <sys/zvol.h>
+#ifndef __NetBSD__
 #include <sys/zcp.h>
+#endif
 #include <sys/dsl_deadlist.h>
 #include <sys/zthr.h>
 #include <sys/spa_impl.h>
@@ -586,6 +588,7 @@ dsl_destroy_snapshot_sync(void *arg, dmu_tx_t *tx)
 	dsl_dataset_rele(ds, FTAG);
 }
 
+#ifndef __NetBSD__
 /*
  * The semantics of this function are described in the comment above
  * lzc_destroy_snaps().  To summarize:
@@ -688,6 +691,7 @@ dsl_destroy_snapshots_nvl(nvlist_t *snaps, boolean_t defer,
 	fnvlist_free(result);
 	return (rv);
 }
+#endif /* !__NetBSD__ */
 
 int
 dsl_destroy_snapshot(const char *name, boolean_t defer)
