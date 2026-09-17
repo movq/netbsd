@@ -24,6 +24,14 @@
 #define nvpair_name		zfs_nvpair_name
 #define nvpair_type		zfs_nvpair_type
 
+/* The retained Solaris module also provides the old nvpair allocators. */
+#define nv_alloc_init		zfs_nv_alloc_init
+#define nv_alloc_fini		zfs_nv_alloc_fini
+#define nv_alloc_reset		zfs_nv_alloc_reset
+#define nv_alloc_nosleep		zfs_nv_alloc_nosleep
+#define nv_alloc_sleep		zfs_nv_alloc_sleep
+#define nv_fixed_ops		zfs_nv_fixed_ops
+
 #include_next <sys/nvpair.h>
 
 #endif /* _NETBSD_SPL_SYS_NVPAIR_H_ */
