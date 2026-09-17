@@ -11,12 +11,14 @@
 #include <sys/zfs_ioctl_impl.h>
 #include <sys/zfs_ioctl_os.h>
 #include <sys/zvol_os.h>
+#include <zfs_gitrev.h>
 
 int zfs_bmajor = -1;
 int zfs_cmajor = -1;
 static volatile unsigned int zfsdev_opens;
 static struct sysctllog *zfsdev_sysctl_log;
 static int zfs_ioctl_version = ZFS_IOCVER_OZFS;
+static char zfs_module_version[] = ZFS_META_GITREV;
 
 CTASSERT(sizeof (zfs_iocparm_t) == 24);
 CTASSERT(offsetof(zfs_iocparm_t, zfs_cmd) == 8);
@@ -175,6 +177,12 @@ zfsdev_attach(void)
 		    CTLFLAG_READONLY, CTLTYPE_INT, "ioctl",
 		    SYSCTL_DESCR("ZFS ioctl ABI version"),
 		    NULL, 0, &zfs_ioctl_version, 0, CTL_CREATE, CTL_EOL);
+	if (error == 0)
+		error = sysctl_createv(&zfsdev_sysctl_log, 0, &node, NULL,
+		    CTLFLAG_READONLY, CTLTYPE_STRING, "module",
+		    SYSCTL_DESCR("ZFS module version"),
+		    NULL, 0, zfs_module_version, sizeof (zfs_module_version),
+		    CTL_CREATE, CTL_EOL);
 	if (error != 0) {
 		sysctl_teardown(&zfsdev_sysctl_log);
 		devsw_detach(&zfs_bdevsw, &zfs_cdevsw);
