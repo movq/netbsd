@@ -21,5 +21,7 @@ int zfs_loadvnode(struct mount *, vnode_t *, const void *, size_t,
 int zfs_newvnode(struct mount *, vnode_t *, vnode_t *, vattr_t *, cred_t *,
     void *, size_t *, const void **);
 void zfs_netbsd_setsize(vnode_t *, uint64_t);
+void zfs_vm_init(void);
+void zfs_vm_fini(void);
 
 #endif

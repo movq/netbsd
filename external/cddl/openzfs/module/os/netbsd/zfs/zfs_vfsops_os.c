@@ -522,6 +522,7 @@ zfs_end_fs(zfsvfs_t *zfsvfs, dsl_dataset_t *ds)
 void
 zfs_init(void)
 {
+	zfs_vm_init();
 	zfsctl_init();
 	zfs_znode_init();
 	dmu_objset_register_type(DMU_OST_ZFS, zpl_get_file_info);
@@ -532,6 +533,7 @@ zfs_fini(void)
 {
 	zfsctl_fini();
 	zfs_znode_fini();
+	zfs_vm_fini();
 }
 
 int

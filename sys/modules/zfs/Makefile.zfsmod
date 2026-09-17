@@ -12,6 +12,7 @@ ZFSOSNET=	${S}/../external/cddl/osnet
 SRCS+=	abd_os.c dmu_os.c dsl_destroy_os.c zfs_vnops_os.c zio_crypt.c
 SRCS+=	zfs_vm.c
 SRCS+=	arc_os.c vdev_disk.c
+SRCS+=	vdev_label_os.c
 SRCS+=	zfs_file_os.c
 SRCS+=	zfs_ioctl_os.c zfsdev_os.c
 SRCS+=	zvol_os.c zvol_io.c
@@ -60,6 +61,7 @@ SRCS+=	vdev_trim.c zap.c zap_leaf.c zap_micro.c
 # Channel programs and the Lua runtime are unsupported on NetBSD.
 SRCS+=	zfeature.c zfs_byteswap.c zfs_chksum.c zfs_fm.c zfs_fuid.c
 SRCS+=	zfs_impl.c zfs_ioctl.c zfs_log.c zfs_onexit.c zfs_quota.c
+SRCS+=	zfs_crrd.c
 SRCS+=	zfs_ratelimit.c zfs_replay.c zfs_rlock.c zfs_sa.c zfs_vnops.c
 SRCS+=	zfs_znode.c zil.c zio.c zio_checksum.c zio_compress.c zio_inject.c
 SRCS+=	zle.c zrlock.c zthr.c zvol.c

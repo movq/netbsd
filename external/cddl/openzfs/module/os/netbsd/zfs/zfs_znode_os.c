@@ -1254,9 +1254,7 @@ zfs_extend(znode_t *zp, uint64_t end)
 static int
 zfs_free_range(znode_t *zp, uint64_t off, uint64_t len)
 {
-	zfsvfs_t *zfsvfs = zp->z_zfsvfs;
 	zfs_locked_range_t *lr;
-	int error;
 
 	/*
 	 * Lock the range being freed.
@@ -1280,20 +1278,6 @@ zfs_free_range(znode_t *zp, uint64_t off, uint64_t len)
 	 */
 	zfs_rangelock_exit(lr);
 	return (SET_ERROR(EOPNOTSUPP));
-	error = dmu_free_long_range(zfsvfs->z_os, zp->z_id, off, len);
-
-	if (error == 0) {
-		/*
-		 * Before __FreeBSD_version 1400032 we cannot free block in the
-		 * middle of a file, but only at the end of a file, so this code
-		 * path should never happen.
-		 */
-		vnode_pager_setsize(ZTOV(zp), off);
-	}
-
-	zfs_rangelock_exit(lr);
-
-	return (error);
 }
 
 /*

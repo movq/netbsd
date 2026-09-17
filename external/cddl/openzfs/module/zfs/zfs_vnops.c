@@ -127,7 +127,7 @@ zfs_fsync(znode_t *zp, int syncflag, cred_t *cr)
 }
 
 
-#if defined(SEEK_HOLE) && defined(SEEK_DATA)
+#if (defined(SEEK_HOLE) && defined(SEEK_DATA)) || defined(__NetBSD__)
 /*
  * Lseek support for finding holes (cmd == SEEK_HOLE) and
  * data (cmd == SEEK_DATA). "off" is an in/out parameter.
@@ -202,7 +202,7 @@ zfs_holey(znode_t *zp, ulong_t cmd, loff_t *off)
 	zfs_exit(zfsvfs, FTAG);
 	return (error);
 }
-#endif /* SEEK_HOLE && SEEK_DATA */
+#endif /* SEEK_HOLE/SEEK_DATA or native NetBSD hole ioctls */
 
 int
 zfs_access(znode_t *zp, int mode, int flag, cred_t *cr)
