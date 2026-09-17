@@ -762,7 +762,7 @@
 ./usr/share/man/cat1/zstdgrep.0			man-util-catman		.cat
 ./usr/share/man/cat1/zstdless.0			man-util-catman		.cat
 ./usr/share/man/cat1/zstdmt.0			man-util-catman		.cat
-./usr/share/man/cat1/ztest.0			man-zfs-catman		zfs,.cat
+./usr/share/man/cat1/ztest.0			man-obsolete		obsolete
 ./usr/share/man/cat3/atari/ahdi_buildlabel.0	man-obsolete		obsolete
 ./usr/share/man/cat3/atari/ahdi_checklabel.0	man-obsolete		obsolete
 ./usr/share/man/cat3/atari/ahdi_readlabel.0	man-obsolete		obsolete
@@ -3142,7 +3142,7 @@
 ./usr/share/man/cat8/mount_umap.0		man-miscfs-catman	umapfs,.cat
 ./usr/share/man/cat8/mount_union.0		man-miscfs-catman	unionfs,.cat
 ./usr/share/man/cat8/mount_v7fs.0		man-sysutil-catman	v7fs,.cat
-./usr/share/man/cat8/mount_zfs.0		man-sysutil-catman	zfs,.cat
+./usr/share/man/cat8/mount_zfs.0		man-obsolete		obsolete
 ./usr/share/man/cat8/mountd.0			man-nfsserver-catman	nfs,.cat
 ./usr/share/man/cat8/moused.0			man-sysutil-catman	.cat
 ./usr/share/man/cat8/mrinfo.0			man-netutil-catman	.cat
@@ -3639,7 +3639,7 @@
 ./usr/share/man/cat8/ypset.0			man-nis-catman		yp,.cat
 ./usr/share/man/cat8/yptest.0			man-nis-catman		yp,.cat
 ./usr/share/man/cat8/ypxfr.0			man-nis-catman		yp,.cat
-./usr/share/man/cat8/zdb.0			man-zfs-catman		zfs,.cat
+./usr/share/man/cat8/zdb.0			man-obsolete		obsolete
 ./usr/share/man/cat8/zdump.0			man-sysutil-catman	.cat
 ./usr/share/man/cat8/zfs.0			man-zfs-catman		zfs,.cat
 ./usr/share/man/cat8/zic.0			man-sysutil-catman	.cat
@@ -4371,7 +4371,7 @@
 ./usr/share/man/man1/zstdgrep.1			man-util-man		.man
 ./usr/share/man/man1/zstdless.1			man-util-man		.man
 ./usr/share/man/man1/zstdmt.1			man-util-man		.man
-./usr/share/man/man1/ztest.1			man-zfs-man		zfs,.man
+./usr/share/man/man1/ztest.1			man-obsolete		obsolete
 ./usr/share/man/man3/atari/ahdi_buildlabel.3	man-obsolete		obsolete
 ./usr/share/man/man3/atari/ahdi_checklabel.3	man-obsolete		obsolete
 ./usr/share/man/man3/atari/ahdi_readlabel.3	man-obsolete		obsolete
@@ -6752,7 +6752,7 @@
 ./usr/share/man/man8/mount_umap.8		man-miscfs-man		umapfs,.man
 ./usr/share/man/man8/mount_union.8		man-miscfs-man		unionfs,.man
 ./usr/share/man/man8/mount_v7fs.8		man-sysutil-man		v7fs,.man
-./usr/share/man/man8/mount_zfs.8		man-sysutil-man		zfs,.man
+./usr/share/man/man8/mount_zfs.8		man-obsolete		obsolete
 ./usr/share/man/man8/mountd.8			man-nfsserver-man	nfs,.man
 ./usr/share/man/man8/moused.8			man-sysutil-man		.man
 ./usr/share/man/man8/mrinfo.8			man-netutil-man		.man
@@ -7246,7 +7246,7 @@
 ./usr/share/man/man8/ypset.8			man-nis-man		yp,.man
 ./usr/share/man/man8/yptest.8			man-nis-man		yp,.man
 ./usr/share/man/man8/ypxfr.8			man-nis-man		yp,.man
-./usr/share/man/man8/zdb.8			man-zfs-man		zfs,.man
+./usr/share/man/man8/zdb.8			man-obsolete		obsolete
 ./usr/share/man/man8/zdump.8			man-sysutil-man		.man
 ./usr/share/man/man8/zfs.8			man-zfs-man		zfs,.man
 ./usr/share/man/man8/zic.8			man-sysutil-man		.man

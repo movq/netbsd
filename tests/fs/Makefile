@@ -53,9 +53,7 @@ TESTS_SUBDIRS+=	umapfs
 TESTS_SUBDIRS+=	union
 .endif
 
-.if ${MKZFS} != "no"
-TESTS_SUBDIRS+=	zfs
-.endif
+# ZFS tests are deferred until OpenZFS has rump support.
 
 FILES= h_funcs.subr
 FILESDIR= ${TESTSDIR}

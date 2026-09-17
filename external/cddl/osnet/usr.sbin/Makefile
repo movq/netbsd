@@ -6,8 +6,6 @@
 SUBDIR+=	dtrace
 .endif
 
-.if ${MKZFS} != "no"
-SUBDIR+=	zdb
-.endif
+# zdb is deferred until it is integrated with OpenZFS.
 
 .include <bsd.subdir.mk>

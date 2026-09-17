@@ -3,7 +3,7 @@
 SUBDIR=
 SUBDIR+=	ramdisk
 SUBDIR+=	ramdisk-cgdroot
-SUBDIR+=	${${MKZFS} != "no":?ramdisk-zfsroot:}
+# ramdisk-zfsroot is deferred until OpenZFS has crunch and mount_zfs support.
 
 TARGETS+=	release
 

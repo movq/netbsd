@@ -6,9 +6,7 @@
 USE_FORT?= yes	# setuid
 PROG=	fstat
 SRCS=	fstat.c isofs.c ntfs.c ptyfs.c tmpfs.c misc.c
-.if (${MKZFS} != "no")
-SRCS+=	zfs.c
-.endif
+# ZFS vnode inspection is deferred until it is integrated with OpenZFS.
 DPADD=	${LIBKVM}
 LDADD=	-lkvm
 BINGRP=	kmem
@@ -18,9 +16,6 @@ CPPFLAGS+= -I${NETBSDSRCDIR}/sys
 
 .if (${USE_INET6} != "no")
 CPPFLAGS+=-DINET6
-.endif
-.if (${MKZFS} != "no")
-CPPFLAGS+=-DHAVE_ZFS
 .endif
 CPPFLAGS+=-D_KMEMUSER
 

@@ -4016,8 +4016,8 @@
 ./usr/lib/libatf-c_p.a				comp-atf-lib		compatfile,atf,profile
 ./usr/lib/libatf.a				comp-obsolete		obsolete
 ./usr/lib/libatf_p.a				comp-obsolete		obsolete
-./usr/lib/libavl.a				comp-zfs-lib		compatfile,zfs
-./usr/lib/libavl_p.a				comp-zfs-proflib	compatfile,profile,zfs
+./usr/lib/libavl.a				comp-obsolete		obsolete,compatfile
+./usr/lib/libavl_p.a				comp-obsolete		obsolete,compatfile
 ./usr/lib/libbfd.a				comp-obsolete		obsolete
 ./usr/lib/libbind9.a				comp-obsolete		obsolete
 ./usr/lib/libbind9_p.a				comp-obsolete		obsolete
@@ -4215,8 +4215,8 @@
 ./usr/lib/libnvmm.a				comp-c-lib		nvmm
 ./usr/lib/libnvmm_p.a				comp-c-proflib		nvmm,profile
 ./usr/lib/libnvmm_pic.a				comp-c-piclib		nvmm,pic,picinstall
-./usr/lib/libnvpair.a				comp-zfs-lib		compatfile,zfs
-./usr/lib/libnvpair_p.a				comp-zfs-proflib	compatfile,zfs,profile
+./usr/lib/libnvpair.a				comp-obsolete		obsolete,compatfile
+./usr/lib/libnvpair_p.a				comp-obsolete		obsolete,compatfile
 ./usr/lib/libobjc.a				comp-objc-lib		compatfile,gcc
 ./usr/lib/libobjc_p.a				comp-objc-proflib	compatfile,gcc,profile
 ./usr/lib/libopenpgpsdk.a			comp-obsolete		obsolete
@@ -4387,8 +4387,8 @@
 ./usr/lib/librumpfs_union_p.a			comp-c-proflib		rump,profile
 ./usr/lib/librumpfs_v7fs.a			comp-c-lib		rump
 ./usr/lib/librumpfs_v7fs_p.a			comp-c-proflib		rump,profile
-./usr/lib/librumpfs_zfs.a			comp-c-lib		zfs,rump
-./usr/lib/librumpfs_zfs_p.a			comp-c-piclib		zfs,rump,profile
+./usr/lib/librumpfs_zfs.a			comp-obsolete		obsolete
+./usr/lib/librumpfs_zfs_p.a			comp-obsolete		obsolete
 ./usr/lib/librumpkern_crypto.a			comp-c-lib		rump
 ./usr/lib/librumpkern_crypto_p.a		comp-c-proflib		rump,profile
 ./usr/lib/librumpkern_ksem.a			comp-obsolete		obsolete
@@ -4399,8 +4399,8 @@
 ./usr/lib/librumpkern_simplehook_tester_p.a	comp-c-proflib		rump,profile
 ./usr/lib/librumpkern_sljit.a			comp-c-lib		rump,sljit
 ./usr/lib/librumpkern_sljit_p.a			comp-c-proflib		rump,sljit,profile
-./usr/lib/librumpkern_solaris.a			comp-c-lib		rump,zfs
-./usr/lib/librumpkern_solaris_p.a		comp-c-proflib		rump,zfs,profile
+./usr/lib/librumpkern_solaris.a			comp-obsolete		obsolete
+./usr/lib/librumpkern_solaris_p.a		comp-obsolete		obsolete
 ./usr/lib/librumpkern_sysproxy.a		comp-c-lib		rump
 ./usr/lib/librumpkern_sysproxy_p.a		comp-c-proflib		rump,profile
 ./usr/lib/librumpkern_time.a			comp-obsolete		obsolete
@@ -4523,8 +4523,8 @@
 ./usr/lib/libubsan_p.a				comp-c-proflib		compatfile,profile,cxx,gcccmds,gcc
 ./usr/lib/libukfs.a				comp-c-lib		compatfile,rump
 ./usr/lib/libukfs_p.a				comp-c-proflib		compatfile,rump,profile
-./usr/lib/libumem.a				comp-zfs-lib		compatfile,zfs
-./usr/lib/libumem_p.a				comp-zfs-proflib	compatfile,zfs,profile
+./usr/lib/libumem.a				comp-obsolete		obsolete,compatfile
+./usr/lib/libumem_p.a				comp-obsolete		obsolete,compatfile
 ./usr/lib/libunbound.a				comp-c-lib		compatfile,unbound
 ./usr/lib/libunbound_p.a			comp-c-lib		compatfile,profile,unbound
 ./usr/lib/libusb.a				comp-obsolete		obsolete,compatfile
@@ -4533,8 +4533,8 @@
 ./usr/lib/libusbhid_p.a				comp-c-proflib		usb,compatfile,profile
 ./usr/lib/libutil.a				comp-c-lib		compatfile
 ./usr/lib/libutil_p.a				comp-c-proflib		compatfile,profile
-./usr/lib/libuutil.a				comp-zfs-lib		compatfile,zfs
-./usr/lib/libuutil_p.a				comp-zfs-proflib	compatfile,zfs,profile
+./usr/lib/libuutil.a				comp-obsolete		obsolete,compatfile
+./usr/lib/libuutil_p.a				comp-obsolete		obsolete,compatfile
 ./usr/lib/libuv.a				comp-obsolete		compatfile,obsolete
 ./usr/lib/libuv_p.a				comp-obsolete		obsolete
 ./usr/lib/libwind.a				comp-krb5-lib		compatfile,kerberos
@@ -4545,12 +4545,12 @@
 ./usr/lib/liby_p.a				comp-c-proflib		compatfile,profile
 ./usr/lib/libz.a				comp-c-lib		compatfile
 ./usr/lib/libz_p.a				comp-c-proflib		compatfile,profile
-./usr/lib/libzfs.a				comp-zfs-lib		compatfile,zfs
-./usr/lib/libzfs_core.a				comp-zfs-lib		compatfile,zfs
-./usr/lib/libzfs_core_p.a			comp-zfs-proflib	compatfile,zfs,profile
-./usr/lib/libzfs_p.a				comp-zfs-proflib	compatfile,zfs,profile
-./usr/lib/libzpool.a				comp-zfs-lib		compatfile,zfs
-./usr/lib/libzpool_p.a				comp-zfs-proflib	compatfile,zfs,profile
+./usr/lib/libzfs.a				comp-obsolete		obsolete,compatfile
+./usr/lib/libzfs_core.a				comp-obsolete		obsolete,compatfile
+./usr/lib/libzfs_core_p.a			comp-obsolete		obsolete,compatfile
+./usr/lib/libzfs_p.a				comp-obsolete		obsolete,compatfile
+./usr/lib/libzpool.a				comp-obsolete		obsolete,compatfile
+./usr/lib/libzpool_p.a				comp-obsolete		obsolete,compatfile
 ./usr/lib/libzstd.a				comp-obsolete		obsolete
 ./usr/lib/libzstd_p.a				comp-obsolete		obsolete
 ./usr/lib/pkgconfig				comp-c-lib

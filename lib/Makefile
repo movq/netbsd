@@ -91,11 +91,9 @@ SUBDIR+=	libbpfjit
 
 SUBDIR+=	../external/bsd/libnv/lib
 
-.if (${MKZFS} != "no")
-SUBDIR+=        ../external/cddl/osnet/lib/libavl
-SUBDIR+=        ../external/cddl/osnet/lib/libnvpair
-SUBDIR+=        ../external/cddl/osnet/lib/libumem
-SUBDIR+=        ../external/cddl/osnet/lib/libuutil
+.if ${MKZFS} != "no" && !defined(MLIBDIR)
+# Private archives used only by the native zfs and zpool commands.
+SUBDIR+=	../external/cddl/openzfs/lib
 .endif
 
 SUBDIR+=	../external/mit/expat/lib
@@ -162,11 +160,6 @@ OSSL=../crypto/external/${EXTERNAL_OPENSSL_SUBDIR}/lib/
 
 .if (${MKISCSI} != "no")
 SUBDIR+=	../external/bsd/iscsi/lib	# depends on libpthread
-.endif
-
-.if (${MKZFS} != "no")
-SUBDIR+=        ../external/cddl/osnet/lib/libzfs_core
-SUBDIR+=        ../external/cddl/osnet/lib/libzpool
 .endif
 
 .if (${MKLVM} != "no")
@@ -260,10 +253,6 @@ SUBDIR+=	../external/bsd/fetch/lib	# depends on libssl
 .if (${MKLDAP} != "no")
 OPENLDAPLIB=	../external/bsd/openldap/lib/	# depends on libcrypto, ...
 .include "${OPENLDAPLIB}Makefile.subdir"
-.endif
-
-.if (${MKZFS} != "no")
-SUBDIR+=        ../external/cddl/osnet/lib/libzfs
 .endif
 
 SUBDIR+= 	../libexec/httpd/libbozohttpd 	# depends on libssl & libcrypto
