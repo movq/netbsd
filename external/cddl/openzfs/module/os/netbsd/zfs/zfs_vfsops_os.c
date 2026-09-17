@@ -97,7 +97,7 @@ zfs_netbsd_check_mount(objset_t *os)
 }
 
 static int
-zfs_domount(vfs_t *mp, const char *name)
+zfs_domount_impl(vfs_t *mp, const char *name, uint64_t snapid)
 {
 	zfsvfs_t *zfsvfs;
 	objset_t *os;
@@ -111,6 +111,12 @@ zfs_domount(vfs_t *mp, const char *name)
 	os = zfsvfs->z_os;
 	zfsvfs->z_vfs = mp;
 	mp->mnt_data = zfsvfs;
+	/* A snapshot can be renamed/replaced while its automount is starting. */
+	if (snapid != 0 && (!dmu_objset_is_snapshot(os) ||
+	    dmu_objset_id(os) != snapid)) {
+		error = SET_ERROR(ESTALE);
+		goto fail;
+	}
 	error = zfs_netbsd_check_mount(os);
 	if (error != 0)
 		goto fail;
@@ -170,6 +176,13 @@ fail:
 	return (error);
 }
 
+int
+zfs_domount_snapshot(vfs_t *mp, const char *name, uint64_t snapid)
+{
+	ASSERT3U(snapid, !=, 0);
+	return (zfs_domount_impl(mp, name, snapid));
+}
+
 static int
 zfs_mount(vfs_t *mp, const char *path, void *data, size_t *data_len)
 {
@@ -210,7 +223,7 @@ zfs_mount(vfs_t *mp, const char *path, void *data, size_t *data_len)
 	    UIO_SYSSPACE, MOUNT_ZFS, mp, curlwp);
 	if (error != 0)
 		return (error);
-	return (zfs_domount(mp, args->fspec));
+	return (zfs_domount_impl(mp, args->fspec, 0));
 }
 
 static int

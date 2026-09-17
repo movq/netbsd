@@ -8,7 +8,7 @@ headers to the include path.
 Pass `MAKEOBJDIR=/absolute/path` on the make wrapper's command line to use
 an isolated object directory; the wrapper overrides the environment setting.
 Run `depend` after adding sources, then request individual `.o` targets.
-The current source list has 206 objects, individually cross-compiled for amd64.
+The current source list has 207 objects, individually cross-compiled for amd64.
 No module link has been attempted.
 
 Native disk vdevs use NetBSD buffer I/O and a workqueue for cache flushes.
@@ -40,8 +40,16 @@ rejected. Snapshot lookup holds a busy mount reference while resolving the
 filehandle. `tests/run-fid.py` checks exact-buffer bounds, round trips,
 generations, malformed lengths, and reference cleanup under ASan/UBSan.
 
-Vnode operations (including paging) and the control directory still need
-integration. Module loading and native concurrency have not been tested.
+The native control directory supports snapshot lookup, automount, unmount,
+and filehandles. Mount publication follows successful setup, and the mounted
+objset ID is checked against the lookup key to reject snapshot replacement
+races. Covered mounts use NetBSD's transaction/recheck protocol before taking
+a busy reference. Readdir uses resumable ZAP cookies; `tests/run-ctldir.py`
+checks short buffers, long snapshot names, offsets, EOF, padding, and errors
+against the actual readdir function under ASan/UBSan.
+
+Vnode operations (including paging) still need integration.
+Module loading and native concurrency have not been tested.
 
 The control device requires new OpenZFS binaries; there is
 no compatibility with osnet command numbers or layouts. Its indirect ioctl
