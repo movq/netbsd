@@ -8360,6 +8360,11 @@ zfs_kmod_init(void)
 	if ((error = zvol_init()) != 0)
 		return (error);
 
+#ifdef __NetBSD__
+	/* Match osnet: pool initialization can use recursive-read TSD. */
+	tsd_create(&rrw_tsd_key, rrw_tsd_destroy);
+	tsd_create(&zfs_allow_log_key, zfs_allow_log_destroy);
+#endif
 	spa_init(SPA_MODE_READ | SPA_MODE_WRITE);
 	zfs_init();
 
@@ -8367,18 +8372,29 @@ zfs_kmod_init(void)
 
 	mutex_init(&zfsdev_state_lock, NULL, MUTEX_DEFAULT, NULL);
 	zfsdev_state_listhead.zs_minor = -1;
+	zfsdev_state_listhead.zs_next = NULL;
 
 	if ((error = zfsdev_attach()) != 0)
 		goto out;
 
+#ifndef __NetBSD__
 	tsd_create(&rrw_tsd_key, rrw_tsd_destroy);
 	tsd_create(&zfs_allow_log_key, zfs_allow_log_destroy);
+#endif
 
 	return (0);
 out:
+#ifdef __NetBSD__
+	mutex_destroy(&zfsdev_state_lock);
+	zfs_ereport_taskq_fini();
+#endif
 	zfs_fini();
 	spa_fini();
 	zvol_fini();
+#ifdef __NetBSD__
+	tsd_destroy(&rrw_tsd_key);
+	tsd_destroy(&zfs_allow_log_key);
+#endif
 
 	return (error);
 }
