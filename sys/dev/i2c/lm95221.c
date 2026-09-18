@@ -1,4 +1,4 @@
-/* $NetBSD: lm95221.c,v 1.1 2026/06/03 11:07:01 jdc Exp $ */
+/* $NetBSD: lm95221.c,v 1.1.2.2 2026/09/18 15:32:36 martin Exp $ */
 
 /*-
  * Copyright (c) 2020 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lm95221.c,v 1.1 2026/06/03 11:07:01 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lm95221.c,v 1.1.2.2 2026/09/18 15:32:36 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

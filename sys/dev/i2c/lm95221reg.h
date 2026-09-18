@@ -1,4 +1,4 @@
-/* $NetBSD: lm95221reg.h,v 1.1 2026/06/03 11:07:01 jdc Exp $ */
+/* $NetBSD: lm95221reg.h,v 1.1.2.2 2026/09/18 15:32:36 martin Exp $ */
 
 /*-
  * Copyright (c) 2026 The NetBSD Foundation, Inc.

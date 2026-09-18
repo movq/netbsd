@@ -1,4 +1,4 @@
-/* $NetBSD: nxp75a.c,v 1.1 2026/06/03 11:08:41 jdc Exp $ */
+/* $NetBSD: nxp75a.c,v 1.1.2.2 2026/09/18 15:32:36 martin Exp $ */
 
 /*-
  * Copyright (c) 2026 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nxp75a.c,v 1.1 2026/06/03 11:08:41 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nxp75a.c,v 1.1.2.2 2026/09/18 15:32:36 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
