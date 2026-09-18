@@ -1,4 +1,4 @@
-/* $NetBSD: fire_i2creg.h,v 1.1 2026/06/04 13:43:24 jdc Exp $ */
+/* $NetBSD: fire_i2creg.h,v 1.1.2.2 2026/09/18 15:40:22 martin Exp $ */
 
 /*-
  * Copyright (c) 2026 The NetBSD Foundation, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fire_i2creg.h,v 1.1 2026/06/04 13:43:24 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fire_i2creg.h,v 1.1.2.2 2026/09/18 15:40:22 martin Exp $");
 
 /* Register offsets */
 #define FIREI2C_ADDR		0x00	/* Slave address */

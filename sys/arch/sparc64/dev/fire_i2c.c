@@ -1,4 +1,4 @@
-/* $NetBSD: fire_i2c.c,v 1.4 2026/06/06 03:04:29 nakayama Exp $ */
+/* $NetBSD: fire_i2c.c,v 1.4.2.2 2026/09/18 15:40:22 martin Exp $ */
 
 /*-
  * Copyright (c) 2026 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fire_i2c.c,v 1.4 2026/06/06 03:04:29 nakayama Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fire_i2c.c,v 1.4.2.2 2026/09/18 15:40:22 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/condvar.h>
