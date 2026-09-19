@@ -1,4 +1,4 @@
-/*	$NetBSD: auxfan.c,v 1.1 2026/07/26 12:53:13 jdc Exp $	*/
+/*	$NetBSD: auxfan.c,v 1.1.2.2 2026/09/19 16:37:06 martin Exp $	*/
 
 /*-
  * Copyright (c) 2026 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: auxfan.c,v 1.1 2026/07/26 12:53:13 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: auxfan.c,v 1.1.2.2 2026/09/19 16:37:06 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
