@@ -1,4 +1,4 @@
-/*	$NetBSD: envmon_ebusreg.h,v 1.1 2026/09/07 07:35:14 jdc Exp $	*/
+/*	$NetBSD: envmon_ebusreg.h,v 1.1.2.2 2026/09/20 10:08:26 martin Exp $	*/
 
 /*-
  * Copyright (c) 2026 The NetBSD Foundation, Inc.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: envmon_ebusreg.h,v 1.1 2026/09/07 07:35:14 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: envmon_ebusreg.h,v 1.1.2.2 2026/09/20 10:08:26 martin Exp $");
 
 #define ENVMON_COMPAT_PIC	"SUNW,ebus-pic16f747-env"
 #define ENVMON_COMPAT_EPIC	"epic"

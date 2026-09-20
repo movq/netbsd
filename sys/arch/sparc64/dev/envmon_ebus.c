@@ -1,4 +1,4 @@
-/*	$NetBSD: envmon_ebus.c,v 1.1 2026/09/07 07:35:13 jdc Exp $	*/
+/*	$NetBSD: envmon_ebus.c,v 1.1.2.2 2026/09/20 10:08:25 martin Exp $	*/
 
 /*-
  * Copyright (c) 2026 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: envmon_ebus.c,v 1.1 2026/09/07 07:35:13 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: envmon_ebus.c,v 1.1.2.2 2026/09/20 10:08:25 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
