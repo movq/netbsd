@@ -1,4 +1,4 @@
-/*	$NetBSD: amlogic-t7-reset.h,v 1.1.1.1 2026/01/18 05:24:17 skrll Exp $	*/
+/*	$NetBSD: amlogic-t7-reset.h,v 1.1.1.1.2.2 2026/10/02 11:35:22 martin Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0-only OR MIT) */
 /*

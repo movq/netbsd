@@ -1,4 +1,4 @@
-/*	$NetBSD: cros_ec.h,v 1.1.1.1 2026/01/18 05:21:49 skrll Exp $	*/
+/*	$NetBSD: cros_ec.h,v 1.1.1.1.2.2 2026/10/02 11:38:15 martin Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
 /*

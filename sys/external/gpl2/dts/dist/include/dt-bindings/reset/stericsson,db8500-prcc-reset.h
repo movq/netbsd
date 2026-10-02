@@ -1,4 +1,4 @@
-/*	$NetBSD: stericsson,db8500-prcc-reset.h,v 1.1.1.1 2026/01/18 05:21:56 skrll Exp $	*/
+/*	$NetBSD: stericsson,db8500-prcc-reset.h,v 1.1.1.1.2.2 2026/10/02 11:38:24 martin Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 

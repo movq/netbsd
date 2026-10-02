@@ -1,4 +1,4 @@
-/*	$NetBSD: imx95-pinfunc.h,v 1.1.1.1 2026/01/18 05:24:48 skrll Exp $	*/
+/*	$NetBSD: imx95-pinfunc.h,v 1.1.1.1.2.2 2026/10/02 11:36:00 martin Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0-only OR MIT) */
 /*

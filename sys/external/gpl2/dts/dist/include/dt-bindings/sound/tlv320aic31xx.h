@@ -1,4 +1,4 @@
-/*	$NetBSD: tlv320aic31xx.h,v 1.1.1.1 2026/01/18 05:21:57 skrll Exp $	*/
+/*	$NetBSD: tlv320aic31xx.h,v 1.1.1.1.2.2 2026/10/02 11:38:26 martin Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0 */
 #ifndef __DT_TLV320AIC31XX_H

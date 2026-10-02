@@ -1,4 +1,4 @@
-/*	$NetBSD: rockchip,rk3576-cru.h,v 1.1.1.1 2026/01/18 05:21:55 skrll Exp $	*/
+/*	$NetBSD: rockchip,rk3576-cru.h,v 1.1.1.1.2.2 2026/10/02 11:38:23 martin Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0 OR MIT) */
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: imx25-pinfunc.h,v 1.1.1.1 2026/01/18 05:22:39 skrll Exp $	*/
+/*	$NetBSD: imx25-pinfunc.h,v 1.1.1.1.2.2 2026/10/02 11:32:51 martin Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*

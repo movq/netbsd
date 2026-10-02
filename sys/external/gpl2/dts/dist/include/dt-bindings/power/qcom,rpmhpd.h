@@ -1,4 +1,4 @@
-/*	$NetBSD: qcom,rpmhpd.h,v 1.1.1.2 2026/09/23 05:22:42 skrll Exp $	*/
+/*	$NetBSD: qcom,rpmhpd.h,v 1.1.1.2.2.2 2026/10/02 11:38:20 martin Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
 /*

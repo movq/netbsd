@@ -1,4 +1,4 @@
-/*	$NetBSD: meson-s4-gpio.h,v 1.1.1.1 2026/01/18 05:21:44 skrll Exp $	*/
+/*	$NetBSD: meson-s4-gpio.h,v 1.1.1.1.2.2 2026/10/02 11:38:08 martin Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0+ OR MIT) */
 /*

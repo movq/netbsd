@@ -1,4 +1,4 @@
-/*	$NetBSD: mt7986-resets.h,v 1.1.1.1 2026/01/18 05:21:54 skrll Exp $	*/
+/*	$NetBSD: mt7986-resets.h,v 1.1.1.1.2.2 2026/10/02 11:38:22 martin Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0+ OR BSD-3-Clause) */
 /*

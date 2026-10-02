@@ -1,4 +1,4 @@
-/*	$NetBSD: qcom,sm8650-rpmh.h,v 1.1.1.1 2026/01/18 05:21:46 skrll Exp $	*/
+/*	$NetBSD: qcom,sm8650-rpmh.h,v 1.1.1.1.2.2 2026/10/02 11:38:13 martin Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: qcom,ids.h,v 1.1.1.1 2026/01/18 05:21:28 skrll Exp $	*/
+/*	$NetBSD: qcom,ids.h,v 1.1.1.1.2.2 2026/10/02 11:37:50 martin Exp $	*/
 
 /* SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause */
 /*

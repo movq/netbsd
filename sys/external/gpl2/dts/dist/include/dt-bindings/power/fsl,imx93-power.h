@@ -1,4 +1,4 @@
-/*	$NetBSD: fsl,imx93-power.h,v 1.1.1.2 2026/09/23 05:22:42 skrll Exp $	*/
+/*	$NetBSD: fsl,imx93-power.h,v 1.1.1.2.2.2 2026/10/02 11:38:19 martin Exp $	*/
 
 /* SPDX-License-Identifier: (GPL-2.0 OR MIT) */
 /*
